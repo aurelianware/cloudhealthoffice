@@ -4,7 +4,6 @@ using EnrollmentImportService.Models;
 using EnrollmentImportService.Repositories;
 using EnrollmentImportService.Services;
 using EnrollmentImportService.Services.Orphans;
-using EnrollmentImportService.Services.Settings;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -93,31 +92,6 @@ public sealed class OrphanMongoTests(MongoRunnerFixture mongo) : IAsyncLifetime
         stored!.ReprocessLeaseUntil.Should().BeNull();
         stored.Status.Should().Be(EnrollmentExceptionStatus.Held);
         stored.Attempts.Should().Be(1);
-    }
-
-    [Fact]
-    public async Task SettingsOverrides_RoundTrip_AndAreTenantScoped()
-    {
-        var store = new MongoEnrollmentSettingsStore(_db);
-        await store.UpsertAsync(new EnrollmentSettingOverride
-        {
-            Id = EnrollmentSettingOverride.IdFor("t1", EnrollmentSettingLevel.Sponsor, "G1"),
-            TenantId = "t1", Level = EnrollmentSettingLevel.Sponsor, Key = "G1",
-            Values = { [EnrollmentSettingKeys.OrphanGraceDays] = 2 }, UpdatedAt = Now,
-        });
-        await store.UpsertAsync(new EnrollmentSettingOverride
-        {
-            Id = EnrollmentSettingOverride.IdFor("t2", EnrollmentSettingLevel.Sponsor, "G1"),
-            TenantId = "t2", Level = EnrollmentSettingLevel.Sponsor, Key = "G1",
-            Values = { [EnrollmentSettingKeys.OrphanGraceDays] = 9 }, UpdatedAt = Now,
-        });
-        var resolver = new EnrollmentSettingsResolver(store);
-
-        (await resolver.ResolveAsync("t1", EnrollmentSettingKeys.OrphanGraceDays, LinesOfBusiness.Commercial, null, "G1")).Value.Should().Be(2);
-        (await store.ListAsync("t1")).Should().ContainSingle();
-        (await store.DeleteAsync("t1", EnrollmentSettingLevel.Sponsor, "G1")).Should().BeTrue();
-        (await resolver.ResolveAsync("t1", EnrollmentSettingKeys.OrphanGraceDays, LinesOfBusiness.Commercial, null, "G1")).Value.Should().Be(7);
-        (await store.ListAsync("t2")).Should().ContainSingle("another tenant's setting is untouched");
     }
 
     private sealed class OddTicksClock(DateTime now) : TimeProvider

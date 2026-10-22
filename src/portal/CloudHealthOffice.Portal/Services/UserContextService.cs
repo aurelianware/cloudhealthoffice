@@ -45,6 +45,10 @@ public class UserContext
         "FinanceApprover" => "Finance Approver",
         "ComplianceOfficer" => "Compliance Officer",
         "ComplianceViewer" => "Compliance Viewer",
+        "AccountManager" => "Account Manager",
+        "Underwriter" => "Underwriter",
+        "ConfigurationAnalyst" => "Configuration Analyst",
+        "ConfigurationManager" => "Configuration Manager",
         "TenantAdmin" => "Tenant Admin",
         "PlatformAdmin" => "Platform Admin",
         _ => PrimaryRole

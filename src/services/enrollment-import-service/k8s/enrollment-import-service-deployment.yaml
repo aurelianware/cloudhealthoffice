@@ -78,6 +78,9 @@ spec:
           value: "http://benefit-plan-service"
         - name: Services__CoverageService
           value: "http://coverage-service"
+        # Plan settings (orphan grace period): docs/architecture/plan-configuration.md.
+        - name: Services__TenantService
+          value: "http://tenant-service"
         resources:
           requests:
             cpu: 100m

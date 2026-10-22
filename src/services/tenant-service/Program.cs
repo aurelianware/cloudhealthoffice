@@ -83,6 +83,24 @@ builder.Services.AddSingleton(invitationOptions);
 builder.Services.AddScoped<IInvitationStore, MongoInvitationStore>();
 builder.Services.AddScoped<InvitationService>();
 
+// Plan configuration (docs/architecture/plan-configuration.md): the setting
+// catalog, values by level, resolution and two-person approval. Changes are
+// published on configuration.changed.v1 when Kafka is configured.
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<CloudHealthOffice.Events.Kafka.IChoEventProducer>(_ =>
+    new CloudHealthOffice.Events.Kafka.ChoKafkaProducer(new CloudHealthOffice.Events.Kafka.ChoKafkaProducerSettings
+    {
+        BootstrapServers = builder.Configuration["Kafka:BootstrapServers"],
+        ClientId = builder.Configuration["Kafka:ClientId"] ?? "tenant-service",
+        SaslUsername = builder.Configuration["Kafka:SaslUsername"],
+        SaslPassword = builder.Configuration["Kafka:SaslPassword"],
+    }));
+builder.Services.AddSingleton<TenantService.Configuration.IConfigurationChangePublisher, TenantService.Configuration.KafkaConfigurationChangePublisher>();
+builder.Services.AddScoped<TenantService.Configuration.IConfigurationStore, TenantService.Configuration.MongoConfigurationStore>();
+builder.Services.AddSingleton<CloudHealthOffice.PlanConfiguration.ISettingCatalog, CloudHealthOffice.PlanConfiguration.BuiltInSettingCatalog>();
+builder.Services.AddScoped<TenantService.Configuration.ConfigurationService>();
+builder.Services.AddHostedService<TenantService.Configuration.ConfigurationIndexInitializer>();
+
 // Health checks
 builder.Services.AddChoHealthChecks(options =>
 {

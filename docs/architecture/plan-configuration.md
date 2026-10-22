@@ -224,7 +224,7 @@ Changes needing a reason or a second approver use the same pattern as two-person
 
 ## 12. Build order
 
-1. **Catalog, store, resolver** (in tenant-service).
+1. **Catalog, store, resolver** (in tenant-service). *Built 2026-10-22 (§12.1); the tenant controls moved to step 2.*
    - Definitions, values with effective dating, locks and constraints.
    - The resolve and explain API, the cache client and change events.
    - Levels: tenant, line-of-business type and sponsor.
@@ -241,6 +241,28 @@ Changes needing a reason or a second approver use the same pattern as two-person
    - the premium grace period, moved off the sponsor's billing info.
 5. **Admin screen** with explain and where-overridden.
 6. **Export and import** between environments.
+
+### 12.1 What step 1 built
+
+- **Shared package `CloudHealthOffice.PlanConfiguration`** (src/services/shared):
+  - **Definitions** (`SettingDefinition`): key, type (integer, decimal, boolean, enum, duration, JSON), owner, description, unit, default and defaults per line-of-business type, allowed levels, constraints (range, allowed values, floors scoped by line of business with a citation), change control and whether the setting is effective-dated.
+  - **The catalog** ships in code (`PlanSettings`, `PlanSettingCatalog`): a service adds its definition there and tenant-service accepts values for it with no other change. `PlanSettingCatalog.Require(key)` fails fast on an undefined key.
+  - **The resolution rules** (`SettingResolver`, `SettingValidator`), shared by tenant-service and the in-process client so both answer the same way.
+  - **Levels** are an ordered enum with room between them (tenant 100, carrier 200, line of business 300, program 400, benefit plan 500, sponsor 600, sponsor policy 700, class 800). Adding a level is a new definition entry and a scope field, not a resolver change. Step 1 holds values at **tenant, line-of-business type and sponsor** (scope id: group number).
+  - **The client** (`IPlanSettings`, `AddPlanSettingsClient`): resolves through tenant-service, caches per tenant, key, scope and date for `PlanSettings:CacheSeconds` (60), and evicts a key's answers on `configuration.changed.v1` when Kafka is configured (each process listens in its own consumer group). It never throws for an unreachable tenant-service: it answers with the definition's default for the line of business, marked `IsFallback`, logs a warning and does not cache the fallback. `InMemoryPlanSettings` applies the same rules for tests.
+- **Configuration module in tenant-service** (collections `configuration-values`, `configuration-pending`, `configuration-changes`; routes `api/v1/configuration/...`, all needing `config:read`):
+  - `GET catalog`;
+  - `GET resolve?key&asOf&lineOfBusiness&sponsor` (and `POST resolve` for up to 100): value, source level and node, lock, clamp and the trace of every level checked;
+  - `GET overrides?key&level&scopeId`: every override at the node's level and all more specific levels, with the value in force and the next scheduled change (narrowing by hierarchy arrives with programs, plans and policies);
+  - `GET values/{level}/{scopeId}/{key}/history`, `GET changes?key`;
+  - `PUT values/{level}/{scopeId}/{key}` `{value, effectiveFrom, effectiveTo, locked, reason}` and `DELETE` (clear from a date). Nodes: `tenant/_`, `lineOfBusiness/Commercial`, `sponsor/{groupNumber}`. Each write needs the level's permission, is checked for level, type, range, floors (refused at line-of-business level; clamped at resolution elsewhere) and a reason where required, and adds a version — values are never edited in place;
+  - two-person settings answer 202 with a pending change; `POST pending/{id}/approve|reject` needs `config:approve`, never by the requester, decided once (compare-and-swap on its status);
+  - every applied change is recorded (who, when, why, before, after, version) and published on `configuration.changed.v1`, best-effort: the change is stored first, and caches expire on their own if an event is lost.
+- **Effective dating:** at a date a node's value is its version in force then with the latest start, the highest version breaking ties; a cleared version means the node sets nothing from that date; an end date lets an earlier version apply again.
+- **Locks:** a locked value at a general level stops every more specific level, and the trace shows the ignored overrides.
+- **Permissions and roles:** `config:read`, `config:sponsor`, `config:product`, `config:enterprise`, `config:approve` on `ChoRolePermissions`; roles AccountManager, Underwriter, ConfigurationAnalyst, ConfigurationManager (and the tenant-service role catalogue and portal role names); `config:read` added to EnrollmentSpecialist, ClaimsSupervisor, MemberServices and ComplianceViewer (ComplianceOfficer has it through `*:read`). Until programs bring negotiable ranges, `config:sponsor` writes are bounded by each definition's constraints.
+- **First setting moved:** `enrollment.orphan.graceDays`. enrollment-import resolves it through the client; on a fallback it opens the orphan rather than hold it on a guessed default. The interim `enrollment-settings` store, `api/v1/enrollment/settings` and `enrollment:configure` are removed; stored interim values were not migrated (no tenant had set any) and the benefit-plan level returns with step 2.
+- **Deferred to step 2:** the tenant controls (`payment.enforceSeparationOfDuties`, `personalRepresentative.requireSecondUserActivation`) move with the carrier and program records, together with their consumers.
 
 ## 13. Decisions (2026-10-22)
 

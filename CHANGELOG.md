@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Plan configuration: settings that cascade, with overrides (step 1).**
+  tenant-service gains a configuration module: a setting catalog defined in
+  code, values by level (tenant, line of business, sponsor) with effective
+  dates, locks, legal floors, version history, a change log, two-person
+  approval, and a resolve API that explains where every value came from.
+  Services read settings through a cached client that falls back to the
+  defaults if tenant-service is unreachable. New permissions `config:*` and
+  roles AccountManager, Underwriter, ConfigurationAnalyst and
+  ConfigurationManager. The orphan-dependent grace period moves into the
+  catalog; enrollment-import's interim settings store and
+  `enrollment:configure` are retired. See
+  `docs/architecture/plan-configuration.md` §12.1.
+
 - **Orphaned dependents wait for their subscriber, then apply themselves.**
   A dependent rejected because its subscriber is not on file is held for a
   grace period, resolved through new enrollment settings by line of business,

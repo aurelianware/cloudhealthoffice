@@ -474,6 +474,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=EnrollmentDB
+      - Services__TenantService=http://tenant-service:8080
     depends_on:
       mongo:
         condition: service_healthy
