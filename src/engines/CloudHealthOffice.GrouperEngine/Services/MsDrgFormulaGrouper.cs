@@ -67,9 +67,11 @@ public sealed record MsDrgFormulaGroupingResult(
 /// </para>
 ///
 /// <para>
-/// It is not yet wired into <c>PricingStage</c>. That is step 8 of ADR 024 and
-/// waits on the parity run, so that a plan keeps paying the billed DRG until
-/// this engine has been shown to agree with CMS.
+/// Callers reach it through <see cref="FormulaMsDrgGrouper"/>, which puts it
+/// behind <see cref="IMsDrgGrouper"/> — the Pricing API asks that seam, not
+/// this class. <c>PricingStage</c> is still to be wired (ADR 024 step 8), and
+/// that is the half that changes adjudicated payments, so a plan keeps paying
+/// the billed DRG there until it has been through parity testing of its own.
 /// </para>
 /// </summary>
 public sealed class MsDrgFormulaGrouper

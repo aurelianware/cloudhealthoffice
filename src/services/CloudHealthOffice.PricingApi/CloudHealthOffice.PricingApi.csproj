@@ -31,6 +31,9 @@
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <!-- Repricing delegates to the same rate resolution engine claims adjudication uses (ADR 016). -->
     <ProjectReference Include="..\..\engines\CloudHealthOffice.FeeScheduleEngine\CloudHealthOffice.FeeScheduleEngine.csproj" />
+    <!-- The MS-DRG grouper seam (ADR 024): an inpatient claim without a DRG is
+         grouped rather than refused. Which grouper answers is bound in Program.cs. -->
+    <ProjectReference Include="..\..\engines\CloudHealthOffice.GrouperEngine\CloudHealthOffice.GrouperEngine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

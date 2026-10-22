@@ -57,6 +57,12 @@ try
     // from this service's own store until the dual-read step wires the canonical one.
     builder.Services.AddScoped<IPricingScheduleSource, LegacyEntryScheduleSource>();
     builder.Services.AddScoped<IRepricingService, RepricingService>();
+
+    // An inpatient claim without a DRG used to be refused outright. It is now
+    // put to a grouper (ADR 024 step 8) — by default the one that reports the
+    // claim's own DRG, so this changes no price until a deployment configures
+    // a CMS release under MsDrgGrouper:Releases.
+    builder.Services.AddMsDrgGrouper(builder.Configuration);
     builder.Services.AddSingleton<IFeeScheduleLoaderService, FeeScheduleLoaderService>();
 
     // ── Authentication ──

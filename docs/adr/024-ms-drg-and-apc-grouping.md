@@ -839,6 +839,55 @@ Build order:
    so a plan can keep paying the billed DRG until it has been through parity
    testing.
 
+   **Done for `RepricingService`.** Taken out of order, and deliberately:
+   nothing in the platform referenced the grouper engine at all, and
+   `RepricingService` still carried the line "Cloud Health Office has no MS-DRG
+   grouper" with an inpatient claim refused beneath it. A capability nothing
+   calls is not a capability.
+
+   Three things were built, and the first was not in the plan:
+
+   - **`FormulaMsDrgGrouper`.** The seam `IMsDrgGrouper` already existed, and
+     the implementation behind it was `TableDrivenMsDrgGrouper` — the earlier,
+     simplified grouper. The engine that agrees with CMS on every corpus row,
+     `MsDrgFormulaGrouper`, was a static class outside the seam, so a caller
+     wiring the seam got the weaker grouper. That is now fixed and the
+     parity-tested engine is what the seam resolves to.
+   - **`BilledDrgGrouper`.** Reports the DRG the facility billed and groups
+     nothing, which is what the platform did before. It is the registered
+     default, so installing the seam changed no price anywhere. It is also the
+     honest implementation for a payer that has contracted to accept the
+     facility's grouping.
+   - **`InpatientStayRequest`** on the repricing API. A repricing request
+     carried diagnoses but no ICD-10-PCS procedures, no discharge date and no
+     present-on-admission indicators, and grouping a stay without its
+     operating-room procedures is not a partial answer but a wrong one: the
+     stay lands in the medical partition of its MDC and returns a plausible
+     DRG that pays the wrong amount. So a grouper is asked only when the
+     request carries this block, and a claim that does not is refused in the
+     words it was refused in before.
+
+   Two details that cost more than they look:
+
+   - **The DRG has to be resolved before the fee schedule is loaded.** Loading
+     an MS-DRG schedule means fetching that DRG's rate row, so a grouping done
+     after the load assigns a DRG the loaded schedule holds no rate for and the
+     claim prices at nothing. The ordering is now the other way round and a
+     test guards it.
+   - **CMS's `drgSeverity` field is not the family's severity marker**, so the
+     adapter leaves `MsDrgGroupingResult.Severity` unset. In V44, 731 of the
+     824 rows carry 0, including every member of three-member families such as
+     11/12/13 — a stay paid DRG 13 ("without CC/MCC") sits on a row marked 0
+     exactly like the "with MCC" sibling above it. The split member could be
+     inferred from position within the base family, but only safely for
+     three-member families: in a two-member family the lower DRG may be "with
+     CC/MCC" or "with MCC" and the table does not say which.
+     `ComplicationLevel`, which the engine computes outright, carries the
+     severity information instead.
+
+   `PricingStage` is still to do, and it is the half that changes adjudicated
+   payments, so it keeps the per-plan toggle this step was written around.
+
 ### 6. Consequences
 
 - Adjudication stops trusting the facility's DRG. That is the point, and it
