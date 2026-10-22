@@ -14,15 +14,34 @@
 | Eligibility production behavior | Confirmed gap, narrower than “all accumulators fake” | [Normal native adapter](../src/services/eligibility-service/Adapters/ChoEligibilityAdapter.cs) calls real benefit accumulation. [Temporal client](../src/services/eligibility-service/Services/IAccumulatorClient.cs) returns synthetic zeros; [host guard](../src/services/eligibility-service/Program.cs) is unconditional. Upstream failures can appear as no coverage on this baseline. No historical snapshot or production startup proof is claimed. |
 | CMS reporting, bulk and conformance | Partially Implemented / confirmed remaining gaps | [Reporting](../src/services/authorization-service/Services/Cms0057/Cms0057Reporting.cs) computes core aggregates but explicitly does not track appeal/extension outcomes. [Bulk](../src/services/fhir-service/Services/BulkExportService.cs) does not produce files. [Validator script](../scripts/interop/fhir-validate.sh) disables terminology and tolerates [baselined errors](../conformance/validator-baseline.txt); green fixture CI is not full deployed conformance. |
 
+### Intentional engagement boundary: external core adapters
+
+QNXT, Facets and HealthEdge interfaces are deliberately completed per payer
+engagement. Platform version/release, tenant configuration, licensed interfaces,
+solution architecture, hosting and data access differ by implementation. A named
+interface whose methods throw is therefore **engagement work**, not evidence of
+a missing CHO-native feature or an unfinished universal connector commitment.
+It also is not a working integration until implemented and accepted for that payer.
+
+Use the existing [core adapter QRE](features/questionnaires/qre-core-admin-adapter-questions.md)
+and its [example](features/questionnaires/examples/qre-core-admin-adapter-example.md)
+to define access, mapping, licensing, environments and acceptance scope. The QRE
+analogy describes implementation discovery (as in a clearinghouse engagement),
+not an assertion of vendor partnership, Availity compatibility, certification or
+interchangeable effort. External adapter work does not gate native-core
+acceptance unless that deployment actually requires it. CAP-17's older
+“Confirmed Gap” describes the absence of a tested QNXT connector at its baseline;
+it must not be reused as a generic CHO product-defect classification.
+
 ### Open changes are proposed, not merged capability
 
-As checked against the source baseline above:
+As checked against the source baseline above (merge updates follow):
 
-- [#1485](https://github.com/aurelianware/cloudhealthoffice/pull/1485): P2P fully denied PA exclusion; 63 focused tests at its reviewed head.
+- [#1485](https://github.com/aurelianware/cloudhealthoffice/pull/1485): **merged** as `8e3413a2`; P2P fully denied PA exclusion. 63 focused tests at the reviewed head; main merge recorded separately from the initial dc23d47e refresh.
 - [#1486](https://github.com/aurelianware/cloudhealthoffice/pull/1486): coverage failures are unavailable, not negative determinations; 59 focused tests at its reviewed head.
 - [#1487](https://github.com/aurelianware/cloudhealthoffice/pull/1487): removes fabricated Bulk completion, returns 501; this does **not** implement durable export. Its security harness is being aligned with the explicit unavailable boundary.
 
-These are proposed statuses, never evidence of main or a deployed tenant. On merge, update this section with the merge commit and actual completed validation. Follow [the production acceptance workstream](implementation/PRODUCTION-ACCEPTANCE-WORKSTREAM.md); do not infer closure from issue/PR titles.
+Unmerged changes are proposed, never evidence of main or a deployed tenant. Merged changes still do not establish deployed behavior. On merge, update this section with the merge commit and actual completed validation. Follow [the production acceptance workstream](implementation/PRODUCTION-ACCEPTANCE-WORKSTREAM.md); do not infer closure from issue/PR titles.
 
 ## Historical evidence baselines
 

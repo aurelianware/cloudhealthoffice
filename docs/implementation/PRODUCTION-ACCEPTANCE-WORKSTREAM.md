@@ -1,5 +1,6 @@
 # Production acceptance workstream
 
+Target: **CHO as the native payer core** (owner-selected October 22, 2026).
 Source planning baseline: October 22, 2026, main dc23d47e. This is a staged
 engineering/acceptance plan, not evidence that the work is already complete.
 The [capability ledger](../CAPABILITY_RECONCILIATION.md) governs current claims.
@@ -17,3 +18,12 @@ Large financial/exchange changes need an ADR or scoped issue before broad
 rewrites (CONTRIBUTING.md). Split implementation by durable data boundary and
 keep acceptance failures visible. Public positioning changes follow demonstrated
 capability, not a planned milestone or aggregate test count.
+
+## External core integration is engagement-scoped
+
+QNXT/Facets/HealthEdge adapter implementation is intentionally tailored to the
+payer's version, configuration, licensed interfaces, hosting and solution
+architecture using the [existing QRE](../features/questionnaires/qre-core-admin-adapter-questions.md).
+Do not make a universal adapter a prerequisite for native CHO acceptance.
+Incumbent comparison data can be supplied through an agreed extract/replay
+contract; direct connectivity is separately scoped if the payer requires it.

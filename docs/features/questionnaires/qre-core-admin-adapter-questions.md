@@ -4,7 +4,7 @@ This questionnaire collects what we need to connect Cloud Health Office (CHO) to
 
 The questions follow the format of the existing transaction QREs (278, 275). Answers fill in the CHO tenant configuration described in the appendix.
 
-> **Status:** CHO's own adapters and backends (`cho`) are the reference implementation for every domain. The QNXT, Facets and HealthEdge adapters ship as interface stubs, and each one is implemented per engagement from this questionnaire. A stubbed legacy-core adapter is an integration gap, not a product gap: the same workflow runs natively in CHO in Replace mode. Augment (shadow) comparison also depends on the per-engagement adapter, which supplies the core's results for CHO to compare against.
+> **Status:** CHO's own adapters and backends (`cho`) are the reference implementation for every domain. The QNXT, Facets and HealthEdge adapters ship as interface stubs, and each one is implemented per engagement from this questionnaire. An unimplemented legacy-core adapter is intentionally scoped engagement work, not a generic CHO product gap: the same workflow runs natively in CHO in Replace mode. Augment (shadow) comparison also depends on the per-engagement adapter, which supplies the core's results for CHO to compare against.
 
 ## Contact Information and Milestones
 - Provide plan contacts for executive sponsor, core platform owner, configuration lead, EDI/integration lead, utilization management lead, interoperability (CMS-0057-F) lead, information security, and claims operations (name, phone, email for each).
