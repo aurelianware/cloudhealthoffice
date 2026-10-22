@@ -24,6 +24,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fhir-service to it through Workload Identity. `claims.finalized.v1` gains an
   additive `ClaimVersionId`. See
   `docs/architecture/managed-fhir-store-analytics.md`.
+- **Demo persona seeder (`tools/DemoPersonaSeeder`).** Seeds a demo tenant
+  with named synthetic personas through the services' own APIs, and writes a
+  demo script with the IDs to type. The cast:
+  - the Delgado family on an employer PPO: PT visits, a COB pend, and a
+    denied MRI with its appeal;
+  - a Medicaid member in concurrent inpatient review;
+  - a Medicare Advantage member with an expedited auth due;
+  - an orthopedic group with approved claims;
+  - an employer group's premium invoice;
+  - two members with similar names.
+
+  Demos look records up the way real users do, now that record search always
+  needs criteria. The seeder refuses to run unless the tenant ID is repeated
+  with `--confirm-synthetic`, and re-runs find what earlier runs created.
 
 ### Changed
 
