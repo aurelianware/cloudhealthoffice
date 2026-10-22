@@ -1,0 +1,178 @@
+# ADR 024: MS-DRG and APC Grouping
+
+## Status
+
+Proposed. Awaiting a decision on option A vs B vs C in section 4.
+
+## Context
+
+Cloud Health Office cannot price an inpatient or an outpatient facility claim
+the way an incumbent payer platform does, because it has no grouper. Two
+things are missing and they are different problems.
+
+### 1. Nothing assigns a group
+
+`RepricingService.RepriceClaimAsync` says so in a comment and refuses the
+claim:
+
+```csharp
+if (loaded.Schedule.Type == EngineDomain.FeeScheduleType.Drg && string.IsNullOrEmpty(request.DrgCode))
+{
+    // Cloud Health Office has no MS-DRG grouper: an inpatient claim without a DRG cannot be priced.
+    warnings.Add("No DRG code provided. ...");
+```
+
+`PricingStage` (claims-service) takes the DRG straight off the claim —
+`claim.Institutional?.DrgCode`, which is 837I `HI*DR`, the DRG the *facility*
+billed. The payer therefore pays whatever group the hospital asserted. No
+incumbent does this: QNXT, Facets and HealthRules all regroup the claim from
+diagnoses and procedures and pay their own group, which is the only way to
+catch upcoding and the only way to pay a claim that arrives without a DRG.
+
+On the outpatient side there is no APC assignment at all. `FeeScheduleType`
+has a `MedicareOpps` member whose doc comment reads "CHO stores pre-calculated
+APC rates", and `FeeScheduleLoaderService` does read the APC and status
+indicator per HCPCS out of the OPPS addendum into `FeeScheduleEntry`. But that
+is a code-level lookup, not grouping: nothing assigns an APC at the claim
+level, and the status indicator is consulted in exactly one place —
+`PricingScheduleSources.cs:206`, to flag status T for the multiple-procedure
+reduction. There is no packaging (status N), no conditional packaging
+(Q1/Q2/Q3), no comprehensive APC (J1/J2), and no composite APC. An OPPS claim
+today prices as a bag of independent line rates, which overpays every packaged
+line.
+
+### 2. Nothing applies the IPPS payment adjustments
+
+Even given a DRG, the IPPS payment is not `weight × base rate`. It is
+
+```
+operating = DRG weight x (labor share x wage index + non-labor share x COLA)
+          + IME + DSH (+ uncompensated care)
+capital   = DRG weight x capital federal rate x geographic adjustment factor
+          + capital IME + capital DSH
+payment   = operating + capital + outlier + new technology add-on
+            adjusted for transfer policy and post-acute transfer policy
+```
+
+`RateResolutionService` implements only `DrgWeight x DrgBaseRate` (or a flat
+case rate). There is no wage index, no outlier, no transfer per-diem, no
+IME/DSH. A short-stay transfer is currently paid the full case rate, which is
+the single largest overpayment a payer platform can have.
+
+### 3. What the claim model already carries
+
+The grouper inputs are almost all present, which is why this is tractable:
+
+| Grouper input | Where it is today |
+| --- | --- |
+| Principal and secondary diagnoses | `Claim.DiagnosisCodes[]` (`CodeQualifier` ABK / ABF) |
+| Present-on-admission | `DiagnosisCode.PresentOnAdmission` (Y/N/U/W/1) |
+| ICD-10-PCS procedures | `InstitutionalClaim.PrincipalProcedure`, `.OtherProcedures[]` |
+| Discharge status | `InstitutionalClaim.PatientStatusCode` |
+| Sex, birth date | `Claim` subscriber/patient demographics |
+| Length of stay | `InstitutionalClaim.CalculateLengthOfStay()` |
+| Type of bill | `InstitutionalClaim.ComposeTypeOfBill(...)` |
+| Revenue codes, HCPCS, units, modifiers | `ClaimServiceLine` |
+| Billed DRG (to compare against) | `InstitutionalClaim.DrgCode` |
+
+Missing and needed: discharge hour is there but admission hour is not used;
+the facility's CCN/provider-specific file (wage index, CBSA, IME ratio, DSH
+percentage, cost-to-charge ratio) has no home in the data model at all.
+
+## What CMS publishes
+
+This decision turns on what is actually available, so the sources are listed
+explicitly. All of it is free and public; none of it requires a vendor
+licence.
+
+| Artefact | What it gives | Form |
+| --- | --- | --- |
+| [MS-DRG Classifications and Software](https://www.cms.gov/medicare/payment/prospective-payment-systems/acute-inpatient-pps/ms-drg-classifications-and-software) | The grouper itself. CMS posts, per version (now V44, FY 2027), the **MS-DRG and MCE Java source code and reference-implementation binaries**, mainframe software, and the ICD-10 MS-DRG Definitions Manual. | Java source (for transparency; CMS states it is "not intended for direct use in applications") plus precompiled jars that "can be used on any platform running Java" |
+| ICD-10 MS-DRG Definitions Manual (same page) | MDC assignment, the DRG list, the CC and MCC lists, the CC exclusion list, the OR and non-OR procedure lists — i.e. every table the grouper logic walks | Text / HTML tables |
+| [Pricer Source Code and Software](https://www.cms.gov/pricersourcecodesoftware) | Ten Java Pricer applications including **IPPS** and **OPPS**. Executable jars price claims; source is reference only and excludes `gov.cms.fiss.pricers.common`. First Java-only IPPS release was October 2021 (FY 2019 forward). | Executable Java jars |
+| [I/OCE software](https://www.cms.gov/medicare/coding-billing/integrated-outpatient-code-editor/integrated-outpatient-code-editor-i-oce-software) and [quarterly release files](https://www.cms.gov/medicare/coding-billing/outpatient-code-editor-oce/quarterly-release-files) | APC assignment, status indicators, packaging, discounting and OPPS line-level edits. October 2026 is V27.3 (data files plus mainframe, PC and **Java standalone** versions); the specification is published as a transmittal (R13979). | Java standalone, plus data files |
+| OPPS Addenda A and B (quarterly, OPPS final rule) | APC rate per APC, and HCPCS → APC + status indicator | CSV / Excel |
+| IPPS Table 2 to 5, wage index tables, provider-specific file | DRG weights and geometric/arithmetic mean LOS, wage index by CBSA, per-provider IME/DSH/CCR | CSV / Excel |
+
+Two constraints come with the software: CMS gives **no technical support** for
+using the grouper, Pricer or I/OCE outside Original Medicare claims
+processing, and the jars are Java (8 today, moving to 17; Java 8 support ends
+November 2026). A .NET platform cannot link them in-process.
+
+## Decision
+
+### 4. The three options
+
+**Option A — pluggable interface, native .NET grouper, CMS jar as the parity
+oracle (recommended).**
+
+A new `CloudHealthOffice.GrouperEngine` defines the contracts
+(`IMsDrgGrouper`, `IApcAssigner`, `IIppsPaymentCalculator`) and ships a
+table-driven .NET implementation whose tables are imported from the CMS
+Definitions Manual, the DRG weight tables and OPPS Addendum B — the same
+`Import/` + `Persistence/` + `Data/` shape `CloudHealthOffice.NcciEngine`
+already uses for the quarterly NCCI files. The CMS Java grouper and OPPS
+Pricer jars are packaged as an optional sidecar container behind a second
+implementation of the same interfaces, used two ways: as the authoritative
+provider for a customer who wants bit-exact CMS parity, and as the **test
+oracle** in CI, where a corpus of synthetic stays is grouped by both and the
+build fails on disagreement.
+
+- Pays for itself: grouping is in-process, no JVM in the hot path, versioned
+  by discharge date like every other reference table in the platform.
+- Provable: "our grouper agrees with CMS V44 on N synthetic stays" is a
+  diligence answer; "we wrote a grouper" is not.
+- Cost: the MS-DRG logic is real work — MDC assignment, pre-MDC cases,
+  CC/MCC with the exclusion list, OR-procedure surgical hierarchy. Estimate
+  four to six PRs for inpatient and three for OPPS.
+
+**Option B — CMS jars only.** Ship the grouper, I/OCE and Pricer jars as a
+required sidecar and make the .NET side a thin HTTP client. Fastest to exact
+parity and no grouping logic to own, but it puts a JVM on the critical path
+of adjudication, inherits the Java 8 → 17 migration and the quarterly
+re-packaging, makes the platform unable to group a non-Medicare (commercial
+or Medicaid) grouping variant, and leaves nothing to point at as our own
+capability. CMS also supports none of it outside their own claims system.
+
+**Option C — interface only, adapter for a licensed vendor.** Define the
+interfaces, ship no grouper, and integrate 3M/Solventum or Optum EASYGroup
+under licence (also the only realistic route to APR-DRG and EAPG, which
+Medicaid lines of business need). Cheapest to build and what many payers
+actually do, but it is a per-member/per-claim licence cost, a vendor
+dependency in diligence, and it leaves the platform unable to price anything
+out of the box.
+
+### 5. Recommendation
+
+Option A, with the Option C adapter seam preserved: the interfaces are the
+deliverable either way, so a customer who already licences EASYGroup can plug
+it in, and a customer who wants CMS parity can run the sidecar. Build order:
+
+1. `GrouperEngine` contracts, domain types and the grouping-result audit
+   record (billed DRG vs assigned DRG vs paid DRG, with the reason).
+2. Table import and persistence for the MS-DRG definition tables, weights and
+   mean LOS, versioned by FY and effective date.
+3. `TableDrivenMsDrgGrouper`: MDC, pre-MDC, surgical hierarchy, CC/MCC with
+   exclusions, sex/age/discharge-status edits.
+4. `IppsPaymentCalculator`: wage index, labor/non-labor split, IME, DSH,
+   outlier, transfer and post-acute transfer policy; plus the
+   provider-specific-file home the data model is missing.
+5. `AddendumBApcAssigner` and OPPS packaging: status indicators, N packaging,
+   Q1/Q2/Q3 conditional packaging, J1/J2 comprehensive APCs, composite APCs,
+   multiple-procedure discounting on status T.
+6. Wire into `PricingStage` and `RepricingService` behind a per-plan toggle,
+   so a plan can keep paying the billed DRG until it has been through parity
+   testing.
+7. The CMS sidecar provider and the CI parity corpus.
+
+### 6. Consequences
+
+- Adjudication stops trusting the facility's DRG. That is the point, and it
+  will change paid amounts, so the toggle in step 6 is not optional.
+- The platform gains a reference-data obligation it does not have today:
+  quarterly OPPS addenda and annual IPPS tables, on the NCCI loader pattern.
+- APR-DRG and EAPG remain out of scope and licensed; the interfaces admit
+  them.
+- A Java sidecar becomes a supported but optional deployment shape, which the
+  Kubernetes-first posture of ADR 005 can carry.
+
