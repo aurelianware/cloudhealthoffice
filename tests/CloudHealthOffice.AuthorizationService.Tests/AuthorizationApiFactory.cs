@@ -5,6 +5,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using AuthorizationService.Repositories;
+using CloudHealthOffice.PriorAuthRuleEngine.Persistence;
 
 namespace CloudHealthOffice.AuthorizationService.Tests;
 
@@ -24,6 +25,9 @@ public class AuthorizationApiFactory : WebApplicationFactory<Program>
 
     public IAuthorizationRepository AuthorizationRepository { get; } = Substitute.For<IAuthorizationRepository>();
 
+    /// <summary>Concurrent review reads stays through this; nothing here exercises Mongo.</summary>
+    public IInpatientStayRepository InpatientStayRepository { get; } = Substitute.For<IInpatientStayRepository>();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
@@ -37,15 +41,22 @@ public class AuthorizationApiFactory : WebApplicationFactory<Program>
         {
             // Remove real repository registrations
             var descriptorsToRemove = services
-                .Where(d => d.ServiceType == typeof(IAuthorizationRepository))
+                .Where(d => d.ServiceType == typeof(IAuthorizationRepository)
+                         || d.ServiceType == typeof(IInpatientStayRepository)
+                         || d.ServiceType == typeof(IPaRuleRepository))
                 .ToList();
 
             foreach (var descriptor in descriptorsToRemove)
                 services.Remove(descriptor);
 
-            // Remove Mongo registrations that would fail without config
+            // Remove Mongo registrations that would fail without config. A
+            // repository is Mongo-backed by its implementation, not by the
+            // interface it is registered under, so both are matched: the
+            // service provider validates every constructor it can see, and a
+            // Mongo implementation left behind asks for IMongoDatabase.
             var infraDescriptors = services
-                .Where(d => d.ServiceType.FullName?.Contains("Mongo") == true)
+                .Where(d => d.ServiceType.FullName?.Contains("Mongo") == true
+                         || d.ImplementationType?.FullName?.Contains("Mongo") == true)
                 .ToList();
 
             foreach (var descriptor in infraDescriptors)
@@ -59,6 +70,8 @@ public class AuthorizationApiFactory : WebApplicationFactory<Program>
             });
 
             services.AddSingleton(AuthorizationRepository);
+            services.AddSingleton(InpatientStayRepository);
+            services.AddSingleton(Substitute.For<IPaRuleRepository>());
         });
     }
 
