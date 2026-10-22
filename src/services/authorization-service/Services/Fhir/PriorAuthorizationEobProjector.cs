@@ -34,21 +34,36 @@ namespace AuthorizationService.Services.Fhir;
 /// implements rather than as a conformance claim:
 /// </para>
 /// <list type="bullet">
-///   <item><c>type</c> is the FHIR claim-type <c>other</c>. CHO's prior-auth
-///   record carries an X12 service-type code, not a claim type, and this
-///   projector will not infer institutional-versus-professional from data that
-///   does not say it. The service type travels in <c>type.text</c> and in
-///   <c>subType</c> under the X12 1365 system.</item>
-///   <item><c>insurer</c> is a reference with a display only: CHO has no payer
-///   <c>Organization</c> resource to point at. The claim EOB projection has the
+///   <item><c>insurer</c> is 1..1 <c>Reference(US Core Organization)</c> in the
+///   profile and CHO has no payer <c>Organization</c> resource to point at, so
+///   it carries a display only. <c>provider</c> is likewise 1..1
+///   <c>Reference(US Core Practitioner | PractitionerRole | Organization)</c>
+///   and carries the requesting NPI as a reference identifier, because CHO has
+///   no Practitioner resource id for it here. The claim EOB projection has the
 ///   same limitation.</item>
-///   <item>Unit adjudication uses a CHO-private category system. FHIR's
-///   adjudication value set has no code for "units requested" or "units
-///   approved", and this projector will not borrow a monetary code for a
-///   quantity.</item>
+///   <item>The <c>denialreason</c> adjudication slice binds <c>reason</c>
+///   (required) to X12 Claim Adjustment Reason Codes. CHO's record carries its
+///   own 278 review codes (<c>NOTMEDNEC</c>), not CARCs, so the slice is
+///   emitted with the right category and CHO's code under its own system plus
+///   the reason in words. The binding is unmet — that is G-17, the open X12
+///   reason-code gap, not a separate one.</item>
 ///   <item>No PDex item-level extensions (item trace number, item
-///   pre-auth issue date), and no <c>careTeam</c> or <c>supportingInfo</c>.</item>
+///   pre-auth issue date, authorized provider), and no <c>careTeam</c> or
+///   <c>supportingInfo</c>.</item>
+///   <item>No profile validation has run against the PDex
+///   <c>StructureDefinition</c> (G-14). What is asserted is the structure the
+///   profile defines, element by element, not a validator's verdict.</item>
 /// </list>
+///
+/// <para>
+/// Two things previously recorded here as limitations are not:
+/// <c>type = other</c> is conformant — PDex binds <c>type</c> to
+/// <c>ClaimTypeCodes</c> <b>extensibly</b> with no profile-specific constraint,
+/// and CHO's record carries an X12 service type rather than a claim type, so
+/// <c>other</c> plus the service type in <c>type.text</c> and <c>subType</c> is
+/// the accurate statement. And unit adjudication no longer uses a CHO-private
+/// category: see <see cref="PriorAuthorizationEobProjector.PdexAdjudicationDiscriminatorSystem"/>.
+/// </para>
 /// </summary>
 public interface IPriorAuthorizationEobProjector
 {
@@ -96,16 +111,30 @@ public sealed class PriorAuthorizationEobProjector : IPriorAuthorizationEobProje
     private const string AuthorizationNumberSystem = "urn:cho:authorization-number";
 
     /// <summary>
-    /// CHO-private adjudication categories for unit quantities. FHIR's
-    /// adjudication value set codes monetary outcomes; none of them means
-    /// "units requested" or "units approved".
+    /// The discriminator PDex slices <c>adjudication</c> on. The slicing is
+    /// <b>closed</b>, so a category outside this system is a slice the profile
+    /// rejects — which is why the CHO-private
+    /// <c>urn:cho:pa-unit-adjudication</c> categories this projector used to
+    /// emit were a conformance defect rather than a stylistic choice. Base
+    /// FHIR's adjudication value set does code monetary outcomes only; PDex
+    /// adds exactly the quantity codes a prior authorization needs.
     /// </summary>
-    private const string UnitAdjudicationSystem = "urn:cho:pa-unit-adjudication";
+    public const string PdexAdjudicationDiscriminatorSystem =
+        "http://hl7.org/fhir/us/davinci-pdex/CodeSystem/PDexAdjudicationDiscriminator";
+
+    /// <summary>The approved quantity: PDex's <c>allowedunits</c> slice.</summary>
+    public const string AllowedUnitsCode = "allowedunits";
+
+    /// <summary>Why a line was denied or reduced: PDex's <c>denialreason</c> slice.</summary>
+    public const string DenialReasonCode = "denialreason";
 
     /// <summary>
     /// CHO-private system for the authorization's own denial reason codes. These
     /// are CHO/278 review codes (e.g. <c>NOTMEDNEC</c>), not X12 CARCs, so they
-    /// do not go under the CARC system URI the claim projection uses.
+    /// do not go under the CARC system URI the claim projection uses, and the
+    /// profile's required CARC binding on <c>reason</c> is therefore unmet
+    /// (G-17). The code is still carried, under the system it belongs to,
+    /// rather than mapped to a CARC the record does not hold.
     /// </summary>
     private const string DenialReasonSystem = "urn:cho:pa-denial-reason";
 
@@ -442,19 +471,31 @@ public sealed class PriorAuthorizationEobProjector : IPriorAuthorizationEobProje
     }
 
     /// <summary>
-    /// What was requested, what was approved, and why a line was refused.
-    /// The unit categories are CHO-private (see the interface limitations); the
-    /// denial reason is a <c>reason</c> coding plus its text.
+    /// What was approved, and why a line was refused, in the slices PDex
+    /// defines: <c>allowedunits</c> and <c>denialreason</c>.
+    ///
+    /// <para>
+    /// The quantity <em>requested</em> is deliberately not an adjudication
+    /// entry. PDex's closed slicing has no slice for it — its three codes are
+    /// <c>allowedunits</c>, <c>consumedunits</c> and <c>denialreason</c> — and
+    /// the requested quantity already has its proper home in
+    /// <c>item.quantity</c> (see <see cref="BuildQuantity"/>). It used to be
+    /// emitted a second time under a CHO-private category, which the profile
+    /// would reject.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>consumedunits</c> is not emitted: CHO's authorization record does not
+    /// track units drawn down against the grant. Claims carry the utilization,
+    /// and correlating them is a separate piece of work.
+    /// </para>
     /// </summary>
     private static JsonArray BuildItemAdjudication(RequestedService service)
     {
-        var adjudication = new JsonArray
-        {
-            UnitAdjudication("requested-units", "Units requested", service.RequestedUnits),
-        };
+        var adjudication = new JsonArray();
 
         if (service.ApprovedUnits is { } approved)
-            adjudication.Add(UnitAdjudication("approved-units", "Units approved", approved));
+            adjudication.Add(UnitAdjudication(AllowedUnitsCode, "allowed units", approved));
 
         if (!string.IsNullOrWhiteSpace(service.DenialReasonCode)
             || !string.IsNullOrWhiteSpace(service.DenialReason))
@@ -467,9 +508,9 @@ public sealed class PriorAuthorizationEobProjector : IPriorAuthorizationEobProje
                     {
                         new JsonObject
                         {
-                            ["system"] = UnitAdjudicationSystem,
-                            ["code"] = "denial-reason",
-                            ["display"] = "Reason the line was denied or reduced",
+                            ["system"] = PdexAdjudicationDiscriminatorSystem,
+                            ["code"] = DenialReasonCode,
+                            ["display"] = "Denial Reason",
                         },
                     },
                 },
@@ -512,7 +553,7 @@ public sealed class PriorAuthorizationEobProjector : IPriorAuthorizationEobProje
                 {
                     new JsonObject
                     {
-                        ["system"] = UnitAdjudicationSystem,
+                        ["system"] = PdexAdjudicationDiscriminatorSystem,
                         ["code"] = code,
                         ["display"] = display,
                     },
