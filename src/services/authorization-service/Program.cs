@@ -10,6 +10,8 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.ClinicalCriteria.Configuration;
+using CloudHealthOffice.PriorAuthRuleEngine.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -131,6 +133,29 @@ if (!string.IsNullOrEmpty(kafkaBootstrap))
 {
     builder.Services.AddHostedService<RfaiDocsReceivedConsumer>();
 }
+
+// ── Concurrent review and the inpatient census ───────────────────────────────
+// A stay is tracked separately from the authorization that certifies it, so a
+// concurrent review extends the existing certification (278 certification type
+// S) instead of opening a new authorization for every additional day.
+builder.Services.AddSingleton<InpatientStayIndexes>();
+builder.Services.AddScoped<IInpatientStayRepository, InpatientStayRepositoryMongo>();
+builder.Services.AddScoped<AuthorizationService.Services.ConcurrentReview.IConcurrentReviewService,
+    AuthorizationService.Services.ConcurrentReview.ConcurrentReviewService>();
+
+// Clinical criteria behind those reviews. InterQual and MCG content is
+// licensed and ships with neither CHO nor this service: without a connector
+// the seam answers "indeterminate", which pends to a human reviewer, and the
+// in-repo cho-local provider runs the PA rules so the seam works everywhere.
+// No rule cache here: authorization-service registers no ICacheProvider, and
+// the criteria path reads rules far less often than the PAS adjudicator does.
+builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
+    .UseMongoRepository()
+    .WithPlatformRules();
+builder.Services.AddClinicalCriteria(builder.Configuration);
+
+// Flags stays whose certification has lapsed or whose review is overdue.
+builder.Services.AddHostedService<AuthorizationService.Services.ConcurrentReview.StayReviewWatchdog>();
 
 // SLA deadline watchdog (runs every 15 minutes)
 builder.Services.AddHostedService<SlaWatchdogService>();
