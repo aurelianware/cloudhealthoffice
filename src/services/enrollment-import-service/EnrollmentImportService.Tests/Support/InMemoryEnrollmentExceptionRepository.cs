@@ -58,6 +58,36 @@ public sealed class InMemoryEnrollmentExceptionRepository : IEnrollmentException
         }
     }
 
+    /// <summary>Makes the orphan lookup fail (an unavailable store).</summary>
+    public bool FailOrphanLookup { get; set; }
+
+    public Task<IReadOnlyList<EnrollmentException>> ListOrphansForSubscriberAsync(string tenantId, string subscriberId, CancellationToken ct = default)
+    {
+        if (FailOrphanLookup) throw new InvalidOperationException("exception store unavailable");
+        lock (_gate)
+            return Task.FromResult<IReadOnlyList<EnrollmentException>>(_items
+                .Where(x => x.TenantId == tenantId && x.ReasonCode == EnrollmentRejectionReasons.SubscriberNotFound
+                            && x.SourceKind == EnrollmentExceptionSourceKind.Dependent && x.Dependent?.SubscriberId == subscriberId
+                            && x.Status is EnrollmentExceptionStatus.Open or EnrollmentExceptionStatus.Held)
+                .OrderBy(x => x.CreatedAt).Select(Copy).ToList());
+    }
+
+    public Task<IReadOnlyList<string>> ListTenantsWithExpiredAutoHeldAsync(DateTime now, CancellationToken ct = default)
+    {
+        lock (_gate)
+            return Task.FromResult<IReadOnlyList<string>>(_items
+                .Where(x => x.AutoHeld && x.Status == EnrollmentExceptionStatus.Held && x.HeldUntil <= now)
+                .Select(x => x.TenantId).Distinct().ToList());
+    }
+
+    public Task<IReadOnlyList<EnrollmentException>> ListExpiredAutoHeldAsync(string tenantId, DateTime now, int limit, CancellationToken ct = default)
+    {
+        lock (_gate)
+            return Task.FromResult<IReadOnlyList<EnrollmentException>>(_items
+                .Where(x => x.TenantId == tenantId && x.AutoHeld && x.Status == EnrollmentExceptionStatus.Held && x.HeldUntil <= now)
+                .OrderBy(x => x.HeldUntil).Take(limit).Select(Copy).ToList());
+    }
+
     private static EnrollmentException Copy(EnrollmentException e) =>
         JsonSerializer.Deserialize<EnrollmentException>(JsonSerializer.Serialize(e))!;
 }

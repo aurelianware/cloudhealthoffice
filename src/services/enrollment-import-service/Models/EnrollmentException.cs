@@ -98,6 +98,20 @@ public sealed class EnrollmentException
 
     public DateTime? HeldUntil { get; set; }
     public int Attempts { get; set; }
+
+    /// <summary>
+    /// The orphan grace period put this on hold when it was recorded
+    /// (enrollment-operations.md §10, decision 5): a dependent whose subscriber
+    /// was not on file, waiting for the subscriber's file. Manual holds leave it false.
+    /// </summary>
+    public bool AutoHeld { get; set; }
+
+    /// <summary>
+    /// A reprocess is in flight until this time. Claimed with the version
+    /// compare-and-swap before the import runs, so an automatic retry and a
+    /// specialist (or two triggers) never apply the same change twice.
+    /// </summary>
+    public DateTime? ReprocessLeaseUntil { get; set; }
     public List<EnrollmentExceptionAction> Actions { get; set; } = new();
 
     public DateTime CreatedAt { get; set; }

@@ -90,6 +90,7 @@ public sealed class EnrollmentExceptionService
         {
             e.Status = EnrollmentExceptionStatus.Held;
             e.HeldUntil = until;
+            e.AutoHeld = false; // the specialist's hold now, not the grace period's
         }, ct);
     }
 
@@ -121,6 +122,8 @@ public sealed class EnrollmentExceptionService
         if (exception is null) return ExceptionActionResult.Missing();
         if (exception.Status == EnrollmentExceptionStatus.Resolved)
             return ExceptionActionResult.Bad("This exception is already resolved.", exception);
+        if (exception.ReprocessLeaseUntil is { } claimed && claimed > Now)
+            return new ExceptionActionResult(ExceptionActionOutcome.Conflict, exception, "This exception is being reprocessed; try again shortly.");
         var expected = exception.Version;
         change(exception);
         exception.UpdatedAt = Now;
@@ -136,17 +139,53 @@ public sealed class EnrollmentExceptionService
         return ExceptionActionResult.Ok(exception);
     }
 
-    private async Task<ExceptionActionResult> RunAsync(EnrollmentException exception, string tenantId, string actor, string action, string? note, CancellationToken ct)
+    /// <summary>
+    /// The automatic retry of an orphaned dependent (enrollment-operations.md
+    /// §10, decision 5), when its subscriber arrives or its grace period ends.
+    /// A hold stays in place while the subscriber is still missing; anything
+    /// else (applied, or a new reason) is settled as usual.
+    /// </summary>
+    public async Task<ExceptionActionResult> AutoRetryOrphanAsync(string tenantId, string id, string note, CancellationToken ct = default)
     {
+        var exception = await _exceptions.GetAsync(tenantId, id, ct);
+        if (exception is null) return ExceptionActionResult.Missing();
+        if (exception.Status == EnrollmentExceptionStatus.Resolved)
+            return ExceptionActionResult.Bad("This exception is already resolved.", exception);
+        if (!Orphans.OrphanDependents.IsOrphan(exception))
+            return ExceptionActionResult.Bad("Only a dependent whose subscriber was not on file is retried automatically.", exception);
+        return await RunAsync(exception, tenantId, Orphans.OrphanDependents.Actor, Orphans.OrphanDependents.AutoRetriedAction, note, ct, automatic: true);
+    }
+
+    /// <summary>How long a reprocess holds its claim; long enough for one change to import.</summary>
+    internal static readonly TimeSpan ReprocessLease = TimeSpan.FromMinutes(5);
+
+    private async Task<ExceptionActionResult> RunAsync(EnrollmentException exception, string tenantId, string actor, string action, string? note,
+        CancellationToken ct, bool automatic = false)
+    {
+        // One reprocess at a time: a specialist and an automatic retry (or two
+        // retries) must never apply the same change twice. The claim is taken
+        // with the version compare-and-swap below, so of two readers only one wins.
+        var now = Now;
+        if (exception.ReprocessLeaseUntil is { } claimed && claimed > now)
+            return new ExceptionActionResult(ExceptionActionOutcome.Conflict, exception, "This exception is being reprocessed; try again shortly.");
+
         // Record the action (and any correction) first, so the import's outcome lands on top of it.
         var expected = exception.Version;
+        // Whole milliseconds: MongoDB stores dates to the millisecond, and the
+        // claim is released only by the reprocess that took it (compared exactly).
+        var leaseTicks = (now + ReprocessLease).Ticks;
+        var lease = new DateTime(leaseTicks - leaseTicks % TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
         exception.Attempts++;
-        exception.Status = EnrollmentExceptionStatus.Open;
-        exception.HeldUntil = null;
-        exception.UpdatedAt = Now;
-        exception.Actions.Add(new EnrollmentExceptionAction { Action = action, Actor = actor, At = Now, Note = note?.Trim() });
+        if (!automatic)
+        {
+            exception.Status = EnrollmentExceptionStatus.Open;
+            exception.HeldUntil = null;
+        }
+        exception.ReprocessLeaseUntil = lease;
+        exception.UpdatedAt = now;
+        exception.Actions.Add(new EnrollmentExceptionAction { Action = action, Actor = actor, At = now, Note = note?.Trim() });
         if (action != EnrollmentExceptionActions.Reprocessed)
-            exception.Actions.Add(new EnrollmentExceptionAction { Action = EnrollmentExceptionActions.Reprocessed, Actor = actor, At = Now });
+            exception.Actions.Add(new EnrollmentExceptionAction { Action = EnrollmentExceptionActions.Reprocessed, Actor = actor, At = now });
         try
         {
             await _exceptions.SaveAsync(exception, expected, ct);
@@ -163,16 +202,73 @@ public sealed class EnrollmentExceptionService
             EdiFileId = exception.EdiFileId,
             ActorId = actor,
             ReprocessExceptionId = exception.Id,
-            ParsedAt = Now,
+            ParsedAt = now,
         };
         if (exception.SourceKind == EnrollmentExceptionSourceKind.Subscriber && exception.Subscriber is { } subscriber)
             batch.Enrollments.Add(subscriber);
         else if (exception.Dependent is { } dependent)
             batch.DependentEnrollments.Add(dependent);
         else
+        {
+            await SettleAsync(tenantId, exception.Id, lease, automatic, ct);
             return ExceptionActionResult.Bad("The exception has no change to reprocess.", exception);
+        }
 
-        await _import.ImportEnrollmentAsync(batch, tenantId);
+        try
+        {
+            await _import.ImportEnrollmentAsync(batch, tenantId);
+        }
+        finally
+        {
+            await SettleAsync(tenantId, exception.Id, lease, automatic, ct);
+        }
         return ExceptionActionResult.Ok((await _exceptions.GetAsync(tenantId, exception.Id, ct))!);
+    }
+
+    /// <summary>
+    /// Releases the reprocess claim and, after an automatic retry that did not
+    /// resolve it, decides where it waits: still held while its subscriber is
+    /// missing and the hold has time left; open (to the work queue) when the
+    /// reason changed or the grace period has ended.
+    /// </summary>
+    private async Task SettleAsync(string tenantId, string id, DateTime lease, bool automatic, CancellationToken ct)
+    {
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var exception = await _exceptions.GetAsync(tenantId, id, CancellationToken.None);
+            if (exception is null || exception.ReprocessLeaseUntil != lease) return;
+            var expected = exception.Version;
+            var now = Now;
+            exception.ReprocessLeaseUntil = null;
+            if (automatic && exception.Status == EnrollmentExceptionStatus.Held)
+            {
+                if (exception.ReasonCode != EnrollmentRejectionReasons.SubscriberNotFound)
+                {
+                    exception.Status = EnrollmentExceptionStatus.Open;
+                    exception.HeldUntil = null;
+                }
+                else if (exception.HeldUntil is not { } until || until <= now)
+                {
+                    exception.Status = EnrollmentExceptionStatus.Open;
+                    exception.HeldUntil = null;
+                    exception.Actions.Add(new EnrollmentExceptionAction
+                    {
+                        Action = Orphans.OrphanDependents.GraceEndedAction,
+                        Actor = Orphans.OrphanDependents.Actor,
+                        At = now,
+                        Note = "Grace period ended; the subscriber was not received.",
+                    });
+                }
+            }
+            exception.UpdatedAt = now;
+            try
+            {
+                await _exceptions.SaveAsync(exception, expected, CancellationToken.None);
+                return;
+            }
+            catch (EnrollmentExceptionConcurrencyException)
+            {
+            }
+        }
     }
 }

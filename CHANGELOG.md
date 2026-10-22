@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Orphaned dependents wait for their subscriber, then apply themselves.**
+  A dependent rejected because its subscriber is not on file is held for a
+  grace period, resolved through new enrollment settings by line of business,
+  benefit plan and sponsor (defaults: commercial 7 days, Marketplace and
+  Medicaid 0). When the subscriber arrives in any later import, the dependent is
+  reprocessed automatically. When the grace period ends, a sweep retries it once
+  more and otherwise opens it to the Matching queue with its history. See
+  `docs/architecture/enrollment-operations.md` §9.3.
+
 - **Raw 834s of any size, on one intake path.** Every raw 834 — uploaded or
   from SFTP, small or a 1 GB state audit file — is streamed to the raw-file
   store (the configured document store, or GridFS), its envelope checked

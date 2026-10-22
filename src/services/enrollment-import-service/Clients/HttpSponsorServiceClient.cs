@@ -34,6 +34,30 @@ public class HttpSponsorServiceClient : ISponsorServiceClient
         return true;
     }
 
+    public async Task<string?> GetLineOfBusinessAsync(string tenantId, string groupNumber, CancellationToken ct = default)
+    {
+        var client = _httpClientFactory.CreateClient(HttpClientName);
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/sponsors/{Uri.EscapeDataString(groupNumber)}");
+        request.Headers.Add("X-Tenant-ID", tenantId);
+
+        using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+        using var doc = await System.Text.Json.JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false), cancellationToken: ct).ConfigureAwait(false);
+        foreach (var property in doc.RootElement.EnumerateObject())
+        {
+            if (!string.Equals(property.Name, "lineOfBusiness", StringComparison.OrdinalIgnoreCase)) continue;
+            return property.Value.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.Number => property.Value.GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture),
+                System.Text.Json.JsonValueKind.String => property.Value.GetString(),
+                _ => null,
+            };
+        }
+        return null;
+    }
+
     public async Task CreateAsync(string tenantId, CreateSponsorRequestDto request, CancellationToken ct = default)
     {
         var client = _httpClientFactory.CreateClient(HttpClientName);

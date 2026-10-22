@@ -2,6 +2,7 @@ using EnrollmentImportService.Clients;
 using EnrollmentImportService.Models;
 using EnrollmentImportService.Services;
 using EnrollmentImportService.Services.Edi;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using ImportSvc = EnrollmentImportService.Services.EnrollmentImportService;
@@ -14,7 +15,7 @@ namespace EnrollmentImportService.Tests.Services;
 /// their INS02 relationship — and nothing about them is ever written onto
 /// the subscriber's record.
 /// </summary>
-public class EnrollmentImportServiceDependentTests
+public partial class EnrollmentImportServiceDependentTests
 {
     /// <summary>member-service stand-in that remembers what was created, so re-imports see prior state.</summary>
     private sealed class Harness
@@ -39,6 +40,20 @@ public class EnrollmentImportServiceDependentTests
         /// <summary>coverage-service fails the reinstate call for this coverage id.</summary>
         public string? FailReinstateFor { get; set; }
         public ImportSvc Service { get; }
+
+        // Orphaned dependents (enrollment-operations.md §10, decision 5).
+        public MutableTime Clock { get; } = new(DateTime.UtcNow);
+        public EnrollmentImportService.Services.Settings.InMemoryEnrollmentSettingsStore Settings { get; } = new();
+        /// <summary>sponsor-service's line of business for every group (its enum number); null = sponsor not on file.</summary>
+        public string? LineOfBusiness { get; set; }
+        /// <summary>When set, member creates wait on it (to hold a reprocess in flight).</summary>
+        public Task? CreateGate { get; set; }
+        public ServiceProvider Provider { get; }
+        /// <summary>The import as the host registers it: followed by the orphan retry.</summary>
+        public IEnrollmentImportService Decorated => Provider.GetRequiredService<IEnrollmentImportService>();
+        public EnrollmentImportService.Services.Orphans.OrphanDependentRetrier Retrier =>
+            Provider.GetRequiredService<EnrollmentImportService.Services.Orphans.OrphanDependentRetrier>();
+        public EnrollmentExceptionService OrphanAwareExceptions => Provider.GetRequiredService<EnrollmentExceptionService>();
 
         public CoverageRecordDto SeedCoverage(string memberId, string line, string level, string effective, string? termination = null)
         {
@@ -66,12 +81,15 @@ public class EnrollmentImportServiceDependentTests
                         ? throw new HttpRequestException("member-service unavailable")
                         : Existing.Contains(id));
             memberClient.Setup(m => m.CreateAsync(It.IsAny<string>(), It.IsAny<CreateMemberRequestDto>(), It.IsAny<CancellationToken>()))
-                .Callback((string _, CreateMemberRequestDto r, CancellationToken _) =>
+                .Returns(async (string _, CreateMemberRequestDto r, CancellationToken _) =>
                 {
-                    Created.Add(r);
-                    Existing.Add(r.MemberId);
-                })
-                .Returns(Task.CompletedTask);
+                    if (CreateGate is { } gate) await gate;
+                    lock (Created)
+                    {
+                        Created.Add(r);
+                        Existing.Add(r.MemberId);
+                    }
+                });
             memberClient.Setup(m => m.UpdateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<UpdateMemberRequestDto>(), It.IsAny<CancellationToken>()))
                 .Callback((string _, string id, UpdateMemberRequestDto r, CancellationToken _) => Updated.Add((id, r)))
                 .Returns(Task.CompletedTask);
@@ -145,6 +163,8 @@ public class EnrollmentImportServiceDependentTests
             var sponsorClient = new Mock<ISponsorServiceClient>();
             sponsorClient.Setup(s => s.ExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
+            sponsorClient.Setup(s => s.GetLineOfBusinessAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => LineOfBusiness);
 
             var benefitPlanClient = new Mock<IBenefitPlanServiceClient>();
             benefitPlanClient.Setup(b => b.ResolvePlanIdAsync(
@@ -162,13 +182,31 @@ public class EnrollmentImportServiceDependentTests
 
             var publisher = new EnrollmentEventPublisher(Events, NullLogger<EnrollmentEventPublisher>.Instance);
 
+            var grace = new EnrollmentImportService.Services.Orphans.OrphanGracePolicy(sponsorClient.Object, benefitPlanClient.Object,
+                new EnrollmentImportService.Services.Settings.EnrollmentSettingsResolver(Settings),
+                NullLogger<EnrollmentImportService.Services.Orphans.OrphanGracePolicy>.Instance);
             Service = new ImportSvc(
                 memberClient.Object, sponsorClient.Object, benefitPlanClient.Object, coverageClient.Object,
                 txns.Object, importRuns.Object, publisher, new EnrollmentValidator(),
-                NullLogger<ImportSvc>.Instance, Exceptions);
+                NullLogger<ImportSvc>.Instance, Exceptions, grace, Clock);
+
+            // As Program.cs wires it: the import, then the orphan retry; the
+            // exception service reprocesses through that same import.
+            var services = new ServiceCollection();
+            services.AddSingleton<EnrollmentImportService.Repositories.IEnrollmentExceptionRepository>(Exceptions);
+            services.AddSingleton<TimeProvider>(Clock);
+            services.AddSingleton(sp => new EnrollmentImportService.Services.Orphans.OrphanDependentRetrier(
+                Exceptions, sp, NullLogger<EnrollmentImportService.Services.Orphans.OrphanDependentRetrier>.Instance));
+            services.AddSingleton<IEnrollmentImportService>(sp => new EnrollmentImportService.Services.Orphans.OrphanRetryingImportService(
+                Service, sp.GetRequiredService<EnrollmentImportService.Services.Orphans.OrphanDependentRetrier>(),
+                NullLogger<EnrollmentImportService.Services.Orphans.OrphanRetryingImportService>.Instance));
+            services.AddSingleton(sp => new EnrollmentExceptionService(Exceptions, sp.GetRequiredService<IEnrollmentImportService>(), Clock));
+            Provider = services.BuildServiceProvider();
         }
 
         public Task<ImportResult> ImportAsync(Enrollment834 batch) => Service.ImportEnrollmentAsync(batch, "t1");
+
+        public Task<ImportResult> ImportViaHostAsync(Enrollment834 batch, string tenantId = "t1") => Decorated.ImportEnrollmentAsync(batch, tenantId);
 
         public EnrollmentExceptionService ExceptionService(DateTime? now = null) =>
             new(Exceptions, Service, new FixedTime(now ?? DateTime.UtcNow));
@@ -177,6 +215,14 @@ public class EnrollmentImportServiceDependentTests
     private sealed class FixedTime(DateTime now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => new(DateTime.SpecifyKind(now, DateTimeKind.Utc));
+    }
+
+    public sealed class MutableTime(DateTime start) : TimeProvider
+    {
+        private DateTime _now = DateTime.SpecifyKind(start, DateTimeKind.Utc);
+        public DateTime Now => _now;
+        public void Advance(TimeSpan by) => _now += by;
+        public override DateTimeOffset GetUtcNow() => new(_now);
     }
 
     private static MemberEnrollment Subscriber(string id, string maintenanceType, params Dependent[] dependents) => new()

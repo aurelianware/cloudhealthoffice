@@ -58,8 +58,21 @@ builder.Services.AddSingleton<IEnrollmentEventRepository, EnrollmentEventReposit
 builder.Services.AddScoped<IEnrollmentEventPublisher, EnrollmentEventPublisher>();
 builder.Services.AddSingleton<IEnrollmentValidator, EnrollmentValidator>();
 builder.Services.AddSingleton<IEnrollmentExceptionRepository, EnrollmentExceptionRepository>();
-builder.Services.AddScoped<IEnrollmentImportService, EnrollmentImportService.Services.EnrollmentImportService>();
+// Enrollment settings through the chain of levels (line of business → benefit
+// plan → sponsor), and the orphaned-dependent grace period and retry built on
+// it (docs/architecture/enrollment-operations.md §10, decision 5).
+builder.Services.AddSingleton<EnrollmentImportService.Services.Settings.IEnrollmentSettingsStore, EnrollmentImportService.Services.Settings.MongoEnrollmentSettingsStore>();
+builder.Services.AddSingleton<EnrollmentImportService.Services.Settings.EnrollmentSettingsResolver>();
+builder.Services.AddSingleton<EnrollmentImportService.Services.Orphans.IOrphanGracePolicy, EnrollmentImportService.Services.Orphans.OrphanGracePolicy>();
+builder.Services.AddScoped<EnrollmentImportService.Services.Orphans.OrphanDependentRetrier>();
+// Every import path goes through the orphan retry: the import itself, then a
+// retry of dependents waiting on the subscribers it put on file.
+builder.Services.AddScoped<EnrollmentImportService.Services.EnrollmentImportService>();
+builder.Services.AddScoped<IEnrollmentImportService, EnrollmentImportService.Services.Orphans.OrphanRetryingImportService>();
 builder.Services.AddScoped<EnrollmentExceptionService>();
+builder.Services.Configure<EnrollmentImportService.Services.Orphans.OrphanSweepOptions>(
+    builder.Configuration.GetSection(EnrollmentImportService.Services.Orphans.OrphanSweepOptions.SectionName));
+builder.Services.AddHostedService<EnrollmentImportService.Services.Orphans.OrphanSweepService>();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IEnrollment834EdiParser, Enrollment834EdiParser>();
 
