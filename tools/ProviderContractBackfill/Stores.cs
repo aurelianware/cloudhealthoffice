@@ -14,11 +14,12 @@ public sealed record Collections(
     string FfsRateConfigs,
     string CapitationRateConfigs,
     string EngineContracts,
+    string CanonicalContracts,
     string FeeSchedules)
 {
     public static Collections Default => new(
         "provider_contracts", "ffs_rate_configs", "capitation_rate_configs",
-        "ProviderContracts", "FeeSchedules");
+        "ProviderContracts", "ProviderContractsCanonical", "FeeSchedules");
 }
 
 /// <summary>Raised when the database the tool is pointed at is not the one the operator named.</summary>
@@ -53,7 +54,8 @@ public sealed class Stores
     public string Describe()
         => $"database {DatabaseName}: legal={_collections.LegalContracts}, " +
            $"ffs={_collections.FfsRateConfigs}, capitation={_collections.CapitationRateConfigs}, " +
-           $"engine={_collections.EngineContracts}, schedules={_collections.FeeSchedules}";
+           $"engine={_collections.EngineContracts}, canonical={_collections.CanonicalContracts}, " +
+           $"schedules={_collections.FeeSchedules}";
 
     /// <summary>
     /// Refuses unless the operator named this database on the command line. The
@@ -101,6 +103,25 @@ public sealed class Stores
             .Find(Builders<EngineModels.ProviderContract>.Filter.Eq(c => c.TenantId, tenantId))
             .ToListAsync();
 
+    /// <summary>
+    /// The canonical contracts a previous run already wrote, so the plan can say
+    /// whether each row creates or replaces one.
+    /// </summary>
+    public async Task<HashSet<string>> CanonicalContractIdsAsync(string tenantId)
+    {
+        var contracts = await _database
+            .GetCollection<EngineModels.ProviderContract>(_collections.CanonicalContracts)
+            .Find(Builders<EngineModels.ProviderContract>.Filter.Eq(c => c.TenantId, tenantId))
+            .Project(Builders<EngineModels.ProviderContract>.Projection.Include(c => c.Id))
+            .ToListAsync();
+
+        return contracts
+            .Select(d => d.GetValue("_id", MongoDB.Bson.BsonNull.Value))
+            .Where(v => v.IsString)
+            .Select(v => v.AsString)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
     public async Task<HashSet<string>> FeeScheduleIdsAsync(string tenantId)
     {
         var ids = await _database.GetCollection<BsonDocument>(_collections.FeeSchedules)
@@ -137,10 +158,18 @@ public sealed class Stores
     /// <summary>
     /// Writes one canonical contract, by its deterministic id, so a second run
     /// replaces rather than duplicates.
+    ///
+    /// <para>
+    /// Into its own collection, beside the engine's existing one rather than
+    /// over it. The dual-read window of ADR 016 phase 4 prices every claim with
+    /// both contracts and pays on the legacy one, which it can only do while
+    /// both still exist — and it means this backfill is undone by dropping a
+    /// collection, not by restoring a dump.
+    /// </para>
     /// </summary>
-    public async Task ReplaceEngineContractAsync(EngineModels.ProviderContract contract)
+    public async Task ReplaceCanonicalContractAsync(EngineModels.ProviderContract contract)
     {
-        var collection = _database.GetCollection<EngineModels.ProviderContract>(_collections.EngineContracts);
+        var collection = _database.GetCollection<EngineModels.ProviderContract>(_collections.CanonicalContracts);
         await collection.ReplaceOneAsync(
             Builders<EngineModels.ProviderContract>.Filter.Eq(c => c.Id, contract.Id),
             contract,

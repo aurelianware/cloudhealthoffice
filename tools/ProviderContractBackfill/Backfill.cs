@@ -67,6 +67,7 @@ public sealed class Backfill(Stores stores, Action<string> log)
         var scheduleIds = await stores.FeeScheduleIdsAsync(tenantId);
         var ffsConfigs = await stores.FfsRateConfigsAsync(tenantId);
         var capitationConfigs = await stores.CapitationRateConfigsAsync(tenantId);
+        var canonicalIds = await stores.CanonicalContractIdsAsync(tenantId);
 
         var engineById = engineContracts.ToDictionary(c => c.Id, StringComparer.Ordinal);
         var claimedEngineIds = new HashSet<string>(StringComparer.Ordinal);
@@ -93,7 +94,7 @@ public sealed class Backfill(Stores stores, Action<string> log)
                     claimedEngineIds.Add(canonicalId);
 
                 var row = FromLegal(
-                    tenantId, legal, planId, canonicalId, engine, scheduleIds,
+                    tenantId, legal, planId, canonicalId, engine, scheduleIds, canonicalIds,
                     ffsConfigs.Where(d => ParentContractId(d) == legal.Id).ToList(),
                     capitationConfigs.Where(d => ParentContractId(d) == legal.Id).ToList());
 
@@ -121,7 +122,7 @@ public sealed class Backfill(Stores stores, Action<string> log)
                      .Where(c => !claimedEngineIds.Contains(c.Id))
                      .OrderBy(c => c.Id, StringComparer.Ordinal))
         {
-            rows.Add(FromEngineOnly(tenantId, engine, scheduleIds));
+            rows.Add(FromEngineOnly(tenantId, engine, scheduleIds, canonicalIds));
         }
 
         return rows;
@@ -136,6 +137,7 @@ public sealed class Backfill(Stores stores, Action<string> log)
         string canonicalId,
         EngineModels.ProviderContract? engine,
         HashSet<string> scheduleIds,
+        HashSet<string> canonicalIds,
         List<BsonDocument> ffsConfigs,
         List<BsonDocument> capitationConfigs)
     {
@@ -148,7 +150,7 @@ public sealed class Backfill(Stores stores, Action<string> log)
             ProviderNpi = legal.ProviderNPI,
             PlanId = planId,
             Origin = "legal",
-            Replaces = engine is not null,
+            Replaces = canonicalIds.Contains(canonicalId),
         };
 
         // The legal contract may already carry its own rate sheet, written
@@ -335,7 +337,8 @@ public sealed class Backfill(Stores stores, Action<string> log)
     // ── An engine contract with no legal agreement ────────────────────
 
     private static PlannedContract FromEngineOnly(
-        string tenantId, EngineModels.ProviderContract engine, HashSet<string> scheduleIds)
+        string tenantId, EngineModels.ProviderContract engine, HashSet<string> scheduleIds,
+        HashSet<string> canonicalIds)
     {
         var row = new PlannedContract
         {
@@ -346,7 +349,7 @@ public sealed class Backfill(Stores stores, Action<string> log)
             ProviderNpi = engine.ProviderNpi,
             PlanId = engine.PlanId,
             Origin = "engine-only",
-            Replaces = true,
+            Replaces = canonicalIds.Contains(engine.Id),
         };
 
         var terms = engine.ReimbursementTerms.Count > 0

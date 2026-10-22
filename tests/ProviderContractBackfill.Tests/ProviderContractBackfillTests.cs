@@ -100,7 +100,9 @@ public sealed class ProviderContractBackfillTests(MongoRunnerFixture mongo) : IA
         var row = Single(await PlanAsync());
 
         Assert.Equal(PlanDecision.Ready, row.Decision);
-        Assert.True(row.Replaces);
+        // A first run creates: the canonical contract lives in its own
+        // collection, so the engine contract seeded above is not what it replaces.
+        Assert.False(row.Replaces);
 
         var terms = row.Contract!.ReimbursementTerms;
         Assert.Equal(2, terms.Count);
@@ -393,7 +395,7 @@ public sealed class ProviderContractBackfillTests(MongoRunnerFixture mongo) : IA
         var exit = await Program.ApplyAsync(Stores(), Line($"apply --plan {plan} --confirm-database {_db.DatabaseNamespace.DatabaseName}"));
 
         Assert.Equal(0, exit);
-        Assert.Equal(0, await Engine().CountDocumentsAsync(FilterDefinition<EngineModels.ProviderContract>.Empty));
+        Assert.Equal(0, await Canonical().CountDocumentsAsync(FilterDefinition<EngineModels.ProviderContract>.Empty));
     }
 
     [Fact]
@@ -407,9 +409,42 @@ public sealed class ProviderContractBackfillTests(MongoRunnerFixture mongo) : IA
         var exit = await Program.ApplyAsync(Stores(), Execute(plan));
 
         Assert.Equal(0, exit);
-        var stored = await Engine().Find(c => c.Id == $"{Tenant}:{Npi}:{PlanId}").SingleAsync();
+        var stored = await Canonical().Find(c => c.Id == $"{Tenant}:{Npi}:{PlanId}").SingleAsync();
         Assert.Equal(1.10m, Assert.Single(stored.ReimbursementTerms).Multiplier);
         Assert.Equal("legal", stored.Origin);
+    }
+
+    [Fact]
+    public async Task Apply_LeavesTheLegacyEngineContractAlone()
+    {
+        // Phase 4 prices every claim with both contracts and pays on the legacy
+        // one, which it can only do while the legacy one still exists.
+        await SeedSchedulesAsync(CommercialSchedule);
+        var legal = await SeedLegalAsync();
+        await SeedFfsAsync(legal.Id, CommercialSchedule);
+        await SeedEngineAsync(CommercialSchedule);
+
+        await Program.ApplyAsync(Stores(), Execute(await WritePlanAsync()));
+
+        var legacy = await Engine().Find(c => c.Id == $"{Tenant}:{Npi}:{PlanId}").SingleAsync();
+        Assert.Equal(CommercialSchedule, legacy.FeeScheduleId);
+        Assert.Empty(legacy.ReimbursementTerms);
+        Assert.Null(legacy.Origin);
+
+        Assert.Single(await Canonical().Find(FilterDefinition<EngineModels.ProviderContract>.Empty).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Apply_AfterAPreviousRun_SaysItIsReplacing()
+    {
+        await SeedSchedulesAsync(CommercialSchedule);
+        var legal = await SeedLegalAsync();
+        await SeedFfsAsync(legal.Id, CommercialSchedule);
+
+        await Program.ApplyAsync(Stores(), Execute(await WritePlanAsync()));
+
+        // A fresh plan now sees the canonical contract the first run wrote.
+        Assert.True(Single(await PlanAsync()).Replaces);
     }
 
     [Fact]
@@ -423,7 +458,7 @@ public sealed class ProviderContractBackfillTests(MongoRunnerFixture mongo) : IA
         await Program.ApplyAsync(Stores(), Execute(plan));
         await Program.ApplyAsync(Stores(), Execute(plan));
 
-        Assert.Equal(1, await Engine().CountDocumentsAsync(FilterDefinition<EngineModels.ProviderContract>.Empty));
+        Assert.Equal(1, await Canonical().CountDocumentsAsync(FilterDefinition<EngineModels.ProviderContract>.Empty));
     }
 
     [Fact]
@@ -438,7 +473,7 @@ public sealed class ProviderContractBackfillTests(MongoRunnerFixture mongo) : IA
                         "--execute --sha256 0000 --operator tester");
 
         await Assert.ThrowsAsync<PlanHashMismatchException>(() => Program.ApplyAsync(Stores(), line));
-        Assert.Equal(0, await Engine().CountDocumentsAsync(FilterDefinition<EngineModels.ProviderContract>.Empty));
+        Assert.Equal(0, await Canonical().CountDocumentsAsync(FilterDefinition<EngineModels.ProviderContract>.Empty));
     }
 
     [Fact]
@@ -452,7 +487,7 @@ public sealed class ProviderContractBackfillTests(MongoRunnerFixture mongo) : IA
 
         await Assert.ThrowsAsync<EnvironmentMismatchException>(() =>
             Program.ApplyAsync(Stores(), Line($"apply --plan {plan} --confirm-database some-other-database")));
-        Assert.Equal(0, await Engine().CountDocumentsAsync(FilterDefinition<EngineModels.ProviderContract>.Empty));
+        Assert.Equal(0, await Canonical().CountDocumentsAsync(FilterDefinition<EngineModels.ProviderContract>.Empty));
     }
 
     [Fact]
@@ -472,14 +507,17 @@ public sealed class ProviderContractBackfillTests(MongoRunnerFixture mongo) : IA
 
         // Exit 1: something was blocked, so the run is not clean even though the
         // writable contracts were written.
+        // Exit 1: something was blocked, so the run is not clean even though the
+        // writable contract was written.
         Assert.Equal(1, exit);
-        var stored = await Engine().Find(FilterDefinition<EngineModels.ProviderContract>.Empty).ToListAsync();
-        Assert.Equal([$"{Tenant}:1111111111:{PlanId}", $"{Tenant}:2222222222:{PlanId}"],
-            stored.Select(c => c.Id).OrderBy(id => id, StringComparer.Ordinal));
-        // The blocked provider's engine contract is untouched: still the legacy shape.
-        var untouched = stored.Single(c => c.ProviderNpi == "2222222222");
-        Assert.Equal(OrthoSchedule, untouched.FeeScheduleId);
-        Assert.Empty(untouched.ReimbursementTerms);
+        var canonical = await Canonical().Find(FilterDefinition<EngineModels.ProviderContract>.Empty).ToListAsync();
+        Assert.Equal($"{Tenant}:1111111111:{PlanId}", Assert.Single(canonical).Id);
+
+        // Nothing canonical for the blocked provider, and its legacy contract
+        // is exactly as it was.
+        var blocked = await Engine().Find(c => c.ProviderNpi == "2222222222").SingleAsync();
+        Assert.Equal(OrthoSchedule, blocked.FeeScheduleId);
+        Assert.Empty(blocked.ReimbursementTerms);
     }
 
     [Fact]
@@ -529,7 +567,7 @@ public sealed class ProviderContractBackfillTests(MongoRunnerFixture mongo) : IA
 
         await WritePlanAsync();
 
-        Assert.Equal(0, await Engine().CountDocumentsAsync(FilterDefinition<EngineModels.ProviderContract>.Empty));
+        Assert.Equal(0, await Canonical().CountDocumentsAsync(FilterDefinition<EngineModels.ProviderContract>.Empty));
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -545,6 +583,13 @@ public sealed class ProviderContractBackfillTests(MongoRunnerFixture mongo) : IA
 
     private IMongoCollection<EngineModels.ProviderContract> Engine()
         => _db.GetCollection<EngineModels.ProviderContract>("ProviderContracts");
+
+    /// <summary>
+    /// Where the backfill writes: its own collection, so the legacy engine
+    /// contract survives for the phase 4 dual-read window to shadow against.
+    /// </summary>
+    private IMongoCollection<EngineModels.ProviderContract> Canonical()
+        => _db.GetCollection<EngineModels.ProviderContract>("ProviderContractsCanonical");
 
     private static CommandLine Line(string command) => CommandLine.Parse(command.Split(' '));
 

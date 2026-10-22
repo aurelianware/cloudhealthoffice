@@ -22,13 +22,19 @@ namespace ProviderContractBackfill;
 /// Ids are deterministic (<c>{tenant}:{npi}:{plan}</c>), so a second run of the
 /// same plan replaces the same contracts rather than adding more.
 ///
+/// The canonical contracts go in their own collection, beside the engine's
+/// existing one rather than over it: the dual-read window of ADR 016 phase 4
+/// prices every claim with both and pays on the legacy one, which it can only do
+/// while both exist. Undoing this backfill is dropping a collection.
+///
 /// Settings (appsettings.json or env vars, never the command line):
 ///   MongoDb:ConnectionString          required
 ///   MongoDb:DatabaseName              default CloudHealthOffice
 ///   Collections:LegalContracts        default provider_contracts
 ///   Collections:FfsRateConfigs        default ffs_rate_configs
 ///   Collections:CapitationRateConfigs default capitation_rate_configs
-///   Collections:EngineContracts       default ProviderContracts
+///   Collections:EngineContracts       default ProviderContracts (read, never written)
+///   Collections:CanonicalContracts    default ProviderContractsCanonical (the only thing written)
 ///   Collections:FeeSchedules          default FeeSchedules
 ///
 /// Exit codes: 0 done, nothing blocked or failed; 1 some provider is blocked by
@@ -100,6 +106,7 @@ public static class Program
             config["Collections:FfsRateConfigs"] ?? defaults.FfsRateConfigs,
             config["Collections:CapitationRateConfigs"] ?? defaults.CapitationRateConfigs,
             config["Collections:EngineContracts"] ?? defaults.EngineContracts,
+            config["Collections:CanonicalContracts"] ?? defaults.CanonicalContracts,
             config["Collections:FeeSchedules"] ?? defaults.FeeSchedules);
 
         return new Stores(
@@ -214,7 +221,7 @@ public static class Program
 
                 try
                 {
-                    await stores.ReplaceEngineContractAsync(row.Contract);
+                    await stores.ReplaceCanonicalContractAsync(row.Contract);
                     Record($"  {verb.ToUpperInvariant()} {row.CanonicalId} ({row.Contract.ReimbursementTerms.Count} term(s))");
                     written++;
                 }

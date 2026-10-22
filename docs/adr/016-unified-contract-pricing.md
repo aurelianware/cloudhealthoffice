@@ -318,6 +318,13 @@ implemented, rather than silently ignoring them.
   stale plan cannot be applied by accident. Ids are deterministic
   (`{tenant}:{npi}:{plan}`), so a re-run replaces rather than duplicates.
 
+  The canonical contracts go in their own collection
+  (`ProviderContractsCanonical`), beside the engine's `ProviderContracts` rather
+  than over it. Phase 4 prices every claim with both and pays on the legacy one,
+  which it can only do while both exist — and it makes undoing the backfill a
+  dropped collection rather than a restored dump. The backfill never writes the
+  legacy collection; it only reads it.
+
   Identity and scope come from the legal contract; terms from its `FfsRateConfig`
   and `CapitationRateConfig` children and from the engine contract's
   `ContractLines` (scoped terms, first) and `FeeScheduleId` (the last-resort

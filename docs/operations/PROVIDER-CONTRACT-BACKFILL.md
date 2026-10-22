@@ -1,7 +1,8 @@
 # Provider contract backfill (ADR 016 phase 3)
 
 Builds the canonical provider contract out of the four places a provider's
-rates live today, and writes it to the engine's contract store.
+rates live today, and writes it to a canonical contract collection of its own,
+beside the engine's existing one.
 
 Tool: `tools/ProviderContractBackfill`. Decision record:
 [ADR 016](../adr/016-unified-contract-pricing.md).
@@ -13,12 +14,18 @@ Tool: `tools/ProviderContractBackfill`. Decision record:
 | Legal contract (provider-contracts-service) | `provider_contracts` | identity, scope, dates, network participation, and the rate sheet when the contract already carries one |
 | Fee-for-service rate configs | `ffs_rate_configs` | a `FeeScheduleRef` term: schedule, `FeeSchedulePercentage` as the multiplier, the two modifier toggles, the effective dates |
 | Capitation rate configs | `capitation_rate_configs` | a `Capitation` term |
-| Engine contract | `ProviderContracts` | `ContractLines` as scoped terms, `FeeScheduleId` as the last-resort term, `LesserOfBilledCharges` |
+| Engine contract | `ProviderContracts` | `ContractLines` as scoped terms, `FeeScheduleId` as the last-resort term, `LesserOfBilledCharges` — **read only, never written** |
 | Engine fee schedules | `FeeSchedules` | checking that every schedule a term names exists |
 
-It writes **only** `ProviderContracts`, one document per provider-and-plan,
-under the engine's own key `{tenant}:{npi}:{plan}`. Ids are deterministic, so a
-second run replaces rather than duplicates.
+It writes **only** `ProviderContractsCanonical`, one document per
+provider-and-plan, under the engine's own key `{tenant}:{npi}:{plan}`. Ids are
+deterministic, so a second run replaces rather than duplicates.
+
+The canonical contracts go in their own collection rather than over the
+engine's. ADR 016 phase 4 prices every claim with both contracts and pays on the
+legacy one, which it can only do while both exist — and it means this backfill
+is undone by dropping a collection instead of restoring a dump. **Nothing the
+tool does changes what the engine prices today.**
 
 The rate configs are read as raw documents rather than through their services'
 models. Nothing has ever written `ffs_rate_configs` — ffs-service has a model
@@ -37,7 +44,8 @@ MongoDb__DatabaseName                default CloudHealthOffice
 Collections__LegalContracts          default provider_contracts
 Collections__FfsRateConfigs          default ffs_rate_configs
 Collections__CapitationRateConfigs   default capitation_rate_configs
-Collections__EngineContracts         default ProviderContracts
+Collections__EngineContracts         default ProviderContracts (read, never written)
+Collections__CanonicalContracts      default ProviderContractsCanonical (the only thing written)
 Collections__FeeSchedules            default FeeSchedules
 ```
 
@@ -153,28 +161,29 @@ new plan replaces the same documents.
 
 ## Rolling back
 
-The engine contracts the backfill replaced are overwritten in place, so take a
-copy of the `ProviderContracts` collection for the tenants being backfilled
-before `--execute`:
+The backfill only ever writes `ProviderContractsCanonical`, and nothing reads
+that collection until ADR 016 phase 4 ships, so rolling back is dropping what
+was written. No dump is needed beforehand.
 
 ```
-mongodump --db CloudHealthOffice --collection ProviderContracts \
-  --query '{"TenantId": {"$in": ["t1"]}}' --out ./before-backfill
+mongosh --eval 'db.ProviderContractsCanonical.deleteMany({"TenantId": {"$in": ["t1"]}})' CloudHealthOffice
 ```
 
-A canonical contract carries terms, and the engine prices a contract with terms
-by them, ignoring the legacy `FeeScheduleId` and `ContractLines` — so restoring
-the copy restores the old pricing exactly.
+The engine's own `ProviderContracts` was never touched, so the pricing in force
+before the run is still the pricing in force after it, and after the rollback.
 
 ## After the backfill
 
-The backfill is phase 3. Phase 4 is the dual-read window: the engine prices with
-both the canonical and the legacy contract, pays on legacy, and emits a parity
-metric per line, for at least one full monthly claim cycle per tenant. Phase 5
-is the per-tenant flag that moves payment onto the canonical result. Neither has
-shipped yet, so **after this backfill the engine prices canonical contracts
-directly** — which is why a `Blocked` row must stay unwritten and a `Review` row
-must be looked at.
+The backfill is phase 3, and on its own it changes no payment. Phase 4 is the
+dual-read window: the engine prices with both the canonical and the legacy
+contract, pays on legacy, and emits a parity metric per line, for at least one
+full monthly claim cycle per tenant. Phase 5 is the per-tenant flag that moves
+payment onto the canonical result.
+
+So a canonical contract starts pricing only when phase 4 begins reading it —
+which is why a `Blocked` row must stay unwritten, and a `Review` row must be
+looked at, before that window opens. A tenant with anything in its conflict
+report is not ready for phase 4.
 
 ## Not covered here
 
