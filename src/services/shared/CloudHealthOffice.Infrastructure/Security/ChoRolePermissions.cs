@@ -80,6 +80,28 @@ public static class ChoRolePermissions
     public const string NoticesWrite = "notices:write";
 
     /// <summary>
+    /// Contacts: the record of a call, chat or walk-in (contact-service).
+    /// <c>service:read</c> reads contacts and the tenant's reason taxonomy;
+    /// <c>service:contact</c> starts one, works it and closes it.
+    ///
+    /// Reading a contact does not open what it discussed: a linked claim is
+    /// still read through claims-service and <c>claims:read</c>. Compliance
+    /// reads contacts through <c>*:read</c>, which is how grievance audits
+    /// reach the calls that opened the cases.
+    /// </summary>
+    public const string ServiceRead = "service:read";
+
+    /// <inheritdoc cref="ServiceRead"/>
+    public const string ServiceContact = "service:contact";
+
+    /// <summary>
+    /// Configures the tenant's contact reason taxonomy: the list every
+    /// service report is counted by. A supervisor's job, not a rep's.
+    /// TenantAdmin holds it through <c>*:*</c>.
+    /// </summary>
+    public const string ServiceAdmin = "service:admin";
+
+    /// <summary>
     /// The document catalog (document-service). Reading a document also needs
     /// the read permission of the subject it is opened from (a claim's
     /// documents need <c>claims:read</c>), and the document must be linked to
@@ -131,6 +153,9 @@ public static class ChoRolePermissions
                 "authorizations:read", "reference-data:read",
                 "attachments:read", "benefits:read", "consent:read", "consent:write",
                 "providers:read",
+                // The call itself: member services is the role that lives in
+                // the contact screen.
+                ServiceRead, ServiceContact,
                 // Member correspondence and forms taken on calls.
                 DocumentsRead, DocumentsWrite,
                 // Members ask for a Payer-to-Payer transfer through member services.
@@ -174,6 +199,8 @@ public static class ChoRolePermissions
                 // Claim status, denials and payments for provider calls, and
                 // the call recorded on the claim. Never claims:work.
                 "claims:read", "claims:note",
+                // Provider calls are contacts too, recorded the same way.
+                ServiceRead, ServiceContact,
                 "providers:read", "providers:write", "providers:credential",
                 "contracts:read", "contracts:write",
                 "networks:read", "networks:write",

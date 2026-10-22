@@ -187,6 +187,12 @@ The tabs are Summary (check/EFT, payee, status) | Claims paid | 835 | Adjustment
 
 The tabs are Summary | Linked records | Follow-ups | Notes † | Documents †. The full design is in `cho-service.md`.
 
+Step 1 of `cho-service.md` §8 shipped 2026-10-22 as one page rather than tabs,
+which is what fits a screen a rep works while someone is on the line: who is
+calling, what they are asking about, what was discussed, and the wrap-up, with
+the history beside it. The module lands at `/service`. Follow-ups appear when
+step 3 puts them in work management.
+
 ## 5. Module landing: List and Insights
 
 Each module opens on two views, **List** and **Insights**, at `/{module}` and `/{module}/insights`.
