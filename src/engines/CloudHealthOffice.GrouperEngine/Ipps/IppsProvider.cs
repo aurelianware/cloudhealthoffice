@@ -77,6 +77,26 @@ namespace CloudHealthOffice.GrouperEngine.Ipps;
 /// <param name="CapitalDisproportionateShareFactor">
 /// The capital disproportionate share adjustment, likewise separate.
 /// </param>
+/// <param name="QualityDataSubmitted">
+/// Whether the hospital met the inpatient quality reporting requirement for
+/// this year. A hospital that did not is paid a reduced market basket update,
+/// which arrives as a smaller standardized amount and not as a percentage
+/// taken off the payment, so it selects a different row of
+/// <see cref="IppsOperatingRateTable"/>.
+///
+/// <para>
+/// CMS's provider file holds this as an indicator that is <c>"1"</c> or
+/// something else, and its pricer treats <i>anything</i> but <c>"1"</c> as not
+/// met — a blank included. A loader that defaults a missing indicator to true
+/// is therefore not being lenient; it is overpaying.
+/// </para>
+/// </param>
+/// <param name="ElectronicRecordsReduction">
+/// Whether the hospital is subject to the reduction for not being a meaningful
+/// electronic health record user. Independent of the quality requirement: a
+/// hospital can carry both reductions, and CMS publishes a standardized amount
+/// for each of the four combinations.
+/// </param>
 public sealed record IppsProvider(
     string CcnNumber,
     decimal WageIndex,
@@ -88,13 +108,16 @@ public sealed record IppsProvider(
     decimal UncompensatedCarePerDischarge,
     decimal CapitalGeographicAdjustmentFactor,
     decimal CapitalIndirectMedicalEducationFactor,
-    decimal CapitalDisproportionateShareFactor)
+    decimal CapitalDisproportionateShareFactor,
+    bool QualityDataSubmitted,
+    bool ElectronicRecordsReduction)
 {
     /// <summary>
     /// A hospital with no teaching programme, no disproportionate share
-    /// adjustment and the national average geography: the shape a test uses
-    /// when it is about something else, and a reasonable starting point for a
-    /// deployment that has one wage index and nothing further.
+    /// adjustment, the national average geography and neither payment
+    /// reduction: the shape a test uses when it is about something else, and a
+    /// reasonable starting point for a deployment that has one wage index and
+    /// nothing further.
     /// </summary>
     public static IppsProvider Plain(string ccnNumber, decimal wageIndex) => new(
         ccnNumber,
@@ -107,7 +130,9 @@ public sealed record IppsProvider(
         UncompensatedCarePerDischarge: 0m,
         CapitalGeographicAdjustmentFactor: 1m,
         CapitalIndirectMedicalEducationFactor: 0m,
-        CapitalDisproportionateShareFactor: 0m);
+        CapitalDisproportionateShareFactor: 0m,
+        QualityDataSubmitted: true,
+        ElectronicRecordsReduction: false);
 }
 
 /// <summary>
