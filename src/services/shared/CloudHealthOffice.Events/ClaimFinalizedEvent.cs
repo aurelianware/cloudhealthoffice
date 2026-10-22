@@ -20,6 +20,15 @@ public class ClaimFinalizedEvent
 
     public string TenantId { get; set; } = string.Empty;
     public string ClaimId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The claim's chain-stable version id (Claim.ClaimVersionId), which is
+    /// the ExplanationOfBenefit resource id. <see cref="ClaimId"/> is the
+    /// per-version document id. Null on events from producers that predate
+    /// the field; consumers fall back to <see cref="ClaimId"/>.
+    /// </summary>
+    public string? ClaimVersionId { get; set; }
+
     public string ClaimNumber { get; set; } = string.Empty;
     public string MemberId { get; set; } = string.Empty;
 

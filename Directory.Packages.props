@@ -73,6 +73,8 @@
     <PackageVersion Include="CsvHelper" Version="33.0.1" />
     <PackageVersion Include="EphemeralMongo" Version="3.2.0" />
     <PackageVersion Include="FluentAssertions" Version="6.12.2" />
+    <!-- Managed FHIR store (CloudHealthOffice.ManagedFhirStore): matches the version Google.Cloud.Storage.V1 resolves. -->
+    <PackageVersion Include="Google.Apis.Auth" Version="1.76.0" />
     <PackageVersion Include="Google.Cloud.Storage.V1" Version="5.0.0" />
     <PackageVersion Include="Google.Cloud.Kms.V1" Version="3.27.0" />
     <PackageVersion Include="Hl7.Fhir.R4" Version="5.10.2" />

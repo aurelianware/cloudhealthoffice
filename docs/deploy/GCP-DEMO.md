@@ -157,6 +157,16 @@ To go back to the development-key demo, delete the five variables and deploy aga
 
 **Known limits.** Field protection (sponsor and provider bank accounts) needs a key ring outside Development, and the only one implemented is Azure Blob Storage with Key Vault, so saving bank account fields fails in this mode until a Google Cloud key ring (Cloud Storage with Cloud KMS) is added. Invitations and self-service signup are Entra flows and are not offered to Access users. The eligibility gateway demo endpoints run only on Development hosts.
 
+## Claims analytics: FHIR store, BigQuery and Vertex AI
+
+Optional. fhir-service can publish every finalized claim's ExplanationOfBenefit into a Cloud Healthcare API FHIR store in the same project, which streams it to BigQuery within seconds; BigQuery ML can then call Vertex AI models over those tables ([ADR 023](../adr/023-managed-fhir-store-projection.md)).
+
+1. In `infrastructure/gcp`, apply with `enable_managed_fhir_store = true` (and `enable_vertex_ai = true` for the Vertex AI connection).
+2. Set the repository variables `MANAGED_FHIR_STORE` and `MANAGED_FHIR_STORE_SERVICE_ACCOUNT` from the outputs (and `MANAGED_FHIR_STORE_TENANT` if the tenant is not `demo`).
+3. Deploy with Kafka on. Adjudicate a claim and query `cho_fhir.ExplanationOfBenefit` in BigQuery.
+
+The walkthrough, sample SQL and the Vertex AI remote model are in [Managed FHIR store analytics](../architecture/managed-fhir-store-analytics.md).
+
 ## What this is and isn't
 
 **It is:**

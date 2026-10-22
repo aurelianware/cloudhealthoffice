@@ -48,6 +48,9 @@ Add these to the repository settings (Settings → Secrets and variables → Act
 | Variable | `GAR_REPOSITORY` | `terraform output -raw artifact_registry_url` |
 | Variable | `DOCUMENTS_BUCKET` | `terraform output -raw documents_bucket` |
 | Variable | `DOCUMENTS_SERVICE_ACCOUNT` | `terraform output -raw documents_service_account` |
+| Variable | `MANAGED_FHIR_STORE` | `terraform output -raw managed_fhir_store_id` (only with `enable_managed_fhir_store = true`) |
+| Variable | `MANAGED_FHIR_STORE_SERVICE_ACCOUNT` | `terraform output -raw managed_fhir_store_service_account` |
+| Variable | `MANAGED_FHIR_STORE_TENANT` | Optional: the CHO tenant to publish (default `demo`) |
 
 Neither secret is a credential. They identify the federation provider and service account; GitHub's short-lived OIDC token is what authenticates.
 
@@ -72,10 +75,19 @@ document-service stores document bytes (attachment-service and member-document-s
 - **Versions:** versioning is on; a replaced or deleted version is kept `documents_noncurrent_days` (30) days. Abandoned pre-signed staging uploads (`*.upload`) are deleted after a day.
 - **Workload Identity** is enabled on the cluster and the node pool (`GKE_METADATA`). On an existing Standard cluster, applying this updates the cluster in place and rolls the node pool.
 
+## Managed FHIR store, BigQuery and Vertex AI
+
+Off by default. With `enable_managed_fhir_store = true`, `fhir-store.tf` creates a Cloud Healthcare API dataset and R4 FHIR store that fhir-service publishes finalized claims' ExplanationOfBenefit into ([ADR 023](../../docs/adr/023-managed-fhir-store-projection.md)), and configures the store to stream every write to the BigQuery dataset `cho_fhir`. Add `enable_vertex_ai = true` for a BigQuery connection that can call Vertex AI, so BigQuery ML remote models run over those tables. Queries and the end-to-end walkthrough: [Managed FHIR store analytics](../../docs/architecture/managed-fhir-store-analytics.md).
+
+- **Access:** fhir-service reaches the store as the `cho-fhir-store` Google service account through Workload Identity (Kubernetes service account `fhir-service-sa`): `roles/healthcare.fhirResourceEditor` and `roles/healthcare.fhirStoreAdmin` on this store only. The Healthcare service agent writes to the BigQuery dataset, the Pub/Sub topic and the export bucket.
+- **Store settings:** client-assigned ids (`enable_update_create`), referential integrity off (CHO publishes resources as events arrive and enforces integrity itself), Pub/Sub change notifications, ANALYTICS_V2 BigQuery streaming, data access audit logs. Enforce ImplementationGuides with `managed_fhir_enabled_implementation_guides` once the IGs are loaded into the store.
+- **Location:** the Healthcare dataset is in `managed_fhir_store_location` (default `us-central1`); BigQuery and the export bucket in `managed_fhir_bigquery_location` (default `US`).
+- **Synthetic data only**, like the rest of this directory: no BAA, no CMEK, no VPC Service Controls.
+
 ## Tear down
 
 ```bash
 terraform destroy -var="project_id=YOUR_PROJECT_ID"
 ```
 
-This deletes the cluster, the image repository and the federation setup, and stops all charges they incur. The documents bucket is not deleted while it holds objects, so stored documents are never removed by accident: empty it first, or apply with `-var="documents_force_destroy=true"` before destroying. Deleting the whole project (`gcloud projects delete YOUR_PROJECT_ID`) also works if the project was created only for the demo.
+This deletes the cluster, the image repository and the federation setup, and stops all charges they incur. With the managed FHIR store on, the BigQuery dataset and export bucket are likewise kept while they hold data unless `managed_fhir_force_destroy=true`. The documents bucket is not deleted while it holds objects, so stored documents are never removed by accident: empty it first, or apply with `-var="documents_force_destroy=true"` before destroying. Deleting the whole project (`gcloud projects delete YOUR_PROJECT_ID`) also works if the project was created only for the demo.

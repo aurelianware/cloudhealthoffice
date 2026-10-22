@@ -226,6 +226,70 @@ def test_document_services_use_the_bucket_through_workload_identity():
     assert not others
 
 
+MANAGED_STORE = "projects/demo-project/locations/us-central1/datasets/cho/fhirStores/cho-fhir-r4"
+MANAGED_STORE_GSA = "cho-fhir-store@demo-project.iam.gserviceaccount.com"
+
+
+def test_fhir_service_does_not_publish_to_a_managed_store_by_default():
+    docs = render()
+    fhir = deployments(docs)["fhir-service"]
+    assert not any(k.startswith("ManagedFhirStore__") for k in env(fhir))
+    account = next(d for d in docs if d["kind"] == "ServiceAccount" and d["metadata"]["name"] == "fhir-service-sa")
+    assert "iam.gke.io/gcp-service-account" not in (account["metadata"].get("annotations") or {})
+
+
+def test_fhir_service_publishes_to_the_managed_store_through_workload_identity():
+    docs = render("--managed-fhir-store", MANAGED_STORE,
+                  "--managed-fhir-store-service-account", MANAGED_STORE_GSA,
+                  "--managed-fhir-store-tenant", "plan-a")
+    deps = deployments(docs)
+    fhir = deps["fhir-service"]
+    assert fhir["spec"]["template"]["spec"]["serviceAccountName"] == "fhir-service-sa"
+    assert {k: v for k, v in env(fhir).items() if k.startswith("ManagedFhirStore__")} == {
+        "ManagedFhirStore__Provider": "GcpHealthcare",
+        "ManagedFhirStore__Gcp__ProjectId": "demo-project",
+        "ManagedFhirStore__Gcp__Location": "us-central1",
+        "ManagedFhirStore__Gcp__DatasetId": "cho",
+        "ManagedFhirStore__Gcp__FhirStoreId": "cho-fhir-r4",
+        "ManagedFhirStore__TenantId": "plan-a",
+    }
+    accounts = [d for d in docs if d["kind"] == "ServiceAccount" and d["metadata"]["name"] == "fhir-service-sa"]
+    assert len(accounts) == 1
+    assert accounts[0]["metadata"]["annotations"]["iam.gke.io/gcp-service-account"] == MANAGED_STORE_GSA
+    # No other service is given the store's identity.
+    others = [n for n, d in deps.items()
+              if n != "fhir-service" and d["spec"]["template"]["spec"].get("serviceAccountName") == "fhir-service-sa"]
+    assert not others
+    assert not any("ManagedFhirStore__Provider" in env(d) for n, d in deps.items() if n != "fhir-service")
+
+
+def test_managed_store_tenant_defaults_to_demo():
+    docs = render("--managed-fhir-store", MANAGED_STORE,
+                  "--managed-fhir-store-service-account", MANAGED_STORE_GSA)
+    assert env(deployments(docs)["fhir-service"])["ManagedFhirStore__TenantId"] == "demo"
+
+
+def test_managed_store_needs_its_service_account_and_a_full_store_id():
+    for extra in (["--managed-fhir-store", MANAGED_STORE],
+                  ["--managed-fhir-store-service-account", MANAGED_STORE_GSA],
+                  ["--managed-fhir-store", "cho-fhir-r4", "--managed-fhir-store-service-account", MANAGED_STORE_GSA]):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--registry", REGISTRY, *extra],
+            capture_output=True, text=True,
+        )
+        assert result.returncode != 0, extra
+
+
+def test_production_keeps_the_managed_store_identity(tmp_path):
+    docs = render(*production_args(tmp_path, "--managed-fhir-store", MANAGED_STORE,
+                                   "--managed-fhir-store-service-account", MANAGED_STORE_GSA))
+    account = next(d for d in docs if d["kind"] == "ServiceAccount" and d["metadata"]["name"] == "fhir-service-sa")
+    assert account["metadata"]["annotations"]["iam.gke.io/gcp-service-account"] == MANAGED_STORE_GSA
+    fhir = deployments(docs)["fhir-service"]
+    assert fhir["spec"]["template"]["spec"]["serviceAccountName"] == "fhir-service-sa"
+    assert env(fhir)["ManagedFhirStore__Provider"] == "GcpHealthcare"
+
+
 def test_document_bucket_needs_its_service_account():
     result = subprocess.run(
         [sys.executable, str(SCRIPT), "--registry", REGISTRY, "--documents-bucket", "b"],
