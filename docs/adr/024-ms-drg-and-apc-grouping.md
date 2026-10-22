@@ -408,7 +408,28 @@ Build order:
    groupers can agree on the DRG while disagreeing about which code earned the
    severity, and a harness comparing only the DRG calls that a pass and breaks
    on the next claim.
-4. The MS-DRG grouper proper: a port of CMS's expression evaluator over the
+4. The MS-DRG grouper proper. **In progress.** The formula engine is done:
+   `GrouperEngine/Formulas/` holds the lexer, the recursive-descent parser and
+   the evaluator, and its operator precedence is checked against CMS's own
+   parser by `FormulaPrecedenceCheck` in the oracle tool rather than against a
+   reading of it.
+
+   The language turned out to be six tokens — an operand name, two parentheses,
+   and `&`, `|`, `~` — and an operand evaluates as plain set membership
+   (`Collection.contains`) against the operand names a stay satisfies. So the
+   remaining work is not an interpreter but a lookup: build the satisfied-operand
+   set for a stay from the extracted code attribute tables, then walk each MDC's
+   ranked formula list and take the first match. What is left:
+
+   - the satisfied-operand set, from `dxPatterns`, `prPatterns`,
+     `codeToClusterIds` and `clusters`;
+   - driving the ranked formula lists per MDC, with `reRouteMdcId` and
+     `severitySuppressionOperand`;
+   - the unknown-code decision forced by the parity run: CHO must distinguish
+     "not a complication" from "not in my table set", and refuse rather than
+     guess.
+
+   A port of CMS's expression evaluator over the
    extracted attribute tables and ranked formula lists, with the surgical
    hierarchy, MDC re-routing, severity suppression and the MCE edits falling
    out of the data rather than being modelled by hand (see above). Grown

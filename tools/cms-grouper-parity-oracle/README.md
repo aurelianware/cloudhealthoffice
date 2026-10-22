@@ -79,6 +79,30 @@ parser — the CMS jars pin enough of the classpath already.
 CHO's grouper against it, which is how the comparison runs on every build
 without the CMS jars being present.
 
+## The second oracle: formula precedence
+
+`FormulaPrecedenceCheck` evaluates DRG logic formulas with CMS's own lexer and
+parser, so CHO's port of them can be checked against the original:
+
+```bash
+CMS_MSDRG_JARS=/path/to/jars ./run.sh    # compiles both main classes
+java -cp build/shim:"$CMS_MSDRG_JARS"/*:build/oracle \
+  gov.cho.grouper.oracle.FormulaPrecedenceCheck
+```
+
+The formula language is six tokens — an operand name, two parentheses, and
+`&`, `|`, `~` — and an operand evaluates as plain set membership against the
+operands a stay satisfies. That is the whole of MS-DRG's branching logic.
+
+Precedence is the part of it most easily got wrong and least likely to fail
+loudly: a parser that binds `a | b & c` as `(a | b) & c` returns a perfectly
+good boolean for every formula, just the wrong one, and only on the claims
+where it matters. CMS's data relies on the rules —
+`"fuse9plus | cmadifd | tulip"` is a real V44 formula with no parentheses at
+all — so they are pinned against the source. The fourteen cases this prints are
+asserted on the .NET side in `DrgFormulaTests.Precedence_matches_the_cms_parser`,
+and CMS's parser agreed with all fourteen.
+
 ## The corpus
 
 34 invented stays. There is no member, no provider, no claim number and no date
