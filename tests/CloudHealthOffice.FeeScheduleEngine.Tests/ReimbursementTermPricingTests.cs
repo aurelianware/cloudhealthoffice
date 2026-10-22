@@ -35,9 +35,11 @@ public class ReimbursementTermPricingTests
     // ═══════════════════════════════════════════════════════════════════
 
     [Theory]
-    [InlineData("99213", 110m)]
-    [InlineData("27447", 1500m)]
-    public async Task DefaultSchedule_TermMatchesLegacy(string code, decimal expected)
+    // Decimal literals are not valid attribute constants, so the expected
+    // amounts are whole dollars.
+    [InlineData("99213", 110)]
+    [InlineData("27447", 1500)]
+    public async Task DefaultSchedule_TermMatchesLegacy(string code, int expected)
     {
         var legacy = Legacy(contract => contract.FeeScheduleId = MainScheduleId);
         var canonical = Canonical(Term(ReimbursementMethod.FeeScheduleRef, MainScheduleId));
@@ -51,9 +53,9 @@ public class ReimbursementTermPricingTests
 
     [Theory]
     // 27400–27599 is routed to the carve-out schedule by both shapes; 99213 is not.
-    [InlineData("27447", 1800m, CarveOutScheduleId)]
-    [InlineData("99213", 110m, MainScheduleId)]
-    public async Task CodeRangeCarveOut_TermMatchesLegacy(string code, decimal expected, string scheduleId)
+    [InlineData("27447", 1800, CarveOutScheduleId)]
+    [InlineData("99213", 110, MainScheduleId)]
+    public async Task CodeRangeCarveOut_TermMatchesLegacy(string code, int expected, string scheduleId)
     {
         var legacy = Legacy(contract =>
         {
