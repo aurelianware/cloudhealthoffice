@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
 using CloudHealthOffice.ProviderEnrollmentService.Aggregator;
 using CloudHealthOffice.ProviderEnrollmentService.Cache;
@@ -84,8 +85,9 @@ public class StateEnrollmentGateTests
 
         if (tenantId is not null)
         {
+            // As TenantMiddleware leaves it: the tenant from the token.
             var ctx = new DefaultHttpContext();
-            ctx.Request.Headers["X-Tenant-Id"] = tenantId;
+            ctx.Items["TenantId"] = tenantId;
             accessor.HttpContext.Returns(ctx);
         }
 
@@ -93,38 +95,56 @@ public class StateEnrollmentGateTests
     }
 
     // ═════════════════════════════════════════════════════════════════
-    //  1-2: No tenant context → Pass
+    //  1-3: Tenant only from the tenant context; none → fail loudly
     // ═════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task NoHttpContext_ReturnsPass()
+    public async Task NoHttpContext_Throws_InsteadOfPassing()
     {
-        // HttpContext is null — batch/test path
         var accessor = Substitute.For<IHttpContextAccessor>();
         accessor.HttpContext.Returns((HttpContext?)null);
 
-        var gate = BuildGate(httpContext: accessor);
+        var gate = BuildGate(httpContext: accessor, config: BuildConfig(EnrollmentGateMode.Enforce));
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var act = () => gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
 
-        result.Passed.Should().BeTrue();
+        await act.Should().ThrowAsync<TenantContextMissingException>();
         await _configRepo.DidNotReceive().GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task TenantIdMissingFromItems_ReturnsPass()
+    public async Task NoTenantContext_Throws_InsteadOfPassing()
     {
-        // HttpContext exists but X-Tenant-Id header is absent
-        var accessor = BuildHttpContext(null);
-        var ctx = new DefaultHttpContext(); // no tenant header
+        var accessor = Substitute.For<IHttpContextAccessor>();
+        accessor.HttpContext.Returns(new DefaultHttpContext());
+
+        var gate = BuildGate(httpContext: accessor, config: BuildConfig(EnrollmentGateMode.Enforce));
+
+        var act = () => gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+
+        await act.Should().ThrowAsync<TenantContextMissingException>();
+    }
+
+    [Fact]
+    public async Task TenantHeader_IsNeverTrusted()
+    {
+        // A client-supplied header must not choose the tenant whose config is
+        // applied: here it names a tenant whose gate is disabled, while the
+        // caller's token tenant enforces.
+        var accessor = Substitute.For<IHttpContextAccessor>();
+        var ctx = new DefaultHttpContext();
+        ctx.Items["TenantId"] = TenantId;
+        ctx.Request.Headers["X-Tenant-Id"] = "other-tenant";
         accessor.HttpContext.Returns(ctx);
 
-        var gate = BuildGate(httpContext: accessor);
+        var gate = BuildGate(httpContext: accessor, config: BuildConfig(EnrollmentGateMode.Enforce), record: null);
 
         var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
 
-        result.Passed.Should().BeTrue();
-        await _configRepo.DidNotReceive().GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        result.Passed.Should().BeFalse();
+        result.DenialCode.Should().Be("PEMS-001");
+        await _configRepo.Received(1).GetAsync(TenantId, Arg.Any<CancellationToken>());
+        await _configRepo.DidNotReceive().GetAsync("other-tenant", Arg.Any<CancellationToken>());
     }
 
     // ═════════════════════════════════════════════════════════════════
