@@ -154,6 +154,24 @@ builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
     .WithPlatformRules();
 builder.Services.AddClinicalCriteria(builder.Configuration);
 
+// ── Transitions of care ──────────────────────────────────────────────────────
+// A discharge refers the member to care management, where that is configured.
+// Best-effort by contract: without a care-management-service the discharge is
+// still recorded, and no case is opened.
+var careManagementUrl = builder.Configuration["Services:CareManagementServiceUrl"];
+if (!string.IsNullOrWhiteSpace(careManagementUrl))
+{
+    builder.Services.AddHttpClient(
+        AuthorizationService.Services.CareManagement.HttpCareReferralGateway.HttpClientName, client =>
+        {
+            client.BaseAddress = new Uri(careManagementUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
+    builder.Services.AddScoped<AuthorizationService.Services.CareManagement.ICareReferralGateway,
+        AuthorizationService.Services.CareManagement.HttpCareReferralGateway>();
+    builder.Services.AddScoped<AuthorizationService.Services.CareManagement.DischargeCareReferral>();
+}
+
 // Flags stays whose certification has lapsed or whose review is overdue.
 builder.Services.AddHostedService<AuthorizationService.Services.ConcurrentReview.StayReviewWatchdog>();
 

@@ -1,6 +1,7 @@
 using AuthorizationService.Exceptions;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
+using AuthorizationService.Services.CareManagement;
 using AuthorizationService.Services.ConcurrentReview;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
@@ -22,7 +23,8 @@ public sealed class InpatientStaysController(
     IInpatientStayRepository stays,
     IConcurrentReviewService reviews,
     ICurrentActor currentActor,
-    ILogger<InpatientStaysController> logger) : ControllerBase
+    ILogger<InpatientStaysController> logger,
+    DischargeCareReferral? careReferral = null) : ControllerBase
 {
     private string Actor => currentActor.UserId;
 
@@ -151,8 +153,17 @@ public sealed class InpatientStaysController(
 
         try
         {
-            return Ok(await reviews.DischargeAsync(
-                stay, request.DischargeDate, request.DischargeDisposition, Actor, ct));
+            var discharged = await reviews.DischargeAsync(
+                stay, request.DischargeDate, request.DischargeDisposition, Actor, ct);
+
+            // Transitions of care: the window a readmission comes from. The
+            // referral is best-effort and runs after the discharge is
+            // persisted, so a care management service that is down cannot
+            // look like a failed discharge.
+            if (careReferral is not null)
+                await careReferral.ReferIfWarrantedAsync(discharged, ct);
+
+            return Ok(discharged);
         }
         catch (InpatientStayTransitionException ex)
         {

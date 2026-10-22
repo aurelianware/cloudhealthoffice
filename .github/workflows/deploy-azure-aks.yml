@@ -228,6 +228,7 @@ jobs:
           - correspondence-service
           - personal-representative-service
           - work-management-service
+          - care-management-service
         include:
           # Image name overrides for the two PascalCase services. Repo
           # convention treats the override value verbatim — no double
