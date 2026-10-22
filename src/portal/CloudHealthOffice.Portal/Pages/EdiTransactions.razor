@@ -125,9 +125,9 @@
                 </MudTd>
                 <MudTd DataLabel="Status">
                     <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status</MudChip>
-                    @if (context.Errors.Count > 0)
+                    @if (context.ReasonText is { } why)
                     {
-                        <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); display: block;">@string.Join("; ", context.Errors)</MudText>
+                        <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); display: block;">@why@(context.Errors.Count > 0 ? ": " + string.Join("; ", context.Errors) : "")</MudText>
                     }
                 </MudTd>
             </RowTemplate>

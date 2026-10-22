@@ -1032,7 +1032,9 @@ public class EnrollmentImportServiceDependentTests
 
         result.FailedCount.Should().Be(1);
         h.Created.Should().BeEmpty();
-        h.Transactions.Should().Contain(t => t.Status == "Rejected" && t.MemberName.Contains("STRANGER"));
+        h.Transactions.Should().Contain(t => t.Status == "Rejected" && t.MemberName.Contains("STRANGER")
+            && t.ReasonCode == EnrollmentRejectionReasons.DependentNotIdentified
+            && t.FilePosition == "dependent 1 without its subscriber");
     }
 
     [Fact]
@@ -1193,7 +1195,10 @@ public class EnrollmentImportServiceDependentTests
         h.Terminated.Should().BeEmpty();
         cov.TerminationDate.Should().BeNull();
         result.DependentsFailed.Should().Be(1);
-        h.Transactions.Should().Contain(t => t.MemberId == DependentId(child) && t.Status == "Rejected");
+        h.Transactions.Should().Contain(t => t.MemberId == DependentId(child) && t.Status == "Rejected"
+            && t.ReasonCode == EnrollmentRejectionReasons.InvalidTransaction
+            && t.FilePosition == "INS 1, dependent 1"
+            && t.Errors.Single().Message.Contains("termination date"));
         h.Events.AllEvents.Should().NotContain(e => e.MemberId == DependentId(child));
     }
 
@@ -1225,7 +1230,81 @@ public class EnrollmentImportServiceDependentTests
         var result = await h.ImportAsync(new Enrollment834 { BatchId = "R13", DependentEnrollments = { baby } });
 
         result.FailedCount.Should().Be(1);
-        h.Transactions.Should().ContainSingle(t => t.MemberId == DependentId(baby) && t.Status == "Rejected");
+        h.Transactions.Should().ContainSingle(t => t.MemberId == DependentId(baby) && t.Status == "Rejected")
+            .Which.ReasonCode.Should().Be(EnrollmentRejectionReasons.DownstreamUnavailable);
+    }
+
+    [Fact]
+    public async Task StandaloneDependent_SubscriberNotOnFile_IsRejectedWithTheReason()
+    {
+        var h = new Harness();
+        var baby = Child("BABY", "20260115", "021");
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R14", DependentEnrollments = { baby } });
+
+        var txn = h.Transactions.Single(t => t.MemberId == DependentId(baby));
+        txn.Status.Should().Be("Rejected");
+        txn.ReasonCode.Should().Be(EnrollmentRejectionReasons.SubscriberNotFound);
+        txn.Errors.Single().Message.Should().Contain("SUB1");
+    }
+
+    [Fact]
+    public async Task StandaloneDependentTermination_NotOnFile_IsAcceptedWithANote()
+    {
+        var h = new Harness();
+        var baby = Child("BABY", "20260115", "024");
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R15", DependentEnrollments = { baby } });
+
+        var txn = h.Transactions.Single(t => t.MemberId == DependentId(baby));
+        txn.Status.Should().Be("Accepted");
+        txn.ReasonCode.Should().Be(EnrollmentRejectionReasons.TermSkippedNotOnFile);
+    }
+
+    [Fact]
+    public async Task SubscriberRows_CarryTheSponsorsReasonDatesAndPosition()
+    {
+        var h = new Harness();
+        var subscriber = Subscriber("SUB1", "021");
+        subscriber.MaintenanceReason = "28";
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R16", Enrollments = { subscriber } });
+
+        var txn = h.Transactions.Single(t => t.MemberId == "SUB1");
+        txn.Status.Should().Be("Accepted");
+        txn.ReasonCode.Should().BeNull();
+        txn.Errors.Should().BeEmpty();
+        txn.MaintenanceReasonCode.Should().Be("28");
+        txn.EffectiveDate.Should().Be("20260201");
+        txn.FilePosition.Should().Be("INS 1");
+    }
+
+    [Fact]
+    public async Task SubscriberTermination_NotOnFile_IsAcceptedWithANote()
+    {
+        var h = new Harness();
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R17", Enrollments = { Subscriber("SUB1", "024") } });
+
+        var txn = h.Transactions.Single(t => t.MemberId == "SUB1");
+        txn.Status.Should().Be("Accepted");
+        txn.ReasonCode.Should().Be(EnrollmentRejectionReasons.TermSkippedNotOnFile);
+    }
+
+    [Fact]
+    public async Task SubscriberFailingValidation_StoresEachRule()
+    {
+        var h = new Harness();
+        var subscriber = Subscriber("SUB1", "021");
+        subscriber.MaintenanceType = "";
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R18", Enrollments = { Subscriber("SUB0", "021"), subscriber } });
+
+        var txn = h.Transactions.Single(t => t.MemberId == "SUB1");
+        txn.Status.Should().Be("Rejected");
+        txn.ReasonCode.Should().Be(EnrollmentRejectionReasons.ValidationFailed);
+        txn.FilePosition.Should().Be("INS 2");
+        txn.Errors.Should().NotBeEmpty().And.OnlyContain(e => e.Code.Length > 0 && e.Message.Length > 0);
     }
 
     private static string FindRepoFile(string relative)

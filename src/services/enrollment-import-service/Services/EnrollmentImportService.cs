@@ -95,8 +95,8 @@ public class EnrollmentImportService : IEnrollmentImportService
                     validation.Errors.Select(e =>
                         $"Subscriber {memberEnrollment.SubscriberId}: [{e.Code}] {e.Field} — {e.Message}"));
                 result.FailedCount++;
-                txnStatus = "Rejected";
-                await RecordTransactionAsync(tenantId, batchId, enrollment, memberEnrollment, txnStatus);
+                await RecordTransactionAsync(tenantId, batchId, enrollment, memberEnrollment, "Rejected",
+                    position: Position(i), rejection: EnrollmentRejection.FromValidation(validation));
                 continue;
             }
 
@@ -109,6 +109,9 @@ public class EnrollmentImportService : IEnrollmentImportService
                 ? memberEnrollment.TransactionId
                 : $"{batchId}-{i:D4}-{memberEnrollment.SubscriberId ?? "ANON"}";
 
+            ctx.SubscriberPosition = Position(i);
+            EnrollmentRejection? rejection = null;
+            var skippedBefore = result.SkippedCount;
             try
             {
                 await ProcessMemberEnrollmentAsync(memberEnrollment, ctx, transactionId);
@@ -121,9 +124,16 @@ public class EnrollmentImportService : IEnrollmentImportService
                 result.Errors.Add($"Subscriber {memberEnrollment.SubscriberId}: {ClientErrorText.For(ex)}");
                 result.FailedCount++;
                 txnStatus = "Rejected";
+                rejection = EnrollmentRejection.FromException(ex);
             }
 
-            await RecordTransactionAsync(tenantId, batchId, enrollment, memberEnrollment, txnStatus);
+            // A termination for a member not on file is accepted with nothing to do; say so.
+            if (rejection is null && result.SkippedCount > skippedBefore)
+                rejection = EnrollmentRejection.Note(EnrollmentRejectionReasons.TermSkippedNotOnFile,
+                    "Member not on file; nothing to terminate.");
+
+            await RecordTransactionAsync(tenantId, batchId, enrollment, memberEnrollment, txnStatus,
+                position: Position(i), rejection: rejection);
         }
 
         // Dependent Loop 2000s whose subscriber wasn't resent in this file
@@ -141,7 +151,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             "Import completed: {SuccessCount} success, {FailedCount} failed, {SkippedCount} skipped, {DependentsFailed} attached dependent(s) failed",
             result.SuccessCount, result.FailedCount, result.SkippedCount, result.DependentsFailed);
 
-        await RecordRunAsync(tenantId, enrollment.ActorId, result);
+        await RecordRunAsync(tenantId, enrollment.ActorId, enrollment.EdiFileId, result);
 
         return result;
     }
@@ -153,7 +163,7 @@ public class EnrollmentImportService : IEnrollmentImportService
     /// moment of the API call. Failure here must not fail the import itself;
     /// same posture as <see cref="RecordTransactionAsync"/>.
     /// </summary>
-    private async Task RecordRunAsync(string tenantId, string? actorId, ImportResult result)
+    private async Task RecordRunAsync(string tenantId, string? actorId, string? ediFileId, ImportResult result)
     {
         try
         {
@@ -162,6 +172,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 TenantId = tenantId,
                 BatchId = result.BatchId,
                 FileName = result.FileName,
+                EdiFileId = ediFileId,
                 ActorId = actorId,
                 StartedAt = result.StartedAt,
                 CompletedAt = result.CompletedAt,
@@ -341,7 +352,9 @@ public class EnrollmentImportService : IEnrollmentImportService
         Enrollment834 batch,
         MemberEnrollment memberEnrollment,
         string status,
-        string? dependentMemberId = null)
+        string? dependentMemberId = null,
+        string? position = null,
+        EnrollmentRejection? rejection = null)
     {
         try
         {
@@ -363,7 +376,13 @@ public class EnrollmentImportService : IEnrollmentImportService
                 TransactionDate = batch.ParsedAt == default ? DateTime.UtcNow : batch.ParsedAt,
                 ReceivedAt = DateTime.UtcNow,
                 Status = status,
-                FileName = batch.FileName
+                FileName = batch.FileName,
+                MaintenanceReasonCode = memberEnrollment.MaintenanceReason,
+                EffectiveDate = memberEnrollment.EnrollmentDate,
+                TerminationDate = memberEnrollment.TerminationDate,
+                FilePosition = position,
+                ReasonCode = rejection?.ReasonCode,
+                Errors = rejection?.Errors.ToList() ?? new(),
             });
         }
         catch (Exception ex)
@@ -375,8 +394,16 @@ public class EnrollmentImportService : IEnrollmentImportService
         }
     }
 
+    private static string Position(int subscriberIndex) => $"INS {subscriberIndex + 1}";
+
+    private static string StandalonePosition(int dependentIndex) => $"dependent {dependentIndex + 1} without its subscriber";
+
     /// <summary>Batch-level context threaded through member, dependent and coverage processing.</summary>
-    private sealed record BatchContext(string TenantId, string BatchId, Enrollment834 Batch, ImportResult Result);
+    private sealed record BatchContext(string TenantId, string BatchId, Enrollment834 Batch, ImportResult Result)
+    {
+        /// <summary>The subscriber loop being processed, for transaction positions ("INS 3").</summary>
+        public string? SubscriberPosition { get; set; }
+    }
 
     private async Task ProcessMemberEnrollmentAsync(
         MemberEnrollment enrollment, BatchContext ctx, string transactionId)
@@ -512,7 +539,8 @@ public class EnrollmentImportService : IEnrollmentImportService
             // are reported in DependentsFailed — one failing dependent never
             // stops its siblings.
             var outcome = await ProcessDependentTransactionAsync(
-                enrollment.Dependents[j], memberId, enrollment, ctx, $"{transactionId}-D{j:D2}");
+                enrollment.Dependents[j], memberId, enrollment, ctx, $"{transactionId}-D{j:D2}",
+                $"{ctx.SubscriberPosition}, dependent {j + 1}");
             if (outcome == DependentOutcome.Failed)
             {
                 result.DependentsFailed++;
@@ -534,7 +562,10 @@ public class EnrollmentImportService : IEnrollmentImportService
             result.Errors.Add(
                 $"Dependent of subscriber {subscriberId}: subscriberId (REF*0F) and maintenanceType (INS03) are required");
             result.FailedCount++;
-            await RecordTransactionAsync(ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected");
+            await RecordTransactionAsync(ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected",
+                position: StandalonePosition(index),
+                rejection: EnrollmentRejection.Of(EnrollmentRejectionReasons.DependentNotIdentified,
+                    "The subscriber id (REF*0F) and maintenance type (INS03) are required."));
             return;
         }
 
@@ -554,7 +585,8 @@ public class EnrollmentImportService : IEnrollmentImportService
             result.Errors.Add($"Subscriber {subscriberId} dependent: {ClientErrorText.For(ex)}");
             result.FailedCount++;
             await RecordTransactionAsync(
-                ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected", dependentMemberId);
+                ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected", dependentMemberId,
+                StandalonePosition(index), EnrollmentRejection.FromException(ex));
             return;
         }
 
@@ -568,20 +600,26 @@ public class EnrollmentImportService : IEnrollmentImportService
                 result.SkippedCount++;
                 // Same status the subscriber loop records for a not-found 024.
                 await RecordTransactionAsync(
-                    ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Accepted", dependentMemberId);
+                    ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Accepted", dependentMemberId,
+                    StandalonePosition(index),
+                    EnrollmentRejection.Note(EnrollmentRejectionReasons.TermSkippedNotOnFile,
+                        "Subscriber not on file; nothing to terminate."));
             }
             else
             {
                 result.Errors.Add($"Subscriber {subscriberId}: not on file; cannot apply dependent maintenance");
                 result.FailedCount++;
                 await RecordTransactionAsync(
-                    ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected", dependentMemberId);
+                    ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected", dependentMemberId,
+                    StandalonePosition(index),
+                    EnrollmentRejection.Of(EnrollmentRejectionReasons.SubscriberNotFound,
+                        $"Subscriber {subscriberId} is not on file, so the dependent's change cannot be applied."));
             }
             return;
         }
 
         var outcome = await ProcessDependentTransactionAsync(
-            dependent, subscriberId, null, ctx, $"{ctx.BatchId}-S{index:D4}-{subscriberId}");
+            dependent, subscriberId, null, ctx, $"{ctx.BatchId}-S{index:D4}-{subscriberId}", StandalonePosition(index));
         switch (outcome)
         {
             case DependentOutcome.Applied: result.SuccessCount++; break;
@@ -600,7 +638,7 @@ public class EnrollmentImportService : IEnrollmentImportService
     /// </summary>
     private async Task<DependentOutcome> ProcessDependentTransactionAsync(
         Dependent dependent, string subscriberMemberId, MemberEnrollment? subscriber, BatchContext ctx,
-        string transactionId)
+        string transactionId, string position)
     {
         var maintenanceType = dependent.MaintenanceType ?? subscriber?.MaintenanceType;
         var projected = ToMemberEnrollment(dependent, subscriber, maintenanceType);
@@ -612,7 +650,10 @@ public class EnrollmentImportService : IEnrollmentImportService
         {
             ctx.Result.Errors.Add(
                 $"Subscriber {subscriberMemberId}: dependent has no member identifier (REF*23) and no first name + date of birth to key it by; not applied");
-            await RecordTransactionAsync(ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected");
+            await RecordTransactionAsync(ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected",
+                position: position,
+                rejection: EnrollmentRejection.Of(EnrollmentRejectionReasons.DependentNotIdentified,
+                    "The dependent has no member identifier (REF*23) and no first name and date of birth to key it by."));
             return DependentOutcome.Failed;
         }
 
@@ -623,7 +664,9 @@ public class EnrollmentImportService : IEnrollmentImportService
             await PublishEnrollmentEventAsync(
                 ctx.TenantId, ctx.BatchId, transactionId, ctx.Batch, projected, dependentMemberId);
             await RecordTransactionAsync(
-                ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Accepted", dependentMemberId);
+                ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Accepted", dependentMemberId, position,
+                applied ? null : EnrollmentRejection.Note(EnrollmentRejectionReasons.TermSkippedNotOnFile,
+                    "Dependent not on file; nothing to terminate."));
             return applied ? DependentOutcome.Applied : DependentOutcome.Skipped;
         }
         catch (Exception ex)
@@ -632,7 +675,8 @@ public class EnrollmentImportService : IEnrollmentImportService
                 LogSanitizer.MaskId(dependentMemberId), LogSanitizer.MaskId(subscriberMemberId));
             ctx.Result.Errors.Add($"Dependent {dependentMemberId}: {ClientErrorText.For(ex)}");
             await RecordTransactionAsync(
-                ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected", dependentMemberId);
+                ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected", dependentMemberId, position,
+                EnrollmentRejection.FromException(ex));
             return DependentOutcome.Failed;
         }
     }
@@ -1694,6 +1738,9 @@ public class ImportResult
     public int CoverageRecordsTerminated { get; set; }
     public int CoverageMappingsUnresolved { get; set; }
     public List<string> Errors { get; set; } = new();
+
+    /// <summary>The EDI file record for a raw 834 upload (<c>GET api/v1/enrollment/edi/files/{id}</c>); null otherwise.</summary>
+    public string? EdiFileId { get; set; }
 
     /// <summary>Interchange envelope outcome (TA104: A, E or R) for a raw 834 upload; null otherwise.</summary>
     public string? InterchangeAcknowledgmentCode { get; set; }

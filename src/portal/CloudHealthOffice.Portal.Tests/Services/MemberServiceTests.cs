@@ -93,6 +93,24 @@ public class MemberServiceTests
         ex.ServiceName.Should().Be("Member Service");
     }
 
+    [Fact]
+    public async Task GetMember834TransactionsAsync_ReadsTheStoredReasonAndErrors()
+    {
+        const string json = """
+            [{"transactionId":"T1","batchId":"B1","memberId":"M1","maintenanceTypeCode":"001","maintenanceReasonCode":"07",
+              "status":"Rejected","fileName":"sponsor.834","filePosition":"INS 3","reasonCode":"VALIDATION_FAILED",
+              "errors":[{"code":"REQUIRED","field":"terminationDate","message":"is required for 024"}]}]
+            """;
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var txn = (await sut.GetMember834TransactionsAsync("M1")).Single();
+
+        txn.ReasonText.Should().Be("Failed validation");
+        txn.MaintenanceReasonCode.Should().Be("07");
+        txn.FilePosition.Should().Be("INS 3");
+        txn.Errors.Single().ToString().Should().Be("terminationDate: is required for 024");
+    }
+
     // ── TerminateEnrollmentAsync ──
 
     [Fact]

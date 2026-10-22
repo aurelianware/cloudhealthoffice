@@ -8,17 +8,18 @@
 #
 # Workflow Steps:
 #   1. fetch-claims - Fetch 837 files from SFTP
-#   2. parse-837-edi - Parse EDI to JSON
-#   3. create-claims - POST to Claims Service API
-#   4. publish-to-kafka - Publish to claims-adjudication topic
+#   2. submit-raw-837 - POST each raw file to claims-service's raw 837 import
+#   3. archive-files - Move the files to the SFTP archive folder
 #
 # Flow:
-#   SFTP /inbound/claims/*.edi → Parse → Claims Service → Kafka
-#   claims-service adjudicates on submission (ClaimAdjudicationOrchestrator).
-#   The claims-adjudication Argo workflow that consumed the Kafka topic is
-#   retired (docs/security/argo-service-tokens.md); the message is still sent.
+#   SFTP /inbound/claims/*.edi → POST /api/v1/claims/import/raw837 (source=Sftp)
+#   Every SFTP file takes the same path as an upload (edi-operations.md §4):
+#   envelope and duplicate ISA13 check, TA1, WEDI SNIP edits and 999, the
+#   EDI file record, then claim submission (claims-service adjudicates on
+#   submission). The workflow no longer parses 837s itself or posts JSON, and
+#   no longer publishes to the retired claims-adjudication Kafka topic.
 #
-# Authentication: runs as service account wf-837-ingest; publish-claims.sh
+# Authentication: runs as service account wf-837-ingest; the submit step
 # exchanges its projected token at token-service for a CHO token (claims:work).
 #
 # Trigger:
@@ -76,10 +77,6 @@ spec:
         value: "*.edi"
       - name: claims-service-url
         value: "http://claims-service.cloudhealthoffice.svc.cluster.local:8080"
-      - name: kafka-bootstrap-servers
-        value: "cloudhealthoffice-kafka-bootstrap.kafka:9092"
-      - name: kafka-topic
-        value: "claims-adjudication"
       - name: tenant-id
         value: "default-payer"
       - name: archive-folder
@@ -93,9 +90,6 @@ spec:
     - name: sftp-credentials
       secret:
         secretName: claims-sftp-secret
-    - name: kafka-credentials
-      secret:
-        secretName: kafka-sasl-secret
     - name: cho-workload-token
       projected:
         sources:
@@ -113,18 +107,12 @@ spec:
       steps:
         - - name: fetch-claims
             template: fetch-from-sftp
-        - - name: parse-claims
-            template: parse-837-files
+        - - name: submit-raw-837
+            template: submit-raw-837-files
             arguments:
               artifacts:
                 - name: edi-files
                   from: "{{steps.fetch-claims.outputs.artifacts.edi-files}}"
-        - - name: create-and-publish
-            template: create-claims-batch
-            arguments:
-              artifacts:
-                - name: parsed-claims
-                  from: "{{steps.parse-claims.outputs.artifacts.parsed-claims}}"
         - - name: archive-files
             template: archive-to-sftp
             arguments:
@@ -190,82 +178,65 @@ spec:
             archive:
               none: {}
     
-    # Step 2: Parse 837 EDI to JSON
-    - name: parse-837-files
+    # Step 2: Submit each raw 837 through the upload path
+    - name: submit-raw-837-files
       inputs:
         artifacts:
           - name: edi-files
             path: /work/input
       container:
-        image: cloudhealthoffice/x12-parser:latest
-        command: ["/app/parse-837.sh"]
+        image: alpine:3.18
+        command: [sh, -c]
         env:
-          - name: INPUT_DIR
-            value: "/work/input"
-          - name: OUTPUT_DIR
-            value: "/work/output"
-          - name: CLAIM_TYPES
-            value: "837P,837I,837D"
-        volumeMounts:
-          - name: work-volume
-            mountPath: /work
-      outputs:
-        artifacts:
-          - name: parsed-claims
-            path: /work/output
-            archive:
-              none: {}
-    
-    # Step 3: Create claims in Claims Service and publish to Kafka
-    - name: create-claims-batch
-      inputs:
-        artifacts:
-          - name: parsed-claims
-            path: /work/claims
-      container:
-        image: cloudhealthoffice/claims-publisher:latest
-        command: ["/app/publish-claims.sh"]
-        env:
-          - name: CLAIMS_DIR
-            value: "/work/claims"
-          - name: CLAIMS_SERVICE_URL
-            value: "{{workflow.parameters.claims-service-url}}"
-          - name: KAFKA_BOOTSTRAP_SERVERS
-            value: "{{workflow.parameters.kafka-bootstrap-servers}}"
-          - name: KAFKA_TOPIC
-            value: "{{workflow.parameters.kafka-topic}}"
-          - name: TENANT_ID
+          - name: WF_PARAM_TENANT_ID
             value: "{{workflow.parameters.tenant-id}}"
-          - name: KAFKA_USERNAME
-            valueFrom:
-              secretKeyRef:
-                name: kafka-sasl-secret
-                key: username
-          - name: KAFKA_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: kafka-sasl-secret
-                key: password
+          - name: WF_PARAM_CLAIMS_SERVICE_URL
+            value: "{{workflow.parameters.claims-service-url}}"
+          - name: WF_PARAM_SFTP_FOLDER
+            value: "{{workflow.parameters.sftp-folder}}"
+        args:
+          - |
+            apk add --no-cache curl jq
+            # CHO workload token for the tenant (Authorization + X-Tenant-ID).
+            . /opt/cho/cho-workload.sh
+            TENANT_ID="${WF_PARAM_TENANT_ID}"
+            mkdir -p /work/results
+            FAILED=0
+
+            for file in /work/input/*.edi; do
+              [ -f "$file" ] || continue
+              name=$(basename "$file")
+              # Obtain or refresh the token in this shell, so the $(...) below reuses it.
+              cho_token "$TENANT_ID" || exit 1
+
+              CODE=$(cho_curl "$TENANT_ID" POST "${WF_PARAM_CLAIMS_SERVICE_URL%/}/api/v1/claims/import/raw837" \
+                -F "file=@$file;filename=$name" \
+                -F "source=Sftp" \
+                -F "sourcePath=${WF_PARAM_SFTP_FOLDER%/}/$name" \
+                -o "/work/results/$name.result.json" \
+                -w '%{http_code}')
+
+              if [ "$CODE" = "200" ]; then
+                echo "✓ $name: $(jq -r '"\(.succeededCount)/\(.totalClaims) claims accepted, file record \(.ediFileId // "n/a")"' "/work/results/$name.result.json")"
+              else
+                # A rejected envelope, a duplicate ISA13 or an unreadable file is
+                # recorded on the EDI file record; the TA1/999 are in the body.
+                echo "✗ $name was not imported (HTTP $CODE)"
+                FAILED=$((FAILED + 1))
+              fi
+            done
+            echo "$FAILED file(s) not imported"
         volumeMounts:
           - name: work-volume
             mountPath: /work
-          # publish-claims.sh sources /opt/cho/cho-workload.sh for its CHO token.
           - name: cho-workload-token
             mountPath: /var/run/secrets/cho
             readOnly: true
           - name: cho-workload-lib
             mountPath: /opt/cho
             readOnly: true
-      outputs:
-        parameters:
-          - name: claims-created
-            valueFrom:
-              path: /work/claims-created.txt
-          - name: kafka-published
-            valueFrom:
-              path: /work/kafka-published.txt
-    
-    # Step 4: Archive processed files to SFTP
+
+    # Step 3: Archive processed files to SFTP
     - name: archive-to-sftp
       inputs:
         artifacts:

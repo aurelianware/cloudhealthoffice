@@ -257,9 +257,9 @@
                                     <MudTh>Date</MudTh>
                                     <MudTh>Batch ID</MudTh>
                                     <MudTh>Type</MudTh>
-                                    <MudTh>Reason</MudTh>
+                                    <MudTh>Sponsor reason</MudTh>
                                     <MudTh>Status</MudTh>
-                                    <MudTh>Errors</MudTh>
+                                    <MudTh>Why</MudTh>
                                 </HeaderContent>
                                 <RowTemplate>
                                     <MudTd DataLabel="Date">
@@ -267,6 +267,10 @@
                                     </MudTd>
                                     <MudTd DataLabel="Batch ID">
                                         <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cb-accent-text-70);">@context.BatchId</MudText>
+                                        @if (!string.IsNullOrEmpty(context.FileName) || !string.IsNullOrEmpty(context.FilePosition))
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@string.Join(", ", new[] { context.FileName, context.FilePosition }.Where(x => !string.IsNullOrEmpty(x)))</MudText>
+                                        }
                                     </MudTd>
                                     <MudTd DataLabel="Type">
                                         <MudTooltip Text="@context.TransactionSetPurpose">
@@ -276,8 +280,8 @@
                                             </MudChip>
                                         </MudTooltip>
                                     </MudTd>
-                                    <MudTd DataLabel="Reason">
-                                        <MudText Typo="Typo.body2">@context.MaintenanceReasonCode</MudText>
+                                    <MudTd DataLabel="Sponsor reason">
+                                        <MudText Typo="Typo.body2">@(context.MaintenanceReasonCode ?? "—")</MudText>
                                     </MudTd>
                                     <MudTd DataLabel="Status">
                                         <MudChip T="string" Size="Size.Small"
@@ -285,22 +289,14 @@
                                             @context.Status
                                         </MudChip>
                                     </MudTd>
-                                    <MudTd DataLabel="Errors">
-                                        @if (context.Errors.Any())
+                                    <MudTd DataLabel="Why">
+                                        @if (context.ReasonText is { } why)
                                         {
-                                            <MudTooltip>
-                                                <TooltipContent>
-                                                    @foreach (var err in context.Errors)
-                                                    {
-                                                        <MudText Typo="Typo.caption" Class="d-block">@err</MudText>
-                                                    }
-                                                </TooltipContent>
-                                                <ChildContent>
-                                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Error">
-                                                        @context.Errors.Count error@(context.Errors.Count != 1 ? "s" : "")
-                                                    </MudChip>
-                                                </ChildContent>
-                                            </MudTooltip>
+                                            <MudText Typo="Typo.body2" Color="@(context.Status == "Rejected" ? Color.Error : Color.Default)">@why</MudText>
+                                            @foreach (var err in context.Errors)
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@err</MudText>
+                                            }
                                         }
                                         else
                                         {

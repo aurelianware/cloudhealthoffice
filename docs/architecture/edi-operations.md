@@ -48,8 +48,8 @@ EDI Operations is the analyst's console for the file layer, across every transac
 - 820 remittance exceptions with a resolve action, the only EDI rework path today.
 
 **Missing:**
-1. **No file record.** Nothing lists the files themselves: records are kept per claim or per member, and a clean file with ISA14=0 leaves only a duplicate-check key.
-2. **SFTP bypasses the checks.** The Argo SFTP routes for 837 and 834 post parsed JSON straight to the services. They skip the envelope and duplicate checks, the SNIP edits and the transaction records.
+1. ~~**No file record.**~~ *Built for 834 and 837 (§9.1).* Other transaction types still keep records per transaction only.
+2. ~~**SFTP bypasses the checks.**~~ *Fixed for 834 and 837 (§9.1):* the Argo SFTP workflows now send the raw file through the upload path.
 3. **Outbound control numbers are not assigned properly.** ISA13 comes from the clock or a random number. GS06 and ST02 are hard-coded to `1` and `0001` for 277CA, 835 and 271. Only TA1 uses the sequence store.
 4. **Trading partners are not linked to files.** No file record points at a partner, nothing looks a partner up by ISA06/GS02, and `LastSuccessfulTransmission` is never written. The Trading Partners page shows mock data.
 5. **Inbound and outbound gaps:**
@@ -139,7 +139,7 @@ The two share the same file layer; only the record layer differs:
 
 ## 9. Build order
 
-1. **File record and one intake path** for 834 and 837 (upload and SFTP), with the raw file in the document store.
+1. **File record and one intake path** for 834 and 837 (upload and SFTP), with the raw file in the document store. *Built 2026-10 (§9.1), except the raw file in the document store, which moves to step 4.*
 2. **Control numbers from the sequence store** for every outbound builder; outbound files recorded.
 3. **Trading partner lookup** on intake; last received/sent; the Trading Partners page on real data.
 4. **EDI Operations page:** files, file detail, acknowledgments; links into the business views.
@@ -147,6 +147,31 @@ The two share the same file layer; only the record layer differs:
 6. **Reprocess and re-send** actions.
 7. **Other types on the file record:** 275, 820, 835 out (with delivery), 271 and 277CA out.
 8. **Partner 999 intake;** real-time monitoring tiles; the dashboard tile.
+
+### 9.1 What step 1 built
+
+- **The `EdiFile` record** (shared, `CloudHealthOffice.Infrastructure.Edi.Files`; collection `edi-files` in each service's database), written for every raw 834 and 837 the services receive. It holds:
+  - the source (Upload, Sftp, Gateway, Api), file name, SFTP path and who handed it in;
+  - the size and SHA-256;
+  - sender and receiver, version and usage indicator;
+  - every ISA13, GS06 and ST02;
+  - the lifecycle with a time for each step (Received → EnvelopeChecked → Acknowledged → Parsed → Applied, or Rejected / Duplicate);
+  - the TA1 and 999 codes and control numbers;
+  - accepted and rejected record counts, and file-level errors.
+
+  Recording is best-effort: a store failure is logged and never fails the intake.
+- **Every outcome is recorded:** accepted files, envelope rejections, duplicate ISA13s (status `Duplicate`, a file of their own), unreadable files and files whose contents could not be parsed.
+- **Links from the records:** `ClaimImportTransaction.EdiFileId` and `EnrollmentImportRun.EdiFileId`, and `ediFileId` in the raw 837 and 834 responses.
+- **Read API:** `GET api/v1/claims/edi/files` and `GET api/v1/enrollment/edi/files` (filters: direction, type, status, from, to, controlNumber matching any ISA13/GS06/ST02, limit), and `.../edi/files/{id}`. Every query is tenant-scoped, and the service's read permission applies until `edi:read` exists.
+- **One intake path:** the Argo workflows `x12-837-ingest` and `x12-834-enrollment-import` no longer parse files or post JSON. They post each raw file to `import/raw837` and `import/raw834` with `source=Sftp` and the SFTP path, so SFTP files get:
+  - the envelope and duplicate check, and the TA1;
+  - for 837s, SNIP and the 999;
+  - the file record.
+
+  The 837 workflow no longer publishes to the retired claims-adjudication Kafka topic.
+- **Deferred:**
+  - **The raw file in the document store.** The catalog needs an EDI-file subject and `edi:raw` first (step 4), so `RawDocumentId` is empty for now and the SHA-256 identifies the file.
+  - **The other transaction types** (step 7).
 
 ## 10. Open questions
 
