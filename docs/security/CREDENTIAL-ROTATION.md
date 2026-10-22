@@ -168,7 +168,25 @@ Cosmos connection strings carrying a real account key. The Cosmos
 that appears in several files is the **Azure Cosmos DB Emulator's well-known
 public key**, published by Microsoft and identical for every installation.
 
-## 4. After rotating
+## 4. How the CI scan is scoped
+
+The `secret-scan` job in `.github/workflows/security-scan.yml` runs gitleaks
+three ways, deliberately scoped:
+
+| Trigger | Scope |
+| --- | --- |
+| Every run | The tree at `HEAD` (`--no-git`). Nothing secret may be present at `HEAD`; this gate is unconditional. |
+| Pull request | Only the commits the pull request contributes — `merge-base(base, head)..head`. |
+| Push to `main`/`develop`, daily schedule, manual dispatch | Full history, with `.gitleaksignore` acknowledging the entries above. |
+
+A pull request is gated on its own commits rather than the whole history
+because the history gate is shared: one flagged string committed anywhere —
+including a false positive on an unrelated branch — failed the check on every
+open pull request at once, and no author could clear it from their own branch.
+Coverage is not reduced, only relocated: a historical finding is reported on
+the push and scheduled runs, where it is actionable by whoever owns it.
+
+## 5. After rotating
 
 1. Recreate the affected Kubernetes Secrets (`sftp-credentials`, `sftp-users`,
    and the reference-data PostgreSQL secret).

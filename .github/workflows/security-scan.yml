@@ -166,11 +166,57 @@ jobs:
       - name: Run gitleaks against the working tree
         run: gitleaks detect --redact --verbose --no-banner --exit-code 1 --no-git --source .
 
-      # Then the full history. Known historical leaks are acknowledged by
-      # fingerprint in .gitleaksignore, each one recorded in
+      # On a pull request, scan only the commits the PR itself contributes
+      # (merge-base(base, head)..head).
+      #
+      # A pull request used to be gated on the repository's entire history,
+      # which meant one flagged string committed anywhere — on an unrelated
+      # branch, by anyone — failed the Secret Scanning check on every open
+      # pull request simultaneously, and no PR author could clear it from
+      # their own branch. A PR is now answerable for what it adds; the tree
+      # at HEAD is still gated unconditionally by the step above, and
+      # history coverage lives on the push/schedule runs below.
+      - name: Run gitleaks against the pull request's commits
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+
+          # The base tip at event time is normally already in the clone
+          # (fetch-depth: 0 fetches every branch). A force-push to the base
+          # branch can leave it unreachable; fetch it rather than guess.
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "${BASE_SHA}" \
+              || git fetch --no-tags origin "${BASE_REF}" \
+              || true
+          fi
+
+          # merge-base rather than the raw base SHA: if the author merged the
+          # base branch into their own, the base branch's commits are not
+          # this PR's to answer for, and base..head would re-include them.
+          if MERGE_BASE="$(git merge-base "${BASE_SHA}" "${HEAD_SHA}" 2>/dev/null)"; then
+            echo "Scanning ${MERGE_BASE}..${HEAD_SHA} (this pull request's commits)."
+            gitleaks detect --redact --verbose --no-banner --exit-code 1 \
+              --log-opts "--no-merges ${MERGE_BASE}..${HEAD_SHA}"
+          else
+            # Fail closed: if the range cannot be resolved, scan everything
+            # rather than scan nothing.
+            echo "::warning::Could not resolve the PR commit range from ${BASE_SHA}..${HEAD_SHA}; falling back to a full-history scan."
+            gitleaks detect --redact --verbose --no-banner --exit-code 1 --source .
+          fi
+
+      # Full history on every push to main/develop, on the daily schedule and
+      # on manual dispatch — so narrowing the pull-request scan above costs no
+      # coverage, it only moves where a historical finding is reported.
+      # Known historical leaks are acknowledged by fingerprint in
+      # .gitleaksignore, each one recorded in
       # docs/security/CREDENTIAL-ROTATION.md and treated as compromised.
       # History is deliberately not rewritten.
       - name: Run gitleaks against full history
+        if: github.event_name != 'pull_request'
         run: gitleaks detect --redact --verbose --no-banner --exit-code 1 --source .
 
   security-summary:
