@@ -10,7 +10,7 @@ The questions follow the format of the existing transaction QREs (278, 275). Ans
 
 ## From questionnaire to implementation
 
-After discovery, complete the [connector onboarding and acceptance checklist](../../implementation/CORE-CONNECTOR-ONBOARDING.md).
+After discovery, complete the [connector onboarding and acceptance checklist](../../implementation/CORE-CONNECTOR-ONBOARDING.md). For the first QNXT engagement, use the [connectivity, security and partnership design](../../implementation/QNXT-CONNECTIVITY-ENGAGEMENT.md); licensed specifications and test access remain pending.
 It records the agreed environment/access matrix, domain scope, mapping and
 failure contracts, reconciliation controls, traceable acceptance evidence and
 cutover/support ownership. QRE answers scope the work; they are not themselves

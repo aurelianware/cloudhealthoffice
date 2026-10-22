@@ -35,13 +35,17 @@ acceptance unless that deployment actually requires it. CAP-17's older
 “Confirmed Gap” describes the absence of a tested QNXT connector at its baseline;
 it must not be reused as a generic CHO product-defect classification.
 
-### Open changes are proposed, not merged capability
+### Follow-up changes: merged versus proposed
 
 As checked against the source baseline above (merge updates follow):
 
 - [#1485](https://github.com/aurelianware/cloudhealthoffice/pull/1485): **merged** as `8e3413a2`; P2P fully denied PA exclusion. 63 focused tests at the reviewed head; main merge recorded separately from the initial dc23d47e refresh.
-- [#1486](https://github.com/aurelianware/cloudhealthoffice/pull/1486): coverage failures are unavailable, not negative determinations; 59 focused tests at its reviewed head.
-- [#1487](https://github.com/aurelianware/cloudhealthoffice/pull/1487): removes fabricated Bulk completion, returns 501; this does **not** implement durable export. Its security harness is being aligned with the explicit unavailable boundary.
+- [#1486](https://github.com/aurelianware/cloudhealthoffice/pull/1486): **merged** as `8547225e`; coverage failures are unavailable, not negative determinations; 59 focused tests at its reviewed head.
+- [#1487](https://github.com/aurelianware/cloudhealthoffice/pull/1487): removes fabricated Bulk completion, returns 501; this does **not** implement durable export. The aligned security harness passes; a remaining running CI check still blocks merge.
+
+- [#1489](https://github.com/aurelianware/cloudhealthoffice/pull/1489): **proposed** native-only FHIR Production source composition, with 30 focused tests including a Production host startup test; does not prove deployed availability.
+- [#1490](https://github.com/aurelianware/cloudhealthoffice/pull/1490): **proposed** explicit unavailable temporal accumulator source outside development, with 14 focused tests; does not implement historical accumulation. The existing accumulator service is a plan-year snapshot source, not point-in-time history.
+- [#1491](https://github.com/aurelianware/cloudhealthoffice/pull/1491): **proposed** durable bank-confirmed claims ACH settlement GL events; 254 AR and 573 payment tests passed at its reviewed head. Debit/mixed files, returns, premium cash application and historical backfill remain separate.
 
 Unmerged changes are proposed, never evidence of main or a deployed tenant. Merged changes still do not establish deployed behavior. On merge, update this section with the merge commit and actual completed validation. Follow [the production acceptance workstream](implementation/PRODUCTION-ACCEPTANCE-WORKSTREAM.md); do not infer closure from issue/PR titles.
 

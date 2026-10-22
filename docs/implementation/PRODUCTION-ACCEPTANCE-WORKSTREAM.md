@@ -27,3 +27,14 @@ architecture using the [existing QRE](../features/questionnaires/qre-core-admin-
 Do not make a universal adapter a prerequisite for native CHO acceptance.
 Incumbent comparison data can be supplied through an agreed extract/replay
 contract; direct connectivity is separately scoped if the payer requires it.
+
+
+## QNXT discovery and managed FHIR projection
+
+Use the [QNXT connectivity engagement design](QNXT-CONNECTIVITY-ENGAGEMENT.md)
+for access, interface selection, VPN/OAuth requirements and anchor-payer ownership.
+QNXT access is still to be arranged. A contract harness and an accepted live
+connector are separate milestones; neither is a native CHO acceptance prerequisite.
+The optional Google managed FHIR store remains a downstream projection/analytics
+component under ADR 023, with its own rejection, replay and reconciliation evidence.
+It does not replace the native-core or scoped CMS exchange acceptance work above.

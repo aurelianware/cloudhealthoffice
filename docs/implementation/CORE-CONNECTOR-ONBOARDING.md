@@ -25,6 +25,10 @@ For a native CHO deployment, mark incumbent connector work **not in scope** unle
 an agreed coexistence/migration/comparison interface requires it. Do not turn an
 unused vendor template into a native-core blocker.
 
+For the first QNXT engagement, also complete the [connectivity, security and
+partnership design](QNXT-CONNECTIVITY-ENGAGEMENT.md). Access is still pending;
+its milestones distinguish a contract harness from a live connector.
+
 ## 2. Environment/access matrix
 
 Complete one row per supported environment and interface. Never infer production
