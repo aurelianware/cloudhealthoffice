@@ -1,5 +1,6 @@
 using CloudHealthOffice.FeeScheduleEngine.Configuration;
 using CloudHealthOffice.FeeScheduleEngine.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 using Microsoft.Extensions.Logging;
 
 namespace CloudHealthOffice.FeeScheduleEngine.Persistence;
@@ -102,7 +103,8 @@ public sealed class DualReadProviderContractRepository : IProviderContractReposi
                     "Dual read: the canonical contract for provider {ProviderNpi} on plan {PlanId} could not be " +
                     "read. The claim is priced on the legacy contract — which is what pays it during the " +
                     "window, and is the fallback after the cutover.",
-                    providerNpi, planId);
+                    // Both come off the claim.
+                    LogSanitizer.Sanitize(providerNpi, 256), LogSanitizer.Sanitize(planId, 256));
             }
 
             _canonicalByKey[key] = canonical;

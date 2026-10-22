@@ -1,6 +1,7 @@
 using CloudHealthOffice.FeeScheduleEngine.Configuration;
 using CloudHealthOffice.FeeScheduleEngine.Domain;
 using CloudHealthOffice.FeeScheduleEngine.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Logging;
 
@@ -126,13 +127,19 @@ public sealed class MetricPricingParityRecorder : IPricingParityRecorder
         if (parity.IsMatch)
             return;
 
+        // The procedure code, NPI and plan come off the claim, and the reason
+        // carries contract and schedule ids out of the stores, so every one of
+        // them is a caller-controlled value in a log line.
         _logger.LogWarning(
             "Contract parity {Outcome} on line {LineNumber} ({ProcedureCode}) for provider {ProviderNpi} " +
             "plan {PlanId} on {ServiceDate:yyyy-MM-dd}: legacy {LegacyAmount:0.00}, canonical " +
             "{CanonicalAmount:0.00} (delta {Delta:0.00}); paid on {Mode}. {Reason}",
-            parity.Outcome, parity.LineNumber, parity.ProcedureCode, parity.ProviderNpi, parity.PlanId,
+            parity.Outcome, parity.LineNumber,
+            LogSanitizer.Sanitize(parity.ProcedureCode, 256),
+            LogSanitizer.Sanitize(parity.ProviderNpi, 256),
+            LogSanitizer.Sanitize(parity.PlanId, 256),
             parity.ServiceDate, parity.LegacyAmount, parity.CanonicalAmount, parity.Delta, parity.Mode,
-            parity.Reason);
+            LogSanitizer.Sanitize(parity.Reason, 512));
     }
 
     private static string OutcomeTag(ParityOutcome outcome) => outcome switch
