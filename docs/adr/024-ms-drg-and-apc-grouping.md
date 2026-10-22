@@ -522,10 +522,28 @@ Build order:
    reported out of the build rather than swallowed, which is the mechanism the
    parity run said step 4 needed.
 
+   **The runtime importer is in**, as `CmsJsonTableImporter`. It reads a
+   release's `diagnoses`, `procedures`, `dxPatterns`, `prPatterns` and
+   `codeGenderMdcs` for one version and refuses rather than degrades: a code
+   with two rows for one version is the release contradicting itself, a
+   dangling pattern number means the files are from different releases, and a
+   version the release does not carry imports as nothing — which is the one
+   outcome that must not look like success, since it makes every stay
+   ungroupable for a reason nobody would look for in the table files. Verified
+   against a real V44 release: 74,879 diagnosis codes and over 50,000
+   procedure codes, behind a `CMS_MSDRG_TABLES` gate so CI never needs a
+   release.
+
+   That gate also now carries the check that should have existed from the
+   start: **every complication level in CHO's seed tables is compared against
+   the release's.** Those are the two levels the parity oracle corrected
+   (`J181` recorded as a CC where CMS makes it an MCC, `E1165` as a CC where
+   CMS makes it neither), and running CMS's whole grouper to find them was a
+   roundabout way of asking a question the tables answer directly. They now
+   agree on every code.
+
    What is left:
 
-   - the runtime importer for `diagnoses`, `procedures`, `dxPatterns` and
-     `prPatterns` behind that interface;
    - procedure **clusters**: CMS resolves combinations of codes into a
      synthetic procedure and suppresses the individual codes' operands in
      named MDCs, which the mask builder declares as its one remaining gap;
