@@ -8,6 +8,14 @@ The questions follow the format of the existing transaction QREs (278, 275). Ans
 
 > **Status:** CHO's own adapters and backends (`cho`) are the reference implementation for every domain. The QNXT, Facets and HealthEdge adapters ship as interface stubs, and each one is implemented per engagement from this questionnaire. An unimplemented legacy-core adapter is intentionally scoped engagement work, not a generic CHO product gap: the same workflow runs natively in CHO in Replace mode. Augment (shadow) comparison also depends on the per-engagement adapter, which supplies the core's results for CHO to compare against.
 
+## From questionnaire to implementation
+
+After discovery, complete the [connector onboarding and acceptance checklist](../../implementation/CORE-CONNECTOR-ONBOARDING.md).
+It records the agreed environment/access matrix, domain scope, mapping and
+failure contracts, reconciliation controls, traceable acceptance evidence and
+cutover/support ownership. QRE answers scope the work; they are not themselves
+proof that a connector is implemented or deployed.
+
 ## Contact Information and Milestones
 - Provide plan contacts for executive sponsor, core platform owner, configuration lead, EDI/integration lead, utilization management lead, interoperability (CMS-0057-F) lead, information security, and claims operations (name, phone, email for each).
 - Identify any vendor or BPaaS contacts (core vendor account team, hosting provider, UM vendor, clearinghouse, system integrator) and whether their involvement requires a separate statement of work or license.

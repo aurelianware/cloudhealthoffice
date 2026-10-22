@@ -10,6 +10,7 @@ the architecture, and find an area to contribute.
 
 | Need | Start with |
 | --- | --- |
+| Scope a payer-specific core connector | [Core adapter QRE](features/questionnaires/qre-core-admin-adapter-questions.md), [onboarding and acceptance](implementation/CORE-CONNECTOR-ONBOARDING.md), [reference backend decision](adr/027-core-adapter-engagement-boundary.md) |
 | Understand the project | [Repository README](../README.md) |
 | Run it locally | [Quickstart](guides/QUICKSTART.md) |
 | Understand services and data flow | [Architecture](architecture/README.md) |
