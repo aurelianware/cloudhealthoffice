@@ -259,5 +259,17 @@ if [[ -n "$caffeinate_pid" ]]; then
   wait "$caffeinate_pid" 2>/dev/null || true
 fi
 
-kubectl logs -n "$NAMESPACE" "job/${JOB_NAME}"
+validator_log="$(mktemp)"
+kubectl logs -n "$NAMESPACE" "job/${JOB_NAME}" | tee "$validator_log"
+
+# Publish the run's evidence (summary + every claim that did not match) to
+# docs/million-claim-challenge/runs/<tenant>/. Synthetic data only. Set
+# EXPORT_EVIDENCE=false to skip. A failed export never changes the exit status.
+if [[ "${EXPORT_EVIDENCE:-true}" == "true" ]]; then
+  log "Exporting run evidence for tenant ${TENANT}"
+  TENANT="$TENANT" NAMESPACE="$NAMESPACE" LOG_FILE="$validator_log" \
+    "$ROOT_DIR/scripts/export-mcc-evidence.sh" \
+    || echo "WARNING: evidence export failed; rerun scripts/export-mcc-evidence.sh with TENANT=${TENANT}" >&2
+fi
+rm -f "$validator_log"
 exit "$job_status"
