@@ -17,7 +17,54 @@ public abstract record DrgFormulaExpression
     /// <summary>
     /// Evaluates the expression against the operand names a stay satisfies.
     /// </summary>
-    public abstract bool Evaluate(IReadOnlySet<string> satisfiedOperands);
+    public bool Evaluate(IReadOnlySet<string> satisfiedOperands) =>
+        Evaluate(satisfiedOperands, null);
+
+    /// <summary>
+    /// Evaluates the expression, recording into <paramref name="matched"/> every
+    /// operand that tested true.
+    ///
+    /// <para>
+    /// This is how a grouping decision becomes explainable: the DRG alone does
+    /// not say which diagnosis or procedure earned it, and that is what an
+    /// appeal turns on. CMS does the same thing — its <c>ContainsNode</c>
+    /// accumulates the attribute into the evaluation context when, and only
+    /// when, the lookup succeeds.
+    /// </para>
+    ///
+    /// <para>
+    /// Two consequences of matching CMS exactly, both deliberate:
+    /// </para>
+    ///
+    /// <list type="bullet">
+    ///   <item>
+    ///     <description>
+    ///     <b>Short-circuiting means the record is partial.</b> CMS's
+    ///     <c>And</c> and <c>Or</c> are Java <c>&amp;&amp;</c> and
+    ///     <c>||</c> — left first, right skipped when the answer is already
+    ///     settled. So an operand on the right of a satisfied <c>|</c> never
+    ///     tested and never appears here. That is the real evaluation, not an
+    ///     omission.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <description>
+    ///     <b>A negated operand that tested true is still recorded.</b> In
+    ///     <c>~a</c>, if <c>a</c> is satisfied the lookup succeeded and CMS
+    ///     accumulates it before the negation flips the result. So <c>a</c>
+    ///     appears in <paramref name="matched"/> even though the expression
+    ///     evaluated false.
+    ///     </description>
+    ///   </item>
+    /// </list>
+    /// </summary>
+    /// <param name="satisfiedOperands">The operands this stay satisfies.</param>
+    /// <param name="matched">
+    /// Collects the operands that tested true, in evaluation order. May be
+    /// <see langword="null"/> when the caller only wants the answer.
+    /// </param>
+    public abstract bool Evaluate(
+        IReadOnlySet<string> satisfiedOperands, ICollection<string>? matched);
 
     /// <summary>
     /// Renders the expression back to formula text. Round-tripping is not
@@ -32,8 +79,17 @@ public abstract record DrgFormulaExpression
     public sealed record Operand(string Name) : DrgFormulaExpression
     {
         /// <inheritdoc/>
-        public override bool Evaluate(IReadOnlySet<string> satisfiedOperands) =>
-            satisfiedOperands.Contains(Name);
+        public override bool Evaluate(
+            IReadOnlySet<string> satisfiedOperands, ICollection<string>? matched)
+        {
+            if (!satisfiedOperands.Contains(Name))
+            {
+                return false;
+            }
+
+            matched?.Add(Name);
+            return true;
+        }
 
         /// <inheritdoc/>
         public override string Print() => Name;
@@ -44,8 +100,10 @@ public abstract record DrgFormulaExpression
         : DrgFormulaExpression
     {
         /// <inheritdoc/>
-        public override bool Evaluate(IReadOnlySet<string> satisfiedOperands) =>
-            Left.Evaluate(satisfiedOperands) && Right.Evaluate(satisfiedOperands);
+        public override bool Evaluate(
+            IReadOnlySet<string> satisfiedOperands, ICollection<string>? matched) =>
+            Left.Evaluate(satisfiedOperands, matched)
+            && Right.Evaluate(satisfiedOperands, matched);
 
         /// <inheritdoc/>
         public override string Print() => $"({Left.Print()} & {Right.Print()})";
@@ -56,8 +114,10 @@ public abstract record DrgFormulaExpression
         : DrgFormulaExpression
     {
         /// <inheritdoc/>
-        public override bool Evaluate(IReadOnlySet<string> satisfiedOperands) =>
-            Left.Evaluate(satisfiedOperands) || Right.Evaluate(satisfiedOperands);
+        public override bool Evaluate(
+            IReadOnlySet<string> satisfiedOperands, ICollection<string>? matched) =>
+            Left.Evaluate(satisfiedOperands, matched)
+            || Right.Evaluate(satisfiedOperands, matched);
 
         /// <inheritdoc/>
         public override string Print() => $"({Left.Print()} | {Right.Print()})";
@@ -67,8 +127,9 @@ public abstract record DrgFormulaExpression
     public sealed record Not(DrgFormulaExpression Inner) : DrgFormulaExpression
     {
         /// <inheritdoc/>
-        public override bool Evaluate(IReadOnlySet<string> satisfiedOperands) =>
-            !Inner.Evaluate(satisfiedOperands);
+        public override bool Evaluate(
+            IReadOnlySet<string> satisfiedOperands, ICollection<string>? matched) =>
+            !Inner.Evaluate(satisfiedOperands, matched);
 
         /// <inheritdoc/>
         public override string Print() => $"~{Inner.Print()}";

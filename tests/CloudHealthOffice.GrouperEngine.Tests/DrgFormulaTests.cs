@@ -265,6 +265,113 @@ public class DrgFormulaTests
         Assert.NotNull(parsed);
     }
 
+    // ─────────────────────────────────────────────────────────
+    //  Accumulation: which operands earned the answer
+    // ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Evaluation_records_the_operands_that_tested_true()
+    {
+        var matched = new List<string>();
+        var expression = DrgFormulaParser.Parse("(CC & backneck)");
+
+        Assert.True(expression.Evaluate(Satisfied("CC", "backneck"), matched));
+        Assert.Equal(["CC", "backneck"], matched);
+    }
+
+    [Fact]
+    public void Only_satisfied_operands_are_recorded()
+    {
+        var matched = new List<string>();
+        var expression = DrgFormulaParser.Parse("CC & backneck");
+
+        Assert.False(expression.Evaluate(Satisfied("CC"), matched));
+        Assert.Equal(["CC"], matched);
+    }
+
+    [Fact]
+    public void A_short_circuited_or_does_not_record_the_right_side()
+    {
+        // CMS's Or is Java "||": left first, right skipped once the answer is
+        // settled. "tulip" is satisfied here but never tested, so it is not
+        // part of why this DRG matched.
+        var matched = new List<string>();
+        var expression = DrgFormulaParser.Parse("fuse9plus | cmadifd | tulip");
+
+        Assert.True(expression.Evaluate(Satisfied("fuse9plus", "tulip"), matched));
+        Assert.Equal(["fuse9plus"], matched);
+    }
+
+    [Fact]
+    public void A_short_circuited_and_does_not_record_the_right_side()
+    {
+        var matched = new List<string>();
+        var expression = DrgFormulaParser.Parse("sensor & bypass");
+
+        Assert.False(expression.Evaluate(Satisfied("bypass"), matched));
+        Assert.Empty(matched);
+    }
+
+    [Fact]
+    public void A_negated_operand_that_tested_true_is_still_recorded()
+    {
+        // In "~a" the lookup on "a" succeeded, and CMS accumulates on success,
+        // before the negation flips the result. So the operand is recorded even
+        // though the expression is false — it is the reason the expression is
+        // false.
+        var matched = new List<string>();
+        var expression = DrgFormulaParser.Parse("~CC");
+
+        Assert.False(expression.Evaluate(Satisfied("CC"), matched));
+        Assert.Equal(["CC"], matched);
+    }
+
+    [Fact]
+    public void An_unsatisfied_negated_operand_records_nothing()
+    {
+        var matched = new List<string>();
+        var expression = DrgFormulaParser.Parse("~CC");
+
+        Assert.True(expression.Evaluate(Satisfied(), matched));
+        Assert.Empty(matched);
+    }
+
+    [Fact]
+    public void Operands_are_recorded_in_evaluation_order()
+    {
+        var matched = new List<string>();
+        var expression = DrgFormulaParser.Parse("(sensor | NORcardcath) & bypass");
+
+        Assert.True(expression.Evaluate(Satisfied("NORcardcath", "bypass"), matched));
+
+        // sensor was tested and failed, so it is absent; NORcardcath then
+        // satisfied the left side, and bypass the right.
+        Assert.Equal(["NORcardcath", "bypass"], matched);
+    }
+
+    [Fact]
+    public void A_duplicate_operand_is_recorded_once_per_evaluation()
+    {
+        // The same operand can appear twice in one formula. Each successful
+        // lookup is a separate accumulation, which is what CMS does with a Set
+        // of attributes — so a caller wanting distinct operands should collect
+        // into a set rather than a list.
+        var distinct = new HashSet<string>(StringComparer.Ordinal);
+        var expression = DrgFormulaParser.Parse("CC & (CC | backneck)");
+
+        Assert.True(expression.Evaluate(Satisfied("CC"), distinct));
+        Assert.Equal(["CC"], distinct);
+    }
+
+    [Fact]
+    public void Evaluation_without_an_accumulator_still_answers()
+    {
+        var expression = DrgFormulaParser.Parse("(sensor | NORcardcath) & bypass");
+
+        Assert.True(expression.Evaluate(Satisfied("sensor", "bypass")));
+        Assert.True(expression.Evaluate(Satisfied("sensor", "bypass"), null));
+    }
+
     [Fact]
     public void Two_adjacent_operands_are_rejected()
     {

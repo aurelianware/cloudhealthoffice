@@ -453,10 +453,40 @@ Build order:
    `GroupingStatus.DemographicConflict` is modelled in the wrong place and
    should come out of the formula evaluation instead.
 
+   **How the default operand actually evaluates**, since the correction above
+   could be read as casting doubt on it: it is mask membership, and the first
+   description was right about that much. CMS's evaluation context
+   (`logic/ast/AstContext`) carries the claim's codes, the MDC, a return code,
+   an accumulator — and a **mask**, which is the precomputed set of attributes
+   the stay satisfies. `logic/ast/ContainsNode` is exactly
+   `mask.contains(attribute)`, where an attribute is the triple (prefix,
+   negated, list name). So the model holds; the key is the triple rather than a
+   bare name, which is what `OperandName` now carries.
+
+   The one thing that model was missing is that CMS **accumulates**: a
+   successful lookup records its attribute into the context before returning
+   true. That accumulation is the audit trail, and it feeds severity
+   suppression. CHO's evaluator now does the same, and matches CMS on the two
+   details that follow from it, both pinned by tests:
+
+   - **The record is partial, because evaluation short-circuits.** CMS's `And`
+     and `Or` are Java `&&` and `||` — left first, right skipped once the
+     answer is settled — so an operand to the right of a satisfied `|` never
+     tests and is not part of why the DRG matched. CHO's operators
+     short-circuit identically and in the same order.
+   - **A negated operand that tested true is still recorded.** In `~a`, the
+     lookup on `a` succeeded and accumulated before the negation flipped the
+     result, so `a` is recorded even though the expression is false — it is the
+     reason it is false.
+
+   This is what makes a grouping decision explainable, which is the whole point
+   of `MsDrgGroupingResult`: the DRG alone never says which diagnosis or
+   procedure earned it, and that is what an appeal turns on.
+
    What is left:
 
-   - the satisfied-operand set, from `dxPatterns`, `prPatterns`,
-     `codeToClusterIds` and `clusters`, honouring the position prefix;
+   - building the mask from `dxPatterns`, `prPatterns`, `codeToClusterIds` and
+     `clusters`, honouring the position prefix;
    - the dozen special-logic operand nodes, counting nodes included;
    - driving the ranked formula lists per MDC — 824 formulas for V44 — with
      `reRouteMdcId` (20 formulas) and `severitySuppressionOperand` (56);
