@@ -4,6 +4,7 @@ using AttachmentService.Controllers;
 using AttachmentService.Models;
 using AttachmentService.Repositories;
 using AttachmentService.Services;
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,6 +23,7 @@ public sealed class AttachmentServiceFactory : WebApplicationFactory<Attachments
     public FakeDocumentCatalog Documents { get; } = new();
     public Mock<ITradingPartnerLookup> TradingPartners { get; } = new();
     public StubParentServices Parents { get; } = new();
+    public InMemoryX12InterchangeStore Interchanges { get; } = new();
 
     /// <summary>A MongoDB address that is never listening; the driver connects lazily.</summary>
     public const string UnreachableMongo =
@@ -42,6 +44,9 @@ public sealed class AttachmentServiceFactory : WebApplicationFactory<Attachments
             services.AddSingleton<IAttachmentRepository>(Attachments);
             services.RemoveAll<IDocumentCatalog>();
             services.AddSingleton<IDocumentCatalog>(Documents);
+            // Acknowledgment control numbers come from an in-memory sequence store.
+            services.RemoveAll<IX12InterchangeStore>();
+            services.AddSingleton<IX12InterchangeStore>(Interchanges);
             services.RemoveAll<ITradingPartnerLookup>();
             services.AddSingleton(TradingPartners.Object);
             // The real HttpAttachmentParentLookup, talking to stand-ins for the owning services.

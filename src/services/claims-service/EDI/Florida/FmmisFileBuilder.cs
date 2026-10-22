@@ -1,5 +1,6 @@
 using System.Text;
 using ClaimsService.EDI.Florida.Models;
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 
 namespace ClaimsService.EDI.Florida;
 
@@ -76,6 +77,28 @@ public class FmmisFileBuilder
         }
 
         return files.AsReadOnly();
+    }
+
+    /// <summary>
+    /// <see cref="Build"/>, then each file's ISA13, GS06 and ST02 assigned from
+    /// the tenant's control-number sequences (docs/architecture/edi-operations.md §5),
+    /// replacing the builder's placeholder numbers. Use this for files that are sent.
+    /// </summary>
+    public async Task<IReadOnlyList<FmmisSubmissionFile>> BuildAsync(
+        string tenantId,
+        IX12ControlNumberAllocator allocator,
+        IEnumerable<FmmisTransaction> transactions,
+        FmmisComplianceConfigDto config,
+        int maxTransactionsPerFile = DefaultMaxTransactionsPerFile,
+        CancellationToken ct = default)
+    {
+        var files = Build(transactions, config, maxTransactionsPerFile);
+        foreach (var file in files)
+        {
+            var assigned = await allocator.AssignAsync(tenantId, Encoding.UTF8.GetString(file.Content), ct);
+            file.Content = Encoding.UTF8.GetBytes(assigned.Content);
+        }
+        return files;
     }
 
     // ── Interchange Builder ──────────────────────────────────────────

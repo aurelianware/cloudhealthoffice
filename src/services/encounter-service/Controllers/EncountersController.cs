@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using CloudHealthOffice.Infrastructure.Security;
@@ -325,6 +326,13 @@ public class EncountersController : ControllerBase
             LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(encounter.EncounterControlNumber), encounter.EncounterType);
 
         var edi = _edi837Service.Generate837(encounter, cfg);
+
+        // Sequenced ISA13/GS06/ST02 (edi-operations.md §5); a repeat download
+        // of this encounter version reuses them.
+        var outbound = HttpContext?.RequestServices.GetService<IOutboundInterchangeTracker>();
+        if (outbound is not null)
+            edi = await outbound.GetOrRecordSentAsync(_actor.TenantId, edi, "837",
+                $"encounter:{encounter.Id}:{encounter.EncounterControlNumber}", HttpContext!.RequestAborted);
 
         var typeCode = encounter.EncounterType switch
         {

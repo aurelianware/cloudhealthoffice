@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using Microsoft.AspNetCore.Mvc;
 using AttachmentService.Models;
 using AttachmentService.Repositories;
@@ -502,14 +503,23 @@ public class AttachmentsController : ControllerBase
             var ackType = _acknowledgmentService.GetAcknowledgmentType(tradingPartner);
 
             // Generate appropriate acknowledgment(s)
+            // Sequenced ISA13/GS06/ST02 (edi-operations.md §5) replace the
+            // generator's placeholders; each acknowledgment is recorded as sent.
+            var outbound = HttpContext?.RequestServices.GetService<IOutboundInterchangeTracker>();
+            async Task<string> Assign(string edi, string type) => outbound is null
+                ? edi
+                : await outbound.AssignAndRecordAsync(tenantId, edi, type, $"attachment:{attachment.Id}", HttpContext!.RequestAborted);
+
             if (ackType == "999" || ackType == "Both")
             {
-                attachment.Generated999 = await _acknowledgmentService.Generate999Async(attachment, tradingPartner ?? CreateDefaultTradingPartner(attachment));
+                attachment.Generated999 = await Assign(
+                    await _acknowledgmentService.Generate999Async(attachment, tradingPartner ?? CreateDefaultTradingPartner(attachment)), "999");
             }
 
             if (ackType == "824" || ackType == "Both")
             {
-                attachment.Generated824 = await _acknowledgmentService.Generate824Async(attachment, tradingPartner ?? CreateDefaultTradingPartner(attachment));
+                attachment.Generated824 = await Assign(
+                    await _acknowledgmentService.Generate824Async(attachment, tradingPartner ?? CreateDefaultTradingPartner(attachment)), "824");
             }
 
             attachment.AcknowledgmentType = ackType;

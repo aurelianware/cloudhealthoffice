@@ -5,8 +5,9 @@ namespace PaymentService.Repositories;
 
 /// <summary>
 /// Wraps the ERA envelope repository so every 835 that payment and reversal
-/// runs persist is also recorded as an outbound interchange (ISA13, sender,
-/// receiver; no content), which the trading partner's TA1 is matched to.
+/// runs persist gets its sequenced control numbers before it is stored, and is
+/// recorded as an outbound interchange and EDI file (identifiers only; no
+/// content), which the trading partner's TA1 is matched to.
 /// Tracking never fails the write: <see cref="IOutboundInterchangeTracker.RecordSentAsync"/>
 /// logs and swallows its own errors.
 /// </summary>
@@ -14,15 +15,26 @@ public sealed class TrackingEraEnvelopeRepository : IEraEnvelopeRepository
 {
     private readonly IEraEnvelopeRepository _inner;
     private readonly IOutboundInterchangeTracker _tracker;
+    private readonly IX12ControlNumberAllocator _allocator;
 
-    public TrackingEraEnvelopeRepository(IEraEnvelopeRepository inner, IOutboundInterchangeTracker tracker)
+    public TrackingEraEnvelopeRepository(IEraEnvelopeRepository inner, IOutboundInterchangeTracker tracker, IX12ControlNumberAllocator allocator)
     {
         _inner = inner;
         _tracker = tracker;
+        _allocator = allocator;
     }
 
     public async Task<EraEnvelopeRecord> CreateAsync(EraEnvelopeRecord record)
     {
+        // The batch generator's numbers are placeholders: assign the sequenced
+        // ISA13/GS06/ST02 before the envelope is stored, so what is stored is
+        // what goes out (edi-operations.md §5). A failure to assign is thrown.
+        var assignment = await _allocator.AssignAsync(record.TenantId, record.EdiContent);
+        if (assignment.Interchanges.Count > 0)
+        {
+            record.EdiContent = assignment.Content;
+            record.ControlNumber = assignment.Interchanges[0].InterchangeControlNumber;
+        }
         var created = await _inner.CreateAsync(record);
         await _tracker.RecordSentAsync(created.TenantId, created.EdiContent, "835", created.Id);
         return created;
@@ -50,6 +62,7 @@ public sealed class TrackingEraEnvelopeRepository : IEraEnvelopeRepository
         services.Add(new ServiceDescriptor(implementation, implementation, descriptor.Lifetime));
         services.AddScoped<IEraEnvelopeRepository>(sp => new TrackingEraEnvelopeRepository(
             (IEraEnvelopeRepository)sp.GetRequiredService(implementation),
-            sp.GetRequiredService<IOutboundInterchangeTracker>()));
+            sp.GetRequiredService<IOutboundInterchangeTracker>(),
+            sp.GetRequiredService<IX12ControlNumberAllocator>()));
     }
 }

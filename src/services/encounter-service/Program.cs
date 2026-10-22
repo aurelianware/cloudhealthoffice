@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using EncounterService;
@@ -79,6 +80,10 @@ builder.Services.AddChoHealthChecks(options =>
 // Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoObservability(builder.Configuration);
+
+// Outbound X12 control numbers from the tenant's sequences, and the record of
+// what was sent (docs/architecture/edi-operations.md §5).
+builder.Services.AddChoX12ControlNumbers();
 
 var app = builder.Build();
 

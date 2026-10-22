@@ -29,22 +29,37 @@ public static class X12InterchangeServiceCollectionExtensions
                 ? TestInterchangeHandling.Reject
                 : TestInterchangeHandling.Accept);
 
-        // MongoDB whenever the service has registered an IMongoDatabase (resolved
-        // per scope, so tenant-scoped databases work); otherwise one in-memory
-        // store for the process.
+        services.AddChoX12ControlNumbers();
+        if (!string.IsNullOrEmpty(configuration["MongoDb:ConnectionString"]))
+            services.AddHostedService<X12InterchangeIndexInitializer>();
+
+        services.TryAddScoped<IX12InterchangeIntake, X12InterchangeIntake>();
+        // The file record every intake path writes (edi-operations.md §3).
+        services.AddChoEdiFiles();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers outbound control-number assignment (<see cref="IX12ControlNumberAllocator"/>),
+    /// the outbound interchange record (<see cref="IOutboundInterchangeTracker"/>)
+    /// and the interchange store both live in, for a service that
+    /// generates X12 but does not take interchanges in. MongoDB whenever the
+    /// service has registered an <see cref="IMongoDatabase"/> (resolved per
+    /// scope, so tenant-scoped databases work); otherwise one in-memory store
+    /// for the process. <see cref="AddChoX12Interchange"/> includes this.
+    /// </summary>
+    public static IServiceCollection AddChoX12ControlNumbers(this IServiceCollection services)
+    {
+        services.AddOptions<X12InterchangeOptions>();
         services.TryAddSingleton<InMemoryX12InterchangeStore>();
         services.TryAddScoped<IX12InterchangeStore>(sp =>
             sp.GetService<IMongoDatabase>() is { } database
                 ? new MongoX12InterchangeStore(database,
                     TimeSpan.FromDays(Math.Max(1, sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<X12InterchangeOptions>>().Value.DuplicateWindowDays) + 1))
                 : sp.GetRequiredService<InMemoryX12InterchangeStore>());
-        if (!string.IsNullOrEmpty(configuration["MongoDb:ConnectionString"]))
-            services.AddHostedService<X12InterchangeIndexInitializer>();
-
-        services.TryAddScoped<IX12InterchangeIntake, X12InterchangeIntake>();
+        services.TryAddScoped<IX12ControlNumberAllocator, X12ControlNumberAllocator>();
+        // Records what was sent (and, where the service registers one, the outbound EDI file).
         services.TryAddScoped<IOutboundInterchangeTracker, OutboundInterchangeTracker>();
-        // The file record every intake path writes (edi-operations.md §3).
-        services.AddChoEdiFiles();
         return services;
     }
 

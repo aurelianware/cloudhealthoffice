@@ -220,6 +220,12 @@ public class AttachmentAuthenticationTests
         var stored = _factory.Attachments.Items[mine.Id];
         stored.Generated999.Should().NotBeNullOrEmpty();
         stored.LastUpdatedBy.Should().Be(TokenUser);
+        // The 999's numbers come from the sequence store, and it is recorded as sent.
+        var sent = CloudHealthOffice.Infrastructure.Edi.Interchange.X12ControlNumberStamper.Read(stored.Generated999).Single();
+        var recorded = await _factory.Interchanges.FindOutboundBySourceAsync(Tenant, "999", $"attachment:{mine.Id}");
+        recorded.Should().NotBeNull();
+        recorded!.ControlNumber.Should().Be(sent.InterchangeControlNumber);
+        recorded.TransactionSetControlNumbers.Should().Equal(sent.TransactionSetControlNumbers);
         _factory.TradingPartners.Verify(t => t.GetByPayerIdAsync("PAYER-1", Tenant), Times.Once);
     }
 

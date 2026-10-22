@@ -338,9 +338,10 @@ public class EligibilityController : ControllerBase
             isaSenderId:   parsed.InterchangeReceiverId, // 270's receiver = 271's sender (payer)
             isaReceiverId: parsed.InterchangeSenderId);  // 270's sender  = 271's receiver (provider)
 
-        // Remember the 271's envelope so the submitter's TA1 for it can be matched.
+        // Sequenced ISA13/GS06/ST02, recorded so the submitter's TA1 can be
+        // matched; a later download of this response reuses them.
         if (_outboundTracker is not null)
-            await _outboundTracker.RecordSentAsync(TenantId, edi271, "271", response.Id, HttpContext.RequestAborted);
+            edi271 = await _outboundTracker.GetOrRecordSentAsync(TenantId, edi271, "271", response.Id, HttpContext.RequestAborted);
 
         Response.Headers["Content-Disposition"] =
             $"inline; filename=\"271_{inquiry.SubscriberId}_{DateTime.UtcNow:yyyyMMdd}.edi\"";
@@ -374,6 +375,11 @@ public class EligibilityController : ControllerBase
             inquiry, response,
             isaSenderId:   inquiry.PayerId,   // payer is the 271 sender
             isaReceiverId: inquiry.ProviderId);
+
+        // The same control numbers every time this response is downloaded
+        // (the first download, or the real-time reply, assigns them).
+        if (_outboundTracker is not null)
+            edi271 = await _outboundTracker.GetOrRecordSentAsync(TenantId, edi271, "271", response.Id, HttpContext.RequestAborted);
 
         var filename = $"271_{inquiry.SubscriberId}_{inquiry.CreatedDate:yyyyMMdd}.edi";
         Response.Headers["Content-Disposition"] = $"attachment; filename=\"{filename}\"";

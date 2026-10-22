@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Text.Json;
 using Microsoft.OpenApi.Models;
@@ -126,6 +127,10 @@ builder.Services.AddChoHealthChecks(options =>
 });
 
 builder.Services.AddChoObservability(builder.Configuration);
+
+// Outbound X12 control numbers from the tenant's sequences, and the record of
+// what was sent (docs/architecture/edi-operations.md §5).
+builder.Services.AddChoX12ControlNumbers();
 
 var app = builder.Build();
 

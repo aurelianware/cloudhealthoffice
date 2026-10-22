@@ -97,6 +97,31 @@ public class Edi270Ta1Tests : IClassFixture<EligibilityApiFactory>
     }
 
     [Fact]
+    public async Task Download271_ReusesTheControlNumbersOfTheRealTimeReply()
+    {
+        var response = new EligibilityResponse { Id = "resp-reuse", InquiryId = "inq-reuse", TenantId = "ta1-tenant", ResponseCode = "AAA", IsCovered = true, CreatedDate = DateTime.UtcNow };
+        _factory.EligibilityService.ProcessInquiryAsync(Arg.Any<EligibilityInquiry>()).Returns(response);
+
+        var realTime = await _client.PostAsync("/api/eligibility/270", Text(Edi270("000000404")));
+        Assert.Equal(HttpStatusCode.OK, realTime.StatusCode);
+        var sent = X12ControlNumberStamper.Read(await realTime.Content.ReadAsStringAsync()).Single();
+        Assert.NotEqual("000000404", sent.InterchangeControlNumber);
+
+        _factory.EligibilityRepository.GetInquiryByIdAsync("ta1-tenant", "inq-reuse").Returns(new EligibilityInquiry
+        {
+            Id = "inq-reuse", TenantId = "ta1-tenant", ResponseId = "resp-reuse", SubscriberId = "SUB123",
+            PayerId = "CHO", ProviderId = "PROVIDER01", CreatedDate = DateTime.UtcNow,
+        });
+        _factory.EligibilityRepository.GetResponseByInquiryIdAsync("ta1-tenant", "inq-reuse").Returns(response);
+
+        var first = await _client.GetStringAsync("/api/eligibility/inq-reuse/271");
+        var again = await _client.GetStringAsync("/api/eligibility/inq-reuse/271");
+
+        Assert.Equivalent(sent, X12ControlNumberStamper.Read(first).Single(), strict: true);
+        Assert.Equivalent(sent, X12ControlNumberStamper.Read(again).Single(), strict: true);
+    }
+
+    [Fact]
     public async Task InboundEndpoint_RefusesWhatIsNotATa1()
     {
         var posted = await _client.PostAsync("/api/eligibility/interchange/ta1/inbound", Text("not x12"));
