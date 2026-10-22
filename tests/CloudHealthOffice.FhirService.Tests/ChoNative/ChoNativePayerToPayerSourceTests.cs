@@ -1,3 +1,4 @@
+extern alias authsvc;
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -308,6 +309,43 @@ public class ChoNativePayerToPayerSourceTests
         resources.Select(r => $"{r.ResourceType}/{r.Id}").Should().Equal(
             "Patient/M-1", "Coverage/cov-a", "Coverage/cov-b", "ExplanationOfBenefit/e-1", "ExplanationOfBenefit/e-2");
         resources.Should().AllBeOfType<FhirJsonResource>();
+    }
+
+    [Fact]
+    public async Task Native_export_excludes_actual_projected_denials_but_keeps_approvals_and_partial_approvals()
+    {
+        var (directory, upstream) = Directory();
+        var projector = new authsvc::AuthorizationService.Services.Fhir.PriorAuthorizationEobProjector();
+        var statuses = new[]
+        {
+            authsvc::AuthorizationService.Models.AuthorizationStatus.Denied,
+            authsvc::AuthorizationService.Models.AuthorizationStatus.Approved,
+            authsvc::AuthorizationService.Models.AuthorizationStatus.Modified,
+            authsvc::AuthorizationService.Models.AuthorizationStatus.Pended,
+        };
+        var projected = statuses.Select(status => projector.Project(new authsvc::AuthorizationService.Models.Authorization
+        {
+            AuthorizationNumber = status.ToString(), MemberId = "M-1", Status = status,
+            SubmittedDate = new DateTime(2026, 10, 1), LastUpdatedDate = new DateTime(2026, 10, 1),
+            ApprovedServiceDateTo = new DateTime(2026, 12, 31),
+        })).ToArray();
+        upstream.Respond = r => r.RequestUri!.AbsolutePath switch
+        {
+            var p when p.Contains("members") => Json(Page(1, Member("M-1"))),
+            var p when p.Contains("coverage") => Json(Page(0)),
+            var p when p.Contains("prior-authorization") => Json(Bundle(projected.Length,
+                projected.Select(e => new JsonObject { ["resource"] = e.DeepClone() }.ToJsonString()).ToArray())),
+            _ => Json(Bundle(0)),
+        };
+
+        var resources = await new ChoNativePayerToPayerExportSource(directory).GetResourcesAsync(
+            new ChoMember { MemberId = "M-1", FirstName = "Pat", LastName = "Jones", Dob = "1962-03-22", Gender = "F" },
+            new PayerToPayerExchangeRequest { TenantId = Tenant, ExchangeDateUtc = new DateTime(2026, 10, 22) });
+
+        resources.Select(r => r.Id).Should().Equal("M-1", "pa-Approved", "pa-Modified", "pa-Pended");
+        // The shared upstream projection still carries denied PA data for
+        // Patient/Provider Access; only Payer-to-Payer filters it.
+        projected[0]["disposition"]!.GetValue<string>().Should().Be("Denied");
     }
 
     [Fact]

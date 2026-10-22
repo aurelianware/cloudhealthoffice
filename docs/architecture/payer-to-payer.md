@@ -247,3 +247,22 @@ invent links the source payer never asserted.
   client registration, mTLS) remain deployment integration behind
   `IPayerToPayerCredentialProvider`, which supplies none by default.
 * No external-core (QNXT/Facets/HealthEdge) Payer-to-Payer integration exists.
+
+## Prior authorization decision filtering
+
+The native export excludes fully denied prior authorizations before applying
+its open-request and date-window rules. This filter is specific to
+Payer-to-Payer: Patient Access and Provider Access continue to receive denials.
+See the [CMS general API FAQ](https://www.cms.gov/initiatives/burden-reduction/overview/interoperability/frequently-asked-questions/general)
+for the distinct API content requirements.
+
+The owning authorization service projects `AuthorizationStatus.Denied` as
+`disposition: "Denied"`. The export uses that explicit projection contract;
+`outcome: "complete"` alone is not a denial indicator because approvals use it
+too. Partially approved (`Modified`) and pending authorizations remain subject
+to the existing window rules. Line-level reductions or denial reasons do not
+exclude a partially approved authorization. A cross-service regression test
+uses the actual authorization projector through the native export path.
+
+This correction does not complete clinical/document export, bulk export, or
+other CMS readiness requirements, and adds no new external-source mappings.
