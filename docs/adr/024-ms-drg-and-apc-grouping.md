@@ -729,16 +729,61 @@ Build order:
    `MsdrgDrgResults` and asserted against hand-built tables. The end-to-end
    parity run is what will confirm the order.
 
+   **Hospital-acquired conditions are built, and so are the two grouping
+   passes around them.** A HAC is a condition Medicare will not pay the
+   hospital for having caused, so it stops counting towards the stay's
+   complication level — which can drop the stay out of a severity-split DRG
+   into its lower-paying sibling. CMS therefore decides the DRG **twice** on
+   every stay: once with every secondary counting, then the HAC policy, then
+   again. Both answers are part of the result, because the pair is the payment
+   mechanism and either one alone cannot explain the difference.
+
+   V44 has 14 conditions, each with one formula, over 5,281 codes. The
+   determination is per secondary diagnosis and reads the POA indicator: a
+   condition present on admission (or clinically undetermined, `W`) is not one
+   the hospital caused; a code the CC exclusion list already removed is not
+   reconsidered; otherwise the condition's formula decides it. A HAC formula is
+   evaluated outside any MDC, with no cluster suppression, over the secondary
+   diagnoses only — not the principal.
+
+   **Three behaviours here are CMS's rather than the policy's, and all three
+   are replicated.** Parity is the requirement: firing a condition the payer
+   does not takes severity off a stay the payer pays in full, which underpays
+   the hospital.
+
+   - **HAC 6 cannot fire in V44 at all.** A code gets its conditions only when
+     one of its HAC list names starts with an upper-case `HAC` — CMS's check
+     is `getListName().startsWith("HAC")`, and Java's is case-sensitive. Every
+     V44 code on HAC 6 is on it through `hac06_show` or `hac06_sdx` alone, so
+     catheter-associated urinary tract infection is never determined, its
+     formula never evaluated, and its show-list rule never reached. Two of the
+     nine `hac11_sdx` codes go the same way. A gated test re-derives this from
+     each release, so a fiscal year that changes it fails loudly — and the
+     show-list rule is built and tested against that day.
+   - **The unknown-reporting-status check is a tautology.** CMS counts
+     secondaries where `poa != Y || poa != W`, which is true of every value, so
+     it counts every secondary on the claim. Two or more, on a stay with any
+     met condition and a facility whose POA reporting status is unknown,
+     refuses the claim. Named as such in the engine so it cannot be read as
+     arithmetic that was meant.
+   - **One unreadable POA anywhere refuses the claim**, not only on the code
+     carrying the condition. CMS sets the flag while walking every HAC-bearing
+     secondary and then applies it to every condition but HAC 6.
+
+   `invalid_age` and the age edits are not involved: as above, V44 names
+   neither.
+
+   **Confidence.** Like MDC assignment, this is source-derived rather than
+   oracle-confirmed, with one exception worth naming: the HAC 6 gate is
+   confirmed against the release's own tables, not just against CMS's code.
+
    What is left in this stage:
 
-   - HAC determination, which the severity count needs to be trustworthy.
-     CMS groups **twice** — once before the HAC rules run and once after —
-     because a HAC takes a secondary diagnosis out of the severity count and
-     can therefore change the DRG. CHO runs the single pass and takes the HAC
-     codes as given, so a caller passing an empty set is claiming the stay had
-     none.
-   - The end-to-end parity run against the oracle corpus, which this step was
-     the last piece before.
+   - The end-to-end parity run against the oracle corpus, which MDC assignment
+     was the last piece blocking. It is what will confirm both chains.
+   - CMS's two marking passes, which record which codes affected the DRG. The
+     matched operands carry most of the same information from the other
+     direction.
 
    None of this changes the recommendation or the build order. It does mean
    step 4 is larger than this ADR first implied, that one thing this ADR

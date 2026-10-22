@@ -280,6 +280,23 @@ public static class MsDrgGrouper
             mdcStops);
     }
 
+    /// <summary>
+    /// The grouping of a claim something refused: DRG 999, no partition, and
+    /// the return code that refused it.
+    /// </summary>
+    public static MsDrgGrouping Refuse(
+        int returnCode, ComplicationLevel severity, MsDrgMdcStops stops) =>
+        new(
+            Ungroupable,
+            Ungroupable,
+            Mdc: 0,
+            severity,
+            DrgTablePartition.NotApplicable,
+            returnCode,
+            Matched: null,
+            MatchedOperands: [],
+            stops);
+
     private static MsDrgGrouping Refused(
         int returnCode, ComplicationLevel severity, List<int> stops) =>
         new(

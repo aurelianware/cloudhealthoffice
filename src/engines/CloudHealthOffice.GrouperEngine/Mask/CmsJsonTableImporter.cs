@@ -3,6 +3,7 @@ using System.Text.Json;
 using CloudHealthOffice.GrouperEngine.Domain;
 
 using CloudHealthOffice.GrouperEngine.Formulas;
+using CloudHealthOffice.GrouperEngine.Hac;
 using CloudHealthOffice.GrouperEngine.Severity;
 
 namespace CloudHealthOffice.GrouperEngine.Mask;
@@ -40,6 +41,8 @@ public static class CmsJsonTableImporter
     private const string PrincipalExclusionFile = "pdxExclusionGroups.json";
     private const string ExclusionGroupFile = "exclusionGroups.json";
     private const string FormulaFile = "formulaRoot.json";
+    private const string HacInformationFile = "hacInformation.json";
+    private const string HacFormulaFile = "hacFormulaLists.json";
 
     /// <summary>
     /// Imports the DRG logic table in <paramref name="directory"/> for
@@ -163,6 +166,22 @@ public static class CmsJsonTableImporter
     private static int Integer(JsonElement row, string name) =>
         row.TryGetProperty(name, out var value) ? value.GetInt32() : 0;
 
+    private static IReadOnlyList<int> Integers(JsonElement row, string name)
+    {
+        if (!row.TryGetProperty(name, out var listed))
+        {
+            return [];
+        }
+
+        var values = new List<int>();
+        foreach (var value in listed.EnumerateArray())
+        {
+            values.Add(value.GetInt32());
+        }
+
+        return values;
+    }
+
     private static IReadOnlyList<string> Strings(JsonElement row, string name)
     {
         if (!row.TryGetProperty(name, out var listed))
@@ -181,6 +200,137 @@ public static class CmsJsonTableImporter
         }
 
         return values;
+    }
+
+    /// <summary>
+    /// Imports a release's hospital-acquired-condition tables: which codes are
+    /// on which HAC lists, and the formula that decides each condition.
+    ///
+    /// <para>
+    /// <b>A code gets its HAC lists only if one of them is spelled in upper
+    /// case.</b> That is not this importer's idea. CMS attaches a code's
+    /// conditions when one of its HAC attributes passes
+    /// <c>getListName().startsWith("HAC")</c>, and Java's <c>startsWith</c> is
+    /// case-sensitive, so a code on only <c>hac06_show</c>, <c>hac06_sdx</c> or
+    /// <c>hac11_sdx</c> gets none. The consequence in V44 is that HAC 6 cannot
+    /// fire at all. Replicated rather than corrected, because a grouper that
+    /// fires a condition the payer does not takes severity off a stay the payer
+    /// pays in full, and that underpays the hospital.
+    /// </para>
+    /// </summary>
+    /// <exception cref="MsDrgTableImportException">
+    /// The directory is not a CMS release's table directory, or a HAC formula
+    /// does not parse.
+    /// </exception>
+    public static InMemoryHacSource ImportHac(string directory, string version)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+
+        using var informationDocument = ReadDocument(directory, HacInformationFile);
+
+        var byCode = new Dictionary<string, IReadOnlyList<MsDrgHacEntry>>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var code in
+            Member(informationDocument.RootElement, "hacInfos", HacInformationFile)
+                .EnumerateObject())
+        {
+            if (!TryRowForVersion(
+                code.Value, version, HacInformationFile, code.Name, out var row))
+            {
+                continue;
+            }
+
+            var lists = Strings(row, "hacOperands");
+            var numbers = Integers(row, "hacNumbers");
+
+            if (lists.Count != numbers.Count)
+            {
+                throw new MsDrgTableImportException(
+                    $"{HacInformationFile} gives code '{code.Name}' {lists.Count} HAC "
+                    + $"lists and {numbers.Count} HAC numbers. They are parallel arrays, "
+                    + "so pairing them up would be a guess.");
+            }
+
+            if (!lists.Any(list => list.StartsWith("HAC", StringComparison.Ordinal)))
+            {
+                // CMS's own gate, above. The code is on a HAC list and still
+                // carries no condition.
+                continue;
+            }
+
+            var entries = new List<MsDrgHacEntry>(lists.Count);
+
+            for (var index = 0; index < lists.Count; index++)
+            {
+                entries.Add(new MsDrgHacEntry(numbers[index], lists[index]));
+            }
+
+            byCode[code.Name] = entries;
+        }
+
+        using var formulaDocument = ReadDocument(directory, HacFormulaFile);
+
+        var byNumber = new Dictionary<int, IReadOnlyList<DrgFormulaExpression>>();
+
+        foreach (var condition in
+            Member(formulaDocument.RootElement, "hacFormulaLists", HacFormulaFile)
+                .EnumerateObject())
+        {
+            if (!int.TryParse(condition.Name, out var number))
+            {
+                throw new MsDrgTableImportException(
+                    $"{HacFormulaFile} keys a condition on '{condition.Name}', which is "
+                    + "not a HAC number.");
+            }
+
+            if (!condition.Value.TryGetProperty("hacFormulaItems", out var rows))
+            {
+                continue;
+            }
+
+            var formulas = new List<DrgFormulaExpression>();
+
+            foreach (var row in rows.EnumerateArray())
+            {
+                if (!MentionsVersion(row, version))
+                {
+                    continue;
+                }
+
+                var text = row.TryGetProperty("formula", out var formula)
+                    ? formula.GetString()
+                    : null;
+
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    throw new MsDrgTableImportException(
+                        $"{HacFormulaFile} gives HAC {number} a row with no formula.");
+                }
+
+                try
+                {
+                    formulas.Add(DrgFormulaParser.Parse(text));
+                }
+                catch (DrgFormulaException exception)
+                {
+                    throw new MsDrgTableImportException(
+                        $"{HacFormulaFile} gives HAC {number} the formula '{text}', which "
+                        + "this engine cannot read. A condition whose formula cannot be "
+                        + "parsed cannot be determined, and the stay would then be paid as "
+                        + "though the hospital had not caused it.",
+                        exception);
+                }
+            }
+
+            if (formulas.Count > 0)
+            {
+                byNumber[number] = formulas;
+            }
+        }
+
+        return new InMemoryHacSource(version, byCode, byNumber);
     }
 
     /// <summary>

@@ -3,6 +3,7 @@ using CloudHealthOffice.GrouperEngine.Data;
 using CloudHealthOffice.GrouperEngine.Domain;
 using CloudHealthOffice.GrouperEngine.Formulas;
 using CloudHealthOffice.GrouperEngine.Grouping;
+using CloudHealthOffice.GrouperEngine.Hac;
 using CloudHealthOffice.GrouperEngine.Mask;
 using Xunit;
 
@@ -506,6 +507,81 @@ public class CmsJsonTableImporterTests : IDisposable
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// A real release's hospital-acquired-condition tables import, every HAC
+    /// formula parses, and HAC 6 turns out to be unreachable.
+    ///
+    /// <para>
+    /// Skipped unless <c>CMS_MSDRG_TABLES</c> names a directory. The HAC 6
+    /// assertion is the valuable one: CMS attaches a code's conditions only
+    /// when one of its HAC list names starts with an upper-case <c>HAC</c>, and
+    /// in V44 every code on HAC 6 is on it through <c>hac06_show</c> or
+    /// <c>hac06_sdx</c> alone. So catheter-associated urinary tract infection
+    /// can never be determined. If a release ever changes that, this test
+    /// fails and the show-list rule -- which is built and tested -- starts
+    /// mattering.
+    /// </para>
+    /// </summary>
+    [SkippableFact]
+    public void A_real_releases_hac_tables_import_and_hac_six_is_unreachable()
+    {
+        var tables = Environment.GetEnvironmentVariable("CMS_MSDRG_TABLES");
+        Skip.If(
+            string.IsNullOrWhiteSpace(tables),
+            "Set CMS_MSDRG_TABLES to a CMS MS-DRG release's table directory to run this.");
+
+        var version = Environment.GetEnvironmentVariable("CMS_MSDRG_VERSION") ?? "V440";
+        var hacs = CmsJsonTableImporter.ImportHac(tables!, version);
+
+        Assert.Equal(version, hacs.Version);
+
+        // 14 conditions, each with at least one formula.
+        Assert.Equal(14, hacs.HacNumbers.Count);
+        foreach (var number in hacs.HacNumbers)
+        {
+            Assert.NotEmpty(hacs.FormulasFor(number));
+        }
+
+        // Thousands of codes carry a condition -- HAC 5, the fall and trauma
+        // list, is most of them.
+        Assert.True(
+            hacs.CodeCount > 3_000,
+            $"Only {hacs.CodeCount} codes carry a condition for {version}.");
+
+        // No code reaches HAC 6, for the reason above.
+        Assert.Empty(CodesCarrying(hacs, 6));
+
+        // Every other condition the release holds a formula for is carried by
+        // at least one code, so the gate above is specific to HAC 6 and not a
+        // version filter that matched nothing.
+        foreach (var number in hacs.HacNumbers.Where(number => number != 6))
+        {
+            Assert.NotEmpty(CodesCarrying(hacs, number));
+        }
+    }
+
+    private static IReadOnlyList<string> CodesCarrying(InMemoryHacSource hacs, int hacNumber)
+    {
+        // The source is keyed by code and answers per code, so the codes
+        // themselves come from the release's own file.
+        var tables = Environment.GetEnvironmentVariable("CMS_MSDRG_TABLES")!;
+
+        using var document = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(tables, "hacInformation.json")));
+
+        var carrying = new List<string>();
+
+        foreach (var code in document.RootElement.GetProperty("hacInfos").EnumerateObject())
+        {
+            if (hacs.EntriesFor(code.Name).Any(entry => entry.Number == hacNumber))
+            {
+                carrying.Add(code.Name);
+            }
+        }
+
+        return carrying;
     }
 
     /// <summary>
