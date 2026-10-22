@@ -102,23 +102,34 @@ Validated in CI by the HL7 validator against CARIN BB 2.2.0
 (`scripts/interop/fhir-validate.sh`). Each of the four goldens reports exactly
 one error, and it is the same error:
 
-**No resolvable `Practitioner`.** Every CARIN BB care-team role but
-`purchasedservice` carries an invariant that the provider resolve to a
-`Practitioner`. CHO publishes no `Practitioner` resource and holds no name for
-the rendering provider, so the reference resolves to nothing.
+**`resolve()` has nothing to read in a single file.** Every CARIN BB care-team
+role but `purchasedservice` carries an invariant that the provider `resolve()`
+to a `Practitioner`.
 
-The fix is a `Practitioner` projection fed by provider data. It is not choosing
-a role the invariant ignores — the 837's rendering provider is a rendering
-provider — and it is the same work the `insurer` and `provider` target profiles
-need, and the same work US Core needs for PAT-02. That makes it the largest
-single remaining item for Provider Access conformance.
+This was first recorded as "CHO publishes no `Practitioner` resource", which was
+wrong. provider-service has projected `us-core-practitioner` keyed by NPI since
+capability 5.7, and fhir-service proxies it at `fhir/r4/Practitioner/{id}` — the
+same base this EOB is served from — so `careTeam.provider` carries a literal
+`Practitioner/{npi}` and resolves against a live server. What cannot resolve is a
+relative reference inside a standalone instance, which is all the validator is
+given here, and `-tx n/a` leaves it no way to fetch one.
 
-Two related limits, for the same reason: `insurer`, `provider` and
-`insurance.coverage` are references by identifier and display rather than
-literal references, because there is no `Organization`, `Practitioner` or
-`Coverage` resource to point at. A reference carrying an identifier and a
-display is valid FHIR and says what is known; a literal reference that would
-404 would not.
+So the line stays in `conformance/validator-baseline.txt` as a limit of the
+harness, and the thing the harness cannot show is shown elsewhere:
+`The_care_team_reference_resolves_to_a_practitioner_the_directory_serves` in
+`tests/Cms0057Acceptance.Tests` takes the reference off the payload and reads it
+back from provider-service's `Practitioner` endpoint. Clearing the validator
+line itself needs a run over a `Bundle`, or Inferno against a running server
+(gap G-60). It is not worked around by choosing a role the invariant ignores:
+the 837's rendering provider is a rendering provider.
+
+The header `provider` is a different case and is deliberately left as an
+identifier reference. It comes from the billing NPI, which may belong to a
+group, and C4BB allows either an `Organization` or a `Practitioner` there. CHO
+cannot tell which from the claim alone, so it says what it knows rather than
+asserting a type that would 404 for every group practice. `insurer` and
+`insurance.coverage` are identifier-and-display references for the plainer
+reason that there is no `Organization` or `Coverage` resource to point at.
 
 What the validator cannot see at all is recorded in
 `scripts/interop/fhir-validate.sh`: terminology checking is off, so the required
