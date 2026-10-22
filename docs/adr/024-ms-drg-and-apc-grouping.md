@@ -414,20 +414,60 @@ Build order:
    parser by `FormulaPrecedenceCheck` in the oracle tool rather than against a
    reading of it.
 
-   The language turned out to be six tokens — an operand name, two parentheses,
-   and `&`, `|`, `~` — and an operand evaluates as plain set membership
-   (`Collection.contains`) against the operand names a stay satisfies. So the
-   remaining work is not an interpreter but a lookup: build the satisfied-operand
-   set for a stay from the extracted code attribute tables, then walk each MDC's
-   ranked formula list and take the first match. What is left:
+   The language is six tokens — an operand name, two parentheses, and `&`, `|`,
+   `~` — so the parser is small and now done.
+
+   **Correction.** This ADR previously said that an operand evaluates as plain
+   set membership and that "the remaining work is not an interpreter but a
+   lookup". That was too rosy, and reading `MsdrgNodeSupplier` rather than only
+   `ContainsNode` shows why. Set membership is the *default* case, but two
+   things sit on top of it:
+
+   - **Operands carry a position prefix.** `ANY:`, `PDX:`, `SDX:`, `ONLY:` and
+     `PT:` say where the codes must appear — any diagnosis, the principal only,
+     a secondary only, every diagnosis, or a patient attribute. 196 of the 452
+     distinct operands in V44's 824 formulas are prefixed (`PDX` 170, `ANY` 14,
+     `SDX` 11, `ONLY` 1). The same list appears under three different prefixes
+     (`ONLY:incident`, `PDX:incident`, `SDX:incident`), so a grouper that
+     ignored the prefix would collapse three different tests into one.
+
+     CMS does not treat `:` as punctuation, so a prefixed operand is a single
+     atom — the parser needed no change, and the split belongs where the
+     operand is resolved. `OperandName` does it, and the tests confirm the
+     lexer keeps `ANY:renalfail` whole.
+
+   - **About a dozen operands are not lookups at all.** They are nodes with
+     real logic: significant trauma, bilateral procedures, the fusion, vessel
+     and stent *counting* nodes (`SINGLEFUSIONCTR`, `FOUR_VESSELS`,
+     `FOUR_STENTS`, …), MDC-20 fall-through, only-incident, and — this is the
+     useful part — the MCE edits, which are formula operands evaluated by a
+     `GrcNode`: `INVALID_PDX`, `INVALID_SEX`, `INVALID_AGE`, `INVALID_DSTAT`,
+     `PDX_ECODE`. Each appears in only a handful of formulas, so the volume is
+     small, but they cannot be faked with a set.
+
+   **This resolves the sex-edit open question from step 3.** `INVALID_SEX` is
+   not a return code the grouper raises on its own; it is an operand in one V44
+   formula, routed through a `GrcNode`. That is why `N400` on a female stay came
+   back `grc=OK` — the edit lives in the formula logic and the gender tables
+   (`codeGenderMdcs`), not in a demographic pre-check. So CHO's
+   `GroupingStatus.DemographicConflict` is modelled in the wrong place and
+   should come out of the formula evaluation instead.
+
+   What is left:
 
    - the satisfied-operand set, from `dxPatterns`, `prPatterns`,
-     `codeToClusterIds` and `clusters`;
-   - driving the ranked formula lists per MDC, with `reRouteMdcId` and
-     `severitySuppressionOperand`;
+     `codeToClusterIds` and `clusters`, honouring the position prefix;
+   - the dozen special-logic operand nodes, counting nodes included;
+   - driving the ranked formula lists per MDC — 824 formulas for V44 — with
+     `reRouteMdcId` (20 formulas) and `severitySuppressionOperand` (56);
    - the unknown-code decision forced by the parity run: CHO must distinguish
      "not a complication" from "not in my table set", and refuse rather than
      guess.
+
+   None of this changes the recommendation or the build order. It does mean
+   step 4 is larger than this ADR implied a commit ago, and that the CMS
+   extracted tables cannot simply be committed — they are CMS table data, so
+   they have to be imported at runtime rather than vendored.
 
    A port of CMS's expression evaluator over the
    extracted attribute tables and ranked formula lists, with the surgical
