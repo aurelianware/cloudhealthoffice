@@ -220,3 +220,22 @@ is a Phase 2 capability.
   CHO conformance posture.
 - [`schemas/plan-documents/`](../../schemas/plan-documents/) — the
   operator-facing `PlanDocumentType` reference.
+
+## Production source composition
+
+Bind Patient, Coverage, Encounter, Claim **and PayerToPayer** to `ChoNative`
+under `FhirAdapters:Sources` and configure their owning-service URLs. With all
+five native, the legacy mock Patient Access provider/member directory is not
+registered. The actionless legacy PatientAccessController has been removed;
+actual Patient/Coverage/EOB actions remain in their existing controllers.
+
+Any selected `Mock` source still triggers the shared synthetic-data guard
+outside Development/Testing unless a synthetic-only demo explicitly opts in.
+Native upstream failures never select a mock fallback. Appeals retain their
+separate source guard. Native source composition does not establish a working
+consent registry, upstream availability, clinical/profile completeness, durable
+bulk export or live payer readiness.
+
+`NativeProductionStartupTests` boots Production with synthetic permission false,
+asymmetric CHO trust and external SMART trust, but substitutes database stores.
+It is composition evidence, not production database or issuer integration proof.
