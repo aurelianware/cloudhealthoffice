@@ -1,91 +1,40 @@
-using System.Collections.Concurrent;
 using FhirService.Models;
-using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services;
 
+/// <summary>
+/// Explicit capability boundary until a durable job store, member-scoped export
+/// worker and authorized NDJSON download storage are implemented. Never issue
+/// completed manifests or download URLs for files that have not been written.
+/// </summary>
 public class BulkExportService : IBulkExportService
 {
-    private readonly ConcurrentDictionary<string, BulkExportJob> _jobs = new();
-    private readonly string _serverBaseUrl;
-    private readonly ILogger<BulkExportService> _logger;
-
-    private static readonly List<string> DefaultResourceTypes = new()
-    {
-        "Patient", "ExplanationOfBenefit", "Coverage", "Encounter",
-    };
-
-    public BulkExportService(IConfiguration configuration, ILogger<BulkExportService> logger)
-    {
-        _serverBaseUrl = configuration["Fhir:ServerBaseUrl"]
-            ?? "https://api.cloudhealthoffice.com/fhir/r4";
-        _logger = logger;
-    }
-
     public Task<BulkExportJob> InitiateExportAsync(
         BulkExportRequest request, string tenantId, CancellationToken ct = default)
     {
-        var jobId = $"export-{Guid.NewGuid().ToString("N")[..12]}";
-
-        var resourceTypes = string.IsNullOrWhiteSpace(request.Type)
-            ? DefaultResourceTypes.ToList()
-            : request.Type.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .ToList();
-
-        var baseUrl = _serverBaseUrl;
-        var manifest = new BulkExportManifest
-        {
-            TransactionTime = DateTimeOffset.UtcNow.ToString("o"),
-            Request = request.GroupId != null
-                ? $"Group/{request.GroupId}/$export"
-                : "$export",
-            Output = resourceTypes.Select(rt => new BulkExportOutput
-            {
-                Type = rt,
-                Url = $"{baseUrl}/$export-data/{jobId}/{rt}.ndjson",
-                Count = 0,
-            }).ToList(),
-        };
-
-        var job = new BulkExportJob
-        {
-            JobId = jobId,
-            Status = BulkExportStatus.Complete,
-            CreatedAt = DateTimeOffset.UtcNow,
-            CompletedAt = DateTimeOffset.UtcNow,
-            Request = manifest.Request,
-            GroupId = request.GroupId,
-            ResourceTypes = resourceTypes,
-            Since = request.Since,
-            Manifest = manifest,
-            ProgressPercent = 100,
-        };
-
-        _jobs[$"{tenantId}:{jobId}"] = job;
-
-        _logger.LogInformation(
-            "Bulk export job {JobId} created for tenant {TenantId}, types={Types}",
-            jobId, LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(string.Join(",", resourceTypes)));
-
-        return Task.FromResult(job);
+        ct.ThrowIfCancellationRequested();
+        throw new BulkExportNotImplementedException();
     }
 
+    // No jobs are accepted by this implementation, so none can be polled or
+    // cancelled. Keep these interfaces for a future durable implementation.
     public Task<BulkExportJob?> GetJobStatusAsync(
         string jobId, string tenantId, CancellationToken ct = default)
     {
-        _jobs.TryGetValue($"{tenantId}:{jobId}", out var job);
-        return Task.FromResult(job);
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult<BulkExportJob?>(null);
     }
 
     public Task<bool> CancelJobAsync(
         string jobId, string tenantId, CancellationToken ct = default)
     {
-        var key = $"{tenantId}:{jobId}";
-        if (!_jobs.TryGetValue(key, out var job))
-            return Task.FromResult(false);
-
-        job.Status = BulkExportStatus.Cancelled;
-        _logger.LogInformation("Bulk export job {JobId} cancelled for tenant {TenantId}", LogSanitizer.Sanitize(jobId), LogSanitizer.Sanitize(tenantId));
-        return Task.FromResult(true);
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(false);
     }
+}
+
+public sealed class BulkExportNotImplementedException : NotSupportedException
+{
+    public BulkExportNotImplementedException()
+        : base("Bulk export is not implemented. No export job or download files were created.") { }
 }
