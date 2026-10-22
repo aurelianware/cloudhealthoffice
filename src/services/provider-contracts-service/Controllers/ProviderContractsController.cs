@@ -3,6 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 using ProviderContractsService.Models;
 using ProviderContractsService.Repositories;
 using CloudHealthOffice.Infrastructure.Logging;
+// The engine declares a ProviderContract of its own (the pricing contract a
+// legal contract projects to), so the term type is aliased rather than the
+// namespace imported.
+using ReimbursementTerm = CloudHealthOffice.FeeScheduleEngine.Models.ReimbursementTerm;
 
 namespace ProviderContractsService.Controllers;
 
@@ -165,6 +169,11 @@ public class ProviderContractsController : ControllerBase
         // conditional on that revision, so a concurrent amendment or
         // lifecycle change in between answers 409 instead of being erased.
         contract.Revision = existing.Revision;
+        // Rates are money and have their own validated endpoint
+        // (PUT /{id}/reimbursement-terms), so a PUT body can neither set nor
+        // clear them. The portal does not send them, so a portal edit would
+        // otherwise wipe a contract's whole rate sheet.
+        contract.ReimbursementTerms = existing.ReimbursementTerms;
         // CapitationRateConfigIds / FfsRateConfigIds stay editable here: no
         // other endpoint links rate configs to a contract (rate-configs is
         // read-only and sync-children is a stub), and the portal sends them.
@@ -314,8 +323,10 @@ public class ProviderContractsController : ControllerBase
 
         // TODO: Propagate ContractNumber, ProviderNPI, ProviderName, LineOfBusiness
         // to all CapitationRateConfig children via capitation-service
-        // /api/v1/capitation/rate-configs?contractId={id} PATCH endpoint,
-        // and to FfsRateConfig children via ffs-service when implemented.
+        // /api/v1/capitation/rate-configs?contractId={id} PATCH endpoint.
+        // There is nothing to propagate to an FfsRateConfig any more: a
+        // fee-for-service rate is a reimbursement term on this contract
+        // (ADR 016 phase 2), so it carries no denormalized copy to sync.
         // Until then, returns 501 so callers know propagation did not occur.
         _logger.LogInformation("Sync-children requested for provider contract {ContractNumber}",
             LogSanitizer.Sanitize(contract.ContractNumber));
@@ -326,7 +337,8 @@ public class ProviderContractsController : ControllerBase
                       "ProviderName, and LineOfBusiness must be manually kept in sync " +
                       "with child rate configs until this is implemented.",
             contractId = id,
-            childCount = contract.CapitationRateConfigIds.Count + contract.FfsRateConfigIds.Count
+            childCount = contract.CapitationRateConfigIds.Count + contract.FfsRateConfigIds.Count,
+            note = "FfsRateConfig children are superseded by this contract's reimbursementTerms."
         });
     }
 
@@ -348,6 +360,149 @@ public class ProviderContractsController : ControllerBase
             capitationRateConfigIds = contract.CapitationRateConfigIds,
             ffsRateConfigIds = contract.FfsRateConfigIds
         });
+    }
+
+    // ── Reimbursement terms (ADR 016 §2) ──────────────────────────────────
+
+    /// <summary>
+    /// The contract's rate sheet, in evaluation order: the first term whose
+    /// scope covers a claim line and whose effective dates cover the service
+    /// date prices it.
+    /// </summary>
+    [HttpGet("{id}/reimbursement-terms")]
+    [ProducesResponseType(typeof(IEnumerable<ReimbursementTerm>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IEnumerable<ReimbursementTerm>>> GetReimbursementTerms(string id)
+    {
+        var contract = await _contractRepository.GetByIdAsync(id);
+        if (contract == null)
+            return NotFound(new { error = $"Contract {id} not found" });
+
+        return Ok(contract.ReimbursementTerms);
+    }
+
+    /// <summary>
+    /// Replace the contract's whole rate sheet.
+    /// </summary>
+    /// <remarks>
+    /// The whole sheet, not one term, because the order is the contract: a
+    /// carve-out placed after the default term it carves out of would never
+    /// price a line. Every term is validated, and so is the list — a term an
+    /// earlier unconditional term always answers before is rejected rather than
+    /// stored, since at pricing time an unreachable term is invisible.
+    ///
+    /// A term with no id is given one, so the stored sheet can always name the
+    /// term that priced a line.
+    /// </remarks>
+    [HttpPut("{id}/reimbursement-terms")]
+    [ProducesResponseType(typeof(IEnumerable<ReimbursementTerm>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IEnumerable<ReimbursementTerm>>> ReplaceReimbursementTerms(
+        string id, [FromBody] ReimbursementTermsRequest request)
+    {
+        var contract = await _contractRepository.GetByIdAsync(id);
+        if (contract == null)
+            return NotFound(new { error = $"Contract {id} not found" });
+
+        var terms = request.Terms ?? [];
+        foreach (var term in terms.Where(t => string.IsNullOrWhiteSpace(t.Id)))
+            term.Id = Guid.NewGuid().ToString();
+
+        var errors = ReimbursementTermSheet.Validate(terms);
+        if (errors.Count > 0)
+            return BadRequest(new { error = "The rate sheet is not valid", details = errors });
+
+        contract.ReimbursementTerms = terms.ToList();
+        _logger.LogInformation(
+            "Replaced the rate sheet of provider contract {ContractNumber} with {TermCount} term(s)",
+            LogSanitizer.Sanitize(contract.ContractNumber), terms.Count);
+
+        var updated = await _contractRepository.UpdateAsync(contract);
+        return Ok(updated.ReimbursementTerms);
+    }
+
+    /// <summary>
+    /// Append a fee-for-service rate to the contract as a reimbursement term.
+    /// </summary>
+    /// <remarks>
+    /// The ffs-service fold of ADR 016 phase 2. A fee-for-service rate used to
+    /// be an <c>FfsRateConfig</c> document in a service that never grew a
+    /// controller or a repository, so the rate was unreachable and nothing
+    /// priced from it. The same fields — a fee schedule, a percentage of it, and
+    /// the two modifier toggles — are one term on the contract, which the
+    /// pricing engine already reads.
+    ///
+    /// The term is appended, so a sheet that already has a default term rejects
+    /// the new one as unreachable: reorder it with
+    /// <c>PUT /{id}/reimbursement-terms</c>, which is the endpoint that owns the
+    /// order.
+    /// </remarks>
+    [HttpPost("{id}/reimbursement-terms/from-ffs-rate-config")]
+    [ProducesResponseType(typeof(IEnumerable<ReimbursementTerm>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IEnumerable<ReimbursementTerm>>> AddFfsRateConfigTerm(
+        string id, [FromBody] FfsRateConfigTermRequest request)
+    {
+        var contract = await _contractRepository.GetByIdAsync(id);
+        if (contract == null)
+            return NotFound(new { error = $"Contract {id} not found" });
+
+        if (contract.PaymentMethodology is PaymentMethodology.FullCapitation)
+        {
+            return BadRequest(new
+            {
+                error = "This contract is full capitation, so it has no fee-for-service rates. " +
+                        "Change the payment methodology first, or add a capitation term.",
+            });
+        }
+
+        var term = request.ToReimbursementTerm();
+        var terms = contract.ReimbursementTerms.Append(term).ToList();
+
+        var errors = ReimbursementTermSheet.Validate(terms);
+        if (errors.Count > 0)
+            return BadRequest(new { error = "The rate sheet is not valid", details = errors });
+
+        contract.ReimbursementTerms = terms;
+        _logger.LogInformation(
+            "Added a fee-for-service term on schedule {FeeScheduleId} to provider contract {ContractNumber}",
+            LogSanitizer.Sanitize(request.FeeScheduleId), LogSanitizer.Sanitize(contract.ContractNumber));
+
+        var updated = await _contractRepository.UpdateAsync(contract);
+        return Ok(updated.ReimbursementTerms);
+    }
+
+    /// <summary>
+    /// The contract as the pricing engine's contract: what a claim against this
+    /// provider would be priced from.
+    /// </summary>
+    /// <remarks>
+    /// Read-only, and the point of ADR 016. The legal agreement and the document
+    /// the engine prices from are two unrelated records today; this is the
+    /// derivation of the second from the first, which the phase 3 backfill will
+    /// write and the phase 4 dual-read window will regenerate after every edit.
+    /// Reading it is how a reviewer sees what a contract would price as before
+    /// anything is written.
+    ///
+    /// One engine contract per plan the legal contract covers, because the
+    /// engine looks a contract up by a single plan. <c>warnings</c> carries
+    /// everything that needs a person's judgement first: a contract that is not
+    /// active, one with no terms, a plan scope that has to be expanded against
+    /// the plan catalogue, a network status the engine has no value for. No TIN
+    /// is projected: pricing needs the NPI, the plan and the terms.
+    /// </remarks>
+    [HttpGet("{id}/pricing-contract")]
+    [ProducesResponseType(typeof(PricingContractProjectionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PricingContractProjectionResult>> GetPricingContract(string id)
+    {
+        var contract = await _contractRepository.GetByIdAsync(id);
+        if (contract == null)
+            return NotFound(new { error = $"Contract {id} not found" });
+
+        return Ok(PricingContractProjection.Project(contract));
     }
 
     /// <summary>

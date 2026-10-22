@@ -17,6 +17,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+    <!--
+      ADR 016: the reimbursement terms on a contract are the same documents the
+      pricing engine evaluates, so this service writes the engine's own
+      ReimbursementTerm type rather than a copy of it. Two shapes that have to
+      agree is the problem the ADR is fixing.
+    -->
+    <ProjectReference Include="..\..\engines\CloudHealthOffice.FeeScheduleEngine\CloudHealthOffice.FeeScheduleEngine.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="Swashbuckle.AspNetCore" />

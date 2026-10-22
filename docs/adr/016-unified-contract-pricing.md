@@ -7,9 +7,11 @@ follows the CMS site-of-service list (section 5; the facility rule risk is fixed
 Phase 2's engine half is implemented: the canonical contract carries
 `ReimbursementTerms[]` and the engine evaluates them, with the legacy
 `FeeScheduleId` + `ContractLines` path unchanged for a contract that has no
-terms. Phase 2's service half (one contract writer: fold `ffs-service` into
-provider-contracts-service, and give the pricing contract an admin API) and
-phases 3 to 5 are planned for later PRs.
+terms. Phase 2's service half is implemented too: the rate sheet is written on the
+legal contract in provider-contracts-service, a fee-for-service rate config
+posts as a term rather than to `ffs-service`, and the legal contract projects to
+the engine contract a claim would be priced from. Phases 3 to 5 are planned for
+later PRs.
 
 ## Context
 
@@ -254,10 +256,54 @@ implemented, rather than silently ignoring them.
   engine's `PricingRequest` carries no service category, and a condition nothing
   populates would silently never match. It lands with the field.
 
-- **Open.** Give ffs-service its API, or fold it into
-  provider-contracts-service: FFS terms become `reimbursementTerms` edited on
-  the contract. Prefer the fold, because a rate config never exists without its
-  contract. The pricing contract still has no admin API.
+- **Done.** ffs-service is folded into provider-contracts-service rather than
+  given an API of its own, because a rate config never exists without its
+  contract. The legal `ProviderContract` carries `ReimbursementTerms[]` — the
+  engine's own term type, by project reference, so the two shapes cannot drift —
+  and three endpoints own it:
+
+  | Endpoint | What it is for |
+  | --- | --- |
+  | `GET /api/v1/contracts/{id}/reimbursement-terms` | the contract's rate sheet, in evaluation order |
+  | `PUT /api/v1/contracts/{id}/reimbursement-terms` | replace the whole sheet, validated |
+  | `POST /api/v1/contracts/{id}/reimbursement-terms/from-ffs-rate-config` | append an `FfsRateConfig`-shaped rate as a term |
+  | `GET /api/v1/contracts/{id}/pricing-contract` | the engine contract this legal contract projects to |
+
+  The replace takes the whole sheet, not one term, because the order *is* the
+  contract: a carve-out placed after the default term it carves out of would
+  never price a line. Validation is each term's own `Validate()` plus the rules
+  that only hold for the list — duplicate term ids, and a term an earlier
+  unconditional term always answers before, which is rejected rather than stored
+  because at pricing time an unreachable term is invisible. Terms are not
+  editable through `PUT /contracts/{id}`: the portal does not send them, so a
+  portal edit would otherwise wipe a contract's rates.
+
+  `FfsRateConfig` maps one-to-one onto a `FeeScheduleRef` term — `FeeScheduleId`
+  to the term's schedule, `FeeSchedulePercentage` to its multiplier, the two
+  toggles to its modifier rules — so the fold needed no new concepts. The model
+  stays in ffs-service for the phase 3 backfill to read; nothing should give it
+  an API.
+
+- **Done.** The pricing contract's admin surface is
+  `GET /contracts/{id}/pricing-contract`: `PricingContractProjection` derives the
+  engine contract from the legal one, as a pure function. That is the link the
+  ADR says is missing, and it is deliberately the same derivation phase 3 will
+  write and phase 4 will regenerate after every edit, so there is one mapping
+  rather than three. One engine contract per plan (the engine looks a contract
+  up by a single plan id, the legal contract covers a list), deterministic ids,
+  the terms carried as the rate sheet and the legacy `FeeScheduleId` /
+  `ContractLines` left empty, `Origin: legal`, and no TIN — pricing needs the
+  NPI, the plan and the terms.
+
+  Its `warnings` are what the backfill's conflict report will carry: a contract
+  that is not Active, one with no terms, a plan scope with no plan ids that has
+  to be expanded against the plan catalogue, and `TieredException`, which the
+  engine's `NetworkStatus` has no value for (it projects as in-network, and the
+  tiering has to be carried by the terms' scopes).
+
+  Reading this is how a reviewer sees what a contract would price as, before
+  anything is written to the engine's store. Nothing writes it yet: phase 2
+  introduces no second writer.
 
 **Phase 3: backfill.**
 
@@ -414,7 +460,9 @@ BenefitEngine and claims-service have no facility-rate POS list
 - `src/services/claims-service/Services/Adjudication/Stages/PricingStage.cs`
 - `src/services/benefit-plan-service/Controllers/AdjudicationController.cs` (`resolve-rates`)
 - `src/services/provider-contracts-service/Models/ProviderContract.cs`
-- `src/services/ffs-service/Models/FfsRateConfig.cs`
+- `src/services/provider-contracts-service/Models/PricingContractProjection.cs`
+- `src/services/provider-contracts-service/Models/ReimbursementTermRequests.cs`
+- `src/services/ffs-service/Models/FfsRateConfig.cs` (superseded; read by the phase 3 backfill)
 - `src/engines/CloudHealthOffice.FeeScheduleEngine/Models/ReimbursementTerms.cs`
 - `tests/CloudHealthOffice.PricingApi.Tests/UnifiedPricingParityTests.cs`
 - `tests/CloudHealthOffice.FeeScheduleEngine.Tests/ContractTermsTests.cs`
