@@ -22,7 +22,7 @@ public static class FhirSmartCampaign
         "patient.search-control", "patient.foreign-id-search", "patient.pagination-confinement",
         "tenant.a.shared-id", "tenant.b.shared-id", "tenant.b.foreign-id", "tenant.a.search", "tenant.b.search",
         "cho.reader-control", "cho.permission-denial", "cho.bulk-denial", "bulk.patient-denial", "bulk.scope-denial",
-        "bulk.create-control", "bulk.own-status", "bulk.foreign-status", "bulk.foreign-cancel", "bulk.owner-state-unchanged", "upstream.audit"
+        "bulk.unavailable-control", "bulk.group-unavailable", "bulk.absent-status", "bulk.foreign-absent-status", "bulk.absent-cancel", "upstream.audit"
     });
 
     public static async Task<int> Run(string[] args)
@@ -189,23 +189,26 @@ public static class FhirSmartCampaign
             await Case("cho.bulk-denial", () => Denied("fhir/r4/$export", ChoDevelopmentAuth.UserToken("synthetic-payer-a", ChoRolePermissions.TenantAdmin), 403, "POST"));
             await Case("bulk.patient-denial", () => Denied("fhir/r4/$export", issuerA.Token(scopes: "patient/*.*"), 403, "POST"));
             await Case("bulk.scope-denial", () => Denied("fhir/r4/$export", issuerA.Token(patient: null, scopes: "system/Patient.read"), 403, "POST"));
-            var backendA = issuerA.Token(patient: null, scopes: "system/$export.read system/$export-status.read system/$export-status.write");
+            var backendA = issuerA.Token(patient: null, scopes: "system/$export.read system/Group.read system/$export-status.read system/$export-status.write");
             var backendB = issuerB.Token(tenant: "synthetic-payer-b", patient: null, scopes: "system/$export.read system/$export-status.read system/$export-status.write", audience: "second-fhir-api");
-            string? job = null; string? jobBody = null;
-            await Case("bulk.create-control", async () =>
+            await Case("bulk.unavailable-control", async () =>
             {
                 var r = await Request("fhir/r4/$export?_type=Patient", backendA, "POST");
-                if (r.Status != 202 || !Uri.TryCreate(r.Location, UriKind.Absolute, out var uri) || uri.GetLeftPart(UriPartial.Authority) != fhir.Http.BaseAddress!.GetLeftPart(UriPartial.Authority)) return false;
-                job = uri.PathAndQuery; return true;
+                return r.Status == 501 && string.IsNullOrEmpty(r.Location)
+                    && r.Body.Contains("OperationOutcome") && r.Body.Contains("not-supported");
             });
-            await Case("bulk.own-status", async () => { var r = await Request(job!, backendA); jobBody = r.Body; return r.Status == 200 && r.Body.Contains("Patient"); }, "bulk.create-control");
-            await Case("bulk.foreign-status", () => Denied(job!, backendB, 404), "bulk.own-status");
-            await Case("bulk.foreign-cancel", () => Denied(job!, backendB, 404, "DELETE"), "bulk.own-status");
-            await Case("bulk.owner-state-unchanged", async () =>
+            await Case("bulk.group-unavailable", async () =>
             {
-                var r = await Request(job!, backendA); var same = r.Status == 200 && r.Body == jobBody;
-                states.Add(new { scenarioId = active, ownerJobUnchanged = same }); return same;
-            }, "bulk.own-status");
+                var r = await Request("fhir/r4/Group/synthetic-group/$export", backendA, "POST");
+                return r.Status == 501 && string.IsNullOrEmpty(r.Location)
+                    && r.Body.Contains("OperationOutcome") && r.Body.Contains("not-supported");
+            }, "bulk.unavailable-control");
+            // No job is accepted by the default implementation. These are
+            // absence checks, not evidence of isolation for a real job store.
+            const string absentJob = "fhir/r4/$export-status/export-not-created";
+            await Case("bulk.absent-status", () => Denied(absentJob, backendA, 404), "bulk.unavailable-control");
+            await Case("bulk.foreign-absent-status", () => Denied(absentJob, backendB, 404), "bulk.unavailable-control");
+            await Case("bulk.absent-cancel", () => Denied(absentJob, backendA, 404, "DELETE"), "bulk.unavailable-control");
             await Case("upstream.audit", async () =>
             {
                 var count = await db.GetCollection<BsonDocument>("RecordAccessAudit").CountDocumentsAsync(new BsonDocument { { "TenantId", "synthetic-payer-a" }, { "ActorId", "fhir-service" }, { "StatusCode", 200 } });
@@ -214,10 +217,10 @@ public static class FhirSmartCampaign
             completed = true;
         }
         catch (Exception e) { Console.Error.WriteLine("Lab ERROR: " + e.GetType().Name); results.Add(new("lab.prerequisites", "ERROR", "Local service, fixture, identity or database setup/cleanup failed")); }
-        var unsupported = new[] { "production-identity-and-tls", "member-production-encryption", "authorization-server-grant-pkce-refresh-revocation", "jwks-rotation-and-outage", "provider-attribution-consent", "non-Patient-resource-data", "bulk-data-downloads", "financial-accounting", "per-tenant-databases", "deployed-ingress", "full-log-phi-leakage" };
+        var unsupported = new[] { "production-identity-and-tls", "member-production-encryption", "authorization-server-grant-pkce-refresh-revocation", "jwks-rotation-and-outage", "provider-attribution-consent", "non-Patient-resource-data", "bulk-data-downloads", "durable-bulk-job-isolation", "financial-accounting", "per-tenant-databases", "deployed-ingress", "full-log-phi-leakage" };
         var json = new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true };
         async Task Write(string name, object value) => await File.WriteAllTextAsync(Path.Combine(output, name), JsonSerializer.Serialize(value, json));
-        await Write("manifest.json", new { schemaVersion = "1.0", campaign = "fhir-smart-v1", runId, started, finished = DateTimeOffset.UtcNow, completed, sourceCommit = source, sourceDirty = dirty, binaries, mongoVersion, runtime = Environment.Version.ToString(), os = System.Runtime.InteropServices.RuntimeInformation.OSDescription, fixtureVersion = "fhir-patient-synthetic-v1", profile = "loopback-fhir-testing-member-development-two-rsa-issuers", tenantStorage = "shared-database-row-filtering", memberSeed = "direct-mongo-existing-state", memberEncryption = "development-noop", identity = "ephemeral-rsa-jwks-http-loopback", bulkExport = "in-process-job-metadata-only", publication = "REQUIRES_REVIEW" });
+        await Write("manifest.json", new { schemaVersion = "1.0", campaign = "fhir-smart-v1", runId, started, finished = DateTimeOffset.UtcNow, completed, sourceCommit = source, sourceDirty = dirty, binaries, mongoVersion, runtime = Environment.Version.ToString(), os = System.Runtime.InteropServices.RuntimeInformation.OSDescription, fixtureVersion = "fhir-patient-synthetic-v1", profile = "loopback-fhir-testing-member-development-two-rsa-issuers", tenantStorage = "shared-database-row-filtering", memberSeed = "direct-mongo-existing-state", memberEncryption = "development-noop", identity = "ephemeral-rsa-jwks-http-loopback", bulkExport = "explicitly-unavailable-no-jobs", publication = "REQUIRES_REVIEW" });
         await File.WriteAllLinesAsync(Path.Combine(output, "scenario-results.jsonl"), results.Select(r => JsonSerializer.Serialize(r, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
         await Write("coverage.json", new { planned = ScenarioIds.Count, reported = results.Count(r => r.Id != "lab.prerequisites"), executed = EvidencePolicy.ExecutedCount(results), pass = results.Count(r => r.Outcome == "PASS"), fail = results.Count(r => r.Outcome == "FAIL"), error = results.Count(r => r.Outcome == "ERROR"), inconclusive = results.Count(r => r.Outcome == "INCONCLUSIVE"), unsupported });
         await Write("http-observations.json", observations); await Write("state-assertions.json", states); await Write("audit-assertions.json", audits);
