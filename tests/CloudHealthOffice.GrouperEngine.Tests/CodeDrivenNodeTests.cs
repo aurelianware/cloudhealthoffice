@@ -190,6 +190,23 @@ public class CodeDrivenNodeTests
     }
 
     /// <summary>
+    /// Two of CMS's node-factory members are not named after the operand they
+    /// match: <c>SGLANTFUSECTR</c> matches <c>SGLANTCTR</c> and
+    /// <c>SGLPOST1FUSECTR</c> matches <c>SGLPOST1CTR</c>. So the member names
+    /// are ordinary operands, counting nothing — here with the procedures that
+    /// would have satisfied the real counter and an empty mask, which is the
+    /// case CMS was asked. A table keyed on the member names would have left
+    /// both counters dead with nothing to notice.
+    /// </summary>
+    [Theory]
+    [InlineData("SGLANTFUSECTR", "sglantfuse")]
+    [InlineData("SGLPOST1FUSECTR", "sglpostfuse1")]
+    public void The_enums_java_name_counts_nothing(string operand, string listName)
+    {
+        Assert.False(EvaluatePr(operand, Pr(listName), Pr(listName)));
+    }
+
+    /// <summary>
     /// <c>FOUR_VESSELS</c> and <c>FOUR_STENTS</c> count <b>weighted</b>
     /// occurrences: <c>vessel3</c> is worth three. So one code can satisfy the
     /// operand on its own, and three <c>vessel1</c> codes cannot — which is
