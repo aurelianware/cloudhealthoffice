@@ -105,7 +105,10 @@ public abstract class FhirControllerBase : ControllerBase
         if (AuthorizedMemberId is null) return false;
         if (!memberReferences.Any(IsOutsidePatientContext)) return false;
 
-        HttpContext.RequestServices.GetService<ILoggerFactory>()?.CreateLogger(GetType())
+        // Withholding the data must not depend on the logging infrastructure
+        // being reachable, so the log is best-effort: a request without a
+        // service provider still gets the refusal.
+        HttpContext.RequestServices?.GetService<ILoggerFactory>()?.CreateLogger(GetType())
             .LogError("{Resource} search returned records outside the caller's member confinement; response withheld.", resourceType);
         return true;
     }

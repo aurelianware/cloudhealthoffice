@@ -60,6 +60,9 @@
 
     <!-- Per-engagement source-system adapter stubs (asserted GAP by the harness). -->
     <ProjectReference Include="..\..\src\services\claims-service\claims-service.csproj" />
+
+    <!-- The CHO-native Encounter source behind Provider Access (ADR 024). -->
+    <ProjectReference Include="..\..\src\services\encounter-service\encounter-service.csproj" />
     <ProjectReference Include="..\..\src\services\provider-service\provider-service.csproj" />
     <ProjectReference Include="..\..\src\services\benefit-plan-service\benefit-plan-service.csproj" />
     <ProjectReference Include="..\..\src\services\authorization-service\authorization-service.csproj" />

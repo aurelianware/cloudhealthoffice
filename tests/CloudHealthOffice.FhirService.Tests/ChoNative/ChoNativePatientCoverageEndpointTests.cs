@@ -305,13 +305,16 @@ public class ChoNativeStartupTests
     }
 
     [Fact]
-    public void Cho_native_for_a_resource_without_a_native_source_does_not_start()
+    public void Cho_native_encounter_without_the_service_url_does_not_start()
     {
+        // Encounter gained a CHO-native source in ADR 024, so binding it no
+        // longer stops start-up for want of an implementation — it stops for
+        // want of the upstream URL, the same guard Patient and Coverage have.
         using var host = new NativeEncounterHost();
 
         var act = () => host.CreateClient();
 
-        act.Should().Throw<Exception>().Where(e => Flatten(e).Contains("Encounter has no CHO-native source"));
+        act.Should().Throw<Exception>().Where(e => Flatten(e).Contains("Services:EncounterServiceUrl"));
     }
 
     private static string Flatten(Exception e) => e.InnerException is null ? e.Message : e.Message + " | " + Flatten(e.InnerException);
