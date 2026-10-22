@@ -313,6 +313,68 @@ public class CmsJsonTableImporterTests : IDisposable
     }
 
     /// <summary>
+    /// A real release's DRG logic table imports, every formula in it parses,
+    /// and the one tie the ranking contains is harmless.
+    ///
+    /// <para>
+    /// Skipped unless <c>CMS_MSDRG_TABLES</c> names a directory. Parsing is
+    /// the point: 824 formulas is a large enough sample that a lexer or
+    /// parser gap shows up here rather than on a claim, and the import refuses
+    /// a formula it cannot parse rather than skipping the row.
+    /// </para>
+    /// </summary>
+    [SkippableFact]
+    public void A_real_releases_drg_logic_table_imports_and_every_formula_parses()
+    {
+        var tables = Environment.GetEnvironmentVariable("CMS_MSDRG_TABLES");
+        Skip.If(
+            string.IsNullOrWhiteSpace(tables),
+            "Set CMS_MSDRG_TABLES to a CMS MS-DRG release's table directory to run this.");
+
+        var version = Environment.GetEnvironmentVariable("CMS_MSDRG_VERSION") ?? "V440";
+        var formulas = CmsJsonTableImporter.ImportFormulas(tables!, version);
+        var codes = CmsJsonTableImporter.Import(tables!, version);
+
+        Assert.Equal(version, formulas.Version);
+
+        // Every MDC CMS numbers, plus 0 (pre-MDC), 29 and 99.
+        Assert.True(
+            formulas.Mdcs.Count > 20,
+            $"Only {formulas.Mdcs.Count} MDCs have a ranking for {version}.");
+        Assert.True(
+            formulas.RowCount > 500,
+            $"Only {formulas.RowCount} rows imported for {version}.");
+
+        // Each MDC's rows come back in rank order.
+        foreach (var mdc in formulas.Mdcs)
+        {
+            var ranks = formulas.ForMdc(mdc).Select(row => row.Rank).ToList();
+            Assert.Equal(ranks.Order(), ranks);
+        }
+
+        // The rows that assign no DRG are CMS's MDC-assignment rows and MCE
+        // edits. In several MDCs one of them shares a rank with a real DRG
+        // row, which is only harmless because no code carries an MDCnn
+        // operand -- so the row cannot match while a DRG is being assigned.
+        var mdcOperands = formulas.Mdcs
+            .SelectMany(formulas.ForMdc)
+            .Where(row => !row.AssignsDrg)
+            .Select(row => row.FormulaText)
+            .Where(text => text.StartsWith("MDC", StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.NotEmpty(mdcOperands);
+
+        var carried = mdcOperands
+            .Where(operand => codes.CarriesDiagnosisOperand(operand)
+                || codes.CarriesProcedureOperand(operand))
+            .ToList();
+
+        Assert.Empty(carried);
+    }
+
+    /// <summary>
     /// A real release's CC exclusion lists import, and every group a principal
     /// diagnosis names is a group the release holds.
     ///

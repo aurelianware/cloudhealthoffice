@@ -2,6 +2,7 @@ using System.Collections.Frozen;
 using System.Text.Json;
 using CloudHealthOffice.GrouperEngine.Domain;
 
+using CloudHealthOffice.GrouperEngine.Formulas;
 using CloudHealthOffice.GrouperEngine.Severity;
 
 namespace CloudHealthOffice.GrouperEngine.Mask;
@@ -38,6 +39,149 @@ public static class CmsJsonTableImporter
     private const string ClusterFile = "clusters.json";
     private const string PrincipalExclusionFile = "pdxExclusionGroups.json";
     private const string ExclusionGroupFile = "exclusionGroups.json";
+    private const string FormulaFile = "formulaRoot.json";
+
+    /// <summary>
+    /// Imports the DRG logic table in <paramref name="directory"/> for
+    /// <paramref name="version"/>: every MDC's ranked formulas.
+    ///
+    /// <para>
+    /// Each formula is parsed here rather than on first use, so a release
+    /// carrying a formula this engine cannot parse fails at import with the
+    /// offending text named, instead of on some later claim.
+    /// </para>
+    /// </summary>
+    public static InMemoryFormulaSource ImportFormulas(string directory, string version)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+
+        using var document = ReadDocument(directory, FormulaFile);
+
+        var rows = new List<MsDrgFormulaRow>();
+
+        foreach (var mdc in Member(document.RootElement, "mdc_formulas", FormulaFile)
+            .EnumerateObject())
+        {
+            if (!int.TryParse(
+                    mdc.Name,
+                    System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var mdcNumber))
+            {
+                throw new MsDrgTableImportException(
+                    $"{FormulaFile} holds a ranking under '{mdc.Name}', which is not an MDC "
+                    + "number.");
+            }
+
+            if (!mdc.Value.TryGetProperty("formulas", out var formulas))
+            {
+                continue;
+            }
+
+            foreach (var formula in formulas.EnumerateArray())
+            {
+                // A row carries its rank per version, and a version it has no
+                // rank for is a version the row does not apply to.
+                if (!TryRankForVersion(formula, version, out var rank))
+                {
+                    continue;
+                }
+
+                var text = formula.TryGetProperty("formula", out var formulaText)
+                    ? formulaText.GetString()
+                    : null;
+
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    throw new MsDrgTableImportException(
+                        $"{FormulaFile} has a row in MDC {mdcNumber} with no formula.");
+                }
+
+                DrgFormulaExpression parsed;
+                try
+                {
+                    parsed = DrgFormulaParser.Parse(text);
+                }
+                catch (DrgFormulaException exception)
+                {
+                    throw new MsDrgTableImportException(
+                        $"{FormulaFile} has a formula in MDC {mdcNumber} this engine cannot "
+                        + $"parse: '{text}'.",
+                        exception);
+                }
+
+                rows.Add(new MsDrgFormulaRow(
+                    Mdc: mdcNumber,
+                    Rank: rank,
+                    Drg: Integer(formula, "drg"),
+                    BaseDrg: Integer(formula, "baseDrg"),
+                    Partition: Partition(formula),
+                    ReRouteMdc: Integer(formula, "reRouteMdcId"),
+                    FormulaText: text,
+                    Formula: parsed,
+                    SeveritySuppressionOperands: Strings(formula, "severitySuppressionOperand"),
+                    DrgSeverity: Integer(formula, "drgSeverity")));
+            }
+        }
+
+        return new InMemoryFormulaSource(version, rows);
+    }
+
+    private static bool TryRankForVersion(JsonElement formula, string version, out int rank)
+    {
+        rank = 0;
+
+        if (!formula.TryGetProperty("versionRanks", out var ranks))
+        {
+            return false;
+        }
+
+        foreach (var candidate in ranks.EnumerateArray())
+        {
+            if (candidate.TryGetProperty("version", out var named)
+                && string.Equals(named.GetString(), version, StringComparison.OrdinalIgnoreCase))
+            {
+                rank = candidate.TryGetProperty("rank", out var ranked) ? ranked.GetInt32() : 0;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static DrgTablePartition Partition(JsonElement formula) =>
+        formula.TryGetProperty("surgical", out var surgical)
+            ? surgical.GetString() switch
+            {
+                "SURGICAL" => DrgTablePartition.Surgical,
+                "MEDICAL" => DrgTablePartition.Medical,
+                _ => DrgTablePartition.NotApplicable,
+            }
+            : DrgTablePartition.NotApplicable;
+
+    private static int Integer(JsonElement row, string name) =>
+        row.TryGetProperty(name, out var value) ? value.GetInt32() : 0;
+
+    private static IReadOnlyList<string> Strings(JsonElement row, string name)
+    {
+        if (!row.TryGetProperty(name, out var listed))
+        {
+            return [];
+        }
+
+        var values = new List<string>();
+        foreach (var value in listed.EnumerateArray())
+        {
+            var text = value.GetString();
+            if (!string.IsNullOrEmpty(text))
+            {
+                values.Add(text);
+            }
+        }
+
+        return values;
+    }
 
     /// <summary>
     /// Imports the CC exclusion lists in <paramref name="directory"/> for
@@ -652,5 +796,48 @@ public sealed class ImportedCodeTables : IMsDrgCodeAttributeSource
     {
         ArgumentNullException.ThrowIfNull(code);
         return procedures.TryGetValue(code, out attributes!);
+    }
+
+    /// <summary>
+    /// Whether any diagnosis code in the table carries the named operand
+    /// list. A scan of the whole table, so for checking a release rather than
+    /// for grouping a claim.
+    /// </summary>
+    public bool CarriesDiagnosisOperand(string listName)
+    {
+        ArgumentNullException.ThrowIfNull(listName);
+
+        return diagnoses.Values.Any(attributes =>
+            Mentions(attributes.Operands, listName)
+            || Mentions(attributes.DiagnosisCategoryOperands, listName)
+            || Mentions(attributes.HacOperands, listName));
+    }
+
+    /// <summary>
+    /// Whether any procedure code in the table carries the named operand
+    /// list.
+    /// </summary>
+    public bool CarriesProcedureOperand(string listName)
+    {
+        ArgumentNullException.ThrowIfNull(listName);
+
+        return procedures.Values.Any(attributes =>
+            Mentions(attributes.Operands, listName));
+    }
+
+    private static bool Mentions(IReadOnlyList<string> operands, string listName)
+    {
+        foreach (var operand in operands)
+        {
+            if (string.Equals(
+                    OperandName.Parse(operand).ListName,
+                    listName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

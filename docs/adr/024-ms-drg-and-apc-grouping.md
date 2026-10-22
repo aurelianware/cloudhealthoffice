@@ -643,10 +643,49 @@ Build order:
    no rule, so the next fiscal year's new list is loud rather than quietly
    false.
 
-   What is left:
+   **The ranked formula driver is built, and it is a loop rather than a
+   decision tree**: an MDC's rows are tried in rank order and the first
+   formula that matches wins. Two properties of that loop are quiet when got
+   wrong:
 
-   - driving the ranked formula lists per MDC — 824 formulas for V44 — with
-     `reRouteMdcId` (20 formulas) and `severitySuppressionOperand` (56).
+   - **The mask is not constant.** Severity is recomputed for *every* row,
+     with that row's own suppression list applied, and added to the mask as an
+     operand before the row is evaluated. 56 of V44's 824 rows carry a
+     suppression list. A grouper that computed severity once before the loop
+     would pay those 56 at the wrong severity, and the other 768 — which write
+     a suppression list of one empty string, matching nothing — would hide
+     that nothing was wrong.
+   - **Rank ties keep the table's own order**, because CMS's sort is stable.
+     In 14 MDCs an `MDCnn` row shares a rank with a real DRG row. That tie is
+     harmless, and checkably so: no V44 diagnosis or procedure code carries an
+     `MDCnn` operand, so the row cannot match while a DRG is being assigned.
+     A gated test asserts exactly that against a real release.
+
+   Severity also needed the **CC exclusion lists**, which are the mechanism
+   that stops a stay being paid twice for one clinical fact. V44 lists a group
+   for 26,168 principal diagnoses pointing at 3,013 shared groups, the largest
+   listing 5,565 codes. Three things take a secondary out of the severity
+   count — the exclusion list, an `mccalive` code on a stay the patient did
+   not survive, and a hospital-acquired condition — and all three are
+   reductions, so leaving any of them out pays *more* than the claim has
+   earned, with no error to notice. The first two are built; HAC determination
+   is not, so the severity processor takes the set as a parameter and its
+   contract says a caller who cannot supply it must refuse the claim.
+
+   **A step this ADR had not separated out: MDC assignment.** 56 of the 824
+   rows assign no DRG. They are the `MDCnn` rows that decide which MDC a stay
+   belongs to, plus the MCE edits, ranked in the same table as the DRG rows.
+   Deciding the MDC — the pre-MDC rules for transplants, tracheostomy and
+   ECMO, those `MDCnn` rows, and the re-routing that `reRouteMdcId` carries on
+   20 rows — is a step above the driver and is not built. So what exists is
+   the branching logic, not yet a grouper: a caller has to know the MDC, and
+   nothing will tell it that the MDC it chose was the wrong one.
+
+   What is left in this stage:
+
+   - MDC assignment, as above. This is the last piece before an end-to-end
+     parity run against the oracle corpus is meaningful.
+   - HAC determination, which the severity count needs to be trustworthy.
 
    None of this changes the recommendation or the build order. It does mean
    step 4 is larger than this ADR implied two commits ago, and that the CMS
