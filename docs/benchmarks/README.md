@@ -62,6 +62,10 @@ inspection.
 > and throughput. Because it deliberately repeats one COB-secondary fixture, it is **not**
 > diverse adjudication-correctness evidence — do not cite it as such.
 
+Claim-level evidence for runs exported since October 2026 (the run summary and
+every claim that did not match) is in
+[`docs/million-claim-challenge/runs/`](../million-claim-challenge/runs/README.md).
+
 Start with:
 
 - [Episode 015 benchmark results](../million-claim-challenge/podcast/episode-015/benchmark-results.txt) — canonical 1M correctness baseline
