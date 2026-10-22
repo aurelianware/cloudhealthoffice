@@ -149,8 +149,12 @@ public class ClaimFhirProjectorTests
         sequences.Should().Equal(1, 4);
         resource["item"]![0]!["diagnosisSequence"]!.AsArray()
             .Select(s => s!.GetValue<int>()).Should().Equal(4);
-        resource["diagnosis"]![1]!["type"]![0]!["coding"]![0]!["code"]!.GetValue<string>().Should().Be("secondary");
         resource["diagnosis"]![0]!["type"]![0]!["coding"]![0]!["code"]!.GetValue<string>().Should().Be("principal");
+
+        // ex-diagnosistype has no concept for "not the principal one", so the
+        // non-ABK diagnosis carries no type rather than an invented code the
+        // HL7 validator rejects. Its sequence still says which one it is.
+        resource["diagnosis"]![1]!.AsObject().Should().NotContainKey("type");
     }
 
     [Fact]

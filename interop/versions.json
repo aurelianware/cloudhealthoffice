@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "description": "Pinned external Da Vinci implementations used by the Cloud Health Office interoperability harness. Every entry MUST be reproducible: an image digest, a release tag plus commit SHA, or a commit SHA. Never a floating tag or unpinned branch. See docs/interop/davinci.md for the upgrade procedure.",
-  "lastReviewedUtc": "2026-09-06T00:00:00Z",
+  "lastReviewedUtc": "2026-10-22T00:00:00Z",
   "targets": [
     {
       "name": "HL7-DaVinci/br-payer",
@@ -139,6 +139,34 @@
         "https://packages.fhir.org — the bundled hl7_validator_service loads IG packages"
       ],
       "startupNotes": "Not started in this PR. Same integration seam as the PDex kit."
+    },
+    {
+      "name": "hl7/fhir-validator (validator_cli.jar)",
+      "key": "hl7-validator",
+      "role": "ConformanceRunner",
+      "protocols": ["US Core", "CARIN BB", "PDex", "PAS"],
+      "upstreamRepository": "https://github.com/hapifhir/org.hl7.fhir.core",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseAsset",
+        "tag": "7.0.3",
+        "asset": "validator_cli.jar",
+        "sha256": "57aa43fb40cec5de41def81c927725fd85908eeb71509b7f9313e04d9b8ec79b",
+        "reference": "https://github.com/hapifhir/org.hl7.fhir.core/releases/download/7.0.3/validator_cli.jar"
+      },
+      "compose": null,
+      "endpoints": { "fhirBaseUrl": null, "cdsHooksBaseUrl": null, "readinessUrl": null },
+      "auth": { "mode": "None", "note": "Runs as a local command over files on disk. It never calls a CHO service, and the goldens it reads are synthetic." },
+      "implementationGuides": {
+        "PDex": "2.1.0",
+        "note": "The script passes no -ig flag of its own: each golden declares its profile in meta.profile and the validator resolves the publishing package from the FHIR package registry."
+      },
+      "igVersionProvenance": "Resolved per instance by the validator from packages.fhir.org at run time, so the effective package version is recorded in the run log rather than pinned here.",
+      "requiredEgress": [
+        "https://github.com — the jar is fetched at the pinned tag during explicit setup",
+        "https://packages.fhir.org and https://packages2.fhir.org — IG packages are resolved per instance"
+      ],
+      "startupNotes": "Needs a JRE 11 or later; CI runners carry Java 21. Terminology checking is switched off with -tx n/a, so value-set bindings are NOT verified. scripts/interop/fhir-validate.sh records what that leaves unproven."
     }
   ],
   "contentSources": [

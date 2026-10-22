@@ -42,6 +42,12 @@ public sealed class ClaimFhirProjector : IClaimFhirProjector
     public const string DiagnosisTypeSystem = "http://terminology.hl7.org/CodeSystem/ex-diagnosistype";
 
     /// <summary>
+    /// X12 element 355, "Unit or Basis for Measurement Code" — the code list the
+    /// 837's drug unit of measure (CTP05-1) is drawn from.
+    /// </summary>
+    public const string DrugUnitOfMeasureSystem = "https://codesystem.x12.org/005010/355";
+
+    /// <summary>
     /// CMS place-of-service code (837 CLM05-1). FHIR R4 Claim has no element
     /// for it at header level, so it is carried as an extension rather than
     /// dropped; a line that overrides it carries its own
@@ -206,14 +212,22 @@ public sealed class ClaimFhirProjector : IClaimFhirProjector
                 ["diagnosisCodeableConcept"] = new JsonObject { ["coding"] = new JsonArray { coding } },
             };
 
-            // ABK is the 837's principal diagnosis qualifier; every other
-            // qualifier the record can carry is a secondary one.
-            entry["type"] = new JsonArray
+            // ABK is the 837's principal diagnosis qualifier, and "principal" is
+            // the matching concept. Every other qualifier the record can carry
+            // means "not the principal one", for which ex-diagnosistype has no
+            // concept at all — its codes are admitting, clinical, differential,
+            // discharge, laboratory, nursing, prenatal, principal, radiology,
+            // remote, retrospective and self. An earlier version emitted
+            // "secondary", which the HL7 validator rejects as an unknown code,
+            // so type is now omitted rather than invented: the diagnosis
+            // sequence already tells a reader which one is principal.
+            if (string.Equals(diagnosis.CodeQualifier, "ABK", StringComparison.OrdinalIgnoreCase))
             {
-                string.Equals(diagnosis.CodeQualifier, "ABK", StringComparison.OrdinalIgnoreCase)
-                    ? Concept(DiagnosisTypeSystem, "principal", "Principal Diagnosis")
-                    : Concept(DiagnosisTypeSystem, "secondary", "Secondary Diagnosis"),
-            };
+                entry["type"] = new JsonArray
+                {
+                    Concept(DiagnosisTypeSystem, "principal", "Principal Diagnosis"),
+                };
+            }
 
             diagnoses.Add(entry);
         }
@@ -283,7 +297,13 @@ public sealed class ClaimFhirProjector : IClaimFhirProjector
                 {
                     var quantity = new JsonObject { ["value"] = JsonValue.Create(drugQuantity) };
                     if (!string.IsNullOrWhiteSpace(line.DrugUnitOfMeasure))
+                    {
+                        // Quantity invariant qty-3: a unit code needs the system
+                        // that defines it. The 837P carries this in CTP05-1,
+                        // whose code list is X12 element 355.
+                        quantity["system"] = DrugUnitOfMeasureSystem;
                         quantity["code"] = line.DrugUnitOfMeasure;
+                    }
                     detail["quantity"] = quantity;
                 }
                 item["detail"] = new JsonArray { detail };

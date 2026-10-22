@@ -1,0 +1,178 @@
+{
+  "resourceType": "Claim",
+  "id": "clm-gold-1",
+  "meta": {
+    "lastUpdated": "2026-09-18T00:00:00.0000000Z"
+  },
+  "identifier": [
+    {
+      "system": "urn:cho:claim-number",
+      "value": "CLM-GOLD-0001"
+    }
+  ],
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/claim-type",
+        "code": "professional",
+        "display": "Professional"
+      }
+    ]
+  },
+  "use": "claim",
+  "patient": {
+    "reference": "Patient/MEM-GOLD-1"
+  },
+  "created": "2026-09-17T00:00:00.0000000Z",
+  "priority": {
+    "coding": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/processpriority",
+        "code": "normal",
+        "display": "Normal"
+      }
+    ]
+  },
+  "billablePeriod": {
+    "start": "2026-09-16T00:00:00.0000000Z",
+    "end": "2026-09-16T00:00:00.0000000Z"
+  },
+  "insurance": [
+    {
+      "sequence": 1,
+      "focal": true,
+      "coverage": {
+        "reference": "Coverage/cov-gold-1"
+      },
+      "preAuthRef": [
+        "AUTH-GOLD-1"
+      ]
+    }
+  ],
+  "total": {
+    "value": 430,
+    "currency": "USD"
+  },
+  "provider": {
+    "identifier": {
+      "system": "http://hl7.org/fhir/sid/us-npi",
+      "value": "1234567893"
+    }
+  },
+  "diagnosis": [
+    {
+      "sequence": 1,
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/sid/icd-10-cm",
+            "code": "E11.9"
+          }
+        ]
+      },
+      "type": [
+        {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/ex-diagnosistype",
+              "code": "principal",
+              "display": "Principal Diagnosis"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "sequence": 2,
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/sid/icd-10-cm",
+            "code": "I10"
+          }
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "sequence": 1,
+      "productOrService": {
+        "coding": [
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "99214"
+          }
+        ]
+      },
+      "servicedPeriod": {
+        "start": "2026-09-16T00:00:00.0000000Z",
+        "end": "2026-09-16T00:00:00.0000000Z"
+      },
+      "quantity": {
+        "value": 1
+      },
+      "net": {
+        "value": 180,
+        "currency": "USD"
+      },
+      "diagnosisSequence": [
+        1
+      ]
+    },
+    {
+      "sequence": 2,
+      "productOrService": {
+        "coding": [
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "J1745"
+          }
+        ]
+      },
+      "servicedPeriod": {
+        "start": "2026-09-16T00:00:00.0000000Z",
+        "end": "2026-09-16T00:00:00.0000000Z"
+      },
+      "quantity": {
+        "value": 10
+      },
+      "net": {
+        "value": 250,
+        "currency": "USD"
+      },
+      "diagnosisSequence": [
+        1,
+        2
+      ],
+      "detail": [
+        {
+          "sequence": 1,
+          "productOrService": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/sid/ndc",
+                "code": "00002771501"
+              }
+            ]
+          },
+          "quantity": {
+            "value": 100,
+            "system": "https://codesystem.x12.org/005010/355",
+            "code": "ML"
+          }
+        }
+      ]
+    }
+  ],
+  "extension": [
+    {
+      "url": "urn:cho:StructureDefinition:claim-place-of-service",
+      "valueCoding": {
+        "system": "https://www.cms.gov/Medicare/Coding/place-of-service-codes",
+        "code": "11"
+      }
+    }
+  ]
+}

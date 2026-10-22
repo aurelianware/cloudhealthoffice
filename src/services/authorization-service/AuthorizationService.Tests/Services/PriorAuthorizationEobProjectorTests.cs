@@ -265,9 +265,13 @@ public class PriorAuthorizationEobProjectorTests
     {
         var eob = _projector.Project(Decided());
 
-        // CHO's record carries an X12 service type, not a claim type, so `type`
-        // is `other` rather than a guess at institutional vs professional.
-        eob["type"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>().Should().Be("other");
+        // CHO's record carries an X12 service type, not a claim type. The
+        // claim-type code system has no concept that fits — its codes are
+        // institutional, oral, pharmacy, professional and vision — and the HL7
+        // validator rejects the `other` this once emitted. The binding is
+        // extensible, so `type` travels as text and nothing is guessed.
+        eob["type"]!.AsObject().Should().NotContainKey("coding");
+        eob["type"]!["text"]!.GetValue<string>().Should().Be("Prior authorization, X12 service type 2");
         eob["subType"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>().Should().Be("2");
     }
 

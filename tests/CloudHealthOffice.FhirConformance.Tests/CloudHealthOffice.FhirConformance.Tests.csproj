@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FHIR profile conformance: golden instances
+    =========================================
+    This project does NOT validate anything itself. It writes one golden
+    instance per FHIR projection CHO serves, from the real projectors, into
+    conformance/golden/. The HL7 validator — the only implementation that
+    decides profile conformance — runs over those files out of process
+    (scripts/fhir-validate.sh, and the fhir-profile-validation workflow).
+
+    Why goldens rather than validating in-process: the Firely SDK version this
+    repository pins ships no validator, and the current one requires a Firely
+    major upgrade across every service. The HL7 validator is the reference
+    implementation either way, so the seam is a file on disk.
+
+    The tests here are drift tests: each asserts that the projector still emits
+    what the checked-in golden says. Regenerate with
+    UPDATE_FHIR_GOLDENS=1 dotnet test, and review the diff — a changed golden
+    is a changed wire contract.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="System.Text.Json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\services\authorization-service\authorization-service.csproj" />
+    <ProjectReference Include="..\..\src\services\claims-service\claims-service.csproj" />
+    <ProjectReference Include="..\..\src\services\encounter-service\encounter-service.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

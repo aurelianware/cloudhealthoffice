@@ -74,7 +74,7 @@ public class ExplanationOfBenefitController : FhirControllerBase
     /// <c>PriorAuthorizationEobProjector</c> lists what is missing).
     /// </summary>
     public const string PdexPriorAuthorizationProfile =
-        "http://hl7.org/fhir/us/davinci-pdex/StructureDefinition/pdex-prior-authorization";
+        "http://hl7.org/fhir/us/davinci-pdex/StructureDefinition/pdex-priorauthorization";
 
     /// <summary>CHO permission a claims-EOB request needs.</summary>
     private const string ClaimsReadPermission = "claims:read";

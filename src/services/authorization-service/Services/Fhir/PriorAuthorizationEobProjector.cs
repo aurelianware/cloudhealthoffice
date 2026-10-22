@@ -56,13 +56,18 @@ namespace AuthorizationService.Services.Fhir;
 /// </list>
 ///
 /// <para>
-/// Two things previously recorded here as limitations are not:
-/// <c>type = other</c> is conformant — PDex binds <c>type</c> to
-/// <c>ClaimTypeCodes</c> <b>extensibly</b> with no profile-specific constraint,
-/// and CHO's record carries an X12 service type rather than a claim type, so
-/// <c>other</c> plus the service type in <c>type.text</c> and <c>subType</c> is
-/// the accurate statement. And unit adjudication no longer uses a CHO-private
-/// category: see <see cref="PriorAuthorizationEobProjector.PdexAdjudicationDiscriminatorSystem"/>.
+/// <b>What the validator says.</b> Run against PDex 2.1.0 by the HL7 validator,
+/// with no terminology server, this projection reports no errors. Two defects it
+/// did find have been fixed: the profile canonical was declared as
+/// <c>pdex-prior-authorization</c>, which does not exist (the profile is
+/// <c>pdex-priorauthorization</c>), so a consumer could not resolve the claim;
+/// and <c>type</c> carried <c>claim-type#other</c>, a code that system does not
+/// define. The limitations above are what the validator cannot see: it cannot
+/// tell that <c>insurer</c> and <c>provider</c> name no resolvable
+/// <c>Organization</c> or <c>Practitioner</c>, and without a terminology server
+/// it cannot check the CARC binding. Unit adjudication is no longer a limitation
+/// at all: see
+/// <see cref="PriorAuthorizationEobProjector.PdexAdjudicationDiscriminatorSystem"/>.
 /// </para>
 /// </summary>
 public interface IPriorAuthorizationEobProjector
@@ -92,9 +97,8 @@ public sealed class PriorAuthorizationEobProjector : IPriorAuthorizationEobProje
     /// profile validation has run against it.
     /// </summary>
     public const string PdexPriorAuthorizationProfile =
-        "http://hl7.org/fhir/us/davinci-pdex/StructureDefinition/pdex-prior-authorization";
+        "http://hl7.org/fhir/us/davinci-pdex/StructureDefinition/pdex-priorauthorization";
 
-    private const string ClaimTypeSystem = "http://terminology.hl7.org/CodeSystem/claim-type";
     private const string X12ServiceTypeSystem = "https://codesystem.x12.org/005010/1365";
     private const string NpiSystem = "http://hl7.org/fhir/sid/us-npi";
     private const string Icd10CmSystem = "http://hl7.org/fhir/sid/icd-10-cm";
@@ -248,30 +252,29 @@ public sealed class PriorAuthorizationEobProjector : IPriorAuthorizationEobProje
     // ── pieces ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// <c>type</c> is required by base FHIR and CHO's record does not carry a
-    /// claim type, so it is the honest <c>other</c> rather than a guess. The
-    /// X12 service type, which the record does carry, goes in
-    /// <c>type.text</c> and in <see cref="BuildSubType"/>.
+    /// <c>type</c> is required by base FHIR, and CHO's record does not carry a
+    /// claim type: an authorization's own type is its timing (pre-service,
+    /// concurrent, retrospective), not institutional or professional. So the
+    /// concept carries <b>text only</b>, with the X12 service type the record
+    /// does hold in <see cref="BuildSubType"/>.
+    ///
+    /// <para>
+    /// It used to emit <c>claim-type#other</c>, which the HL7 validator rejects:
+    /// <c>other</c> is not a concept in that code system (its codes are
+    /// institutional, oral, pharmacy, professional and vision). The binding is
+    /// extensible, which allows a concept from elsewhere — or text alone — when
+    /// no code in the value set fits; it does not allow a code the named system
+    /// does not define. Deriving institutional or professional from the service
+    /// type would be a guess, and a wrong claim type is worse than none.
+    /// </para>
     /// </summary>
     private static JsonObject BuildType(Authorization authorization)
-    {
-        var type = new JsonObject
+        => new()
         {
-            ["coding"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["system"] = ClaimTypeSystem,
-                    ["code"] = "other",
-                },
-            },
+            ["text"] = string.IsNullOrWhiteSpace(authorization.ServiceTypeCode)
+                ? "Prior authorization"
+                : "Prior authorization, X12 service type " + authorization.ServiceTypeCode,
         };
-
-        if (!string.IsNullOrWhiteSpace(authorization.ServiceTypeCode))
-            type["text"] = "X12 service type " + authorization.ServiceTypeCode;
-
-        return type;
-    }
 
     private static JsonObject? BuildSubType(Authorization authorization)
         => string.IsNullOrWhiteSpace(authorization.ServiceTypeCode)

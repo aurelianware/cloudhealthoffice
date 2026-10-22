@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "description": "Which implementation-guide packages scripts/interop/fhir-validate.sh loads for each golden in conformance/golden/. The profile itself is NOT listed here: every instance declares its own in meta.profile, and the validator resolves it out of the packages named below. A golden with no packages is validated against base FHIR R4 only, which is weaker on purpose and recorded as such.",
+  "fhirVersion": "4.0.1",
+  "goldens": {
+    "prior-authorization-eob": {
+      "igs": ["hl7.fhir.us.davinci-pdex#2.1.0"],
+      "note": "Declares the PDex Prior Authorization profile. This is the Patient Access prior-authorization payload CMS-0057-F asks for."
+    },
+    "claim-eob": {
+      "igs": [],
+      "note": "Base R4 only. The Provider Access payload is being reshaped onto the CARIN BB non-financial Basis ExplanationOfBenefit profiles; once it declares one, add hl7.fhir.us.carin-bb and the validator will judge it."
+    },
+    "claim-as-billed": {
+      "igs": [],
+      "note": "Base R4 only. A FHIR Claim is CHO-native source material, not a payload any CMS-0057-F profile governs, so there is no IG to load."
+    },
+    "encounter": {
+      "igs": [],
+      "note": "Base R4 only, for the same reason as claim-as-billed. Provider Access carries encounters inside a non-financial ExplanationOfBenefit, not as FHIR Encounter."
+    }
+  }
+}

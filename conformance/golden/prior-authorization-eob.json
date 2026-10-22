@@ -1,0 +1,187 @@
+{
+  "resourceType": "ExplanationOfBenefit",
+  "id": "pa-AUTH-GOLD-1",
+  "meta": {
+    "lastUpdated": "2026-09-12T09:00:00.000Z",
+    "profile": [
+      "http://hl7.org/fhir/us/davinci-pdex/StructureDefinition/pdex-priorauthorization"
+    ]
+  },
+  "status": "active",
+  "type": {
+    "text": "Prior authorization, X12 service type 2"
+  },
+  "use": "preauthorization",
+  "patient": {
+    "reference": "Patient/MEM-GOLD-1"
+  },
+  "created": "2026-09-10T14:30:00.000Z",
+  "insurer": {
+    "display": "Cloud Health Office"
+  },
+  "provider": {
+    "identifier": {
+      "system": "http://hl7.org/fhir/sid/us-npi",
+      "value": "1234567893"
+    },
+    "display": "Example Orthopaedics"
+  },
+  "outcome": "partial",
+  "identifier": [
+    {
+      "system": "urn:cho:authorization-number",
+      "value": "AUTH-GOLD-1"
+    }
+  ],
+  "insurance": [
+    {
+      "focal": true,
+      "coverage": {
+        "reference": "Coverage/cov-gold-1"
+      },
+      "preAuthRef": [
+        "AUTH-GOLD-1"
+      ]
+    }
+  ],
+  "subType": {
+    "coding": [
+      {
+        "system": "https://codesystem.x12.org/005010/1365",
+        "code": "2"
+      }
+    ]
+  },
+  "disposition": "Approved in part",
+  "billablePeriod": {
+    "start": "2026-09-20",
+    "end": "2026-10-20"
+  },
+  "benefitPeriod": {
+    "start": "2026-09-22",
+    "end": "2026-10-22"
+  },
+  "diagnosis": [
+    {
+      "sequence": 1,
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/sid/icd-10-cm",
+            "code": "M17.11",
+            "display": "Unilateral primary osteoarthritis, right knee"
+          }
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "sequence": 1,
+      "productOrService": {
+        "coding": [
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "27447",
+            "display": "Total knee arthroplasty"
+          }
+        ]
+      },
+      "modifier": [
+        {
+          "coding": [
+            {
+              "system": "http://www.ama-assn.org/go/cpt",
+              "code": "RT"
+            }
+          ]
+        }
+      ],
+      "quantity": {
+        "value": 1,
+        "unit": "procedures"
+      },
+      "adjudication": [
+        {
+          "category": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/davinci-pdex/CodeSystem/PDexAdjudicationDiscriminator",
+                "code": "allowedunits",
+                "display": "allowed units"
+              }
+            ]
+          },
+          "value": 1
+        }
+      ]
+    },
+    {
+      "sequence": 2,
+      "productOrService": {
+        "coding": [
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "97110",
+            "display": "Therapeutic exercise"
+          }
+        ]
+      },
+      "quantity": {
+        "value": 24,
+        "unit": "visits"
+      },
+      "adjudication": [
+        {
+          "category": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/davinci-pdex/CodeSystem/PDexAdjudicationDiscriminator",
+                "code": "allowedunits",
+                "display": "allowed units"
+              }
+            ]
+          },
+          "value": 12
+        },
+        {
+          "category": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/davinci-pdex/CodeSystem/PDexAdjudicationDiscriminator",
+                "code": "denialreason",
+                "display": "Denial Reason"
+              }
+            ]
+          },
+          "reason": {
+            "coding": [
+              {
+                "system": "urn:cho:pa-denial-reason",
+                "code": "NOTMEDNEC"
+              }
+            ],
+            "text": "Twelve visits approved; the remainder is not medically necessary"
+          }
+        }
+      ]
+    }
+  ],
+  "processNote": [
+    {
+      "number": 1,
+      "type": "display",
+      "text": "NOTMEDNEC: Physical therapy not medically necessary for this indication"
+    },
+    {
+      "number": 2,
+      "type": "display",
+      "text": "Next step: Submit new clinical documentation to request reconsideration"
+    },
+    {
+      "number": 3,
+      "type": "display",
+      "text": "Servicing provider NPI 1245319599 (Example Surgical Center)"
+    }
+  ]
+}
