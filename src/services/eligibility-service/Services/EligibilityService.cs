@@ -209,18 +209,10 @@ public class EligibilityServiceImpl : IEligibilityService
         try
         {
             var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api/v1";
-            var request = new HttpRequestMessage(HttpMethod.Get,
-                $"{coverageUrl}/coverage/member/{subscriberId}/active?serviceDate={serviceDate:yyyy-MM-dd}&tenantId={tenantId}");
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                $"{coverageUrl}/coverage/member/{Uri.EscapeDataString(subscriberId)}/active?serviceDate={serviceDate:yyyy-MM-dd}");
             request.Headers.Add("X-Tenant-ID", tenantId);
-            var response = await _httpClient.SendAsync(request);
-            
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("No active coverage found for member {SubscriberId}", LogSanitizer.MaskId(subscriberId));
-                return null;
-            }
-
-            var coverages = await response.Content.ReadFromJsonAsync<List<CoverageDto>>();
+            var coverages = await CoverageLookup.ReadAsync<CoverageDto>(_httpClient, request);
             return SelectCoverage(coverages, serviceDate, serviceTypeCode, groupNumber);
         }
         catch (Exception ex)

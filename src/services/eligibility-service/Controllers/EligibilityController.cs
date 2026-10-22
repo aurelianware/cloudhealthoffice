@@ -67,6 +67,11 @@ public class EligibilityController : ControllerBase
             
             return Ok(response);
         }
+        catch (CoverageLookupUnavailableException ex)
+        {
+            _logger.LogWarning(ex, "Coverage verification unavailable (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Coverage verification temporarily unavailable", StatusCodes.Status503ServiceUnavailable);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing eligibility inquiry (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
@@ -97,6 +102,11 @@ public class EligibilityController : ControllerBase
                 Message = isEligible.Message
             });
         }
+        catch (CoverageLookupUnavailableException ex)
+        {
+            _logger.LogWarning(ex, "Coverage verification unavailable (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Coverage verification temporarily unavailable", StatusCodes.Status503ServiceUnavailable);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in quick eligibility check");
@@ -120,6 +130,11 @@ public class EligibilityController : ControllerBase
             
             return Ok(benefits);
         }
+        catch (CoverageLookupUnavailableException ex)
+        {
+            _logger.LogWarning(ex, "Coverage verification unavailable (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Coverage verification temporarily unavailable", StatusCodes.Status503ServiceUnavailable);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving benefits");
@@ -138,6 +153,11 @@ public class EligibilityController : ControllerBase
             var accumulation = await _eligibilityService.GetAccumulationAsync(TenantId, subscriberId);
             
             return Ok(accumulation);
+        }
+        catch (CoverageLookupUnavailableException ex)
+        {
+            _logger.LogWarning(ex, "Coverage verification unavailable (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Coverage verification temporarily unavailable", StatusCodes.Status503ServiceUnavailable);
         }
         catch (Exception ex)
         {
@@ -188,6 +208,11 @@ public class EligibilityController : ControllerBase
                 Reason = requiresAuth.Reason,
                 ServiceType = request.ServiceTypeCode
             });
+        }
+        catch (CoverageLookupUnavailableException ex)
+        {
+            _logger.LogWarning(ex, "Coverage verification unavailable (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Coverage verification temporarily unavailable", StatusCodes.Status503ServiceUnavailable);
         }
         catch (Exception ex)
         {
@@ -295,6 +320,11 @@ public class EligibilityController : ControllerBase
         try
         {
             response = await _eligibilityService.ProcessInquiryAsync(inquiry);
+        }
+        catch (CoverageLookupUnavailableException ex)
+        {
+            _logger.LogWarning(ex, "Coverage verification unavailable (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Coverage verification temporarily unavailable", StatusCodes.Status503ServiceUnavailable);
         }
         catch (Exception ex)
         {

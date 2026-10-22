@@ -33,7 +33,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
     {
         // 1. Check active coverage
         var coverage = await GetActiveCoverageAsync(
-            request.TenantId, request.SubscriberId, request.ServiceDate, request.ServiceTypeCode, request.GroupNumber);
+            request.TenantId, request.SubscriberId, request.ServiceDate, request.ServiceTypeCode, request.GroupNumber, ct);
 
         if (coverage == null || !coverage.IsInForceOn(request.ServiceDate))
         {
@@ -73,25 +73,14 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
     }
 
     private async Task<ChoCoverageDto?> GetActiveCoverageAsync(
-        string tenantId, string subscriberId, DateTime serviceDate, string? serviceTypeCode, string? groupNumber)
+        string tenantId, string subscriberId, DateTime serviceDate, string? serviceTypeCode, string? groupNumber, CancellationToken ct)
     {
         var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api/v1";
         var client = _httpClientFactory.CreateClient("EligibilityDefault");
-        var request = new HttpRequestMessage(HttpMethod.Get,
-            $"{coverageUrl}/coverage/member/{subscriberId}/active?serviceDate={serviceDate:yyyy-MM-dd}&tenantId={tenantId}");
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            $"{coverageUrl}/coverage/member/{Uri.EscapeDataString(subscriberId)}/active?serviceDate={serviceDate:yyyy-MM-dd}");
         request.Headers.Add("X-Tenant-ID", tenantId);
-        var response = await client.SendAsync(request);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogWarning("No active coverage found for member {SubscriberId}", LogSanitizer.MaskId(subscriberId));
-            return null;
-        }
-
-        // The /active endpoint returns a List<Coverage> (medical, dental,
-        // vision...): pick the one for this request's insurance line and group
-        // by the same rule as the eligibility service itself.
-        var coverages = await response.Content.ReadFromJsonAsync<List<ChoCoverageDto>>();
+        var coverages = await CoverageLookup.ReadAsync<ChoCoverageDto>(client, request, ct);
         return EligibilityServiceImpl.SelectCoverageFor(coverages, serviceDate, serviceTypeCode, groupNumber);
     }
 
