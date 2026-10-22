@@ -35,12 +35,16 @@
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <ProjectReference Include="..\shared\CloudHealthOffice.Appeals.Contracts\CloudHealthOffice.Appeals.Contracts.csproj" />
     <ProjectReference Include="..\shared\CloudHealthOffice.Consent.Contracts\CloudHealthOffice.Consent.Contracts.csproj" />
+    <!-- claims.finalized.v1 payload, for publishing ExplanationOfBenefit to a managed FHIR store (ADR 023). -->
+    <ProjectReference Include="..\shared\CloudHealthOffice.Events\CloudHealthOffice.Events.csproj" />
+    <ProjectReference Include="..\..\engines\CloudHealthOffice.ManagedFhirStore\CloudHealthOffice.ManagedFhirStore.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.ProviderEnrollmentService\CloudHealthOffice.ProviderEnrollmentService.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.PriorAuthRuleEngine\CloudHealthOffice.PriorAuthRuleEngine.csproj" />
     <!-- StackExchange.Redis is pulled in transitively via
          CloudHealthOffice.Infrastructure. fhir-service has no direct
          IConnectionMultiplexer consumer after A.7.2 — the Redis client is
          opened and owned by AddChoCaching. -->
+    <PackageReference Include="Confluent.Kafka" />
     <PackageReference Include="Hl7.Fhir.R4" />
     <PackageReference Include="MongoDB.Driver" />
     <!-- Standard JWT Bearer validation — tokens issued by smart-auth-service with

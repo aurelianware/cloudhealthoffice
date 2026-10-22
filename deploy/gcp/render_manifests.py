@@ -54,6 +54,12 @@ What it changes:
     account infrastructure/gcp creates (Workload Identity), and
     DocumentStore__Provider=Gcs with the bucket. Without them they keep the
     manifests' Azure Blob settings.
+  - With --managed-fhir-store and --managed-fhir-store-service-account,
+    fhir-service publishes finalized claims' ExplanationOfBenefit to that
+    Cloud Healthcare API FHIR store (ADR 023): its service account is bound
+    to the Google one (Workload Identity) and ManagedFhirStore__* names the
+    store and the one tenant it holds (--managed-fhir-store-tenant, default
+    demo). The store streams to BigQuery by its own configuration.
 
 Usage:
   render_manifests.py --registry REGION-docker.pkg.dev/PROJECT/cho --tag SHA \
@@ -61,6 +67,8 @@ Usage:
       [--ai-examiner] [--claims-replicas 2] [--benefit-plan-replicas 2] \
       [--storage-class cho-pd-standard] [--resource-profile small] \
       [--documents-bucket BUCKET --documents-service-account GSA_EMAIL] [--list-images]
+      [--managed-fhir-store projects/P/locations/L/datasets/D/fhirStores/S
+       --managed-fhir-store-service-account GSA_EMAIL [--managed-fhir-store-tenant demo]]
       [--security production --token-signing-key-version projects/.../cryptoKeyVersions/1
        --token-service-google-account GSA_EMAIL --kubernetes-issuer URL
        --token-public-key-file token-service.pub.pem
@@ -151,6 +159,13 @@ MANAGED_SECRETS = {
 # Deployment and the Kubernetes service account Workload Identity trusts.
 DOCUMENT_SERVICES = ("document-service",)
 WORKLOAD_IDENTITY_ANNOTATION = "iam.gke.io/gcp-service-account"
+# fhir-service's Kubernetes service account (its manifest defines it), bound
+# to the managed FHIR store's Google service account when publishing is on.
+MANAGED_FHIR_STORE_SERVICE = "fhir-service"
+MANAGED_FHIR_STORE_ACCOUNT = "fhir-service-sa"
+MANAGED_FHIR_STORE_ID = re.compile(
+    r"^projects/(?P<project>[a-z][a-z0-9-]{4,28}[a-z0-9])/locations/(?P<location>[a-z0-9-]+)"
+    r"/datasets/(?P<dataset>[A-Za-z0-9_.-]{1,256})/fhirStores/(?P<store>[A-Za-z0-9_.-]{1,256})$")
 
 # Probe paths scripts/deploy-local.sh patches to /health/live.
 READINESS_TO_LIVE = {"appeals-service", "consent-service", "personal-representative-service"}
@@ -299,6 +314,10 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
         return None
     if kind == "Secret" and name in MANAGED_SECRETS:
         return None
+    if kind == "ServiceAccount" and name == MANAGED_FHIR_STORE_ACCOUNT and args.managed_fhir_store:
+        annotations = doc.setdefault("metadata", {}).get("annotations") or {}
+        annotations[WORKLOAD_IDENTITY_ANNOTATION] = args.managed_fhir_store_service_account
+        doc["metadata"]["annotations"] = annotations
     if kind == "ServiceAccount" and production(args):
         annotations = doc.get("metadata", {}).get("annotations") or {}
         for key in [k for k in annotations if k.startswith(AZURE_WORKLOAD_IDENTITY_PREFIX)]:
@@ -422,6 +441,10 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             spec["serviceAccountName"] = name
             set_env(container, "DocumentStore__Provider", "Gcs")
             set_env(container, "DocumentStore__Gcs__Bucket", args.documents_bucket)
+        if name == MANAGED_FHIR_STORE_SERVICE and args.managed_fhir_store:
+            spec["serviceAccountName"] = MANAGED_FHIR_STORE_ACCOUNT
+            for key, value in managed_fhir_store_env(args).items():
+                set_env(container, key, value)
         if name == "smart-auth-service":
             # The only service whose manifest and Development settings name no
             # service-token client id; the demo token config requires one.
@@ -604,6 +627,20 @@ def validate_production_args(parser: argparse.ArgumentParser, args: argparse.Nam
     args.token_public_key_pem = pem + "\n"
 
 
+def managed_fhir_store_env(args: argparse.Namespace) -> dict[str, str]:
+    """fhir-service settings for publishing to a Cloud Healthcare API FHIR store."""
+    match = MANAGED_FHIR_STORE_ID.match(args.managed_fhir_store)
+    assert match is not None  # checked in main()
+    return {
+        "ManagedFhirStore__Provider": "GcpHealthcare",
+        "ManagedFhirStore__Gcp__ProjectId": match["project"],
+        "ManagedFhirStore__Gcp__Location": match["location"],
+        "ManagedFhirStore__Gcp__DatasetId": match["dataset"],
+        "ManagedFhirStore__Gcp__FhirStoreId": match["store"],
+        "ManagedFhirStore__TenantId": args.managed_fhir_store_tenant,
+    }
+
+
 def document_service_accounts(args: argparse.Namespace) -> list[dict]:
     """Kubernetes service accounts for DOCUMENT_SERVICES, bound to the Google one."""
     return [
@@ -636,6 +673,12 @@ def main() -> int:
                         help="Google Cloud Storage bucket for documents (terraform output documents_bucket)")
     parser.add_argument("--documents-service-account", default="",
                         help="Google service account the document services act as (terraform output documents_service_account)")
+    parser.add_argument("--managed-fhir-store", default="",
+                        help="Cloud Healthcare API FHIR store fhir-service publishes to (terraform output managed_fhir_store_id)")
+    parser.add_argument("--managed-fhir-store-service-account", default="",
+                        help="Google service account fhir-service publishes as (terraform output managed_fhir_store_service_account)")
+    parser.add_argument("--managed-fhir-store-tenant", default="demo",
+                        help="The one CHO tenant whose claims are published (default: %(default)s)")
     parser.add_argument("--list-images", action="store_true", help="Print 'name dockerfile' for each image to build, then exit")
     parser.add_argument("--security", choices=("demo", "production"), default="demo",
                         help="demo: development keys and LocalDemo sign-in; production: Cloud KMS, Kubernetes identity, Cloudflare Access")
@@ -665,6 +708,12 @@ def main() -> int:
         parser.error("--registry is required")
     if bool(args.documents_bucket) != bool(args.documents_service_account):
         parser.error("--documents-bucket and --documents-service-account go together")
+    if bool(args.managed_fhir_store) != bool(args.managed_fhir_store_service_account):
+        parser.error("--managed-fhir-store and --managed-fhir-store-service-account go together")
+    if args.managed_fhir_store and not MANAGED_FHIR_STORE_ID.match(args.managed_fhir_store):
+        parser.error("--managed-fhir-store must be projects/P/locations/L/datasets/D/fhirStores/S")
+    if args.managed_fhir_store and not args.managed_fhir_store_tenant.strip():
+        parser.error("--managed-fhir-store-tenant must name a tenant")
     if production(args):
         validate_production_args(parser, args)
 

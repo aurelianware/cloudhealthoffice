@@ -184,6 +184,10 @@ jobs:
           # Document storage (terraform outputs in infrastructure/gcp); optional.
           DOCUMENTS_BUCKET: ${{ vars.DOCUMENTS_BUCKET }}
           DOCUMENTS_SERVICE_ACCOUNT: ${{ vars.DOCUMENTS_SERVICE_ACCOUNT }}
+          # Managed FHIR store -> BigQuery (terraform outputs in infrastructure/gcp/fhir-store.tf); optional.
+          MANAGED_FHIR_STORE: ${{ vars.MANAGED_FHIR_STORE }}
+          MANAGED_FHIR_STORE_SERVICE_ACCOUNT: ${{ vars.MANAGED_FHIR_STORE_SERVICE_ACCOUNT }}
+          MANAGED_FHIR_STORE_TENANT: ${{ vars.MANAGED_FHIR_STORE_TENANT }}
           # Production security (all five, or none for the development-key demo).
           TOKEN_SIGNING_KEY_VERSION: ${{ vars.TOKEN_SIGNING_KEY_VERSION }}
           TOKEN_SERVICE_GOOGLE_ACCOUNT: ${{ vars.TOKEN_SERVICE_GOOGLE_ACCOUNT }}
