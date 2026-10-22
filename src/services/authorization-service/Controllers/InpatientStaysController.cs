@@ -3,6 +3,7 @@ using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services.CareManagement;
 using AuthorizationService.Services.ConcurrentReview;
+using CloudHealthOffice.Infrastructure.Logging;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
@@ -39,7 +40,19 @@ public sealed class InpatientStaysController(
     public async Task<ActionResult<InpatientCensus>> GetCensus(
         [FromQuery] DateTime? asOf, [FromQuery] string? facilityNpi, CancellationToken ct)
     {
-        var census = await reviews.GetCensusAsync(asOf?.ToUniversalTime() ?? DateTime.UtcNow, facilityNpi, ct);
+        // A date off the query string binds as Unspecified, and ToUniversalTime()
+        // would read that as the server's local time and shift the census by
+        // the host's offset. The census is a calendar day, so an unqualified
+        // date is taken as the UTC day it names.
+        var asOfUtc = asOf switch
+        {
+            null => DateTime.UtcNow,
+            { Kind: DateTimeKind.Utc } utc => utc,
+            { Kind: DateTimeKind.Local } local => local.ToUniversalTime(),
+            var unspecified => DateTime.SpecifyKind(unspecified.Value, DateTimeKind.Utc),
+        };
+
+        var census = await reviews.GetCensusAsync(asOfUtc, facilityNpi, ct);
         return Ok(census);
     }
 
@@ -134,7 +147,10 @@ public sealed class InpatientStaysController(
         }
         catch (InpatientStayConcurrencyException ex)
         {
-            logger.LogInformation("Concurrent review on stay {StayId} lost a write race: {Message}", id, ex.Message);
+            // The id comes off the route, so it is sanitized before it reaches a log line.
+            logger.LogInformation(
+                "Concurrent review on stay {StayId} lost a write race: {Message}",
+                LogSanitizer.Sanitize(id), ex.Message);
             return Conflict(new ProblemDetails { Title = "Stay changed", Detail = ex.Message });
         }
     }
