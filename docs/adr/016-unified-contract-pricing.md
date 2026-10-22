@@ -12,8 +12,11 @@ legal contract in provider-contracts-service, a fee-for-service rate config
 posts as a term rather than to `ffs-service`, and the legal contract projects to
 the engine contract a claim would be priced from. Phase 3's contract backfill is
 implemented as `tools/ProviderContractBackfill`, with the conflict report the
-cutover is gated on; phase 3's fee schedule re-ingest, and phases 4 and 5, are
-planned for later PRs.
+cutover is gated on. Phase 4's dual read is implemented: inside a per-tenant
+window every claim is priced with both the legacy and the canonical contract and
+**paid on legacy**, with the difference reported per line. Phase 3's fee schedule
+re-ingest, phase 4's PricingApi schedule fallback, and phase 5, are planned for
+later PRs.
 
 ## Context
 
@@ -357,17 +360,44 @@ implemented, rather than silently ignoring them.
 
 **Phase 4: dual read (shadow).**
 
-- The engine's contract repository reads the canonical contract and the legacy
-  contract, and prices with both. Both repositories are behind the existing
-  `IProviderContractRepository` seam.
-- It **pays on legacy** and emits a parity metric per line (match, amount
-  delta, reason). PricingApi reads the canonical schedule store first and falls
-  back to `fee_schedule_entries` (`EngineStoreScheduleSource`, then
-  `LegacyEntryScheduleSource`).
-- Writes go to the canonical contract only. The legacy engine contract is
-  regenerated from it, so the two cannot drift during the window.
-- Run it for at least one full monthly claim cycle per tenant. Exit criterion:
-  zero unexplained deltas on adjudicated lines.
+- **Done.** `DualReadProviderContractRepository` reads both contracts behind the
+  existing `IProviderContractRepository` seam and answers with the legacy one, so
+  opening the window changes no payment. It records the canonical contract in
+  `ContractShadowLedger`, and `ShadowPricingRateResolutionService` prices the
+  same lines a second time against it. Documented at
+  [docs/operations/CONTRACT-DUAL-READ-WINDOW.md](../operations/CONTRACT-DUAL-READ-WINDOW.md).
+
+  The shadow pass reads **no database**: its contract repository is that ledger,
+  so the two passes cannot see stores that moved between them, and the canonical
+  contract is read once per claim rather than once per line. The result returned
+  to the caller is always the paid pass, and a shadow pass that throws — or a
+  canonical store that is down — is recorded as an outcome and the claim is paid
+  on legacy.
+
+  Every line emits `cho.pricing.contract_parity.total`, tagged by tenant and by
+  outcome: `match`, `same_amount_different_route` (the same money by another
+  schedule or route — not a payment difference, but a contract that does not say
+  what the one paying says), `amount_delta` (with the dollar size on
+  `cho.pricing.contract_parity.amount_delta`), `canonical_pends`, `legacy_pends`,
+  `no_canonical_contract` and `shadow_failed`. Each non-match is also logged with
+  the provider, plan, procedure code, both amounts and the reason. No member
+  identity on either.
+
+  The window is per tenant and off until a deployment names one
+  (`FeeScheduleEngine:ContractDualRead`), because it costs a second pricing pass
+  per claim. Run it for at least one full monthly claim cycle per tenant. Exit
+  criterion: zero unexplained deltas on adjudicated lines.
+
+  Writes through the engine's repository go to the canonical store only. The ADR
+  originally called for regenerating the legacy engine contract from it; nothing
+  writes the legacy collection in the live path — that it has no admin API is
+  this ADR's own finding — so there is nothing to regenerate while the window is
+  open, and the runbook says to leave that collection alone instead.
+
+- **Open.** PricingApi reads the canonical schedule store first and falls back to
+  `fee_schedule_entries` (`EngineStoreScheduleSource`, then
+  `LegacyEntryScheduleSource`). That is a job over schedules rather than
+  contracts and depends on the re-ingest phase 3 left open.
 
 **Phase 5: cutover.**
 
@@ -493,6 +523,11 @@ BenefitEngine and claims-service have no facility-rate POS list
 - `src/services/provider-contracts-service/Models/ProviderContract.cs`
 - `src/services/provider-contracts-service/Models/PricingContractProjection.cs`
 - `tools/ProviderContractBackfill/` and `docs/operations/PROVIDER-CONTRACT-BACKFILL.md`
+- `src/engines/CloudHealthOffice.FeeScheduleEngine/Persistence/DualReadProviderContractRepository.cs`
+- `src/engines/CloudHealthOffice.FeeScheduleEngine/Persistence/ContractShadowLedger.cs`
+- `src/engines/CloudHealthOffice.FeeScheduleEngine/Services/ShadowPricingRateResolutionService.cs`
+- `src/engines/CloudHealthOffice.FeeScheduleEngine/Services/PricingParity.cs` and `docs/operations/CONTRACT-DUAL-READ-WINDOW.md`
+- `tests/CloudHealthOffice.FeeScheduleEngine.Tests/ContractDualReadTests.cs`
 - `src/services/provider-contracts-service/Models/ReimbursementTermRequests.cs`
 - `src/services/ffs-service/Models/FfsRateConfig.cs` (superseded; read by the phase 3 backfill)
 - `src/engines/CloudHealthOffice.FeeScheduleEngine/Models/ReimbursementTerms.cs`
