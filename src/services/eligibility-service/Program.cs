@@ -111,11 +111,9 @@ builder.Services.AddScoped<IEdi271Generator, Edi271Generator>();
 // X12 interchange control: ISA/IEA validation, TA1, duplicate ISA13, outbound 271 TA1 tracking.
 builder.Services.AddChoX12Interchange(builder.Configuration);
 
-// Temporal eligibility (date-bound read projection over coverage-service)
-// No accumulator-service client yet: the stub answers made-up accumulators.
-CloudHealthOffice.Infrastructure.Security.ChoSyntheticData.EnsureAllowed(
-    builder.Environment, builder.Configuration, "The temporal eligibility accumulator client (StubAccumulatorClient)");
-builder.Services.AddSingleton<IAccumulatorClient, StubAccumulatorClient>();
+// Temporal coverage can be real even when historical accumulator data is not.
+// Production defaults to explicit unavailable values, never synthetic zeroes.
+builder.Services.AddTemporalAccumulatorSource(builder.Configuration, builder.Environment);
 builder.Services.AddScoped<ITemporalEligibilityService, TemporalEligibilityService>();
 
 // Shared messaging bus. Backend (ServiceBus / InMemory / Null) is resolved
