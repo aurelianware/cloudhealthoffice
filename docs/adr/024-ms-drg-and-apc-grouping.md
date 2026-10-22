@@ -133,13 +133,36 @@ reads them; its README has the detail. Three findings matter here.
 **The tables are a protobuf buffer, readable with two jars.** They live in
 `runtime_buffers/msdrg_combined.bin` inside `msdrg-binary-access`, described by
 the release's own generated classes. Reading it needs that jar and
-`protobuf-java` — not the grouper, and not `com.mmm.his.cer:foundation`, the 3M
-library the grouper's runtime options extend, which is **not on Maven Central**.
-That last point is the real obstacle to the parity oracle: extracting the data is
-easy, running CMS's grouper as an oracle is not, because its dependencies are
-only in a 278 MB Windows installer. That has to be solved (pull the jars out of
-the installer, or vendor the dependency), it is no longer the cheap part, and it
-is why the parity corpus moves to the front of the build order below.
+`protobuf-java` — not the grouper itself, and not the Solventum (former 3M)
+foundation library the grouper's runtime options extend. That is why the
+extractor reads the buffer rather than calling the grouper.
+
+**Running CMS's grouper as the parity oracle is also feasible**, which was in
+doubt for an hour and is worth recording as settled. The foundation library the
+grouper needs is not on Maven Central under any obvious coordinates, and the
+first conclusion here was that it shipped only inside the release's 278 MB
+Windows installer. It does not: the release's own Java API guide names it as a
+*Solventum open source dependency*, published at
+[solventum-oss/GFC-Grouper-Foundation-Classes](https://github.com/solventum-oss/GFC-Grouper-Foundation-Classes).
+The full set to run the grouper is therefore:
+
+| Dependency | Version | Where from |
+| --- | --- | --- |
+| `msdrg-core`, `msdrg-model-v2`, `msdrg-binary-access` | 44.0.0.3 / 2.12.2 / 1.6.4 | the CMS Java jars download |
+| `gfc-base-api` (`com.mmm.his.cer.gfc.gfc-api`) | 3.4.9 | the Solventum repo above, built from source with Maven |
+| `protobuf-java` | 3.25.5 | Maven Central |
+| `slf4j-api` | 1.7.36 | Maven Central |
+
+plus a Java 17 or newer runtime. The guide also documents the calling sequence
+(`MsdrgRuntimeOption` → `RuntimeOptions` → `MsdrgInput.builder()` →
+`MsdrgComponent.process(claim)` → `claim.getOutput()`), so the oracle harness is
+a known quantity rather than reverse engineering. The one piece of plumbing left
+is that `gfc-base-api` has no published binary, so the parity job has to build it
+from source — ordinary CI work, not a research problem.
+
+The corpus still moves to the front of the build order below, for the second
+reason given there: the evaluator is much easier to write against a corpus that
+can answer "what does CMS say for this stay?" on demand.
 
 Extracted from V44: 75,005 diagnosis codes, 83,558 procedure codes, 4,111
 procedure clusters, formula lists for 28 MDCs, the CC and PDX exclusion groups,
@@ -322,11 +345,11 @@ Build order:
    (see above). Include the ICD-10 forward-mapping tables, so an old stay can
    be re-grouped under a current version.
 3. **Stand the CMS parity oracle up now, not last.** This was step 7 until the
-   jars were opened; two things moved it. The oracle's dependencies are not on
-   Maven Central and ship inside a Windows installer, so whether we can run
-   CMS's grouper at all is an open risk — and the whole case for building
-   rather than buying rests on being able to say we agree with it. A risk that
-   invalidates the plan belongs at the front of the plan, not the end. It also
+   jars were opened. The whole case for building rather than buying rests on
+   being able to say we agree with CMS, so the harness that proves it should
+   exist before the thing it judges, not after — and the dependency set for it
+   is now known (see above), so this is a CI job to write rather than a
+   question to answer. It also
    pays for itself immediately: the evaluator in step 4 is far easier to write
    against a corpus that can answer "what does CMS say for this stay?" on
    demand than against a hand-built expectation.

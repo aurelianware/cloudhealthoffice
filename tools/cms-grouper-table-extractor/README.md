@@ -13,9 +13,14 @@ of the data.
 
 Reading that buffer needs **two jars**: the release's `msdrg-binary-access`
 and `protobuf-java`. It does not need the grouper itself, and it does not need
-`com.mmm.his.cer:foundation` — the 3M library the grouper's own runtime
-options depend on, which is not published to Maven Central. That is why this
-tool reads the buffer rather than calling the grouper.
+the Solventum foundation library the grouper's own runtime options depend on.
+That is why this tool reads the buffer rather than calling the grouper.
+
+Running the grouper is a separate job — the parity oracle, ADR 024 §5 step 3 —
+and it needs more: `msdrg-core`, `msdrg-model-v2`, `gfc-base-api` 3.4.9 (built
+from [solventum-oss/GFC-Grouper-Foundation-Classes](https://github.com/solventum-oss/GFC-Grouper-Foundation-Classes),
+which publishes no binary), `slf4j-api`, and Java 17 or newer. The release's
+`pbl161_msdrg_java_api.pdf` documents the calling sequence.
 
 ## Getting the inputs
 
