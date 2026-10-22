@@ -41,7 +41,7 @@ As checked against the source baseline above (merge updates follow):
 
 - [#1485](https://github.com/aurelianware/cloudhealthoffice/pull/1485): **merged** as `8e3413a2`; P2P fully denied PA exclusion. 63 focused tests at the reviewed head; main merge recorded separately from the initial dc23d47e refresh.
 - [#1486](https://github.com/aurelianware/cloudhealthoffice/pull/1486): **merged** as `8547225e`; coverage failures are unavailable, not negative determinations; 59 focused tests at its reviewed head.
-- [#1487](https://github.com/aurelianware/cloudhealthoffice/pull/1487): removes fabricated Bulk completion, returns 501; this does **not** implement durable export. The aligned security harness passes; a remaining running CI check still blocks merge.
+- [#1487](https://github.com/aurelianware/cloudhealthoffice/pull/1487): **merged** as `9a3367f8`; removes fabricated Bulk completion, returns 501; this does **not** implement durable export. The aligned security harness and completed CI passed before merge.
 
 - [#1489](https://github.com/aurelianware/cloudhealthoffice/pull/1489): **proposed** native-only FHIR Production source composition, with 30 focused tests including a Production host startup test; does not prove deployed availability.
 - [#1490](https://github.com/aurelianware/cloudhealthoffice/pull/1490): **proposed** explicit unavailable temporal accumulator source outside development, with 14 focused tests; does not implement historical accumulation. The existing accumulator service is a plan-year snapshot source, not point-in-time history.
