@@ -3,10 +3,9 @@ using EligibilityService.Models;
 namespace EligibilityService.Services;
 
 /// <summary>
-/// Thin client for the future accumulator-service. Today only a stub
-/// implementation exists; the real service is scoped to a later prompt.
-/// Kept on an interface so consumers (TemporalEligibilityService) don't
-/// depend on the stub and can be swapped without further changes.
+/// Date-bound accumulator query boundary. A response must distinguish an
+/// unavailable historical snapshot from a measured zero. The existing
+/// accumulator-service plan-year lookup is not a point-in-time source.
 /// </summary>
 public interface IAccumulatorClient
 {
@@ -38,6 +37,24 @@ public class StubAccumulatorClient : IAccumulatorClient
             AsOfDate = asOfDate,
             Deductible = new DeductibleInfo(),
             OutOfPocket = new OutOfPocketInfo()
+        });
+    }
+}
+
+/// <summary>No historical source is configured; never invent amounts.</summary>
+public sealed class UnavailableAccumulatorClient : IAccumulatorClient
+{
+    public Task<AccumulatorSnapshot> GetSnapshotAsync(string tenantId, string memberId,
+        string planId, DateTime asOfDate, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(new AccumulatorSnapshot
+        {
+            Source = "unavailable",
+            AsOfDate = asOfDate,
+            UnavailableReason = "A plan-specific point-in-time accumulator source is not implemented.",
+            Deductible = null,
+            OutOfPocket = null,
         });
     }
 }

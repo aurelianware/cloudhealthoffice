@@ -5,7 +5,7 @@ namespace EligibilityService.Models;
 /// <summary>
 /// Read projection returned by GET /api/v1/eligibility/temporal.
 /// Lists every coverage active on the queried service date together with the
-/// COB order, plan snapshot, and a (currently stubbed) accumulator snapshot.
+/// COB order, plan snapshot and explicitly sourced accumulator availability.
 /// </summary>
 public class TemporalEligibilityResult
 {
@@ -48,13 +48,14 @@ public class TemporalCoverage
 }
 
 /// <summary>
-/// Stub accumulator snapshot. Populated by IAccumulatorClient — the real
-/// accumulator-service is delivered in a later prompt, so default implementation
-/// returns zeros and sets Source = "stub".
+/// Accumulator query result. Source=unavailable carries no measured balances;
+/// AsOfDate is then the requested date, not an assertion of a historical value.
+/// Source=stub is synthetic demo data, never a production measurement.
 /// </summary>
 public class AccumulatorSnapshot
 {
-    public string Source { get; set; } = "stub";
+    public string Source { get; set; } = "unavailable";
+    public string? UnavailableReason { get; set; }
     public DateTime AsOfDate { get; set; } = DateTime.UtcNow;
     public DeductibleInfo? Deductible { get; set; }
     public OutOfPocketInfo? OutOfPocket { get; set; }

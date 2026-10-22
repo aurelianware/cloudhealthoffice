@@ -17,8 +17,8 @@ Returns every coverage that was active on `serviceDate` together with:
 - COB order (`cobOrder`, `coverageSequence` = P / S / T / O),
 - plan snapshot (`planId`, `planVersion`, `coverageLevel`, `insuranceLineCode`,
   effective / termination dates),
-- accumulator snapshot (`accumulators.source = "stub"` until accumulator-service
-  lands in a later roadmap prompt),
+- accumulator availability (`source = "unavailable"` and null balances outside
+  Development/Testing by default; labelled `stub` in development),
 - `isRetroactive` flag (true when the coverage's effective date is in the past
   at query time and still covers the service date),
 - `isCOBRA` flag mapped from the Coverage-service status code.
@@ -33,10 +33,18 @@ Returns every coverage that was active on `serviceDate` together with:
 - COB ordering is derived from the coverage record's `OtherInsurance.IsPrimaryPayer`
   and `MedicareCoverage.IsPrimaryPayer` flags. When neither is set, coverages
   are ordered by ascending `effectiveDate` so the earliest becomes primary.
-- Accumulators are fetched through `IAccumulatorClient`. The current binding is
-  `StubAccumulatorClient` which returns zeroed values and stamps `source = "stub"`.
-  When accumulator-service ships, swap the DI binding — no other change is
-  required.
+- `TemporalEligibility:AccumulatorSource` selects `Unavailable` or `Stub`.
+  Production/Staging default to `Unavailable`: `source=unavailable`, a reason,
+  and null deductible/OOP values. These are not measured zeroes; the date is the
+  requested date only. Development/Testing preserve the labelled demo stub.
+  Explicit Stub outside those environments still requires synthetic permission.
+  Unknown source names fail startup. Other mock gateway/storage/auth guards are
+  unchanged and must also be configured correctly for production.
+- accumulator-service already exists, but its `asOfDate` selects the plan year
+  of a current snapshot rather than reconstructing balances as they stood on
+  that date. Its snapshot identity is member/plan-year, not this request's plan.
+  It must not be advertised as a historical plan-specific source without that
+  additional contract and reconstruction work.
 - Tenant boundary is enforced by the existing `TenantMiddleware`; the
   controller reads `HttpContext.Items["TenantId"]` and forwards it to the
   outbound Coverage-service call via `X-Tenant-ID`.
