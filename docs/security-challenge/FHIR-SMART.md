@@ -23,11 +23,11 @@ endpoints, not live services. The optional coverage/PCP lookup is unavailable;
 this profile establishes no PCP/coverage assurance. Shared-database tenant row
 filtering is exercised, not per-tenant databases.
 
-Bulk export is currently an in-process job/manifest implementation. The campaign
-tests creation, status and cancellation authorization; it cannot demonstrate
-protection of exported files that this implementation does not serve. Job polling
-and cancellation use the current `$export-status.read` / `.write` scopes in
-addition to `$export.read`; no claim of a complete Bulk Data implementation is made.
+Bulk export explicitly returns HTTP 501 with a FHIR not-supported outcome.
+The campaign verifies system/group refusal without a job location, absence of
+jobs to poll/cancel, and the existing SMART scope/caller denials. It does not
+establish real job-store isolation or download authorization: no exporter exists.
+Polling/cancellation retain `$export-status.read` / `.write` scope checks.
 
 ## Reproduce
 
@@ -56,8 +56,8 @@ prerequisite, execution error, missing case or inconclusive control returns 1.
 Positive-control failures block dependent cases as INCONCLUSIVE. A setup failure
 is ERROR, not a successful denial. Denied HTTP requests must return the specified
 status, expose no patient canary, and leave non-audit Mongo collections unchanged.
-The bulk owner status is independently compared before and after foreign actions
-because those jobs are in process memory rather than Mongo.
+No-job checks are absence evidence only; durable job ownership, export files and
+download isolation remain unsupported.
 
 ## Exact scenario catalog (42)
 
@@ -75,7 +75,7 @@ because those jobs are in process memory rather than Mongo.
 | `tenant.a.search`, `tenant.b.search` | Staff searches have the correct payer totals and canaries; payer A follows the actual next-page link and payer B has no next page. |
 | `cho.reader-control`, `.permission-denial`, `.bulk-denial` | CHO staff need members:read; TenantAdmin alone cannot invoke SMART-only bulk export (403). |
 | `bulk.patient-denial`, `.scope-denial` | A patient scope or unrelated backend scope cannot start a bulk job (403). |
-| `bulk.create-control`, `.own-status`, `.foreign-status`, `.foreign-cancel`, `.owner-state-unchanged` | An authorized backend creates/polls its job; another payer cannot read/cancel it (404), and the owner's manifest remains unchanged. |
+| `bulk.unavailable-control`, `.group-unavailable`, `.absent-status`, `.foreign-absent-status`, `.absent-cancel` | Authorized system/group initiation returns 501 with no job location; nonexistent job status/cancel returns 404. Real job isolation is unsupported. |
 | `upstream.audit` | Member-service records successful reads with payer A and actor `fhir-service`, providing evidence of the upstream service-identity boundary. |
 
 ## Prove that controls detect defects

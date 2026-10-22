@@ -9,7 +9,7 @@ namespace FhirService.Controllers;
 
 /// <summary>
 /// FHIR Bulk Data Access endpoints for system-level and group-level export.
-/// Implements the async polling pattern per the Bulk Data IG.
+/// The default service explicitly refuses initiation until durable export exists.
 /// </summary>
 [Route("fhir/r4")]
 // DELIBERATELY SMART/system-only. A bulk export covers every member in its
@@ -50,7 +50,15 @@ public class BulkExportController : FhirControllerBase
             OutputFormat = outputFormat ?? "application/fhir+ndjson",
         };
 
-        var job = await _exportService.InitiateExportAsync(request, TenantId, ct);
+        BulkExportJob job;
+        try
+        {
+            job = await _exportService.InitiateExportAsync(request, TenantId, ct);
+        }
+        catch (BulkExportNotImplementedException)
+        {
+            return BulkExportNotImplemented();
+        }
 
         _logger.LogInformation(
             "Bulk export initiated: job={JobId}, tenant={TenantId}",
@@ -80,7 +88,15 @@ public class BulkExportController : FhirControllerBase
             GroupId = groupId,
         };
 
-        var job = await _exportService.InitiateExportAsync(request, TenantId, ct);
+        BulkExportJob job;
+        try
+        {
+            job = await _exportService.InitiateExportAsync(request, TenantId, ct);
+        }
+        catch (BulkExportNotImplementedException)
+        {
+            return BulkExportNotImplemented();
+        }
 
         _logger.LogInformation(
             "Group bulk export initiated: job={JobId}, group={GroupId}, tenant={TenantId}",
@@ -107,6 +123,9 @@ public class BulkExportController : FhirControllerBase
             return StatusCode(500, new { error = job.ErrorMessage ?? "Export failed" });
         }
 
+        if (job.Status == BulkExportStatus.Cancelled)
+            return StatusCode(StatusCodes.Status410Gone);
+
         // Still in progress
         Response.Headers["X-Progress"] = $"{job.ProgressPercent}% complete";
         Response.Headers["Retry-After"] = "120";
@@ -129,6 +148,24 @@ public class BulkExportController : FhirControllerBase
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private IActionResult BulkExportNotImplemented()
+    {
+        var result = new ObjectResult(new Hl7.Fhir.Model.OperationOutcome
+        {
+            Issue = new List<Hl7.Fhir.Model.OperationOutcome.IssueComponent>
+            {
+                new()
+                {
+                    Severity = Hl7.Fhir.Model.OperationOutcome.IssueSeverity.Error,
+                    Code = Hl7.Fhir.Model.OperationOutcome.IssueType.NotSupported,
+                    Diagnostics = "Bulk export is not implemented. No export job or download files were created.",
+                },
+            },
+        }) { StatusCode = StatusCodes.Status501NotImplemented };
+        result.ContentTypes.Add("application/fhir+json");
+        return result;
+    }
 
     private bool HasRespondAsyncHeader()
     {

@@ -1,156 +1,90 @@
 using FhirService.Controllers;
 using FhirService.Models;
 using FhirService.Services;
+using FluentAssertions;
+using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using FluentAssertions;
 
 namespace CloudHealthOffice.FhirService.Tests.Controllers;
 
 public class BulkExportControllerTests
 {
-    private readonly BulkExportService _exportService;
-    private readonly BulkExportController _controller;
-
-    public BulkExportControllerTests()
+    private static BulkExportController Controller(IBulkExportService? service = null)
     {
-        var config = new Mock<IConfiguration>();
-        config.Setup(c => c["Fhir:ServerBaseUrl"]).Returns("https://test.example.com/fhir/r4");
-        var logger = new Mock<ILogger<BulkExportService>>();
-        var controllerLogger = new Mock<ILogger<BulkExportController>>();
-
-        _exportService = new BulkExportService(config.Object, logger.Object);
-        _controller = new BulkExportController(_exportService, controllerLogger.Object);
-
-        var httpContext = new DefaultHttpContext();
-        httpContext.Items["TenantId"] = "test-tenant";
-        httpContext.Request.Scheme = "https";
-        httpContext.Request.Host = new HostString("test.example.com");
-        httpContext.Request.Headers["Prefer"] = "respond-async";
-        _controller.ControllerContext = new ControllerContext
+        var http = new DefaultHttpContext();
+        http.Items["TenantId"] = "tenant-a";
+        http.Request.Scheme = "https";
+        http.Request.Host = new HostString("test.example.com");
+        http.Request.Headers["Prefer"] = "respond-async";
+        return new BulkExportController(service ?? new BulkExportService(), NullLogger<BulkExportController>.Instance)
         {
-            HttpContext = httpContext,
+            ControllerContext = new ControllerContext { HttpContext = http },
         };
     }
 
-    // ── System export ────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task Export_ValidRequest_Returns202WithContentLocation()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DefaultService_Returns501OutcomeWithoutJobLocationOrManifest(bool group)
     {
-        var result = await _controller.SystemExport(null, null, null, CancellationToken.None);
+        var controller = Controller();
+        var result = group
+            ? await controller.GroupExport("group-1", null, null, null, default)
+            : await controller.SystemExport("Patient,Coverage", null, null, default);
 
-        var statusResult = result.Should().BeOfType<StatusCodeResult>().Subject;
-        statusResult.StatusCode.Should().Be(202);
-        _controller.Response.Headers["Content-Location"].ToString()
-            .Should().Contain("$export-status/export-");
+        var obj = result.Should().BeOfType<ObjectResult>().Subject;
+        obj.StatusCode.Should().Be(501);
+        obj.ContentTypes.Should().Contain("application/fhir+json");
+        var outcome = obj.Value.Should().BeOfType<OperationOutcome>().Subject;
+        outcome.Issue.Single().Code.Should().Be(OperationOutcome.IssueType.NotSupported);
+        controller.Response.Headers.Should().NotContainKey("Content-Location");
+        controller.Response.Headers.Should().NotContainKey("X-Progress");
     }
 
     [Fact]
-    public async Task Export_MissingPreferHeader_Returns400()
+    public async Task MissingPreferHeader_Remains400()
     {
-        // Remove the Prefer header
-        _controller.HttpContext.Request.Headers.Remove("Prefer");
-
-        var result = await _controller.SystemExport(null, null, null, CancellationToken.None);
-
-        var statusResult = result.Should().BeOfType<ObjectResult>().Subject;
-        statusResult.StatusCode.Should().Be(400);
+        var controller = Controller();
+        controller.Request.Headers.Remove("Prefer");
+        (await controller.SystemExport(null, null, null, default)).Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
-    public async Task Export_WithTypeFilter_ReturnsFilteredManifest()
+    public async Task NoDefaultJobsCanBePolledOrCancelled()
     {
-        // Initiate export with type filter
-        var exportResult = await _controller.SystemExport("Patient,Coverage", null, null, CancellationToken.None);
-        exportResult.Should().BeOfType<StatusCodeResult>();
-
-        // Extract jobId from Content-Location
-        var contentLocation = _controller.Response.Headers["Content-Location"].ToString();
-        var jobId = contentLocation.Split("$export-status/").Last();
-
-        // Poll status
-        var statusResult = await _controller.ExportStatus(jobId, CancellationToken.None);
-        var okResult = statusResult.Should().BeOfType<OkObjectResult>().Subject;
-        var manifest = okResult.Value.Should().BeOfType<BulkExportManifest>().Subject;
-
-        manifest.Output.Should().HaveCount(2);
-        manifest.Output.Should().Contain(o => o.Type == "Patient");
-        manifest.Output.Should().Contain(o => o.Type == "Coverage");
-    }
-
-    // ── Group export ─────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task GroupExport_ValidGroupId_Returns202()
-    {
-        var result = await _controller.GroupExport(
-            "payer-exchange-001", null, null, null, CancellationToken.None);
-
-        var statusResult = result.Should().BeOfType<StatusCodeResult>().Subject;
-        statusResult.StatusCode.Should().Be(202);
-        _controller.Response.Headers["Content-Location"].ToString()
-            .Should().Contain("$export-status/");
-    }
-
-    // ── Export status ────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task ExportStatus_CompletedJob_Returns200WithManifest()
-    {
-        // Initiate
-        await _controller.SystemExport(null, null, null, CancellationToken.None);
-        var jobId = _controller.Response.Headers["Content-Location"].ToString()
-            .Split("$export-status/").Last();
-
-        // Reset response headers for the next call
-        _controller.ControllerContext.HttpContext = new DefaultHttpContext();
-        _controller.HttpContext.Items["TenantId"] = "test-tenant";
-        _controller.HttpContext.Request.Scheme = "https";
-        _controller.HttpContext.Request.Host = new HostString("test.example.com");
-
-        var result = await _controller.ExportStatus(jobId, CancellationToken.None);
-
-        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-        var manifest = okResult.Value.Should().BeOfType<BulkExportManifest>().Subject;
-        manifest.RequiresAccessToken.Should().BeTrue();
-        manifest.Output.Should().NotBeEmpty();
+        var controller = Controller();
+        (await controller.ExportStatus("unknown", default)).Should().BeOfType<NotFoundObjectResult>();
+        (await controller.CancelExport("unknown", default)).Should().BeOfType<NotFoundObjectResult>();
     }
 
     [Fact]
-    public async Task ExportStatus_UnknownJobId_Returns404()
+    public async Task AnImplementedBackend_CanStillAcceptAndReturnARealManifest()
     {
-        var result = await _controller.ExportStatus("nonexistent", CancellationToken.None);
+        var service = new Mock<IBulkExportService>();
+        var job = new BulkExportJob { JobId = "real-job", Status = BulkExportStatus.Complete,
+            Manifest = new BulkExportManifest { Output = new() { new BulkExportOutput {
+                Type = "Patient", Url = "https://test.example.com/authorized/patients.ndjson", Count = 1 } } } };
+        service.Setup(s => s.InitiateExportAsync(It.IsAny<BulkExportRequest>(), "tenant-a", default)).ReturnsAsync(job);
+        service.Setup(s => s.GetJobStatusAsync("real-job", "tenant-a", default)).ReturnsAsync(job);
+        var controller = Controller(service.Object);
 
-        var notFound = result.Should().BeOfType<NotFoundObjectResult>().Subject;
-        notFound.StatusCode.Should().Be(404);
-    }
-
-    // ── Cancel export ────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task CancelExport_ExistingJob_Returns202()
-    {
-        // Initiate
-        await _controller.SystemExport(null, null, null, CancellationToken.None);
-        var jobId = _controller.Response.Headers["Content-Location"].ToString()
-            .Split("$export-status/").Last();
-
-        var result = await _controller.CancelExport(jobId, CancellationToken.None);
-
-        var statusResult = result.Should().BeOfType<StatusCodeResult>().Subject;
-        statusResult.StatusCode.Should().Be(202);
+        (await controller.SystemExport(null, null, null, default)).Should().BeOfType<StatusCodeResult>()
+            .Which.StatusCode.Should().Be(202);
+        controller.Response.Headers["Content-Location"].ToString().Should().EndWith("/$export-status/real-job");
+        (await controller.ExportStatus("real-job", default)).Should().BeOfType<OkObjectResult>().Which.Value.Should().BeSameAs(job.Manifest);
     }
 
     [Fact]
-    public async Task CancelExport_UnknownJobId_Returns404()
+    public async Task CancelledJobs_DoNotPollAsInProgressForever()
     {
-        var result = await _controller.CancelExport("nonexistent", CancellationToken.None);
-
-        var notFound = result.Should().BeOfType<NotFoundObjectResult>().Subject;
-        notFound.StatusCode.Should().Be(404);
+        var service = new Mock<IBulkExportService>();
+        service.Setup(s => s.GetJobStatusAsync("cancelled", "tenant-a", default)).ReturnsAsync(
+            new BulkExportJob { JobId = "cancelled", Status = BulkExportStatus.Cancelled });
+        (await Controller(service.Object).ExportStatus("cancelled", default)).Should().BeOfType<StatusCodeResult>()
+            .Which.StatusCode.Should().Be(410);
     }
 }

@@ -82,7 +82,7 @@ def run(member, output, coverage=None, claims=None, consent=None, documents=Fals
     count = 55 if coverage is not None else 42
     mutations = P2P_MUTATIONS if coverage is not None else FHIR_MUTATIONS
     controls = (["export.inline-control", "export.cache-control", "match.control", "match.export-control", "tenant.b.inline-control"]
-                if coverage is not None else ["identity.valid-control", "identity.second-issuer-control", "cho.reader-control", "bulk.create-control"])
+                if coverage is not None else ["identity.valid-control", "identity.second-issuer-control", "cho.reader-control", "bulk.unavailable-control"])
     if consent is not None:
         profile, count, mutations = "provider-access", 30, PROVIDER_MUTATIONS
         service_args = [str(member), str(consent)]

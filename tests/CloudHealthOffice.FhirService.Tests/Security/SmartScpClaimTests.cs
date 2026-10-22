@@ -89,18 +89,22 @@ public class SmartScpClaimTests : IClassFixture<FhirTestWebAppFactory>
         body.Should().NotContain("patient/*.read").And.NotContain("system/*.read");
     }
 
+    // Authorized export calls reach the default unavailable exporter (501);
+    // refusal before that boundary remains 401/403. Authentication semantics
+    // are unchanged even though the fake successful export has been removed.
+
     // ── (b) Grants only in scp ────────────────────────────────────────────────
 
     [Fact]
     public async Task ScpOnly_SpaceDelimitedString_IsParsedLikeScope()
         => (await ExportAsync(Token(scope: null, extra: Scp("system/*.read system/Coverage.read"))))
-            .StatusCode.Should().Be(HttpStatusCode.Accepted);
+            .StatusCode.Should().Be(HttpStatusCode.NotImplemented);
 
     [Fact]
     public async Task ScpOnly_JsonArray_IsParsedLikeScope()
         // Two scp claims are written as a JSON array.
         => (await ExportAsync(Token(scope: null, extra: [Scp("system/Coverage.read"), Scp("system/*.read")])))
-            .StatusCode.Should().Be(HttpStatusCode.Accepted);
+            .StatusCode.Should().Be(HttpStatusCode.NotImplemented);
 
     [Fact]
     public async Task ScpOnly_PatientScope_ReadsItsOwnPatient()
@@ -140,13 +144,13 @@ public class SmartScpClaimTests : IClassFixture<FhirTestWebAppFactory>
     [InlineData("system/*.read system/*.read", "system/*.read")]
     public async Task BothClaims_SameSet_AreAccepted(string scope, string scp)
         => (await ExportAsync(Token(scope, extra: Scp(scp))))
-            .StatusCode.Should().Be(HttpStatusCode.Accepted);
+            .StatusCode.Should().Be(HttpStatusCode.NotImplemented);
 
     [Fact]
     public async Task BothClaims_SameSet_ScpAsAnArray_IsAccepted()
         => (await ExportAsync(Token("system/*.read system/Coverage.read",
                 extra: [Scp("system/Coverage.read"), Scp("system/*.read")])))
-            .StatusCode.Should().Be(HttpStatusCode.Accepted);
+            .StatusCode.Should().Be(HttpStatusCode.NotImplemented);
 
     // ── (d) Both claims, different sets ───────────────────────────────────────
 
@@ -234,7 +238,7 @@ public class SmartScpClaimTests : IClassFixture<FhirTestWebAppFactory>
     [Fact]
     public async Task ScopeOnly_IsUnchanged()
     {
-        (await ExportAsync(Token("system/*.read"))).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        (await ExportAsync(Token("system/*.read"))).StatusCode.Should().Be(HttpStatusCode.NotImplemented);
         (await GetAsync("/fhir/r4/Patient/pat-001", Token("patient/*.read", patient: "pat-001")))
             .StatusCode.Should().Be(HttpStatusCode.OK);
         (await GetAsync("/fhir/r4/Patient/pat-002", Token("patient/*.read", patient: "pat-001")))
