@@ -1060,6 +1060,24 @@ public class Enrollment834Record
     public string MaintenanceTypeCode { get; set; } = string.Empty;
     public DateTime TransactionDate { get; set; }
     public string Status { get; set; } = string.Empty;
+
+    /// <summary>The sponsor's maintenance reason (INS04).</summary>
+    public string? MaintenanceReasonCode { get; set; }
+    public string? EffectiveDate { get; set; }
+    public string? TerminationDate { get; set; }
+    public string? FileName { get; set; }
+    public string? FilePosition { get; set; }
+
+    /// <summary>Why it was not applied (or a note on an accepted row); see enrollment-import-service's EnrollmentRejectionReasons.</summary>
+    public string? ReasonCode { get; set; }
+    public List<Enrollment834Error> Errors { get; set; } = new();
+}
+
+public class Enrollment834Error
+{
+    public string Code { get; set; } = string.Empty;
+    public string? Field { get; set; }
+    public string Message { get; set; } = string.Empty;
 }
 
 /// <summary>
