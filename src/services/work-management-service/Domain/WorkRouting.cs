@@ -22,9 +22,10 @@ public static class WorkRouter
 
     public static bool Matches(WorkType type, WorkQueue queue, WorkItemAttributes a) => type switch
     {
-        // Claim criteria are the only ones phase 1 defines; other work types'
-        // queues route by order alone until their criteria land.
-        WorkType.Claim => MatchesClaim(queue.Criteria, a),
+        // Claim criteria are the only ones phase 1 defines. Enrollment queues
+        // reuse them: the reason code travels as the item's pend code. Other
+        // work types' queues route by order alone until their criteria land.
+        WorkType.Claim or WorkType.Enrollment834 => MatchesClaim(queue.Criteria, a),
         _ => true,
     };
 

@@ -110,6 +110,17 @@ public sealed class WorkConfigService
             if (created > 0)
                 _logger.LogInformation("Seeded {Count} default claim queues for tenant {TenantId}", created, tenantId);
         }
+        if (!queues.Any(q => q.WorkType == WorkType.Enrollment834))
+        {
+            var created = 0;
+            foreach (var definition in DefaultEnrollmentQueues.All)
+            {
+                if (await _store.CreateQueueIfAbsentAsync(DefaultEnrollmentQueues.Create(definition, tenantId, Now), ct))
+                    created++;
+            }
+            if (created > 0)
+                _logger.LogInformation("Seeded {Count} default enrollment queues for tenant {TenantId}", created, tenantId);
+        }
         if (_seedMembers.Count > 0)
             await SeedMembershipsAsync(tenantId, ct);
         _seeded.MarkSeeded(tenantId);
@@ -117,7 +128,9 @@ public sealed class WorkConfigService
 
     /// <summary>
     /// Gives each configured seed user a primary membership in every active
-    /// claim queue, unless they already have any membership in the tenant (so
+    /// claim queue (enrollment queues wait for the Enrollment Ops exception
+    /// screen, so Get Next never opens a page that does not exist yet), unless
+    /// they already have any membership in the tenant (so
     /// an admin's own setup is never overwritten). Deterministic ids keep it
     /// idempotent across replicas and restarts.
     /// </summary>

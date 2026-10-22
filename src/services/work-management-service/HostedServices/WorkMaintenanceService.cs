@@ -45,12 +45,14 @@ public sealed class WorkMaintenanceService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var reconcile = ReconcileEnabled(_options, _configuration);
+        var enrollment = _options.EnrollmentReconcile.Enabled;
         var rescore = _options.RescoreIntervalMinutes > 0;
         _logger.LogInformation("Work maintenance: periodic reconcile {Reconcile} (every {Interval} min), re-score {Rescore}",
             reconcile ? "on" : "off", _options.Reconcile.IntervalMinutes, rescore ? $"every {_options.RescoreIntervalMinutes} min" : "off");
-        if (!reconcile && !rescore) return;
+        if (!reconcile && !rescore && !enrollment) return;
 
         var lastReconcile = DateTimeOffset.MinValue;
+        var lastEnrollment = DateTimeOffset.MinValue;
         var lastRescore = _time.GetUtcNow();
         // A short first delay lets the host (and claims-service) come up.
         try { await Task.Delay(TimeSpan.FromSeconds(20), _time, stoppingToken); }
@@ -61,11 +63,13 @@ public sealed class WorkMaintenanceService : BackgroundService
             var now = _time.GetUtcNow();
             var doReconcile = reconcile && now - lastReconcile >= TimeSpan.FromMinutes(Math.Max(1, _options.Reconcile.IntervalMinutes));
             var doRescore = rescore && now - lastRescore >= TimeSpan.FromMinutes(_options.RescoreIntervalMinutes);
-            if (doReconcile || doRescore)
+            var doEnrollment = enrollment && now - lastEnrollment >= TimeSpan.FromMinutes(Math.Max(1, _options.EnrollmentReconcile.IntervalMinutes));
+            if (doReconcile || doRescore || doEnrollment)
             {
-                await RunOnceAsync(doReconcile, doRescore, stoppingToken);
+                await RunOnceAsync(doReconcile, doRescore, stoppingToken, doEnrollment);
                 if (doReconcile) lastReconcile = now;
                 if (doRescore) lastRescore = now;
+                if (doEnrollment) lastEnrollment = now;
             }
             try { await Task.Delay(TimeSpan.FromSeconds(30), _time, stoppingToken); }
             catch (OperationCanceledException) { return; }
@@ -73,7 +77,7 @@ public sealed class WorkMaintenanceService : BackgroundService
     }
 
     /// <summary>One pass over every known tenant (internal for tests).</summary>
-    internal async Task RunOnceAsync(bool reconcile, bool rescore, CancellationToken ct)
+    internal async Task RunOnceAsync(bool reconcile, bool rescore, CancellationToken ct, bool enrollment = false)
     {
         IReadOnlyList<string> tenants;
         using (var scope = _services.CreateScope())
@@ -93,6 +97,11 @@ public sealed class WorkMaintenanceService : BackgroundService
                 {
                     var source = scope.ServiceProvider.GetRequiredService<IClaimsWorkSource>();
                     await intake.ReconcileClaimsAsync(tenant, source, Math.Clamp(_options.Reconcile.PageSize, 1, 1000), ct);
+                }
+                if (enrollment)
+                {
+                    var source = scope.ServiceProvider.GetRequiredService<IEnrollmentWorkSource>();
+                    await intake.ReconcileEnrollmentAsync(tenant, source, Math.Clamp(_options.EnrollmentReconcile.PageSize, 1, 1000), ct);
                 }
                 if (rescore)
                     await intake.RecomputeAsync(tenant, reroute: false, ct);

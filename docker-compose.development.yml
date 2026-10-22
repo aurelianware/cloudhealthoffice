@@ -458,6 +458,7 @@ services:
     environment:
       <<: *common-env
       Services__ClaimsService: http://claims-service:8080
+      Services__EnrollmentImportService: http://enrollment-import-service:8080
     depends_on:
       mongodb:
         condition: service_healthy

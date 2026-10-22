@@ -20,9 +20,12 @@ public class ConfigTests
         await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => otherProcess.EnsureSeededAsync(T)));
 
         var queues = await _kit.Store.ListQueuesAsync(T);
-        queues.Should().HaveCount(DefaultClaimQueues.All.Count);
-        first.Select(q => q.SystemKey).Should().Equal(DefaultClaimQueues.All.OrderBy(d => d.Order).Select(d => d.Key));
-        queues.Count(q => q.IsFallback).Should().Be(1);
+        queues.Should().HaveCount(DefaultClaimQueues.All.Count + DefaultEnrollmentQueues.All.Count);
+        first.Where(q => q.WorkType == WorkType.Claim).Select(q => q.SystemKey)
+            .Should().Equal(DefaultClaimQueues.All.OrderBy(d => d.Order).Select(d => d.Key));
+        first.Where(q => q.WorkType == WorkType.Enrollment834).Select(q => q.SystemKey)
+            .Should().Equal(DefaultEnrollmentQueues.All.OrderBy(d => d.Order).Select(d => d.Key));
+        queues.Count(q => q.IsFallback).Should().Be(2, "one fallback per work type");
     }
 
     [Fact]
@@ -41,10 +44,11 @@ public class ConfigTests
         await _kit.Config().EnsureSeededAsync(T);
 
         var memberships = await _kit.Store.ListMembershipsAsync(T);
-        var claimQueues = (await _kit.Store.ListQueuesAsync(T)).Where(q => q.WorkType == WorkType.Claim && q.IsActive).ToList();
+        var claimQueues = (await _kit.Store.ListQueuesAsync(T))
+            .Where(q => q.WorkType == WorkType.Claim && q.IsActive).ToList();
         claimQueues.Should().HaveCount(DefaultClaimQueues.All.Count);
         memberships.Where(m => m.UserId == "presenter").Select(m => m.QueueId)
-            .Should().BeEquivalentTo(claimQueues.Select(q => q.Id), "one primary membership per claim queue, no duplicates");
+            .Should().BeEquivalentTo(claimQueues.Select(q => q.Id), "one primary membership per claim queue, no duplicates; enrollment queues wait for their screen");
         memberships.Where(m => m.UserId == "admin-configured").Select(m => m.Id).Should().Equal("admin-set");
         (await _kit.Config().EffectiveQueuesAsync(T, "presenter")).Should().HaveCount(claimQueues.Count);
     }
@@ -131,7 +135,7 @@ public class ConfigTests
         var result = await _kit.Config().ReorderAsync(T, WorkType.Claim, [cob, ncci], "admin");
 
         result.Error.Should().BeNull();
-        var ordered = (await _kit.Config().ListQueuesAsync(T)).Select(q => q.Id).ToList();
+        var ordered = (await _kit.Config().ListQueuesAsync(T)).Where(q => q.WorkType == WorkType.Claim).Select(q => q.Id).ToList();
         ordered.IndexOf(cob).Should().Be(0);
         ordered.IndexOf(ncci).Should().Be(1);
         ordered.Last().Should().Be(WorkTestKit.QueueId("claim.other"), "the fallback is always last");

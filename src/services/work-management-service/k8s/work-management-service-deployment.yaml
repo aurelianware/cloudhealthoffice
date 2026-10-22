@@ -19,6 +19,7 @@ data:
   ASPNETCORE_ENVIRONMENT: "Production"
   MongoDb__DatabaseName: "CloudHealthOffice"
   Services__ClaimsService: "http://claims-service.cloudhealthoffice"
+  Services__EnrollmentImportService: "http://enrollment-import-service.cloudhealthoffice"
   Kafka__ClientId: "work-management-service"
   Kafka__ClaimWork__GroupId: "work-management-service.claims-work"
   # Leases and the periodic reconcile (docs/architecture/work-management.md).

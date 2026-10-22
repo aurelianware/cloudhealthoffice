@@ -30,6 +30,7 @@ public class EnrollmentImportServiceDependentTests
         public List<(string Id, DateTime Date)> CoverageTerminations { get; } = new();
         public List<string> CoverageReinstatements { get; } = new();
         public List<EnrollmentTransaction> Transactions { get; } = new();
+        public Support.InMemoryEnrollmentExceptionRepository Exceptions { get; } = new();
         public InMemoryEnrollmentEventRepository Events { get; } = new();
         public string? ResolvedPlanId { get; set; } = "resolved-plan-id";
         public bool ReturnCreatedCoverageId { get; set; } = true;
@@ -162,10 +163,18 @@ public class EnrollmentImportServiceDependentTests
             Service = new ImportSvc(
                 memberClient.Object, sponsorClient.Object, benefitPlanClient.Object, coverageClient.Object,
                 txns.Object, importRuns.Object, publisher, new EnrollmentValidator(),
-                NullLogger<ImportSvc>.Instance);
+                NullLogger<ImportSvc>.Instance, Exceptions);
         }
 
         public Task<ImportResult> ImportAsync(Enrollment834 batch) => Service.ImportEnrollmentAsync(batch, "t1");
+
+        public EnrollmentExceptionService ExceptionService(DateTime? now = null) =>
+            new(Exceptions, Service, new FixedTime(now ?? DateTime.UtcNow));
+    }
+
+    private sealed class FixedTime(DateTime now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(DateTime.SpecifyKind(now, DateTimeKind.Utc));
     }
 
     private static MemberEnrollment Subscriber(string id, string maintenanceType, params Dependent[] dependents) => new()
@@ -1323,6 +1332,151 @@ public class EnrollmentImportServiceDependentTests
         txn.ReasonCode.Should().Be(EnrollmentRejectionReasons.ValidationFailed);
         txn.FilePosition.Should().Be("INS 2");
         txn.Errors.Should().NotBeEmpty().And.OnlyContain(e => e.Code.Length > 0 && e.Message.Length > 0);
+    }
+
+    // ── Enrollment exceptions (enrollment-operations.md §3) ─────────────
+
+    [Fact]
+    public async Task ARejectedSubscriber_OpensAnException_WithTheChangeAsReceived()
+    {
+        var h = new Harness();
+        var subscriber = Subscriber("SUB1", "021");
+        subscriber.MaintenanceType = "";
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "X1", FileName = "acme.834", EdiFileId = "EDIFILE-9", Enrollments = { subscriber } });
+
+        var exception = h.Exceptions.All.Should().ContainSingle().Subject;
+        var txn = h.Transactions.Single(t => t.Status == "Rejected");
+        exception.Id.Should().Be(txn.Id);
+        exception.Number.Should().StartWith("EX-");
+        exception.Status.Should().Be(EnrollmentExceptionStatus.Open);
+        exception.ReasonCode.Should().Be(EnrollmentRejectionReasons.ValidationFailed);
+        exception.Errors.Should().NotBeEmpty();
+        exception.SourceKind.Should().Be(EnrollmentExceptionSourceKind.Subscriber);
+        exception.Subscriber!.SubscriberId.Should().Be("SUB1");
+        exception.EdiFileId.Should().Be("EDIFILE-9");
+        exception.FilePosition.Should().Be("INS 1");
+        exception.GroupNumber.Should().Be("GRP0001");
+    }
+
+    [Fact]
+    public async Task AcceptedChanges_AndSkippedTerminations_OpenNoException()
+    {
+        var h = new Harness();
+        await h.ImportAsync(new Enrollment834 { BatchId = "X2", Enrollments = { Subscriber("SUB1", "021"), Subscriber("SUB2", "024") } });
+
+        h.Transactions.Should().HaveCount(2);
+        h.Exceptions.All.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AFailedAttachedDependent_IsKeptAsAStandaloneDependentWithWhatItInherited()
+    {
+        var h = new Harness();
+        var child = Child("EMMA", "20120304", "024");
+        h.Existing.Add("SUB1");
+        h.Existing.Add(DependentId(child)!);
+        // The subscriber's 001 carries no termination date, so the dependent's 024 cannot be applied.
+        await h.ImportAsync(new Enrollment834 { BatchId = "X3", Enrollments = { Subscriber("SUB1", "001", child) } });
+
+        var exception = h.Exceptions.All.Should().ContainSingle().Subject;
+        exception.SourceKind.Should().Be(EnrollmentExceptionSourceKind.Dependent);
+        exception.Dependent!.SubscriberId.Should().Be("SUB1");
+        exception.Dependent.GroupNumber.Should().Be("GRP0001", "inherited from the subscriber's loop");
+        exception.Dependent.EnrollmentDate.Should().Be("20260201");
+        exception.FilePosition.Should().Be("INS 1, dependent 1");
+    }
+
+    [Fact]
+    public async Task MatchingADependentToItsSubscriber_ReprocessesAndResolvesIt()
+    {
+        var h = new Harness();
+        var baby = Child("BABY", "20260115", "021");
+        baby.SubscriberId = "SUB-WRONG";
+        await h.ImportAsync(new Enrollment834 { BatchId = "X4", DependentEnrollments = { baby } });
+        var exception = h.Exceptions.All.Single();
+        exception.ReasonCode.Should().Be(EnrollmentRejectionReasons.SubscriberNotFound);
+
+        h.Existing.Add("SUB1");
+        var result = await h.ExceptionService().MatchAsync("t1", exception.Id, "specialist-1", "SUB1", "Sponsor sent the old id");
+
+        result.Outcome.Should().Be(ExceptionActionOutcome.Done);
+        var resolved = result.Exception!;
+        resolved.Status.Should().Be(EnrollmentExceptionStatus.Resolved);
+        resolved.Resolution.Should().Be(EnrollmentExceptionResolution.Applied);
+        resolved.ResolvedBy.Should().Be("specialist-1");
+        resolved.Attempts.Should().Be(1);
+        resolved.TransactionIds.Should().HaveCount(2);
+        resolved.Actions.Select(a => a.Action).Should().Equal(EnrollmentExceptionActions.Matched, EnrollmentExceptionActions.Reprocessed);
+        h.Created.Should().ContainSingle(c => c.FirstName == "BABY");
+        h.Exceptions.All.Should().ContainSingle("the reprocess updates the exception rather than opening another");
+    }
+
+    [Fact]
+    public async Task AReprocessThatFailsAgain_KeepsTheExceptionOpen_WithTheNewReason()
+    {
+        var h = new Harness { ThrowOnExistsFor = "SUB1" };
+        var baby = Child("BABY", "20260115", "021");
+        await h.ImportAsync(new Enrollment834 { BatchId = "X5", DependentEnrollments = { baby } });
+        var exception = h.Exceptions.All.Single();
+        exception.ReasonCode.Should().Be(EnrollmentRejectionReasons.DownstreamUnavailable);
+
+        h.ThrowOnExistsFor = null; // member-service is back, but SUB1 is still not on file
+        var result = await h.ExceptionService().ReprocessAsync("t1", exception.Id, "specialist-1", null, null, null);
+
+        var after = result.Exception!;
+        after.Status.Should().Be(EnrollmentExceptionStatus.Open);
+        after.ReasonCode.Should().Be(EnrollmentRejectionReasons.SubscriberNotFound);
+        after.Actions.Single().OutcomeReasonCode.Should().Be(EnrollmentRejectionReasons.SubscriberNotFound);
+        h.Exceptions.All.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ACorrection_MustBeOfTheSameKind_AndIsWhatGetsReprocessed()
+    {
+        var h = new Harness();
+        var subscriber = Subscriber("SUB1", "021");
+        subscriber.MaintenanceType = "";
+        await h.ImportAsync(new Enrollment834 { BatchId = "X6", Enrollments = { subscriber } });
+        var exception = h.Exceptions.All.Single();
+        var service = h.ExceptionService();
+
+        (await service.ReprocessAsync("t1", exception.Id, "s", null, Child("X", "20200101", "021"), null)).Outcome
+            .Should().Be(ExceptionActionOutcome.Invalid);
+
+        var corrected = Subscriber("SUB1", "021");
+        var result = await service.ReprocessAsync("t1", exception.Id, "s", corrected, null, "INS03 was blank");
+
+        result.Exception!.Status.Should().Be(EnrollmentExceptionStatus.Resolved);
+        result.Exception.Subscriber!.MaintenanceType.Should().Be("021");
+        result.Exception.Actions.Select(a => a.Action).Should().Equal(EnrollmentExceptionActions.Corrected, EnrollmentExceptionActions.Reprocessed);
+        h.Created.Should().ContainSingle(c => c.FirstName == "JOHN");
+    }
+
+    [Fact]
+    public async Task Hold_SendBack_AndNoAction_AreRecorded_AndAResolvedExceptionCannotChange()
+    {
+        var h = new Harness();
+        var now = new DateTime(2026, 10, 22, 15, 0, 0, DateTimeKind.Utc);
+        await h.ImportAsync(new Enrollment834 { BatchId = "X7", DependentEnrollments = { Child("A", "20200101", "021"), Child("B", "20200102", "021") } });
+        var (first, second) = (h.Exceptions.All[0], h.Exceptions.All[1]);
+        var service = h.ExceptionService(now);
+
+        (await service.HoldAsync("t1", first.Id, "s", now.AddHours(-1), null)).Outcome.Should().Be(ExceptionActionOutcome.Invalid);
+        var held = (await service.HoldAsync("t1", first.Id, "s", now.AddDays(2), "Asked the sponsor for the subscriber id")).Exception!;
+        held.Status.Should().Be(EnrollmentExceptionStatus.Held);
+        (await h.Exceptions.ListWorkableAsync("t1", now, 1, 50)).Items.Select(e => e.Id).Should().Equal(second.Id);
+        (await h.Exceptions.ListWorkableAsync("t1", now.AddDays(3), 1, 50)).Items.Should().HaveCount(2, "the hold ran out");
+
+        (await service.SendBackAsync("t1", first.Id, "s", "")).Outcome.Should().Be(ExceptionActionOutcome.Invalid);
+        var sent = (await service.SendBackAsync("t1", first.Id, "s", "Subscriber id missing; resend")).Exception!;
+        sent.Resolution.Should().Be(EnrollmentExceptionResolution.SentBackToSponsor);
+        (await service.NoActionAsync("t1", second.Id, "s", "Duplicate of an add already applied")).Exception!
+            .Resolution.Should().Be(EnrollmentExceptionResolution.NoAction);
+
+        (await service.NoActionAsync("t1", first.Id, "s", "again")).Outcome.Should().Be(ExceptionActionOutcome.Invalid);
+        (await service.ReprocessAsync("t1", first.Id, "s", null, null, null)).Outcome.Should().Be(ExceptionActionOutcome.Invalid);
+        (await service.HoldAsync("t2", second.Id, "s", now.AddDays(1), null)).Outcome.Should().Be(ExceptionActionOutcome.NotFound, "another tenant's exception");
     }
 
     private static string FindRepoFile(string relative)

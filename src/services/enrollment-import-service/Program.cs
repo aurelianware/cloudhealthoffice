@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using CloudHealthOffice.Infrastructure.Edi.Files;
 using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using EnrollmentImportService;
@@ -54,7 +55,10 @@ builder.Services.AddSingleton<IEnrollmentImportRunRepository, EnrollmentImportRu
 builder.Services.AddSingleton<IEnrollmentEventRepository, EnrollmentEventRepository>();
 builder.Services.AddScoped<IEnrollmentEventPublisher, EnrollmentEventPublisher>();
 builder.Services.AddSingleton<IEnrollmentValidator, EnrollmentValidator>();
+builder.Services.AddSingleton<IEnrollmentExceptionRepository, EnrollmentExceptionRepository>();
 builder.Services.AddScoped<IEnrollmentImportService, EnrollmentImportService.Services.EnrollmentImportService>();
+builder.Services.AddScoped<EnrollmentExceptionService>();
+builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IEnrollment834EdiParser, Enrollment834EdiParser>();
 
 // X12 interchange control: ISA/IEA validation, TA1, duplicate ISA13 (shared library).

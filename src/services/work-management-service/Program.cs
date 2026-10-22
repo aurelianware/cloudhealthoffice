@@ -86,6 +86,17 @@ builder.Services.AddHttpClient(HttpClaimsWorkSource.HttpClientName, client =>
 }).SetHandlerLifetime(TimeSpan.FromMinutes(5));
 builder.Services.AddScoped<IClaimsWorkSource, HttpClaimsWorkSource>();
 
+// enrollment-import-service: enrollment exceptions become Enrollment834 work
+// through the periodic reconcile (no event stream yet). Same token handling.
+builder.Services.AddHttpClient(HttpEnrollmentWorkSource.HttpClientName, client =>
+{
+    var baseUrl = builder.Configuration["Services:EnrollmentImportService"] ?? "http://enrollment-import-service.cloudhealthoffice";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+builder.Services.AddScoped<IEnrollmentWorkSource, HttpEnrollmentWorkSource>();
+
 // claims.work.v1 consumer (disabled without Kafka) and the periodic
 // reconcile / re-score (reconcile on automatically when there is no Kafka).
 builder.Services.AddHostedService<ClaimWorkEventConsumer>();

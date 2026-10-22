@@ -166,7 +166,7 @@ The page reads enrollment and work-management data only. Member detail needs `me
 ## 9. Build order
 
 1. **Store the reason** on every rejected transaction, with the INS position and file link. Show it on the member's Enrollment tab. *Built 2026-10-22 (§9.1), including the link to the EDI file record.*
-2. **Exceptions and work items:** the `EnrollmentException` record, `Enrollment834` items with SLAs, and the specialist actions (reprocess, match, hold, no action, send back).
+2. **Exceptions and work items:** the `EnrollmentException` record, `Enrollment834` items with SLAs, and the specialist actions (reprocess, match, hold, no action, send back). *Built 2026-10-22 (§9.2), API only; the screen is step 3.*
 3. **Enrollment Ops page:** the exceptions view, then sponsors.
 4. **Retro rules:** line-of-business, plan and sponsor settings; the commercial floor; two-person approval; the claims-impact event and claims review items.
 5. **Sponsor error reports:** generated per file into the document store, plus the sponsor-contact notice.
@@ -204,6 +204,25 @@ SFTP files reaching the same import path with the duplicate check is a prerequis
   - a "Why" column with the reason in words and each error.
   
   EDI Transactions shows the same under each 834 transaction's status.
+
+### 9.2 What step 2 built
+
+- **The `EnrollmentException` record** (collection `enrollment-exceptions`), one per rejected 834 row, opened by the import as it records the rejection. Its id is the rejected transaction's id and its number is `EX-` plus eight characters. It keeps:
+  - the reason code and errors, the file, file position and EDI file link;
+  - the change as received: the subscriber loop, or the dependent. A dependent that failed inside its subscriber's loop is kept as a standalone dependent with what it inherited from that loop (subscriber id, group, maintenance type and reason, dates), so it can be reprocessed alone;
+  - status (Open, Held, Resolved), resolution (Applied, SentBackToSponsor, NoAction), the hold date, attempts, every action with who did it and its outcome, and every transaction that touched it.
+
+  Accepted rows open nothing. Recording is best-effort: a store failure is logged and never fails the import.
+- **Specialist actions** (`api/v1/enrollment/exceptions/{id}/…`, `enrollment:process`):
+  - `reprocess`, optionally with a corrected subscriber or dependent (it must be the same kind);
+  - `match`, to set the subscriber id and reprocess;
+  - `hold` until a date (future, at most 90 days), with a note;
+  - `send-back` to the sponsor and `no-action`, each with a required note.
+
+  A reprocess runs the change through the normal import as batch `{batch}-RP{n}`. If it is accepted the exception resolves as Applied; if it fails again the exception stays open with the new reason and errors, and no second exception is opened. Changes are compare-and-swap on a version (409 on a conflict); a resolved exception cannot change (422).
+- **Reads** (`enrollment:read`): `GET api/v1/enrollment/exceptions` (status, reason, group, member, EDI file) and `GET …/{id}`.
+- **Work items.** `GET …/exceptions/work-snapshots` pages the workable exceptions (open, or held past their date) with no PHI: id, number, reason, group, member id, maintenance type, created date. work-management-service reconciles against it every 2 minutes (`WorkManagement:EnrollmentReconcile`; also `POST api/v1/work/admin/reconcile/enrollment`): each becomes an `Enrollment834` item, routed by reason code, and items whose exception is resolved or held are closed. Default queues: Retry (downstream unavailable, concurrent update; 2-day SLA), Matching (subscriber or dependent not found, possible duplicate; 5 days), Retro (3 days), Data (validation, invalid, downstream rejected, plan code, state gate; 5 days) and Other. An item opens `/enrollment-ops/exceptions/{id}`.
+- **Deferred to step 3:** the exception screen. Until it exists the demo seed gives no one membership in the enrollment queues, so Get Next never opens a page that is not there; supervisors see the items in the work list.
 
 ## 10. Open questions
 

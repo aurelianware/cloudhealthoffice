@@ -64,6 +64,21 @@ public sealed class EnrollmentIndexInitializer : IHostedService
             new CreateIndexOptions { Unique = true, Name = "ux_tenant_member_version" }),
             cancellationToken: cancellationToken);
 
+        var exceptions = _db.GetCollection<EnrollmentException>(Repositories.EnrollmentExceptionRepository.CollectionName);
+        exceptions.Indexes.CreateOne(new CreateIndexModel<EnrollmentException>(
+            Builders<EnrollmentException>.IndexKeys
+                .Ascending(x => x.TenantId)
+                .Ascending(x => x.Status)
+                .Ascending(x => x.CreatedAt),
+            new CreateIndexOptions { Name = "ix_tenant_status_created" }),
+            cancellationToken: cancellationToken);
+        exceptions.Indexes.CreateOne(new CreateIndexModel<EnrollmentException>(
+            Builders<EnrollmentException>.IndexKeys
+                .Ascending(x => x.TenantId)
+                .Ascending(x => x.MemberId),
+            new CreateIndexOptions { Name = "ix_tenant_member" }),
+            cancellationToken: cancellationToken);
+
         _logger.LogInformation("Enrollment-import-service Mongo indexes ensured.");
         return Task.CompletedTask;
     }
