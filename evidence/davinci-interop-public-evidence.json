@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "davinci-interoperability",
-  "generatedAtUtc": "2026-10-22T15:34:53Z",
-  "sourceCommit": "77ba07410d47c5eb5bde412a6f397901b60213ee",
-  "sourceCommitShort": "77ba07410d47",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/77ba07410d47c5eb5bde412a6f397901b60213ee",
-  "inventoryReviewedUtc": "2026-09-06T00:00:00Z",
+  "generatedAtUtc": "2026-10-22T17:37:00Z",
+  "sourceCommit": "038d249ee00d7fdc04c980be5b407a074b955e2f",
+  "sourceCommitShort": "038d249ee00d",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/038d249ee00d7fdc04c980be5b407a074b955e2f",
+  "inventoryReviewedUtc": "2026-10-22T00:00:00Z",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence. External interoperability results never change a CMS-0057-F scenario status, and CMS acceptance statuses never imply an interoperability result. See docs/interop/davinci.md and docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md.",
   "targets": [
@@ -96,6 +96,30 @@
         "DTR": "see kit release notes for v0.17.1"
       },
       "igVersionProvenance": null,
+      "exercised": false
+    },
+    {
+      "name": "hl7/fhir-validator (validator_cli.jar)",
+      "key": "hl7-validator",
+      "role": "ConformanceRunner",
+      "protocols": [
+        "US Core",
+        "CARIN BB",
+        "PDex",
+        "PAS"
+      ],
+      "upstreamRepository": "https://github.com/hapifhir/org.hl7.fhir.core",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseAsset",
+        "reference": "https://github.com/hapifhir/org.hl7.fhir.core/releases/download/7.0.3/validator_cli.jar",
+        "sourceCommit": null
+      },
+      "implementationGuides": {
+        "PDex": "2.1.0",
+        "note": "The script passes no -ig flag of its own: each golden declares its profile in meta.profile and the validator resolves the publishing package from the FHIR package registry."
+      },
+      "igVersionProvenance": "Resolved per instance by the validator from packages.fhir.org at run time, so the effective package version is recorded in the run log rather than pinned here.",
       "exercised": false
     }
   ],
@@ -193,10 +217,10 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-10-22T15:34:15.0886903+00:00",
+    "generatedAtUtc": "2026-10-22T17:36:44.1005267+00:00",
     "environment": "CI",
-    "choCommit": "77ba07410d47c5eb5bde412a6f397901b60213ee",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/77ba07410d47c5eb5bde412a6f397901b60213ee",
+    "choCommit": "038d249ee00d7fdc04c980be5b407a074b955e2f",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/038d249ee00d7fdc04c980be5b407a074b955e2f",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 3,
