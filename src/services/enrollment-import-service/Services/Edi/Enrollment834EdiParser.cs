@@ -69,10 +69,16 @@ public sealed class Enrollment834EdiParser : IEnrollment834EdiParser
         public bool LegacyBlockWarned { get; set; }
     }
 
-    public Enrollment834 Parse(string ediContent, string fileName)
-    {
-        var doc = X12Tokenizer.Tokenize(ediContent);
+    public Enrollment834 Parse(string ediContent, string fileName) =>
+        ParseSegments(X12Tokenizer.Tokenize(ediContent).Segments, fileName);
 
+    /// <summary>
+    /// Parses already-tokenized segments. The streaming parser
+    /// (<see cref="Streaming834Parser"/>) hands it one family's segments at a
+    /// time, with its transaction set's header, so both share these rules.
+    /// </summary>
+    internal static Enrollment834 ParseSegments(IEnumerable<X12Segment> segments, string fileName)
+    {
         var result = new Enrollment834
         {
             FileName = fileName,
@@ -87,7 +93,7 @@ public sealed class Enrollment834EdiParser : IEnrollment834EdiParser
         // dependents can be attached by identifier rather than by position.
         var subscribersById = new Dictionary<string, MemberEnrollment>(StringComparer.Ordinal);
 
-        foreach (var seg in doc.Segments)
+        foreach (var seg in segments)
         {
             switch (seg.Id)
             {

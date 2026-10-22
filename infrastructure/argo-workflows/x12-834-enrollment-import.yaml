@@ -85,8 +85,11 @@ spec:
               # Obtain or refresh the token in this shell, so the $(...) below reuses it.
               cho_token "$TENANT_ID" || exit 1
 
-              # The raw X12 goes through the upload path: envelope check,
-              # duplicate ISA13 check, TA1 and the EDI file record (source Sftp).
+              # Every raw 834, of any size, takes the one intake path
+              # (edi-operations.md §11): streamed to the raw-file store,
+              # envelope and duplicate ISA13 check, TA1, the EDI file record,
+              # then an import run. 200: the run finished within the wait;
+              # 202: it continues in the background (both are success).
               CODE=$(cho_curl "$TENANT_ID" POST http://enrollment-import-service.cloudhealthoffice/api/v1/enrollment/import/raw834 \
                 -F "file=@$file;filename=$name" \
                 -F "source=Sftp" \
@@ -96,6 +99,19 @@ spec:
 
               if [ "$CODE" = "200" ]; then
                 echo "✓ Imported $name (file record $(jq -r '.ediFileId // "n/a"' "/work/results/$name.result.json"))"
+              elif [ "$CODE" = "202" ]; then
+                RUN_ID=$(jq -r '.importRunId' "/work/results/$name.result.json")
+                echo "… $name accepted as import run $RUN_ID (file record $(jq -r '.ediFileId // "n/a"' "/work/results/$name.result.json")); following it"
+                # Follow the run for up to 30 minutes; it carries on regardless.
+                STATUS=Queued
+                for i in $(seq 1 180); do
+                  sleep 10
+                  cho_token "$TENANT_ID" || break
+                  STATUS=$(cho_curl "$TENANT_ID" GET "http://enrollment-import-service.cloudhealthoffice/api/v1/enrollment/import/runs/$RUN_ID" | jq -r '.status // "Unknown"')
+                  [ "$STATUS" = "Completed" ] || [ "$STATUS" = "Failed" ] && break
+                done
+                echo "  run $RUN_ID: $STATUS"
+                [ "$STATUS" = "Failed" ] && FAILED=$((FAILED + 1))
               else
                 # Rejected envelopes and duplicates are recorded on the EDI file
                 # record; the TA1 is in the result body.

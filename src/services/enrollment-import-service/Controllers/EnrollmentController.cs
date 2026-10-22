@@ -1,7 +1,7 @@
-using CloudHealthOffice.Infrastructure.Edi.Files;
 using EnrollmentImportService.Models;
 using EnrollmentImportService.Services;
 using EnrollmentImportService.Services.Edi;
+using EnrollmentImportService.Services.Runs;
 using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Authorization;
@@ -15,20 +15,12 @@ namespace EnrollmentImportService.Controllers;
 public class EnrollmentController : ControllerBase
 {
     private readonly IEnrollmentImportService _importService;
-    private readonly IEnrollment834EdiParser _ediParser;
     private readonly IPlanCodeGapReportService _gapReportService;
     private readonly IEnrollmentImportRunRepository _importRuns;
     private readonly ICurrentActor _actor;
     private readonly ILogger<EnrollmentController> _logger;
-    private readonly IX12InterchangeIntake? _interchangeIntake;
-    private readonly IEdiFileRecorder? _ediFiles;
-
-    /// <summary>
-    /// Set once the raw 834 reached ImportEnrollmentAsync. The import writes
-    /// members, coverage and transaction rows as it goes, and a replay is not
-    /// guaranteed to be a no-op, so from then on the ISA13 is never released.
-    /// </summary>
-    private bool _raw834ImportStarted;
+    private readonly Raw834Intake? _raw834;
+    private readonly IStreaming834Parser _streamingParser;
 
     public EnrollmentController(
         IEnrollmentImportService importService,
@@ -37,14 +29,12 @@ public class EnrollmentController : ControllerBase
         IEnrollmentImportRunRepository importRuns,
         ICurrentActor actor,
         ILogger<EnrollmentController> logger,
-        IX12InterchangeIntake? interchangeIntake = null,
-        Microsoft.Extensions.Options.IOptions<X12InterchangeOptions>? interchangeOptions = null,
-        IEdiFileRecorder? ediFiles = null)
+        Raw834Intake? raw834 = null,
+        IStreaming834Parser? streamingParser = null)
     {
-        _ediFiles = ediFiles;
-        _interchangeIntake = interchangeOptions?.Value.Enabled == false ? null : interchangeIntake;
+        _raw834 = raw834;
+        _streamingParser = streamingParser ?? new Streaming834Parser();
         _importService = importService;
-        _ediParser = ediParser;
         _gapReportService = gapReportService;
         _importRuns = importRuns;
         _actor = actor;
@@ -72,12 +62,17 @@ public class EnrollmentController : ControllerBase
     }
 
     /// <summary>
-    /// Accepts a raw X12 834 EDI file, parses it, and imports it — the
-    /// on-ramp for evaluators dropping in their own enrollment file rather
-    /// than calling /import with an already-structured payload.
+    /// Accepts a raw X12 834 file of any size — the one intake path for
+    /// uploads and SFTP files alike (edi-operations.md §11). The file is
+    /// streamed to the raw-file store, its envelope checked (TA1, duplicate
+    /// ISA13), its EDI file record written, and an import run queued. The
+    /// request then waits up to <c>EnrollmentImport:Runs:WaitSeconds</c>: a run
+    /// that finishes in time answers 200 with the <see cref="ImportResult"/>;
+    /// otherwise 202 with the run and file ids (<c>GET import/runs/{id}</c>).
     /// </summary>
     [HttpPost("import/raw834")]
-    [RequestSizeLimit(20_000_000)]
+    [RequestSizeLimit(MaxRawUploadBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxRawUploadBytes)]
     public async Task<ActionResult<ImportResult>> ImportRaw834(
         [FromForm] IFormFile file,
         [FromForm] string? source = null,
@@ -89,128 +84,96 @@ public class EnrollmentController : ControllerBase
         {
             return BadRequest("A non-empty 834 file is required.");
         }
-
-        string ediContent;
-        using (var reader = new StreamReader(file.OpenReadStream()))
+        if (_raw834 is null)
         {
-            ediContent = await reader.ReadToEndAsync();
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Raw 834 intake is not configured.");
         }
 
-        // Interchange envelope first: a rejected ISA/IEA gets a TA1 and its
-        // contents are never parsed or imported (and no 999 is produced).
-        InterchangeIntakeResult? envelope = null;
-        InterchangeIntakeRequest? intakeRequest = null;
-        if (_interchangeIntake is not null)
+        var ct = HttpContext?.RequestAborted ?? CancellationToken.None;
+        Raw834IntakeOutcome outcome;
+        await using (var content = file.OpenReadStream())
         {
-            intakeRequest = new InterchangeIntakeRequest
-            {
-                TenantId = tenantId,
-                Content = ediContent,
-                TransactionType = "834",
-                FileName = file.FileName,
-            };
-            envelope = await _interchangeIntake.ReceiveAsync(intakeRequest, HttpContext?.RequestAborted ?? CancellationToken.None);
+            outcome = await _raw834.ReceiveAsync(tenantId, _actor.UserId, content, file.FileName, source, sourcePath, ct);
         }
 
-        // The file record (edi-operations.md §3): written for every file,
-        // whether its envelope was accepted, rejected or a duplicate.
-        var ediFile = _ediFiles is null ? null : await _ediFiles.RecordReceivedAsync(new EdiFileIntake
+        if (outcome.IsRejected)
         {
-            TenantId = tenantId,
-            Content = ediContent,
-            TransactionType = "834",
-            Source = source,
-            FileName = file.FileName,
-            SourcePath = sourcePath,
-            ReceivedBy = _actor.UserId,
-        }, envelope, HttpContext?.RequestAborted ?? CancellationToken.None);
-
-        if (envelope is not null)
-        {
-            if (envelope.IsRejected)
+            var envelope = outcome.Envelope!;
+            return BadRequest(new
             {
-                _logger.LogWarning("Uploaded 834 file {FileName} for tenant {TenantId} rejected at the interchange envelope",
-                    LogSanitizer.Sanitize(file.FileName), LogSanitizer.Sanitize(tenantId));
-                return BadRequest(new
+                error = "The interchange envelope (ISA/IEA) was rejected: " + string.Join("; ", envelope.RejectionReasons),
+                ediFileId = outcome.EdiFile?.Id,
+                interchangeAcknowledgmentCode = Ta1AckCodes.Rejected,
+                acknowledgmentTa1 = envelope.Ta1,
+                ta1AcknowledgmentIds = envelope.AcknowledgmentIds,
+            });
+        }
+
+        // The wait is not tied to the request: a caller that hangs up still gets its run.
+        var run = await _raw834.WaitAsync(outcome.Run!, CancellationToken.None);
+        return RunResponse(run);
+    }
+
+    /// <summary>The largest raw 834 accepted (1 GiB); the file is streamed, never held in memory.</summary>
+    public const long MaxRawUploadBytes = 1L << 30;
+
+    /// <summary>One import run: its status, progress and, once finished, its counts.</summary>
+    [HttpGet("import/runs/{id}")]
+    [ProducesResponseType(typeof(EnrollmentImportRunStatusResponse), 200)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> GetImportRun(string id, CancellationToken ct)
+    {
+        var run = await _importRuns.GetAsync(TenantId, id, ct);
+        return run is null ? NotFound() : Ok(EnrollmentImportRunStatusResponse.From(run));
+    }
+
+    private ActionResult<ImportResult> RunResponse(EnrollmentImportRun run)
+    {
+        if (run.Status == EnrollmentImportRunStatus.Completed)
+            return Ok(ToImportResult(run));
+
+        if (run.Status == EnrollmentImportRunStatus.Failed)
+        {
+            return run.FailureKind == EnrollmentImportFailureKinds.Parse
+                ? BadRequest(run.FailureMessage)
+                : StatusCode(StatusCodes.Status500InternalServerError, new
                 {
-                    error = "The interchange envelope (ISA/IEA) was rejected: " + string.Join("; ", envelope.RejectionReasons),
-                    ediFileId = ediFile?.Id,
-                    interchangeAcknowledgmentCode = Ta1AckCodes.Rejected,
-                    acknowledgmentTa1 = envelope.Ta1,
-                    ta1AcknowledgmentIds = envelope.AcknowledgmentIds,
+                    error = run.FailureMessage,
+                    importRunId = run.Id,
+                    ediFileId = run.EdiFileId,
                 });
-            }
-            ediContent = envelope.AcceptedContent!;
         }
 
-        // The envelope claimed its ISA13: a failure after it gives the number
-        // back, so the partner's resend is not refused as a duplicate.
-        try
-        {
-            var imported = await ImportAcceptedRaw834Async(file, tenantId, ediContent, envelope, ediFile?.Id);
-            if (imported.Result is ObjectResult { StatusCode: >= 400 } && envelope is not null && !_raw834ImportStarted)
-                await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope, CancellationToken.None);
-            await CompleteEdiFileAsync(ediFile, imported);
-            return imported;
-        }
-        catch when (envelope is not null && !_raw834ImportStarted)
-        {
-            await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope, CancellationToken.None);
-            throw;
-        }
+        return Accepted($"api/v1/enrollment/import/runs/{run.Id}", EnrollmentImportRunStatusResponse.From(run));
     }
 
-    /// <summary>Records what the import made of the file on its <see cref="EdiFile"/>.</summary>
-    private Task CompleteEdiFileAsync(EdiFile? ediFile, ActionResult<ImportResult> imported)
+    private static ImportResult ToImportResult(EnrollmentImportRun run) => new()
     {
-        if (_ediFiles is null || ediFile is null) return Task.CompletedTask;
-        var body = imported.Result is ObjectResult objectResult ? objectResult.Value : imported.Value;
-        var result = body as ImportResult;
-        var failed = imported.Result is ObjectResult { StatusCode: >= 400 };
-        return _ediFiles.CompleteAsync(ediFile, new EdiFileCompletion
-        {
-            AcceptedRecords = failed ? 0 : result?.SuccessCount ?? 0,
-            RejectedRecords = failed ? 0 : result?.FailedCount ?? 0,
-            Errors = failed && body is string error ? [error] : [],
-        }, CancellationToken.None);
-    }
-
-    private async Task<ActionResult<ImportResult>> ImportAcceptedRaw834Async(
-        IFormFile file, string tenantId, string ediContent, InterchangeIntakeResult? envelope, string? ediFileId)
-    {
-        Enrollment834 enrollment;
-        try
-        {
-            enrollment = _ediParser.Parse(ediContent, file.FileName);
-        }
-        catch (X12FormatException ex)
-        {
-            _logger.LogWarning(ex, "Failed to parse uploaded 834 file {FileName} for tenant {TenantId}",
-                LogSanitizer.Sanitize(file.FileName), LogSanitizer.Sanitize(tenantId));
-            return BadRequest($"Could not parse 834 file: {ex.Message}");
-        }
-
-        _logger.LogInformation("Parsed uploaded 834 file {FileName} for tenant {TenantId} with {Count} enrollments",
-            LogSanitizer.Sanitize(enrollment.FileName), LogSanitizer.Sanitize(tenantId), enrollment.TransactionCount);
-
-        // The importing user is the token subject; nothing in the body can claim it.
-        enrollment.ActorId = _actor.UserId;
-        enrollment.EdiFileId = ediFileId;
-        _raw834ImportStarted = true;
-        var result = await _importService.ImportEnrollmentAsync(enrollment, tenantId);
-        result.EdiFileId = ediFileId;
-
-        if (envelope is not null)
-        {
-            result.InterchangeAcknowledgmentCode = envelope.Interchanges.Any(i => i.IsRejected) ? Ta1AckCodes.Rejected
-                : envelope.Interchanges.Any(i => i.Decision.AckCode == Ta1AckCodes.AcceptedWithErrors) ? Ta1AckCodes.AcceptedWithErrors
-                : Ta1AckCodes.Accepted;
-            result.AcknowledgmentTa1 = envelope.Ta1;
-            result.Ta1AcknowledgmentIds = envelope.AcknowledgmentIds.ToList();
-        }
-
-        return Ok(result);
-    }
+        FileName = run.FileName ?? string.Empty,
+        BatchId = run.BatchId,
+        StartedAt = run.StartedAt,
+        CompletedAt = run.CompletedAt,
+        SuccessCount = run.SuccessCount,
+        FailedCount = run.FailedCount,
+        SkippedCount = run.SkippedCount,
+        MembersCreated = run.MembersCreated,
+        MembersUpdated = run.MembersUpdated,
+        MembersTerminated = run.MembersTerminated,
+        DependentsCreated = run.DependentsCreated,
+        DependentsUpdated = run.DependentsUpdated,
+        DependentsTerminated = run.DependentsTerminated,
+        DependentsFailed = run.DependentsFailed,
+        CoverageRecordsCreated = run.CoverageRecordsCreated,
+        CoverageRecordsUpdated = run.CoverageRecordsUpdated,
+        CoverageRecordsReinstated = run.CoverageRecordsReinstated,
+        CoverageRecordsTerminated = run.CoverageRecordsTerminated,
+        CoverageMappingsUnresolved = run.CoverageMappingsUnresolved,
+        Errors = run.Errors,
+        EdiFileId = run.EdiFileId,
+        InterchangeAcknowledgmentCode = run.InterchangeAcknowledgmentCode,
+        AcknowledgmentTa1 = run.AcknowledgmentTa1,
+        Ta1AcknowledgmentIds = run.Ta1AcknowledgmentIds,
+    };
 
     /// <summary>
     /// Read-only onboarding check: scans an already-structured 834 batch for
@@ -235,7 +198,8 @@ public class EnrollmentController : ControllerBase
     /// <summary>Same as <see cref="PlanCodeGapReport"/>, but for a raw X12 834 file upload.</summary>
     [HttpPost("plan-code-gap-report/raw834")]
     [RequirePermission("enrollment:read")]
-    [RequestSizeLimit(20_000_000)]
+    [RequestSizeLimit(MaxRawUploadBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxRawUploadBytes)]
     public async Task<ActionResult<PlanCodeGapReport>> PlanCodeGapReportRaw834(
         [FromForm] IFormFile file,
         CancellationToken ct)
@@ -247,16 +211,13 @@ public class EnrollmentController : ControllerBase
             return BadRequest("A non-empty 834 file is required.");
         }
 
-        string ediContent;
-        using (var reader = new StreamReader(file.OpenReadStream()))
-        {
-            ediContent = await reader.ReadToEndAsync();
-        }
-
-        Enrollment834 enrollment;
+        // Streamed unit by unit: only the plan codes are kept.
         try
         {
-            enrollment = _ediParser.Parse(ediContent, file.FileName);
+            await using var content = file.OpenReadStream();
+            var units = _streamingParser.ParseAsync(content, file.FileName, ct: ct);
+            var report = await _gapReportService.BuildReportAsync(units, file.FileName, tenantId, ct);
+            return Ok(report);
         }
         catch (X12FormatException ex)
         {
@@ -264,9 +225,6 @@ public class EnrollmentController : ControllerBase
                 LogSanitizer.Sanitize(file.FileName), LogSanitizer.Sanitize(tenantId));
             return BadRequest($"Could not parse 834 file: {ex.Message}");
         }
-
-        var report = await _gapReportService.BuildReportAsync(enrollment, tenantId, ct);
-        return Ok(report);
     }
 
     /// <summary>

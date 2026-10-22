@@ -73,6 +73,25 @@ public class Enrollment834
     /// </summary>
     [JsonIgnore]
     public string? ReprocessExceptionId { get; set; }
+
+    /// <summary>
+    /// Where this batch's first subscriber and first standalone dependent sit
+    /// in the whole file, when the batch is one unit of a larger file
+    /// (edi-operations.md §11). Positions ("INS 3") and transaction ids are
+    /// numbered from these, so they are the file's, not the unit's. [JsonIgnore].
+    /// </summary>
+    [JsonIgnore]
+    public int SubscriberIndexOffset { get; set; }
+
+    [JsonIgnore]
+    public int DependentIndexOffset { get; set; }
+
+    /// <summary>
+    /// False for a unit of an import run: the run, not each unit, is the
+    /// import's summary record. [JsonIgnore].
+    /// </summary>
+    [JsonIgnore]
+    public bool RecordRun { get; set; } = true;
 }
 
 public class MemberEnrollment

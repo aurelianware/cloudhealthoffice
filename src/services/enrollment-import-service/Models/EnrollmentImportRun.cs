@@ -49,4 +49,106 @@ public class EnrollmentImportRun
     public int CoverageMappingsUnresolved { get; set; }
 
     public List<string> Errors { get; set; } = new();
+
+    // ── A raw 834 imported as a run (edi-operations.md §11) ──────────────
+
+    /// <summary><see cref="EnrollmentImportRunStatus"/>. A run written at the end of a structured import is Completed when written.</summary>
+    public string Status { get; set; } = EnrollmentImportRunStatus.Completed;
+
+    /// <summary>Where the raw file is: the store's kind and the file's key.</summary>
+    public string? RawStore { get; set; }
+    public string? RawDocumentKey { get; set; }
+
+    public string? Source { get; set; }
+    public string? SourcePath { get; set; }
+
+    /// <summary>Interchanges (0-based, file order) whose envelope was accepted; the rest are skipped. Null: all.</summary>
+    public List<int>? AcceptedInterchanges { get; set; }
+
+    /// <summary>ISA13s the envelope check claimed, given back if the file cannot be parsed.</summary>
+    public List<ClaimedInterchangeReceipt> ClaimedReceipts { get; set; } = new();
+
+    public string? InterchangeAcknowledgmentCode { get; set; }
+    public string? AcknowledgmentTa1 { get; set; }
+    public List<string> Ta1AcknowledgmentIds { get; set; } = new();
+
+    /// <summary>
+    /// The gather (edi-operations.md §11): how many units the parse produced,
+    /// and how many have been applied or failed. The run finishes, once, when
+    /// completed + failed reaches expected.
+    /// </summary>
+    public int? ExpectedUnits { get; set; }
+    public int CompletedUnits { get; set; }
+    public int FailedUnits { get; set; }
+
+    /// <summary>Units before this sequence number are known to be applied or failed (the resume point).</summary>
+    public int DispatchedThrough { get; set; }
+
+    public string? LeaseOwner { get; set; }
+    public DateTime? LeaseExpiresAt { get; set; }
+    public int Attempts { get; set; }
+    public DateTime? QueuedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+
+    /// <summary><see cref="EnrollmentImportFailureKinds"/> when Status is Failed.</summary>
+    public string? FailureKind { get; set; }
+    public string? FailureMessage { get; set; }
+}
+
+public static class EnrollmentImportRunStatus
+{
+    public const string Queued = "Queued";
+    public const string Running = "Running";
+    public const string Completed = "Completed";
+    public const string Failed = "Failed";
+
+    public static bool IsFinished(string status) => status is Completed or Failed;
+}
+
+public static class EnrollmentImportFailureKinds
+{
+    /// <summary>The file is not a readable 834: nothing was imported and its ISA13 was given back.</summary>
+    public const string Parse = "Parse";
+
+    /// <summary>The stored raw file could not be read.</summary>
+    public const string RawFileUnavailable = "RawFileUnavailable";
+
+    /// <summary>The run was started and stopped more than the allowed number of times.</summary>
+    public const string TooManyAttempts = "TooManyAttempts";
+}
+
+public sealed class ClaimedInterchangeReceipt
+{
+    public string PartyKey { get; set; } = string.Empty;
+    public string ControlNumber { get; set; } = string.Empty;
+    public DateTime ClaimedAt { get; set; }
+}
+
+/// <summary>
+/// One unit of a run as applied: written before the unit is applied, so a
+/// redelivered unit is never applied twice (edi-operations.md §11).
+/// </summary>
+public sealed class EnrollmentImportUnitRecord
+{
+    /// <summary><c>{runId}:{sequence}</c>.</summary>
+    public string Id { get; set; } = string.Empty;
+    public string TenantId { get; set; } = string.Empty;
+    public string RunId { get; set; } = string.Empty;
+    public int Sequence { get; set; }
+    public string FilePosition { get; set; } = string.Empty;
+
+    /// <summary>Applying, Done or Failed.</summary>
+    public string Status { get; set; } = EnrollmentImportUnitStatus.Applying;
+    public string? Error { get; set; }
+    public DateTime StartedAt { get; set; }
+    public DateTime? FinishedAt { get; set; }
+
+    public static string IdFor(string runId, int sequence) => $"{runId}:{sequence}";
+}
+
+public static class EnrollmentImportUnitStatus
+{
+    public const string Applying = "Applying";
+    public const string Done = "Done";
+    public const string Failed = "Failed";
 }

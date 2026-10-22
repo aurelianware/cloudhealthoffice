@@ -18,30 +18,30 @@ namespace EnrollmentImportService.Tests.Controllers;
 public class EnrollmentRaw834EdiFileTests
 {
     private const string Body =
-        "GS*BE*SPONSOR01*CHO*20260115*1200*7*X*005010X220A1~ST*834*0001*005010X220A1~BGN*00*REF1*20260115*1200****2~SE*3*0001~GE*1*7~";
+        "GS*BE*SPONSOR01*CHO*20260115*1200*7*X*005010X220A1~ST*834*0001*005010X220A1~BGN*00*REF1*20260115*1200****2~" +
+        "INS*Y*18*021*28*A~REF*0F*SUB1~NM1*IL*1*DOE*JANE~SE*6*0001~GE*1*7~";
 
     private static string Edi834(string iea02 = "000000701") =>
         "ISA*00*          *00*          *ZZ*SPONSOR01      *ZZ*CHO            *260115*1200*^*00501*000000701*0*T*:~" +
         Body + $"IEA*1*{iea02}~";
 
     private readonly Mock<IEnrollmentImportService> _import = new();
-    private readonly Mock<IEnrollment834EdiParser> _parser = new();
-    private readonly InMemoryX12InterchangeStore _interchanges = new();
-    private readonly InMemoryEdiFileStore _files = new();
+    private readonly FlakyStreamingParser _parser = new();
+    private RunTestKit? _kit;
     private Enrollment834? _imported;
 
-    private EnrollmentController Controller(ImportResult? result = null)
+    private InMemoryEdiFileStore _files => Kit().Files;
+
+    private RunTestKit Kit(ImportResult? result = null)
     {
-        _parser.Setup(p => p.Parse(It.IsAny<string>(), It.IsAny<string>())).Returns(new Enrollment834 { FileName = "f.834" });
+        if (_kit is not null) return _kit;
         _import.Setup(s => s.ImportEnrollmentAsync(It.IsAny<Enrollment834>(), "t1"))
             .Callback<Enrollment834, string>((e, _) => _imported = e)
             .ReturnsAsync(result ?? new ImportResult { SuccessCount = 3, FailedCount = 1 });
-        var intake = new X12InterchangeIntake(_interchanges, Options.Create(new X12InterchangeOptions()), NullLogger<X12InterchangeIntake>.Instance);
-        return new EnrollmentController(
-            _import.Object, _parser.Object, Mock.Of<IPlanCodeGapReportService>(), Mock.Of<IEnrollmentImportRunRepository>(),
-            new TestActor(tenantId: "t1"), NullLogger<EnrollmentController>.Instance, intake,
-            ediFiles: new EdiFileRecorder(_files, NullLogger<EdiFileRecorder>.Instance));
+        return _kit = new RunTestKit(_import.Object, _parser);
     }
+
+    private EnrollmentController Controller(ImportResult? result = null) => Kit(result).Controller();
 
     private static IFormFile File(string content)
     {
@@ -68,6 +68,8 @@ public class EnrollmentRaw834EdiFileTests
         file.RejectedRecords.Should().Be(1);
         ((ImportResult)ok.Value!).EdiFileId.Should().Be(file.Id);
         _imported!.EdiFileId.Should().Be(file.Id, "the import run records the file it came from");
+        file.RawDocumentId.Should().StartWith("tenants/t1/edi/inbound/834/", "the raw file is kept");
+        file.SizeBytes.Should().Be(Encoding.UTF8.GetByteCount(Edi834()));
     }
 
     [Fact]
@@ -98,7 +100,7 @@ public class EnrollmentRaw834EdiFileTests
     public async Task UnparseableContents_AreRecordedWithTheError()
     {
         var controller = Controller();
-        _parser.Setup(p => p.Parse(It.IsAny<string>(), It.IsAny<string>())).Throws(new X12FormatException("no INS loop"));
+        _parser.Fail = "no INS loop";
 
         Assert.IsType<BadRequestObjectResult>((await controller.ImportRaw834(File(Edi834()))).Result);
         var file = await OnlyFileAsync();

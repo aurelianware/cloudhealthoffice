@@ -31,6 +31,7 @@ public class EnrollmentImportServiceDependentTests
         public List<string> CoverageReinstatements { get; } = new();
         public List<EnrollmentTransaction> Transactions { get; } = new();
         public Support.InMemoryEnrollmentExceptionRepository Exceptions { get; } = new();
+        public int RunsCreated { get; private set; }
         public InMemoryEnrollmentEventRepository Events { get; } = new();
         public string? ResolvedPlanId { get; set; } = "resolved-plan-id";
         public bool ReturnCreatedCoverageId { get; set; } = true;
@@ -156,6 +157,7 @@ public class EnrollmentImportServiceDependentTests
                 .ReturnsAsync((EnrollmentTransaction t) => t);
             var importRuns = new Mock<IEnrollmentImportRunRepository>();
             importRuns.Setup(r => r.CreateAsync(It.IsAny<EnrollmentImportRun>()))
+                .Callback(() => RunsCreated++)
                 .ReturnsAsync((EnrollmentImportRun r) => r);
 
             var publisher = new EnrollmentEventPublisher(Events, NullLogger<EnrollmentEventPublisher>.Instance);
@@ -1477,6 +1479,29 @@ public class EnrollmentImportServiceDependentTests
         (await service.NoActionAsync("t1", first.Id, "s", "again")).Outcome.Should().Be(ExceptionActionOutcome.Invalid);
         (await service.ReprocessAsync("t1", first.Id, "s", null, null, null)).Outcome.Should().Be(ExceptionActionOutcome.Invalid);
         (await service.HoldAsync("t2", second.Id, "s", now.AddDays(1), null)).Outcome.Should().Be(ExceptionActionOutcome.NotFound, "another tenant's exception");
+    }
+
+    // ── A unit of a larger file (edi-operations.md §11) ─────────────────
+
+    [Fact]
+    public async Task AUnitOfARun_IsNumberedFromItsPlaceInTheFile_AndWritesNoRunOfItsOwn()
+    {
+        var h = new Harness();
+        var invalid = Subscriber("SUB7", "021");
+        invalid.MaintenanceType = "";
+        var baby = Child("BABY", "20260115", "021");
+        baby.SubscriberId = "SUB-MISSING";
+
+        await h.ImportAsync(new Enrollment834
+        {
+            BatchId = "RUN1", Enrollments = { invalid }, DependentEnrollments = { baby },
+            SubscriberIndexOffset = 6, DependentIndexOffset = 2, RecordRun = false,
+        });
+
+        h.Transactions.Should().Contain(t => t.FilePosition == "INS 7");
+        h.Transactions.Should().Contain(t => t.FilePosition == "dependent 3 without its subscriber");
+        h.Exceptions.All.Select(e => e.FilePosition).Should().BeEquivalentTo(["INS 7", "dependent 3 without its subscriber"]);
+        h.RunsCreated.Should().Be(0, "the run, not the unit, is the import's record");
     }
 
     private static string FindRepoFile(string relative)

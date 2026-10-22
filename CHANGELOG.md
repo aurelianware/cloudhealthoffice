@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Raw 834s of any size, on one intake path.** Every raw 834 — uploaded or
+  from SFTP, small or a 1 GB state audit file — is streamed to the raw-file
+  store (the configured document store, or GridFS), its envelope checked
+  from a stream (TA1, duplicate ISA13), and imported by a background run of
+  units (a subscriber with its dependents, or a standalone dependent). The
+  upload answers 200 with the usual result when the run finishes within a
+  few seconds, otherwise 202 with `GET api/v1/enrollment/import/runs/{id}`.
+  Runs resume after a restart without applying a unit twice, and finish
+  exactly once. Uploads up to 1 GiB; the file is never held in memory. See
+  `docs/architecture/edi-operations.md` §11.
+
 - **834 enrollment exceptions are worked as work items.** Every rejected 834
   row opens an `EnrollmentException` holding the change as received, its reason
   and errors, and its file. Enrollment specialists can reprocess it (optionally

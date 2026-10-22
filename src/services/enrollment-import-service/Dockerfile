@@ -12,11 +12,13 @@ COPY src/Directory.Build.props src/
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/enrollment-import-service/EnrollmentImportService.csproj src/services/enrollment-import-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/engines/CloudHealthOffice.DocumentStore/CloudHealthOffice.DocumentStore.csproj src/engines/CloudHealthOffice.DocumentStore/
 RUN dotnet restore src/services/enrollment-import-service/EnrollmentImportService.csproj
 
 # Copy source code and build
 COPY src/services/enrollment-import-service/ src/services/enrollment-import-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/engines/CloudHealthOffice.DocumentStore/ src/engines/CloudHealthOffice.DocumentStore/
 RUN dotnet build src/services/enrollment-import-service/EnrollmentImportService.csproj -c Release --no-restore
 
 # Publish stage
