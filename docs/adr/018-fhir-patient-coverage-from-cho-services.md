@@ -52,7 +52,8 @@ Two defects stood in the way:
    `Mock` or `ChoNative`. The code and `appsettings.json` default stays `Mock`
    so a clone or a test host behaves as before; the Kubernetes manifest for
    fhir-service binds both to `ChoNative`. `Encounter` and `Claim` accept only
-   `Mock`; any other value, or `ChoNative` without the upstream URL, stops
+   `Mock` (until ADR 024 gave them sources); any other value, or `ChoNative`
+   without the upstream URL, stops
    fhir-service at start-up rather than serving something other than what the
    configuration says.
 4. **Status reporting follows the binding, not the label.** The adapter-status
@@ -90,7 +91,10 @@ Not in this change, each recorded as a follow-up:
 - `IPatientAccessDataProvider` and `IChoMemberDirectory` (Payer-to-Payer
   respond and `$member-match`) still read the mock store. Member-match needs a
   demographic candidate query on member-service rather than "all members".
-- `Encounter` and `Claim` have no CHO-native source yet.
+- `Encounter` and `Claim` have no CHO-native source yet. **Closed by
+  [ADR 024](024-fhir-encounter-claim-from-cho-services.md),** which also
+  corrects the search envelope recorded in §1 above: the shipped contract is
+  `{"total", "items": [{"resource": …}]}`, not `{"total", "resources"}`.
 - Coverage carries no `subscriber`, `relationship` or `dependent` because
   coverage-service does not store them; they belong to the member record and
   are a follow-up join.

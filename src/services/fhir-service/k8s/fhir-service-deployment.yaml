@@ -23,11 +23,14 @@ data:
   Fhir__DefaultPageSize: "20"
   Fhir__MaxPageSize: "100"
   Fhir__ServerBaseUrl: "https://api.cloudhealthoffice.com/fhir/r4"
-  # Patient and Coverage come from CHO's own member-service and coverage-service
-  # projections (ADR 018); Encounter and Claim stay on the synthetic mock. Uses
-  # Services__MemberServiceUrl / Services__CoverageServiceUrl below.
+  # Every FHIR data resource comes from CHO's own services: Patient and Coverage
+  # from member-service and coverage-service (ADR 018), Encounter and Claim from
+  # encounter-service and claims-service (ADR 024). Nothing here is bound to the
+  # synthetic mock. Uses the Services__*Url values below.
   FhirAdapters__Sources__Patient: "ChoNative"
   FhirAdapters__Sources__Coverage: "ChoNative"
+  FhirAdapters__Sources__Encounter: "ChoNative"
+  FhirAdapters__Sources__Claim: "ChoNative"
   FhirAdapters__Sources__PayerToPayer: "ChoNative"
   # What the adapter headers and /fhir/r4/adapter-status tell callers about the
   # data. Served from a plan's own records, so production PHI here; the GKE
@@ -42,11 +45,14 @@ metadata:
   namespace: cloudhealthoffice
 type: Opaque
 stringData:
-  # CHO service URLs. fhir-service calls them root-relative (/api/v1/...), so a
-  # path on the base URL is ignored. Member and coverage serve Patient/Coverage.
+  # CHO service URLs. fhir-service calls them root-relative (/api/v1/..., or
+  # /api/encounters/... and /fhir/... where the service's own API has no v1
+  # segment), so a path on the base URL is ignored. These four serve Patient,
+  # Coverage, Claim and Encounter respectively.
   Services__MemberServiceUrl: "http://member-service/api"
   Services__CoverageServiceUrl: "http://coverage-service/api"
   Services__ClaimsServiceUrl: "http://claims-service/api"
+  Services__EncounterServiceUrl: "http://encounter-service/api"
   # The consent registry. Without it every consent decision refuses (ADR 021).
   Services__ConsentServiceUrl: "http://consent-service"
 

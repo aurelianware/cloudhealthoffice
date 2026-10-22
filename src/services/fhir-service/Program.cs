@@ -121,9 +121,10 @@ builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
 builder.Services.Configure<FhirAdapterOptions>(
     builder.Configuration.GetSection(FhirAdapterOptions.SectionName));
 builder.Services.AddSingleton<IFhirAdapterStatusService, FhirAdapterStatusService>();
-// Patient and Coverage may be served from CHO's own member-service and
-// coverage-service (FhirAdapters:Sources:<Resource>=ChoNative) instead of the
-// synthetic mock, which stays the default (ADR 018). The bindings are resolved
+// Patient, Coverage, Encounter and Claim may be served from CHO's own
+// member-service, coverage-service, encounter-service and claims-service
+// (FhirAdapters:Sources:<Resource>=ChoNative) instead of the synthetic mock,
+// which stays the default (ADR 018, ADR 024). The bindings are resolved
 // and validated here, so an invalid or unsatisfiable configuration stops
 // start-up instead of serving something other than what it says.
 var fhirDataBindings = FhirDataBindings.From(
@@ -158,6 +159,10 @@ if (fhirDataBindings.AnyNative)
     if (fhirDataBindings.Coverage == FhirAdapterSources.ChoNative || fhirDataBindings.PayerToPayerNative)
         AddChoNativeClient(ChoNativeFhirDataAdapter.CoverageServiceClient, "Services:CoverageServiceUrl",
             fhirDataBindings.Coverage == FhirAdapterSources.ChoNative ? "Coverage" : "PayerToPayer");
+    if (fhirDataBindings.Encounter == FhirAdapterSources.ChoNative)
+        AddChoNativeClient(ChoNativeFhirDataAdapter.EncounterServiceClient, "Services:EncounterServiceUrl", "Encounter");
+    if (fhirDataBindings.Claim == FhirAdapterSources.ChoNative)
+        AddChoNativeClient(ChoNativeFhirDataAdapter.ClaimsServiceClient, "Services:ClaimsServiceUrl", "Claim");
     builder.Services.AddSingleton<ChoNativeFhirDataAdapter>();
     builder.Services.AddScoped<ChoNativeMemberDirectory>();
 }

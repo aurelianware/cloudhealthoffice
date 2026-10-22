@@ -108,16 +108,14 @@ public class ProviderAndPatientAccessTests
 
     // ── PAT-03 member PA data except drugs ──────────────────────────────────────
 
-    [Fact]
-    [Trait("Scenario", "PAT-03")]
-    public void PAT03_PriorAuthData_IsSupportedResourceType()
-    {
-        // Prior-authorization data (ClaimResponse) is a recognized PA-data
-        // resource for Patient Access. Drug exclusion is handled with PAS-08.
-        // Retention and freshness are covered by PriorAuthorizationRetentionTests.
-        var checker = new Cms0057ComplianceChecker();
-        checker.SupportedResourceTypes.Should().Contain("ClaimResponse");
-    }
+    // The PA-data read and search themselves are driven end to end in
+    // PatientAccessPriorAuthorizationTests (fhir-service → authorization-service
+    // → PriorAuthorizationEobProjector). The test that used to stand here
+    // asserted only that "ClaimResponse" appeared in a list of supported
+    // resource-type names, which is a fact about the list rather than about the
+    // API, and was recorded as a tautological test in docs/epa-gap-matrix.md
+    // §6.1. Drug exclusion is also covered with PAS-08; retention and freshness
+    // below and in PriorAuthorizationRetentionTests.
 
     [Fact]
     [Trait("Scenario", "PAT-03")]

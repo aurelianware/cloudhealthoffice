@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using EncounterService;
+using EncounterService.Fhir;
 using EncounterService.Repositories;
 using EncounterService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
@@ -8,6 +9,7 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Audit;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -53,6 +55,13 @@ if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvide
 }
 
 builder.Services.AddScoped<IEncounterRepository, EncounterRepositoryMongo>();
+
+// FHIR R4 Encounter projection and its own search query (ADR 024). The FHIR
+// read and search are PHI reads, so they are recorded in the record access log
+// like member-service's Patient projection.
+builder.Services.AddScoped<IEncounterFhirSearchRepository, EncounterFhirSearchRepositoryMongo>();
+builder.Services.AddSingleton<IEncounterFhirProjector, EncounterFhirProjector>();
+builder.Services.AddRecordAccessAudit();
 
 // 837 EDI generator
 builder.Services.AddScoped<IEncounter837Service, Encounter837Service>();

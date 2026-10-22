@@ -1,0 +1,107 @@
+name: FHIR Profile Validation
+
+# Judges CHO's FHIR projections with the HL7 validator — the same engine the
+# Inferno certification kits and Touchstone run — rather than with assertions
+# CHO wrote about its own output.
+#
+# This answers a question no other workflow in this repository answers:
+#
+#   test-dotnet.yml                 Do the projections contain what CHO's own
+#                                   tests say they should?
+#   this workflow                   Does a projection conform to the profile it
+#                                   declares, according to HL7's tool?
+#
+# A pass here is not certification and may not change a CMS-0057-F scenario
+# status on its own. It is evidence that the wire format holds up to the tool a
+# certifier would reach for.
+#
+# Two jobs, because they fail for different reasons and a reviewer needs to tell
+# them apart:
+#   drift      the goldens on disk still match what the projectors produce
+#              (no network, seconds)
+#   validate   the HL7 validator over those goldens (downloads the pinned jar
+#              and resolves IG packages, a couple of minutes)
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'conformance/**'
+      - 'tests/CloudHealthOffice.FhirConformance.Tests/**'
+      - 'scripts/interop/fhir-validate.sh'
+      - 'interop/versions.json'
+      - 'src/services/claims-service/Fhir/**'
+      - 'src/services/encounter-service/Fhir/**'
+      - 'src/services/authorization-service/Services/Fhir/**'
+      - '.github/workflows/fhir-profile-validation.yml'
+  pull_request:
+    branches: ["main"]
+    paths:
+      - 'conformance/**'
+      - 'tests/CloudHealthOffice.FhirConformance.Tests/**'
+      - 'scripts/interop/fhir-validate.sh'
+      - 'interop/versions.json'
+      - 'src/services/claims-service/Fhir/**'
+      - 'src/services/encounter-service/Fhir/**'
+      - 'src/services/authorization-service/Services/Fhir/**'
+      - '.github/workflows/fhir-profile-validation.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: fhir-profile-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    name: Goldens match the projectors
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # No UPDATE_FHIR_GOLDENS here on purpose: in CI the goldens are the
+      # expectation, never the output. A changed wire contract fails this job and
+      # shows up in review as a diff on conformance/golden/.
+      - name: Compare the goldens with the projections
+        run: dotnet test tests/CloudHealthOffice.FhirConformance.Tests --nologo -v minimal
+
+  validate:
+    name: HL7 validator
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: drift
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # The jar is pinned by SHA-256 in interop/versions.json and the script
+      # refuses a mismatch, so the cache cannot substitute a different build.
+      - name: Cache the pinned validator and its IG packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            interop/.external/hl7-validator
+            ~/.fhir/packages
+          key: hl7-validator-${{ hashFiles('interop/versions.json') }}
+
+      - name: Validate the goldens against the profiles they declare
+        run: ./scripts/interop/fhir-validate.sh
+
+      - name: Upload the validator logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hl7-validator-logs
+          path: interop/.external/hl7-validator/out/
+          if-no-files-found: warn

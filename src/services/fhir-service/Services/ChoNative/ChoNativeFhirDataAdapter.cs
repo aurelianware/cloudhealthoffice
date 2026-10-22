@@ -14,9 +14,10 @@ using Task = System.Threading.Tasks.Task;
 namespace FhirService.Services.ChoNative;
 
 /// <summary>
-/// Patient and Coverage from CHO's own services (ADR 018): member-service and
-/// coverage-service own the projections; this adapter turns FHIR search into
-/// their structured queries and parses what they return.
+/// Patient, Coverage, Encounter and Claim from CHO's own services (ADR 018 for
+/// the first two, ADR 024 for the others): member-service, coverage-service,
+/// encounter-service and claims-service own their projections; this adapter
+/// turns FHIR search into their structured queries and parses what they return.
 ///
 /// Identity and tenancy: the named clients carry the caller's tenant
 /// (<see cref="TenantHeaderPropagationHandler"/>) and the right credential (the
@@ -34,12 +35,15 @@ namespace FhirService.Services.ChoNative;
 /// URL that carries a path (<c>http://member-service/api</c>, as the Kubernetes
 /// manifests have it) cannot shift them.
 ///
-/// Only Patient and Coverage are served; the router never sends anything else here.
+/// Patient, Coverage, Encounter and Claim are served; the router never sends
+/// anything else here.
 /// </summary>
 public sealed class ChoNativeFhirDataAdapter
 {
     public const string MemberServiceClient = "ChoNativeMemberService";
     public const string CoverageServiceClient = "ChoNativeCoverageService";
+    public const string EncounterServiceClient = "ChoNativeEncounterService";
+    public const string ClaimsServiceClient = "ChoNativeClaimsService";
 
     /// <summary>The identifier system under which CHO exposes the member id.</summary>
     public const string MemberIdSystem = "urn:cho:member-id";
@@ -52,6 +56,39 @@ public sealed class ChoNativeFhirDataAdapter
 
     /// <summary>coverage-service's FHIR Coverage search; its <c>memberId</c> filter is what confines a patient-bound search.</summary>
     public const string CoverageSearchRoute = "/api/v1/coverage/fhir/Coverage";
+
+    /// <summary>
+    /// encounter-service's FHIR Encounter search; its <c>memberId</c> filter is
+    /// what confines a patient-bound search. The prefix has no <c>v1</c>
+    /// segment because encounter-service's own API has none.
+    /// </summary>
+    public const string EncounterSearchRoute = "/api/encounters/fhir/Encounter";
+
+    /// <summary>claims-service's FHIR Claim search; its <c>memberId</c> filter is what confines a patient-bound search.</summary>
+    public const string ClaimSearchRoute = "/fhir/Claim";
+
+    /// <summary>The code system of Encounter.type in encounter-service's projection.</summary>
+    public const string EncounterTypeSystem = "urn:cho:encounter-type";
+
+    /// <summary>CHO's 837 transaction variants, as Encounter.type codes.</summary>
+    private static readonly string[] EncounterTypes = ["professional", "institutional", "dental"];
+
+    /// <summary>
+    /// FHIR Encounter statuses encounter-service's projection can emit. Any
+    /// other status in the R4 value set is a valid code that selects nothing,
+    /// so it answers an empty bundle rather than a 400.
+    /// </summary>
+    private static readonly string[] EncounterStatuses = ["finished", "entered-in-error"];
+
+    /// <summary>The full R4 Encounter status value set, for telling a bad code from an unused one.</summary>
+    private static readonly string[] AllEncounterStatuses =
+        ["planned", "arrived", "triaged", "in-progress", "onleave", "finished", "cancelled", "entered-in-error", "unknown"];
+
+    /// <summary>FHIR Claim statuses claims-service's projection can emit.</summary>
+    private static readonly string[] ClaimStatuses = ["active", "cancelled"];
+
+    /// <summary>The full R4 fm-status value set.</summary>
+    private static readonly string[] AllClaimStatuses = ["active", "cancelled", "draft", "entered-in-error"];
 
     /// <summary>The deepest offset the CHO search endpoints accept.</summary>
     public const int MaxOffset = 10_000;
@@ -178,6 +215,139 @@ public sealed class ChoNativeFhirDataAdapter
         return await SearchAsync<Coverage>(CoverageServiceClient, "Coverage", CoverageSearchRoute, CoverageSearchRoute + q, ct);
     }
 
+
+    // ── Encounter ────────────────────────────────────────────────────────────
+
+    public async Task<Encounter?> GetEncounterAsync(string id, string tenantId, CancellationToken ct)
+    {
+        RequireRequestTenant(tenantId);
+        var body = await GetAsync(EncounterServiceClient, "Encounter",
+            $"/api/encounters/{Uri.EscapeDataString(id)}/fhir", "/api/encounters/{id}/fhir", ct);
+        return body is null ? null : ParseResource<Encounter>("Encounter", body);
+    }
+
+    public async Task<(IReadOnlyList<Encounter> Items, int Total)> SearchEncountersAsync(
+        EncounterSearchParams search, string tenantId, CancellationToken ct)
+    {
+        RequireRequestTenant(tenantId);
+        RejectUnsupportedParameters(EncounterParameters);
+        var q = new QueryBuilder();
+
+        FhirSearchTranslation.Single("_id", Values("_id", search.Id));
+        q.Add("encounterId", search.Id);
+
+        // search.Patient may already be the SMART-bound patient the controller
+        // pinned; it is what confines the search to one member upstream.
+        FhirSearchTranslation.Single("patient", Values("patient", search.Patient));
+        q.Add("memberId", search.Patient is null ? null : FhirSearchTranslation.ParsePatientReference("patient", search.Patient));
+
+        if (ProjectedStatus("status", Values("status", search.Status), AllEncounterStatuses, EncounterStatuses,
+                "http://hl7.org/fhir/encounter-status", "an Encounter status") is { } statusOutcome)
+        {
+            if (statusOutcome.MatchesNothing) return (Array.Empty<Encounter>(), 0);
+            q.Add("status", statusOutcome.Code);
+        }
+
+        foreach (var type in FhirSearchTranslation.AnyOf("type", Values("type", search.Type)))
+        {
+            var code = FhirSearchTranslation.ParseToken("type", type, EncounterTypeSystem);
+            var matched = EncounterTypes.FirstOrDefault(t => string.Equals(t, code, StringComparison.OrdinalIgnoreCase))
+                          ?? throw new FhirSearchNotSupportedException(
+                              $"'{code}' is not a CHO encounter type ({string.Join(", ", EncounterTypes)}).");
+            // The upstream binds the CHO EncounterType enum, whose names are
+            // the codes with an initial capital.
+            q.Add("encounterType", char.ToUpperInvariant(matched[0]) + matched[1..]);
+        }
+
+        if (!AddRange(q, "serviceDate", FhirSearchTranslation.ParseDates("date", Values("date", search.Date)), dateOnly: false)
+            || !AddRange(q, "lastUpdated", FhirSearchTranslation.ParseDates("_lastUpdated", Values("_lastUpdated", search.LastUpdated)), dateOnly: false))
+        {
+            return (Array.Empty<Encounter>(), 0);
+        }
+
+        q.AddPage(search.Page, search.Count);
+        return await SearchAsync<Encounter>(EncounterServiceClient, "Encounter", EncounterSearchRoute, EncounterSearchRoute + q, ct);
+    }
+
+    // ── Claim ────────────────────────────────────────────────────────────────
+
+    public async Task<Claim?> GetClaimAsync(string id, string tenantId, CancellationToken ct)
+    {
+        RequireRequestTenant(tenantId);
+        var body = await GetAsync(ClaimsServiceClient, "Claim",
+            $"/fhir/Claim/{Uri.EscapeDataString(id)}", "/fhir/Claim/{id}", ct);
+        return body is null ? null : ParseResource<Claim>("Claim", body);
+    }
+
+    public async Task<(IReadOnlyList<Claim> Items, int Total)> SearchClaimsAsync(
+        ClaimSearchParams search, string tenantId, CancellationToken ct)
+    {
+        RequireRequestTenant(tenantId);
+        RejectUnsupportedParameters(ClaimParameters);
+        var q = new QueryBuilder();
+
+        FhirSearchTranslation.Single("_id", Values("_id", search.Id));
+        q.Add("claimVersionId", search.Id);
+
+        FhirSearchTranslation.Single("patient", Values("patient", search.Patient));
+        q.Add("memberId", search.Patient is null ? null : FhirSearchTranslation.ParsePatientReference("patient", search.Patient));
+
+        if (ProjectedStatus("status", Values("status", search.Status), AllClaimStatuses, ClaimStatuses,
+                "http://hl7.org/fhir/fm-status", "a Claim status") is { } statusOutcome)
+        {
+            if (statusOutcome.MatchesNothing) return (Array.Empty<Claim>(), 0);
+            q.Add("status", statusOutcome.Code);
+        }
+
+        // Every claim this projection serves has use = claim: a prior
+        // authorization is a different record, projected by
+        // authorization-service as a PDex prior-authorization EOB. Asking for
+        // any other use selects nothing here rather than quietly widening.
+        foreach (var use in FhirSearchTranslation.AnyOf("use", Values("use", search.Use)))
+        {
+            var code = FhirSearchTranslation.ParseToken("use", use, "http://hl7.org/fhir/claim-use").ToLowerInvariant();
+            if (code is not ("claim" or "preauthorization" or "predetermination"))
+                throw new FhirSearchNotSupportedException($"'{code}' is not a Claim use.");
+            if (code != "claim") return (Array.Empty<Claim>(), 0);
+        }
+
+        if (!AddRange(q, "created", FhirSearchTranslation.ParseDates("created", Values("created", search.Created)), dateOnly: false)
+            || !AddRange(q, "lastUpdated", FhirSearchTranslation.ParseDates("_lastUpdated", Values("_lastUpdated", search.LastUpdated)), dateOnly: false))
+        {
+            return (Array.Empty<Claim>(), 0);
+        }
+
+        q.AddPage(search.Page, search.Count);
+        return await SearchAsync<Claim>(ClaimsServiceClient, "Claim", ClaimSearchRoute, ClaimSearchRoute + q, ct);
+    }
+
+    /// <summary>
+    /// A status token resolved against what the projection can actually emit.
+    /// A code outside the resource's value set is a 400; a valid code the
+    /// projection never emits selects nothing, so the caller answers an empty
+    /// bundle rather than refusing a legitimate query. Null when no status was
+    /// given.
+    /// </summary>
+    private static (string Code, bool MatchesNothing)? ProjectedStatus(
+        string parameter, IEnumerable<string?> values, string[] valueSet, string[] emitted, string system, string description)
+    {
+        (string, bool)? outcome = null;
+        foreach (var raw in FhirSearchTranslation.AnyOf(parameter, values))
+        {
+            var code = FhirSearchTranslation.ParseToken(parameter, raw, system).ToLowerInvariant();
+            if (!valueSet.Contains(code, StringComparer.Ordinal))
+                throw new FhirSearchNotSupportedException($"'{code}' is not {description}.");
+            if (!emitted.Contains(code, StringComparer.Ordinal))
+                return (code, true);
+            // Repeated status parameters AND, and one record has one status, so
+            // two different emitted codes can match nothing.
+            if (outcome is { Item1: var earlier } && !string.Equals(earlier, code, StringComparison.Ordinal))
+                return (code, true);
+            outcome = (code, false);
+        }
+        return outcome;
+    }
+
     // ── Plumbing ─────────────────────────────────────────────────────────────
 
     /// <summary>Request parameters that never filter: paging and output format.</summary>
@@ -189,6 +359,14 @@ public sealed class ChoNativeFhirDataAdapter
 
     private static readonly HashSet<string> CoverageParameters = new(
         ControlParameters.Concat(["_id", "_lastUpdated", "patient", "beneficiary", "status", "type"]),
+        StringComparer.Ordinal);
+
+    private static readonly HashSet<string> EncounterParameters = new(
+        ControlParameters.Concat(["_id", "_lastUpdated", "patient", "date", "status", "type"]),
+        StringComparer.Ordinal);
+
+    private static readonly HashSet<string> ClaimParameters = new(
+        ControlParameters.Concat(["_id", "_lastUpdated", "patient", "created", "status", "use"]),
         StringComparer.Ordinal);
 
     /// <summary>

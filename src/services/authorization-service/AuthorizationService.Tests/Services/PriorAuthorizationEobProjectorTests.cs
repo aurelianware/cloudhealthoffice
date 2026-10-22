@@ -146,12 +146,33 @@ public class PriorAuthorizationEobProjectorTests
         item["sequence"]!.GetValue<int>().Should().Be(1);
         item["productOrService"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>().Should().Be("97110");
         item["modifier"]!.AsArray()[0]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>().Should().Be("GP");
+        // The quantity requested is item.quantity — PDex's closed adjudication
+        // slicing has no slice for it, so it is not also an adjudication entry.
         item["quantity"]!["value"]!.GetValue<decimal>().Should().Be(24);
         item["quantity"]!["unit"]!.GetValue<string>().Should().Be("visits");
 
         var adjudication = item["adjudication"]!.AsArray();
-        UnitValue(adjudication, "requested-units").Should().Be(24);
-        UnitValue(adjudication, "approved-units").Should().Be(12);
+        UnitValue(adjudication, PriorAuthorizationEobProjector.AllowedUnitsCode).Should().Be(12);
+    }
+
+    [Fact]
+    public void EveryAdjudicationCategoryIsOneOfPdexsOwnSlices()
+    {
+        // PDex slices adjudication closed on category, so a CHO-private
+        // category is a slice the profile rejects. Only allowedunits,
+        // consumedunits and denialreason exist.
+        var categories = _projector.Project(Decided())["item"]!.AsArray()
+            .SelectMany(i => i!["adjudication"]?.AsArray() ?? [])
+            .Select(a => (
+                System: a!["category"]!["coding"]!.AsArray()[0]!["system"]!.GetValue<string>(),
+                Code: Category(a!)))
+            .ToList();
+
+        categories.Should().NotBeEmpty();
+        categories.Select(c => c.System).Should()
+            .AllBe(PriorAuthorizationEobProjector.PdexAdjudicationDiscriminatorSystem);
+        categories.Select(c => c.Code).Should()
+            .BeSubsetOf(["allowedunits", "consumedunits", "denialreason"]);
     }
 
     [Fact]
@@ -160,8 +181,11 @@ public class PriorAuthorizationEobProjectorTests
         var eob = _projector.Project(Decided());
 
         var denial = eob["item"]!.AsArray()[0]!["adjudication"]!.AsArray()
-            .Single(a => Category(a!) == "denial-reason")!;
+            .Single(a => Category(a!) == PriorAuthorizationEobProjector.DenialReasonCode)!;
 
+        // CHO's own 278 review code, under its own system: the profile binds
+        // reason to X12 CARCs, which this record does not carry (G-17), and a
+        // mapped CARC would be data CHO does not hold.
         denial["reason"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>().Should().Be("UNITSRED");
         denial["reason"]!["text"]!.GetValue<string>()
             .Should().Be("Approved for 12 of 24 requested visits.");
@@ -241,9 +265,13 @@ public class PriorAuthorizationEobProjectorTests
     {
         var eob = _projector.Project(Decided());
 
-        // CHO's record carries an X12 service type, not a claim type, so `type`
-        // is `other` rather than a guess at institutional vs professional.
-        eob["type"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>().Should().Be("other");
+        // CHO's record carries an X12 service type, not a claim type. The
+        // claim-type code system has no concept that fits — its codes are
+        // institutional, oral, pharmacy, professional and vision — and the HL7
+        // validator rejects the `other` this once emitted. The binding is
+        // extensible, so `type` travels as text and nothing is guessed.
+        eob["type"]!.AsObject().Should().NotContainKey("coding");
+        eob["type"]!["text"]!.GetValue<string>().Should().Be("Prior authorization, X12 service type 2");
         eob["subType"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>().Should().Be("2");
     }
 
@@ -294,10 +322,14 @@ public class PriorAuthorizationEobProjectorTests
         var authorization = Decided();
         authorization.RequestedServices[0].ApprovedUnits = null;
 
-        var adjudication = _projector.Project(authorization)["item"]!.AsArray()[0]!["adjudication"]!.AsArray();
+        var item = _projector.Project(authorization)["item"]!.AsArray()[0]!;
+        var adjudication = item["adjudication"]!.AsArray();
 
-        adjudication.Select(a => Category(a!)).Should().NotContain("approved-units");
-        UnitValue(adjudication, "requested-units").Should().Be(24);
+        // Nothing is approved, so there is no allowedunits slice — and the
+        // requested count is still stated, on item.quantity.
+        adjudication.Select(a => Category(a!)).Should()
+            .NotContain(PriorAuthorizationEobProjector.AllowedUnitsCode);
+        item["quantity"]!["value"]!.GetValue<decimal>().Should().Be(24);
     }
 
     [Fact]

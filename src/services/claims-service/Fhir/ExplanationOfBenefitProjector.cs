@@ -100,15 +100,16 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
             {
                 ["display"] = "CloudHealthOffice"
             },
-            ["provider"] = new JsonObject
-            {
-                ["identifier"] = new JsonObject
+            ["provider"] = WithDisplay(
+                new JsonObject
                 {
-                    ["system"] = "http://hl7.org/fhir/sid/us-npi",
-                    ["value"] = claim.BillingProviderNPI
+                    ["identifier"] = new JsonObject
+                    {
+                        ["system"] = "http://hl7.org/fhir/sid/us-npi",
+                        ["value"] = claim.BillingProviderNPI
+                    }
                 },
-                ["display"] = claim.BillingProviderName
-            },
+                claim.BillingProviderName),
             ["outcome"] = MapOutcome(claim.Status),
             ["billablePeriod"] = new JsonObject
             {
@@ -149,12 +150,7 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
                     {
                         ["coding"] = new JsonArray
                         {
-                            new JsonObject
-                            {
-                                ["system"] = "http://hl7.org/fhir/sid/icd-10-cm",
-                                ["code"] = dx.Code,
-                                ["display"] = dx.Description
-                            }
+                            Coding("http://hl7.org/fhir/sid/icd-10-cm", dx.Code, dx.Description)
                         }
                     }
                 });
@@ -190,12 +186,7 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
                     {
                         ["coding"] = new JsonArray
                         {
-                            new JsonObject
-                            {
-                                ["system"] = "http://www.ama-assn.org/go/cpt",
-                                ["code"] = line.ProcedureCode,
-                                ["display"] = line.ProcedureDescription
-                            }
+                            Coding("http://www.ama-assn.org/go/cpt", line.ProcedureCode, line.ProcedureDescription)
                         }
                     },
                     ["servicedPeriod"] = new JsonObject
@@ -576,12 +567,7 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
                 {
                     ["coding"] = new JsonArray
                     {
-                        new JsonObject
-                        {
-                            ["system"] = CarcSystem,
-                            ["code"] = adj.DenialReasonCode!,
-                            ["display"] = adj.DenialReason
-                        }
+                        Coding(CarcSystem, adj.DenialReasonCode, adj.DenialReason)
                     }
                 };
             }
@@ -600,12 +586,7 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
                 {
                     ["coding"] = new JsonArray
                     {
-                        new JsonObject
-                        {
-                            ["system"] = CarcSystem,
-                            ["code"] = reason.ReasonCode,
-                            ["display"] = reason.Description
-                        }
+                        Coding(CarcSystem, reason.ReasonCode, reason.Description)
                     },
                     ["text"] = reason.GroupCode
                 },
@@ -666,6 +647,35 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
         ClaimStatus.Deny or ClaimStatus.Denied => "error",
         _ => "queued"
     };
+
+    /// <summary>
+    /// A coding whose <c>code</c> and <c>display</c> are present only when there
+    /// is one. Assigning a null string through the <see cref="JsonObject"/>
+    /// indexer writes a JSON <c>null</c>, and FHIR draws a line between an
+    /// element that is absent and one that is present with no value: the HL7
+    /// validator rejects the second ("this property must be a simple value, not
+    /// a Null"), which is how this helper came to exist.
+    /// </summary>
+    private static JsonObject Coding(string system, string? code, string? display)
+    {
+        var coding = new JsonObject { ["system"] = system };
+        if (!string.IsNullOrWhiteSpace(code))
+            coding["code"] = code;
+        if (!string.IsNullOrWhiteSpace(display))
+            coding["display"] = display;
+        return coding;
+    }
+
+    /// <summary>
+    /// Adds <c>display</c> to a reference when there is one, for the same reason
+    /// as <see cref="Coding"/>.
+    /// </summary>
+    private static JsonObject WithDisplay(JsonObject reference, string? display)
+    {
+        if (!string.IsNullOrWhiteSpace(display))
+            reference["display"] = display;
+        return reference;
+    }
 
     private static JsonObject Money(decimal amount) => new()
     {

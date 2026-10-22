@@ -1,0 +1,57 @@
+# Validation errors the HL7 validator currently reports over conformance/golden/,
+# recorded by scripts/interop/fhir-validate.sh. One "golden: error" line each.
+#
+# A line belongs here only with a reason: a profile CHO has not reshaped onto yet,
+# or a check that needs a terminology server the run deliberately does without.
+# Never add a line to make the build green.
+#
+# The script fails on an error that is not here AND on a line here that no longer
+# occurs, so this file stays honest as the projections are reshaped.
+
+# ── CHO-local extension canonicals are not resolvable ─────────────────────────
+# FHIR R4 Claim and Encounter have no header-level element for the CMS place of
+# service (837 CLM05-1), so both projections carry it as an extension under a
+# urn: canonical. A urn: can never be dereferenced, so the validator cannot read
+# the definition and reports the extension as not allowed.
+#
+# Not a wording problem: either CHO publishes a StructureDefinition at a
+# resolvable https canonical, or the element moves to where the profiles put it.
+# The CARIN BB non-financial ExplanationOfBenefit carries place of service in
+# item.location, which is the direction the Provider Access reshape takes, so
+# this is held open rather than papered over.
+claim-as-billed: Claim.extension[0]: Error - The extension urn:cho:StructureDefinition:claim-place-of-service could not be found so is not allowed here
+encounter: Encounter.extension[0]: Error - The extension urn:cho:StructureDefinition:encounter-place-of-service could not be found so is not allowed here
+
+# ── denial reasons are not yet X12 CARCs (gap G-17) ───────────────────────────
+# PDex binds adjudication.denialreason.reason to the X12 Claim Adjustment Reason
+# Codes required. CHO's authorization store carries its own reason vocabulary
+# (urn:cho:pa-denial-reason), and no mapping to CARCs exists yet. This is the
+# same thing gap G-17 records in docs/epa-gap-matrix.md, and it is why the
+# Patient Access prior-authorization scenario stays PARTIAL.
+prior-authorization-eob: ExplanationOfBenefit.item[1].adjudication[1].reason: Error - None of the codings provided are in the value set 'X12 Claim Adjustment Reason Codes - Remittance Advice Remark Codes' (http://hl7.org/fhir/us/davinci-pdex/ValueSet/X12ClaimAdjustmentReasonCodesCMSRemittanceAdviceRemarkCodes|2.1.0), and a coding from this value set is required) (codes = urn:cho:pa-denial-reason#NOTMEDNEC)
+
+# ── Provider Access care team: resolve() has nothing to read in one file ──────
+# Every CARIN BB care-team role but "purchasedservice" carries an invariant that
+# the provider resolve() to a Practitioner.
+#
+# careTeam.provider now carries a literal Practitioner/{npi} reference, which
+# provider-service's us-core-practitioner projection serves (capability 5.7,
+# keyed by NPI) from the same fhir/r4 base fhir-service serves this EOB from. So
+# the reference does resolve on a live server; what cannot resolve is a relative
+# reference inside a single-file instance, which is all the validator is given
+# here, and -tx n/a leaves it no way to fetch one either.
+#
+# That is a limit of this harness, not of the projection, so the residue is
+# recorded rather than chased. What the harness cannot show, an acceptance
+# scenario does: The_care_team_reference_resolves_to_a_practitioner_the_directory_serves
+# in tests/Cms0057Acceptance.Tests takes the reference off the payload and reads
+# it back from the service that owns the Practitioner projection. Closing this
+# line properly needs a validator run over a Bundle, or Inferno against a
+# running server (gap G-60).
+#
+# It is NOT worked around by choosing a role the invariant ignores: the 837's
+# rendering provider is a rendering provider.
+carin-professional-basis: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-prof-careTeam-practitioner: 'Professional EOB:  Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Professional-NonClinician-Basis)
+carin-oral-basis: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-prof-careTeam-practitioner: 'Professional EOB:  Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Oral-Basis)
+carin-inpatient-basis: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-inst-careTeam-practitioner: 'Institutional EOB: Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Inpatient-Institutional-Basis)
+carin-outpatient-basis: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-inst-careTeam-practitioner: 'Institutional EOB: Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Outpatient-Institutional-Basis)

@@ -222,7 +222,13 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var path = request.RequestUri!.AbsolutePath;
+            // Provider Access reaches the same claims through a route of its
+            // own, where claims-service answers with the CARIN BB non-financial
+            // projection. The stub serves both from one set of records: what
+            // changes upstream is the projection, not which claims match.
+            var path = request.RequestUri!.AbsolutePath
+                .Replace("/fhir/ProviderAccess/ExplanationOfBenefit", "/fhir/ExplanationOfBenefit",
+                    StringComparison.Ordinal);
             const string searchPath = "/fhir/ExplanationOfBenefit";
             const string readPrefix = "/fhir/ExplanationOfBenefit/";
 

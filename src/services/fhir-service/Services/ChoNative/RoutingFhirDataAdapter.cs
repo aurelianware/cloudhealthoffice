@@ -7,8 +7,9 @@ namespace FhirService.Services.ChoNative;
 /// <summary>
 /// The registered <see cref="IFhirDataAdapter"/> (ADR 018): sends each resource
 /// to the source <see cref="FhirDataBindings"/> names — CHO's own services for
-/// Patient and Coverage when configured, the synthetic mock otherwise. The
-/// bindings are fixed at start-up; nothing chooses a source per request.
+/// Patient, Coverage, Encounter and Claim when configured, the synthetic mock
+/// otherwise. The bindings are fixed at start-up; nothing chooses a source per
+/// request.
 /// </summary>
 public sealed class RoutingFhirDataAdapter : IFhirDataAdapter
 {
@@ -41,19 +42,17 @@ public sealed class RoutingFhirDataAdapter : IFhirDataAdapter
         CoverageSearchParams search, string tenantId, CancellationToken ct = default)
         => Native(_bindings.Coverage) ? _native!.SearchCoverageAsync(search, tenantId, ct) : _mock.SearchCoverageAsync(search, tenantId, ct);
 
-    // Encounter and Claim have no CHO-native source; FhirDataBindings refuses
-    // any other binding for them at start-up.
     public Task<Encounter?> GetEncounterAsync(string id, string tenantId, CancellationToken ct = default)
-        => _mock.GetEncounterAsync(id, tenantId, ct);
+        => Native(_bindings.Encounter) ? _native!.GetEncounterAsync(id, tenantId, ct) : _mock.GetEncounterAsync(id, tenantId, ct);
 
     public Task<(IReadOnlyList<Encounter> Items, int Total)> SearchEncountersAsync(
         EncounterSearchParams search, string tenantId, CancellationToken ct = default)
-        => _mock.SearchEncountersAsync(search, tenantId, ct);
+        => Native(_bindings.Encounter) ? _native!.SearchEncountersAsync(search, tenantId, ct) : _mock.SearchEncountersAsync(search, tenantId, ct);
 
     public Task<Claim?> GetClaimAsync(string id, string tenantId, CancellationToken ct = default)
-        => _mock.GetClaimAsync(id, tenantId, ct);
+        => Native(_bindings.Claim) ? _native!.GetClaimAsync(id, tenantId, ct) : _mock.GetClaimAsync(id, tenantId, ct);
 
     public Task<(IReadOnlyList<Claim> Items, int Total)> SearchClaimsAsync(
         ClaimSearchParams search, string tenantId, CancellationToken ct = default)
-        => _mock.SearchClaimsAsync(search, tenantId, ct);
+        => Native(_bindings.Claim) ? _native!.SearchClaimsAsync(search, tenantId, ct) : _mock.SearchClaimsAsync(search, tenantId, ct);
 }

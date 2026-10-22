@@ -204,9 +204,17 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
                 if (bound == FhirAdapterSources.ChoNative)
                 {
                     mode = ResolveMode(resource, FhirAdapterModes.Hybrid);
-                    resolvedSource = resource == "Patient"
-                        ? "member-service FHIR Patient projection (CHO-native)"
-                        : "coverage-service FHIR Coverage projection (CHO-native)";
+                    resolvedSource = resource switch
+                    {
+                        "Patient" => "member-service FHIR Patient projection (CHO-native)",
+                        "Coverage" => "coverage-service FHIR Coverage projection (CHO-native)",
+                        "Encounter" => "encounter-service FHIR Encounter projection (CHO-native)",
+                        "Claim" => "claims-service FHIR Claim projection (CHO-native)",
+                        // A resource FhirDataBindings calls native-capable but
+                        // this report has no wording for: name it rather than
+                        // borrowing another resource's source line.
+                        _ => $"{resource} CHO-native projection",
+                    };
                 }
                 else
                 {

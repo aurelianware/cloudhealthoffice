@@ -209,6 +209,10 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(ApprovalReadjudicator);
 
             services.AddSingleton(ClaimRepository);
+            // The FHIR Claim search repository is a Mongo implementation, so
+            // the filter above removed it. The endpoints that use it are not
+            // exercised here; this keeps the DI graph constructible.
+            services.AddSingleton(Substitute.For<IClaimFhirSearchRepository>());
             services.AddSingleton(MassAdjudicationRunRepository);
             services.AddSingleton(AcknowledgmentService);
             services.AddSingleton(Substitute.For<IProviderService>());

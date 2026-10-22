@@ -1,0 +1,281 @@
+{
+  "resourceType": "ExplanationOfBenefit",
+  "id": "clm-gold-inst-11",
+  "meta": {
+    "lastUpdated": "2026-09-18T00:00:00.0000000Z",
+    "profile": [
+      "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Inpatient-Institutional-Basis"
+    ]
+  },
+  "identifier": [
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBIdentifierType",
+            "code": "uc",
+            "display": "Unique Claim ID"
+          }
+        ]
+      },
+      "system": "urn:cho:claim-number",
+      "value": "CLM-GOLD-INST-11"
+    }
+  ],
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/claim-type",
+        "version": "1.0.1",
+        "code": "institutional"
+      }
+    ]
+  },
+  "use": "claim",
+  "patient": {
+    "reference": "Patient/MEM-GOLD-1"
+  },
+  "billablePeriod": {
+    "start": "2026-09-16",
+    "end": "2026-09-16"
+  },
+  "created": "2026-09-17T00:00:00.0000000Z",
+  "insurer": {
+    "display": "CloudHealthOffice"
+  },
+  "provider": {
+    "identifier": {
+      "system": "http://hl7.org/fhir/sid/us-npi",
+      "value": "1234567893"
+    }
+  },
+  "outcome": "complete",
+  "subType": {
+    "coding": [
+      {
+        "system": "http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBInstitutionalClaimSubType",
+        "code": "inpatient"
+      }
+    ]
+  },
+  "careTeam": [
+    {
+      "sequence": 1,
+      "provider": {
+        "reference": "Practitioner/1245319599",
+        "identifier": {
+          "system": "http://hl7.org/fhir/sid/us-npi",
+          "value": "1245319599"
+        }
+      },
+      "role": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBClaimCareTeamRole",
+            "code": "attending"
+          }
+        ]
+      }
+    }
+  ],
+  "supportingInfo": [
+    {
+      "sequence": 1,
+      "category": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBSupportingInfoType",
+            "code": "clmrecvddate"
+          }
+        ]
+      },
+      "timingDate": "2026-09-17"
+    },
+    {
+      "sequence": 2,
+      "category": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBSupportingInfoType",
+            "code": "typeofbill"
+          }
+        ]
+      },
+      "code": {
+        "coding": [
+          {
+            "system": "https://www.nubc.org/CodeSystem/TypeOfBill",
+            "code": "111"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": 3,
+      "category": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBSupportingInfoType",
+            "code": "admissionperiod"
+          }
+        ]
+      },
+      "timingPeriod": {
+        "start": "2026-09-16T07:30:00.0000000Z",
+        "end": "2026-09-18T00:00:00.0000000Z"
+      }
+    }
+  ],
+  "diagnosis": [
+    {
+      "sequence": 1,
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/sid/icd-10-cm",
+            "code": "E11.9"
+          }
+        ]
+      },
+      "type": [
+        {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/ex-diagnosistype",
+              "code": "principal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "sequence": 2,
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/sid/icd-10-cm",
+            "code": "I10"
+          }
+        ]
+      },
+      "type": [
+        {
+          "coding": [
+            {
+              "system": "http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBClaimDiagnosisType",
+              "code": "other"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "insurance": [
+    {
+      "focal": true,
+      "coverage": {
+        "reference": "Coverage/cov-gold-1"
+      }
+    }
+  ],
+  "item": [
+    {
+      "sequence": 1,
+      "productOrService": {
+        "coding": [
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "99214"
+          }
+        ]
+      },
+      "diagnosisSequence": [
+        1
+      ],
+      "servicedPeriod": {
+        "start": "2026-09-16",
+        "end": "2026-09-16"
+      },
+      "revenue": {
+        "coding": [
+          {
+            "system": "https://www.nubc.org/CodeSystem/RevenueCodes",
+            "code": "0450"
+          }
+        ]
+      },
+      "quantity": {
+        "value": 1
+      }
+    },
+    {
+      "sequence": 2,
+      "productOrService": {
+        "coding": [
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "J1745"
+          }
+        ]
+      },
+      "diagnosisSequence": [
+        1,
+        2
+      ],
+      "servicedPeriod": {
+        "start": "2026-09-16",
+        "end": "2026-09-16"
+      },
+      "revenue": {
+        "coding": [
+          {
+            "system": "https://www.nubc.org/CodeSystem/RevenueCodes",
+            "code": "0636"
+          }
+        ]
+      },
+      "quantity": {
+        "value": 10
+      }
+    }
+  ],
+  "adjudication": [
+    {
+      "category": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBAdjudicationDiscriminator",
+            "code": "benefitpaymentstatus"
+          }
+        ]
+      },
+      "reason": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBPayerAdjudicationStatus",
+            "code": "innetwork"
+          }
+        ]
+      }
+    },
+    {
+      "category": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBAdjudicationDiscriminator",
+            "code": "billingnetworkstatus"
+          }
+        ]
+      },
+      "reason": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBPayerAdjudicationStatus",
+            "code": "innetwork"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -65,6 +65,25 @@ public abstract class FhirControllerBase : ControllerBase
         => HttpContext.Items["SmartPatientId"] as string;
 
     /// <summary>
+    /// True when this request reached us through Provider Access — an
+    /// attributed provider reading a member's data — rather than through a
+    /// patient-bound token.
+    ///
+    /// <para>
+    /// The distinction decides which payload a resource is served in, not only
+    /// who may read it. CMS-0057-F's Provider Access API is expected to carry
+    /// the CARIN Blue Button <b>non-financial</b> profiles: the plan's financial
+    /// terms are between the plan and the member, and a provider receiving the
+    /// clinical and administrative record has no need of them.
+    /// </para>
+    /// </summary>
+    protected bool IsProviderAccessRequest
+        => SmartPatientId is null
+           && HttpContext.Items[
+               FhirService.Services.ProviderAccess.ProviderAccessAuthorizationFilter
+                   .AuthorizedMemberItemKey] as string is not null;
+
+    /// <summary>
     /// The one member this request may read, when it is confined to one:
     /// the patient a patient-scoped SMART token is bound to, or the member a
     /// provider/backend SMART token was just authorized for by
@@ -105,7 +124,10 @@ public abstract class FhirControllerBase : ControllerBase
         if (AuthorizedMemberId is null) return false;
         if (!memberReferences.Any(IsOutsidePatientContext)) return false;
 
-        HttpContext.RequestServices.GetService<ILoggerFactory>()?.CreateLogger(GetType())
+        // Withholding the data must not depend on the logging infrastructure
+        // being reachable, so the log is best-effort: a request without a
+        // service provider still gets the refusal.
+        HttpContext.RequestServices?.GetService<ILoggerFactory>()?.CreateLogger(GetType())
             .LogError("{Resource} search returned records outside the caller's member confinement; response withheld.", resourceType);
         return true;
     }

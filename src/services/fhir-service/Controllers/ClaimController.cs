@@ -47,6 +47,13 @@ public class ClaimController : FhirControllerBase
 
         var (items, total) = await _adapter.SearchClaimsAsync(search, TenantId, ct);
 
+        // Defence in depth for a request confined to one member: the data
+        // source was given that member as its filter, so a result outside it
+        // means the filter was not applied. Withhold the whole page rather
+        // than trim it (ADR 024).
+        if (ResultsLeaveConfinement("Claim", items.Select(c => c.Patient?.Reference)))
+            return FhirBadGateway("Claim search returned records outside the caller's member confinement.");
+
         var bundle = _bundleBuilder.Build(
             items, total, search.Page, search.Count,
             "Claim", FhirBaseUrl, RawQueryString);

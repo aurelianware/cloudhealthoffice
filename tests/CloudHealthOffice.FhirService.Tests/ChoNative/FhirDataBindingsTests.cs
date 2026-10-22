@@ -49,11 +49,46 @@ public class FhirDataBindingsTests
     [Theory]
     [InlineData("Encounter")]
     [InlineData("Claim")]
-    public void Cho_native_is_refused_where_no_native_source_exists(string resource)
+    public void Encounter_and_claim_can_be_bound_to_cho_native(string resource)
     {
-        var act = () => FhirDataBindings.From(With((resource, FhirAdapterSources.ChoNative)));
+        // ADR 024 gave both a CHO-native source (encounter-service and
+        // claims-service), so the start-up refusal that used to cover them
+        // applies to no data resource any more. That the refusal still works is
+        // pinned by the native-capable guard below.
+        var bindings = FhirDataBindings.From(With((resource, FhirAdapterSources.ChoNative)));
 
-        act.Should().Throw<InvalidOperationException>().WithMessage($"*{resource}*no CHO-native source*");
+        bindings.SourceOf(resource).Should().Be(FhirAdapterSources.ChoNative);
+        bindings.AnyNative.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Every_known_data_resource_is_native_capable_so_a_live_deployment_needs_no_mock()
+    {
+        var bindings = FhirDataBindings.From(With(
+            ("Patient", FhirAdapterSources.ChoNative),
+            ("Coverage", FhirAdapterSources.ChoNative),
+            ("Encounter", FhirAdapterSources.ChoNative),
+            ("Claim", FhirAdapterSources.ChoNative),
+            ("PayerToPayer", FhirAdapterSources.ChoNative)));
+
+        bindings.Should().Be(new FhirDataBindings(
+            FhirAdapterSources.ChoNative, FhirAdapterSources.ChoNative, FhirAdapterSources.ChoNative,
+            FhirAdapterSources.ChoNative, FhirAdapterSources.ChoNative));
+    }
+
+    [Fact]
+    public void Only_a_resource_with_a_cho_native_implementation_is_native_capable()
+    {
+        // The refusal branch in FhirDataBindings.From is unreachable while
+        // every data resource has a native source. This pins the set it reads,
+        // so adding a resource to the bindings without an implementation puts
+        // the refusal back in play instead of silently binding it to ChoNative.
+        FhirDataBindings.NativeCapable.Should().BeEquivalentTo(
+            ["Patient", "Coverage", "Encounter", "Claim", "PayerToPayer"]);
+
+        // ExplanationOfBenefit is proxied to claims-service, not served
+        // through IFhirDataAdapter, so it is not a binding at all.
+        FhirDataBindings.NativeCapable.Should().NotContain("ExplanationOfBenefit");
     }
 
     [Fact]

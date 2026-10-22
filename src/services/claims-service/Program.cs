@@ -93,6 +93,13 @@ builder.Services.AddHostedService<ClaimAdjustmentIndexInitializer>();
 // the Hl7.Fhir.R4 transitive dep; used by the v1 member-scoped claims endpoint.
 builder.Services.AddSingleton<IExplanationOfBenefitProjector, ExplanationOfBenefitProjector>();
 
+// FHIR R4 Claim projector — the same record as billed, alongside the
+// adjudicated EOB view, and the structured search behind FHIR Claim search
+// (ADR 024). Hand-built JsonObject for the same reason as the EOB projector.
+builder.Services.AddSingleton<IClaimFhirProjector, ClaimFhirProjector>();
+builder.Services.AddSingleton<ICarinNonFinancialEobProjector, CarinNonFinancialEobProjector>();
+builder.Services.AddScoped<IClaimFhirSearchRepository, ClaimFhirSearchRepositoryMongo>();
+
 // 277CA acknowledgment generator
 builder.Services.AddScoped<IClaimAcknowledgmentService, ClaimAcknowledgmentService>();
 

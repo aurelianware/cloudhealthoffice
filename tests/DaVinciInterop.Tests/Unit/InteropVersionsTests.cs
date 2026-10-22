@@ -60,12 +60,44 @@ public sealed class InteropVersionsTests
     }
 
     [Fact]
-    public void Every_target_declares_how_readiness_is_observed()
+    public void Every_started_target_declares_how_readiness_is_observed()
     {
-        foreach (var target in Versions.Targets)
+        // A target the harness STARTS must say how to tell it is up, or the
+        // harness ends up sleeping and hoping. A tool it merely runs as a local
+        // command — pinned by release asset, with no compose placement — has
+        // nothing to become ready, and demanding a URL for it would mean
+        // inventing one.
+        foreach (var target in Versions.Targets.Where(t => t.Pin.ParsedKind != PinKind.ReleaseAsset))
         {
             target.Endpoints.ReadinessUrl.Should().NotBeNullOrWhiteSpace(
                 "'{0}' must declare a readiness endpoint so the harness never guesses with a sleep", target.Name);
+        }
+    }
+
+    [Fact]
+    public void A_release_asset_is_pinned_by_hash_and_the_runner_enforces_it()
+    {
+        foreach (var target in Versions.Targets.Where(t => t.Pin.ParsedKind == PinKind.ReleaseAsset))
+        {
+            target.Pin.Sha256.Should().NotBeNullOrWhiteSpace(
+                "'{0}' is a downloadable file, and a release asset can be replaced in place, " +
+                "so the tag alone is not a pin", target.Name);
+            target.Pin.Reference.Should().Contain(target.Pin.Asset!,
+                "the reference must name the asset the hash belongs to");
+
+            // A hash nothing checks is a comment. Some script has to fetch this
+            // target and refuse a file that does not match the pin — whether it
+            // reads the hash out of this manifest or carries it inline.
+            var enforced = Directory
+                .EnumerateFiles(Path.Combine(InteropPaths.RepositoryRoot, "scripts"), "*.sh",
+                    SearchOption.AllDirectories)
+                .Select(File.ReadAllText)
+                .Any(script => script.Contains(target.Key, StringComparison.Ordinal)
+                               && script.Contains("sha256sum", StringComparison.Ordinal));
+
+            enforced.Should().BeTrue(
+                "no script under scripts/ fetches '{0}' and compares it against its pinned hash",
+                target.Name);
         }
     }
 

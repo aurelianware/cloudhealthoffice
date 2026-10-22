@@ -13,12 +13,16 @@ public sealed record FhirDataBindings(string Patient, string Coverage, string En
 {
     /// <summary>Resources that can be served by CHO's own services today.</summary>
     public static readonly IReadOnlySet<string> NativeCapable =
-        new HashSet<string>(["Patient", "Coverage", "PayerToPayer"], StringComparer.OrdinalIgnoreCase);
+        new HashSet<string>(["Patient", "Coverage", "Encounter", "Claim", "PayerToPayer"], StringComparer.OrdinalIgnoreCase);
 
     private static readonly string[] Known = ["Patient", "Coverage", "Encounter", "Claim", "PayerToPayer"];
 
     public bool AnyNative =>
-        Patient == FhirAdapterSources.ChoNative || Coverage == FhirAdapterSources.ChoNative || PayerToPayerNative;
+        Patient == FhirAdapterSources.ChoNative
+        || Coverage == FhirAdapterSources.ChoNative
+        || Encounter == FhirAdapterSources.ChoNative
+        || Claim == FhirAdapterSources.ChoNative
+        || PayerToPayerNative;
 
     /// <summary>Payer-to-Payer members, coverage and claims come from CHO's own services (ADR 020).</summary>
     public bool PayerToPayerNative => PayerToPayer == FhirAdapterSources.ChoNative;
