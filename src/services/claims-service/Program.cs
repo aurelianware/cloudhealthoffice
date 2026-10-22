@@ -96,6 +96,7 @@ builder.Services.AddSingleton<IExplanationOfBenefitProjector, ExplanationOfBenef
 // adjudicated EOB view, and the structured search behind FHIR Claim search
 // (ADR 024). Hand-built JsonObject for the same reason as the EOB projector.
 builder.Services.AddSingleton<IClaimFhirProjector, ClaimFhirProjector>();
+builder.Services.AddSingleton<ICarinNonFinancialEobProjector, CarinNonFinancialEobProjector>();
 builder.Services.AddScoped<IClaimFhirSearchRepository, ClaimFhirSearchRepositoryMongo>();
 
 // 277CA acknowledgment generator

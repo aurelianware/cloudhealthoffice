@@ -42,22 +42,53 @@ public class FhirExplanationOfBenefitController : ControllerBase
     private const int DefaultPageSize = 50;
     private const int MaxPageSize = 200;
 
+    /// <summary>
+    /// The route segment that selects the Provider Access payload: the same
+    /// claims as CARIN Blue Button <b>non-financial</b> ExplanationOfBenefits.
+    /// </summary>
+    public const string ProviderAccessSegment = "ProviderAccess";
+
     private readonly IClaimRepository _repository;
     private readonly IExplanationOfBenefitProjector _projector;
+    private readonly ICarinNonFinancialEobProjector _nonFinancialProjector;
     private readonly IClaimDiagnosisMetadataEnricher _diagnosisMetadataEnricher;
     private readonly ILogger<FhirExplanationOfBenefitController> _logger;
 
     public FhirExplanationOfBenefitController(
         IClaimRepository repository,
         IExplanationOfBenefitProjector projector,
+        ICarinNonFinancialEobProjector nonFinancialProjector,
         IClaimDiagnosisMetadataEnricher diagnosisMetadataEnricher,
         ILogger<FhirExplanationOfBenefitController> logger)
     {
         _repository = repository;
         _projector = projector;
+        _nonFinancialProjector = nonFinancialProjector;
         _diagnosisMetadataEnricher = diagnosisMetadataEnricher;
         _logger = logger;
     }
+
+    /// <summary>
+    /// Which payload this request asks for. Patient Access gets the adjudicated
+    /// EOB; Provider Access gets the CARIN BB non-financial one, which carries
+    /// the same encounter without the plan's financial terms.
+    ///
+    /// <para>
+    /// The two share one pair of actions on purpose. Everything else about them
+    /// is identical — the chain-head read, the <c>_id</c>-versus-<c>patient</c>
+    /// rule that stops a bound token tunnelling to another member, the paging —
+    /// and a second controller would be a second chance to get one of those
+    /// wrong on only one of the paths. fhir-service applies the SMART scope,
+    /// the attribution check and the member confinement before either is
+    /// reached; this service decides nothing but tenancy and the projection.
+    /// </para>
+    /// </summary>
+    private bool IsProviderAccess
+        => Request.Path.Value?.Contains("/" + ProviderAccessSegment + "/", StringComparison.OrdinalIgnoreCase)
+           == true;
+
+    private JsonObject Project(Claim claim)
+        => IsProviderAccess ? _nonFinancialProjector.Project(claim) : _projector.Project(claim);
 
     /// <summary>
     /// FHIR ExplanationOfBenefit read by claim-version id. Returns the
@@ -66,6 +97,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
     /// state. Per-version (<c>_history</c>) reads are Phase 2.
     /// </summary>
     [HttpGet("ExplanationOfBenefit/{id}")]
+    [HttpGet(ProviderAccessSegment + "/ExplanationOfBenefit/{id}")]
     [AuditClaimAccess(ClaimAccessActions.Eob, ClaimIdRouteValue = "id")]
     [Produces(FhirContentType)]
     public async Task<IActionResult> ReadEob(string id, CancellationToken ct)
@@ -116,7 +148,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
         }
 
         await _diagnosisMetadataEnricher.EnrichAsync(claim, ct);
-        var projected = _projector.Project(claim);
+        var projected = Project(claim);
         return new ContentResult
         {
             ContentType = FhirContentType,
@@ -145,6 +177,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
     /// search-seam expansion.
     /// </summary>
     [HttpGet("ExplanationOfBenefit")]
+    [HttpGet(ProviderAccessSegment + "/ExplanationOfBenefit")]
     [AuditClaimAccess(ClaimAccessActions.Eob)]
     [Produces(FhirContentType)]
     public async Task<IActionResult> SearchEobs(
@@ -242,7 +275,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
         {
             entries.Add(new JsonObject
             {
-                ["resource"] = _projector.Project(claim),
+                ["resource"] = Project(claim),
                 ["search"] = new JsonObject { ["mode"] = "match" },
             });
         }

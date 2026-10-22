@@ -55,7 +55,7 @@ public sealed class EncounterFhirProjector : IEncounterFhirProjector
     /// </summary>
     public const string PlaceOfServiceExtension = "urn:cho:StructureDefinition:encounter-place-of-service";
 
-    public const string PlaceOfServiceSystem = "https://www.cms.gov/Medicare/Coding/place-of-service-codes";
+    public const string PlaceOfServiceSystem = "https://www.cms.gov/Medicare/Coding/place-of-service-codes/Place_of_Service_Code_Set";
 
     /// <summary>
     /// Place-of-service codes whose encounter class is not ambulatory. Only

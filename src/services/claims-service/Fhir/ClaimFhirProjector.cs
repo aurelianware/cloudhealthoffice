@@ -38,7 +38,7 @@ public sealed class ClaimFhirProjector : IClaimFhirProjector
     public const string ModifierSystem = "http://www.ama-assn.org/go/cpt";
     public const string RevenueCodeSystem = "https://www.nubc.org/CodeSystem/RevenueCodes";
     public const string NdcSystem = "http://hl7.org/fhir/sid/ndc";
-    public const string PlaceOfServiceSystem = "https://www.cms.gov/Medicare/Coding/place-of-service-codes";
+    public const string PlaceOfServiceSystem = "https://www.cms.gov/Medicare/Coding/place-of-service-codes/Place_of_Service_Code_Set";
     public const string DiagnosisTypeSystem = "http://terminology.hl7.org/CodeSystem/ex-diagnosistype";
 
     /// <summary>

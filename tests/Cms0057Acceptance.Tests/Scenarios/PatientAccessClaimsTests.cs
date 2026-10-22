@@ -193,7 +193,8 @@ public class PatientAccessClaimsTests
             var http = new DefaultHttpContext();
             http.Items["TenantId"] = Tenant;
             return new FhirExplanationOfBenefitController(
-                repository.Object, new ExplanationOfBenefitProjector(), enricher.Object,
+                repository.Object, new ExplanationOfBenefitProjector(),
+                new CarinNonFinancialEobProjector(), enricher.Object,
                 NullLogger<FhirExplanationOfBenefitController>.Instance)
             {
                 ControllerContext = new ControllerContext { HttpContext = http },

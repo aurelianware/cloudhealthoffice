@@ -13,6 +13,8 @@ using ChoClaimDiagnosis = ClaimsService.Models.DiagnosisCode;
 using ChoClaimLine = ClaimsService.Models.ClaimLine;
 using ChoClaimStatus = ClaimsService.Models.ClaimStatus;
 using ChoClaimType = ClaimsService.Models.ClaimType;
+using ChoAdjudicationResult = ClaimsService.Models.AdjudicationResult;
+using ChoInstitutionalDetails = ClaimsService.Models.InstitutionalClaimDetails;
 using ChoEncounter = EncounterService.Models.Encounter;
 using ChoEncounterDiagnosis = EncounterService.Models.EncounterDiagnosis;
 using ChoEncounterLine = EncounterService.Models.EncounterServiceLine;
@@ -68,6 +70,34 @@ public class GoldenInstanceTests
     [Fact]
     public void Encounter()
         => Golden("encounter", new EncounterFhirProjector().Project(EncounterRecord()));
+
+    // ── Provider Access: the CARIN BB non-financial EOB, one per profile ─────
+    //
+    // Four goldens rather than one because CARIN BB splits the Basis family by
+    // claim type and each variant requires different elements: the inpatient
+    // profile wants an admission period and a revenue code per line, the
+    // professional and oral profiles want a place of service and an item-level
+    // benefit payment status. A single golden would leave three unexercised.
+
+    [Fact]
+    public void Carin_professional_non_financial_eob()
+        => Golden("carin-professional-basis",
+            new CarinNonFinancialEobProjector().Project(Claim()));
+
+    [Fact]
+    public void Carin_inpatient_institutional_non_financial_eob()
+        => Golden("carin-inpatient-basis",
+            new CarinNonFinancialEobProjector().Project(InstitutionalClaim("11")));
+
+    [Fact]
+    public void Carin_outpatient_institutional_non_financial_eob()
+        => Golden("carin-outpatient-basis",
+            new CarinNonFinancialEobProjector().Project(InstitutionalClaim("13")));
+
+    [Fact]
+    public void Carin_oral_non_financial_eob()
+        => Golden("carin-oral-basis",
+            new CarinNonFinancialEobProjector().Project(DentalClaim()));
 
     // ── the golden file ──────────────────────────────────────────────────────
 
@@ -173,6 +203,7 @@ public class GoldenInstanceTests
         ClaimType = ChoClaimType.Professional,
         LineOfBusiness = ChoLineOfBusiness.Medicaid,
         BillingProviderNPI = "1234567893",
+        RenderingProviderNPI = "1245319599",
         PlaceOfServiceCode = "11",
         PriorAuthorizationNumber = "AUTH-GOLD-1",
         TotalChargeAmount = 430m,
@@ -212,6 +243,63 @@ public class GoldenInstanceTests
             },
         ],
     };
+
+    /// <summary>
+    /// The claim above as an 837I, with the facility type code deciding whether
+    /// it projects as inpatient or outpatient. Carries what the institutional
+    /// profiles ask for and the professional one does not: revenue codes, a type
+    /// of bill, and an admission period.
+    /// </summary>
+    private static ChoClaim InstitutionalClaim(string facilityTypeCode)
+    {
+        var claim = Claim();
+        claim.Id = "clm-gold-inst-" + facilityTypeCode;
+        claim.ClaimVersionId = claim.Id;
+        claim.ClaimNumber = "CLM-GOLD-INST-" + facilityTypeCode;
+        claim.ClaimType = ChoClaimType.Institutional;
+        claim.ReceivedDate = new DateTime(2026, 9, 17, 0, 0, 0, DateTimeKind.Utc);
+        claim.AdjudicationResult = new ChoAdjudicationResult { NetworkTier = "InNetwork" };
+        claim.Institutional = new ChoInstitutionalDetails
+        {
+            FacilityTypeCode = facilityTypeCode,
+            AdmissionDate = new DateTime(2026, 9, 16, 7, 30, 0, DateTimeKind.Utc),
+            StatementFromDate = new DateTime(2026, 9, 16, 0, 0, 0, DateTimeKind.Utc),
+            StatementToDate = new DateTime(2026, 9, 18, 0, 0, 0, DateTimeKind.Utc),
+        };
+        claim.ClaimLines[0].RevenueCode = "0450";
+        claim.ClaimLines[1].RevenueCode = "0636";
+        return claim;
+    }
+
+    /// <summary>
+    /// An 837D. CDT procedure codes travel in the same element as CPT, and the
+    /// oral profile's binding is on the value set, which the validator cannot
+    /// check without a terminology server either way.
+    /// </summary>
+    private static ChoClaim DentalClaim()
+    {
+        var claim = Claim();
+        claim.Id = "clm-gold-dental";
+        claim.ClaimVersionId = claim.Id;
+        claim.ClaimNumber = "CLM-GOLD-DENTAL";
+        claim.ClaimType = ChoClaimType.Dental;
+        claim.RenderingProviderNPI = "1245319599";
+        claim.AdjudicationResult = new ChoAdjudicationResult { NetworkTier = "OutOfNetwork" };
+        claim.ClaimLines =
+        [
+            new ChoClaimLine
+            {
+                LineNumber = 1,
+                ProcedureCode = "D2740",
+                Units = 1,
+                ChargeAmount = 1200m,
+                DiagnosisPointers = [1],
+                ServiceDateFrom = new DateTime(2026, 9, 16, 0, 0, 0, DateTimeKind.Utc),
+                ServiceDateTo = new DateTime(2026, 9, 16, 0, 0, 0, DateTimeKind.Utc),
+            },
+        ];
+        return claim;
+    }
 
     private static ChoEncounter EncounterRecord() => new()
     {

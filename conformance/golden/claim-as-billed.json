@@ -170,7 +170,7 @@
     {
       "url": "urn:cho:StructureDefinition:claim-place-of-service",
       "valueCoding": {
-        "system": "https://www.cms.gov/Medicare/Coding/place-of-service-codes",
+        "system": "https://www.cms.gov/Medicare/Coding/place-of-service-codes/Place_of_Service_Code_Set",
         "code": "11"
       }
     }

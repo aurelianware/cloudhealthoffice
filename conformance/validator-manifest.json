@@ -9,7 +9,23 @@
     },
     "claim-eob": {
       "igs": [],
-      "note": "Base R4 only. The Provider Access payload is being reshaped onto the CARIN BB non-financial Basis ExplanationOfBenefit profiles; once it declares one, add hl7.fhir.us.carin-bb and the validator will judge it."
+      "note": "Base R4 only. This is the Patient Access EOB, which carries adjudication amounts and declares no profile yet; CARIN BB conformance for it is separate work from the Provider Access reshape below."
+    },
+    "carin-professional-basis": {
+      "igs": ["hl7.fhir.us.carin-bb#2.2.0"],
+      "note": "The Provider Access payload for an 837P, on the CARIN BB Professional NonClinician Basis profile. Non-financial by requirement, not by simplification: the Basis family exists so a payer can send another provider the record of an encounter without the plan's financial terms."
+    },
+    "carin-inpatient-basis": {
+      "igs": ["hl7.fhir.us.carin-bb#2.2.0"],
+      "note": "An 837I whose type of bill says inpatient. This profile asks for more than the others: an admission period and a revenue code on every line."
+    },
+    "carin-outpatient-basis": {
+      "igs": ["hl7.fhir.us.carin-bb#2.2.0"],
+      "note": "The same 837I with an outpatient bill classification, which selects a different profile with a different diagnosis-type value set."
+    },
+    "carin-oral-basis": {
+      "igs": ["hl7.fhir.us.carin-bb#2.2.0"],
+      "note": "An 837D on the Oral Basis profile, which is the strictest of the four on network status: it requires a rendering network status CHO can only supply once the claim has been adjudicated on a mappable tier."
     },
     "claim-as-billed": {
       "igs": [],

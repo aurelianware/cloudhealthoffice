@@ -29,3 +29,18 @@ encounter: Encounter.extension[0]: Error - The extension urn:cho:StructureDefini
 # same thing gap G-17 records in docs/epa-gap-matrix.md, and it is why the
 # Patient Access prior-authorization scenario stays PARTIAL.
 prior-authorization-eob: ExplanationOfBenefit.item[1].adjudication[1].reason: Error - None of the codings provided are in the value set 'X12 Claim Adjustment Reason Codes - Remittance Advice Remark Codes' (http://hl7.org/fhir/us/davinci-pdex/ValueSet/X12ClaimAdjustmentReasonCodesCMSRemittanceAdviceRemarkCodes|2.1.0), and a coding from this value set is required) (codes = urn:cho:pa-denial-reason#NOTMEDNEC)
+
+# ── Provider Access care team: no resolvable Practitioner ─────────────────────
+# Every CARIN BB care-team role but "purchasedservice" carries an invariant that
+# the provider resolve to a Practitioner. CHO publishes no Practitioner resource
+# and holds no name for the rendering provider, so the reference resolves to
+# nothing and the invariant fails.
+#
+# The fix is a Practitioner projection fed by provider data, which US Core needs
+# anyway (PAT-02, and the targetProfiles on insurer/provider). It is NOT choosing
+# a role the invariant ignores: the 837's rendering provider is a rendering
+# provider. This is the largest single item left for Provider Access conformance.
+carin-professional-basis: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-prof-careTeam-practitioner: 'Professional EOB:  Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Professional-NonClinician-Basis)
+carin-oral-basis: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-prof-careTeam-practitioner: 'Professional EOB:  Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Oral-Basis)
+carin-inpatient-basis: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-inst-careTeam-practitioner: 'Institutional EOB: Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Inpatient-Institutional-Basis)
+carin-outpatient-basis: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-inst-careTeam-practitioner: 'Institutional EOB: Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Outpatient-Institutional-Basis)

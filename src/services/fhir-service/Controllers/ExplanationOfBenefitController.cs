@@ -59,6 +59,15 @@ public class ExplanationOfBenefitController : FhirControllerBase
     internal const string PriorAuthorizationPath = "fhir/ExplanationOfBenefit/prior-authorization";
 
     /// <summary>
+    /// claims-service's Provider Access route: the same claims as CARIN Blue
+    /// Button <b>non-financial</b> ExplanationOfBenefits. An attributed provider
+    /// is served from here rather than from the Patient Access route, because
+    /// PDex points Provider Access at the Basis profiles and because the plan's
+    /// financial terms are not the provider's business.
+    /// </summary>
+    internal const string ProviderAccessPath = "fhir/ProviderAccess/ExplanationOfBenefit";
+
+    /// <summary>
     /// Resource-id prefix authorization-service puts on a prior-authorization
     /// EOB (<c>pa-{authorizationNumber}</c>). Claim EOB ids are claim-version
     /// ids and never start with it, so a read routes to the owning service from
@@ -147,9 +156,10 @@ public class ExplanationOfBenefitController : FhirControllerBase
 
         if (RequireChoPermission(ClaimsReadPermission) is { } claimsRefused) return Task.FromResult(claimsRefused);
 
+        var readPath = IsProviderAccessRequest ? ProviderAccessPath : "fhir/ExplanationOfBenefit";
         return ProxyClaimsServiceAsync(
             "ExplanationOfBenefit",
-            $"fhir/ExplanationOfBenefit/{Uri.EscapeDataString(id)}",
+            $"{readPath}/{Uri.EscapeDataString(id)}",
             ct,
             confinement);
     }
@@ -252,7 +262,8 @@ public class ExplanationOfBenefitController : FhirControllerBase
                 "Provide a patient-scoped token or an explicit patient search parameter."));
         }
 
-        var path = "fhir/ExplanationOfBenefit" + BuildUpstreamQueryString(query, effectivePatient);
+        var searchBase = IsProviderAccessRequest ? ProviderAccessPath : "fhir/ExplanationOfBenefit";
+        var path = searchBase + BuildUpstreamQueryString(query, effectivePatient);
         return ProxyClaimsServiceAsync("ExplanationOfBenefit", path, ct,
             leavesConfinement: leavesConfinement);
     }
