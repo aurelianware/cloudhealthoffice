@@ -179,6 +179,11 @@ The group agreement between the sponsor and the plan, per contract term (usually
 - Each **sponsor policy** has its own **policy (sub-group) number** under the group, e.g. 123456-0001 for the PPO and 123456-0002 for the HMO. This is the number often printed on ID cards and sent as the group number on the 834 (`REF*1L`) and the 837 (`SBR03`).
 - A sponsor policy is a lasting record that continues across renewals, with its terms **versioned per contract term**. Renewal does not create new policies, so coverage, ID cards and claims never need re-pointing.
 - The contract term holds the dates, status and signed document, and covers the policy terms for that year.
+- **When a policy continues and when it is replaced.**
+  - **Same plan, new terms** (rates, waiting period, retro window, life events): the policy continues and gains a new version of its terms, effective on the renewal date. Anything resolved for a date uses the version in force then.
+  - **Different plan** (a new benefit plan, a different program or carrier, or a required change of policy number): the old policy ends the day before renewal, a new policy starts on the renewal date, and members move through the renewal's enrollment.
+  - **Plan-year benefit changes** (deductibles, copays) are versions of the benefit plan itself, where accumulators reset; the sponsor policy points at the plan version in force.
+  - Ending and recreating policies at every renewal is avoided: it forces every member to be termed and re-added, creates a coverage-break risk, pends claims around the boundary, reissues ID cards and splits history.
 - The 834 import resolves `REF*1L` against policy numbers as well as group numbers (policy → sponsor). Today it, and the orphan retry, assume `REF*1L` is the group number.
 
 ```
