@@ -425,6 +425,60 @@ If the model is unavailable the brief degrades to the figures and tables — the
 same "the absence of a recommendation never blocks" posture as
 [`claim-ai-examination.md`](claim-ai-examination.md).
 
+### 6.4 Who intervenes when the supervisor cannot
+
+A supervisor can rearrange their own queues. They cannot conjure hours, and they
+cannot move people across an organisational boundary. At health plans the
+accountability for meeting a compliance deadline sits a level or two up — a
+director or VP of claims, with UM and appeals usually reported under claims — and
+that person is the one who can authorise overtime, borrow people from another
+department, or accept that an extension will be invoked. So a `StaffingGap`
+finding that stops at the supervisor stops at the person who already knew and
+could not act.
+
+**Escalation follows scope, not a reporting line.** CHO should not hold an org
+chart: a reporting hierarchy goes stale the week someone changes jobs, nobody
+maintains it, and CHO is not an HR system. What CHO can keep accurate is
+**scope of responsibility** — the set of queues and work types a person
+administers. A supervisor's scope is their queues; a director's scope spans
+several supervisors' scopes. Escalation then walks *outward by scope* rather than
+*upward by person*, which gives the same answer in practice and stays correct on
+its own.
+
+This produces a tier per recommendation, decided by what the fix would touch:
+
+| The fix touches | Who can accept it |
+|---|---|
+| One queue (rank, overflow, authority limit, weights) | The supervisor whose scope contains it |
+| Two queues in one scope | The supervisor, if their scope contains both |
+| Two queues in different scopes (claims people onto appeals work) | The director whose scope contains both. **Nothing in CHO can do this today**, and it is the most valuable of the lot |
+| Hours, headcount or overtime | Nobody in CHO. The director, outside it; CHO records the decision and the date against the finding |
+| Invoking a regulatory extension | The director or A&G manager, in appeals-service where the rule pack governs it. The finding deep-links there; this capability must not reimplement an extension |
+
+**Two gaps this exposes, both outside this capability.**
+
+1. **There is no director tier in `ChoRolePermissions`.** The roles stop at
+   `ClaimsSupervisor`. The precedent for adding one is `Finance` →
+   `FinanceApprover` and `ConfigurationAnalyst` → `ConfigurationManager`: a
+   separate, narrow role holding the wider-scope and intervention permissions,
+   **not** a superset of supervisor. `OperationsDirector` with
+   `workqueue:admin` at a wider scope, `reports:*` for its areas, and sight of
+   `StaffingGap` is the shape.
+2. **There is no scope at all today.** `ClaimsSupervisor` holds tenant-wide
+   `workqueue:admin`, under a code comment saying supervisors manage "their
+   teams' queue memberships" — an intent the permission does not enforce, so
+   every supervisor can currently administer every queue. Introducing a director
+   tier is the natural moment to introduce scope, but doing so *narrows* existing
+   behaviour for supervisors, so it is its own decision with its own migration
+   rather than a detail of this one.
+
+**Compliance sees, the director owns.** `ComplianceOfficer` already reads
+everything through `*:read`, so a regulated-clock `StaffingGap` is visible to
+compliance without being addressed to them. Addressing it to compliance instead
+would be wrong twice: it is not their decision to make, and a supervisor whose
+every gap routes to compliance stops raising them honestly, which costs more
+than the visibility gains.
+
 ---
 
 ## 7. Proving it works before anyone relies on it
@@ -578,7 +632,8 @@ be sequenced together rather than each building half a reporting layer.
 | 2 | Where does **available hours** come from (§5.3)? | Build the simple shift pattern first, since every plan can fill it in; add a WFM schedule adapter when a pilot plan will share its schedule; keep the inferred fallback clearly labelled. |
 | 3 | Should per-worker throughput be snapshotted so a supervisor can see trends? | **No** in this capability. Per-person measurement belongs to the throughput report under its own permission, with its own retention. Making it a by-product of forecasting creates a two-year performance record nobody asked for. |
 | 4 | Do we show forecasts to supervisors before the backtest gate passes? | No. Show "not enough history" with the date. A forecast that embarrasses itself once will not be trusted again. |
-| 5 | Should `StaffingGap` findings be visible to anyone above the supervisor? | Likely yes — it is the finding an operations director and a regulator-facing compliance officer most need — but it is also the most politically charged. Needs Mark's call on who sees it. |
+| 5 | ~~Should `StaffingGap` findings be visible to anyone above the supervisor?~~ | **Answered 2026-10-23 (Mark).** The supervisor sees it and it rolls up to the director or VP who owns meeting compliance, who also needs to be able to intervene. Designed in §6.4, which turns "rolls up" into scope rather than a reporting line, and names the two gaps it exposes (no director role, no scope on `workqueue:admin`). |
+| 8 | Does scope on `workqueue:admin` land with the director tier, or on its own? | On its own, before it. It narrows what every existing supervisor can do, so it needs a migration and a conversation with any plan already running CHO — it should not arrive as a side effect of a forecasting capability. |
 | 6 | Is this packaged with CHO or sold as a module? | Same open question as [`cho-service.md`](cho-service.md) §9 Q4 and probably has the same answer; the capability is thin without CHO's own work engine, which argues for included. |
 | 7 | Do we ever want a learned model per queue? | Behind the same interface and the same backtest gate, once there are enough tenants and enough history that it can beat the seasonal baseline. Not before. |
 

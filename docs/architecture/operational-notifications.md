@@ -220,10 +220,31 @@ single most important element of the design.
 
 A topic has an ordered tier list. Tier 1 is the business audience. If the
 notification is still `Open` at its acknowledgement deadline, it escalates: state
-becomes `Escalated`, and tier 2's subscribers are delivered to — typically an
-operations manager, and for the topics that warrant it, the IT distribution list.
+becomes `Escalated`, and tier 2's subscribers are delivered to.
+
+**Tier 2 is the next wider scope, not a named person and not "my manager".**
+At health plans the accountability for a compliance deadline sits a level or two
+above the supervisor — a director or VP of claims, with UM and appeals typically
+reported under claims. The naive way to express that is a reporting hierarchy,
+and CHO should not hold one: it goes stale the week somebody changes jobs, nobody
+maintains it, and CHO is not an HR system. What CHO can keep accurate is **scope
+of responsibility** — the queues, work types and areas a role assignment covers.
+Escalation then walks outward by scope: a notification scoped to one queue
+escalates to whoever holds that queue's area, which in practice is the director
+the business would have escalated to anyway, and it stays correct without anyone
+maintaining it.
+
+That requires two things CHO does not have, both bigger than this capability and
+both discussed in [`workforce-optimization.md`](workforce-optimization.md) §6.4:
+a role tier above `ClaimsSupervisor` (the `Finance` → `FinanceApprover` pattern),
+and scope on `workqueue:admin`, which is tenant-wide today. Until they exist,
+tier 2 is a distribution list a tenant admin maintains by hand — which works, and
+is honest about being a stopgap rather than pretending the hierarchy is modelled.
+
 A tier-3 tier exists for the handful of topics where a regulatory clock is at
-stake (an unacknowledged expedited-appeal risk should reach compliance).
+stake. Note what tier 3 is *for*: compliance already reads everything through
+`*:read`, so it is not about giving them sight. It is about addressing someone
+when the owner of the deadline has not responded either.
 
 Escalation is **a different message**, not a resend: it leads with the fact that
 nothing happened, how long it has been open, who was told and when. That is the
@@ -269,8 +290,8 @@ alerting without a second path to maintain.
 
 | Topic | Tier 1 | Escalates to | Notes |
 |---|---|---|---|
-| `work.queue.deadline_risk` | ClaimsSupervisor / the queue's team | Operations manager, then IT (EscalationOnly) | PHI-free: counts and queue names |
-| `appeals.case.deadline_risk` | A&G manager | Compliance, then IT | A regulated clock; tier 3 warranted |
+| `work.queue.deadline_risk` | ClaimsSupervisor / the queue's team | The queue's wider scope (director), then IT (EscalationOnly) | PHI-free: counts and queue names |
+| `appeals.case.deadline_risk` | A&G manager | The director who owns the clock, then compliance, then IT | A regulated clock; tier 3 warranted |
 | `payment.run.awaiting_approval` | FinanceApprover | Finance manager | Mandatory; a financial control |
 | `report.run.completed` / `failed` | The user who ran it | — on `completed`; IT on repeated `failed` | Not acknowledgeable when it succeeded |
 | `correspondence.delivery.failed` | Correspondence operations | IT when the failure is systemic (a channel, not a letter) | A single returned letter is a work item, not an alert |
@@ -278,6 +299,7 @@ alerting without a second path to maintain.
 | `edi.inbound.failed` | EDI operations | IT immediately | Primarily IT; also a Prometheus gauge |
 | `config.secret.expiring` | — | IT only | Never a business topic |
 | `work.recommendation.proposed` | The queue's supervisor | — | Never escalates; a suggestion nobody takes is not a failure |
+| `work.staffing_gap` | The queue's supervisor | The director whose scope covers it, immediately rather than on a deadline | The supervisor cannot fix it, so the wider scope is not an escalation but a co-recipient ([workforce-optimization.md](workforce-optimization.md) §6.4) |
 
 The pattern: **the business owns the condition, IT owns the silence**, and
 whether a failure is "a bad file" or "bad rows" is the line that decides which.
@@ -361,7 +383,8 @@ delivery time rather than copying them.
 
 | # | Question | Recommendation |
 |---|---|---|
-| 1 | Is the IT group a distribution list, or should CHO gain a real group concept in tenant-service? | A distribution list first — it is a day's work, and "IT" is not a CHO role so a role would be wrong. Revisit if plans start wanting groups for several purposes, at which point tenant-service owning groups is the right home. |
+| 1 | Is the IT group a distribution list, or should CHO gain a real group concept in tenant-service? | A distribution list for IT specifically, since "IT" is not a CHO role and never will be. But the scope-based escalation in §5.2 wants the same structure that report schedule recipients and approval routing will want, so the **list belongs in tenant-service beside users and roles**, not as a notification-service concept — otherwise the second and third consumer each grow their own. |
+| 7 | Does this capability wait for the director role and scope (§5.2)? | No. Build tiers against distribution lists, and let a scoped role tier replace the hand-maintained list later without changing the topic contracts. Waiting would hold the notification capability behind a permissions change that narrows what supervisors can do today. |
 | 2 | Should individuals be able to mute a topic an admin subscribed them to? | Yes, except on topics marked `mandatory` (compliance, financial approvals), and the mute is visible to the admin in the coverage view. A mute an admin cannot see is how coverage silently disappears. |
 | 3 | Escalation to IT: every acknowledgeable business topic, or only the ones a plan nominates? | Nominated per tenant, defaulting to the ones with a regulatory or financial consequence. A plan whose IT group wants everything can say so; the default should not hand IT the firehose. |
 | 4 | Do we allow `bodyDetailed` (naming a member or claim) on **any** channel but in-portal? | No. It is one rule, it matches correspondence's, and every exception becomes a PHI review. |
