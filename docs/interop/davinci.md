@@ -368,9 +368,10 @@ Run them with:
 In CI they are the `inferno` job in
 [`davinci-interop.yml`](../../.github/workflows/davinci-interop.yml): nightly
 and `workflow_dispatch` only, and `continue-on-error`. Both choices are
-deliberate. Each kit builds a Ruby image from an upstream checkout, starts seven
-CHO services beside it, and validates every resource it reads against a bundled
-IG package — tens of minutes a pull request that did not touch the FHIR surface
+deliberate. Each kit builds a Ruby image from an upstream checkout, starts a
+queue, a worker and an HL7 validator of its own plus seven CHO services beside
+them, and validates every resource it reads against an IG package it
+downloads — tens of minutes a pull request that did not touch the FHIR surface
 learns nothing from paying for. And an external validator's verdict is a finding
 to triage rather than a merge gate: a kit release can tighten what it checks
 overnight, and a red required check on an unrelated pull request trains people
@@ -405,6 +406,61 @@ to ignore it.
 * **Nothing else.** The verdict is the kit's. The harness records every
   non-passing result as a finding, and never reinterprets a `fail` or turns a
   run that skipped everything into a pass.
+
+#### What a kit actually needs to run
+
+A kit is not one container, and until this was wired the `interop-c4bb` and
+`interop-us-core` profiles started only one. Both kit containers died on boot
+with `SQLite3::CantOpenException` before serving a single request, so the
+nightly `inferno` job has never produced a conformance verdict — it is
+`continue-on-error`, so the workflow still reported green and only the job's own
+conclusion said otherwise.
+
+Upstream's `docker-compose.yml` at each pinned tag runs five services. Four of
+them are load-bearing, and each is fatal on its own:
+
+| Service | Why the run needs it |
+| --- | --- |
+| `inferno` | The web app and the JSON API `InfernoRunner` drives. |
+| `worker` | `bundle exec sidekiq -r ./worker.rb`. Inferno queues every test run; with no worker a run is accepted and then never executes. |
+| `redis` | The queue itself. |
+| `hl7_validator_service` | The FHIR validator. The suite's verdict *is* its output. |
+| `nginx` | Browser-side proxy only — `location /` forwards to `inferno:4567` and `/hl7validatorapi/` to the validator. The harness talks to the app directly, so this is the one upstream service deliberately not reproduced. |
+
+Each app also needs a writable data directory. `config/database.yml` at every
+pinned tag puts the SQLite database at `data/inferno_production.db`, relative to
+the image's `WORKDIR` of `/opt/inferno`, and the app and its worker must see the
+same file — hence one shared named volume per kit.
+
+The app and the worker find redis and the validator through the two variables in
+each kit's own `.env.production`: `REDIS_URL` and
+`FHIR_RESOURCE_VALIDATOR_URL`. Inferno loads that file with `Dotenv.load`, which
+does **not** overwrite a variable already set in the environment, so the
+Compose `environment:` blocks redirect both to CHO's shared sidecars rather than
+to upstream's `redis` and `hl7_validator_service` hostnames. None of that is
+inferred: the variable names, the validator port and the database path were read
+out of the four kits at their pinned tags.
+
+One redis and one validator carry all four kit profiles. Exactly one kit profile
+is ever started at a time — a scenario names a single external target — and
+teardown is `down --volumes`, so no state crosses between kits. Both are pinned
+by digest, with the tag they were resolved from in a comment beside them;
+`InteropVersionsTests.Every_image_the_compose_file_starts_is_pinned_by_digest`
+fails the build if either floats, because the validator's version is part of any
+result read from these kits.
+
+A kit that starts before the validator answers reports errors against CHO that
+are not CHO's, so neither sidecar is merely started: both carry a healthcheck
+and the kit waits on `condition: service_healthy`. Upstream ships no healthcheck
+for the validator image, but the image carries curl and the service answers
+`GET /validator/version` with 200 once it is serving, which is what the check
+asks. What that does **not** prove is that the IG packages a suite needs are
+cached: those are fetched per validator session at first use. The fetch is
+synchronous, so it makes the first validation of a run slow rather than wrong.
+
+Every running container's logs are captured into the run artifacts, not only the
+kit app's — when an Inferno run goes wrong the sentence explaining why is
+usually in the worker or the validator, neither of which the scenario names.
 
 Suite ids at the current pins:
 

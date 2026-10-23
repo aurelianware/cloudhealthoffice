@@ -49,6 +49,31 @@ public sealed class InteropVersionsTests
     }
 
     [Fact]
+    public void Every_image_the_compose_file_starts_is_pinned_by_digest()
+    {
+        // The pin tests above only reach images interop/versions.json records as
+        // targets. The Inferno kit profiles also start two supporting images —
+        // the Sidekiq queue and the HL7 validator — and the validator's output
+        // IS the conformance verdict, so a floating tag there would let a
+        // verdict change with no reviewable diff. Two references are exempt
+        // deliberately: the development MongoDB behind the CHO profile, whose
+        // version no external result depends on, and the images built here from
+        // an upstream checkout, which are pinned by the checkout's own tag.
+        var offenders = File.ReadAllLines(InteropPaths.ComposeFile)
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith("image:", StringComparison.Ordinal))
+            .Select(line => line["image:".Length..].Trim())
+            .Where(image => !image.StartsWith("mongo:", StringComparison.Ordinal)
+                            && !image.StartsWith("cho-interop/", StringComparison.Ordinal))
+            .Where(image => !image.Contains("@sha256:", StringComparison.Ordinal))
+            .ToList();
+
+        offenders.Should().BeEmpty(
+            "every third-party image this file starts must be referenced by digest, with the tag it was " +
+            "resolved from recorded in a comment beside it");
+    }
+
+    [Fact]
     public void Every_compose_placement_names_a_service_and_profile_that_exist()
     {
         // A manifest that names a service the compose file does not define reads
