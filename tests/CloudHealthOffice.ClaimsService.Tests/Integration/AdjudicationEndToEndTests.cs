@@ -103,15 +103,16 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
         var response = await _client.PostAsJsonAsync("/api/v1/claims", inbound);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
-        // Drain the in-memory bus by polling for the persistence-stage
-        // write. With InMemoryMessageBus the dispatch is an async pump,
-        // so a short polling window covers the typical single-digit-
-        // millisecond handler runtime without flakiness.
-        var deadline = DateTime.UtcNow.AddSeconds(5);
-        while (DateTime.UtcNow < deadline && _factory.ProjectionWrites.Count == 0)
-        {
-            await Task.Delay(20);
-        }
+        // With InMemoryMessageBus the dispatch is an async pump, so the
+        // persistence-stage write lands some time after the POST returns.
+        // Wait on a signal the stage raises rather than polling a wall
+        // clock: the test wakes the moment the write arrives, and the
+        // generous timeout is a deadlock guard, not a guess at how long a
+        // loaded CI runner needs. Polling also read the list while the
+        // pump was writing it, which is a data race in its own right.
+        Assert.True(
+            await _factory.WaitForProjectionWriteAsync(TimeSpan.FromSeconds(30)),
+            "The persistence stage never recorded a projection write.");
 
         Assert.NotEmpty(_factory.ProjectionWrites);
         var write = _factory.ProjectionWrites[0];
@@ -151,6 +152,16 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
     {
         public IClaimRepository Repository { get; } = Substitute.For<IClaimRepository>();
         public List<ProjectionWrite> ProjectionWrites { get; } = new();
+        private readonly SemaphoreSlim _projectionWritten = new(0);
+
+        /// <summary>
+        /// Completes as soon as the persistence stage records a projection
+        /// write, or returns false if none arrives inside <paramref name="timeout"/>.
+        /// Waiting on the signal also publishes the pump thread's writes to
+        /// the test thread, so the recorded lists can be read safely after it.
+        /// </summary>
+        public Task<bool> WaitForProjectionWriteAsync(TimeSpan timeout)
+            => _projectionWritten.WaitAsync(timeout);
         public List<(string TenantId, IReadOnlyList<PricingRequest> Requests)> PricingRequests { get; } = new();
         public List<BenefitResolutionRequest> BenefitRequests { get; } = new();
 
@@ -203,6 +214,7 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                         ci.ArgAt<string>(1),
                         ci.ArgAt<AdjudicationResult>(2),
                         ci.ArgAt<IReadOnlyList<LineAdjudicationResult>>(3)));
+                    _projectionWritten.Release();
                     return true;
                 });
         }

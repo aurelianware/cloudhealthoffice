@@ -1,6 +1,7 @@
 @namespace CloudHealthOffice.Portal.Shared.Records
 @using CloudHealthOffice.Portal.Services
 @using CloudHealthOffice.Portal.Pages
+@using CloudHealthOffice.Portal.Shared.Documents
 @inject IProviderService ProviderService
 @inject IUserContextService UserContextService
 @inject ISnackbar Snackbar
@@ -498,6 +499,15 @@
                     }
                 </div>
             }
+            else if (ActiveTab == "documents")
+            {
+                @* Credentialing papers, a W-9, a contract amendment, and the
+                   unmatched 275s held under Provider:{npi} until their claim
+                   arrives — all filed here and, until now, unreachable. *@
+                <div data-testid="provider-tab-documents">
+                    <DocumentsPanel SubjectKind="DocumentSubjectKind.Provider" SubjectId="@ProviderId" Title="Provider documents" />
+                </div>
+            }
             else if (ActiveTab == "access-log")
             {
                 <RecordAccessLogTab Kind="Provider" RecordId="@_provider.ProviderId" Npi="@_provider.NPI" />
@@ -528,6 +538,7 @@
         new("claims", "Claims", Icons.Material.Filled.Receipt),
         new("payments", "Payments", Icons.Material.Filled.Payments, Visible: UserContextService.HasPermission("payments:read")),
         new("performance", "Performance", Icons.Material.Filled.Analytics),
+        new("documents", "Documents", Icons.Material.Filled.AttachFile),
         new("access-log", "Access log", Icons.Material.Filled.Visibility, Visible: _canReadAccessLog),
     ];
 

@@ -1,5 +1,6 @@
 @namespace CloudHealthOffice.Portal.Shared.Records
 @using CloudHealthOffice.Portal.Services
+@using CloudHealthOffice.Portal.Shared.Documents
 @inject IAppealsService AppealsService
 @inject IServiceProvider ServiceProvider
 
@@ -163,40 +164,12 @@
             }
             else if (ActiveTab == "documents")
             {
+                @* The catalog, not appeals-service's own list: a 275, a
+                   generated letter and an uploaded case file all support the
+                   same appeal, and only the catalog has all three. It also
+                   gives the first way to actually open one. *@
                 <div data-testid="appeal-tab-documents">
-                    @if (Detail.Documents.Any())
-                    {
-                        <MudSimpleTable Dense="true" Hover="true" Elevation="1">
-                            <thead>
-                                <tr>
-                                    <th>Document</th>
-                                    <th>Type</th>
-                                    <th>Uploaded</th>
-                                    <th>Source</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var doc in Detail.Documents)
-                                {
-                                    <tr>
-                                        <td>
-                                            <div class="d-flex align-center gap-1">
-                                                <MudIcon Icon="@Icons.Material.Filled.PictureAsPdf" Size="Size.Small" Color="Color.Error" />
-                                                <MudText Typo="Typo.body2">@doc.DocumentName</MudText>
-                                            </div>
-                                        </td>
-                                        <td>@doc.DocumentType</td>
-                                        <td>@doc.UploadedDate.ToString("MM/dd/yyyy")</td>
-                                        <td>@doc.UploadedBy</td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </MudSimpleTable>
-                    }
-                    else
-                    {
-                        <MudAlert Severity="Severity.Info">No supporting documents have been uploaded for this appeal.</MudAlert>
-                    }
+                    <DocumentsPanel SubjectKind="DocumentSubjectKind.Appeal" SubjectId="@AppealId" Title="Appeal documents" />
                 </div>
             }
             else if (ActiveTab == "access-log")
@@ -221,7 +194,7 @@
     [
         new("case", "Case", Icons.Material.Filled.Description),
         new("timeline", "Timeline", Icons.Material.Filled.Timeline, Detail is { Timeline.Count: > 0 } dt ? dt.Timeline.Count : null),
-        new("documents", "Documents", Icons.Material.Filled.AttachFile, Detail is { Documents.Count: > 0 } dd ? dd.Documents.Count : null),
+        new("documents", "Documents", Icons.Material.Filled.AttachFile),
         new("access-log", "Access log", Icons.Material.Filled.Visibility, Visible: RecordAccessLogTab.CanRead(ServiceProvider)),
     ];
 

@@ -293,6 +293,7 @@ builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
 builder.Services.AddScoped<ICms0057Service, Cms0057Service>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
 builder.Services.AddScoped<IMemberDocumentService, MemberDocumentService>();
+builder.Services.AddScoped<IDocumentCatalogService, DocumentCatalogService>();
 builder.Services.AddScoped<IIdCardService, CloudHealthOffice.Portal.Services.IdCardService>();
 builder.Services.AddScoped<IProviderService, ProviderService>();
 builder.Services.AddScoped<IBenefitPlanService, BenefitPlanService>();
@@ -524,6 +525,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 // Member document downloads: the browser's link for a document. Signed-in users
 // only; the document is fetched with the user's CHO token (GET, no side effects).
 app.MapMemberDocumentDownload();
+app.MapDocumentDownload();
 
 app.MapControllers();
 app.MapRazorPages();
