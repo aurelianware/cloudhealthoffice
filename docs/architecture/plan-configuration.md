@@ -248,8 +248,14 @@ Changes needing a reason or a second approver use the same pattern as two-person
 4. **First consumers:**
    - enrollment retro limits, waiting periods, orphan grace and the full-replace guard;
    - the premium grace period, moved off the sponsor's billing info.
-5. **Admin screen** with explain and where-overridden.
-6. **Export and import** between environments.
+5. **The prior-authorization denial-reason mapping** (gap G-17; proposal at `/mnt/project-files/pa-denial-codes/proposal.md` §5, decided 23 October 2026): a setting holding, per internal denial reason, the X12 external list 886 code for the PAS `reviewAction.reasonCode` and the CARC for the PDex EOB `denialreason` slice. CHO ships the CARC column prefilled, because CARCs are freely published, and the 886 column **empty**, because list 886 is X12's property and is not enumerated in the IG package — each tenant fills it from the licence it already holds to run a 278. Three things fix the shape of this one:
+   - **An unmapped row emits nothing**, never a fallback. Both target elements have required bindings and `reviewAction.reasonCode` is 0..*, so an absent code is conformant and a wrong one is not. The denial still travels as certification action `A3` plus the prose reason.
+   - **Validation is of shape only, with who entered each row and when.** Checking membership in list 886 needs the list, which is the thing CHO does not have; claiming more than shape would be claiming a check CHO cannot perform.
+   - **It keys on a string until the internal set closes.** `Authorization.DenialReasonCode` is a free 50-character string today that a rule pack or a reviewer can set to anything, and closing it to an enumeration needs UM policy sign-off (proposal §4a). The setting tightens to that enumeration when it exists.
+
+   Carrier or tenant level with an optional per-program override, not per benefit plan: the map follows a payer's own licence and UM policy rather than a product. The consumers belong to the CMS-0057-F conformance work, not here.
+6. **Admin screen** with explain and where-overridden.
+7. **Export and import** between environments.
 
 ### 12.1 What step 1 built
 
