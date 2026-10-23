@@ -59,12 +59,56 @@ public sealed class ConfigurationStoreMongoTests(MongoRunnerFixture mongo) : IAs
         await _store.AddPendingAsync(pending);
 
         (await _store.GetPendingAsync("t2", pending.Id)).Should().BeNull();
-        (await _store.TryDecideAsync("t2", pending.Id, PendingChangeStatus.Approved, "b", Day, null, null)).Should().BeFalse();
+        (await _store.TryClaimApprovalAsync("t2", pending.Id, "b", Day, null)).Should().BeFalse();
         (await _store.ListPendingAsync("t1")).Should().ContainSingle();
-        (await _store.TryDecideAsync("t1", pending.Id, PendingChangeStatus.Approved, "b", Day, "ok", 1)).Should().BeTrue();
-        (await _store.TryDecideAsync("t1", pending.Id, PendingChangeStatus.Rejected, "c", Day, null, null)).Should().BeFalse();
-        (await _store.GetPendingAsync("t1", pending.Id))!.Status.Should().Be(PendingChangeStatus.Approved);
+        (await _store.TryClaimApprovalAsync("t1", pending.Id, "b", Day, "ok")).Should().BeTrue();
+        (await _store.TryClaimApprovalAsync("t1", pending.Id, "c", Day, null)).Should().BeFalse("claimed once");
+        (await _store.TryRejectAsync("t1", pending.Id, "c", Day, null)).Should().BeFalse("an approval under way cannot be rejected");
+        (await _store.ListPendingAsync("t1")).Should().ContainSingle("an unfinished approval stays listed");
+
+        var version = await _store.AppendAsync(new SettingValue
+        {
+            TenantId = "t1", Key = "k", Level = SettingLevel.Tenant, ScopeId = "", Value = "false", EffectiveFrom = Day,
+            SetBy = "a", SetAt = Day, ApprovedFromPendingId = pending.Id, ApprovedBy = "b",
+        });
+        (await _store.TryCompleteApprovalAsync("t2", pending.Id, version)).Should().BeFalse();
+        (await _store.TryCompleteApprovalAsync("t1", pending.Id, version)).Should().BeTrue();
+        (await _store.TryCompleteApprovalAsync("t1", pending.Id, version)).Should().BeFalse("already approved");
+        var stored = (await _store.GetPendingAsync("t1", pending.Id))!;
+        stored.Status.Should().Be(PendingChangeStatus.Approved);
+        stored.AppliedVersion.Should().Be(version.Version);
+        stored.AppliedVersionId.Should().Be(version.Id);
         (await _store.ListPendingAsync("t1")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task An_approval_writes_at_most_one_version_even_when_retried_concurrently()
+    {
+        SettingValue FromApproval(string value) => new()
+        {
+            TenantId = "t1", Key = "k", Level = SettingLevel.Tenant, ScopeId = "", Value = value, EffectiveFrom = Day,
+            SetBy = "a", SetAt = Day, ApprovedFromPendingId = "pending-1", ApprovedBy = "b",
+        };
+
+        var written = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => _store.AppendAsync(FromApproval("false"))));
+
+        written.Select(v => v.Id).Distinct().Should().ContainSingle();
+        (await _store.GetVersionsAsync("t1", "k", [(SettingLevel.Tenant, "")])).Should().ContainSingle();
+        (await _store.GetVersionForPendingAsync("t1", "pending-1"))!.Id.Should().Be(written[0].Id);
+        (await _store.GetVersionForPendingAsync("t2", "pending-1")).Should().BeNull();
+        // Ordinary versions (no approval) are unaffected by the approval index.
+        SettingValue Plain(string value) { var v = V("t1", SettingLevel.Tenant, "", value); v.Key = "k"; return v; }
+        (await _store.AppendAsync(Plain("true"))).Version.Should().Be(2);
+        (await _store.AppendAsync(Plain("false"))).Version.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task An_approvals_change_record_is_stored_once()
+    {
+        var record = new ConfigurationChangeRecord { Id = "approved-p1", TenantId = "t1", Key = "k", Action = "Approved", At = Day };
+        await _store.AddChangeAsync(record);
+        await _store.AddChangeAsync(new ConfigurationChangeRecord { Id = "approved-p1", TenantId = "t1", Key = "k", Action = "Approved", At = Day });
+        (await _store.ListChangesAsync("t1", "k", 10)).Should().ContainSingle();
     }
 
     [Fact]
@@ -83,5 +127,6 @@ public sealed class ConfigurationStoreMongoTests(MongoRunnerFixture mongo) : IAs
     {
         var indexes = await (await _db.GetCollection<SettingValue>(MongoConfigurationStore.ValuesCollection).Indexes.ListAsync()).ToListAsync();
         indexes.Should().Contain(i => i["name"] == "ix_tenant_key_node_version" && i["unique"].AsBoolean);
+        indexes.Should().Contain(i => i["name"] == "ix_tenant_pending" && i["unique"].AsBoolean);
     }
 }

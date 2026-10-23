@@ -16,6 +16,9 @@ public enum ConfigurationOutcome
 
 public sealed record ConfigurationResult(ConfigurationOutcome Outcome, IReadOnlyList<string> Errors, SettingValue? Value = null, PendingConfigurationChange? Pending = null)
 {
+    /// <summary>How a sponsor-level write was checked against line-of-business floors.</summary>
+    public FloorCheck FloorCheck { get; init; } = FloorCheck.NotApplicable;
+
     public static ConfigurationResult Fail(ConfigurationOutcome outcome, params string[] errors) => new(outcome, errors);
 }
 
@@ -46,7 +49,8 @@ public sealed class ConfigurationService(
     IConfigurationStore store,
     IConfigurationChangePublisher publisher,
     TimeProvider clock,
-    ILogger<ConfigurationService> logger)
+    ILogger<ConfigurationService> logger,
+    ISponsorLineOfBusinessLookup? sponsors = null)
 {
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
     private DateTime Today => DateTime.SpecifyKind(Now.Date, DateTimeKind.Utc);
@@ -103,9 +107,10 @@ public sealed class ConfigurationService(
             return ConfigurationResult.Fail(ConfigurationOutcome.Forbidden, $"Changing {key} at {level} needs {permission}.");
 
         var node = Normalize(level, scopeId);
-        var errors = SettingValidator.Validate(definition, level, node, write.Value, clear, write.Reason).ToList();
+        var (floorCheck, lineOfBusiness) = await FloorChecks.ForWriteAsync(sponsors, definition, level, node, clear, actor.TenantId, logger, ct);
+        var errors = SettingValidator.Validate(definition, level, node, write.Value, clear, write.Reason, lineOfBusiness).ToList();
         var (from, to) = Dates(definition, write, errors);
-        if (errors.Count > 0) return new ConfigurationResult(ConfigurationOutcome.Invalid, errors);
+        if (errors.Count > 0) return new ConfigurationResult(ConfigurationOutcome.Invalid, errors) { FloorCheck = floorCheck };
 
         var value = clear ? null : Canonical(definition, write.Value!);
         if (definition.ChangeControl == ChangeControl.TwoPersonApproval)
@@ -118,51 +123,84 @@ public sealed class ConfigurationService(
             };
             await store.AddPendingAsync(pending, ct);
             await store.AddChangeAsync(Record(pending, "Requested", actor.UserId, await BeforeAsync(actor.TenantId, key, level, node, from, ct), null), ct);
-            return new ConfigurationResult(ConfigurationOutcome.Pending, [], Pending: pending);
+            return new ConfigurationResult(ConfigurationOutcome.Pending, [], Pending: pending) { FloorCheck = floorCheck };
         }
 
         var applied = await ApplyAsync(actor.TenantId, key, level, node, value, clear, write.Locked, from, to, write.Reason?.Trim(), actor.UserId, null, null, ct);
-        return new ConfigurationResult(ConfigurationOutcome.Applied, [], applied);
+        return new ConfigurationResult(ConfigurationOutcome.Applied, [], applied) { FloorCheck = floorCheck };
     }
 
     public Task<IReadOnlyList<PendingConfigurationChange>> PendingAsync(string tenantId, CancellationToken ct = default) =>
         store.ListPendingAsync(tenantId, ct);
 
-    /// <summary>Approves a pending change: <c>config:approve</c>, never one's own, and the change must still be valid.</summary>
+    /// <summary>
+    /// Approves a pending change: <c>config:approve</c>, never one's own, and the
+    /// change must still be valid. The approval claims the change (Pending →
+    /// Approving), writes its version (at most once per change), then marks it
+    /// Approved with that version. If it stops part-way, approving again
+    /// finishes it rather than writing a second version.
+    /// </summary>
     public async Task<ConfigurationResult> ApproveAsync(ICurrentActor actor, string pendingId, string? note, CancellationToken ct = default)
     {
         if (!actor.HasPermission(PlanConfigurationPermissions.Approve))
             return ConfigurationResult.Fail(ConfigurationOutcome.Forbidden, $"Approving needs {PlanConfigurationPermissions.Approve}.");
         if (await store.GetPendingAsync(actor.TenantId, pendingId, ct) is not { } pending)
             return ConfigurationResult.Fail(ConfigurationOutcome.NotFound, "No such pending change.");
-        if (pending.Status != PendingChangeStatus.Pending)
+        if (pending.Status is not (PendingChangeStatus.Pending or PendingChangeStatus.Approving))
             return ConfigurationResult.Fail(ConfigurationOutcome.Conflict, $"The change was already {pending.Status.ToString().ToLowerInvariant()}.");
         if (string.Equals(pending.RequestedBy, actor.UserId, StringComparison.Ordinal))
             return ConfigurationResult.Fail(ConfigurationOutcome.Forbidden, "A change must be approved by someone other than the person who requested it.");
-        if (catalog.Find(pending.Key) is not { } definition)
-            return ConfigurationResult.Fail(ConfigurationOutcome.Invalid, $"Setting '{pending.Key}' is no longer defined.");
-        var errors = SettingValidator.Validate(definition, pending.Level, pending.ScopeId, pending.Value, pending.Cleared, pending.Reason);
-        if (errors.Count > 0) return new ConfigurationResult(ConfigurationOutcome.Invalid, errors);
 
-        // Claim the decision first, so two approvers cannot both apply it.
-        if (!await store.TryDecideAsync(actor.TenantId, pendingId, PendingChangeStatus.Approved, actor.UserId, Now, note, null, ct))
-            return ConfigurationResult.Fail(ConfigurationOutcome.Conflict, "Someone decided this change first.");
-        var applied = await ApplyAsync(actor.TenantId, pending.Key, pending.Level, pending.ScopeId, pending.Value, pending.Cleared, pending.Locked,
-            pending.EffectiveFrom, pending.EffectiveTo, pending.Reason, pending.RequestedBy, pending.Id, actor.UserId, ct);
+        var floorCheck = FloorCheck.NotApplicable;
+        if (pending.Status == PendingChangeStatus.Pending)
+        {
+            if (catalog.Find(pending.Key) is not { } definition)
+                return ConfigurationResult.Fail(ConfigurationOutcome.Invalid, $"Setting '{pending.Key}' is no longer defined.");
+            (floorCheck, var lineOfBusiness) = await FloorChecks.ForWriteAsync(sponsors, definition, pending.Level, pending.ScopeId, pending.Cleared, actor.TenantId, logger, ct);
+            var errors = SettingValidator.Validate(definition, pending.Level, pending.ScopeId, pending.Value, pending.Cleared, pending.Reason, lineOfBusiness);
+            if (errors.Count > 0) return new ConfigurationResult(ConfigurationOutcome.Invalid, errors) { FloorCheck = floorCheck };
+
+            // Claim the decision first, so two approvers cannot both apply it.
+            if (!await store.TryClaimApprovalAsync(actor.TenantId, pendingId, actor.UserId, Now, note, ct))
+            {
+                // Someone else claimed or decided it; only an unfinished claim may be finished here.
+                pending = await store.GetPendingAsync(actor.TenantId, pendingId, ct);
+                if (pending?.Status != PendingChangeStatus.Approving)
+                    return ConfigurationResult.Fail(ConfigurationOutcome.Conflict, "Someone decided this change first.");
+            }
+        }
+        else
+        {
+            logger.LogInformation("Finishing an approval of change {PendingId} for tenant {TenantId} that stopped part-way",
+                LogSanitizer.Sanitize(pendingId), LogSanitizer.Sanitize(actor.TenantId));
+        }
+
+        // The approver of record is whoever claimed it; a finisher only completes it.
+        var approver = pending!.DecidedBy ?? actor.UserId;
+        var applied = await store.GetVersionForPendingAsync(actor.TenantId, pendingId, ct)
+                      ?? await ApplyAsync(actor.TenantId, pending.Key, pending.Level, pending.ScopeId, pending.Value, pending.Cleared, pending.Locked,
+                          pending.EffectiveFrom, pending.EffectiveTo, pending.Reason, pending.RequestedBy, pending.Id, approver, ct);
+
+        if (!await store.TryCompleteApprovalAsync(actor.TenantId, pendingId, applied, ct)
+            && (await store.GetPendingAsync(actor.TenantId, pendingId, ct))?.Status != PendingChangeStatus.Approved)
+            return ConfigurationResult.Fail(ConfigurationOutcome.Conflict, "The change could not be marked approved; approve it again to finish.");
+
         pending.Status = PendingChangeStatus.Approved;
-        pending.DecidedBy = actor.UserId;
+        pending.DecidedBy = approver;
         pending.AppliedVersion = applied.Version;
-        return new ConfigurationResult(ConfigurationOutcome.Applied, [], applied, pending);
+        pending.AppliedVersionId = applied.Id;
+        return new ConfigurationResult(ConfigurationOutcome.Applied, [], applied, pending) { FloorCheck = floorCheck };
     }
 
+    /// <summary>Rejects a change still waiting; a change whose approval has started can only be finished.</summary>
     public async Task<ConfigurationResult> RejectAsync(ICurrentActor actor, string pendingId, string? note, CancellationToken ct = default)
     {
         if (!actor.HasPermission(PlanConfigurationPermissions.Approve))
             return ConfigurationResult.Fail(ConfigurationOutcome.Forbidden, $"Rejecting needs {PlanConfigurationPermissions.Approve}.");
         if (await store.GetPendingAsync(actor.TenantId, pendingId, ct) is not { } pending)
             return ConfigurationResult.Fail(ConfigurationOutcome.NotFound, "No such pending change.");
-        if (!await store.TryDecideAsync(actor.TenantId, pendingId, PendingChangeStatus.Rejected, actor.UserId, Now, note, null, ct))
-            return ConfigurationResult.Fail(ConfigurationOutcome.Conflict, "The change was already decided.");
+        if (!await store.TryRejectAsync(actor.TenantId, pendingId, actor.UserId, Now, note, ct))
+            return ConfigurationResult.Fail(ConfigurationOutcome.Conflict, "The change was already decided, or its approval has started.");
         pending.Status = PendingChangeStatus.Rejected;
         pending.DecidedBy = actor.UserId;
         pending.DecisionNote = note;
@@ -188,6 +226,8 @@ public sealed class ConfigurationService(
 
         await store.AddChangeAsync(new ConfigurationChangeRecord
         {
+            // An approval's record has a fixed id, so finishing a stopped approval does not log it twice.
+            Id = pendingId is null ? Guid.NewGuid().ToString("N") : $"approved-{pendingId}",
             TenantId = tenantId, Key = key, Level = level, ScopeId = node,
             Action = pendingId is null ? (clear ? "Cleared" : "Set") : "Approved",
             Before = before, After = value, Locked = version.Locked, EffectiveFrom = from, EffectiveTo = to,
@@ -204,7 +244,7 @@ public sealed class ConfigurationService(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // The change is stored; subscribers' caches expire on their own.
-            logger.LogWarning(ex, "Could not publish the change to {Key} for tenant {TenantId}", key, LogSanitizer.Sanitize(tenantId));
+            logger.LogWarning(ex, "Could not publish the change to {Key} for tenant {TenantId}", LogSanitizer.Sanitize(key), LogSanitizer.Sanitize(tenantId));
         }
         return version;
     }

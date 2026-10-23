@@ -57,7 +57,7 @@ public abstract class CachingPlanSettings(IMemoryCache cache, PlanSettingsOption
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogWarning(ex, "Could not read setting {Key} for tenant {TenantId}; using the default for its line of business",
-                key, LogSanitizer.Sanitize(tenantId));
+                LogSanitizer.Sanitize(key), LogSanitizer.Sanitize(tenantId));
             // Not cached: the next call tries again.
             return SettingResolver.Resolve(definition, scope, date, [], isFallback: true);
         }

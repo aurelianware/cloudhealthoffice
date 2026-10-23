@@ -159,4 +159,104 @@ public class ConfigurationServiceTests
     [InlineData("policy", SettingLevel.SponsorPolicy)]
     [InlineData("nope", null)]
     public void Route_levels_parse(string text, SettingLevel? expected) => ConfigurationController.ParseLevel(text).Should().Be(expected);
+
+    // ── Approvals that stop part-way (review fix) ─────────────────────────
+
+    private async Task<string> RequestControlChangeAsync()
+    {
+        var pending = await Service.WriteAsync(As("alice", ChoRolePermissions.ConfigurationManager), "test.control", SettingLevel.Tenant, "",
+            new SettingWrite { Value = "false", Reason = "Small team" }, false);
+        return pending.Pending!.Id;
+    }
+
+    [Fact]
+    public async Task An_approval_that_stops_before_writing_its_version_is_finished_by_approving_again()
+    {
+        var id = await RequestControlChangeAsync();
+        _store.FailNextAppend = true;
+
+        var first = () => Service.ApproveAsync(As("dave", ChoRolePermissions.Underwriter), id, "ok");
+        await first.Should().ThrowAsync<InvalidOperationException>();
+        _store.Pending.Single().Status.Should().Be(PendingChangeStatus.Approving, "claimed, never shown as Approved without a version");
+        _store.Values.Should().BeEmpty();
+        (await Service.PendingAsync("t1")).Should().ContainSingle("an unfinished approval stays in the queue");
+        (await Service.RejectAsync(As("erin", ChoRolePermissions.Underwriter), id, "no")).Outcome
+            .Should().Be(ConfigurationOutcome.Conflict, "an approval under way can only be finished");
+        (await Service.ApproveAsync(As("alice", ChoRolePermissions.ConfigurationManager), id, null)).Outcome
+            .Should().Be(ConfigurationOutcome.Forbidden, "the requester still cannot finish it");
+
+        var finished = await Service.ApproveAsync(As("erin", ChoRolePermissions.Underwriter), id, null);
+
+        finished.Outcome.Should().Be(ConfigurationOutcome.Applied);
+        finished.Value!.ApprovedBy.Should().Be("dave", "the approver of record is the one who claimed it");
+        _store.Values.Should().ContainSingle();
+        var pending = _store.Pending.Single();
+        pending.Status.Should().Be(PendingChangeStatus.Approved);
+        pending.AppliedVersionId.Should().Be(finished.Value.Id);
+        _store.Changes.Count(c => c.Action == "Approved").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task An_approval_that_stops_after_writing_its_version_completes_without_a_second_version()
+    {
+        var id = await RequestControlChangeAsync();
+        _store.FailNextComplete = true;
+
+        var first = () => Service.ApproveAsync(As("dave", ChoRolePermissions.Underwriter), id, "ok");
+        await first.Should().ThrowAsync<InvalidOperationException>();
+        _store.Values.Should().ContainSingle("the version was written");
+        _store.Pending.Single().Status.Should().Be(PendingChangeStatus.Approving);
+
+        var finished = await Service.ApproveAsync(As("dave", ChoRolePermissions.Underwriter), id, null);
+
+        finished.Outcome.Should().Be(ConfigurationOutcome.Applied);
+        _store.Values.Should().ContainSingle("finishing reuses the version already written");
+        _store.Pending.Single().Status.Should().Be(PendingChangeStatus.Approved);
+        _store.Pending.Single().AppliedVersion.Should().Be(1);
+        _store.Changes.Count(c => c.Action == "Approved").Should().Be(1, "the approval's change record has a fixed id");
+        _publisher.Published.Should().ContainSingle();
+        (await Service.ApproveAsync(As("erin", ChoRolePermissions.Underwriter), id, null)).Outcome.Should().Be(ConfigurationOutcome.Conflict);
+    }
+
+    // ── Sponsor writes checked against the sponsor's line (review fix) ─────
+
+    [Fact]
+    public async Task A_sponsor_write_below_its_lines_floor_is_refused_when_the_line_is_known()
+    {
+        var lines = new FakeSponsorLines { Lines = { ["STATE1"] = LinesOfBusiness.Medicaid, ["ACME"] = LinesOfBusiness.Commercial } };
+        var service = TestSettings.Service(_store, _publisher, _clock, lines);
+        var am = As("am", ChoRolePermissions.AccountManager);
+
+        var refused = await service.WriteAsync(am, "test.days", SettingLevel.Sponsor, "STATE1", new SettingWrite { Value = "5", Reason = "x" }, false);
+        refused.Outcome.Should().Be(ConfigurationOutcome.Invalid);
+        refused.FloorCheck.Should().Be(FloorCheck.CheckedAgainstSponsorLine);
+        refused.Errors.Should().Contain(e => e.Contains("State rule X"));
+
+        var commercial = await service.WriteAsync(am, "test.days", SettingLevel.Sponsor, "ACME", new SettingWrite { Value = "5", Reason = "x" }, false);
+        commercial.Outcome.Should().Be(ConfigurationOutcome.Applied, "the Medicaid floor does not apply to a commercial sponsor");
+        commercial.FloorCheck.Should().Be(FloorCheck.CheckedAgainstSponsorLine);
+    }
+
+    [Fact]
+    public async Task When_the_sponsors_line_cannot_be_found_the_write_is_accepted_and_clamped_at_resolution()
+    {
+        var lines = new FakeSponsorLines { Fail = true };
+        var service = TestSettings.Service(_store, _publisher, _clock, lines);
+        var am = As("am", ChoRolePermissions.AccountManager);
+
+        var accepted = await service.WriteAsync(am, "test.days", SettingLevel.Sponsor, "STATE1", new SettingWrite { Value = "5", Reason = "x" }, false);
+        accepted.Outcome.Should().Be(ConfigurationOutcome.Applied);
+        accepted.FloorCheck.Should().Be(FloorCheck.LookupFailed);
+        var resolved = await service.ResolveAsync("t1", "test.days", new SettingScope { LineOfBusiness = LinesOfBusiness.Medicaid, Sponsor = "STATE1" }, null);
+        resolved!.Value.Should().Be("10", "clamped to the Medicaid floor");
+        resolved.ClampedBy.Should().NotBeNull();
+
+        lines.Fail = false;
+        (await service.WriteAsync(am, "test.days", SettingLevel.Sponsor, "UNKNOWN", new SettingWrite { Value = "5", Reason = "x" }, false))
+            .FloorCheck.Should().Be(FloorCheck.SponsorNotFound);
+        var calls = lines.Calls;
+        (await service.WriteAsync(am, Grace, SettingLevel.Sponsor, "ACME", new SettingWrite { Value = "3", Reason = "x" }, false))
+            .FloorCheck.Should().Be(FloorCheck.NotApplicable, "the orphan grace setting has no line-specific floors");
+        lines.Calls.Should().Be(calls, "no lookup when no floor depends on the line");
+    }
 }

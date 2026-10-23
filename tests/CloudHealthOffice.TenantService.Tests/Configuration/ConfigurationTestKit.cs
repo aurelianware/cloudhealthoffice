@@ -52,6 +52,12 @@ public sealed class InMemoryConfigurationStore : IConfigurationStore
     public List<PendingConfigurationChange> Pending { get; } = new();
     public List<ConfigurationChangeRecord> Changes { get; } = new();
 
+    /// <summary>Fail the next append (after nothing was written), to simulate an approval stopping part-way.</summary>
+    public bool FailNextAppend { get; set; }
+
+    /// <summary>Fail the next Approving → Approved update (after the version was written).</summary>
+    public bool FailNextComplete { get; set; }
+
     public Task<IReadOnlyList<SettingValue>> GetVersionsAsync(string tenantId, string key, IReadOnlyCollection<(SettingLevel Level, string ScopeId)> nodes, CancellationToken ct = default)
     {
         lock (_gate)
@@ -69,12 +75,25 @@ public sealed class InMemoryConfigurationStore : IConfigurationStore
     {
         lock (_gate)
         {
+            if (FailNextAppend)
+            {
+                FailNextAppend = false;
+                throw new InvalidOperationException("store unavailable");
+            }
+            if (value.ApprovedFromPendingId is { } pendingId
+                && Values.FirstOrDefault(v => v.TenantId == value.TenantId && v.ApprovedFromPendingId == pendingId) is { } already)
+                return Task.FromResult(already);
             value.Version = Values.Where(v => v.TenantId == value.TenantId && v.Key == value.Key && v.Level == value.Level && v.ScopeId == value.ScopeId)
                 .Select(v => v.Version).DefaultIfEmpty(0).Max() + 1;
             value.Id = SettingValue.IdFor(value.TenantId, value.Key, value.Level, value.ScopeId, value.Version);
             Values.Add(value);
             return Task.FromResult(value);
         }
+    }
+
+    public Task<SettingValue?> GetVersionForPendingAsync(string tenantId, string pendingId, CancellationToken ct = default)
+    {
+        lock (_gate) return Task.FromResult(Values.FirstOrDefault(v => v.TenantId == tenantId && v.ApprovedFromPendingId == pendingId));
     }
 
     public Task AddPendingAsync(PendingConfigurationChange change, CancellationToken ct = default)
@@ -91,16 +110,16 @@ public sealed class InMemoryConfigurationStore : IConfigurationStore
     public Task<IReadOnlyList<PendingConfigurationChange>> ListPendingAsync(string tenantId, CancellationToken ct = default)
     {
         lock (_gate)
-            return Task.FromResult<IReadOnlyList<PendingConfigurationChange>>(Pending.Where(p => p.TenantId == tenantId && p.Status == PendingChangeStatus.Pending).ToList());
+            return Task.FromResult<IReadOnlyList<PendingConfigurationChange>>(Pending.Where(p => p.TenantId == tenantId && p.Status is PendingChangeStatus.Pending or PendingChangeStatus.Approving).ToList());
     }
 
-    public Task<bool> TryDecideAsync(string tenantId, string id, PendingChangeStatus status, string decidedBy, DateTime at, string? note, int? appliedVersion, CancellationToken ct = default)
+    public Task<bool> TryRejectAsync(string tenantId, string id, string decidedBy, DateTime at, string? note, CancellationToken ct = default)
     {
         lock (_gate)
         {
             var p = Pending.FirstOrDefault(x => x.TenantId == tenantId && x.Id == id && x.Status == PendingChangeStatus.Pending);
             if (p is null) return Task.FromResult(false);
-            p.Status = status;
+            p.Status = PendingChangeStatus.Rejected;
             p.DecidedBy = decidedBy;
             p.DecidedAt = at;
             p.DecisionNote = note;
@@ -108,9 +127,42 @@ public sealed class InMemoryConfigurationStore : IConfigurationStore
         }
     }
 
+    public Task<bool> TryClaimApprovalAsync(string tenantId, string id, string approvedBy, DateTime at, string? note, CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            var p = Pending.FirstOrDefault(x => x.TenantId == tenantId && x.Id == id && x.Status == PendingChangeStatus.Pending);
+            if (p is null) return Task.FromResult(false);
+            p.Status = PendingChangeStatus.Approving;
+            p.DecidedBy = approvedBy;
+            p.DecidedAt = at;
+            p.DecisionNote = note;
+            return Task.FromResult(true);
+        }
+    }
+
+    public Task<bool> TryCompleteApprovalAsync(string tenantId, string id, SettingValue version, CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            if (FailNextComplete)
+            {
+                FailNextComplete = false;
+                throw new InvalidOperationException("store unavailable");
+            }
+            var p = Pending.FirstOrDefault(x => x.TenantId == tenantId && x.Id == id && x.Status == PendingChangeStatus.Approving);
+            if (p is null) return Task.FromResult(false);
+            p.Status = PendingChangeStatus.Approved;
+            p.AppliedVersion = version.Version;
+            p.AppliedVersionId = version.Id;
+            return Task.FromResult(true);
+        }
+    }
+
     public Task AddChangeAsync(ConfigurationChangeRecord change, CancellationToken ct = default)
     {
-        lock (_gate) Changes.Add(change);
+        lock (_gate)
+            if (Changes.All(c => c.Id != change.Id)) Changes.Add(change);
         return Task.CompletedTask;
     }
 
@@ -154,6 +206,22 @@ public static class TestSettings
         },
     };
 
-    public static ConfigurationService Service(InMemoryConfigurationStore store, RecordingPublisher publisher, FixedClock clock) =>
-        new(new TestCatalog(Control, Days, PlanSettings.OrphanGraceDays), store, publisher, clock, NullLogger<ConfigurationService>.Instance);
+    public static ConfigurationService Service(InMemoryConfigurationStore store, RecordingPublisher publisher, FixedClock clock,
+        ISponsorLineOfBusinessLookup? sponsors = null) =>
+        new(new TestCatalog(Control, Days, PlanSettings.OrphanGraceDays), store, publisher, clock, NullLogger<ConfigurationService>.Instance, sponsors);
+}
+
+/// <summary>Sponsor lines of business by group number; throws for <see cref="Fail"/>.</summary>
+public sealed class FakeSponsorLines : ISponsorLineOfBusinessLookup
+{
+    public Dictionary<string, string> Lines { get; } = new();
+    public bool Fail { get; set; }
+    public int Calls { get; private set; }
+
+    public Task<string?> GetAsync(string tenantId, string groupNumber, CancellationToken ct = default)
+    {
+        Calls++;
+        if (Fail) throw new HttpRequestException("sponsor-service unavailable");
+        return Task.FromResult(Lines.GetValueOrDefault(groupNumber));
+    }
 }
