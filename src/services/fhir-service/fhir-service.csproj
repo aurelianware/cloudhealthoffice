@@ -37,6 +37,7 @@
     <ProjectReference Include="..\shared\CloudHealthOffice.Consent.Contracts\CloudHealthOffice.Consent.Contracts.csproj" />
     <!-- claims.finalized.v1 payload, for publishing ExplanationOfBenefit to a managed FHIR store (ADR 023). -->
     <ProjectReference Include="..\shared\CloudHealthOffice.Events\CloudHealthOffice.Events.csproj" />
+    <ProjectReference Include="..\shared\CloudHealthOffice.PlanConfiguration\CloudHealthOffice.PlanConfiguration.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.ManagedFhirStore\CloudHealthOffice.ManagedFhirStore.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.ProviderEnrollmentService\CloudHealthOffice.ProviderEnrollmentService.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.PriorAuthRuleEngine\CloudHealthOffice.PriorAuthRuleEngine.csproj" />

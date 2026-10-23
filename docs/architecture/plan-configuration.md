@@ -1,6 +1,6 @@
 # Plan configuration: settings that cascade, with overrides
 
-**Status:** Agreed in review (2026-10-22); decisions in §13.
+**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2).
 **Scope:** One way for every CHO service to define a business setting, set it at the right level of the plan's structure, override it further down, and explain where an effective value came from.
 
 **Related:**
@@ -224,33 +224,22 @@ Changes needing a reason or a second approver use the same pattern as two-person
 
 ## 12. Build order
 
-1. **Catalog, store, resolver** (in tenant-service). *Built 2026-10-22 (§12.1); the tenant controls moved to step 2.*
+1. **Catalog, store, resolver** (in tenant-service). *Built 2026-10-22 (§12.1); the tenant controls moved to step 2b.*
    - Definitions, values with effective dating, locks and constraints.
    - The resolve and explain API, the cache client and change events.
    - Levels: tenant, line-of-business type and sponsor.
    - Move #1500's enrollment settings into it; retire its interim store, endpoints and `enrollment:configure`.
    - The `config:*` permissions and the roles in §9a.
-2. **Program and carrier records** in tenant-service. One carrier per tenant is created automatically.
-   - Legal-entity details move from tenant configuration to the carrier: NACHA origination, payer IDs, tax ID, the name and address used on letters and ID cards.
-   - Tenant controls become catalog settings at tenant level: payment separation of duties, personal-representative activation by a second user. Technical and integration configuration (modules, region, SFTP, clearinghouse, platform adapters) stays tenant configuration.
+2. **Program and carrier records** in tenant-service. *Built 2026-10-23 (§12.2).*
+   - Carrier and program records, one carrier per tenant created automatically.
    - Benefit plans and sponsors gain a program.
-   - Line-of-business defaults move from the enum to programs (a program carries its line-of-business type).
-   - **A consumer already waiting on this:** `CrdContextResolver` in fhir-service
-     (2026-10-23) builds the prior-authorization rule context for a CRD hook. The
-     rule engine keys its rule sets on `StateCode` + `Lob` + `Program`, which is
-     the same information a program carries as one record. Today the resolver
-     reads state from the member's Patient address and line of business from the
-     `cho-line-of-business` coding on their Coverage, and sets `Program` to
-     **null** — because CHO has no program field to read. It is worth knowing
-     what that costs: the engine falls back from program-specific rule sets to
-     program-agnostic ones, so state-and-line-of-business rules resolve
-     correctly, but a rule set keyed on a program such as `STAR` fires for
-     nobody. (Before this, a hard-coded `TX` / `Medicaid` / `STAR` context made
-     it fire for everybody, including a commercial member in Ohio — so this is
-     strictly fewer wrong answers, and also fewer answers.) When programs land,
-     the resolver should read the member's benefit plan → program and take all
-     three from that one record, and the engine's `ResolvedRuleSetKey` can
-     become a program id rather than a string concatenation.
+   - Carrier, program and benefit-plan levels in the resolver; naming a program resolves the levels above it.
+   - `CrdContextResolver` reads the member's benefit plan → program.
+   - **Still to do, as step 2b.** Each one is a consumer change rather than a new record, so they move one at a time behind the fields step 2 added:
+     - Legal-entity details move from tenant configuration to the carrier: NACHA origination (premium-billing, capitation), payer IDs (EDI, eligibility), tax ID, and the name and address used on letters and ID cards (correspondence, idcard). The carrier already holds the fields; the sending services still read tenant configuration.
+     - Tenant controls become catalog settings at tenant level: `payment.enforceSeparationOfDuties` (capitation-service), `personalRepresentative.requireSecondUserActivation` (personal-representative-service). Technical and integration configuration (modules, region, SFTP, clearinghouse, platform adapters) stays tenant configuration.
+     - The `overrides` endpoint narrows by hierarchy: a carrier's programs, a program's plans, a sponsor's policies.
+     - The engine's `ResolvedRuleSetKey` becomes a program id rather than a string concatenation of state, line of business and program code.
 3. **Sponsor contracts** (§9b) in sponsor-service, with sponsor policies and classes, draft terms and underwriting approval (enrollment step 4), and their levels in the resolver.
 4. **First consumers:**
    - enrollment retro limits, waiting periods, orphan grace and the full-replace guard;
@@ -264,7 +253,7 @@ Changes needing a reason or a second approver use the same pattern as two-person
   - **Definitions** (`SettingDefinition`): key, type (integer, decimal, boolean, enum, duration, JSON), owner, description, unit, default and defaults per line-of-business type, allowed levels, constraints (range, allowed values, floors scoped by line of business with a citation), change control and whether the setting is effective-dated.
   - **The catalog** ships in code (`PlanSettings`, `PlanSettingCatalog`): a service adds its definition there and tenant-service accepts values for it with no other change. `PlanSettingCatalog.Require(key)` fails fast on an undefined key.
   - **The resolution rules** (`SettingResolver`, `SettingValidator`), shared by tenant-service and the in-process client so both answer the same way.
-  - **Levels** are an ordered enum with room between them (tenant 100, carrier 200, line of business 300, program 400, benefit plan 500, sponsor 600, sponsor policy 700, class 800). Adding a level is a new definition entry and a scope field, not a resolver change. Step 1 holds values at **tenant, line-of-business type and sponsor** (scope id: group number).
+  - **Levels** are an ordered enum with room between them (tenant 100, carrier 200, line of business 300, program 400, benefit plan 500, sponsor 600, sponsor policy 700, class 800). Adding a level is a new definition entry and a scope field, not a resolver change. Step 1 held values at **tenant, line-of-business type and sponsor** (scope id: group number); step 2 added **carrier** (scope id: carrier id), **program** (program id) and **benefit plan** (the plan id a coverage carries).
   - **The client** (`IPlanSettings`, `AddPlanSettingsClient`): resolves through tenant-service, caches per tenant, key, scope and date for `PlanSettings:CacheSeconds` (60), and evicts a key's answers on `configuration.changed.v1` when Kafka is configured (each process listens in its own consumer group). It never throws for an unreachable tenant-service: it answers with the definition's default for the line of business, marked `IsFallback`, logs a warning and does not cache the fallback. `InMemoryPlanSettings` applies the same rules for tests.
 - **Configuration module in tenant-service** (collections `configuration-values`, `configuration-pending`, `configuration-changes`; routes `api/v1/configuration/...`, all needing `config:read`):
   - `GET catalog`;
@@ -278,7 +267,20 @@ Changes needing a reason or a second approver use the same pattern as two-person
 - **Locks:** a locked value at a general level stops every more specific level, and the trace shows the ignored overrides.
 - **Permissions and roles:** `config:read`, `config:sponsor`, `config:product`, `config:enterprise`, `config:approve` on `ChoRolePermissions`; roles AccountManager, Underwriter, ConfigurationAnalyst, ConfigurationManager (and the tenant-service role catalogue and portal role names); `config:read` added to EnrollmentSpecialist, ClaimsSupervisor, MemberServices and ComplianceViewer (ComplianceOfficer has it through `*:read`). Until programs bring negotiable ranges, `config:sponsor` writes are bounded by each definition's constraints.
 - **First setting moved:** `enrollment.orphan.graceDays`. enrollment-import resolves it through the client; on a fallback it opens the orphan rather than hold it on a guessed default. The interim `enrollment-settings` store, `api/v1/enrollment/settings` and `enrollment:configure` are removed; stored interim values were not migrated (no tenant had set any) and the benefit-plan level returns with step 2.
-- **Deferred to step 2:** the tenant controls (`payment.enforceSeparationOfDuties`, `personalRepresentative.requireSecondUserActivation`) move with the carrier and program records, together with their consumers.
+- **Deferred to step 2b:** the tenant controls (`payment.enforceSeparationOfDuties`, `personalRepresentative.requireSecondUserActivation`) become catalog settings together with their consumers (§12.2 built the records they hang off).
+
+### 12.2 What step 2 built
+
+- **Carrier and program records** (tenant-service `Hierarchy/`; collections `carriers`, `programs`):
+  - A **carrier** is a legal entity of the tenant: code (upper case, unique in the tenant), name, legal name, tax ID, NAIC code, payer IDs per transaction, NACHA immediate origin and company identification, and the name and address used on letters and ID cards. One per tenant, code `DEFAULT`, created from the tenant's own record the first time carriers are read — so no caller has to handle "this tenant has no carrier yet", and two concurrent readers cannot create two (the id is `{tenant}|{code}`, so the loser of the insert reads the winner's). A tenant must keep one active carrier.
+  - A **program** is a line of business in a state under a carrier: code, name, line-of-business type (a canonical `LinesOfBusiness` name), two-letter state, regulatory contract number, effective dates, active. A program's code, carrier, state and line of business are **fixed once it exists**: every rule set, setting and filing keyed on the program would move with them, so a change means a new program and retiring the old one. Its name, contract number, dates and status can change.
+  - Routes `api/v1/carriers` and `api/v1/programs` (list, read, create, patch), all needing `config:read`; a carrier write needs `config:enterprise` and a program write `config:product`, the same split `SettingValidator.WritePermissionFor` applies to settings at those levels. Both are revision-guarded, as the tenant record is.
+- **`GET api/v1/programs/by-benefit-plan/{planId}`** follows the plan → program link that benefit-plan-service holds, so every consumer asks one service one question (§7) rather than joining two records itself. Its **404 means the plan carries no program**; a **503 means benefit-plan-service could not be asked**. A caller that could not tell those apart would read an outage as a member with no program.
+- **Benefit plans and sponsors carry a program.** `BenefitPlan.ProgramId` and `Sponsor.ProgramId`, both nullable: every record written before programs existed carries none, and a reader must treat null as "not stated" rather than guessing from the line-of-business enum, which carries no state and no program code. Where both are set the program is the authority on the line of business — it is the one a contract was written against — but they are not reconciled on write, because a plan can be given a program long after it was created and refusing the link would leave the plan with neither. A sponsor that buys from more than one program leaves its own field null and carries the program on each plan: the two branches meet at the sponsor policy, not at the sponsor (§3).
+- **Resolution through the new levels.** `SettingScope` gains `Carrier`, `Program` and `BenefitPlan`, so the chain runs sponsor → benefit plan → program → line of business → carrier → tenant → platform default. **Naming a program is enough to place a member:** `SettingScope.CompletedFrom` reads the program's carrier and line-of-business type off the one record, so a caller holding a single program id resolves the whole branch above it — which is what "line-of-business defaults move from the enum to programs" amounts to in practice. What the caller already stated wins, so a record it did not name cannot contradict it, and a program the tenant does not have is left as given (the resolution then simply finds nothing at that node rather than failing a read of an unrelated setting).
+- **`IProgramDirectory`** (shared `CloudHealthOffice.PlanConfiguration`): `GetAsync` and `ForBenefitPlanAsync`, reading tenant-service, cached per tenant for `ProgramDirectory:CacheSeconds` (300 — programs change about once a plan year). It answers null for a program that is not there and **throws when tenant-service could not be asked**, so a caller can tell "no program" from "did not get to look". `InMemoryProgramDirectory` for tests and hosts without tenant-service.
+- **First consumer: `CrdContextResolver`** (fhir-service). The prior-authorization rule engine keys its rule sets on state, line of business and program, and a program record carries all three. Where the member's coverage names a benefit plan sold under a program, all three now come from the program: the line of business the contract was written against, and the state the plan operates in, rather than whichever state the member's mailing address is in. Where there is no program, state and line of business come from the address and the coverage's `cho-line-of-business` coding as before, and `Program` stays null — a correct answer, just a less specific one. **If the program could not be looked up, the context is not filled in from the address instead:** the resolution fails with the IG's `technical` reason and the engine is not called. A member on a Texas STAR plan living in Ohio would otherwise get an Ohio rule set during an outage, which is the confident-answer-about-someone-else's-benefits failure the resolver exists to stop. A coverage that names no plan has nothing to look up, so it takes the address path without a call.
+- **Deferred to step 2b** (§12): moving the services that read NACHA origination, payer IDs and letter addresses off tenant configuration and onto the carrier, the two tenant controls becoming catalog settings, hierarchy narrowing in `overrides`, and the rule-set key becoming a program id.
 
 ## 13. Decisions (2026-10-22)
 

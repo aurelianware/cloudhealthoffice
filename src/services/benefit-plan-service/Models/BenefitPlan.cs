@@ -66,6 +66,24 @@ public class BenefitPlan
     [JsonPropertyName("lineOfBusiness")]
     public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
 
+    /// <summary>
+    /// The program this plan is sold under — a line of business in a state,
+    /// held in tenant-service (docs/architecture/plan-configuration.md §3).
+    /// Null on every plan written before programs existed, and on a plan whose
+    /// program has not been set yet; a reader must treat null as "not stated"
+    /// rather than guessing from <see cref="LineOfBusiness"/>, which carries no
+    /// state and no program code.
+    ///
+    /// <para>
+    /// The program is the authority on the line of business where both are set:
+    /// it is the one a contract was actually written against. They are not
+    /// reconciled here, because a plan can be given a program long after it was
+    /// created and refusing the link would leave the plan with neither.
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("programId")]
+    public string? ProgramId { get; set; }
+
     [JsonPropertyName("benefits")]
     [JsonConverter(typeof(BenefitListJsonConverter))]
     public List<Benefit> Benefits { get; set; } = new();

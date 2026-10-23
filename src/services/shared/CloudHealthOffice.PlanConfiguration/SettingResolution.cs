@@ -50,6 +50,12 @@ public sealed record SettingScope
     public static readonly SettingScope Empty = new();
 
     public string? LineOfBusiness { get; init; }
+    /// <summary>The carrier's id. Derived from the program when only the program is given.</summary>
+    public string? Carrier { get; init; }
+    /// <summary>The program's id, not its code: one line of business in one state.</summary>
+    public string? Program { get; init; }
+    /// <summary>The benefit plan's plan id, as coverage-service records it on a coverage.</summary>
+    public string? BenefitPlan { get; init; }
     /// <summary>The sponsor's group number.</summary>
     public string? Sponsor { get; init; }
 
@@ -58,12 +64,29 @@ public sealed record SettingScope
     {
         var chain = new List<(SettingLevel, string)>();
         if (!string.IsNullOrWhiteSpace(Sponsor)) chain.Add((SettingLevel.Sponsor, Sponsor.Trim()));
+        if (!string.IsNullOrWhiteSpace(BenefitPlan)) chain.Add((SettingLevel.BenefitPlan, BenefitPlan.Trim()));
+        if (!string.IsNullOrWhiteSpace(Program)) chain.Add((SettingLevel.Program, Program.Trim()));
         if (LinesOfBusiness.Normalize(LineOfBusiness) is { } lob) chain.Add((SettingLevel.LineOfBusiness, lob));
+        if (!string.IsNullOrWhiteSpace(Carrier)) chain.Add((SettingLevel.Carrier, Carrier.Trim()));
         chain.Add((SettingLevel.Tenant, string.Empty));
         return chain;
     }
 
-    public string CacheKey => $"{LinesOfBusiness.Normalize(LineOfBusiness)}|{Sponsor?.Trim()}";
+    /// <summary>
+    /// The same scope with what the program record supplies filled in
+    /// (plan-configuration.md §7: the client fills in what can be derived).
+    /// Anything the caller already stated wins, so a caller cannot be
+    /// contradicted by a record it did not name.
+    /// </summary>
+    public SettingScope CompletedFrom(ProgramDescriptor program) => this with
+    {
+        Program = string.IsNullOrWhiteSpace(Program) ? program.Id : Program,
+        Carrier = string.IsNullOrWhiteSpace(Carrier) ? program.CarrierId : Carrier,
+        LineOfBusiness = LinesOfBusiness.Normalize(LineOfBusiness) ?? program.LineOfBusiness,
+    };
+
+    public string CacheKey =>
+        $"{LinesOfBusiness.Normalize(LineOfBusiness)}|{Carrier?.Trim()}|{Program?.Trim()}|{BenefitPlan?.Trim()}|{Sponsor?.Trim()}";
 }
 
 public sealed record SettingTraceEntry(SettingLevel Level, string ScopeId, string? Value, bool Locked, int? Version, string Note);

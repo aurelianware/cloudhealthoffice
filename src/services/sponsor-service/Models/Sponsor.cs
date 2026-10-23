@@ -136,6 +136,22 @@ public class Sponsor
     public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
 
     /// <summary>
+    /// The program this sponsor's coverage is sold under — a line of business in
+    /// a state, held in tenant-service
+    /// (docs/architecture/plan-configuration.md §3). Null on every sponsor
+    /// written before programs existed.
+    ///
+    /// <para>
+    /// A sponsor that buys from more than one program leaves this null and
+    /// carries the program on each benefit plan instead: the two branches of
+    /// the hierarchy meet at the sponsor policy, not at the sponsor (§3). This
+    /// field is for the common case, one sponsor buying within one program, so
+    /// a sponsor-level setting can be placed without a policy record (step 3).
+    /// </para>
+    /// </summary>
+    public string? ProgramId { get; set; }
+
+    /// <summary>
     /// Billing configuration
     /// </summary>
     public BillingInfo? BillingInfo { get; set; }

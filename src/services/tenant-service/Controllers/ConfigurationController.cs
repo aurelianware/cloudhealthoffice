@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.PlanConfiguration;
 using Microsoft.AspNetCore.Mvc;
 using TenantService.Configuration;
+using TenantService.Hierarchy;
 
 namespace TenantService.Controllers;
 
@@ -13,29 +14,43 @@ namespace TenantService.Controllers;
 /// write needs the permission for its level as well (§9a):
 /// <c>config:sponsor</c> at sponsor level, <c>config:enterprise</c> at line
 /// of business and tenant level; approving needs <c>config:approve</c>.
-/// Nodes in routes: <c>tenant/_</c>, <c>lineOfBusiness/Commercial</c>,
-/// <c>sponsor/{groupNumber}</c>.
+/// Nodes in routes: <c>tenant/_</c>, <c>carrier/{carrierId}</c>,
+/// <c>lineOfBusiness/Commercial</c>, <c>program/{programId}</c>,
+/// <c>benefitPlan/{planId}</c>, <c>sponsor/{groupNumber}</c>.
 /// </summary>
 [ApiController]
 [Route("api/v1/configuration")]
 [RequirePermission(PlanConfigurationPermissions.Read)]
-public sealed class ConfigurationController(ConfigurationService configuration, ISettingCatalog catalog, ICurrentActor actor) : ControllerBase
+public sealed class ConfigurationController(
+    ConfigurationService configuration, ISettingCatalog catalog, ICurrentActor actor, HierarchyService hierarchy) : ControllerBase
 {
     /// <summary>Every defined setting: type, defaults, allowed levels, constraints, change control.</summary>
     [HttpGet("catalog")]
     public IActionResult Catalog() => Ok(catalog.All.OrderBy(d => d.Key));
 
-    /// <summary>A setting's value for a member's position on a date, where it came from, and every level checked.</summary>
+    /// <summary>
+    /// A setting's value for a member's position on a date, where it came from,
+    /// and every level checked. Naming a <c>program</c> is enough to place the
+    /// member: its carrier and line of business are read from the program
+    /// record, so a caller holding one id gets the whole branch above it
+    /// (plan-configuration.md §7).
+    /// </summary>
     [HttpGet("resolve")]
     public async Task<IActionResult> Resolve([FromQuery] string key, [FromQuery] DateTime? asOf,
-        [FromQuery] string? lineOfBusiness, [FromQuery] string? sponsor, CancellationToken ct)
+        [FromQuery] string? lineOfBusiness, [FromQuery] string? sponsor, [FromQuery] string? carrier,
+        [FromQuery] string? program, [FromQuery] string? benefitPlan, CancellationToken ct)
     {
         if (lineOfBusiness is not null && LinesOfBusiness.Normalize(lineOfBusiness) is null) return UnknownLine(lineOfBusiness);
-        var resolved = await configuration.ResolveAsync(actor.TenantId, key, new SettingScope { LineOfBusiness = lineOfBusiness, Sponsor = sponsor }, asOf, ct);
+        var scope = await CompleteAsync(new SettingScope
+        {
+            LineOfBusiness = lineOfBusiness, Sponsor = sponsor, Carrier = carrier, Program = program, BenefitPlan = benefitPlan,
+        }, ct);
+        var resolved = await configuration.ResolveAsync(actor.TenantId, key, scope, asOf, ct);
         return resolved is null ? UnknownKey(key) : Ok(resolved);
     }
 
-    public sealed record ResolveRequest(string Key, DateTime? AsOf, string? LineOfBusiness, string? Sponsor);
+    public sealed record ResolveRequest(string Key, DateTime? AsOf, string? LineOfBusiness, string? Sponsor,
+        string? Carrier = null, string? Program = null, string? BenefitPlan = null);
 
     /// <summary>Several resolutions at once (up to 100).</summary>
     [HttpPost("resolve")]
@@ -46,12 +61,28 @@ public sealed class ConfigurationController(ConfigurationService configuration, 
         foreach (var r in requests)
         {
             if (r.LineOfBusiness is not null && LinesOfBusiness.Normalize(r.LineOfBusiness) is null) return UnknownLine(r.LineOfBusiness);
-            var resolved = await configuration.ResolveAsync(actor.TenantId, r.Key, new SettingScope { LineOfBusiness = r.LineOfBusiness, Sponsor = r.Sponsor }, r.AsOf, ct);
+            var scope = await CompleteAsync(new SettingScope
+            {
+                LineOfBusiness = r.LineOfBusiness, Sponsor = r.Sponsor, Carrier = r.Carrier, Program = r.Program, BenefitPlan = r.BenefitPlan,
+            }, ct);
+            var resolved = await configuration.ResolveAsync(actor.TenantId, r.Key, scope, r.AsOf, ct);
             if (resolved is null) return UnknownKey(r.Key);
             results.Add(resolved);
         }
         return Ok(results);
     }
+
+    /// <summary>
+    /// Fills in the levels above a named program. A program the tenant does not
+    /// have is left as the caller gave it: the resolution then simply finds
+    /// nothing at that node, which is the honest answer, rather than failing a
+    /// read of an unrelated setting.
+    /// </summary>
+    private async Task<SettingScope> CompleteAsync(SettingScope scope, CancellationToken ct) =>
+        string.IsNullOrWhiteSpace(scope.Program)
+        || await hierarchy.GetProgramAsync(actor.TenantId, scope.Program.Trim(), ct) is not { } program
+            ? scope
+            : scope.CompletedFrom(program.ToDescriptor());
 
     /// <summary>Every override of a key at a node's level and every more specific level ("where is this overridden?").</summary>
     [HttpGet("overrides")]
@@ -135,7 +166,7 @@ public sealed class ConfigurationController(ConfigurationService configuration, 
     };
 
     private UnprocessableEntityObjectResult UnknownLevel(string level) =>
-        UnprocessableEntity(new { error = $"Unknown level '{level}'. Use tenant, lineOfBusiness or sponsor." });
+        UnprocessableEntity(new { error = $"Unknown level '{level}'. Use tenant, carrier, lineOfBusiness, program, benefitPlan or sponsor." });
 
     private NotFoundObjectResult UnknownKey(string key) => NotFound(new { error = $"Setting '{key}' is not defined." });
 
