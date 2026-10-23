@@ -159,6 +159,8 @@ WorkQueueSnapshot
   tenantId, queueId, queueName, workType, periodStart (hour, UTC), capturedAt
   open, leased, openAndOverdue, dueWithin24h, dueWithin72h
   arrivals, completions, reopened, cancelled, reroutedIn, reroutedOut
+  openAtPeriodStart                              (so §5.3 can tell a quiet
+                                                  hour from an idle one)
   oldestAgeHours, medianAgeHours, p90AgeHours
   medianScore, p90Score
   leaseStarts, leaseCompletions, leasesReclaimed, releases
@@ -272,7 +274,7 @@ changes".**
 ```
 inventory due by T          from current items' DueAt
 + forecast arrivals due by T (arrival × the share historically due within T)
-− projected completions by T (§5.3 capacity × hours remaining)
+− projected completions by T (§5.3's measured throughput over the hours remaining)
 = projected breaches by T, with a band from the arrival band and the
   throughput band
 ```
@@ -290,31 +292,68 @@ and those queues are reported separately from internal-SLA queues. A breach of
 an internal SLA is a service problem; a breach of 42 CFR 422 is a citation, and
 the two must never be summed into one number.
 
-### 5.3 Capacity, measured not assumed
+### 5.3 Capacity: measured throughput, not available hours
 
-Capacity per queue over a window is:
+**CHO does not model who is working, and should not try.** The projection needs
+expected throughput, and throughput is directly measurable:
 
 ```
-capacity = Σ over eligible workers:
-             available hours × share of their time historically spent in
-             this queue × their measured items-per-hour in it
+baseline(queue, weekday, hour)
+  = p50 of completions in that queue in that weekday-hour slot,
+    over a trailing window, counting only hours in which the queue
+    had work to do
+exceptions
+  = dated, supervisor-entered deviations (headcount delta or percentage)
+holidays
+  = the tenant holiday calendar (shared with the arrival side)
+
+projected completions = baseline × (1 + exceptions) × holidays
+band                  = measured p10 / p90 of the same slots
 ```
 
-all three terms measured from snapshots and memberships, with **available hours
-the one input CHO does not know** — CHO has no schedule, no shifts, no PTO. Three
-options, in order of preference:
+An earlier draft of this document decomposed capacity as *available hours ×
+share of time in this queue × items per hour*, with available hours taken from a
+WFM adapter or a shift pattern typed into CHO. That was the wrong abstraction. It
+imported a workforce-management model into a problem that does not need one, and
+every term in it is something a person has to maintain and will stop
+maintaining. Measured throughput already has the staffing level, the shift
+patterns, the PTO rate and the real productivity inside it, and it self-corrects:
+a team that shrinks produces less, and the projection follows without anyone
+telling it anything.
 
-1. **Read the schedule from the plan's WFM** (NiCE, Verint, Genesys, Amazon
-   Connect) through an adapter, where the plan has one and will share it. Best
-   answer; one adapter per platform, the same pattern as every other CHO
-   adapter.
-2. **A simple shift pattern per team** in CHO configuration (hours per weekday,
-   holidays), maintained by the supervisor. Crude, good enough for a projection
-   to two weeks, and the only option a plan without WFM has.
-3. **Inferred from observed activity** (hours in which that worker completed or
-   leased anything). Available as a fallback and clearly labelled as inferred,
-   because it cannot tell "off today" from "stuck in a meeting" from "working a
-   different system".
+**What measurement cannot see is a known future change,** and over a one-to-two
+week horizon that is precisely what matters — three people on leave next week, a
+new hire starting, a training day. Hence `exceptions`: dated entries a supervisor
+makes *only* for known deviations, a handful a month rather than a roster. This
+is deliberately the same shape as the driver calendar on the arrival side
+(§5.1), so both terms of the projection are a measured baseline with known,
+dated adjustments on top, and a supervisor learns one idea instead of two.
+
+**The holiday calendar is the one thing worth holding as real configuration,**
+because the arrival forecast needs it anyway — claims do not arrive on Christmas
+either — so one calendar per tenant serves both terms.
+
+**A WFM schedule adapter keeps its place, demoted.** Where a plan runs NiCE,
+Verint, Genesys or Amazon Connect and will share its schedule, an adapter
+replaces the hand-entered exceptions with real data. It is a refinement, not the
+source of truth, so nothing here waits on a procurement conversation or on one
+integration per platform.
+
+**Two limitations, stated rather than hidden.**
+
+1. **Measured throughput conflates capacity with demand.** A queue that has been
+   starved of work shows low completions because there was nothing to do, not
+   because nobody was there. Hence the conditioning above: only hours in which
+   the queue was non-empty count toward the baseline. A queue that has never been
+   busy has no credible capacity estimate, and the projection says so instead of
+   guessing.
+2. **Per-queue throughput double-counts shared workers.** Someone who works two
+   queues contributes to the measured baseline of both, so projecting both at
+   full baseline simultaneously assumes they are in two places. A single queue's
+   projection is sound; a plan-wide total is an **upper bound** and is labelled
+   one. This is also the argument for §5.4: reallocating shared people is exactly
+   what a rebalancing recommendation decides, and it is a decision, not something
+   a forecast can assume away.
 
 **Erlang C is the wrong model here and will not be used.** It assumes callers
 who wait or abandon in real time; back-office work neither abandons nor is
@@ -594,7 +633,9 @@ Each phase is useful on its own, and each is a reviewable PR or two.
    *This is also the data the reporting layer's supervisor reports need, so it
    should be built once, here, rather than twice.*
 1. **The present, measured.** Live queue health: inventory, overdue, measured
-   throughput and handle time, items due in 24/72h, the health strip on
+   throughput and handle time (the whole capacity side of §5.3, which needs no
+   new input beyond the snapshots), the tenant holiday calendar, items due in
+   24/72h, the health strip on
    `/work-queues`, and the pended-inventory and throughput reports. No forecast,
    no AI. Already more than supervisors have today.
 2. **Forecast.** The seasonal model, the driver calendar, stored forecasts,
@@ -610,8 +651,9 @@ Each phase is useful on its own, and each is a reviewable PR or two.
    `AuthorityRaise` and `SplitQueue` after, each gated on its own rejection rate.
 5. **Claude narration.** The daily brief, anomaly explanation and recommendation
    rationale, over the figures from 1–4.
-6. **Outward.** Drivers to the plan's WFM, and the schedule adapter that
-   improves §5.3's capacity term. Optionally CHO work items into platform task
+6. **Outward.** Drivers to the plan's WFM, and the optional schedule adapter
+   that replaces §5.3's hand-entered capacity exceptions with real schedule
+   data. Optionally CHO work items into platform task
    routing.
 
 **Dependencies to be honest about:** phase 2 cannot be credible for contact
@@ -629,7 +671,7 @@ be sequenced together rather than each building half a reporting layer.
 | # | Question | Recommendation |
 |---|---|---|
 | 1 | Does this live in `work-management-service` or a new service? | **In work-management-service.** It needs queue configuration, memberships, items, due dates and the audit stream, and a separate service would have to copy or call for all of it. Contact volume comes in through one read endpoint. Revisit only if the forecaster's compute starts to interfere with `Get Next`. |
-| 2 | Where does **available hours** come from (§5.3)? | Build the simple shift pattern first, since every plan can fill it in; add a WFM schedule adapter when a pilot plan will share its schedule; keep the inferred fallback clearly labelled. |
+| 2 | ~~Where does **available hours** come from (§5.3)?~~ | **Answered 2026-10-23 (Mark asked what was best).** Nowhere: the question was wrong. §5.3 now measures throughput per queue per weekday-hour from the snapshots, adds a tenant holiday calendar the arrival side needs anyway, and takes sparse dated exceptions from a supervisor for known future changes. No schedule, no shift table, no adapter on the critical path. |
 | 3 | Should per-worker throughput be snapshotted so a supervisor can see trends? | **No** in this capability. Per-person measurement belongs to the throughput report under its own permission, with its own retention. Making it a by-product of forecasting creates a two-year performance record nobody asked for. |
 | 4 | Do we show forecasts to supervisors before the backtest gate passes? | No. Show "not enough history" with the date. A forecast that embarrasses itself once will not be trusted again. |
 | 5 | ~~Should `StaffingGap` findings be visible to anyone above the supervisor?~~ | **Answered 2026-10-23 (Mark).** The supervisor sees it and it rolls up to the director or VP who owns meeting compliance, who also needs to be able to intervene. Designed in §6.4, which turns "rolls up" into scope rather than a reporting line, and names the two gaps it exposes (no director role, no scope on `workqueue:admin`). |
