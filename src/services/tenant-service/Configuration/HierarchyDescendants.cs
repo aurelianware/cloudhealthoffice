@@ -23,14 +23,28 @@ public interface IHierarchyDescendants
 
     /// <summary>The plan ids of every benefit plan in the named programs.</summary>
     Task<IReadOnlyList<string>> BenefitPlanIdsAsync(string tenantId, IReadOnlyCollection<string> programIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// The policies a sponsor offers, each with its classes, from the sponsor
+    /// contract (§9b). Empty where the group has no contract yet, which is a
+    /// real answer: that sponsor overrides nothing below itself.
+    /// </summary>
+    Task<IReadOnlyList<SponsorPolicyNode>> PoliciesAsync(string tenantId, string groupNumber, CancellationToken ct = default);
 }
 
 /// <summary>
-/// Reads programs from tenant-service's own hierarchy records and plans from
-/// benefit-plan-service, which is where each link lives.
+/// Reads programs from tenant-service's own hierarchy records, plans from
+/// benefit-plan-service and policies from sponsor-service, which is where each
+/// link lives.
 /// </summary>
-public sealed class HierarchyDescendants(HierarchyService hierarchy, IBenefitPlanProgramLookup plans) : IHierarchyDescendants
+public sealed class HierarchyDescendants(
+    HierarchyService hierarchy,
+    IBenefitPlanProgramLookup plans,
+    ISponsorPolicyLookup policies) : IHierarchyDescendants
 {
+    public Task<IReadOnlyList<SponsorPolicyNode>> PoliciesAsync(string tenantId, string groupNumber, CancellationToken ct = default) =>
+        policies.GetPoliciesAsync(tenantId, groupNumber, ct);
+
     public async Task<IReadOnlyList<ProgramNode>> ProgramsAsync(string tenantId, string? carrierId, CancellationToken ct = default) =>
         (await hierarchy.ListProgramsAsync(tenantId, carrierId, ct))
             .Select(p => new ProgramNode(p.Id, p.LineOfBusiness))

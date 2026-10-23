@@ -1,6 +1,6 @@
 # Plan configuration: settings that cascade, with overrides
 
-**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), the records of step 3 (§12.7) and the terms per contract year of step 3b (§12.8); 3c, the sponsor narrowing and the two levels below it, is next.
+**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), and steps 3a to 3c of step 3 (§§12.7–12.9); 3d, the consumers, is next.
 **Scope:** One way for every CHO service to define a business setting, set it at the right level of the plan's structure, override it further down, and explain where an effective value came from.
 
 **Related:**
@@ -243,7 +243,7 @@ Changes needing a reason or a second approver use the same pattern as two-person
 3. **Sponsor contracts** (§9b) in sponsor-service, with sponsor policies and classes, draft terms and underwriting approval (enrollment step 4), and their levels in the resolver. Staged, because the records come before anything that reads them:
    - **3a, the records:** sponsor policies with their classes, and contract terms with §9b's status flow. *Built 2026-10-23 (§12.7).*
    - **3b, terms versioned per contract year:** the tiers, rates, contribution, billing terms, eligibility, waiting period and life events of §9b's table, held per period so that a renewal adds a version rather than replacing a policy. *Built 2026-10-23 (§12.8), the policy's own sections and the contract term's.*
-   - **3c, the levels:** `SponsorPolicy` and `Class` in `SettingScope` and in resolution, and the sponsor → policies narrowing of `GET overrides` that step 2b deferred here (§12.6).
+   - **3c, the levels:** `SponsorPolicy` and `Class` in `SettingScope` and in resolution, and the sponsor → policies narrowing of `GET overrides` that step 2b deferred here (§12.6). *Built 2026-10-23 (§12.9).*
    - **3d, the consumers,** one at a time behind a fallback: the 834's `REF*1L` resolving against policy numbers, ID cards and the 837's `SBR03`, and claims eligibility.
 4. **First consumers:**
    - enrollment retro limits, waiting periods, orphan grace and the full-replace guard;
@@ -363,6 +363,19 @@ Two things in there are worth naming:
 - **A due day past the end of a month lands on its last day.** A due day of 31 means the end of the month, not a date that does not exist, and clamping it in the record is what stops every consumer getting February wrong in its own way.
 
 57 tests across 3b.
+
+### 12.9 Step 3, third part: the contract's own levels, and the branch they make
+
+Built 2026-10-23. This closes the item step 2b deferred (§12.6) and wires the two levels under the sponsor into resolution, now that 3a and 3b have built the records they hang off.
+
+- **A sponsor reaches its policies, and through them their classes.** `GET overrides` asked about a sponsor now confines the list to that sponsor's own policies and their classes, through sponsor-service's `GET api/v1/sponsors/{group}/policies`. Asked about one policy, it confines the classes to that policy's. The link is real rather than guessed: the classes 3a built compute their own node id from the policy's id, which is why §9b put that computation in one place.
+- **What a carrier still does not reach is a sponsor.** The deferral is gone but the honest limit under it is not: the link runs from a policy to a plan, so a sponsor buys plans rather than belonging to one, and there is no read from a carrier or a program to the sponsors under it. From the plan side the three contract levels stay unnarrowed, with a reason that now says *why* instead of saying "step 3 will fix it". Narrowing them would need sponsor-service to answer "which policies are in this program", which nothing asks yet; when something does, that is the read to add.
+- **`SponsorPolicy` and `Class` are in `SettingScope`,** in the chain, in the cache key and on the resolve endpoints. A class resolves through its policy, its sponsor, the plan, the program, the line of business, the carrier and the tenant, in that order.
+- **A class named without its policy is refused, not resolved.** It looks like a convenience to accept one and skip what was not named, and it is the same mistake in a new place: resolution would check the class and then the tenant and answer as though neither the policy nor the sponsor had set anything — "could not look" reading as "there is none" again. The caller holding a class id holds the policy's already, because the class id is built from it. Same for a policy named without its sponsor.
+- **An outage gives up the narrowing rather than the list,** as on the plan side. A sponsor whose contract could not be read still has every policy and class override returned, labelled unnarrowed, because narrowing on "no policies" would answer that the sponsor overrides nothing. A group that genuinely has no contract — which is every group until one is entered — *does* narrow to nothing, and that is correct: it has no policies.
+- **A policy id that does not name its group is reported, not guessed.** sponsor-service lists policies by group, and a policy node names only itself, so the group is taken from the policy's id. Where the id is not in that form, the class level comes back unnarrowed with its own reason rather than narrowed to nothing. The id format is therefore known in two services that share no package; it is pinned by a test on the tenant-service side, so a change on either side fails loudly instead of quietly matching nothing. If a third service needs it, it belongs in a shared contract.
+
+24 tests. Step 3d, the consumers, is next: billing terms replacing `Sponsor.BillingInfo`, the 834's `REF*1L` resolving against policy numbers, ID cards and the 837's `SBR03`, and claims eligibility — each behind a fallback, so a tenant with no contract behaves exactly as it does today.
 
 ## 13. Decisions (2026-10-22)
 

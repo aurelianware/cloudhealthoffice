@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.PlanConfiguration;
 using Microsoft.Extensions.Logging.Abstractions;
 using TenantService.Configuration;
+using TenantService.Hierarchy;
 
 namespace CloudHealthOffice.TenantService.Tests.Configuration;
 
@@ -224,9 +225,10 @@ public static class TestSettings
 }
 
 /// <summary>
-/// The hierarchy as the narrowing reads it: programs by carrier and plans by
-/// program. Throws for <see cref="Fail"/>, as an unreachable tenant-service or
-/// benefit-plan-service does.
+/// The hierarchy as the narrowing reads it: programs by carrier, plans by
+/// program, and a sponsor's policies with their classes. Throws for
+/// <see cref="Fail"/>, as an unreachable tenant-service, benefit-plan-service
+/// or sponsor-service does.
 /// </summary>
 public sealed class FakeDescendants : IHierarchyDescendants
 {
@@ -239,8 +241,16 @@ public sealed class FakeDescendants : IHierarchyDescendants
     /// <summary>Fail the program read.</summary>
     public bool Fail { get; set; }
 
+    /// <summary>Group number → its policies, each with its class codes.</summary>
+    public Dictionary<string, List<(string PolicyId, string[] ClassCodes)>> Policies { get; } = new();
+
     /// <summary>Fail only the plan read, so that a partly narrowed answer is possible.</summary>
     public bool FailPlans { get; set; }
+
+    /// <summary>Fail only the contract read, as an unreachable sponsor-service does.</summary>
+    public bool FailPolicies { get; set; }
+
+    public int PolicyReads { get; private set; }
 
     public int ProgramReads { get; private set; }
 
@@ -258,6 +268,18 @@ public sealed class FakeDescendants : IHierarchyDescendants
     {
         if (Fail || FailPlans) throw new HttpRequestException("benefit-plan-service unavailable");
         return Task.FromResult<IReadOnlyList<string>>(Plans.Where(p => programIds.Contains(p.Value)).Select(p => p.Key).ToList());
+    }
+
+    public Task<IReadOnlyList<SponsorPolicyNode>> PoliciesAsync(string tenantId, string groupNumber, CancellationToken ct = default)
+    {
+        if (Fail || FailPolicies) throw new HttpRequestException("sponsor-service unavailable");
+        PolicyReads++;
+        if (!Policies.TryGetValue(groupNumber, out var policies)) return Task.FromResult<IReadOnlyList<SponsorPolicyNode>>([]);
+        return Task.FromResult<IReadOnlyList<SponsorPolicyNode>>(policies
+            .Select(p => new SponsorPolicyNode(
+                p.PolicyId,
+                p.ClassCodes.Select(c => SponsorScopeIds.ForClass(p.PolicyId, c)).ToList()))
+            .ToList());
     }
 }
 

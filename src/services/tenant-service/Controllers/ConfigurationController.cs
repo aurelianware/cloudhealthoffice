@@ -38,19 +38,24 @@ public sealed class ConfigurationController(
     [HttpGet("resolve")]
     public async Task<IActionResult> Resolve([FromQuery] string key, [FromQuery] DateTime? asOf,
         [FromQuery] string? lineOfBusiness, [FromQuery] string? sponsor, [FromQuery] string? carrier,
-        [FromQuery] string? program, [FromQuery] string? benefitPlan, CancellationToken ct)
+        [FromQuery] string? program, [FromQuery] string? benefitPlan,
+        [FromQuery] string? sponsorPolicy, [FromQuery(Name = "class")] string? classId, CancellationToken ct)
     {
         if (lineOfBusiness is not null && LinesOfBusiness.Normalize(lineOfBusiness) is null) return UnknownLine(lineOfBusiness);
-        var scope = await CompleteAsync(new SettingScope
+        var stated = new SettingScope
         {
             LineOfBusiness = lineOfBusiness, Sponsor = sponsor, Carrier = carrier, Program = program, BenefitPlan = benefitPlan,
-        }, ct);
+            SponsorPolicy = sponsorPolicy, Class = classId,
+        };
+        if (stated.Incoherent() is { Count: > 0 } problems) return UnprocessableEntity(new { errors = problems });
+        var scope = await CompleteAsync(stated, ct);
         var resolved = await configuration.ResolveAsync(actor.TenantId, key, scope, asOf, ct);
         return resolved is null ? UnknownKey(key) : Ok(resolved);
     }
 
     public sealed record ResolveRequest(string Key, DateTime? AsOf, string? LineOfBusiness, string? Sponsor,
-        string? Carrier = null, string? Program = null, string? BenefitPlan = null);
+        string? Carrier = null, string? Program = null, string? BenefitPlan = null,
+        string? SponsorPolicy = null, string? Class = null);
 
     /// <summary>Several resolutions at once (up to 100).</summary>
     [HttpPost("resolve")]
@@ -61,10 +66,13 @@ public sealed class ConfigurationController(
         foreach (var r in requests)
         {
             if (r.LineOfBusiness is not null && LinesOfBusiness.Normalize(r.LineOfBusiness) is null) return UnknownLine(r.LineOfBusiness);
-            var scope = await CompleteAsync(new SettingScope
+            var stated = new SettingScope
             {
                 LineOfBusiness = r.LineOfBusiness, Sponsor = r.Sponsor, Carrier = r.Carrier, Program = r.Program, BenefitPlan = r.BenefitPlan,
-            }, ct);
+                SponsorPolicy = r.SponsorPolicy, Class = r.Class,
+            };
+            if (stated.Incoherent() is { Count: > 0 } problems) return UnprocessableEntity(new { errors = problems });
+            var scope = await CompleteAsync(stated, ct);
             var resolved = await configuration.ResolveAsync(actor.TenantId, r.Key, scope, r.AsOf, ct);
             if (resolved is null) return UnknownKey(r.Key);
             results.Add(resolved);
@@ -172,7 +180,7 @@ public sealed class ConfigurationController(
     };
 
     private UnprocessableEntityObjectResult UnknownLevel(string level) =>
-        UnprocessableEntity(new { error = $"Unknown level '{level}'. Use tenant, carrier, lineOfBusiness, program, benefitPlan or sponsor." });
+        UnprocessableEntity(new { error = $"Unknown level '{level}'. Use tenant, carrier, lineOfBusiness, program, benefitPlan, sponsor, sponsorPolicy or class." });
 
     private NotFoundObjectResult UnknownKey(string key) => NotFound(new { error = $"Setting '{key}' is not defined." });
 

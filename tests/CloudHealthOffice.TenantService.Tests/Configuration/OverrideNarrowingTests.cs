@@ -11,12 +11,14 @@ namespace CloudHealthOffice.TenantService.Tests.Configuration;
 ///
 /// <para>
 /// A carrier reaches its programs, and through them their lines of business
-/// and benefit plans. It does not reach sponsors: the sponsor contract and its
-/// policies and classes arrive with step 3, so a sponsor-level node is still
-/// listed whatever branch it belongs to — and the response says so, rather
-/// than letting a caller read an unnarrowed level as a narrowed one. The same
-/// is said, with a different reason, when the hierarchy could not be read at
-/// all: an outage must not quietly shrink the list to nothing.
+/// and benefit plans. A sponsor reaches its policies and their classes
+/// (§12.9). What a carrier still does not reach is a sponsor: the link runs
+/// from a policy to a plan, so a sponsor buys plans rather than belonging to
+/// one, and from the plan side a contract node is listed whatever branch it
+/// belongs to — with the response saying so, rather than letting a caller read
+/// an unnarrowed level as a narrowed one. The same is said, with a different
+/// reason, when the hierarchy could not be read at all: an outage must not
+/// quietly shrink the list to nothing.
 /// </para>
 /// </summary>
 public class OverrideNarrowingTests
@@ -33,6 +35,13 @@ public class OverrideNarrowingTests
         // Two commercial programs under one carrier, a Medicaid one under another.
         Programs = { ["P1"] = ("C1", "Commercial"), ["P2"] = ("C1", "Commercial"), ["P3"] = ("C2", "Medicaid") },
         Plans = { ["PL1"] = "P1", ["PL3"] = "P3" },
+        // ACME offers two policies; the PPO has an hourly and a salaried class.
+        // BETA is another group, so none of its nodes belong to ACME's branch.
+        Policies =
+        {
+            ["ACME"] = [("t1|ACME|ACME-0001", ["HOURLY", "SALARIED"]), ("t1|ACME|ACME-0002", [])],
+            ["BETA"] = [("t1|BETA|BETA-0001", ["HOURLY"])],
+        },
     };
 
     private ConfigurationService Service(IHierarchyDescendants? descendants) =>
@@ -51,6 +60,22 @@ public class OverrideNarrowingTests
         Set(SettingLevel.BenefitPlan, "PL1");
         Set(SettingLevel.BenefitPlan, "PL3");
         Set(SettingLevel.Sponsor, "ACME");
+    }
+
+    /// <summary>
+    /// Overrides on the contract side: a second group, so that a narrowing to
+    /// one sponsor's own policies and classes has something it must leave out.
+    /// Seeded per test rather than for all of them, because from the plan side
+    /// these levels are unnarrowed and every one of them would then appear in
+    /// the lists those tests assert exactly.
+    /// </summary>
+    private void SeedContract()
+    {
+        Set(SettingLevel.Sponsor, "BETA");
+        Set(SettingLevel.SponsorPolicy, "t1|ACME|ACME-0001");
+        Set(SettingLevel.SponsorPolicy, "t1|BETA|BETA-0001");
+        Set(SettingLevel.Class, "t1|ACME|ACME-0001|HOURLY");
+        Set(SettingLevel.Class, "t1|BETA|BETA-0001|HOURLY");
     }
 
     private void Set(SettingLevel level, string scopeId) => _store.AppendAsync(new SettingValue
@@ -103,25 +128,89 @@ public class OverrideNarrowingTests
     }
 
     [Fact]
-    public async Task Sponsor_policies_and_classes_are_named_as_deferred_rather_than_left_to_be_inferred()
+    public async Task The_contract_levels_are_named_as_unreachable_from_a_plan_rather_than_left_to_be_inferred()
     {
         var answer = (await Narrowing.OverridesAsync(Tenant, Key, SettingLevel.Carrier, "C1", null))!;
 
         answer.Unnarrowed.Select(u => u.Level).Should().Equal(SettingLevel.Sponsor, SettingLevel.SponsorPolicy, SettingLevel.Class);
-        answer.Unnarrowed.Should().OnlyContain(u => u.Reason == ConfigurationService.SponsorsAwaitStepThree);
+        answer.Unnarrowed.Should().OnlyContain(u => u.Reason == ConfigurationService.ContractNotReachedFromHere);
         // At sponsor level and below, every node in the tenant is listed; the
         // reason is what tells a caller that, so it must not be empty.
         answer.Unnarrowed.Should().OnlyContain(u => u.Reason.Length > 0);
     }
 
     [Fact]
-    public async Task A_sponsors_own_overrides_are_not_narrowed_either()
+    public async Task A_sponsor_reaches_its_own_policies_and_their_classes()
     {
+        SeedContract();
         var answer = (await Narrowing.OverridesAsync(Tenant, Key, SettingLevel.Sponsor, "ACME", null))!;
 
-        Nodes(answer).Should().Equal((SettingLevel.Sponsor, "ACME"));
+        // BETA's policy and class are gone: they are another group's, and
+        // listing them here read as if they overrode something for ACME.
+        Nodes(answer).Should().Equal(
+            (SettingLevel.Sponsor, "ACME"),
+            (SettingLevel.SponsorPolicy, "t1|ACME|ACME-0001"),
+            (SettingLevel.Class, "t1|ACME|ACME-0001|HOURLY"));
+        answer.Narrowed.Should().Equal(SettingLevel.SponsorPolicy, SettingLevel.Class);
+        answer.Unnarrowed.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_policy_reaches_only_its_own_classes()
+    {
+        SeedContract();
+        var answer = (await Narrowing.OverridesAsync(Tenant, Key, SettingLevel.SponsorPolicy, "t1|ACME|ACME-0001", null))!;
+
+        Nodes(answer).Should().Equal(
+            (SettingLevel.SponsorPolicy, "t1|ACME|ACME-0001"),
+            (SettingLevel.Class, "t1|ACME|ACME-0001|HOURLY"));
+        answer.Narrowed.Should().Equal(SettingLevel.Class);
+        answer.Unnarrowed.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_sponsor_with_no_contract_overrides_nothing_below_itself()
+    {
+        // No policies for this group is a real answer, not a failure: the group
+        // has no contract entered yet. So the levels below it narrow to nothing
+        // rather than being reported unnarrowed.
+        var answer = (await Narrowing.OverridesAsync(Tenant, Key, SettingLevel.Sponsor, "GAMMA", null))!;
+
+        answer.Overrides.Should().BeEmpty();
+        answer.Narrowed.Should().Equal(SettingLevel.SponsorPolicy, SettingLevel.Class);
+        answer.Unnarrowed.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_contract_that_could_not_be_read_gives_up_the_narrowing_rather_than_the_list()
+    {
+        SeedContract();
+        _hierarchy.FailPolicies = true;
+
+        var answer = (await Narrowing.OverridesAsync(Tenant, Key, SettingLevel.Sponsor, "ACME", null))!;
+
+        // Every policy and class below ACME is still returned. Narrowing on
+        // "no policies" would answer that this sponsor overrides nothing, which
+        // is the one answer an outage must never produce.
+        Nodes(answer).Should().Contain((SettingLevel.SponsorPolicy, "t1|BETA|BETA-0001"));
         answer.Narrowed.Should().BeEmpty();
         answer.Unnarrowed.Select(u => u.Level).Should().Equal(SettingLevel.SponsorPolicy, SettingLevel.Class);
+        answer.Unnarrowed.Should().OnlyContain(u => u.Reason == ConfigurationService.HierarchyUnreadable);
+    }
+
+    [Fact]
+    public async Task A_policy_id_that_does_not_name_its_group_gives_up_the_class_narrowing()
+    {
+        // A policy node written before the id format, or by hand. Its classes
+        // cannot be looked up without the group, and narrowing to nothing would
+        // say it has none.
+        var answer = (await Narrowing.OverridesAsync(Tenant, Key, SettingLevel.SponsorPolicy, "ACME-0001", null))!;
+
+        answer.Narrowed.Should().BeEmpty();
+        answer.Unnarrowed.Should().ContainSingle()
+            .Which.Should().Match<UnnarrowedLevel>(u =>
+                u.Level == SettingLevel.Class && u.Reason == ConfigurationService.PolicyGroupUnknown);
+        _hierarchy.PolicyReads.Should().Be(0, "there was no group to ask about");
     }
 
     [Fact]
@@ -166,7 +255,7 @@ public class OverrideNarrowingTests
             (SettingLevel.Sponsor, "ACME"));
         answer.Narrowed.Should().BeEmpty();
         answer.Unnarrowed.Should().Contain(u => u.Level == SettingLevel.Program && u.Reason == ConfigurationService.HierarchyUnreadable);
-        answer.Unnarrowed.Should().Contain(u => u.Level == SettingLevel.Sponsor && u.Reason == ConfigurationService.SponsorsAwaitStepThree);
+        answer.Unnarrowed.Should().Contain(u => u.Level == SettingLevel.Sponsor && u.Reason == ConfigurationService.ContractNotReachedFromHere);
     }
 
     [Fact]
