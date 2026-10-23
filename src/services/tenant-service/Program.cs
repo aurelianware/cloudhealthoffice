@@ -109,6 +109,10 @@ builder.Services.AddHttpClient(TenantService.Configuration.HttpSponsorLineOfBusi
 });
 builder.Services.AddScoped<TenantService.Configuration.ISponsorLineOfBusinessLookup, TenantService.Configuration.HttpSponsorLineOfBusinessLookup>();
 builder.Services.AddScoped<TenantService.Configuration.ConfigurationService>();
+// Narrowing an override list to one branch reads programs from the hierarchy
+// records and plans from benefit-plan-service (plan-configuration.md §12.6);
+// both are registered below.
+builder.Services.AddScoped<TenantService.Configuration.IHierarchyDescendants, TenantService.Configuration.HierarchyDescendants>();
 builder.Services.AddHostedService<TenantService.Configuration.ConfigurationIndexInitializer>();
 
 // Carrier and program records (plan-configuration.md §12 step 2). benefit-plan-service

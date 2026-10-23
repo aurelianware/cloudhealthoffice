@@ -206,9 +206,59 @@ public static class TestSettings
         },
     };
 
+    /// <summary>A setting a node at every level may set, for the tests that are about nodes rather than values.</summary>
+    public static readonly SettingDefinition Anywhere = new()
+    {
+        Key = "test.anywhere",
+        Type = SettingType.Integer,
+        Owner = "test",
+        Description = "A value any node may set",
+        Default = "0",
+        AllowedLevels = new HashSet<SettingLevel>(Enum.GetValues<SettingLevel>()),
+    };
+
     public static ConfigurationService Service(InMemoryConfigurationStore store, RecordingPublisher publisher, FixedClock clock,
-        ISponsorLineOfBusinessLookup? sponsors = null) =>
-        new(new TestCatalog(Control, Days, PlanSettings.OrphanGraceDays), store, publisher, clock, NullLogger<ConfigurationService>.Instance, sponsors);
+        ISponsorLineOfBusinessLookup? sponsors = null, IHierarchyDescendants? descendants = null) =>
+        new(new TestCatalog(Control, Days, Anywhere, PlanSettings.OrphanGraceDays), store, publisher, clock,
+            NullLogger<ConfigurationService>.Instance, sponsors, descendants);
+}
+
+/// <summary>
+/// The hierarchy as the narrowing reads it: programs by carrier and plans by
+/// program. Throws for <see cref="Fail"/>, as an unreachable tenant-service or
+/// benefit-plan-service does.
+/// </summary>
+public sealed class FakeDescendants : IHierarchyDescendants
+{
+    /// <summary>Program id → (carrier id, line of business).</summary>
+    public Dictionary<string, (string Carrier, string LineOfBusiness)> Programs { get; } = new();
+
+    /// <summary>Plan id → program id.</summary>
+    public Dictionary<string, string> Plans { get; } = new();
+
+    /// <summary>Fail the program read.</summary>
+    public bool Fail { get; set; }
+
+    /// <summary>Fail only the plan read, so that a partly narrowed answer is possible.</summary>
+    public bool FailPlans { get; set; }
+
+    public int ProgramReads { get; private set; }
+
+    public Task<IReadOnlyList<ProgramNode>> ProgramsAsync(string tenantId, string? carrierId, CancellationToken ct = default)
+    {
+        if (Fail) throw new HttpRequestException("tenant-service unavailable");
+        ProgramReads++;
+        return Task.FromResult<IReadOnlyList<ProgramNode>>(Programs
+            .Where(p => carrierId is null || p.Value.Carrier == carrierId)
+            .Select(p => new ProgramNode(p.Key, p.Value.LineOfBusiness))
+            .ToList());
+    }
+
+    public Task<IReadOnlyList<string>> BenefitPlanIdsAsync(string tenantId, IReadOnlyCollection<string> programIds, CancellationToken ct = default)
+    {
+        if (Fail || FailPlans) throw new HttpRequestException("benefit-plan-service unavailable");
+        return Task.FromResult<IReadOnlyList<string>>(Plans.Where(p => programIds.Contains(p.Value)).Select(p => p.Key).ToList());
+    }
 }
 
 /// <summary>Sponsor lines of business by group number; throws for <see cref="Fail"/>.</summary>

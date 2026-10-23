@@ -11,7 +11,13 @@ namespace BenefitPlanService.Services;
 /// </summary>
 public interface IBenefitPlanService
 {
-    Task<IEnumerable<BenefitPlan>> GetPlansAsync(string tenantId, string? payer, string? planType, bool activeOnly);
+    /// <summary>
+    /// The tenant's plans, optionally only those of one payer, plan type or
+    /// program. <paramref name="program"/> is the program id a plan carries
+    /// (<see cref="BenefitPlan.ProgramId"/>); a plan that carries none is never
+    /// in a program's list, because "not stated" is not a match.
+    /// </summary>
+    Task<IEnumerable<BenefitPlan>> GetPlansAsync(string tenantId, string? payer, string? planType, bool activeOnly, string? program = null);
     Task<BenefitPlan?> GetPlanAsync(string id, string tenantId);
     /// <param name="actorId">The authenticated user creating (and, legacy semantics, publishing) the plan.</param>
     Task<BenefitPlan> CreatePlanAsync(BenefitPlan plan, string tenantId, string actorId);
@@ -95,13 +101,20 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         string tenantId,
         string? payer,
         string? planType,
-        bool activeOnly)
+        bool activeOnly,
+        string? program = null)
     {
         var plans = await _repository.SearchAsync(tenantId, null, planType, null, 1, 500);
 
         if (!string.IsNullOrEmpty(payer))
         {
             plans = plans.Where(p => string.Equals(p.Payer, payer, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(program))
+        {
+            var programId = program.Trim();
+            plans = plans.Where(p => string.Equals(p.ProgramId, programId, StringComparison.Ordinal));
         }
 
         if (activeOnly)

@@ -120,6 +120,13 @@ public sealed class FakeBenefitPlans : IBenefitPlanProgramLookup
         if (Fail) throw new HttpRequestException("benefit-plan-service unavailable");
         return Task.FromResult(Programs.GetValueOrDefault(planId));
     }
+
+    public Task<IReadOnlyList<string>> GetPlanIdsForProgramAsync(string tenantId, string programId, CancellationToken ct = default)
+    {
+        if (Fail) throw new HttpRequestException("benefit-plan-service unavailable");
+        return Task.FromResult<IReadOnlyList<string>>(
+            Programs.Where(p => p.Value == programId).Select(p => p.Key).OrderBy(id => id, StringComparer.Ordinal).ToList());
+    }
 }
 
 public static class HierarchyTestKit
