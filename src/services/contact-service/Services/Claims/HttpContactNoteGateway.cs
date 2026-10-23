@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CloudHealthOffice.Infrastructure.Logging;
 using ContactService.Models;
 
 namespace ContactService.Services.Claims;
@@ -39,6 +40,11 @@ public sealed class HttpContactNoteGateway(
     {
         if (command.SubjectType != ContactSubjectType.Claim) return null;
 
+        // The subject id comes from the request body, so it reaches the log
+        // only through LogSanitizer: a newline in it would otherwise let a
+        // caller forge log lines.
+        var claimId = LogSanitizer.Sanitize(command.SubjectId, 100);
+
         var payload = new
         {
             category = CategoryFor(command.CallerType),
@@ -62,7 +68,7 @@ public sealed class HttpContactNoteGateway(
                 logger.LogWarning(
                     "claims-service returned {Status} when writing a contact note on claim {ClaimId}; " +
                     "the claim is linked to the contact but its own history does not show the call.",
-                    (int)response.StatusCode, command.SubjectId);
+                    (int)response.StatusCode, claimId);
                 return null;
             }
 
@@ -78,7 +84,7 @@ public sealed class HttpContactNoteGateway(
             logger.LogWarning(ex,
                 "Could not write a contact note on claim {ClaimId}; the claim is linked to the contact " +
                 "but its own history does not show the call.",
-                command.SubjectId);
+                claimId);
             return null;
         }
     }

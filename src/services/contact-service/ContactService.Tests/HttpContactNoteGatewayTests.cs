@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json.Nodes;
 using ContactService.Models;
 using ContactService.Services.Claims;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ContactService.Tests;
@@ -115,6 +116,44 @@ public class HttpContactNoteGatewayTests
 
         await gateway.Invoking(g => g.WriteContactNoteAsync(Command(), cancelled.Token))
                      .Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task A_subject_id_carrying_newlines_cannot_forge_a_log_line()
+    {
+        // The subject id comes from the request body. CodeQL flagged it
+        // reaching the logger unsanitised; LogSanitizer replaces the control
+        // characters that would otherwise let a caller write their own lines.
+        var logger = new CapturingLogger();
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient(HttpContactNoteGateway.HttpClientName))
+               .Returns(() => new HttpClient(new StubHandler(HttpStatusCode.Forbidden, null, null))
+               {
+                   BaseAddress = new Uri("http://claims-service/"),
+               });
+
+        var gateway = new HttpContactNoteGateway(factory.Object, logger);
+
+        await gateway.WriteContactNoteAsync(new ContactNoteCommand(
+            "t1", ContactSubjectType.Claim, "claim-7\nFATAL everything is fine",
+            CallerType.Member, "C-1", null));
+
+        logger.Messages.Should().ContainSingle()
+              .Which.Should().NotContain("\n").And.Contain("claim-7_FATAL");
+    }
+
+    /// <summary>Keeps the formatted log messages so a test can read them.</summary>
+    private sealed class CapturingLogger : ILogger<HttpContactNoteGateway>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Messages.Add(formatter(state, exception));
     }
 
     [Fact]
