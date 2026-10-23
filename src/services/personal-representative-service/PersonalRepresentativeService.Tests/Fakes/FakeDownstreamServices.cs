@@ -3,6 +3,9 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using PersonalRepresentativeService.Services;
+using CloudHealthOffice.PlanConfiguration;
+using System.Text.Json.Serialization;
 
 namespace PersonalRepresentativeService.Tests.Fakes;
 
@@ -99,10 +102,24 @@ public sealed class FakeMemberDocumentService
     }
 }
 
-/// <summary>tenant-service: <c>GET api/v1/tenants/{id}</c>.</summary>
+/// <summary>
+/// tenant-service: <c>GET api/v1/tenants/{id}</c> and
+/// <c>GET api/v1/configuration/resolve</c>, the two places an activation
+/// control can live while the tenant controls are moving into plan
+/// configuration. A resolve is answered from an <see cref="InMemoryPlanSettings"/>
+/// through the real wire shape, so the service under test uses its real client.
+/// </summary>
 public sealed class FakeTenantService
 {
     private readonly ConcurrentDictionary<string, bool?> _requireSecondPerson = new();
+
+    private static readonly JsonSerializerOptions ResolveJson = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() },
+    };
+
+    /// <summary>The settings this tenant-service holds. Empty, so resolves answer the definition's default.</summary>
+    public InMemoryPlanSettings Settings { get; } = new();
 
     public ConcurrentBag<DownstreamRequest> Requests { get; } = new();
 
@@ -116,6 +133,14 @@ public sealed class FakeTenantService
     /// </summary>
     public void SetRequireSecondPerson(string tenant, bool? value) => _requireSecondPerson[tenant] = value;
 
+    /// <summary>
+    /// Sets the <c>personalRepresentative.requireSecondUserActivation</c>
+    /// setting at tenant level, which is where the control is moving to.
+    /// </summary>
+    public void SetRequireSecondUserActivation(string tenant, bool value) => Settings.Set(
+        tenant, TenantPersonalRepControls.SettingKey, SettingLevel.Tenant, string.Empty,
+        value ? "true" : "false");
+
     public HttpMessageHandler Handler() => new ResponderHandler(Respond);
 
     private HttpResponseMessage Respond(HttpRequestMessage request)
@@ -126,6 +151,9 @@ public sealed class FakeTenantService
             return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
         if (request.Headers.Authorization is null)
             return new HttpResponseMessage(HttpStatusCode.Unauthorized);
+
+        if (request.RequestUri!.AbsolutePath.Contains("/configuration/resolve", StringComparison.Ordinal))
+            return Resolve(tenant, request.RequestUri);
 
         var configuration = new JsonObject
         {
@@ -139,5 +167,15 @@ public sealed class FakeTenantService
             ["tenantId"] = tenant,
             ["configuration"] = configuration
         });
+    }
+
+    private HttpResponseMessage Resolve(string tenant, Uri uri)
+    {
+        var key = System.Web.HttpUtility.ParseQueryString(uri.Query)["key"] ?? string.Empty;
+        var resolved = Settings.ResolveAsync(tenant, key, SettingScope.Empty).GetAwaiter().GetResult();
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(resolved, ResolveJson), Encoding.UTF8, "application/json"),
+        };
     }
 }

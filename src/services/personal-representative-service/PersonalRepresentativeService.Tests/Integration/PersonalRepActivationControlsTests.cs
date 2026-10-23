@@ -21,9 +21,11 @@ namespace PersonalRepresentativeService.Tests.Integration;
 ///   proof-of-authority document in the same tenant, linked to the member;</item>
 ///   <item>member-document-service failures answer 503 and activate nothing;</item>
 ///   <item>the creator cannot activate (403 "Separation of duties") unless the
-///   tenant sets <c>personalRepresentativeControls.requireSecondPerson = false</c>,
-///   which is audit-logged; a missing setting or unreachable tenant-service keeps
-///   the rule on;</item>
+///   tenant turns it off — in the <c>personalRepresentative.requireSecondUserActivation</c>
+///   setting, or, where that is unset, in the tenant document's
+///   <c>personalRepresentativeControls.requireSecondPerson</c> — which is
+///   audit-logged either way; neither set, or an unreachable tenant-service,
+///   keeps the rule on;</item>
 ///   <item>a service token cannot activate.</item>
 /// </list>
 /// </summary>
@@ -385,6 +387,45 @@ public class PersonalRepActivationControlsTests : IClassFixture<PersonalRepLifec
         _factory.Repo.SnapshotEvents().Single(e =>
                 e.PersonalRepId == repId && e.EventType == PersonalRepEventType.PersonalRepActivated)
             .Payload!["secondPersonOverride"]!.GetValue<bool>().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task PlanConfiguration_TurnsTheSecondPersonOff_AndIsAuditLoggedTheSameWay()
+    {
+        // The control is moving from the tenant document to the catalog setting
+        // personalRepresentative.requireSecondUserActivation
+        // (plan-configuration.md §12.5). The tenant document here says nothing;
+        // the setting alone decides, and the override is audited as before,
+        // because what is being recorded is that one person acted alone.
+        var tenant = NewTenant();
+        _factory.TenantService.SetRequireSecondUserActivation(tenant, false);
+        var repId = await DraftAsync(tenant, PersonalRepCredentialType.Parent, "M1");
+
+        (await ActivateAsync(User(Creator, tenant), repId)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await _factory.Repo.GetByIdAsync(tenant, repId))!.ActivatedBy.Should().Be(Creator);
+        _factory.Logs.Entries.Should().ContainSingle(l =>
+            l.EventId.Id == PersonalRepActivationControls.SecondPersonOverrideAuditEvent.Id
+            && l.Message.Contains(repId));
+    }
+
+    [Fact]
+    public async Task PlanConfiguration_Wins_OverTheTenantDocument()
+    {
+        // The two disagree: the tenant document would let the creator activate,
+        // the setting says a second person is required. Plan configuration is
+        // the authority wherever it holds a value, so the creator is refused —
+        // the tenant document is only consulted where nothing is set.
+        var tenant = NewTenant();
+        _factory.TenantService.SetRequireSecondPerson(tenant, false);
+        _factory.TenantService.SetRequireSecondUserActivation(tenant, true);
+        var repId = await DraftAsync(tenant, PersonalRepCredentialType.Parent, "M1");
+
+        (await ActivateAsync(User(Creator, tenant), repId)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        await ShouldStayDraftAsync(tenant, repId);
+
+        // And a second user still can.
+        (await ActivateAsync(User(Reviewer, tenant), repId)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]

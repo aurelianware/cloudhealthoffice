@@ -64,6 +64,7 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
 // the carrier states nothing, the deployment's own Nacha:*/Payer:* values stand
 // (plan-configuration.md §12.2, step 2b).
 builder.Services.AddCarrierDirectoryClient(builder.Configuration);
+builder.Services.AddPlanSettingsClient(builder.Configuration);
 
 
 // Database — MongoDB is the only capitation store (ADR 006); the client is

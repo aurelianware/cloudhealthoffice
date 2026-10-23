@@ -16,6 +16,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.PlanConfiguration;
 
 namespace PersonalRepresentativeService.Tests.Integration;
 
@@ -93,6 +94,10 @@ public class PersonalRepLifecycleSmokeTests : IClassFixture<PersonalRepLifecycle
                 services.AddHttpClient(MemberDocumentProofOfAuthorityDocuments.HttpClientName)
                     .ConfigurePrimaryHttpMessageHandler(() => MemberDocuments.Handler());
                 services.AddHttpClient(TenantPersonalRepControls.HttpClientName)
+                    .ConfigurePrimaryHttpMessageHandler(() => TenantService.Handler());
+                // The plan-settings client reads the same tenant-service, so the
+                // real client, cache and wire shape are exercised here too.
+                services.AddHttpClient(HttpPlanSettings.HttpClientName)
                     .ConfigurePrimaryHttpMessageHandler(() => TenantService.Handler());
             });
 

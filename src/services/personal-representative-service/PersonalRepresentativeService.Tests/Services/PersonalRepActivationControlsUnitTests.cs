@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using PersonalRepresentativeService.Models;
 using PersonalRepresentativeService.Services;
+using CloudHealthOffice.PlanConfiguration;
 
 namespace PersonalRepresentativeService.Tests.Services;
 
@@ -37,7 +38,7 @@ public class PersonalRepActivationControlsUnitTests
             .Returns(() => new HttpClient(new Fakes.ResponderHandler(_ =>
                 new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("not json") }))
             { BaseAddress = new Uri("http://tenant-service") });
-        var controls = new TenantPersonalRepControls(factory.Object, NullLogger<TenantPersonalRepControls>.Instance);
+        var controls = new TenantPersonalRepControls(new InMemoryPlanSettings(), factory.Object, NullLogger<TenantPersonalRepControls>.Instance);
 
         (await controls.IsSecondPersonRequiredAsync("tenant-x")).Should().BeTrue();
     }

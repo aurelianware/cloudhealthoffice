@@ -11,10 +11,12 @@ COPY src/Directory.Build.props src/
 
 COPY src/services/personal-representative-service/personal-representative-service.csproj src/services/personal-representative-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/CloudHealthOffice.PlanConfiguration.csproj src/services/shared/CloudHealthOffice.PlanConfiguration/
 RUN dotnet restore src/services/personal-representative-service/personal-representative-service.csproj
 
 COPY src/services/personal-representative-service/ src/services/personal-representative-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/ src/services/shared/CloudHealthOffice.PlanConfiguration/
 RUN dotnet build src/services/personal-representative-service/personal-representative-service.csproj -c Release --no-restore
 
 FROM build AS publish
