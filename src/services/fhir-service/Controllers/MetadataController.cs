@@ -137,6 +137,94 @@ public class MetadataController : FhirControllerBase
                             ("submit",  "http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-submit"),
                             ("inquire", "http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-inquire"),
                         ]),
+                        // ── Provider directory (proxied to provider-service, and
+                        // NPPES for Location) ────────────────────────────────────
+                        // These were served by ProviderDirectoryController and
+                        // declared nowhere, which made the CapabilityStatement
+                        // wrong in the direction that matters: a client — or an
+                        // Inferno suite, which reads $metadata before anything
+                        // else — was told the server does not support
+                        // Practitioner, while the Provider Access EOB's
+                        // careTeam.provider carries a literal Practitioner/{npi}
+                        // reference served from this very base (ADR 028,
+                        // docs/architecture/provider-access-non-financial-eob.md).
+                        // A reference the server disclaims is a reference a
+                        // conformant consumer is entitled not to follow.
+                        //
+                        // The search parameters are the ones the upstream
+                        // controllers actually bind, not the full US Core set;
+                        // FhirCapabilityStatementTests pins both directions.
+                        BuildResource("Practitioner",
+                        [
+                            ("_id",        SearchParamType.Token),
+                            ("identifier", SearchParamType.Token),
+                            ("given",      SearchParamType.String),
+                            ("family",     SearchParamType.String),
+                            ("address-city",  SearchParamType.String),
+                            ("address-state", SearchParamType.String),
+                            ("specialty",  SearchParamType.Token)
+                        ],
+                        supportedProfiles:
+                        [
+                            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitioner"
+                        ]),
+                        BuildResource("PractitionerRole",
+                        [
+                            ("_id",          SearchParamType.Token),
+                            ("practitioner", SearchParamType.Reference),
+                            ("organization", SearchParamType.Reference),
+                            ("specialty",    SearchParamType.Token)
+                        ],
+                        supportedProfiles:
+                        [
+                            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitionerrole"
+                        ]),
+                        BuildResource("Organization",
+                        [
+                            ("_id",        SearchParamType.Token),
+                            ("identifier", SearchParamType.Token),
+                            ("name",       SearchParamType.String),
+                            ("address-city",  SearchParamType.String),
+                            ("address-state", SearchParamType.String),
+                            ("type",       SearchParamType.Token)
+                        ],
+                        supportedProfiles:
+                        [
+                            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-organization"
+                        ]),
+                        BuildResource("Location",
+                        [
+                            ("_id",           SearchParamType.Token),
+                            ("organization",  SearchParamType.Reference),
+                            ("address-city",  SearchParamType.String),
+                            ("address-state", SearchParamType.String),
+                            ("address-postalcode", SearchParamType.String)
+                        ],
+                        supportedProfiles:
+                        [
+                            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-location"
+                        ]),
+                        // Plan-Net InsurancePlan, proxied to benefit-plan-service,
+                        // which owns the canonical projection. It indexes
+                        // identifier, name and status only; type, owned-by,
+                        // administered-by and address are deferred, so they are
+                        // not claimed here.
+                        BuildResource("InsurancePlan",
+                        [
+                            ("_id",        SearchParamType.Token),
+                            ("identifier", SearchParamType.Token),
+                            ("name",       SearchParamType.String),
+                            ("status",     SearchParamType.Token)
+                        ]),
+                        // Plan-Net Endpoint, proxied to benefit-plan-service. The
+                        // upstream honours _id, status and connection-type;
+                        // organization= is deferred, so it is not claimed here.
+                        BuildResource("Endpoint",
+                        [
+                            ("_id",             SearchParamType.Token),
+                            ("status",          SearchParamType.Token),
+                            ("connection-type", SearchParamType.Token)
+                        ]),
                         BuildResource("Questionnaire",
                         [
                             ("_id",          SearchParamType.Token),
