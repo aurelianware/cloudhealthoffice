@@ -12,13 +12,10 @@
 // could have created — which is the point: an Inferno suite reading seeded data
 // must be reading data CHO itself accepted.
 //
-// Authentication is a development-signed user token. The key is the public
-// development symmetric key every service already carries in its
-// appsettings.Development.json, and ChoAuthOptions.Validate refuses symmetric
-// keys on any host that is not Development or Testing, so this script cannot
-// authenticate against anything deployed. Permissions are named explicitly
-// rather than taken from a role, because a role expands through
-// ChoRolePermissions and what it expands to is not this script's business.
+// Authentication is a development-signed user token, described by the fixture's
+// own `auth` block rather than by constants here — the interop harness mints the
+// same token from the same block, and a drift between the two would surface as
+// an opaque 401 rather than as a diff.
 //
 // No dependencies: Node's own crypto signs the token.
 
@@ -30,11 +27,7 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const FIXTURE = join(REPO_ROOT, 'interop', 'cho-seed.json');
 
-// Mirrors ChoDevelopmentAuth. Base64, as ChoAuthOptions.SigningCredentialsFrom reads it.
-const DEV_KEY = process.env.CHO_DEV_SIGNING_KEY
-  ?? 'Q0hPLWRldmVsb3BtZW50LW9ubHktc2lnbmluZy1rZXktZG8tbm90LXVzZS0yMDI2';
-const DEV_ISSUER = 'cho-portal-dev';
-const DEV_AUDIENCE = 'cho-api';
+const fixture = JSON.parse(readFileSync(FIXTURE, 'utf8'));
 
 const SERVICES = {
   member: process.env.INTEROP_MEMBER_URL ?? 'http://127.0.0.1:18025',
@@ -43,34 +36,37 @@ const SERVICES = {
   fhir: process.env.INTEROP_FHIR_URL ?? 'http://127.0.0.1:18023',
 };
 
-const PERMISSIONS = [
-  'members:read', 'members:write',
-  'coverage:read', 'coverage:write',
-  'claims:read', 'claims:work',
-];
 
 const base64url = (buffer) =>
   Buffer.from(buffer).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-function devUserToken(tenantId) {
+/**
+ * Mints the development user token the fixture's `auth` block describes. The
+ * signing key is the public development symmetric key every service already
+ * carries in its appsettings.Development.json; ChoAuthOptions.Validate refuses
+ * symmetric keys on any host that is not Development or Testing, so a token
+ * minted here cannot authenticate against anything deployed.
+ */
+function devUserToken(auth, tenantId) {
+  const key = process.env[auth.signingKeyEnvVar] ?? auth.signingKeyBase64;
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: 'HS256', typ: 'JWT' };
   const payload = {
-    iss: DEV_ISSUER,
-    aud: DEV_AUDIENCE,
-    sub: `interop-seed-${tenantId}`,
+    iss: auth.issuer,
+    aud: auth.audience,
+    sub: `${auth.subjectPrefix}-${tenantId}`,
     jti: `${now}-${Math.random().toString(36).slice(2)}`,
     iat: now,
     nbf: now,
-    exp: now + 900,
+    exp: now + auth.lifetimeSeconds,
     tenant_id: tenantId,
     roles: [],
-    permissions: PERMISSIONS,
+    permissions: auth.permissions,
     name: 'Interop Seed',
   };
   const signingInput =
     `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`;
-  const signature = createHmac('sha256', Buffer.from(DEV_KEY, 'base64'))
+  const signature = createHmac('sha256', Buffer.from(key, 'base64'))
     .update(signingInput)
     .digest();
   return `${signingInput}.${base64url(signature)}`;
@@ -211,8 +207,7 @@ function expectProfile(resource, profile, label) {
   }
 }
 
-const fixture = JSON.parse(readFileSync(FIXTURE, 'utf8'));
-const token = devUserToken(fixture.tenantId);
+const token = devUserToken(fixture.auth, fixture.tenantId);
 
 if (!process.argv.includes('--verify-only')) {
   await seed(fixture, token);

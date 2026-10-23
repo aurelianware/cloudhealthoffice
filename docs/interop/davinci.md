@@ -320,30 +320,91 @@ What the runner can now do that it could not before:
   session-data repository switches on `type` and *raises* on a non-text input
   that arrives without one rather than ignoring it.
 
-The two scenarios this aims at are in
-[`interop/scenarios.json`](../../interop/scenarios.json), `implemented: false`
-until a test executes them:
+* `InfernoRunner.DescribeSuiteAsync` / `ResolveGroupId` — turn the group id the
+  kit's source declares into the id Inferno addresses it by. These are not the
+  same string: `us_core_v311_patient` is what the kit writes down, and
+  `us_core_v311-us_core_v311_fhir_api-us_core_v311_patient` is what the API
+  accepts, because Inferno prefixes a nested group with its ancestors. The
+  prefix is read from the running kit rather than composed from a naming rule —
+  a wrong rule does not fail loudly, it names a group that does not exist, and a
+  conformance run that silently tested nothing is the one result this harness
+  must never produce. An ambiguous short id is an error rather than a first
+  match.
 
-| Scenario | Suite | What it judges |
-| --- | --- | --- |
-| `INFERNO-USCORE-SERVER-001` | `us_core_v311`, groups `capability_statement`, `patient`, `encounter` | The US Core floor CMS-0057-F sets |
-| `INFERNO-C4BB-SERVER-001` | `c4bb_v200` (financial) | Patient, Coverage, Organization, Practitioner and the adjudicated EOB |
+### The two conformance scenarios
 
-`c4bb_v200devnonfinancial` is deliberately **not** among them — see the
-`-Basis` / `-NonFinancial` mismatch above.
+Both are in [`interop/scenarios.json`](../../interop/scenarios.json) and both
+now run:
 
-What the next PR has to do:
+| Scenario | Suite | Groups | What it judges |
+| --- | --- | --- | --- |
+| `INFERNO-USCORE-SERVER-001` | `us_core_v311` | `capability_statement`, `patient`, `encounter` | The US Core floor CMS-0057-F sets |
+| `INFERNO-C4BB-SERVER-001` | `c4bb_v200` (financial) | `capability_statement_group`, `patient`, `coverage`, `eob`, `organization`, `practitioner` | Patient, Coverage, Organization, Practitioner and the adjudicated EOB |
 
-* Run `./scripts/interop/fetch-inferno.sh pdex` (or `dtr`) to check the kit out at
-  its pinned tag into `interop/.external/`, then bring up the `interop-pdex` (or
-  `interop-dtr-inferno`) profile, which builds the kit's image from that checkout.
-  Upstream publishes no image for either kit, which is why the checkout is an
-  explicit setup step.
-* Start CHO with the `interop-cho` profile, since these suites drive CHO as the
-  system under test. See "What the `interop-cho` profile runs" below for what
-  that profile is and why it is not the mock.
-* Confirm the exact input names each suite declares (they are versioned with the
-  kit) and supply CHO's endpoint accordingly.
+Which groups run is **inventory data, not code**. It is a claim about what CHO
+serves, so it belongs where a reader can check it against the scenario's
+description rather than buried in a test method, where narrowing a run would
+look like a refactor instead of a change of claim.
+
+What is deliberately not run, and why:
+
+* `c4bb_v200devnonfinancial` — it checks the superseded `-NonFinancial`
+  canonicals while CHO declares CARIN BB 2.2.0 `-Basis`; see the mismatch
+  section above. It would match nothing in either direction.
+* `c4bb_v200_related_person` — CHO publishes no `RelatedPerson`.
+* The SMART launch groups — the harness supplies an already-issued token rather
+  than driving a launch.
+* `c4bb_server_v200_visual_inspection_and_attestation` — manual by construction.
+
+Run them with:
+
+```bash
+./scripts/interop/fetch-inferno.sh us-core c4bb   # explicit setup, once
+./scripts/interop/run.sh inferno us-core
+./scripts/interop/run.sh inferno c4bb
+./scripts/interop/run.sh inferno all
+```
+
+In CI they are the `inferno` job in
+[`davinci-interop.yml`](../../.github/workflows/davinci-interop.yml): nightly
+and `workflow_dispatch` only, and `continue-on-error`. Both choices are
+deliberate. Each kit builds a Ruby image from an upstream checkout, starts seven
+CHO services beside it, and validates every resource it reads against a bundled
+IG package — tens of minutes a pull request that did not touch the FHIR surface
+learns nothing from paying for. And an external validator's verdict is a finding
+to triage rather than a merge gate: a kit release can tighten what it checks
+overnight, and a red required check on an unrelated pull request trains people
+to ignore it.
+
+#### What the harness supplies, and what it refuses to decide
+
+* **The endpoint.** `http://cho-fhir-service:8080/fhir/r4` — the Compose service
+  name, because the kit runs *inside* the Compose network. A `127.0.0.1` URL
+  would point the kit at its own container, nothing would answer, and Inferno
+  would report that identically to CHO failing every test.
+  `ChoUnderTestAddressTests` fails the build if that address stops naming a
+  service the Compose file defines, or if a host port drifts from its Compose
+  default.
+* **A token.** A development-signed user token, minted from the `auth` block of
+  [`interop/cho-seed.json`](../../interop/cho-seed.json) — the same block
+  `seed-cho.mjs` reads, so the two cannot drift into an opaque 401.
+  `ChoAuthOptions.Validate` refuses symmetric signing keys on any host that is
+  not Development or Testing, so nothing minted here authenticates against
+  anything deployed.
+* **Seeded data.** The scenario shells out to `scripts/interop/seed-cho.mjs`
+  rather than reimplementing the seed in C#: the script is what a developer runs
+  by hand, and a conformance run that seeded differently would be judging a
+  system nobody else can reproduce. A failed seed stops the run before the kit
+  starts — a suite pointed at an empty server reports a wall of failures that
+  say nothing about CHO's conformance.
+* **A preflight read.** CHO's own `metadata` is fetched from the host before the
+  kit is handed the container address. This is not a duplicate of the kit's
+  capability test; it is what separates "CHO answered and the kit judged it"
+  from "the kit could not reach CHO" — two outcomes Inferno reports identically,
+  and only one of which is a conformance result.
+* **Nothing else.** The verdict is the kit's. The harness records every
+  non-passing result as a finding, and never reinterprets a `fail` or turns a
+  run that skipped everything into a pass.
 
 Suite ids at the current pins:
 
@@ -363,9 +424,8 @@ them. `us_core_v311` is CHO's suite — `Cms0057ComplianceChecker` and the
 CapabilityStatement target US Core 3.1.1+, the floor CMS-0057-F sets — with
 `us_core_v610` the natural second run.
 
-Fetch either with `./scripts/interop/fetch-inferno.sh c4bb` or
-`./scripts/interop/fetch-inferno.sh us-core`; both were fetched at these pins and
-the script's pin check passed.
+Fetch them with `./scripts/interop/fetch-inferno.sh us-core c4bb`; both were
+fetched at these pins and the script's pin check passed.
 
 ### What the `interop-cho` profile runs
 
@@ -533,24 +593,30 @@ Known at the current pins:
 
 ## 13. Limitations
 
-* Three scenarios execute today: `BR-PAS-SUBMIT-001` (PAS), `BR-CRD-001` (CRD)
-  and `BR-DTR-001` (DTR). Everything else in the inventory is `NotRun` —
-  deliberately, because a placeholder must never look like a result.
-* CHO participates in all three scenarios as the **client**, and through its real
-  production code on the CHO side (`MetadataController` for PAS,
-  `CrdController` for CRD). CHO's FHIR service does not run as a container in
-  any of them; the `interop-cho` profile exists for the scenarios where CHO is
-  the server, and is exercised by no scenario yet. Its contents are described
-  under "What the `interop-cho` profile runs".
+* Five scenarios execute today: `BR-PAS-SUBMIT-001` (PAS), `BR-CRD-001` (CRD),
+  `BR-DTR-001` (DTR), `INFERNO-USCORE-SERVER-001` (US Core) and
+  `INFERNO-C4BB-SERVER-001` (CARIN BB). Everything else in the inventory is
+  `NotRun` — deliberately, because a placeholder must never look like a result.
+* CHO participates in the three br-payer scenarios as the **client**, through its
+  real production code (`MetadataController` for PAS, `CrdController` for CRD);
+  its FHIR service does not run as a container in any of them. In the two
+  conformance scenarios CHO is the **server**, and the `interop-cho` profile runs
+  its real services. Its contents are described under "What the `interop-cho`
+  profile runs".
 * `BR-CRD-001` proves protocol interoperability and that the external payer's
   rules ran. It does **not** compare coverage decisions between CHO and the
   payer — see "Protocol compatibility vs payer rule parity" below.
 * `br-provider` is pinned and defined, but nothing drives it. Upstream pairs it
   with the FAST UDAP security server in its own Compose stack; that topology is
   not reproduced here.
-* No Inferno suite executes. Only the runner seam exists, and the `interop-cho`
-  profile — although it now runs CHO's real path rather than the mock — has never
-  been started by a scenario, and its services' stores are not seeded.
+* The conformance runs cover one seeded member, one coverage and two claims. A
+  suite that passes on that record has shown CHO's projections are conformant
+  for it; it has not shown they stay conformant across a population. Widening
+  the fixture is the obvious next move, and the kits will say so loudly when it
+  happens.
+* `INFERNO-PDEX-SERVER-001`, `INFERNO-PDEX-CLIENT-001` and
+  `INFERNO-DTR-PAYER-001` remain unimplemented. Their kits are pinned; nothing
+  drives them.
 * The CARIN BB kit's non-financial suite cannot judge CHO's EOBs at the current
   pin — see "CARIN BB non-financial: `-Basis` against `-NonFinancial`" below. US
   Core has no such gap.

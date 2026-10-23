@@ -1,6 +1,23 @@
 {
   "_comment": "The synthetic record set the interop-cho profile serves. Every value names nobody: no real member, no real provider, no real payer, and nothing derived from any of those. The NPIs are the conventional test NPIs 1234567893 and 1679576722, whose check digits are valid so format-checking implementations accept them, and which are issued to no provider. scripts/interop/seed-cho.mjs writes this through each service's own API, so a seed passes the same validation a real write does.",
   "tenantId": "interop-tenant",
+  "auth": {
+    "_comment": "The development identity both the seeder and the interop harness present to CHO. It lives here, in one file with two readers, because a drift between them would show up as an opaque 401 rather than as a diff. ChoAuthOptions.Validate refuses a symmetric signing key on any host that is not Development or Testing, so nothing signed with this key authenticates against anything deployed. Permissions are named rather than taken from a role: a role expands through ChoRolePermissions, and what it expands to is not this fixture's business.",
+    "issuer": "cho-portal-dev",
+    "audience": "cho-api",
+    "subjectPrefix": "interop-seed",
+    "lifetimeSeconds": 900,
+    "signingKeyEnvVar": "CHO_DEV_SIGNING_KEY",
+    "signingKeyBase64": "Q0hPLWRldmVsb3BtZW50LW9ubHktc2lnbmluZy1rZXktZG8tbm90LXVzZS0yMDI2",
+    "permissions": [
+      "members:read",
+      "members:write",
+      "coverage:read",
+      "coverage:write",
+      "claims:read",
+      "claims:work"
+    ]
+  },
   "member": {
     "memberId": "INTEROP-MEM-1",
     "groupNumber": "INTEROP-GRP-1",

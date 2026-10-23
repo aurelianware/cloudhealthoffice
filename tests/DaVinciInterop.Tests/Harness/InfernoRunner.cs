@@ -61,6 +61,42 @@ public sealed record InfernoResult
     [JsonPropertyName("result_message")] public string? ResultMessage { get; init; }
 }
 
+/// <summary>
+/// A group as the suite description reports it, with its children.
+///
+/// <para>
+/// The <see cref="Id"/> here is the <em>runnable</em> id, which is not the id
+/// the kit's source declares. Inferno prefixes a nested group with its
+/// ancestors — <c>us_core_v311_patient</c>, declared in the kit, is addressable
+/// only as <c>us_core_v311-us_core_v311_fhir_api-us_core_v311_patient</c>. The
+/// kit's own code walks its children with <c>id.ends_with?</c> for the same
+/// reason.
+/// </para>
+/// </summary>
+public sealed record InfernoTestGroup
+{
+    [JsonPropertyName("id")] public string Id { get; init; } = "";
+    [JsonPropertyName("title")] public string? Title { get; init; }
+    [JsonPropertyName("test_groups")] public List<InfernoTestGroup> TestGroups { get; init; } = new();
+}
+
+/// <summary>A suite as Inferno's API describes it.</summary>
+public sealed record InfernoTestSuite
+{
+    [JsonPropertyName("id")] public string Id { get; init; } = "";
+    [JsonPropertyName("title")] public string? Title { get; init; }
+    [JsonPropertyName("test_groups")] public List<InfernoTestGroup> TestGroups { get; init; } = new();
+
+    /// <summary>Every group in the suite, depth first, including nested ones.</summary>
+    public IEnumerable<InfernoTestGroup> AllGroups()
+    {
+        IEnumerable<InfernoTestGroup> Walk(IEnumerable<InfernoTestGroup> groups) =>
+            groups.SelectMany(group => new[] { group }.Concat(Walk(group.TestGroups)));
+
+        return Walk(TestGroups);
+    }
+}
+
 /// <summary>An Inferno test run as reported by its API.</summary>
 public sealed record InfernoTestRun
 {
@@ -81,12 +117,11 @@ public sealed record InfernoTestRun
 /// rendered HTML, because a conformance result that depends on page markup is not
 /// a result worth publishing.
 ///
-/// The kits are not started by any scenario in this PR. Upstream publishes no
-/// image for them, so a checkout at the pinned tag has to exist before this runner
-/// has anything to talk to (see scripts/interop/fetch-inferno.sh and
-/// docs/interop/davinci.md). Everything the next PR needs is here: session
-/// creation with CHO's endpoint as suite input, run start, bounded polling, and
-/// the mapping from Inferno's vocabulary into <see cref="InteropStatus"/>.
+/// Upstream publishes no image for these kits, so a checkout at the pinned tag has
+/// to exist before this runner has anything to talk to (see
+/// scripts/interop/fetch-inferno.sh). <see cref="InfernoSuiteScenario"/> is what
+/// drives it: INFERNO-USCORE-SERVER-001 and INFERNO-C4BB-SERVER-001 run through
+/// here.
 /// </summary>
 public sealed class InfernoRunner
 {
@@ -166,6 +201,53 @@ public sealed class InfernoRunner
         CancellationToken cancellationToken = default)
         => StartRunAsync(
             new { test_session_id = sessionId, test_group_id = groupId, inputs }, cancellationToken);
+
+    /// <summary>Reads a suite's structure, including every nested group.</summary>
+    public async Task<InfernoTestSuite> DescribeSuiteAsync(
+        string suiteId, CancellationToken cancellationToken = default)
+        => await _http.GetFromJsonAsync<InfernoTestSuite>(
+               $"{_apiBaseUrl}/test_suites/{Uri.EscapeDataString(suiteId)}", JsonOptions, cancellationToken)
+           ?? throw new InvalidOperationException($"Inferno returned an unreadable description of '{suiteId}'.");
+
+    /// <summary>
+    /// Resolves the id the kit's source declares for a group into the runnable
+    /// id Inferno addresses it by.
+    ///
+    /// <para>
+    /// Asked of the running kit rather than composed from a naming rule. A rule
+    /// would be a guess about how a particular suite nests its groups, and a
+    /// wrong guess here does not fail loudly — it names a group that does not
+    /// exist, and a conformance run that silently tested nothing is the one
+    /// outcome this harness must never produce. Resolution is exact-or-suffix,
+    /// and an ambiguous short id is an error rather than a first match.
+    /// </para>
+    /// </summary>
+    public static string ResolveGroupId(InfernoTestSuite suite, string declaredGroupId)
+    {
+        var groups = suite.AllGroups().ToList();
+
+        var matches = groups
+            .Where(group => group.Id == declaredGroupId
+                            || group.Id.EndsWith($"-{declaredGroupId}", StringComparison.Ordinal))
+            .ToList();
+
+        if (matches.Count == 1)
+        {
+            return matches[0].Id;
+        }
+
+        if (matches.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Suite '{suite.Id}' has no group '{declaredGroupId}'. Groups it does have: " +
+                string.Join(", ", groups.Select(group => group.Id)));
+        }
+
+        throw new InvalidOperationException(
+            $"'{declaredGroupId}' is ambiguous in suite '{suite.Id}': it matches " +
+            string.Join(", ", matches.Select(group => group.Id)) +
+            ". Name the group by its full runnable id.");
+    }
 
     private async Task<InfernoTestRun> StartRunAsync(object body, CancellationToken cancellationToken)
     {

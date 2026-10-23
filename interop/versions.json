@@ -179,7 +179,7 @@
         "https://rubygems.org and Docker Hub — the kit image is built locally from upstream's Dockerfile",
         "https://packages.fhir.org — the bundled hl7_validator_service loads IG packages"
       ],
-      "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Not started by any scenario yet. This is the kit that would judge Provider Access EOB conformance (gap-matrix G-14); neither the PDex nor the DTR kit covers CARIN BB."
+      "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Started by INFERNO-C4BB-SERVER-001, which runs the c4bb_v200 financial groups. This is the kit that judges Provider Access EOB conformance (gap-matrix G-14); neither the PDex nor the DTR kit covers CARIN BB."
     },
     {
       "name": "inferno-framework/us-core-test-kit",
@@ -222,7 +222,7 @@
         "https://rubygems.org and Docker Hub — the kit image is built locally from upstream's Dockerfile",
         "https://packages.fhir.org — the bundled hl7_validator_service loads IG packages"
       ],
-      "startupNotes": "Not started by any scenario yet. v1.1.6 stops suppressing HL7 validator messages in the 6.1.0 server suite, so a system that passed an earlier release may not pass this one — a stricter result rather than a regression."
+      "startupNotes": "Started by INFERNO-USCORE-SERVER-001, which runs the us_core_v311 CapabilityStatement, Patient and Encounter groups. v1.1.6 stops suppressing HL7 validator messages in the 6.1.0 server suite, so a system that passed an earlier release may not pass this one — a stricter result rather than a regression."
     },
     {
       "name": "hl7/fhir-validator (validator_cli.jar)",

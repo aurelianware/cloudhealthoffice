@@ -18,8 +18,11 @@ name: Da Vinci Interoperability
 # Cost control: harness unit tests run on every triggering PR (seconds, no Docker).
 # The external scenarios — which pull and start a real third-party container — run
 # on PRs that touch the harness or the interop-relevant service surface, on
-# workflow_dispatch, and nightly. Heavier suites (Inferno conformance kits) are
-# expected to be nightly-only when they land.
+# workflow_dispatch, and nightly. The Inferno conformance kits are nightly and
+# workflow_dispatch only: each one builds a Ruby image from an upstream checkout,
+# starts seven CHO services beside it, and validates every returned resource
+# against a bundled IG package. That is tens of minutes, and a pull request that
+# did not touch the FHIR surface learns nothing from paying for it.
 #
 # Both br-payer scenarios run in ONE job rather than a matrix leg each. They pin
 # the same image, so a single job pulls it once instead of twice; the harness
@@ -224,6 +227,108 @@ jobs:
   # what happened, and hiding a failure would make the snapshot a marketing
   # artifact rather than evidence. The job's own gate is that the scenarios job
   # completed, not that every scenario passed.
+  # ── Inferno conformance kits ───────────────────────────────────────────────
+  # The direction reverses here. The scenarios job has CHO driving an independent
+  # payer and the harness judging the answers; this job has an independent
+  # implementation judging CHO:
+  #   INFERNO-USCORE-SERVER-001  US Core 3.1.1 — CapabilityStatement, Patient,
+  #                              Encounter groups against the seeded interop-cho
+  #                              profile (CHO's real services, not the mock)
+  #   INFERNO-C4BB-SERVER-001    CARIN BB 2.0.0 financial — CapabilityStatement,
+  #                              Patient, Coverage, EOB, Organization,
+  #                              Practitioner groups
+  #
+  # The kits publish no upstream image, so each is fetched at the tag pinned in
+  # interop/versions.json and built locally. The fetch script refuses a checkout
+  # whose commit does not match the pin.
+  #
+  # Scheduled and manual only, and `continue-on-error` — deliberately. An
+  # external validator's verdict on CHO is a finding to triage, not a merge gate:
+  # a kit release can tighten what it checks overnight, and a red required check
+  # on an unrelated pull request would train people to ignore it. The verdict
+  # lands in the job summary and the uploaded evidence, where it is read.
+  #
+  # Same security posture as the scenarios job: `contents: read`, no repository
+  # secret, no Docker socket mounted, host ports bound to 127.0.0.1, all data
+  # synthetic.
+  inferno:
+    name: Inferno conformance kits judging CHO (US Core, CARIN BB)
+    runs-on: ubuntu-latest
+    needs: harness
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    continue-on-error: true
+    # Two kit builds, seven CHO service builds, and two suites that validate
+    # every resource they read. The outer bound, not an expectation.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+
+      # The interop-cho profile is seeded by scripts/interop/seed-cho.mjs, which
+      # takes no dependencies beyond Node itself.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Fetch the pinned conformance kits
+        run: ./scripts/interop/fetch-inferno.sh us-core c4bb
+
+      - name: Run the conformance kits against CHO
+        env:
+          CHO_INTEROP_ENVIRONMENT: CI
+        run: ./scripts/interop/run.sh inferno all
+
+      - name: Job summary
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          path = 'artifacts/interop/run.json'
+          print('## Inferno conformance kits judging CHO')
+          if not os.path.exists(path):
+              print('\n_No conformance evidence was produced._')
+              raise SystemExit(0)
+          run = json.load(open(path))
+          s = run['summary']
+          print(f"\n{s['passed']} passed / {s['failed']} failed / {s['skipped']} skipped / {s['notRun']} not run\n")
+          print('| Scenario | Protocol | Status | Conformance kit | Pinned version |')
+          print('| --- | --- | --- | --- | --- |')
+          for target in run['targets']:
+              for result in target['results']:
+                  print(f"| {result['scenarioId']} | {result['protocol']} | {result['status']} "
+                        f"| {target['name']} | `{target['version']}` |")
+          failures = [f for f in run['findings'] if f['severity'] == 'Error']
+          if failures:
+              print('\n### What the kits reported as failing\n')
+              for finding in failures:
+                  print(f"- {finding['summary']}")
+          print('\n_An Inferno pass is not CMS certification, and nothing here changes a CMS-0057-F '
+                'scenario status on its own._')
+          PY
+
+      - name: Upload sanitized conformance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: inferno-conformance-evidence-${{ github.sha }}
+          path: artifacts/interop/
+          if-no-files-found: warn
+
+      - name: Confirm the stack was torn down
+        if: always()
+        run: |
+          LEFTOVER=$(docker ps --filter "label=com.docker.compose.project=cho-interop" --quiet)
+          if [ -n "$LEFTOVER" ]; then
+            echo "::warning::Interop containers survived the run; removing them."
+            docker rm --force $LEFTOVER
+          else
+            echo "No interop containers remain."
+          fi
+
   publish:
     name: Publish latest interoperability evidence
     runs-on: ubuntu-latest

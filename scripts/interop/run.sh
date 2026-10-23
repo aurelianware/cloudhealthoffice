@@ -7,7 +7,17 @@
 #   ./scripts/interop/run.sh br-payer crd       # CRD CDS Hooks (BR-CRD-001)
 #   ./scripts/interop/run.sh br-payer dtr       # DTR $questionnaire-package (BR-DTR-001)
 #   ./scripts/interop/run.sh br-payer all       # all three, into one evidence document
+#   ./scripts/interop/run.sh inferno us-core    # US Core 3.1.1 server groups (INFERNO-USCORE-SERVER-001)
+#   ./scripts/interop/run.sh inferno c4bb       # CARIN BB financial groups (INFERNO-C4BB-SERVER-001)
+#   ./scripts/interop/run.sh inferno all        # both conformance kits
 #   ./scripts/interop/run.sh unit               # harness unit tests only, no Docker
+#
+# The `inferno` target turns the direction around. The br-payer scenarios have
+# CHO driving an independent payer and this harness judging the answers; the
+# conformance kits have an independent implementation judging CHO. They start
+# the interop-cho profile — CHO's own services, not the mock — seed it through
+# those services' APIs, and hand the kit CHO's endpoint and a development token.
+# Both kits must be fetched first: ./scripts/interop/fetch-inferno.sh us-core c4bb
 #
 # Each scenario starts the pinned HL7 Da Vinci burden-reduction payer reference
 # implementation, waits for it to actually be ready, performs a real exchange
@@ -49,17 +59,34 @@ fi
 # Each mode maps to the scenario ids it runs, via the [Trait("Scenario", …)] the
 # scenario tests carry. `all` runs every external scenario in one invocation; the
 # evidence writer merges their results into a single run document.
-case "$MODE" in
-  smoke) FILTER='Scenario=BR-PAS-SUBMIT-001'; LABEL='PAS $submit smoke (BR-PAS-SUBMIT-001)' ;;
-  crd)   FILTER='Scenario=BR-CRD-001';        LABEL='CRD CDS Hooks (BR-CRD-001)' ;;
-  dtr)   FILTER='Scenario=BR-DTR-001';        LABEL='DTR $questionnaire-package, chained from CRD (BR-DTR-001)' ;;
-  all)   FILTER='Category=DaVinciInterop';    LABEL='all external scenarios' ;;
-  unit)  : ;;
-  *)
-    echo "Unknown mode '$MODE'. Modes: smoke | crd | dtr | all | unit." >&2
-    exit 2
-    ;;
-esac
+if [[ "$TARGET" == "inferno" ]]; then
+  MODE="${2:-all}"
+  case "$MODE" in
+    us-core) FILTER='Scenario=INFERNO-USCORE-SERVER-001'
+             LABEL='Inferno US Core 3.1.1 server groups (INFERNO-USCORE-SERVER-001)' ;;
+    c4bb)    FILTER='Scenario=INFERNO-C4BB-SERVER-001'
+             LABEL='Inferno CARIN BB financial groups (INFERNO-C4BB-SERVER-001)' ;;
+    all)     FILTER='Target~inferno-framework'
+             LABEL='both Inferno conformance kits' ;;
+    *)
+      echo "Unknown mode '$MODE' for target 'inferno'. Modes: us-core | c4bb | all." >&2
+      exit 2
+      ;;
+  esac
+else
+  case "$MODE" in
+    smoke) FILTER='Scenario=BR-PAS-SUBMIT-001'; LABEL='PAS $submit smoke (BR-PAS-SUBMIT-001)' ;;
+    crd)   FILTER='Scenario=BR-CRD-001';        LABEL='CRD CDS Hooks (BR-CRD-001)' ;;
+    dtr)   FILTER='Scenario=BR-DTR-001';        LABEL='DTR $questionnaire-package, chained from CRD (BR-DTR-001)' ;;
+    all)   FILTER='Scenario!=INFERNO-USCORE-SERVER-001&Scenario!=INFERNO-C4BB-SERVER-001&Category=DaVinciInterop'
+           LABEL='all br-payer external scenarios' ;;
+    unit)  : ;;
+    *)
+      echo "Unknown mode '$MODE'. Modes: smoke | crd | dtr | all | unit." >&2
+      exit 2
+      ;;
+  esac
+fi
 
 # ── Unconditional cleanup ────────────────────────────────────────────────────
 # The harness tears its own stack down, but a killed test run (Ctrl-C, a CI
@@ -73,6 +100,7 @@ cleanup() {
       ${CHO_INTEROP_COMPOSE_OVERRIDE:+--file "$CHO_INTEROP_COMPOSE_OVERRIDE"} \
       --profile interop-br --profile interop-br-provider --profile interop-cho \
       --profile interop-pdex --profile interop-dtr-inferno \
+      --profile interop-c4bb --profile interop-us-core \
       down --volumes --remove-orphans --timeout 30 >/dev/null 2>&1 || true
   fi
   exit "$status"
@@ -84,11 +112,36 @@ if [[ "$MODE" == "unit" ]]; then
   exec dotnet test "$TEST_PROJECT" -c Debug --filter "Category=DaVinciInteropUnit"
 fi
 
-if [[ "$TARGET" != "br-payer" ]]; then
+if [[ "$TARGET" != "br-payer" && "$TARGET" != "inferno" ]]; then
   echo "Unknown interop target '$TARGET'." >&2
-  echo "Executable targets in this repository: br-payer (BR-PAS-SUBMIT-001, BR-CRD-001, BR-DTR-001)." >&2
+  echo "Executable targets in this repository:" >&2
+  echo "  br-payer  BR-PAS-SUBMIT-001, BR-CRD-001, BR-DTR-001" >&2
+  echo "  inferno   INFERNO-USCORE-SERVER-001, INFERNO-C4BB-SERVER-001" >&2
   echo "Other targets are pinned in interop/versions.json but have no scenario yet;" >&2
   echo "see docs/interop/davinci.md for how to add one." >&2
+  exit 2
+fi
+
+# The kits publish no upstream image, so a checkout at the pinned tag has to
+# exist before Compose can build one. Checking here turns a twenty-minute build
+# failure into a one-line instruction.
+if [[ "$TARGET" == "inferno" ]]; then
+  for kit in \
+    "us-core:$REPO_ROOT/interop/.external/us-core-test-kit:$MODE:us-core" \
+    "c4bb:$REPO_ROOT/interop/.external/carin-for-blue-button-test-kit:$MODE:c4bb"
+  do
+    IFS=: read -r name path mode wanted <<<"$kit"
+    [[ "$mode" == "all" || "$mode" == "$wanted" ]] || continue
+    if [[ ! -f "$path/Dockerfile" ]]; then
+      echo "The $name test kit is not checked out at $path." >&2
+      echo "Fetch it at its pinned tag first: ./scripts/interop/fetch-inferno.sh $name" >&2
+      exit 2
+    fi
+  done
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "node is required: the interop-cho profile is seeded by scripts/interop/seed-cho.mjs." >&2
   exit 2
 fi
 
@@ -101,7 +154,11 @@ echo "==> Cleaning previous evidence from $ARTIFACTS"
 rm -rf "$ARTIFACTS"
 
 echo "==> Running Da Vinci interoperability: $LABEL"
-echo "    target: HL7-DaVinci/br-payer, pinned by digest in interop/versions.json"
+if [[ "$TARGET" == "inferno" ]]; then
+  echo "    CHO is the system under test; the kits are pinned by tag in interop/versions.json"
+else
+  echo "    target: HL7-DaVinci/br-payer, pinned by digest in interop/versions.json"
+fi
 
 # The harness owns startup, readiness and teardown of the external stack; this
 # script only enables it and collects what it produced.

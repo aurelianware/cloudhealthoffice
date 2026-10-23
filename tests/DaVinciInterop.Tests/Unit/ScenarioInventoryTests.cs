@@ -20,6 +20,8 @@ public sealed class ScenarioInventoryTests
     [InlineData("INFERNO-DTR-PAYER-001")]
     [InlineData("INFERNO-PDEX-SERVER-001")]
     [InlineData("INFERNO-PDEX-CLIENT-001")]
+    [InlineData("INFERNO-USCORE-SERVER-001")]
+    [InlineData("INFERNO-C4BB-SERVER-001")]
     public void The_planned_scenario_inventory_is_present(string scenarioId)
     {
         Inventory.Scenario(scenarioId).Should().NotBeNull();
@@ -34,7 +36,10 @@ public sealed class ScenarioInventoryTests
         Inventory.Scenarios
             .Where(s => s.Implemented)
             .Select(s => s.Id)
-            .Should().BeEquivalentTo(["BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001"]);
+            .Should().BeEquivalentTo([
+                "BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001",
+                "INFERNO-USCORE-SERVER-001", "INFERNO-C4BB-SERVER-001",
+            ]);
     }
 
     [Fact]
@@ -124,5 +129,86 @@ public sealed class ScenarioInventoryTests
         crd.ParsedChoRole.Should().Be(ChoRole.Client,
             "CHO is the provider-side CRD client; the external implementation is the payer CDS service");
         crd.ExternalTarget.Should().Be("br-payer");
+    }
+
+    /// <summary>
+    /// A conformance scenario that names a suite the pinned kit does not ship
+    /// fails at container startup, minutes into a CI job, with an Inferno error
+    /// rather than a diff. Catching it here costs nothing.
+    /// </summary>
+    [Fact]
+    public void Every_inferno_scenario_names_a_suite_its_pinned_kit_ships()
+    {
+        foreach (var scenario in Inventory.Scenarios.Where(s => s.InfernoSuite is not null))
+        {
+            var target = Versions.Target(scenario.ExternalTarget);
+
+            target.Inferno.Should().NotBeNull(
+                "'{0}' runs an Inferno suite, so '{1}' must declare an inferno block",
+                scenario.Id, target.Key);
+
+            target.Inferno!.Suites.Should().Contain(scenario.InfernoSuite!,
+                "'{0}' names suite '{1}'; the pin ships [{2}]",
+                scenario.Id, scenario.InfernoSuite, string.Join(", ", target.Inferno.Suites));
+        }
+    }
+
+    /// <summary>
+    /// Every input a conformance scenario declares must be one the harness knows
+    /// how to supply. An input silently left unset does not fail the run — the
+    /// suite simply tests something other than what the scenario claims, which
+    /// is the outcome this inventory exists to make impossible.
+    /// </summary>
+    [Fact]
+    public void Every_inferno_scenario_declares_only_inputs_the_harness_can_supply()
+    {
+        var fixture = ChoSeedFixture.Load();
+
+        foreach (var scenario in Inventory.Scenarios.Where(s => s.InfernoSuite is not null))
+        {
+            var act = () => InfernoSuiteScenario.BuildInputs(scenario, fixture);
+
+            act.Should().NotThrow($"'{scenario.Id}' declares inputs [{string.Join(", ", scenario.InfernoInputs)}]");
+
+            InfernoSuiteScenario.BuildInputs(scenario, fixture)
+                .Select(input => input.Name)
+                .Should().BeEquivalentTo(scenario.InfernoInputs);
+        }
+    }
+
+    /// <summary>
+    /// A conformance scenario that names no suite would run nothing, and a
+    /// server-role scenario that runs nothing is the failure mode the inventory
+    /// is supposed to prevent — it would report NotRun while claiming to be
+    /// implemented.
+    /// </summary>
+    [Fact]
+    public void Every_implemented_conformance_scenario_declares_what_to_run()
+    {
+        foreach (var scenario in Inventory.Scenarios
+                     .Where(s => s.Implemented && s.ExternalTarget.StartsWith("inferno-", StringComparison.Ordinal)))
+        {
+            scenario.InfernoSuite.Should().NotBeNullOrWhiteSpace(
+                "'{0}' is implemented against a conformance kit, so it must say which suite it runs",
+                scenario.Id);
+
+            scenario.InfernoInputs.Should().Contain("url",
+                "'{0}' must tell the suite where CHO is", scenario.Id);
+        }
+    }
+
+    /// <summary>
+    /// The CARIN BB non-financial suite is deliberately not run at the current
+    /// pin: it checks the superseded '-NonFinancial' canonicals while CHO
+    /// declares the CARIN BB 2.2.0 '-Basis' profiles. If a future pin bump makes
+    /// it runnable, that is a decision to take explicitly, not something to
+    /// discover from a surprising green row.
+    /// </summary>
+    [Fact]
+    public void The_carin_bb_non_financial_suite_is_not_run_while_its_canonicals_differ()
+    {
+        Inventory.Scenario("INFERNO-C4BB-SERVER-001").InfernoSuite
+            .Should().Be("c4bb_v200",
+                "the non-financial suite at this pin cannot match CHO's -Basis profiles in either direction");
     }
 }

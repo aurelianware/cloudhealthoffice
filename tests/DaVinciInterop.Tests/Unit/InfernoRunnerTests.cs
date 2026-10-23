@@ -130,4 +130,100 @@ public sealed class InfernoRunnerTests
         Status = "done",
         Results = results.Select((r, i) => new InfernoResult { Id = $"r{i}", Result = r }).ToList(),
     };
+
+    /// <summary>
+    /// Inferno addresses a nested group by an id the kit's source never writes
+    /// down: <c>us_core_v311_patient</c> is declared in the kit and runnable
+    /// only as <c>us_core_v311-us_core_v311_fhir_api-us_core_v311_patient</c>.
+    /// Composing that prefix from a naming rule would be a guess, and a wrong
+    /// guess names a group that does not exist rather than failing loudly.
+    /// </summary>
+    [Fact]
+    public void A_declared_group_id_resolves_to_the_nested_runnable_id()
+    {
+        var suite = SampleSuite();
+
+        InfernoRunner.ResolveGroupId(suite, "us_core_v311_patient")
+            .Should().Be("us_core_v311-us_core_v311_fhir_api-us_core_v311_patient");
+
+        InfernoRunner.ResolveGroupId(suite, "us_core_v311_capability_statement")
+            .Should().Be("us_core_v311-us_core_v311_fhir_api-us_core_v311_capability_statement");
+    }
+
+    [Fact]
+    public void A_full_runnable_id_resolves_to_itself()
+    {
+        InfernoRunner.ResolveGroupId(SampleSuite(), "us_core_v311-us_core_smart_app_launch")
+            .Should().Be("us_core_v311-us_core_smart_app_launch");
+    }
+
+    [Fact]
+    public void A_group_the_suite_does_not_have_is_an_error_naming_the_ones_it_does()
+    {
+        var act = () => InfernoRunner.ResolveGroupId(SampleSuite(), "us_core_v311_allergy_intolerance");
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*us_core_v311_allergy_intolerance*")
+            .WithMessage("*us_core_v311-us_core_v311_fhir_api-us_core_v311_patient*",
+                "a scenario naming a group that does not exist must be told which ones do");
+    }
+
+    /// <summary>
+    /// Suffix matching is what makes resolution possible at all, and it is also
+    /// how it could go wrong: two groups ending in the same declared id would
+    /// make the first match arbitrary. An ambiguous id is an error, never a
+    /// silent choice between two suites' worth of tests.
+    /// </summary>
+    [Fact]
+    public void An_ambiguous_declared_id_is_an_error_rather_than_a_first_match()
+    {
+        var suite = new InfernoTestSuite
+        {
+            Id = "c4bb_v200",
+            TestGroups =
+            [
+                new InfernoTestGroup { Id = "c4bb_v200-a-capability_statement_group" },
+                new InfernoTestGroup { Id = "c4bb_v200-b-capability_statement_group" },
+            ],
+        };
+
+        var act = () => InfernoRunner.ResolveGroupId(suite, "capability_statement_group");
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*ambiguous*")
+            .WithMessage("*c4bb_v200-a-capability_statement_group*")
+            .WithMessage("*c4bb_v200-b-capability_statement_group*");
+    }
+
+    [Fact]
+    public void A_partial_word_match_is_not_a_match()
+    {
+        // "patient" is a suffix of "us_core_v311_patient" as a string, but not as
+        // an id segment. Matching on the bare substring would resolve one group's
+        // id to another's.
+        var act = () => InfernoRunner.ResolveGroupId(SampleSuite(), "patient");
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    /// <summary>The shape Inferno's /test_suites/{id} returns, trimmed to what the resolver reads.</summary>
+    private static InfernoTestSuite SampleSuite() => new()
+    {
+        Id = "us_core_v311",
+        Title = "US Core Server v3.1.1",
+        TestGroups =
+        [
+            new InfernoTestGroup { Id = "us_core_v311-us_core_smart_app_launch" },
+            new InfernoTestGroup
+            {
+                Id = "us_core_v311-us_core_v311_fhir_api",
+                TestGroups =
+                [
+                    new InfernoTestGroup { Id = "us_core_v311-us_core_v311_fhir_api-us_core_v311_capability_statement" },
+                    new InfernoTestGroup { Id = "us_core_v311-us_core_v311_fhir_api-us_core_v311_patient" },
+                    new InfernoTestGroup { Id = "us_core_v311-us_core_v311_fhir_api-us_core_v311_encounter" },
+                ],
+            },
+        ],
+    };
 }
