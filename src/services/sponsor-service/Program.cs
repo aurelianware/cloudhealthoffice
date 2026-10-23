@@ -85,6 +85,11 @@ builder.Services.AddScoped<ISponsorBankAccountRepository, MongoSponsorBankAccoun
 // Sponsor bank accounts under dual control (see SponsorBankAccountsController).
 builder.Services.AddScoped<ISponsorBankAccountService, SponsorBankAccountService>();
 
+// Sponsor policies and contract terms (plan-configuration.md §9b, step 3).
+builder.Services.AddScoped<SponsorService.Contracts.IContractStore, SponsorService.Contracts.ContractStoreMongo>();
+builder.Services.AddScoped<SponsorService.Contracts.ContractService>();
+builder.Services.AddSingleton(TimeProvider.System);
+
 // No CORS: this service is called server-to-server only (the portal is
 // Blazor Server), so browsers on other origins get no CORS grant.
 
