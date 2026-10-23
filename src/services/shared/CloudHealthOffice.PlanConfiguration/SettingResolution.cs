@@ -181,8 +181,14 @@ public static class SettingResolver
 /// <summary>Checks a value before it is stored (plan-configuration.md §4–5).</summary>
 public static class SettingValidator
 {
+    /// <param name="lineOfBusiness">
+    /// The line of business the node belongs to, when the caller knows it (for
+    /// example a sponsor's, looked up from sponsor-service). A line-of-business
+    /// node is its own line. With neither, only floors for every line are checked
+    /// here and the rest are clamped at resolution.
+    /// </param>
     public static IReadOnlyList<string> Validate(SettingDefinition definition, SettingLevel level, string scopeId,
-        string? value, bool cleared, string? reason)
+        string? value, bool cleared, string? reason, string? lineOfBusiness = null)
     {
         var errors = new List<string>();
         if (level == SettingLevel.Platform || !definition.AllowedLevels.Contains(level))
@@ -210,9 +216,10 @@ public static class SettingValidator
         {
             if (c.Min is { } min && n < min) errors.Add($"The value must be at least {SettingJson.Number(min)}.");
             if (c.Max is { } max && n > max) errors.Add($"The value must be at most {SettingJson.Number(max)}.");
-            // A line-of-business value is checked against that line's floors here;
-            // values at other levels are clamped to the member's line at resolution.
-            var lob = level == SettingLevel.LineOfBusiness ? LinesOfBusiness.Normalize(scopeId) : null;
+            // A line-of-business value is checked against that line's floors here,
+            // and so is any other node whose line the caller knows; the rest are
+            // clamped to the member's line at resolution.
+            var lob = level == SettingLevel.LineOfBusiness ? LinesOfBusiness.Normalize(scopeId) : LinesOfBusiness.Normalize(lineOfBusiness);
             foreach (var floor in c.Floors.Where(f => f.LineOfBusiness is null
                                                       || (lob is not null && string.Equals(f.LineOfBusiness, lob, StringComparison.OrdinalIgnoreCase))))
             {
@@ -224,6 +231,10 @@ public static class SettingValidator
     }
 
     /// <summary>The permission a write at <paramref name="level"/> needs (plan-configuration.md §9a).</summary>
+    /// <summary>Whether any floor applies only to particular lines of business (so knowing the node's line can refuse more).</summary>
+    public static bool HasLineSpecificFloors(SettingDefinition definition) =>
+        definition.Constraints.Floors.Any(f => f.LineOfBusiness is not null);
+
     public static string WritePermissionFor(SettingLevel level) => level switch
     {
         SettingLevel.Sponsor or SettingLevel.SponsorPolicy or SettingLevel.Class => PlanConfigurationPermissions.Sponsor,
