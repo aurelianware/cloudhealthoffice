@@ -155,11 +155,17 @@ for a *prior-authorization* item waiting on records.
 **A claim waiting on provider records has no RFAI today.** So
 `WaitingProviderRecords` on a claim item currently has no event to wake it and
 falls back to a date, which is the weakest case in the table and the most common
-reason in practice. Closing that properly means either extending RFAI to claim
-attachment requests — which is where it most likely belongs, since
-`payer-claim-attachment-receiver.md` already receives the 275 — or treating the
-attachment arrival as the event directly. Either is its own piece of work and is
-§12 Q1, not something this design should quietly assume.
+reason in practice.
+
+**Now designed elsewhere.** [`claim-rfai.md`](claim-rfai.md) (merged in #1518)
+works out exactly the recommendation §12 Q1 made: give `RfaiCase` a claim
+subject rather than waking on a bare attachment, since an attachment alone
+cannot tell a solicited document from an unsolicited one. It reaches the same
+finding from the other direction — the request lifecycle is built and attached
+to the wrong subject — and lists `WorkItemStatus.Waiting` among the things that
+must exist first, so the two designs are dependencies of each other rather than
+alternatives. §11 step 6 is therefore implementing that design, not deciding
+what it should be.
 
 ---
 
@@ -367,7 +373,8 @@ sequenced together in §11.
 5. **The forecasting correction** (§10) — ideally in step with
    [`workforce-optimization.md`](workforce-optimization.md)'s own phases 1–3, so
    its projection is never shipped in the wrong version.
-6. **The claim-side RFAI gap** (§4.1), once §12 Q1 is decided.
+6. **The claim-side RFAI wake** (§4.1) — implementing
+   [`claim-rfai.md`](claim-rfai.md), which depends on step 1 of this list.
 7. **Wait-failure prediction and the necessity review** (§9.3), each behind its
    own backtest gate.
 8. **`WaitPatternFinding`** (§9.4) in the recommendation engine.
@@ -378,7 +385,7 @@ sequenced together in §11.
 
 | # | Question | Recommendation |
 |---|---|---|
-| 1 | A claim waiting on provider records has no RFAI to wake it (§4.1). Extend `rfai-service` to claim attachment requests, or wake on the 275 attachment arriving? | Extend RFAI. It already models request, due date, response and overdue, and `payer-claim-attachment-receiver.md` gives it the inbound side. Waking on a bare attachment cannot tell a solicited document from an unsolicited one. |
+| 1 | ~~A claim waiting on provider records has no RFAI to wake it (§4.1). Extend `rfai-service` to claim attachment requests, or wake on the 275 attachment arriving?~~ | **Settled 2026-10-23 by [claim-rfai.md](claim-rfai.md) (#1518)**, in the direction recommended here: a claim subject on the RFAI case, not a bare attachment. That design also names `WorkItemStatus.Waiting` as a prerequisite, and carries its own open decisions (including whether the PWK pend defaults on, which changes adjudication behaviour today) — those are its to answer, not this document's. |
 | 2 | Should `Waiting` ever be set by a service rather than a person? | Yes for one case: a source-owned item whose source says it is blocked (an authorization in `RfaiStatus.Open`). That is the source telling the truth about its own state, not a person parking work. Every other case stays person-initiated. |
 | 3 | What happens to a waiting item when its source resolves (the claim leaves Pended)? | It closes, as now — `Done` wins over `Waiting`. The wait was about work that no longer needs doing. |
 | 4 | Does a wait suspend the **internal** SLA, as distinct from a regulatory clock? | No by default, but worth a tenant setting for internal-only queues, reported separately. The moment it is configurable for regulated work it will be configured wrongly, so that is not offered. |
