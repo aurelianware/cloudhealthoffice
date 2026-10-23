@@ -149,6 +149,24 @@
       color: #0F766E;
       font-weight: bold;
     }
+
+    .status-pass {
+      color: #0F766E;
+      font-weight: bold;
+    }
+
+    .status-part {
+      color: #9A5B00;
+      font-weight: bold;
+    }
+
+    .status-note {
+      display: block;
+      margin-top: 6px;
+      color: #475569;
+      font-size: 0.85em;
+      line-height: 1.5;
+    }
     
     .sandbox-section {
       background: linear-gradient(135deg, #F5F7FA 0%, #EEF3F8 100%);
@@ -538,7 +556,8 @@
       <!-- CMS-0057-F Compliance -->
       <section class="feature-section">
         <h2>CMS-0057-F Readiness Status</h2>
-        <p>Cloud Health Office provides implemented CMS-0057-F readiness surfaces with FHIR R4, US Core, and Da Vinci Implementation Guide coverage that still require payer-specific validation before production use.</p>
+        <p>Cloud Health Office implements the CMS-0057-F surfaces on FHIR R4, US Core, and the Da Vinci Implementation Guides. Each row below carries the status the platform's own acceptance evidence gives it, counted by scenario &mdash; not a single verdict per API. Every surface still requires payer-specific validation before production use.</p>
+        <p style="color: #475569;">The source of truth for every status is &sect;11 of the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer" style="color: #0E7490;">ePA gap matrix</a>, and the executable evidence behind it is published in the <a href="/evidence" style="color: #0E7490;">Evidence Hub</a>. <strong>Passable</strong> means the acceptance suite exercises the behaviour at a named revision against synthetic data. <strong>Partial</strong> means the surface is implemented but something stated in the matrix is still open. Neither is CMS certification, and no Inferno or Touchstone conformance suite has been run against Cloud Health Office as a payer server yet.</p>
 
         <table class="compliance-table">
           <thead>
@@ -554,41 +573,42 @@
               <td>Patient Access API</td>
               <td>FHIR R4 &mdash; Claim, EOB, Coverage, Patient, Encounter</td>
               <td>January 1, 2027</td>
-              <td><span class="check-icon">&#10003; Implemented</span></td>
+              <td><span class="status-part">Partial</span> &mdash; 3 of 3 scenarios partial<br><span class="status-note">Member, coverage and claim data come from Cloud Health Office's own services; no projection has been validated against a published profile.</span></td>
             </tr>
             <tr>
               <td>Provider Access API</td>
-              <td>FHIR R4 &mdash; Claim, EOB, Patient, Condition, Observation</td>
+              <td>FHIR R4 &mdash; non-financial CARIN BB EOB, Patient, Condition, Observation</td>
               <td>January 1, 2027</td>
-              <td><span class="check-icon">&#10003; Implemented</span></td>
+              <td><span class="status-pass">Passable</span> on 2 of 3 scenarios, <span class="status-part">partial</span> on 1<br><span class="status-note">Attribution and member opt-out are exercised against real services; the claims and encounter payload is not yet profile-validated.</span></td>
             </tr>
             <tr>
               <td>Prior Authorization API</td>
-              <td>FHIR R4 + CDS Hooks &mdash; real-time PA decisions</td>
+              <td>FHIR R4 + CDS Hooks &mdash; CRD, DTR and PAS</td>
               <td>January 1, 2027</td>
-              <td><span class="check-icon">&#10003; Implemented</span></td>
+              <td><span class="status-pass">Passable</span> on 2 of 8 scenarios, <span class="status-part">partial</span> on 6<br><span class="status-note">CRD, DTR and PAS are implemented and persist their records, and are not yet conformant to the Da Vinci guides.</span></td>
             </tr>
             <tr>
               <td>Payer-to-Payer API</td>
               <td>FHIR R4 &mdash; bidirectional member data exchange</td>
               <td>January 1, 2027</td>
-              <td><span class="check-icon">&#10003; Implemented</span></td>
+              <td><span class="status-pass">Passable</span> on 1 of 4 scenarios, <span class="status-part">partial</span> on 3<br><span class="status-note">Opt-in enforcement is exercised end to end. Export and member-match run against Cloud Health Office's own data but are single-tenant and not profile-validated.</span></td>
             </tr>
             <tr>
               <td>Provider Directory API</td>
               <td>FHIR R4 &mdash; Practitioner, Organization, Location, Network</td>
               <td>January 1, 2027</td>
-              <td><span class="check-icon">&#10003; Implemented</span></td>
+              <td><span class="status-part">Implemented surface</span><br><span class="status-note">Served, but outside the 21 acceptance scenarios, so no scenario status is claimed for it.</span></td>
             </tr>
             <tr>
               <td>USCDI v1/v2</td>
               <td>US Core profiles, Da Vinci IGs (PDex, PAS, CRD, DTR, HRex)</td>
               <td>January 1, 2027</td>
-              <td><span class="check-icon">&#10003; Implemented</span></td>
+              <td><span class="status-part">Mapped</span><br><span class="status-note">Data classes are mapped to US Core; profile validation in CI is the open item for every surface above.</span></td>
             </tr>
           </tbody>
         </table>
 
+        <p><strong>Scenario counts</strong> are the 21 CMS-0057-F acceptance scenarios as of 23 October 2026: 6 passable, 15 partial, none failing. Eighteen of them belong to the four APIs above; the remaining three cover SMART on FHIR authorization (partial), the consent registry (passable) and the public prior-authorization metric set (partial), which has no row here because it is a reporting obligation rather than an API. The counts move as the matrix moves &mdash; the <a href="/evidence">Evidence Hub</a> renders the current published snapshot and the revision it was generated from, and this page does not.</p>
         <p><strong>Full readiness documentation:</strong> <a href="/docs/compliance" target="_blank" rel="noopener noreferrer">CMS-0057-F Readiness Guide &rarr;</a></p>
       </section>
 
