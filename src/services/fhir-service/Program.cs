@@ -264,8 +264,44 @@ builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerConsen
 builder.Services.Configure<FhirService.Services.ProviderAccess.ProviderAttributionOptions>(
     builder.Configuration.GetSection(
         FhirService.Services.ProviderAccess.ProviderAttributionOptions.SectionName));
-builder.Services.AddScoped<FhirService.Services.ProviderAccess.IProviderAttributionSource,
-    FhirService.Services.ProviderAccess.ConfiguredProviderAttributionSource>();
+builder.Services.AddScoped<FhirService.Services.ProviderAccess.ConfiguredProviderAttributionSource>();
+
+// Attribution sources. Configured panels are always available; claims history
+// (PROV-02) is added when a deployment turns it on, and the two compose as a
+// disjunction — an assignment the panel knows about and treatment the claims
+// know about are different relationships, and either one is a relationship.
+// Which sources are active is reported by /fhir/r4/adapter-status, so a render
+// cannot quietly be running on demo panels.
+var claimsHistoryAttribution = builder.Configuration.GetValue(
+    "Cms0057:ProviderAttribution:ClaimsHistory:Enabled", false);
+if (claimsHistoryAttribution)
+{
+    var lookbackMonths = builder.Configuration.GetValue(
+        "Cms0057:ProviderAttribution:ClaimsHistory:LookbackMonths", 24);
+    if (lookbackMonths <= 0)
+    {
+        // Refused at start-up rather than at the first request: a non-positive
+        // lookback attributes no one, which is indistinguishable from a plan
+        // whose providers genuinely have not treated anybody.
+        throw new InvalidOperationException(
+            "Cms0057:ProviderAttribution:ClaimsHistory:LookbackMonths must be greater than zero "
+            + "when claims-history attribution is enabled.");
+    }
+
+    builder.Services.AddScoped<FhirService.Services.ProviderAccess.ClaimsHistoryProviderAttributionSource>();
+    builder.Services.AddScoped<FhirService.Services.ProviderAccess.IProviderAttributionSource>(sp =>
+        new FhirService.Services.ProviderAccess.CompositeProviderAttributionSource(
+            new FhirService.Services.ProviderAccess.IProviderAttributionSource[]
+            {
+                sp.GetRequiredService<FhirService.Services.ProviderAccess.ConfiguredProviderAttributionSource>(),
+                sp.GetRequiredService<FhirService.Services.ProviderAccess.ClaimsHistoryProviderAttributionSource>(),
+            }));
+}
+else
+{
+    builder.Services.AddScoped<FhirService.Services.ProviderAccess.IProviderAttributionSource>(sp =>
+        sp.GetRequiredService<FhirService.Services.ProviderAccess.ConfiguredProviderAttributionSource>());
+}
 builder.Services.AddScoped<FhirService.Services.ProviderAccess.IProviderAccessAuthorizationService,
     FhirService.Services.ProviderAccess.ProviderAccessAuthorizationService>();
 builder.Services.AddSingleton<FhirService.Services.PayerToPayer.IPayerToPayerExportBuilder,
