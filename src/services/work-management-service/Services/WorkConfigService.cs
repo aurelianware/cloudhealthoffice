@@ -24,7 +24,7 @@ public sealed class QueueInput
     public bool IsActive { get; set; } = true;
     public int? Order { get; set; }
     public bool IsFallback { get; set; }
-    public ClaimQueueCriteria Criteria { get; set; } = new();
+    public WorkQueueCriteria Criteria { get; set; } = new();
     public PriorityWeights Weights { get; set; } = new();
     public int SlaDays { get; set; } = 30;
 }
@@ -120,6 +120,17 @@ public sealed class WorkConfigService
             }
             if (created > 0)
                 _logger.LogInformation("Seeded {Count} default enrollment queues for tenant {TenantId}", created, tenantId);
+        }
+        if (!queues.Any(q => q.WorkType == WorkType.Inquiry))
+        {
+            var created = 0;
+            foreach (var definition in DefaultInquiryQueues.All)
+            {
+                if (await _store.CreateQueueIfAbsentAsync(DefaultInquiryQueues.Create(definition, tenantId, Now), ct))
+                    created++;
+            }
+            if (created > 0)
+                _logger.LogInformation("Seeded {Count} default follow-up queues for tenant {TenantId}", created, tenantId);
         }
         if (_seedMembers.Count > 0)
             await SeedMembershipsAsync(tenantId, ct);
@@ -248,21 +259,28 @@ public sealed class WorkConfigService
         queue.WorkType = input.WorkType;
         queue.IsActive = input.IsActive;
         queue.IsFallback = input.IsFallback;
-        queue.Criteria = Normalize(input.Criteria ?? new ClaimQueueCriteria());
+        queue.Criteria = Normalize(input.Criteria ?? new WorkQueueCriteria());
         queue.Weights = input.Weights ?? new PriorityWeights();
         queue.SlaDays = input.SlaDays;
         queue.UpdatedAt = Now;
         queue.UpdatedBy = actor;
     }
 
-    private static ClaimQueueCriteria Normalize(ClaimQueueCriteria c)
+    private static WorkQueueCriteria Normalize(WorkQueueCriteria c)
     {
         static List<string> Clean(List<string>? values, bool upper = false) =>
             (values ?? new()).Where(v => !string.IsNullOrWhiteSpace(v))
                 .Select(v => upper ? v.Trim().ToUpperInvariant() : v.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        return new ClaimQueueCriteria
+        return new WorkQueueCriteria
         {
+            // A facet whose values all cleaned away is dropped rather than
+            // kept empty, so "every facet named here must hold" stays true of
+            // what is stored.
+            Facets = (c.Facets ?? new()).GroupBy(f => WorkFacets.Key(f.Key))
+                .Select(g => (Key: g.Key, Values: Clean(g.SelectMany(x => x.Value ?? new()).ToList())))
+                .Where(f => f.Values.Count > 0)
+                .ToDictionary(f => f.Key, f => f.Values),
             PendCodes = Clean(c.PendCodes, upper: true),
             MatchAnyPendCode = c.MatchAnyPendCode,
             LinesOfBusiness = Clean(c.LinesOfBusiness),
@@ -291,15 +309,16 @@ public sealed class WorkConfigService
         var c = queue.Criteria;
         if (c.MinAmount is < 0 || c.MaxAmount is < 0) return "Amounts cannot be negative.";
         if (c.MinAmount is { } min && c.MaxAmount is { } max && min > max) return "MinAmount cannot exceed MaxAmount.";
-        if (queue.WorkType != WorkType.Claim && HasClaimCriteria(c))
-            return $"Claim criteria apply to Claim queues only; {queue.WorkType} queues route by order in this phase.";
+        if (c.Facets.Count > 10) return "A queue routes on at most 10 facets.";
+        foreach (var (name, values) in c.Facets)
+        {
+            if (!WorkFacets.IsValidKey(name))
+                return $"Facet name '{name}' must be 1 to 40 characters of a-z, 0-9 and underscore.";
+            if (values.Count > 50) return $"Facet '{name}' lists at most 50 values.";
+            if (values.Any(v => v.Length > 100)) return $"Facet '{name}' values are at most 100 characters.";
+        }
         return FallbackError(queue.WorkType, all);
     }
-
-    private static bool HasClaimCriteria(ClaimQueueCriteria c) =>
-        c.PendCodes.Count + c.LinesOfBusiness.Count + c.ClaimTypes.Count + c.ProviderNpis.Count
-        + c.ProviderTins.Count + c.NetworkTiers.Count > 0
-        || c.MinAmount is not null || c.MaxAmount is not null || c.Expedited is not null;
 
     /// <summary>A work type with active queues has exactly one active fallback.</summary>
     private static string? FallbackError(WorkType type, IEnumerable<WorkQueue> all)

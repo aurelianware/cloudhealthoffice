@@ -101,6 +101,44 @@ public sealed class AssignRequest
     public string UserId { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// Work a person raises: today a follow-up from a contact. The source id is
+/// not here — the service generates it, so two follow-ups from one contact
+/// cannot overwrite each other.
+/// </summary>
+public sealed class CreateWorkRequest
+{
+    public WorkType WorkType { get; set; } = WorkType.Inquiry;
+
+    /// <summary>What needs doing, in a sentence; shown in the queue and on My Work.</summary>
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>The source's human-readable number (the contact number).</summary>
+    public string? SourceNumber { get; set; }
+
+    /// <summary>Relative portal path the item opens at (the contact it came from).</summary>
+    public string? OpenUrl { get; set; }
+
+    /// <summary>Reason codes to route on; the first is the routing (primary) one.</summary>
+    public List<string>? ReasonCodes { get; set; }
+
+    /// <summary>Routing attributes the named fields do not cover (channel, caller, classification).</summary>
+    public Dictionary<string, List<string>>? Facets { get; set; }
+
+    public string? MemberId { get; set; }
+    public string? ProviderNpi { get; set; }
+    public string? LineOfBusiness { get; set; }
+    public bool Expedited { get; set; }
+
+    /// <summary>An explicit deadline; without one the queue's SLA sets the due date.</summary>
+    public DateTime? DueAt { get; set; }
+}
+
+public sealed class CompleteRequest
+{
+    public string? Resolution { get; set; }
+}
+
 public sealed class ReorderRequest
 {
     public WorkType WorkType { get; set; } = WorkType.Claim;

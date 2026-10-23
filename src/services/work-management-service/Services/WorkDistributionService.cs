@@ -179,6 +179,35 @@ public sealed class WorkDistributionService
             return (DistributionStatus.Ok, null);
         }, (item, before) => AuditAsync(item, WorkAuditActions.Unassigned, supervisor.UserId, fromUser: before));
 
+    /// <summary>
+    /// The holder finishes person-created work. Source-owned work is never
+    /// completed here: a claim's item closes when claims-service says the
+    /// claim is no longer pended, and letting a person close it would leave
+    /// the queue disagreeing with the claim. A follow-up from a contact has
+    /// no such source, so the person who did it is the only one who can say
+    /// it is done.
+    /// </summary>
+    public Task<DistributionResult> CompleteAsync(
+        ICurrentActor actor, string id, string? resolution, CancellationToken ct = default) =>
+        MutateAsync(actor.TenantId, id, ct, item =>
+        {
+            if (!WorkTypes.IsPersonCreated(item.WorkType))
+                return (DistributionStatus.Conflict,
+                    $"{item.WorkType} work is completed by its source, not from the work list.");
+            if (!WorkEntitlements.Permits(actor, item.WorkType))
+                return (DistributionStatus.Forbidden, $"You may not work {item.WorkType} items.");
+            if (!item.IsActive) return (DistributionStatus.Conflict, $"The item is already {item.Status}.");
+            if (item.Status == WorkItemStatus.Leased && item.AssignedTo != actor.UserId)
+                return (DistributionStatus.Forbidden, "Only the holder can complete this item.");
+            item.Status = WorkItemStatus.Done;
+            item.SetLease(null, item.AssignedBy, null);
+            item.CompletedAt = Now;
+            item.CompletedBy = actor.UserId;
+            item.Resolution = string.IsNullOrWhiteSpace(resolution) ? null : resolution.Trim();
+            return (DistributionStatus.Ok, null);
+        }, (item, before) => AuditAsync(item, WorkAuditActions.Completed, actor.UserId, fromUser: before,
+            detail: item.Resolution));
+
     /// <summary>Read, check, change, compare-and-swap; retried while the item changes underneath.</summary>
     private async Task<DistributionResult> MutateAsync(
         string tenantId, string id, CancellationToken ct,

@@ -300,7 +300,7 @@ public class RecomputeTests
         await _kit.Intake().ApplyClaimEventAsync(_kit.Needed("small", amount: 50m));
         var created = await _kit.Config().CreateQueueAsync(WorkTestKit.Tenant, new QueueInput
         {
-            Name = "High dollar", Order = 1, Criteria = new ClaimQueueCriteria { MinAmount = 10_000m },
+            Name = "High dollar", Order = 1, Criteria = new WorkQueueCriteria { MinAmount = 10_000m },
         }, "admin");
         created.Error.Should().BeNull();
 

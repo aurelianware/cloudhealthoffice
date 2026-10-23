@@ -5,9 +5,14 @@ using MongoDB.Bson.Serialization.Attributes;
 namespace WorkManagementService.Models;
 
 /// <summary>
-/// The kinds of work one engine distributes. Phase 1 produces Claim only;
-/// the others are reserved so queues, memberships and entitlement are typed
-/// from day one (phase 2: Appeal, PriorAuth; phase 3: Enrollment834, Payment).
+/// The kinds of work one engine distributes.
+///
+/// <para>Most are <b>source-owned</b>: the work exists because a domain
+/// service says one of its records needs work, and disappears when it says
+/// it does not. <see cref="Inquiry"/> is the first that is not — a service
+/// representative creates a follow-up deliberately, and only a person closes
+/// it. <see cref="WorkTypes.IsPersonCreated"/> is the boundary, and it is
+/// what the create endpoint is allowed to accept.</para>
 /// </summary>
 public enum WorkType
 {
@@ -16,6 +21,24 @@ public enum WorkType
     PriorAuth,
     Enrollment834,
     Payment,
+
+    /// <summary>
+    /// A follow-up from a member or provider contact (cho-service.md §8 step 3).
+    /// Person-created: no source service owns it.
+    /// </summary>
+    Inquiry,
+}
+
+/// <summary>Facts about a <see cref="WorkType"/> that are not its name.</summary>
+public static class WorkTypes
+{
+    /// <summary>
+    /// Work a person creates and a person closes, with no source service
+    /// behind it. Source-owned types are never created through the API:
+    /// their items come from their source's events or reconcile, so a forged
+    /// create could otherwise put a claim in a queue no claim is pended for.
+    /// </summary>
+    public static bool IsPersonCreated(WorkType type) => type is WorkType.Inquiry;
 }
 
 public enum WorkItemStatus
@@ -60,8 +83,8 @@ public class WorkQueue
     /// </summary>
     public bool IsFallback { get; set; }
 
-    /// <summary>Claim routing criteria (Claim queues). Empty criteria match everything.</summary>
-    public ClaimQueueCriteria Criteria { get; set; } = new();
+    /// <summary>Routing criteria. Empty criteria match everything.</summary>
+    public WorkQueueCriteria Criteria { get; set; } = new();
 
     public PriorityWeights Weights { get; set; } = new();
 
@@ -77,22 +100,36 @@ public class WorkQueue
 }
 
 /// <summary>
-/// Claim attributes a queue routes on. Every list is "any of"; an empty list
-/// or a null bound does not constrain. All set constraints must hold.
+/// Attributes a queue routes on, for every work type. Every list is "any of";
+/// an empty list or a null bound does not constrain. All set constraints must
+/// hold.
+///
+/// <para>The named fields below are the ones nearly every source has — a
+/// reason code, a line of business, an amount, a provider, expedited. They
+/// are named after claims because claims came first, but none of them is
+/// claim-only: an enrollment exception's reason code travels as its pend
+/// code, and so does a contact's reason code. What a source has and the
+/// named fields do not is a <see cref="Facets">facet</see>.</para>
 /// </summary>
-public class ClaimQueueCriteria
+public class WorkQueueCriteria
 {
-    /// <summary>Pend codes (NCCI, COB, ...), compared case-insensitively.</summary>
+    /// <summary>
+    /// The source's reason code(s), compared case-insensitively: a claim's
+    /// pend code (NCCI, COB, ...), an enrollment exception's reason, a
+    /// contact's reason code.
+    /// </summary>
     public List<string> PendCodes { get; set; } = new();
 
     /// <summary>
-    /// False (default): <see cref="PendCodes"/> matches the claim's routing
-    /// (primary) pend code, as the claims work-queue categories always have.
-    /// True: any pend code on the claim matches.
+    /// False (default): <see cref="PendCodes"/> matches the item's primary
+    /// (routing) reason code, as the claims work-queue categories always have.
+    /// True: any of the item's reason codes matches.
     /// </summary>
     public bool MatchAnyPendCode { get; set; }
 
     public List<string> LinesOfBusiness { get; set; } = new();
+
+    /// <summary>Claim types; only sources that set <see cref="WorkItemAttributes.ClaimType"/> match these.</summary>
     public List<string> ClaimTypes { get; set; } = new();
 
     [BsonRepresentation(BsonType.Decimal128)]
@@ -107,6 +144,44 @@ public class ClaimQueueCriteria
 
     /// <summary>Null: either. True / false: only expedited / only non-expedited items.</summary>
     public bool? Expedited { get; set; }
+
+    /// <summary>
+    /// Attributes the named fields above do not cover, as facet name → the
+    /// values that match. A work type adds its own without a schema change
+    /// and without every other type growing a field it will never set: a
+    /// contact routes on <c>channel</c>, <c>caller</c> and
+    /// <c>classification</c>, where a claim has none of the three.
+    ///
+    /// <para>Facets are "all of, each any of": every named facet must hold,
+    /// and within one, any listed value does. A facet with no values does not
+    /// constrain, like the lists above. Names are normalised by
+    /// <see cref="WorkFacets.Key"/>.</para>
+    /// </summary>
+    public Dictionary<string, List<string>> Facets { get; set; } = new();
+}
+
+/// <summary>The facet names CHO's own sources set, and how a name is normalised.</summary>
+public static class WorkFacets
+{
+    /// <summary>How the contact arrived: phone, chat, email, portal, ...</summary>
+    public const string Channel = "channel";
+
+    /// <summary>Who was on the contact: member, representative, provider, other.</summary>
+    public const string Caller = "caller";
+
+    /// <summary>A contact's regulatory classification: inquiry, grievance, appeal, ...</summary>
+    public const string Classification = "classification";
+
+    /// <summary>
+    /// Lower-cased and trimmed. A Mongo document key cannot begin with '$'
+    /// or contain '.', so neither can a facet name; <see cref="IsValidKey"/>
+    /// is what the admin API refuses on.
+    /// </summary>
+    public static string Key(string name) => name.Trim().ToLowerInvariant();
+
+    /// <summary>1..40 characters of a-z, 0-9 and underscore.</summary>
+    public static bool IsValidKey(string key) =>
+        key.Length is > 0 and <= 40 && key.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_');
 }
 
 /// <summary>
@@ -161,9 +236,13 @@ public class WorkMembership
     public string? UpdatedBy { get; set; }
 }
 
-/// <summary>Attribute snapshot of the work's source, taken when the work was needed.</summary>
+/// <summary>
+/// Attribute snapshot of the work's source, taken when the work was needed.
+/// The queue criteria of every work type are evaluated against this.
+/// </summary>
 public class WorkItemAttributes
 {
+    /// <summary>The routing reason code: a claim's pend code, an exception's reason, a contact's reason.</summary>
     public string? PrimaryPendCode { get; set; }
     public List<string> PendCodes { get; set; } = new();
     public string? PendReason { get; set; }
@@ -186,6 +265,29 @@ public class WorkItemAttributes
     public DateTime? ReceivedDate { get; set; }
     public DateTime? ServiceDate { get; set; }
     public string? MemberId { get; set; }
+
+    /// <summary>
+    /// What this item is about, in a sentence, for sources whose record has
+    /// no number worth reading on its own ("Call back about the denial on
+    /// claim CLM-412"). The queue list shows it where it is set.
+    /// </summary>
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// Where the portal opens this item, when the work type alone does not
+    /// say — a follow-up from a contact opens the contact, not a screen named
+    /// after the follow-up. A relative portal path only; see
+    /// <see cref="Domain.WorkEntitlements.OpenUrl"/>, which refuses anything
+    /// else and falls back to the work type's own screen.
+    /// </summary>
+    public string? OpenUrl { get; set; }
+
+    /// <summary>
+    /// Routing attributes the fields above do not name, as facet name → its
+    /// values (a contact's <c>channel</c>, <c>caller</c>, <c>classification</c>).
+    /// Matched against <see cref="WorkQueueCriteria.Facets"/>.
+    /// </summary>
+    public Dictionary<string, List<string>> Facets { get; set; } = new();
 }
 
 /// <summary>
