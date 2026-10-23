@@ -55,11 +55,13 @@ public sealed record RulePackEvaluation(
 /// </summary>
 public static class RulePackEvaluator
 {
-    private const string FederalAck = "42 CFR 438.406(b)(1)";
-    private const string FederalAppeal = "42 CFR 438.408(b)(2)";
-    private const string FederalExpedited = "42 CFR 438.408(b)(3)";
-    private const string FederalGrievance = "42 CFR 438.408(b)(1)";
-    private const string FederalExtension = "42 CFR 438.408(c)";
+    /// <summary>
+    /// The pack's own federal floor. Every pack in the catalog has one
+    /// (the validator refuses a line of business without), so the fallback
+    /// is only for a pack built in a test.
+    /// </summary>
+    private static RulePackFloor Floor(RulePack pack) =>
+        RulePackFloor.For(pack.LineOfBusiness) ?? RulePackFloor.Medicaid;
 
     public static RulePackEvaluation Evaluate(RulePack pack, RulePackEvaluationInput input, IHolidayCalendar? holidays = null)
     {
@@ -74,7 +76,7 @@ public static class RulePackEvaluator
         };
 
         return new RulePackEvaluation(
-            pack.Id, pack.State, pack.LineOfBusiness, pack.Version, pack.VerifiedOn,
+            pack.Id, pack.Jurisdiction, pack.LineOfBusiness, pack.Version, pack.VerifiedOn,
             input.CaseType, input.Expedited, deadlines, pack.ToConfirm);
     }
 
@@ -88,21 +90,20 @@ public static class RulePackEvaluator
     private static List<RuleDeadline> MemberAppeal(RulePack pack, RulePackEvaluationInput input, IHolidayCalendar? holidays)
     {
         var rules = pack.MemberAppeal;
+        var floor = Floor(pack);
         var deadlines = new List<RuleDeadline>();
 
         var ack = input.Expedited ? rules.AcknowledgmentExpedited : rules.Acknowledgment;
         if (ack is not null)
             deadlines.Add(FromClock(pack, "acknowledgment", input.ReceivedAt, ack, holidays));
         else if (!input.Expedited)
-            deadlines.Add(new RuleDeadline("acknowledgment", null, null, FederalAck, null,
-                Note: "Acknowledgment is required; the State sets no deadline."));
+            deadlines.Add(new RuleDeadline("acknowledgment", null, null, floor.AcknowledgmentCitation, null,
+                Note: "Acknowledgment is required; the pack sets no deadline."));
 
         var resolutionClock = input.Expedited ? rules.ResolutionExpedited : rules.Resolution;
-        var ceiling = input.ReceivedAt + (input.Expedited
-            ? RulePackValidator.MedicaidExpeditedAppealCeiling
-            : RulePackValidator.MedicaidAppealCeiling);
+        var ceiling = input.ReceivedAt + (input.Expedited ? floor.ExpeditedAppealCeiling : floor.AppealCeiling);
         var resolution = Decision(pack, "resolution", input, resolutionClock, ceiling,
-            input.Expedited ? FederalExpedited : FederalAppeal, holidays);
+            input.Expedited ? floor.ExpeditedAppealCitation : floor.AppealCitation, holidays);
         deadlines.Add(resolution);
 
         if (rules.Extension.MaxDays > 0 && resolution.DueAt is { } resolvedBy)
@@ -111,6 +112,7 @@ public static class RulePackEvaluator
             var extended = resolvedBy.AddDays(rules.Extension.MaxDays);
             var clamped = extended > extendedCeiling;
             var notes = new List<string>();
+            if (rules.Extension.Note is { } extensionNote) notes.Add(extensionNote);
             if (rules.Extension.RequiresStateApproval) notes.Add("Requires State approval before the deadline.");
             if (rules.Extension.WrittenNotice is { } notice) notes.Add($"Written notice to the member within {Describe(notice)} of extending.");
             var source = Source(pack, rules.Extension.Source);
@@ -125,12 +127,12 @@ public static class RulePackEvaluator
         else if (rules.Extension.MaxDays == 0)
         {
             var source = Source(pack, rules.Extension.Source);
-            deadlines.Add(new RuleDeadline("resolutionWithExtension", null, "no extension", source?.Citation ?? FederalExtension, source?.Url,
-                Note: "The State allows no extension."));
+            deadlines.Add(new RuleDeadline("resolutionWithExtension", null, "no extension",
+                source?.Citation ?? floor.ExtensionCitation, source?.Url, Note: "No extension is allowed."));
         }
 
-        if (input.DecidedAt is { } decidedAt)
-            deadlines.Add(FromClock(pack, "fairHearingRequest", decidedAt, rules.FairHearingRequestWindow, holidays));
+        if (input.DecidedAt is { } decidedAt && rules.FairHearingRequestWindow is { } fairHearing)
+            deadlines.Add(FromClock(pack, "fairHearingRequest", decidedAt, fairHearing, holidays));
 
         if (input.NoticeSentAt is { } noticeSentAt && rules.ContinuationRequestWindow is { } continuation)
         {
@@ -144,20 +146,22 @@ public static class RulePackEvaluator
     private static List<RuleDeadline> MemberGrievance(RulePack pack, RulePackEvaluationInput input, IHolidayCalendar? holidays)
     {
         var rules = pack.MemberGrievance;
+        var floor = Floor(pack);
         var deadlines = new List<RuleDeadline>();
-        var ceiling = input.ReceivedAt + RulePackValidator.MedicaidGrievanceCeiling;
+        var ceiling = input.ReceivedAt + floor.GrievanceCeiling;
 
         if (rules.Acknowledgment is { } ack)
             deadlines.Add(FromClock(pack, "acknowledgment", input.ReceivedAt, ack, holidays));
         else
-            deadlines.Add(new RuleDeadline("acknowledgment", null, null, FederalAck, null,
-                Note: "Acknowledgment is required; the State sets no deadline."));
+            deadlines.Add(new RuleDeadline("acknowledgment", null, null, floor.AcknowledgmentCitation, null,
+                Note: "Acknowledgment is required; the pack sets no deadline."));
 
         var clock = input.Expedited && rules.ResolutionExpedited is { } expedited ? expedited : rules.Resolution;
-        deadlines.Add(Decision(pack, "resolution", input, clock, ceiling, FederalGrievance, holidays));
+        deadlines.Add(Decision(pack, "resolution", input, clock, ceiling, floor.GrievanceCitation, holidays));
 
         foreach (var variant in rules.Variants)
-            deadlines.Add(Decision(pack, $"resolution:{variant.Name}", input, variant.Clock, ceiling, FederalGrievance, holidays));
+            deadlines.Add(Decision(pack, $"resolution:{variant.Name}", input, variant.Clock, ceiling,
+                floor.GrievanceCitation, holidays));
 
         return deadlines;
     }

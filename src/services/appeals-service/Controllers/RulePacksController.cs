@@ -95,7 +95,7 @@ public class RulePacksController : ControllerBase
 
         var rule = RulePackEvaluator.RecoupmentAsOf(pack, date);
         return rule is null
-            ? Problem(statusCode: StatusCodes.Status404NotFound, title: $"No recoupment rule in effect for {pack.State} on {date:yyyy-MM-dd}.")
+            ? Problem(statusCode: StatusCodes.Status404NotFound, title: $"No recoupment rule in effect for {pack.Jurisdiction} on {date:yyyy-MM-dd}.")
             : Ok(rule);
     }
 
@@ -111,11 +111,13 @@ public class RulePacksController : ControllerBase
     };
 
     private ObjectResult NotFoundPack(string state, LineOfBusiness lob) =>
-        Problem(statusCode: StatusCodes.Status404NotFound, title: $"No {lob} rule pack for State '{state}'.");
+        Problem(statusCode: StatusCodes.Status404NotFound, title: $"No {lob} rule pack for '{state}'.");
 }
 
 public sealed record RulePackSummary(
     string Id,
+
+    /// <summary>The two-letter State code, or "US" for a national pack.</summary>
     string State,
     LineOfBusiness LineOfBusiness,
     string Program,
@@ -127,6 +129,6 @@ public sealed record RulePackSummary(
     int ToConfirmCount)
 {
     public static RulePackSummary From(RulePack p) => new(
-        p.Id, p.State, p.LineOfBusiness, p.Program, p.Version, p.EffectiveFrom, p.EffectiveTo, p.VerifiedOn,
+        p.Id, p.Jurisdiction, p.LineOfBusiness, p.Program, p.Version, p.EffectiveFrom, p.EffectiveTo, p.VerifiedOn,
         p.Conflicts.Count, p.ToConfirm.Count);
 }

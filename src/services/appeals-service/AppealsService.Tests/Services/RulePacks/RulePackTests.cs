@@ -36,11 +36,13 @@ public class RulePackTests
     // ── Catalog ─────────────────────────────────────────────────────────
 
     [Fact]
-    public void All_ten_embedded_packs_load_and_validate()
+    public void Every_embedded_pack_loads_and_validates()
     {
-        Catalog.All.Select(p => p.State).Should().BeEquivalentTo(
-            new[] { "AZ", "CA", "CO", "FL", "IL", "MI", "NY", "OH", "OK", "TX" });
-        Catalog.All.Should().OnlyContain(p => p.LineOfBusiness == LineOfBusiness.Medicaid);
+        Catalog.All.Select(p => p.Jurisdiction).Should().BeEquivalentTo(
+            new[] { "AZ", "CA", "CO", "FL", "IL", "MI", "NY", "OH", "OK", "TX", "US" });
+        Catalog.All.Where(p => p.LineOfBusiness == LineOfBusiness.Medicaid).Should().HaveCount(10);
+        Catalog.All.Should().ContainSingle(p => p.IsNational)
+               .Which.LineOfBusiness.Should().Be(LineOfBusiness.Medicare);
         foreach (var pack in Catalog.All)
             RulePackValidator.Validate(pack).Should().BeEmpty(pack.Id);
     }
@@ -50,7 +52,6 @@ public class RulePackTests
     {
         Catalog.Find("tx", LineOfBusiness.Medicaid, AsOf)!.Id.Should().Be("tx-medicaid");
         Catalog.Find("FL", LineOfBusiness.Medicaid, new DateOnly(2026, 6, 30)).Should().BeNull();
-        Catalog.Find("TX", LineOfBusiness.Medicare, AsOf).Should().BeNull();
         Catalog.Find("WY", LineOfBusiness.Medicaid, AsOf).Should().BeNull();
     }
 
