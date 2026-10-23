@@ -97,7 +97,7 @@ perdiem".
 
 ## The corpus
 
-Twenty-four invented stays. There is no member, no claim number and no real
+Thirty-one invented stays. There is no member, no claim number and no real
 provider: the CMS certification numbers are fabricated, chosen only so their
 first two digits are a plausible state code, because the pricer reads the state
 from them. The wage-index localities are real published CBSA codes, which is
@@ -181,8 +181,7 @@ asserts that each exclusion is still a real corpus row:
   code 12, and which post-acute rule a DRG carries is a column of CMS's DRG
   table that nothing here imports yet.
 
-And the pricer pays several things the calculator still has no notion of: the
-hospital-specific portion for sole-community and Medicare-dependent hospitals,
+And the pricer pays several things the calculator still has no notion of:
 pass-through amounts, new-technology add-ons and the bundled-payment
 adjustment. It also works in covered days and lifetime reserve days, where
 `IppsStay` has no beneficiary-day concept. Those are recorded in ADR 024 as the
@@ -234,3 +233,46 @@ is to price a claim that selects it. Five corpus rows were added for that, and
 the parity test now builds the whole eight-row table out of CMS's answers and
 asserts CHO paid from the same row — which also exercises CMS's own selection
 branch, where reading the file would not have.
+
+## What the third run added: the hospital-specific portion
+
+Sole-community, essential-access and Medicare-dependent hospitals are paid the
+greater of the federal rate and their own historical rate, and CMS pays the
+difference. Seven corpus rows were added for it, and four things came out of
+reading `CalculateAdditionalHospitalSpecificPortion` that would not have come
+out of reading 42 CFR 412.73 and 412.108:
+
+- **The comparison is one-sided in a way the regulation does not say.** The
+  federal side of it carries the transfer fraction; the hospital's own rate
+  carries the **full** DRG weight. So a short transfer at one of these
+  hospitals lands on the hospital-specific side almost whatever the facility
+  rate is. `sole-community-transfer-full-weight` pins it: CMS pays 4,578.85
+  against a 5,371.28 federal portion on a stay whose full federal payment
+  would have beaten the hospital's own rate outright.
+- **The operating cost outlier is inside the comparison and the capital
+  outlier is not.** `sole-community-outlier-and-adjustments` is tuned so both
+  sides pay an outlier: CMS pays a 3,984.58 portion without the operating
+  outlier and 2,294.26 with it, which is the 1,690.32 operating outlier taken
+  off dollar for dollar, while the 5,394.00 capital outlier does not move it.
+  The uncompensated care payment is in the comparison too.
+- **The portion sits above the low-volume base and the penalty base.** The same
+  row pays a low-volume uplift of 3,916.16, which is 0.2 of a base the portion
+  is inside, and a penalty of -234.97, which is one percent of that total. So
+  the portion has to be settled before the four adjustments and not added at
+  the end.
+- **The update factor's cumulative prior-year chain restarts in FY2026.**
+  Through FY2025 CMS's pricer multiplied every market basket update back to
+  FY2019 into it; `Ipps2026PricerContext` does not override it at all, so it is
+  1.0, and `Ipps2027PricerContext` then carries FY2026's update alone. A year
+  loaded with the previous year's chain overpays every sole-community discharge
+  by several percent, and does it quietly.
+
+CMS reports no column for that update factor, and unlike a rate table row it
+cannot be read off a payment in general, because the portion it produces is a
+difference. On a plain discharge with no teaching, no disproportionate share,
+no outlier and no uncompensated care payment the federal side **is** the
+reported federal specific portion, so the two sole-community discharges are
+invertible to a hundredth of a cent. Those two rows are therefore calibration
+rather than comparison — the standing `wage-index-below-one` already has for
+the capital rate — and the parity test says so where it does the inversion. The
+other five rows are not implied by them.

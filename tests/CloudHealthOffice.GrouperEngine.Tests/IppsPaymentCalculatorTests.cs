@@ -66,7 +66,23 @@ public class IppsPaymentCalculatorTests
         CapitalFederalRate: CapitalRate,
         Outlier: new IppsOutlierPolicy(fixedLoss, 0.80m, 0.90m, new HashSet<int> { 927, 928 }),
         Teaching: new IppsTeachingPolicy(0.405d, 1.35m),
+        HospitalSpecificUpdate: HospitalSpecificUpdate(),
         EmpiricallyJustifiedDshShare: 0.25m);
+
+    /// <summary>
+    /// Hospital-specific update factors chosen so that a facility rate passes
+    /// through unchanged in the common case: 1.0 for a hospital with its
+    /// quality data in and no record reduction, and visibly smaller for each
+    /// other combination. The product of the three published factors is pinned
+    /// separately, below.
+    /// </summary>
+    private static IppsHospitalSpecificUpdate HospitalSpecificUpdate() => new(
+        WithQualityData: 1m,
+        WithQualityDataAndRecordsReduction: 0.9m,
+        WithoutQualityData: 0.95m,
+        WithoutQualityDataAndRecordsReduction: 0.85m,
+        BudgetNeutrality: 1m,
+        CumulativePriorYears: 1m);
 
     private static IppsStay Stay(
         decimal weight = 1m,
@@ -285,6 +301,240 @@ public class IppsPaymentCalculatorTests
 
         Assert.Contains("tab2", thrown.Message);
         Assert.Contains("tab8", thrown.Message);
+    }
+
+    // ─────────────────────────────────────────────────────────
+    //  The hospital-specific portion (42 CFR 412.73, 412.77, 412.108)
+    // ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A hospital in one of the three categories, with its own base rate on
+    /// file. At a wage index of 1.0 on a weight of 1.0 the federal operating
+    /// side pays 6,000 and the capital side 500, so a facility rate of 8,000
+    /// wins the comparison by 2,000 and a rate of 4,000 loses it.
+    /// </summary>
+    private static IppsProvider Category(
+        IppsHospitalSpecificCategory category, decimal facilityRate = 8000m) =>
+        IppsProvider.Plain("123456", wageIndex: 1m) with
+        {
+            HospitalSpecificCategory = category,
+            FacilitySpecificRate = facilityRate
+        };
+
+    [Fact]
+    public void A_hospital_in_none_of_the_categories_is_paid_no_portion_whatever_rate_is_on_file()
+    {
+        // A rate high enough to win several times over, at a hospital CMS does
+        // not pay a hospital-specific portion to. CMS reads the provider type
+        // and never looks at the rate, and a loader that populated the rate
+        // from the provider file without the type must not start paying it.
+        var payment = IppsPaymentCalculator.Pay(
+            Year(), Category(IppsHospitalSpecificCategory.None, facilityRate: 20_000m), Stay());
+
+        Assert.Equal(0m, payment.HospitalSpecific.Payment);
+        Assert.Equal(6_500m, payment.Total);
+    }
+
+    [Fact]
+    public void A_sole_community_hospital_is_paid_the_difference_where_its_own_rate_wins()
+    {
+        var payment = IppsPaymentCalculator.Pay(
+            Year(), Category(IppsHospitalSpecificCategory.SoleCommunity), Stay());
+
+        // 8,000 against the 6,000 the federal operating side paid: the
+        // difference, and not the whole of its own rate.
+        Assert.Equal(8_000m, payment.HospitalSpecific.Rate);
+        Assert.Equal(6_000m, payment.HospitalSpecific.FederalAmountCompared);
+        Assert.Equal(2_000m, payment.HospitalSpecific.Payment);
+        Assert.Equal(8_500m, payment.Total);
+    }
+
+    [Fact]
+    public void A_sole_community_hospital_whose_own_rate_loses_is_paid_nothing_extra()
+    {
+        var payment = IppsPaymentCalculator.Pay(
+            Year(),
+            Category(IppsHospitalSpecificCategory.SoleCommunity, facilityRate: 4_000m),
+            Stay());
+
+        // The comparison is a comparison. An implementation that added the two
+        // together would pay 10,500 here and would agree with the test above.
+        Assert.Equal(4_000m, payment.HospitalSpecific.Rate);
+        Assert.Equal(0m, payment.HospitalSpecific.Payment);
+        Assert.Equal(6_500m, payment.Total);
+    }
+
+    [Fact]
+    public void A_medicare_dependent_hospital_is_paid_three_quarters_of_the_difference()
+    {
+        var payment = IppsPaymentCalculator.Pay(
+            Year(), Category(IppsHospitalSpecificCategory.MedicareDependent), Stay());
+
+        // 412.108(c)(2)(ii): 0.75 × 2,000. The one thing separating the three
+        // categories, and a 25 percent overpayment with no other symptom if a
+        // loader puts provider type 14 into the sole community branch.
+        Assert.Equal(1_500m, payment.HospitalSpecific.Payment);
+        Assert.Equal(8_000m, payment.Total);
+    }
+
+    [Fact]
+    public void An_essential_access_hospital_is_paid_on_the_sole_community_terms()
+    {
+        var sole = IppsPaymentCalculator.Pay(
+            Year(), Category(IppsHospitalSpecificCategory.SoleCommunity), Stay());
+        var essential = IppsPaymentCalculator.Pay(
+            Year(), Category(IppsHospitalSpecificCategory.EssentialAccessCommunity), Stay());
+
+        Assert.Equal(sole.HospitalSpecific.Payment, essential.HospitalSpecific.Payment);
+        Assert.Equal(2_000m, essential.HospitalSpecific.Payment);
+    }
+
+    [Fact]
+    public void The_comparison_counts_the_uncompensated_care_payment_and_no_part_of_the_capital_side()
+    {
+        var provider = Category(IppsHospitalSpecificCategory.SoleCommunity) with
+        {
+            UncompensatedCarePerDischarge = 1_000m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        // The federal side of the comparison is 6,000 plus the 1,000
+        // uncompensated care payment, so the portion falls to 1,000. The 500
+        // capital payment is not in it: if it were, the portion would be 500,
+        // and the hospital would be paid less than its own rate for the case
+        // while CMS pays it more.
+        Assert.Equal(7_000m, payment.HospitalSpecific.FederalAmountCompared);
+        Assert.Equal(1_000m, payment.HospitalSpecific.Payment);
+    }
+
+    [Fact]
+    public void The_operating_outlier_is_inside_the_comparison_and_the_capital_outlier_is_not()
+    {
+        var provider = Category(IppsHospitalSpecificCategory.SoleCommunity, facilityRate: 40_000m)
+            with
+            {
+                OperatingCostToChargeRatio = 0.30m,
+                CapitalCostToChargeRatio = 0.05m
+            };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay(charges: 150_000m));
+
+        // Both sides paid an outlier, which is what makes the row worth
+        // having: the operating one is inside the comparison dollar for dollar
+        // and the capital one is outside it entirely.
+        Assert.True(payment.Outlier.Operating.Payment > 0m);
+        Assert.True(payment.Outlier.Capital.Payment > 0m);
+        Assert.Equal(
+            6_000m + payment.Outlier.Operating.Payment,
+            payment.HospitalSpecific.FederalAmountCompared);
+        Assert.Equal(
+            40_000m - 6_000m - payment.Outlier.Operating.Payment,
+            payment.HospitalSpecific.Payment);
+    }
+
+    [Fact]
+    public void A_transfer_weights_the_federal_side_down_and_the_hospitals_own_rate_not_at_all()
+    {
+        var payment = IppsPaymentCalculator.Pay(
+            Year(),
+            Category(IppsHospitalSpecificCategory.SoleCommunity),
+            Stay(kind: IppsDischargeKind.TransferredToAcuteCare, los: 1, geometricMean: 4m));
+
+        // Two per diems out of four, so the federal side is halved to 3,000 —
+        // while the hospital's own rate keeps the FULL DRG weight and stays at
+        // 8,000. The portion is therefore 5,000 and not the 1,000 a
+        // symmetrically weighted comparison would pay. That asymmetry is in
+        // CMS's program rather than in the regulation, which is why the corpus
+        // carries a sole-community transfer as well as this test.
+        Assert.Equal(0.5m, payment.Transfer!.Fraction);
+        Assert.Equal(8_000m, payment.HospitalSpecific.Rate);
+        Assert.Equal(3_000m, payment.HospitalSpecific.FederalAmountCompared);
+        Assert.Equal(5_000m, payment.HospitalSpecific.Payment);
+    }
+
+    [Fact]
+    public void The_portion_is_inside_the_low_volume_base_and_the_penalty_base()
+    {
+        var provider = Category(IppsHospitalSpecificCategory.SoleCommunity) with
+        {
+            LowVolumeTemporaryRelief = true,
+            LowVolumeAdjustmentFactor = 0.25m,
+            HospitalAcquiredConditionReduction = true
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        // Case payment 6,500 plus a 2,000 portion is 8,500. The low-volume
+        // uplift is a quarter of all of it, 2,125, and the penalty is one
+        // percent of the 10,625 that follows: -106.25. Both reach the portion,
+        // which is the whole reason it has to be settled before them.
+        Assert.Equal(8_500m, payment.PaymentBeforeAdjustments);
+        Assert.Equal(2_125m, payment.Adjustments.LowVolume);
+        Assert.Equal(-106.25m, payment.Adjustments.HospitalAcquiredConditionPenalty);
+        Assert.Equal(10_518.75m, payment.Total);
+    }
+
+    [Fact]
+    public void The_portion_is_outside_the_readmissions_and_value_based_base()
+    {
+        var provider = Category(IppsHospitalSpecificCategory.SoleCommunity) with
+        {
+            ReadmissionsAdjustmentFactor = 0.97m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        // -0.03 × 6,000. CMS's base for these two is the federal specific
+        // portion plus any new-technology add-on, so the 2,000 portion is not
+        // in it: a base of 8,000 would make this -240.
+        Assert.Equal(2_000m, payment.HospitalSpecific.Payment);
+        Assert.Equal(-180m, payment.Adjustments.Readmissions);
+    }
+
+    [Fact]
+    public void The_update_factor_is_the_three_published_factors_multiplied_and_rounded_to_five_places()
+    {
+        var update = new IppsHospitalSpecificUpdate(
+            WithQualityData: 1.0135m,
+            WithQualityDataAndRecordsReduction: 1m,
+            WithoutQualityData: 1m,
+            WithoutQualityDataAndRecordsReduction: 1m,
+            BudgetNeutrality: 0.99719m,
+            CumulativePriorYears: 1.02m);
+
+        // 1.0135 × 1.02 × 0.99719 = 1.0308651063, and CMS rounds it to five
+        // places before it multiplies anything by it. The rounding is part of
+        // the amount, not presentation: on a facility rate of 10,000 the
+        // unrounded factor pays 10,308.651063 and CMS pays 10,308.70.
+        Assert.Equal(
+            1.03087m,
+            update.FactorFor(IppsProvider.Plain("123456", wageIndex: 1m)));
+    }
+
+    [Theory]
+    [InlineData(true, false, 1.0)]
+    [InlineData(true, true, 0.9)]
+    [InlineData(false, false, 0.95)]
+    [InlineData(false, true, 0.85)]
+    public void The_two_payment_reduction_flags_choose_the_update_factor_and_the_wage_index_does_not(
+        bool qualityData, bool recordsReduction, double expected)
+    {
+        var update = HospitalSpecificUpdate();
+
+        foreach (var wageIndex in new[] { 0.8m, 1m, 1.4m })
+        {
+            var provider = IppsProvider.Plain("123456", wageIndex) with
+            {
+                QualityDataSubmitted = qualityData,
+                ElectronicRecordsReduction = recordsReduction
+            };
+
+            // The hospital-specific portion is the hospital's own rate, so
+            // nothing geographic touches it — unlike the eight-row federal
+            // table, where the same two flags are crossed with the wage index.
+            Assert.Equal((decimal)expected, update.FactorFor(provider));
+        }
     }
 
     // ─────────────────────────────────────────────────────────

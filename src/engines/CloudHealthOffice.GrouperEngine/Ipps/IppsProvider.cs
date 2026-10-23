@@ -1,6 +1,49 @@
 namespace CloudHealthOffice.GrouperEngine.Ipps;
 
 /// <summary>
+/// Which of CMS's special hospital categories a hospital is in, for the
+/// hospital-specific portion of 42 CFR 412.73 and 412.77.
+///
+/// <para>
+/// An enum rather than the two-character provider type code CMS's
+/// provider-specific file holds, because the code is a coarse field carrying
+/// several unrelated facts and only this one matters here. The mapping is on
+/// each member, and it is the mapping a loader has to get right: there is no
+/// way to read a category off a claim.
+/// </para>
+/// </summary>
+public enum IppsHospitalSpecificCategory
+{
+    /// <summary>
+    /// Neither sole-community, essential-access nor Medicare-dependent, which
+    /// is almost every hospital. Paid the federal rate and nothing else, so
+    /// <see cref="IppsProvider.FacilitySpecificRate"/> is never consulted.
+    /// </summary>
+    None = 0,
+
+    /// <summary>
+    /// A sole community hospital, 42 CFR 412.92 — CMS provider types 16 and
+    /// 17. Paid the full difference where its own rate beats the federal one.
+    /// </summary>
+    SoleCommunity,
+
+    /// <summary>
+    /// An essential access community hospital, provider types 21 and 22. Paid
+    /// on the same terms as a sole community hospital: the category is kept
+    /// separate because it is a different statutory status and a deployment
+    /// reporting on one should not have to infer which it had.
+    /// </summary>
+    EssentialAccessCommunity,
+
+    /// <summary>
+    /// A Medicare-dependent, small rural hospital, 42 CFR 412.108 — provider
+    /// types 14 and 15. <b>Paid 75 percent of the difference</b>, not the whole
+    /// of it, which is the one place the three categories part company.
+    /// </summary>
+    MedicareDependent
+}
+
+/// <summary>
 /// What CMS's provider-specific file says about one hospital, as a payment
 /// calculation needs it.
 ///
@@ -126,6 +169,24 @@ namespace CloudHealthOffice.GrouperEngine.Ipps;
 /// pays <b>nothing</b> rather than being capped — a cap would quietly pay a
 /// hospital whose provider file is wrong.
 /// </param>
+/// <param name="HospitalSpecificCategory">
+/// Whether this hospital is paid a hospital-specific portion, and on which
+/// terms. <see cref="IppsHospitalSpecificCategory.None"/> at almost every
+/// hospital.
+/// </param>
+/// <param name="FacilitySpecificRate">
+/// The hospital's own base rate per discharge, held in CMS's provider-specific
+/// file as the PPS facility specific rate. Updated forward from a historical
+/// cost reporting year rather than set in the annual rule, so it differs
+/// between two hospitals in the same town, and zero where the hospital has
+/// none.
+///
+/// <para>
+/// A rate here with a category of <see cref="IppsHospitalSpecificCategory.None"/>
+/// pays nothing, which is what CMS does: it reads the provider type and
+/// ignores the rate unless the type says to use it.
+/// </para>
+/// </param>
 /// <param name="HospitalAcquiredConditionReduction">
 /// Whether the hospital is in the worst-performing quartile for
 /// hospital-acquired conditions and so subject to the one percent penalty
@@ -151,14 +212,16 @@ public sealed record IppsProvider(
     decimal? ValueBasedPurchasingAdjustmentFactor,
     bool LowVolumeTemporaryRelief,
     decimal LowVolumeAdjustmentFactor,
+    IppsHospitalSpecificCategory HospitalSpecificCategory,
+    decimal FacilitySpecificRate,
     bool HospitalAcquiredConditionReduction)
 {
     /// <summary>
     /// A hospital with no teaching programme, no disproportionate share
-    /// adjustment, the national average geography, neither payment reduction
-    /// and none of the quality programmes: the shape a test uses when it is
-    /// about something else, and a reasonable starting point for a deployment
-    /// that has one wage index and nothing further.
+    /// adjustment, the national average geography, neither payment reduction,
+    /// none of the quality programmes and no special category: the shape a
+    /// test uses when it is about something else, and a reasonable starting
+    /// point for a deployment that has one wage index and nothing further.
     /// </summary>
     public static IppsProvider Plain(string ccnNumber, decimal wageIndex) => new(
         ccnNumber,
@@ -178,6 +241,8 @@ public sealed record IppsProvider(
         ValueBasedPurchasingAdjustmentFactor: null,
         LowVolumeTemporaryRelief: false,
         LowVolumeAdjustmentFactor: 0m,
+        HospitalSpecificCategory: IppsHospitalSpecificCategory.None,
+        FacilitySpecificRate: 0m,
         HospitalAcquiredConditionReduction: false);
 }
 

@@ -277,6 +277,91 @@ public sealed record IppsTeachingPolicy(double Exponent, decimal Multiplier)
 }
 
 /// <summary>
+/// The update factors that carry a hospital's own historical base rate forward
+/// to this fiscal year, for the hospital-specific portion of
+/// 42 CFR 412.73 and 412.77.
+///
+/// <para>
+/// Four factors keyed by the same two payment-reduction flags that choose a
+/// row of <see cref="IppsOperatingRateTable"/>, and <b>not</b> by the wage
+/// index: the hospital-specific portion is the hospital's own rate, so nothing
+/// geographic touches it. A hospital that withheld its quality data or is not
+/// a meaningful electronic health record user gets a smaller update here as
+/// well as a smaller standardized amount, which is the same reduction reaching
+/// the same discharge twice through two different numbers.
+/// </para>
+///
+/// <para>
+/// <b>The product is rounded to five decimal places, and that rounding is part
+/// of the amount.</b> CMS rounds it there before multiplying, and the factor
+/// multiplies a facility rate of several thousand dollars times a DRG weight,
+/// so carrying the unrounded product through moves the payment by cents on
+/// every sole-community discharge. It is not a display choice.
+/// </para>
+/// </summary>
+/// <param name="WithQualityData">
+/// The market basket update for a hospital that met the quality reporting
+/// requirement and is a meaningful electronic health record user: 1.0260 for
+/// FY2026.
+/// </param>
+/// <param name="WithQualityDataAndRecordsReduction">
+/// Quality data submitted, but subject to the electronic health record
+/// reduction: 1.00125.
+/// </param>
+/// <param name="WithoutQualityData">
+/// No quality data, no records reduction: 1.01775.
+/// </param>
+/// <param name="WithoutQualityDataAndRecordsReduction">
+/// Both reductions: 0.9930.
+/// </param>
+/// <param name="BudgetNeutrality">
+/// The budget-neutrality factors CMS applies to the update, as one number.
+/// For FY2026 it is two published factors multiplied together,
+/// 0.998580 × 0.999897.
+/// </param>
+/// <param name="CumulativePriorYears">
+/// The product of the prior years' updates, where this year's base rate is
+/// still carried from an earlier rebasing, and 1.0 where it is not.
+///
+/// <para>
+/// This is the field that cannot be guessed, and it is not a rounding detail:
+/// through FY2025 CMS's pricer multiplied every update back to FY2019 into
+/// this factor, and for FY2026 it is <b>1.0</b> — the chain restarts, and
+/// FY2027 then carries FY2026's update alone. A year loaded with the previous
+/// year's cumulative factor overpays sole-community hospitals by several
+/// percent on every discharge, and does it quietly, because the payment still
+/// looks like a payment.
+/// </para>
+/// </param>
+public sealed record IppsHospitalSpecificUpdate(
+    decimal WithQualityData,
+    decimal WithQualityDataAndRecordsReduction,
+    decimal WithoutQualityData,
+    decimal WithoutQualityDataAndRecordsReduction,
+    decimal BudgetNeutrality,
+    decimal CumulativePriorYears)
+{
+    /// <summary>
+    /// The factor this hospital's own base rate is carried forward by.
+    /// </summary>
+    public decimal FactorFor(IppsProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+
+        var current = (provider.QualityDataSubmitted, provider.ElectronicRecordsReduction) switch
+        {
+            (true, false) => WithQualityData,
+            (true, true) => WithQualityDataAndRecordsReduction,
+            (false, false) => WithoutQualityData,
+            (false, true) => WithoutQualityDataAndRecordsReduction
+        };
+
+        return decimal.Round(
+            current * CumulativePriorYears * BudgetNeutrality, 5, MidpointRounding.AwayFromZero);
+    }
+}
+
+/// <summary>
 /// One fiscal year's IPPS rates and policies — everything in the payment that
 /// is the same for every hospital.
 ///
@@ -310,6 +395,11 @@ public sealed record IppsTeachingPolicy(double Exponent, decimal Multiplier)
 /// <param name="CapitalFederalRate">The federal capital rate.</param>
 /// <param name="Outlier">The cost outlier policy.</param>
 /// <param name="Teaching">The indirect medical education formula.</param>
+/// <param name="HospitalSpecificUpdate">
+/// The update factors for the hospital-specific portion, which pays
+/// sole-community, essential-access and Medicare-dependent hospitals their own
+/// historical rate where it beats the federal one.
+/// </param>
 /// <param name="EmpiricallyJustifiedDshShare">
 /// The share of the computed DSH adjustment still paid through the claim:
 /// 25 percent, because 412.106(f) reduces the 412.106(d) amount by 75 percent
@@ -328,6 +418,7 @@ public sealed record IppsRateSet(
     decimal CapitalFederalRate,
     IppsOutlierPolicy Outlier,
     IppsTeachingPolicy Teaching,
+    IppsHospitalSpecificUpdate HospitalSpecificUpdate,
     decimal EmpiricallyJustifiedDshShare)
 {
     /// <summary>Whether these rates pay a stay discharged on the date.</summary>

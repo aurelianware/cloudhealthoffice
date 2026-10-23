@@ -865,7 +865,7 @@ Build order:
    the pricer itself as a runnable jar, to satisfy Freedom of Information Act
    requests, along with its Java source *with the original COBOL quoted as
    comments above each rule*. `tools/cms-ipps-pricer-oracle` runs it over
-   twenty-four invented stays and commits what it paid;
+   thirty-one invented stays and commits what it paid;
    `IppsPricerParityTests` holds the calculator to those amounts on every
    build, with no CMS artifact present. The tool's README has the whole of it,
    including the five undocumented provider-record fields that stop a
@@ -989,11 +989,61 @@ Build order:
    needs the year's approval *and* a factor of at most 0.25, where a larger
    factor pays nothing rather than being capped.
 
+   **The hospital-specific portion is built, and it is a comparison rather
+   than an add-on.** Sole-community (42 CFR 412.92), essential-access and
+   Medicare-dependent (412.108) hospitals are paid the greater of the federal
+   rate and their own historical rate, and CMS pays the *difference* — so the
+   portion is zero at any such hospital whose own rate has fallen behind, which
+   is most of them most years, and an implementation that added the two would
+   roughly double the payment. A Medicare-dependent hospital is paid 75 percent
+   of the difference and the other two all of it, which is the only thing
+   separating the three categories. Four things came out of reading
+   `CalculateAdditionalHospitalSpecificPortion` that would not have come out of
+   reading the regulation:
+
+   - **The comparison is one-sided on a transfer.** The federal side carries
+     the transfer fraction; the hospital's own rate carries the **full** DRG
+     weight. A short transfer at one of these hospitals therefore lands on the
+     hospital-specific side almost whatever the facility rate is. That is in
+     CMS's program and not in the regulation, and the corpus's sole-community
+     transfer is the row that pins it.
+   - **The operating cost outlier is inside the comparison and the capital
+     outlier is not**, and the uncompensated care payment is inside it too. On
+     the corpus's tuned row CMS pays a 3,984.58 portion without the operating
+     outlier and 2,294.26 with it — the 1,690.32 operating outlier taken off
+     dollar for dollar — while the 5,394.00 capital outlier does not move it at
+     all.
+   - **The portion sits above the low-volume base and the penalty base**, so it
+     has to be settled before the four adjustments rather than added at the
+     end. The same row pays a low-volume uplift of 0.2 × a base the portion is
+     inside, and a penalty of one percent of that total. It is *outside* the
+     readmissions and value-based base, which stays the federal specific
+     portion alone.
+   - **The update factor's cumulative prior-year chain restarts in FY2026.**
+     Through FY2025 CMS's pricer multiplied every market basket update back to
+     FY2019 into it; `Ipps2026PricerContext` does not override it at all, so it
+     is 1.0, and FY2027 then carries FY2026's update alone. A year loaded with
+     the previous year's chain overpays every sole-community discharge by
+     several percent and does it quietly, because the payment still looks like
+     a payment. The factor is four published market basket updates — keyed by
+     the same two payment-reduction flags as the rate table, and *not* by the
+     wage index, because the hospital-specific portion is the hospital's own
+     rate and nothing geographic touches it — times the budget-neutrality
+     factors times that chain, rounded to five decimal places before anything
+     is multiplied by it.
+
+   CMS reports no column for that factor, and unlike a rate table row it cannot
+   be read off a payment in general, because the portion it produces is a
+   difference. On a plain discharge with nothing else on the federal side it is
+   invertible exactly, so the corpus's two sole-community discharges are
+   calibration rather than comparison — the standing the capital rate already
+   has — and the parity test says so at the inversion. The other five
+   hospital-specific rows are not implied by them.
+
    **What is still missing**, and why this is not yet wired into adjudication.
-   CMS pays the hospital-specific portion for sole-community and
-   Medicare-dependent hospitals, pass-through amounts for direct medical
-   education and organ acquisition, new-technology add-ons and the
-   bundled-payment adjustment, and this pays none of them. And CMS works in
+   CMS pays pass-through amounts for direct medical education and organ
+   acquisition, new-technology add-ons and the bundled-payment adjustment, and
+   this pays none of them. And CMS works in
    covered days and lifetime reserve days, reporting regular, reserve and
    outlier days used, where `IppsStay` has no beneficiary-day concept at all —
    the last of those is a model change rather than an arithmetic one, and
