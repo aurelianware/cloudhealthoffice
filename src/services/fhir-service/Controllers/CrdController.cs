@@ -144,13 +144,23 @@ public class CrdController : FhirControllerBase
                 request, TenantId, ct);
 
             _logger.LogInformation(
-                "CRD hook {HookId} completed in {ElapsedMs}ms, codes={CodesEvaluated}, translations={Translations}",
+                "CRD hook {HookId} completed in {ElapsedMs}ms, codes={CodesEvaluated}, "
+                + "translations={Translations}, systemActions={SystemActions}",
                 LogSanitizer.Sanitize(hookId),
                 sw.ElapsedMilliseconds,
                 result.CodesEvaluated,
-                result.TranslationsPerformed);
+                result.TranslationsPerformed,
+                result.SystemActions.Count);
 
-            return Ok(new CrdCardResponse { Cards = result.Cards });
+            return Ok(new CrdCardResponse
+            {
+                Cards = result.Cards,
+                // Null rather than an empty list when there is nothing to
+                // assert: `systemActions` is then absent from the JSON, and a
+                // response CHO cannot make a coverage statement for looks
+                // exactly as it did before it could make any.
+                SystemActions = result.SystemActions.Count > 0 ? result.SystemActions : null,
+            });
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Net.Http.Json;
 using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
 using CloudHealthOffice.PriorAuthRuleEngine.Domain;
@@ -36,8 +37,14 @@ public class CrdService : ICrdService
     {
         var sw = Stopwatch.StartNew();
 
-        // 1. Extract codes from draftOrders
-        var codes = ExtractCodes(request);
+        // 1. Extract codes from draftOrders, remembering which order carried each
+        //    one. The code alone was enough while the answer was a card; a system
+        //    action has to be attached to the resource it is about.
+        var coded = ExtractCodedOrders(request);
+        var codes = coded.Select(c => c.Coding).ToList();
+        var entryOfCode = new Dictionary<CrdCoding, int>(ReferenceEqualityComparer.Instance);
+        foreach (var (entryIndex, coding) in coded)
+            entryOfCode[coding] = entryIndex;
 
         // 2. Translate SNOMED codes if needed
         var translated = await TranslateCodesAsync(codes, tenantId, ct);
@@ -45,13 +52,22 @@ public class CrdService : ICrdService
         // 3. Evaluate each code against benefit configuration (O(1) HashSet lookup)
         var classification = GetClassification(tenantId);
         var cards = new List<CrdCard>();
+        var assertions = new List<(int EntryIndex, CrdDetermination Determination,
+            CrdIndeterminateReason? Reason, CrdCoding Coding)>();
+
         foreach (var tc in translated)
         {
             var effectiveCode = tc.EffectiveCode;
             var display = tc.TranslatedCoding?.Display ?? tc.OriginalCode.Display ?? effectiveCode;
+            var coding = tc.TranslatedCoding ?? tc.OriginalCode;
+            var entryIndex = entryOfCode.TryGetValue(tc.OriginalCode, out var index) ? index : -1;
+
             try
             {
-                cards.Add(await EvaluateCodeAsync(request, tenantId, classification, effectiveCode, display, ct));
+                var outcome = await EvaluateCodeAsync(
+                    request, tenantId, classification, effectiveCode, display, ct);
+                cards.Add(outcome.Card);
+                assertions.Add((entryIndex, outcome.Determination, outcome.Reason, coding));
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -64,6 +80,8 @@ public class CrdService : ICrdService
                 _logger.LogWarning(ex, "CRD evaluation failed for code {Code}; answering unknown",
                     LogSanitizer.Sanitize(effectiveCode, 256));
                 cards.Add(BuildRequirementsUnknownCard(display));
+                assertions.Add((entryIndex, CrdDetermination.Indeterminate,
+                    CrdIndeterminateReason.Technical, coding));
             }
         }
 
@@ -71,17 +89,147 @@ public class CrdService : ICrdService
         // MedicationRequest by medicationReference — still gets an answer, and
         // the only honest one is UNKNOWN. Before, it got no card at all, which
         // an EHR shows exactly like "no requirements" (D-21).
-        foreach (var uncoded in UncodedOrders(request))
-            cards.Add(BuildRequirementsUnknownCard($"{uncoded} order (no coded service)"));
+        foreach (var (entryIndex, label) in UncodedOrderEntries(request))
+        {
+            cards.Add(BuildRequirementsUnknownCard($"{label} order (no coded service)"));
+            assertions.Add((entryIndex, CrdDetermination.Indeterminate,
+                CrdIndeterminateReason.NoCodedService, Coding: new CrdCoding()));
+        }
 
         sw.Stop();
         return new CrdEvaluationResult
         {
             Cards = cards,
+            SystemActions = BuildSystemActions(request, assertions),
             CodesEvaluated = codes.Count,
             TranslationsPerformed = translated.Count(t => t.WasTranslated),
             ElapsedMs = sw.ElapsedMilliseconds,
         };
+    }
+
+    /// <summary>
+    /// Turns the determinations into CDS Hooks system actions: the EHR's own
+    /// draft order, with CHO's <c>coverage-information</c> extension added.
+    ///
+    /// <para>
+    /// Returns nothing when the request's prefetch carries no active Coverage.
+    /// The extension requires a Coverage reference, and CHO will not invent one:
+    /// a fabricated reference inside a resource the EHR is being asked to store
+    /// is worse than the card-only answer this replaces. The cards still carry
+    /// the determination in that case, exactly as before.
+    /// </para>
+    /// </summary>
+    private static List<CdsHooksSystemAction> BuildSystemActions(
+        CrdHookRequest request,
+        IReadOnlyList<(int EntryIndex, CrdDetermination Determination,
+            CrdIndeterminateReason? Reason, CrdCoding Coding)> assertions)
+    {
+        var coverageReference = CrdPrefetch.ActiveCoverageReference(request);
+        if (coverageReference is null)
+        {
+            return [];
+        }
+
+        var entries = request.Context?.DraftOrders?.Entry;
+        if (entries is null)
+        {
+            return [];
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var actions = new List<CdsHooksSystemAction>();
+
+        foreach (var group in assertions
+                     .Where(a => a.EntryIndex >= 0 && a.EntryIndex < entries.Count)
+                     .GroupBy(a => a.EntryIndex))
+        {
+            var raw = entries[group.Key].RawResource;
+            if (raw is not { ValueKind: JsonValueKind.Object } resource)
+            {
+                continue;
+            }
+
+            var extensions = group.Select(assertion => new CrdCoverageInformation
+            {
+                CoverageReference = coverageReference,
+                // Unique per assertion, as the extension requires. CHO does not
+                // persist it yet, so it identifies the assertion within this
+                // response and cannot be resolved later — a limitation recorded
+                // in the gap matrix rather than papered over with a value that
+                // looks durable.
+                CoverageAssertionId = Guid.NewGuid().ToString(),
+                Date = today,
+                Determination = assertion.Determination,
+                Reason = assertion.Reason,
+                BillingCodeSystem = string.IsNullOrWhiteSpace(assertion.Coding.Code)
+                    ? null
+                    : assertion.Coding.System,
+                BillingCode = string.IsNullOrWhiteSpace(assertion.Coding.Code) ? null : assertion.Coding.Code,
+            }.ToExtension()).ToList();
+
+            actions.Add(new CdsHooksSystemAction
+            {
+                Type = "update",
+                Description = "Coverage requirements determined by Cloud Health Office",
+                Resource = WithExtensions(resource, extensions),
+            });
+        }
+
+        return actions;
+    }
+
+    /// <summary>
+    /// The EHR's resource with the given extensions appended to its own, and
+    /// nothing else changed.
+    ///
+    /// <para>
+    /// Rebuilt from the raw JSON rather than from the parsed model, because the
+    /// parsed model only knows the few fields CRD evaluation reads. A system
+    /// action asks the EHR to store this resource; handing back a version that
+    /// had quietly lost its subject or its requester would be a data-loss bug
+    /// dressed as a conformance feature.
+    /// </para>
+    /// </summary>
+    private static JsonElement WithExtensions(
+        JsonElement resource, IReadOnlyList<Dictionary<string, object?>> extensions)
+    {
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+
+            foreach (var property in resource.EnumerateObject())
+            {
+                if (property.NameEquals("extension"))
+                {
+                    continue;
+                }
+
+                property.WriteTo(writer);
+            }
+
+            writer.WritePropertyName("extension");
+            writer.WriteStartArray();
+
+            if (resource.TryGetProperty("extension", out var existing)
+                && existing.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var extension in existing.EnumerateArray())
+                {
+                    extension.WriteTo(writer);
+                }
+            }
+
+            foreach (var extension in extensions)
+            {
+                JsonSerializer.Serialize(writer, extension);
+            }
+
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
+        return JsonDocument.Parse(buffer.ToArray()).RootElement.Clone();
     }
 
     /// <summary>
@@ -97,24 +245,36 @@ public class CrdService : ICrdService
 
     /// <summary>Order types (known ones by name, others as "Draft") of draft orders with no code to evaluate.</summary>
     internal static List<string> UncodedOrders(CrdHookRequest request)
+        => UncodedOrderEntries(request).Select(u => u.Label).ToList();
+
+    /// <summary>
+    /// The same uncoded orders, with the index of the entry each came from — the
+    /// system action has to be attached to the order it is about.
+    /// </summary>
+    internal static List<(int EntryIndex, string Label)> UncodedOrderEntries(CrdHookRequest request)
     {
-        var uncoded = new List<string>();
-        foreach (var entry in request.Context?.DraftOrders?.Entry ?? [])
+        var uncoded = new List<(int, string)>();
+        var entries = request.Context?.DraftOrders?.Entry;
+        for (var index = 0; index < (entries?.Count ?? 0); index++)
         {
-            var resource = entry.Resource;
+            var resource = entries![index].Resource;
             if (resource == null) continue;
             var concept = resource.ResourceType == "MedicationRequest"
                 ? resource.MedicationCodeableConcept
                 : resource.Code;
             if (concept?.Coding is not { Count: > 0 } || concept.Coding.All(c => string.IsNullOrWhiteSpace(c.Code)))
-                uncoded.Add(KnownOrderTypes.TryGetValue(resource.ResourceType ?? string.Empty, out var known)
+                uncoded.Add((index, KnownOrderTypes.TryGetValue(resource.ResourceType ?? string.Empty, out var known)
                     ? known
-                    : "Draft");
+                    : "Draft"));
         }
         return uncoded;
     }
 
-    private async Task<CrdCard> EvaluateCodeAsync(
+    /// <summary>One code's answer: the card an EHR displays and the determination behind it.</summary>
+    private readonly record struct CrdCodeOutcome(
+        CrdCard Card, CrdDetermination Determination, CrdIndeterminateReason? Reason);
+
+    private async Task<CrdCodeOutcome> EvaluateCodeAsync(
         CrdHookRequest request, string tenantId, CrdCodeClassification classification,
         string effectiveCode, string display, CancellationToken ct)
     {
@@ -141,14 +301,24 @@ public class CrdService : ICrdService
         // A "required" answer from either source still wins: erring toward
         // requiring authorization is the safe direction.
         if (ruleDecision.IsPriorAuthRequired())
-            return BuildAuthRequiredCard(display, ruleDecision);
+            return new(BuildAuthRequiredCard(display, ruleDecision),
+                CrdDetermination.AuthorizationRequired, null);
         if (classification.AuthRequiredCodes.Contains(effectiveCode))
-            return BuildAuthRequiredCard(display);
+            return new(BuildAuthRequiredCard(display), CrdDetermination.AuthorizationRequired, null);
         if (classification.DocumentationRequiredCodes.Contains(effectiveCode))
-            return BuildDocumentationRequiredCard(display);
+            return new(BuildDocumentationRequiredCard(display),
+                CrdDetermination.DocumentationRequired,
+                CrdIndeterminateReason.DocumentationOnlyClassification);
         if (classification.AutoApprovedCodes.Contains(effectiveCode))
-            return BuildAutoApprovedCard(display);
-        return BuildRequirementsUnknownCard(display);
+            return new(BuildAutoApprovedCard(display), CrdDetermination.NoAuthorizationRequired, null);
+
+        // Unknown is not one case but two, and the extension can say which:
+        // the engine failed to answer (technical, which the IG has a code for),
+        // or nothing classifies the code at all.
+        return new(
+            BuildRequirementsUnknownCard(display),
+            CrdDetermination.Indeterminate,
+            ruleDecision is null ? CrdIndeterminateReason.Technical : CrdIndeterminateReason.Unclassified);
     }
 
     private async Task<PaRuleDecision?> EvaluatePriorAuthRuleAsync(
@@ -227,14 +397,22 @@ public class CrdService : ICrdService
     // ── Code extraction ──────────────────────────────────────────────────────
 
     internal static List<CrdCoding> ExtractCodes(CrdHookRequest request)
+        => ExtractCodedOrders(request).Select(c => c.Coding).ToList();
+
+    /// <summary>
+    /// The same codes, each paired with the index of the draft order that
+    /// carried it. A card names a service in prose; a system action has to name
+    /// the resource, so the link back to the entry cannot be dropped on the way.
+    /// </summary>
+    internal static List<(int EntryIndex, CrdCoding Coding)> ExtractCodedOrders(CrdHookRequest request)
     {
-        var codes = new List<CrdCoding>();
+        var codes = new List<(int, CrdCoding)>();
         var entries = request.Context?.DraftOrders?.Entry;
         if (entries == null) return codes;
 
-        foreach (var entry in entries)
+        for (var index = 0; index < entries.Count; index++)
         {
-            var resource = entry.Resource;
+            var resource = entries[index].Resource;
             if (resource == null) continue;
 
             // ServiceRequest → code
@@ -249,7 +427,9 @@ public class CrdService : ICrdService
             {
                 // A blank code classifies nothing; the order is answered once,
                 // as uncoded (UncodedOrders), not also as an "unknown" blank code.
-                codes.AddRange(codeableConcept.Coding.Where(c => !string.IsNullOrWhiteSpace(c.Code)));
+                codes.AddRange(codeableConcept.Coding
+                    .Where(c => !string.IsNullOrWhiteSpace(c.Code))
+                    .Select(c => (index, c)));
             }
         }
 
