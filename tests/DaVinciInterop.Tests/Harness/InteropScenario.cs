@@ -28,7 +28,33 @@ public sealed record InteropScenarioDefinition
 
     [JsonPropertyName("description")] public string Description { get; init; } = "";
 
+    /// <summary>The Inferno suite this scenario runs, for a conformance-kit scenario.</summary>
+    [JsonPropertyName("infernoSuite")] public string? InfernoSuite { get; init; }
+
+    /// <summary>
+    /// The groups within that suite the scenario runs, by the id the kit's own
+    /// source declares. Empty means the whole suite.
+    ///
+    /// <para>
+    /// Which groups are run is a claim about what CHO says it serves, so it is
+    /// inventory data a reader can check against the description — not a list
+    /// buried in a test method where narrowing the run would look like a code
+    /// change rather than a change of claim.
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("infernoGroups")] public List<string> InfernoGroups { get; init; } = new();
+
+    /// <summary>The suite inputs the harness supplies, by the names the suite declares.</summary>
+    [JsonPropertyName("infernoInputs")] public List<string> InfernoInputs { get; init; } = new();
+
     public ChoRole ParsedChoRole => Enum.Parse<ChoRole>(ChoRole);
+
+    /// <summary>The suite id, or a diagnostic naming the scenario that lacks one.</summary>
+    public string RequiredInfernoSuite =>
+        !string.IsNullOrWhiteSpace(InfernoSuite)
+            ? InfernoSuite!
+            : throw new InvalidOperationException(
+                $"Scenario '{Id}' declares no infernoSuite in interop/scenarios.json.");
 }
 
 /// <summary>The scenario inventory as loaded from interop/scenarios.json.</summary>

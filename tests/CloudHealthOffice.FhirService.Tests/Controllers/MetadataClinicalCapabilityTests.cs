@@ -127,6 +127,94 @@ public class MetadataClinicalCapabilityTests : IClassFixture<FhirTestWebAppFacto
                 $"{resource.Type} is advertised but no controller route serves it");
     }
 
+    [Fact]
+    public async Task NoResourceIsServedThatTheStatementDoesNotAdvertise()
+    {
+        // The converse of the test above, and the one that was missing. An
+        // advertised type with no route is a promise the server breaks; a served
+        // type with no entry is the server disclaiming something it does. The
+        // second is the quieter failure and the more damaging one here: every
+        // Inferno suite reads $metadata before anything else, and the Provider
+        // Access EOB's careTeam.provider is a literal Practitioner/{npi}
+        // reference served from this same base. A conformant consumer is
+        // entitled not to follow a reference into a type the server says it does
+        // not support.
+        //
+        // Routes under fhir/r4 whose first segment is not a resource type are
+        // excluded by name, so a new one has to be considered rather than
+        // absorbed.
+        var statement = await GetCapabilityStatementAsync();
+        var advertised = statement.Rest[0].Resource
+            .Select(r => r.Type)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // One assertion over the whole set rather than one per type, so a gap
+        // reports every missing entry at once instead of the first.
+        FhirR4RouteSegments()
+            .Where(t => !NonResourceRouteSegments.Contains(t) && !advertised.Contains(t))
+            .Should().BeEmpty(
+                "every resource type served under fhir/r4 must be advertised; add the entry, or "
+                + "name the route in NonResourceRouteSegments if it is not a FHIR resource");
+    }
+
+    /// <summary>
+    /// First route segments under <c>fhir/r4</c> that name something other than a
+    /// FHIR resource type, so they belong in no CapabilityStatement entry.
+    /// </summary>
+    private static readonly IReadOnlySet<string> NonResourceRouteSegments =
+        new HashSet<string>(
+        [
+            "metadata",
+            // CHO's own operational reports, which happen to live under this
+            // base: the adapter-binding report (which resource the mock serves
+            // and which a CHO service does) and the CMS-0057-F self-report.
+            // Neither is a FHIR resource.
+            "adapter-status",
+            "compliance-status",
+            // SMART App Launch discovery. Required by the specification to sit
+            // beside the FHIR base, and named in CapabilityStatement.rest
+            // .security rather than as a resource entry.
+            ".well-known",
+        ], StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// First path segments reachable under the <c>fhir/r4</c> base, read from the
+    /// controllers' own route prefixes and action templates.
+    ///
+    /// <para>
+    /// Deliberately narrower than <see cref="ServedResourceTypes"/>, which
+    /// ignores the controller prefix and so also picks up routes on other bases
+    /// (<c>api/v1/crd/code-classification</c>, for one). A superset is harmless
+    /// when asking whether everything advertised is served; it is wrong when
+    /// asking the converse, which is what this feeds.
+    /// </para>
+    /// </summary>
+    private static IReadOnlySet<string> FhirR4RouteSegments()
+    {
+        var segments = new HashSet<string>(RoutedClinicalTypes(), StringComparer.OrdinalIgnoreCase);
+
+        var controllers = typeof(FhirControllerBase).Assembly.GetTypes()
+            .Where(t => typeof(ControllerBase).IsAssignableFrom(t) && !t.IsAbstract);
+
+        foreach (var controller in controllers)
+        {
+            var prefix = controller.GetCustomAttribute<RouteAttribute>()?.Template?.Trim('/');
+            if (!string.Equals(prefix, "fhir/r4", StringComparison.OrdinalIgnoreCase)) continue;
+
+            foreach (var method in controller.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+            {
+                foreach (var route in method.GetCustomAttributes<HttpGetAttribute>())
+                {
+                    var first = route.Template?.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+                    if (string.IsNullOrEmpty(first) || first.StartsWith('{') || first.StartsWith('$')) continue;
+                    segments.Add(first);
+                }
+            }
+        }
+
+        return segments;
+    }
+
     /// <summary>Clinical types the clinical controller's route constraint admits.</summary>
     private static IReadOnlySet<string> RoutedClinicalTypes()
     {

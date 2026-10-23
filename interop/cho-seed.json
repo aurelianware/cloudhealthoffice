@@ -1,0 +1,133 @@
+{
+  "_comment": "The synthetic record set the interop-cho profile serves. Every value names nobody: no real member, no real provider, no real payer, and nothing derived from any of those. The NPIs are the conventional test NPIs 1234567893 and 1679576722, whose check digits are valid so format-checking implementations accept them, and which are issued to no provider. scripts/interop/seed-cho.mjs writes this through each service's own API, so a seed passes the same validation a real write does.",
+  "tenantId": "interop-tenant",
+  "auth": {
+    "_comment": "The development identity both the seeder and the interop harness present to CHO. It lives here, in one file with two readers, because a drift between them would show up as an opaque 401 rather than as a diff. ChoAuthOptions.Validate refuses a symmetric signing key on any host that is not Development or Testing, so nothing signed with this key authenticates against anything deployed. Permissions are named rather than taken from a role: a role expands through ChoRolePermissions, and what it expands to is not this fixture's business.",
+    "issuer": "cho-portal-dev",
+    "audience": "cho-api",
+    "subjectPrefix": "interop-seed",
+    "lifetimeSeconds": 900,
+    "signingKeyEnvVar": "CHO_DEV_SIGNING_KEY",
+    "signingKeyBase64": "Q0hPLWRldmVsb3BtZW50LW9ubHktc2lnbmluZy1rZXktZG8tbm90LXVzZS0yMDI2",
+    "permissions": [
+      "members:read",
+      "members:write",
+      "coverage:read",
+      "coverage:write",
+      "claims:read",
+      "claims:work"
+    ]
+  },
+  "member": {
+    "memberId": "INTEROP-MEM-1",
+    "groupNumber": "INTEROP-GRP-1",
+    "isSubscriber": true,
+    "firstName": "Testcase",
+    "lastName": "Interop",
+    "dateOfBirth": "1970-01-01T00:00:00Z",
+    "gender": "F",
+    "birthSex": "F",
+    "address": "1 Synthetic Way",
+    "city": "Springfield",
+    "state": "FL",
+    "zipCode": "32401",
+    "phone": "555-0100",
+    "email": "testcase.interop@example.invalid",
+    "preferredLanguage": "en",
+    "effectiveDate": "2026-01-01T00:00:00Z"
+  },
+  "coverage": {
+    "memberId": "INTEROP-MEM-1",
+    "groupNumber": "INTEROP-GRP-1",
+    "planId": "INTEROP-PLAN-1",
+    "coverageLevel": "EMP",
+    "insuranceLineCode": "HM",
+    "effectiveDate": "2026-01-01T00:00:00Z"
+  },
+  "claims": [
+    {
+      "_comment": "Professional. lineOfBusiness 1 = Commercial, claimType 1 = Professional: claims-service serializes its enums as numbers, and this fixture speaks its API rather than its source.",
+      "expectProfile": "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Professional-NonClinician-Basis",
+      "claimNumber": "INTEROP-CLM-PROF-1",
+      "memberId": "INTEROP-MEM-1",
+      "subscriberId": "INTEROP-MEM-1",
+      "patientFirstName": "Testcase",
+      "patientLastName": "Interop",
+      "patientRelationship": "18",
+      "lineOfBusiness": 1,
+      "billingProviderNPI": "1234567893",
+      "billingProviderName": "Interop Provider A (synthetic)",
+      "renderingProviderNPI": "1679576722",
+      "renderingProviderName": "Interop Rendering B (synthetic)",
+      "placeOfServiceCode": "11",
+      "claimType": 1,
+      "claimFrequencyCode": "1",
+      "totalChargeAmount": 250.00,
+      "serviceDateFrom": "2026-03-02T00:00:00Z",
+      "serviceDateTo": "2026-03-02T00:00:00Z",
+      "diagnosisCodes": [
+        { "code": "E119", "codeQualifier": "ABK", "pointerNumber": 1, "description": "Type 2 diabetes mellitus without complications" }
+      ],
+      "claimLines": [
+        {
+          "lineNumber": 1,
+          "procedureCode": "99213",
+          "procedureDescription": "Office or other outpatient visit, established patient",
+          "diagnosisPointers": [1],
+          "serviceDateFrom": "2026-03-02T00:00:00Z",
+          "serviceDateTo": "2026-03-02T00:00:00Z",
+          "units": 1,
+          "chargeAmount": 250.00,
+          "placeOfServiceCode": "11",
+          "renderingProviderNPI": "1679576722"
+        }
+      ]
+    },
+    {
+      "_comment": "Institutional (claimType 2), inpatient by the bill-classification digit of the type of bill.",
+      "expectProfile": "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Inpatient-Institutional-Basis",
+      "claimNumber": "INTEROP-CLM-INST-1",
+      "memberId": "INTEROP-MEM-1",
+      "subscriberId": "INTEROP-MEM-1",
+      "patientFirstName": "Testcase",
+      "patientLastName": "Interop",
+      "patientRelationship": "18",
+      "lineOfBusiness": 1,
+      "billingProviderNPI": "1234567893",
+      "billingProviderName": "Interop Hospital A (synthetic)",
+      "facilityNPI": "1234567893",
+      "facilityName": "Interop Hospital A (synthetic)",
+      "placeOfServiceCode": "21",
+      "claimType": 2,
+      "claimFrequencyCode": "1",
+      "totalChargeAmount": 18400.00,
+      "serviceDateFrom": "2026-04-06T00:00:00Z",
+      "serviceDateTo": "2026-04-09T00:00:00Z",
+      "diagnosisCodes": [
+        { "code": "J189", "codeQualifier": "ABK", "pointerNumber": 1, "description": "Pneumonia, unspecified organism", "presentOnAdmission": "Y" }
+      ],
+      "institutional": {
+        "_comment": "facilityTypeCode is the first TWO digits of the UB-04 type of bill: facility type then bill classification. 11 = hospital inpatient. CarinNonFinancialEobProjector.IsInpatient reads the second digit, and a claim it cannot read as inpatient falls to the outpatient profile, which is the weaker of the two.",
+        "facilityTypeCode": "11",
+        "admissionDate": "2026-04-06T00:00:00Z",
+        "dischargeDate": "2026-04-09T00:00:00Z",
+        "admissionTypeCode": "1",
+        "admissionSourceCode": "7",
+        "patientStatusCode": "01"
+      },
+      "claimLines": [
+        {
+          "lineNumber": 1,
+          "procedureCode": "0120",
+          "procedureDescription": "Room and board, semi-private",
+          "revenueCode": "0120",
+          "diagnosisPointers": [1],
+          "serviceDateFrom": "2026-04-06T00:00:00Z",
+          "serviceDateTo": "2026-04-09T00:00:00Z",
+          "units": 3,
+          "chargeAmount": 18400.00
+        }
+      ]
+    }
+  ]
+}

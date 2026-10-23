@@ -43,6 +43,7 @@
          assembly so the harness can load them at runtime. -->
     <Content Include="..\..\interop\versions.json" Link="interop\versions.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\interop\scenarios.json" Link="interop\scenarios.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\interop\cho-seed.json" Link="interop\cho-seed.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

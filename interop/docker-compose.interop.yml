@@ -12,9 +12,11 @@
 # Profiles:
 #   interop-br           HL7 br-payer                  (CRD/DTR/PAS payer RI)
 #   interop-br-provider  HL7 br-provider               (provider-side RI)
-#   interop-cho          CHO fhir-service + mongo      (CHO as the server under test)
+#   interop-cho          CHO native stack + mongo      (CHO as the server under test)
 #   interop-pdex         Inferno PDex test kit         (seam only — see docs/interop/davinci.md)
 #   interop-dtr-inferno  Inferno DTR test kit          (seam only — see docs/interop/davinci.md)
+#   interop-c4bb         Inferno CARIN BB test kit     (seam only — judges Provider Access EOBs)
+#   interop-us-core      Inferno US Core test kit      (seam only — see docs/interop/davinci.md)
 #
 # Normally you do not run this file by hand — `scripts/interop/run.sh` and the
 # harness (InteropEnvironment) bring up exactly the services a scenario needs.
@@ -76,6 +78,16 @@ services:
   # ── Cloud Health Office under test ────────────────────────────────────────
   # Only needed by scenarios where CHO is the *server* (the Inferno suites).
   # Kept behind its own profile so the br-payer smoke path stays light.
+  #
+  # This profile serves CHO's real path, not the synthetic mock: fhir-service
+  # binds Patient, Coverage, Encounter and Claim to ChoNative
+  # (FhirAdapters:Sources, ADR 018/024), so every resource an Inferno suite
+  # reads is projected by the service that owns it. A mock-backed profile would
+  # certify the mock. The data is still synthetic — it is seeded into these
+  # services' own stores, which is what DataClassification=synthetic records.
+  #
+  # Mode is Hybrid rather than Demo because that is what the bindings make true:
+  # Demo is the honest label only while the mock serves these resources.
   interop-mongo:
     image: mongo:7
     profiles: [interop-cho]
@@ -88,6 +100,151 @@ services:
       timeout: 5s
       retries: 24
 
+  # ── CHO domain services behind the FHIR projection ────────────────────────
+  # One mongod, one database per service, exactly as docker-compose.yml splits
+  # them, so a service cannot read another's collections by accident.
+  #
+  # Each runs ASPNETCORE_ENVIRONMENT=Development, which loads its own
+  # appsettings.Development.json: the development issuers (cho-portal-dev,
+  # cho-internal-dev) and this service's own ChoAuth:ServiceToken. That is what
+  # lets fhir-service authenticate its calls here. The keys are the public
+  # development symmetric key, refused on any host that is not Development or
+  # Testing (ChoAuthOptions.Validate), so this is a test configuration and not
+  # an authentication bypass — the same posture section 10 of
+  # docs/interop/davinci.md states for the FHIR server itself.
+  cho-member-service:
+    build:
+      context: ..
+      dockerfile: src/services/member-service/Dockerfile
+      args:
+        REGISTRY: ${CHO_IMAGE_REGISTRY:-mcr.microsoft.com}
+    profiles: [interop-cho]
+    networks: [interop]
+    ports:
+      - "127.0.0.1:${INTEROP_CHO_MEMBER_PORT:-18025}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      MongoDb__ConnectionString: mongodb://interop-mongo:27017
+      MongoDb__DatabaseName: InteropMemberDB
+    depends_on:
+      interop-mongo:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  cho-coverage-service:
+    build:
+      context: ..
+      dockerfile: src/services/coverage-service/Dockerfile
+      args:
+        REGISTRY: ${CHO_IMAGE_REGISTRY:-mcr.microsoft.com}
+    profiles: [interop-cho]
+    networks: [interop]
+    ports:
+      - "127.0.0.1:${INTEROP_CHO_COVERAGE_PORT:-18026}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      MongoDb__ConnectionString: mongodb://interop-mongo:27017
+      MongoDb__DatabaseName: InteropCoverageDB
+    depends_on:
+      interop-mongo:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  cho-claims-service:
+    build:
+      context: ..
+      dockerfile: src/services/claims-service/Dockerfile
+      args:
+        REGISTRY: ${CHO_IMAGE_REGISTRY:-mcr.microsoft.com}
+    profiles: [interop-cho]
+    networks: [interop]
+    ports:
+      - "127.0.0.1:${INTEROP_CHO_CLAIMS_PORT:-18027}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      MongoDb__ConnectionString: mongodb://interop-mongo:27017
+      MongoDb__DatabaseName: InteropClaimsDB
+    depends_on:
+      interop-mongo:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  cho-encounter-service:
+    build:
+      context: ..
+      dockerfile: src/services/encounter-service/Dockerfile
+      args:
+        REGISTRY: ${CHO_IMAGE_REGISTRY:-mcr.microsoft.com}
+    profiles: [interop-cho]
+    networks: [interop]
+    ports:
+      - "127.0.0.1:${INTEROP_CHO_ENCOUNTER_PORT:-18028}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      MongoDb__ConnectionString: mongodb://interop-mongo:27017
+      MongoDb__DatabaseName: InteropEncounterDB
+    depends_on:
+      interop-mongo:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  # Practitioner / PractitionerRole / Organization are Hybrid in
+  # FhirAdapters:Resources, which means fhir-service proxies them here rather
+  # than inventing them (see cho-practitioner-directory). US Core requires
+  # resolvable Practitioner references from the EOBs the CARIN BB suites read,
+  # so this is not optional for those suites.
+  cho-provider-service:
+    build:
+      context: ..
+      dockerfile: src/services/provider-service/Dockerfile
+      args:
+        REGISTRY: ${CHO_IMAGE_REGISTRY:-mcr.microsoft.com}
+    profiles: [interop-cho]
+    networks: [interop]
+    ports:
+      - "127.0.0.1:${INTEROP_CHO_PROVIDER_PORT:-18029}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      MongoDb__ConnectionString: mongodb://interop-mongo:27017
+      MongoDb__DatabaseName: InteropProviderDB
+    depends_on:
+      interop-mongo:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  # ── SMART authorization server ────────────────────────────────────────────
+  # Previously absent: SmartAuth__Issuer defaulted to http://localhost:18024,
+  # where nothing listened, so discovery and JWKS retrieval could not succeed
+  # and no Inferno SMART suite could obtain a token. The issuer is the in-network
+  # name because that is the address both fhir-service and an Inferno container
+  # reach it on; it must be byte-identical on both services, since tokens,
+  # discovery and JWKS all name it whatever Host a request arrives with.
+  cho-smart-auth-service:
+    build:
+      context: ..
+      dockerfile: src/services/smart-auth-service/Dockerfile
+      args:
+        REGISTRY: ${CHO_IMAGE_REGISTRY:-mcr.microsoft.com}
+    profiles: [interop-cho]
+    networks: [interop]
+    ports:
+      - "127.0.0.1:${INTEROP_SMART_AUTH_PORT:-18024}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      MongoDb__ConnectionString: mongodb://interop-mongo:27017
+      MongoDb__DatabaseName: InteropSmartAuthDB
+      SmartAuth__Issuer: ${INTEROP_SMART_ISSUER:-http://cho-smart-auth-service:8080}
+    depends_on:
+      interop-mongo:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
   cho-fhir-service:
     build:
       context: ..
@@ -99,20 +256,49 @@ services:
     ports:
       - "127.0.0.1:${INTEROP_CHO_FHIR_PORT:-18023}:8080"
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - MongoDb__ConnectionString=mongodb://interop-mongo:27017
-      - MongoDb__DatabaseName=FhirInteropDB
+      ASPNETCORE_ENVIRONMENT: Development
+      MongoDb__ConnectionString: mongodb://interop-mongo:27017
+      MongoDb__DatabaseName: FhirInteropDB
       # Synthetic interoperability identity mode. This is a test-environment
       # configuration value, not a switch that disables authentication: CHO's
       # SMART middleware stays in place and still validates tokens.
-      - FhirAdapters__Mode=Demo
-      - FhirAdapters__DataClassification=synthetic
-      - FhirAdapters__TenantId=interop-tenant
-      - SmartAuth__Issuer=${INTEROP_SMART_ISSUER:-http://localhost:18024}
-      - SmartAuth__RequireHttpsMetadata=false
-      - Appeals__UseMockAdapter=true
+      FhirAdapters__Mode: Hybrid
+      FhirAdapters__DataClassification: synthetic
+      FhirAdapters__TenantId: interop-tenant
+      # The bindings that make this the real path. Each needs the matching
+      # Services:*Url below; fhir-service refuses to start if one is missing
+      # rather than quietly serving the mock.
+      FhirAdapters__Sources__Patient: ChoNative
+      FhirAdapters__Sources__Coverage: ChoNative
+      FhirAdapters__Sources__Encounter: ChoNative
+      FhirAdapters__Sources__Claim: ChoNative
+      Services__MemberServiceUrl: http://cho-member-service:8080/
+      Services__CoverageServiceUrl: http://cho-coverage-service:8080/
+      Services__EncounterServiceUrl: http://cho-encounter-service:8080/
+      Services__ClaimsServiceUrl: http://cho-claims-service:8080/
+      Services__ProviderServiceUrl: http://cho-provider-service:8080/
+      # Provider Access attribution from claims history rather than from a
+      # configured panel (ADR 028, docs/architecture/provider-access-attribution.md).
+      # The Inferno Provider Access suites exercise the attribution decision, so
+      # the profile has to make the decision the real way.
+      Cms0057__ProviderAttribution__ClaimsHistory__Enabled: "true"
+      SmartAuth__Issuer: ${INTEROP_SMART_ISSUER:-http://cho-smart-auth-service:8080}
+      SmartAuth__RequireHttpsMetadata: "false"
+      Appeals__UseMockAdapter: "true"
     depends_on:
       interop-mongo:
+        condition: service_healthy
+      cho-member-service:
+        condition: service_healthy
+      cho-coverage-service:
+        condition: service_healthy
+      cho-claims-service:
+        condition: service_healthy
+      cho-encounter-service:
+        condition: service_healthy
+      cho-provider-service:
+        condition: service_healthy
+      cho-smart-auth-service:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
@@ -137,3 +323,23 @@ services:
       context: ${INTEROP_INFERNO_DTR_DIR:-./.external/davinci-dtr-test-kit}
     ports:
       - "127.0.0.1:${INTEROP_INFERNO_DTR_PORT:-14568}:4567"
+
+  # The kit that judges Provider Access EOB conformance (gap-matrix G-14).
+  # Neither the PDex nor the DTR kit covers CARIN BB. See the knownMismatches
+  # entry for this target in interop/versions.json before reading a result from
+  # its non-financial suite.
+  inferno-c4bb:
+    profiles: [interop-c4bb]
+    networks: [interop]
+    build:
+      context: ${INTEROP_INFERNO_C4BB_DIR:-./.external/carin-for-blue-button-test-kit}
+    ports:
+      - "127.0.0.1:${INTEROP_INFERNO_C4BB_PORT:-14569}:4567"
+
+  inferno-us-core:
+    profiles: [interop-us-core]
+    networks: [interop]
+    build:
+      context: ${INTEROP_INFERNO_US_CORE_DIR:-./.external/us-core-test-kit}
+    ports:
+      - "127.0.0.1:${INTEROP_INFERNO_US_CORE_PORT:-14570}:4567"

@@ -4,16 +4,29 @@
 #
 #   ./scripts/interop/fetch-inferno.sh pdex
 #   ./scripts/interop/fetch-inferno.sh dtr
+#   ./scripts/interop/fetch-inferno.sh c4bb
+#   ./scripts/interop/fetch-inferno.sh us-core
+#   ./scripts/interop/fetch-inferno.sh us-core c4bb   # several at once
 #
 # Upstream publishes no container image for these kits, so the harness builds one
 # from a checkout. This is an EXPLICIT setup step on purpose: no ordinary test run
 # may download third-party code. The checkout lands in interop/.external/, which is
 # git-ignored — upstream sources are never committed into this repository.
 #
-# No scenario in this repository runs an Inferno suite yet. This script and the
-# InfernoRunner class are the seam the next PR builds on; see docs/interop/davinci.md.
+# INFERNO-USCORE-SERVER-001 and INFERNO-C4BB-SERVER-001 run against checkouts
+# this script produces; ./scripts/interop/run.sh inferno refuses to start without
+# them. See docs/interop/davinci.md.
 
 set -euo pipefail
+
+# Several kits in one call: re-invoke once per kit so each still gets the full
+# pin check, rather than a loop that could skip one on a partial failure.
+if [[ $# -gt 1 ]]; then
+  for kit in "$@"; do
+    "${BASH_SOURCE[0]}" "$kit"
+  done
+  exit 0
+fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 EXTERNAL_DIR="$REPO_ROOT/interop/.external"
@@ -21,9 +34,11 @@ VERSIONS="$REPO_ROOT/interop/versions.json"
 
 KIT="${1:-}"
 case "$KIT" in
-  pdex) KEY="inferno-pdex"; DIR_NAME="davinci-pdex-test-kit" ;;
-  dtr)  KEY="inferno-dtr";  DIR_NAME="davinci-dtr-test-kit" ;;
-  *)    echo "Usage: $0 {pdex|dtr}" >&2; exit 2 ;;
+  pdex)    KEY="inferno-pdex";    DIR_NAME="davinci-pdex-test-kit" ;;
+  dtr)     KEY="inferno-dtr";     DIR_NAME="davinci-dtr-test-kit" ;;
+  c4bb)    KEY="inferno-c4bb";    DIR_NAME="carin-for-blue-button-test-kit" ;;
+  us-core) KEY="inferno-us-core"; DIR_NAME="us-core-test-kit" ;;
+  *)       echo "Usage: $0 {pdex|dtr|c4bb|us-core}" >&2; exit 2 ;;
 esac
 
 read -r REPO TAG COMMIT < <(python3 - "$VERSIONS" "$KEY" <<'PY'

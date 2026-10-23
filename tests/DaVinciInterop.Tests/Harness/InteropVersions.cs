@@ -67,6 +67,10 @@ public static class InteropPaths
     public static string ScenarioInventory =>
         Path.Combine(AppContext.BaseDirectory, "interop", "scenarios.json");
 
+    /// <summary>interop/cho-seed.json, as copied beside the test assembly.</summary>
+    public static string ChoSeedFixture =>
+        Path.Combine(AppContext.BaseDirectory, "interop", "cho-seed.json");
+
     /// <summary>
     /// The repository root, located by walking up from the test assembly until a
     /// directory containing interop/docker-compose.interop.yml is found.

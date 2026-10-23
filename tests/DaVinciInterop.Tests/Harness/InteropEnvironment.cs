@@ -28,12 +28,17 @@ public sealed class InteropEnvironment : IAsyncDisposable
     private InteropEnvironment(
         InteropVersions versions,
         DockerCompose compose,
-        IReadOnlyList<ExternalServiceDefinition> services)
+        IReadOnlyList<ExternalServiceDefinition> services,
+        IEnumerable<string> additionalProfiles)
     {
         Versions = versions;
         _compose = compose;
         _services = services.ToList();
-        _profiles = services.SelectMany(s => s.Compose.Profiles).Distinct().ToList();
+        _profiles = services
+            .SelectMany(s => s.Compose.Profiles)
+            .Concat(additionalProfiles)
+            .Distinct()
+            .ToList();
     }
 
     /// <summary>The pinned target manifest this environment was built from.</summary>
@@ -53,11 +58,33 @@ public sealed class InteropEnvironment : IAsyncDisposable
 
     /// <summary>Builds an environment for the named external targets.</summary>
     public static InteropEnvironment For(params string[] targetKeys)
+        => For(targetKeys, additionalProfiles: []);
+
+    /// <summary>
+    /// Builds an environment for the named external targets, alongside Compose
+    /// profiles that are not external targets.
+    ///
+    /// <para>
+    /// <c>interop-cho</c> is the case this exists for. When a conformance kit
+    /// judges CHO, CHO is the system under test rather than an external
+    /// implementation: it has no pin, no upstream repository and no readiness
+    /// entry in interop/versions.json, because those record what the harness
+    /// does not own. It still has to be started, and started by the same
+    /// lifecycle, so that teardown covers it after a failure exactly as it
+    /// covers the kit.
+    /// </para>
+    /// </summary>
+    public static InteropEnvironment For(
+        IReadOnlyList<string> targetKeys, IReadOnlyList<string> additionalProfiles)
     {
         var versions = InteropVersions.Load();
         var services = targetKeys.Select(versions.Target).ToList();
-        return new InteropEnvironment(versions, DockerCompose.ForRepository(), services);
+        return new InteropEnvironment(
+            versions, DockerCompose.ForRepository(), services, additionalProfiles);
     }
+
+    /// <summary>The Compose profiles this environment starts.</summary>
+    public IReadOnlyList<string> Profiles => _profiles;
 
     /// <summary>Looks up a coordinated service by target key.</summary>
     public ExternalServiceDefinition Service(string key) =>

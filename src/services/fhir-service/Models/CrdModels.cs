@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace FhirService.Models;
@@ -45,8 +46,51 @@ public class CrdDraftOrders
 
 public class CrdDraftOrderEntry
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new();
+    private CrdDraftOrderResource? _typed;
+    private bool _deserialized;
+
+    /// <summary>
+    /// The draft order exactly as the EHR sent it.
+    ///
+    /// <para>
+    /// Kept verbatim because a CDS Hooks system action asks the EHR to
+    /// <em>update</em> this resource, and the only honest update is the EHR's own
+    /// resource with CHO's extension added. Rebuilding it from
+    /// <see cref="CrdDraftOrderResource"/> would silently drop everything that
+    /// model does not parse — <c>CodeableConcept.text</c>, the subject, the
+    /// requester — and hand the EHR back a lesser version of its own order.
+    /// </para>
+    /// </summary>
     [JsonPropertyName("resource")]
-    public CrdDraftOrderResource? Resource { get; set; }
+    public JsonElement? RawResource { get; set; }
+
+    /// <summary>
+    /// The parsed view used for evaluation. Setting it also sets
+    /// <see cref="RawResource"/>, so a hand-constructed entry still produces a
+    /// usable system action.
+    /// </summary>
+    [JsonIgnore]
+    public CrdDraftOrderResource? Resource
+    {
+        get
+        {
+            if (_deserialized) return _typed;
+            _deserialized = true;
+            _typed = RawResource is { ValueKind: JsonValueKind.Object } raw
+                ? raw.Deserialize<CrdDraftOrderResource>(SerializerOptions)
+                : null;
+            return _typed;
+        }
+        set
+        {
+            _typed = value;
+            _deserialized = true;
+            RawResource = value is null
+                ? null
+                : JsonSerializer.SerializeToElement(value, SerializerOptions);
+        }
+    }
 }
 
 public class CrdDraftOrderResource
@@ -110,6 +154,20 @@ public class CrdCardResponse
 {
     [JsonPropertyName("cards")]
     public List<CrdCard> Cards { get; set; } = new();
+
+    /// <summary>
+    /// Changes CHO asks the EHR to apply without a user accepting a suggestion.
+    /// This is where the machine-readable determination lives: a card is prose
+    /// an EHR can display, a system action is an answer it can branch on.
+    ///
+    /// <para>
+    /// Omitted from the JSON when empty, so a response with nothing to assert is
+    /// byte-for-byte what it was before CHO emitted system actions at all.
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("systemActions")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<CdsHooksSystemAction>? SystemActions { get; set; }
 }
 
 public class CrdCard
@@ -187,6 +245,15 @@ public class CrdCodeClassification
 public class CrdEvaluationResult
 {
     public List<CrdCard> Cards { get; set; } = new();
+
+    /// <summary>
+    /// The system actions carrying the same determinations the cards describe.
+    /// Empty when CHO could not resolve the member's Coverage: the
+    /// <c>coverage-information</c> extension requires a Coverage reference, and
+    /// an assertion that names no coverage is not a conformant assertion. The
+    /// cards still answer.
+    /// </summary>
+    public List<CdsHooksSystemAction> SystemActions { get; set; } = new();
     public int CodesEvaluated { get; set; }
     public int TranslationsPerformed { get; set; }
     public long ElapsedMs { get; set; }

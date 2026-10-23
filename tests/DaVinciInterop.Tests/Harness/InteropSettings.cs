@@ -59,6 +59,17 @@ public static class InteropSettings
         /// <summary>Tearing the stack down.</summary>
         public static TimeSpan Teardown => FromEnv("CHO_INTEROP_TEARDOWN_TIMEOUT_SECONDS", TimeSpan.FromMinutes(3));
 
+        /// <summary>
+        /// One Inferno suite or group run. Far longer than a protocol call: a
+        /// kit validates every returned resource against its bundled IG
+        /// packages, and the US Core server groups walk every search parameter
+        /// the profile declares.
+        /// </summary>
+        public static TimeSpan InfernoRun => FromEnv("CHO_INTEROP_INFERNO_TIMEOUT_SECONDS", TimeSpan.FromMinutes(45));
+
+        /// <summary>Interval between polls of a running Inferno test run.</summary>
+        public static TimeSpan InfernoPoll => FromEnv("CHO_INTEROP_INFERNO_POLL_SECONDS", TimeSpan.FromSeconds(10));
+
         /// <summary>Interval between readiness polls.</summary>
         public static TimeSpan ReadinessPoll => FromEnv("CHO_INTEROP_POLL_SECONDS", TimeSpan.FromSeconds(5));
 
