@@ -7,22 +7,24 @@ name: CMS-0057-F Acceptance Evidence
 # in docs/epa-gap-matrix.md §11 (owner decision Q-1); scenario names and Augment
 # statuses come from tests/Cms0057Acceptance.Tests/scenarios.json.
 #
-# PUBLISH IS PAUSED (owner decision Q-1, docs/epa-gap-matrix.md §6.1 / §7.1).
-# Replace statuses now come from docs/epa-gap-matrix.md §11 rather than being
-# hand-declared in scenarios.json, but several backing tests are still
-# tautological and the published snapshot predates the matrix. Publishing stays
-# paused until the owner approves re-enabling it. The `evidence` job still runs
-# and uploads artifacts; only the `publish` job below is disabled.
-# The already-published JSON under src/site/** is intentionally left untouched
-# here; public copy is handled in a separate, owner-approved PR.
+# PUBLISHING IS ENABLED (owner decision Q-17, 2026-10-23; see
+# docs/epa-gap-matrix.md §6.1 / §7.1). Q-1 paused publishing for three reasons,
+# all now resolved: statuses were hand-declared in scenarios.json (they now come
+# from §11, #1292), several backing tests were tautological (every one §6.1
+# named has since been replaced by real-seam tests or deleted), and the
+# published snapshot predated the matrix (the first run after this change
+# replaces it). Any future pause goes back through the owner, by restoring the
+# `false &&` guard on the `publish` job in a reviewed PR — not by editing the
+# published JSON by hand.
 #
-# When publishing is enabled: on main, after a fully passing, reconciled run, a
-# SANITIZED public-safe snapshot (tools/Cms0057Evidence --public-output) is
-# committed into the site
-# tree (src/site/insights/cms-0057-f/cms0057-public-evidence.json). That commit
-# touches only src/site/**, so it triggers the Pages deploy but NOT this workflow
-# (whose paths never include src/site/**) — no loop, and no [skip ci] that would
-# suppress the deploy.
+# On main, after a fully passing, reconciled run, a SANITIZED public-safe
+# snapshot (tools/Cms0057Evidence --public-output) is published to the
+# `ci-evidence` branch (scripts/ci/publish-evidence.sh), which the two site
+# deploys overlay onto src/site/insights/cms-0057-f/cms0057-public-evidence.json.
+# main itself only ever takes reviewed pull requests, so nothing is committed
+# here — and because a GITHUB_TOKEN push starts no workflows, the publish step
+# redeploys the site explicitly. No loop, and no [skip ci] that would suppress
+# the deploy.
 
 permissions:
   contents: read
@@ -208,16 +210,16 @@ jobs:
   # Depends on `evidence` succeeding, so a failed run can never publish. Commits
   # the sanitized snapshot into the site tree; that push deploys via Pages.
   #
-  # PAUSED (owner decision Q-1, docs/epa-gap-matrix.md §6.1 / §7.1). The leading
-  # `false &&` disables this job unconditionally. The generator now derives
-  # Replace statuses from docs/epa-gap-matrix.md §11; the job stays off until
-  # the owner approves re-enabling it. Re-enable only by removing `false &&` in
-  # a reviewed PR.
+  # ENABLED (owner decision Q-17, docs/epa-gap-matrix.md §6.1 / §7.1). Statuses
+  # come from §11, and the generator refuses to emit a public snapshot from
+  # anything but a fully passing, reconciled run — so a red suite publishes
+  # nothing. To pause publishing again, restore `false &&` to the `if:` below in
+  # a reviewed PR; never by hand-editing the published snapshot.
   publish:
-    name: Publish latest validated evidence (paused, Q-1)
+    name: Publish latest validated evidence
     runs-on: ubuntu-latest
     needs: evidence
-    if: false && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
       actions: write
