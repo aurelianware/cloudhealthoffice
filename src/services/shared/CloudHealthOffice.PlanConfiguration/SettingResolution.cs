@@ -121,7 +121,11 @@ public sealed record SettingScope
         var problems = new List<string>();
         if (!string.IsNullOrWhiteSpace(Class) && string.IsNullOrWhiteSpace(SponsorPolicy))
             problems.Add("A class belongs to a sponsor policy: name the policy as well, or the levels between the class and the tenant are skipped.");
-        if (!string.IsNullOrWhiteSpace(SponsorPolicy) && string.IsNullOrWhiteSpace(Sponsor))
+        // Named for a class as well as for a policy, so that a scope carrying
+        // only a class is told everything it is missing in one answer rather
+        // than one level per round trip.
+        if ((!string.IsNullOrWhiteSpace(SponsorPolicy) || !string.IsNullOrWhiteSpace(Class))
+            && string.IsNullOrWhiteSpace(Sponsor))
             problems.Add("A sponsor policy belongs to a sponsor: name the sponsor's group number as well, or the sponsor's own settings are skipped.");
         return problems;
     }
