@@ -14,6 +14,19 @@ public class CardBindings
     public string? Gender { get; set; }
 
     public string? GroupNumber { get; set; }
+
+    /// <summary>
+    /// The sponsor policy within the group, where the member is enrolled under
+    /// one (plan-configuration.md §9b, §12.12). Null for a member enrolled by
+    /// group number, and on every card issued before enrolment recorded
+    /// policies — so a card shows the line only where there is one, rather than
+    /// an empty field.
+    ///
+    /// Not the *other* carrier's policy number: this service does not render
+    /// coordination-of-benefits detail at all.
+    /// </summary>
+    public string? SponsorPolicyNumber { get; set; }
+
     public string? SponsorName { get; set; }
     public string? SponsorSupportPhone { get; set; }
 

@@ -176,6 +176,7 @@ public class ChoIdCardAdapter : IIdCardAdapter
             Gender = member.Gender,
 
             GroupNumber = coverage.GroupNumber,
+            SponsorPolicyNumber = coverage.SponsorPolicyNumber,
             SponsorName = sponsor?.EmployerName,
             SponsorSupportPhone = sponsor?.SupportPhone ?? sponsor?.ContactPhone,
 

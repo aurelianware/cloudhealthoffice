@@ -1,6 +1,6 @@
 # Plan configuration: settings that cascade, with overrides
 
-**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), steps 3a to 3c of step 3 (§§12.7–12.9) and two of 3d's consumers (§§12.10–12.12); ID cards, the 837's `SBR03` and claims eligibility are the rest of 3d.
+**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), steps 3a to 3c of step 3 (§§12.7–12.9) and three of 3d's consumers (§§12.10–12.13); claims eligibility and the 837's `SBR03` are the rest of 3d.
 **Scope:** One way for every CHO service to define a business setting, set it at the right level of the plan's structure, override it further down, and explain where an effective value came from.
 
 **Related:**
@@ -244,7 +244,7 @@ Changes needing a reason or a second approver use the same pattern as two-person
    - **3a, the records:** sponsor policies with their classes, and contract terms with §9b's status flow. *Built 2026-10-23 (§12.7).*
    - **3b, terms versioned per contract year:** the tiers, rates, contribution, billing terms, eligibility, waiting period and life events of §9b's table, held per period so that a renewal adds a version rather than replacing a policy. *Built 2026-10-23 (§12.8), the policy's own sections and the contract term's.*
    - **3c, the levels:** `SponsorPolicy` and `Class` in `SettingScope` and in resolution, and the sponsor → policies narrowing of `GET overrides` that step 2b deferred here (§12.6). *Built 2026-10-23 (§12.9).*
-   - **3d, the consumers,** one at a time behind a fallback: billing terms replacing `Sponsor.BillingInfo` *(built 2026-10-23, §12.10)*, the 834's `REF*1L` resolving against policy numbers *(built 2026-10-23, §§12.11–12.12)*, ID cards and the 837's `SBR03`, and claims eligibility.
+   - **3d, the consumers,** one at a time behind a fallback: billing terms replacing `Sponsor.BillingInfo` *(built 2026-10-23, §12.10)*, the 834's `REF*1L` resolving against policy numbers *(built 2026-10-23, §§12.11–12.12)*, ID cards *(built 2026-10-23, §12.13)* and the 837's `SBR03`, and claims eligibility.
 4. **First consumers:**
    - enrollment retro limits, waiting periods, orphan grace and the full-replace guard;
    - the premium grace period, moved off the sponsor's billing info.
@@ -426,7 +426,20 @@ Built 2026-10-23. The enrollment importer now asks §12.11 what each `REF*1L` is
 
 24 tests, split between what the wire answers mean and what the importer does with each answer.
 
-Still to come in 3d, each behind the same kind of fallback: ID cards and the 837's `SBR03`, then claims eligibility.
+### 12.13 Step 3d, third consumer: the policy on the member's ID card
+
+Built 2026-10-23. A provider keys eligibility off the card, so where a member holds one of several policies of the same employer, the card is where that has to be legible.
+
+- **It reads the coverage, which is the whole reason the field went there.** idcard-service already resolves the member's coverage for the group number and the plan id; the policy number comes back on the same read, with no second lookup and no new dependency. §12.12's choice of home is what makes this a three-line change.
+- **Both the group and the policy, never one in place of the other.** The group says who the employer is; the policy says which of its offerings this member joined. A provider phoning about eligibility has to be able to name both.
+- **The field is conditional, so no existing card changes.** It sits with Group, Plan and Network in a field list that omits what is empty, so a card for a member enrolled by group number — every card until a tenant enters policies — is laid out exactly as it is today, rather than gaining an empty label. A blank string is treated as none, because a label with nothing after it reads as a card printed wrong.
+- **The built-in SVG layout deliberately does not place the token.** An SVG draws text at fixed coordinates and cannot close a gap the way the PDF's field list does, so a line that is empty for most members would leave a hole. The token (`{{SponsorPolicyNumber}}`) exists for a tenant's own layout, which knows whether its members are on policies.
+
+6 tests.
+
+**The 837's `SBR03` is a separate gap, and a question rather than a build.** Reading it closely, `SBR03` is "insured group *or* policy number" and carries the **group** number where there is one, which CHO always has — so a member's policy number has no element of its own in loop 2000B, and putting it in `SBR03` would be wrong rather than more informative. What the reading did turn up is two real defects in `SBR03` itself, neither about policies: the live generator (`encounter-service`) leaves `SBR03` empty, and the unwired `EncounterEngine` transformer puts the **subscriber id** there, which is the identifier that already belongs in `NM1*IL`. Both want the group number, and neither service holds one today — `encounter-service` builds an encounter from its request body and never resolves coverage. Whether it gains a coverage-service client or the group number rides on the create request is a dependency decision, so it waits on an answer rather than a guess.
+
+Still to come in 3d: claims eligibility, and `SBR03` once the question above is answered.
 
 ## 13. Decisions (2026-10-22)
 

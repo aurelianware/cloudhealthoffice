@@ -91,6 +91,14 @@ public class CoverageDto
     public string Id { get; set; } = string.Empty;
     public string? MemberId { get; set; }
     public string? GroupNumber { get; set; }
+
+    /// <summary>
+    /// The sponsor policy the member is enrolled under, where enrolment
+    /// recorded one (plan-configuration.md §9b, §12.12). Null for a member
+    /// enrolled by group number, which is still the commonest case.
+    /// </summary>
+    public string? SponsorPolicyNumber { get; set; }
+
     public string? PlanId { get; set; }
     public string? PlanName { get; set; }
     public string? CoverageLevel { get; set; }
