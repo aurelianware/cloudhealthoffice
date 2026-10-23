@@ -65,17 +65,20 @@ public sealed class WorkConfigService
 {
     private readonly IWorkStore _store;
     private readonly WorkSeedTracker _seeded;
+    private readonly IWorkEntitlementDirectory _entitlements;
     private readonly TimeProvider _time;
     private readonly ILogger<WorkConfigService> _logger;
 
     private readonly IReadOnlyList<string> _seedMembers;
 
     public WorkConfigService(
-        IWorkStore store, WorkSeedTracker seeded, TimeProvider time, ILogger<WorkConfigService> logger,
+        IWorkStore store, WorkSeedTracker seeded, IWorkEntitlementDirectory entitlements,
+        TimeProvider time, ILogger<WorkConfigService> logger,
         Microsoft.Extensions.Options.IOptions<WorkManagementOptions>? options = null)
     {
         _store = store;
         _seeded = seeded;
+        _entitlements = entitlements;
         _time = time;
         _logger = logger;
         _seedMembers = (options?.Value.SeedMemberUserIds ?? new List<string>())
@@ -386,6 +389,10 @@ public sealed class WorkConfigService
         if (hasTeam && await _store.GetTeamAsync(tenantId, input.TeamId!, ct) is null)
             return ConfigResult<WorkMembership>.Bad($"Team {input.TeamId} not found.");
 
+        var queue = (await _store.GetQueueAsync(tenantId, input.QueueId, ct))!;
+        if (await RefuseUnentitledAsync(tenantId, input, queue.WorkType, ct) is { } refusal)
+            return refusal;
+
         var all = await _store.ListMembershipsAsync(tenantId, ct);
         WorkMembership membership;
         if (id is null)
@@ -418,6 +425,62 @@ public sealed class WorkConfigService
         await _store.DeleteMembershipAsync(tenantId, id, ct)
             ? ConfigResult<bool>.Ok(true)
             : ConfigResult<bool>.NotFound($"Membership {id} not found.");
+
+    /// <summary>
+    /// A membership says a person pulls this queue's work, so everybody it
+    /// names must be entitled to that work type. Without this, a claim queue
+    /// could hold a member who can never resolve a claim: Get Next would skip
+    /// them (it filters on entitlement), the queue's staffing would read as
+    /// larger than it is, and a supervisor would see them in the picker.
+    ///
+    /// <para>Refused both when the answer is no and when there is no answer,
+    /// for the reason given on
+    /// <see cref="WorkDistributionService.AssignAsync"/>: an unchecked
+    /// membership is a staffing number nobody can trust.</para>
+    /// </summary>
+    private async Task<ConfigResult<WorkMembership>?> RefuseUnentitledAsync(
+        string tenantId, MembershipInput input, WorkType workType, CancellationToken ct)
+    {
+        var permission = WorkEntitlements.PermissionFor(workType);
+
+        var users = new List<string>();
+        if (!string.IsNullOrWhiteSpace(input.UserId))
+        {
+            users.Add(input.UserId.Trim());
+        }
+        else if (await _store.GetTeamAsync(tenantId, input.TeamId!.Trim(), ct) is { } team)
+        {
+            users.AddRange(team.UserIds.Where(u => !string.IsNullOrWhiteSpace(u)).Select(u => u.Trim()).Distinct(StringComparer.Ordinal));
+        }
+
+        var denied = new List<string>();
+        var unknown = new List<string>();
+        foreach (var user in users)
+        {
+            switch (await _entitlements.CheckAsync(tenantId, user, permission, ct))
+            {
+                case Entitlement.Denied: denied.Add(user); break;
+                case Entitlement.Unknown: unknown.Add(user); break;
+            }
+        }
+
+        if (unknown.Count > 0)
+            return ConfigResult<WorkMembership>.Conflict(
+                $"Could not establish whether {Name(unknown)} may work {workType} items ({permission}): " +
+                "tenant-service did not answer. The membership was not saved rather than saved unchecked; try again shortly.");
+
+        if (denied.Count > 0)
+            return ConfigResult<WorkMembership>.Bad(
+                $"{Name(denied)} may not work {workType} items ({permission}), so this queue would list somebody " +
+                "who can never pull from it. Give them a role that grants it, or leave them out of this queue.");
+
+        return null;
+
+        // Up to five names, so a large team's refusal stays readable.
+        static string Name(List<string> users) => users.Count <= 5
+            ? string.Join(", ", users)
+            : string.Join(", ", users.Take(5)) + $" and {users.Count - 5} others";
+    }
 
     /// <summary>
     /// The queues <paramref name="userId"/> pulls from: direct memberships and

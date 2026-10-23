@@ -15,7 +15,7 @@ public class ConfigTests
     {
         var first = await _kit.Config().ListQueuesAsync(T);
         // A second replica (its own seed tracker) seeding the same tenant concurrently.
-        var otherProcess = new WorkConfigService(_kit.Store, new WorkSeedTracker(), _kit.Clock,
+        var otherProcess = new WorkConfigService(_kit.Store, new WorkSeedTracker(), _kit.Entitlements, _kit.Clock,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkConfigService>.Instance);
         await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => otherProcess.EnsureSeededAsync(T)));
 

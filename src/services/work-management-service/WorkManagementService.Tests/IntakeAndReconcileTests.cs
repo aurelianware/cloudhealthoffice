@@ -174,6 +174,7 @@ public class IntakeTests
             .AddSingleton(_kit.Store)
             .AddSingleton<TimeProvider>(_kit.Clock)
             .AddSingleton(_kit.Seeds)
+            .AddSingleton<IWorkEntitlementDirectory>(_kit.Entitlements)
             .AddLogging()
             .AddScoped<WorkConfigService>()
             .AddScoped<WorkIntakeService>()

@@ -88,10 +88,37 @@ permits, whatever the memberships say:
 | PriorAuth | `authorizations:decide` | 2 |
 | Enrollment834 | `enrollment:process` | 3 |
 | Payment | `payments:run` | 3 |
+| Inquiry | `service:contact` | 1 |
 
-A membership can therefore only ever narrow what the role permits. (The admin
-API cannot check another user's roles: users live in tenant-service. The check is
-made where it matters, at distribution, on the puller's token.)
+A membership can therefore only ever narrow what the role permits.
+
+The caller's own permissions come from their token, so pulling needs no lookup.
+The two places work management decides something about **somebody else** —
+pushing an item to an assignee, and putting a member in a queue — ask
+tenant-service through `IWorkEntitlementDirectory`
+(`GET api/v1/tenants/{tenantId}/users/{userId}/permissions/{permission}`).
+
+Both refuse when the answer is no, and **also when there is no answer**. The
+reasoning, because fail-open is the tempting choice here: this is not the
+authority to do the work — that lives in the owning service and is checked
+against the worker's own token — so allowing an unchecked push grants nobody
+anything. What it does is park the item. A pushed item is `Leased`, so Get Next
+hides it from the people who could do it, and the queue's SLA runs for the
+whole lease while nobody is looking at it. A refusal costs a supervisor a retry
+they can see immediately; an unchecked push costs a member an item nobody
+notices for eight hours. Visible-now beats invisible-later.
+
+What keeps that refusal rare is the directory's cache rather than a softer
+default: an answer is reused for five minutes, and when a live call fails an
+answer up to an hour old is still served (logged as stale). Only with nothing
+cached at all is the answer unknown. Failures themselves are never cached, so a
+blip cannot pin a user out of their own work. A 404 is an answer, not a
+failure — tenant-service has no such user in this tenant — which also makes a
+mistyped user id a clean refusal.
+
+There is deliberately no supervisor override. An override would hand somebody
+work they provably cannot finish; the remedy for "I want this person on claims"
+is a role, one screen away in tenant admin.
 
 ### Memberships and teams
 
@@ -134,8 +161,14 @@ a timer: the item simply becomes eligible again and the next Get Next reclaims i
 `assign` leases the item to the named user for `AssignedLeaseMinutes` (480) with
 `assignedBy` = the supervisor (from the token, never the body), replacing any
 holder (audited `Assigned` / `Reassigned`); `unassign` returns it to the queue.
-Push is an override: the assignee needs no membership. The assignee's Get Next
-returns the pushed item first (it is their lease).
+The assignee's Get Next returns the pushed item first (it is their lease).
+
+Push overrides the assignee's **membership**, which is a routing preference,
+but not their **entitlement**, which is a role: the assignee is checked against
+the item's work type first, and the push is refused (409) both when they lack
+the permission and when the check cannot be run. See Entitlement above. The
+same check runs when a membership is saved, for a named user or for every
+member of a team, so a queue cannot list somebody who can never pull from it.
 
 ### Concurrency
 
