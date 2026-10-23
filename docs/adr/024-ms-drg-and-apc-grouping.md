@@ -1180,13 +1180,87 @@ Build order:
      `ComplicationLevel`, which the engine computes outright, carries the
      severity information instead.
 
-   `PricingStage` is still to do, and it is the half that changes adjudicated
-   payments, so it keeps the per-plan toggle this step was written around.
+   **Done for adjudication too, and this is the half that changes paid
+   amounts.** The work is `InpatientGroupingStage`, Order 240, between
+   `NetworkCredentialingStage` (200) and `PricingStage` (250), which reads
+   `ClaimAdjudicationContext.InpatientGrouping` and prices by the DRG it
+   names.
+
+   The toggle is the plan setting `pricing.inpatient.groupDrg`, allowed at
+   tenant and line-of-business level and `false` everywhere until a payer sets
+   it. Medicare does not get a higher default: a Medicare default of `true`
+   would be this repository deciding, for every deployment, that CHO's grouper
+   is the one to pay by, which is a payer's decision after it has run its own
+   inpatient history through the grouper. The benefit-plan level is omitted
+   rather than declared, because `SettingScope` carries no benefit-plan id —
+   plan-configuration step 2 is unstarted — and declaring a level nothing can
+   set would read as a capability.
+
+   Four decisions in this stage are worth the reader's time:
+
+   - **The grouper binding moved into the engine.** `AddMsDrgGrouper` and the
+     `MsDrgGrouper` configuration section now live in
+     `CloudHealthOffice.GrouperEngine`, with the Pricing API's own
+     `AddInpatientDrgResolver` layered over it. Two hosts now ask for a DRG,
+     and two copies of that binding would be two chances for the Pricing API
+     and adjudication to disagree about what a stay groups to — which is the
+     one disagreement that shows up as money.
+   - **It fails closed.** A claim that should have been grouped and could not
+     be pends (`DRGREVIEW`); it is never priced by the billed DRG as a
+     fallback. The whole reason a payer turns this on is that the facility's
+     own number is not the one being paid, so reverting to it on a bad code or
+     a missing table would pay exactly the amount the payer was trying to stop
+     paying, and would do it invisibly.
+   - **An unreadable setting is answered by the host, not guessed at.**
+     `IPlanSettings` never throws; it answers with the default, `false`,
+     marked `IsFallback`. Whether that is safe depends on the deployment, so
+     the stage injects `IMsDrgReleaseProvider` as nullable — it is registered
+     only when a CMS release actually imported. A host with no tables could
+     not have grouped whatever the setting said, so the unknown costs nothing
+     and the claim prices as it always has. A host with tables may be one that
+     groups, and pricing by the billed DRG there is the silent wrong amount
+     above, so the claim pends (`CONFIGUNAVAIL`) instead.
+   - **Present-on-admission reporting is the one input nothing holds.** It is
+     a property of the facility, not of the claim, and CHO has no field for it
+     on the provider record and no importer that would fill one. The stage
+     sends `HospitalPoaReporting.Unknown`, which is CMS's own answer to not
+     knowing; in `FormulaMsDrgGrouper` that refuses only a stay actually
+     carrying a hospital-acquired condition, so the great majority of claims
+     group and the ones where the distinction pays differently pend rather
+     than being guessed at. A provider-record PoA field is a prerequisite for
+     turning this on at scale, and is named as such rather than defaulted.
+
+   Two smaller ones, both the kind of near-miss that pays a plausible wrong
+   amount rather than failing: the principal diagnosis is taken only from the
+   ABK-qualified entry and never from the first diagnosis on the claim, since
+   grouping a stay on a secondary returns a plausible DRG; and the discharge
+   date, which selects the grouper version, falls back through the statement
+   through date to the service period with an explicit guard against a default
+   `DateTime`, which would group a 1-January-0001 stay against no tables at
+   all.
+
+   The end-to-end test is the argument for the toggle. One four-day knee
+   replacement with no complication on the claim: the facility billed DRG 469
+   (with MCC), the grouper assigns 470 (without MCC), and against a DRG rate
+   table paying 32,000 and 19,500 the two runs differ by 12,500 on one claim,
+   with the plan setting as the only thing that changed between them.
+
+   **Still to do before a payer could turn this on for real:** the
+   provider-record present-on-admission field above, and IPPS payment, which
+   is step 5's other half and is not blocked on arithmetic — every formula is
+   built and parity-checked. It is blocked on facility reference data. The
+   calculator needs about twenty provider-specific parameters per hospital
+   (wage index, CBSA, cost-to-charge ratios, DSH and IME factors, capital
+   geographic adjustment) and an annual rate set, and `grep -rn "Ipps" src`
+   returns nothing outside the engine's own fixtures: there is no store for
+   CMS's Provider Specific File, no importer, no correction surface, and no
+   admin screen. That is a reference-data project in its own right, and
+   defaulting the fields instead would pay wrong amounts confidently.
 
 ### 6. Consequences
 
 - Adjudication stops trusting the facility's DRG. That is the point, and it
-  will change paid amounts, so the toggle in step 6 is not optional.
+  will change paid amounts, so the per-plan toggle in step 8 is not optional.
 - The platform gains a reference-data obligation it does not have today:
   quarterly OPPS addenda and annual IPPS tables, on the NCCI loader pattern.
 - APR-DRG and EAPG remain out of scope and licensed; the interfaces admit

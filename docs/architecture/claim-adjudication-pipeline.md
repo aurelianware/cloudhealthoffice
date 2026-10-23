@@ -118,6 +118,7 @@ POST /api/v1/claims                                     (capability 5.3)
    │       120  DuplicateClaimStage          ★ real               │
    │       150  ProviderIntegrityStage       ★ real (added 7/26)  │
    │       200  NetworkCredentialingStage    ★ real (5.6)         │
+   │       240  InpatientGroupingStage       ★ real (ADR 024 §8)  │
    │       250  PricingStage                 ★ real (added 10/26) │
    │       275  CoordinationOfBenefitsStage  ★ real (5.8)         │
    │       300  BenefitCalculationStage      ★ real (5.5)         │
@@ -437,6 +438,31 @@ HTTP surface portal/preview features already use.
 throw `NotImplementedException` because the pipeline doesn't use them.
 Adding those surfaces is a follow-up driven by capability 5.12 (adjustment
 workflow).
+
+## Inpatient grouping stage (Order=240, ADR 024 §8)
+
+`InpatientGroupingStage` assigns the MS-DRG for an inpatient stay so that
+`PricingStage` (250) prices by the DRG CHO's grouper worked out rather than the
+one the facility billed. It writes
+`ClaimAdjudicationContext.InpatientGrouping`, which carries both DRGs, the
+grouper's whole result and whether the two disagree.
+
+It does nothing unless the plan setting `pricing.inpatient.groupDrg` is set:
+the setting defaults to `false` at every level and in every line of business,
+because grouping changes which DRG rate row a claim prices against and so
+changes paid amounts. With the setting off the stage records the billed DRG and
+passes, and the grouper is not called at all.
+
+When the setting is on, the stage fails closed. A stay the grouper refuses, a
+claim with no ABK-qualified principal diagnosis, and a grouper that throws all
+pend with `DRGREVIEW` — none of them fall back to pricing the billed DRG, since
+that is precisely the amount the payer turned this on to stop paying. A setting
+that could not be read is answered by the host's own capability: a deployment
+with no imported CMS release could not have grouped whatever the setting said,
+so it passes, while one with tables loaded pends with `CONFIGUNAVAIL`.
+
+See ADR 024 §8 for the rest, including why present-on-admission reporting is
+sent as `Unknown` and what a payer still needs on file before turning this on.
 
 ## Provider integrity stage (added July 2026)
 

@@ -62,7 +62,7 @@ try
     // put to a grouper (ADR 024 step 8) — by default the one that reports the
     // claim's own DRG, so this changes no price until a deployment configures
     // a CMS release under MsDrgGrouper:Releases.
-    builder.Services.AddMsDrgGrouper(builder.Configuration);
+    builder.Services.AddInpatientDrgResolver(builder.Configuration);
     builder.Services.AddSingleton<IFeeScheduleLoaderService, FeeScheduleLoaderService>();
 
     // ── Authentication ──
