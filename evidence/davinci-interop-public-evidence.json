@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "davinci-interoperability",
-  "generatedAtUtc": "2026-10-23T00:26:25Z",
-  "sourceCommit": "eb8b2085355bf869c6e97aaea33de538556ebbaf",
-  "sourceCommitShort": "eb8b2085355b",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/eb8b2085355bf869c6e97aaea33de538556ebbaf",
-  "inventoryReviewedUtc": "2026-10-22T00:00:00Z",
+  "generatedAtUtc": "2026-10-23T02:26:19Z",
+  "sourceCommit": "8b06acba9a4514727f194a1260ee0475bcb44988",
+  "sourceCommitShort": "8b06acba9a45",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/8b06acba9a4514727f194a1260ee0475bcb44988",
+  "inventoryReviewedUtc": "2026-10-23T00:00:00Z",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence. External interoperability results never change a CMS-0057-F scenario status, and CMS acceptance statuses never imply an interoperability result. See docs/interop/davinci.md and docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md.",
   "targets": [
@@ -97,6 +97,46 @@
       },
       "igVersionProvenance": null,
       "exercised": false
+    },
+    {
+      "name": "inferno-framework/carin-for-blue-button-test-kit",
+      "key": "inferno-c4bb",
+      "role": "ConformanceRunner",
+      "protocols": [
+        "CARIN BB"
+      ],
+      "upstreamRepository": "https://github.com/inferno-framework/carin-for-blue-button-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "reference": "https://github.com/inferno-framework/carin-for-blue-button-test-kit@v0.16.3",
+        "sourceCommit": "386f6a0b024e47cda82d2ed0fd15dc6495557ca8"
+      },
+      "implementationGuides": {
+        "CARIN BB": "1.1.0 and 2.0.0, plus a 2.0.0 development snapshot of the non-financial branch"
+      },
+      "igVersionProvenance": "Read from package.json inside the IG packages the kit bundles at the pinned tag. The non-financial package (igs/carin4bb-200-dev-nonfinancial-fixed) self-identifies as hl7.fhir.us.carin-bb 2.0.0 dated 2023-04-24.",
+      "exercised": true
+    },
+    {
+      "name": "inferno-framework/us-core-test-kit",
+      "key": "inferno-us-core",
+      "role": "ConformanceRunner",
+      "protocols": [
+        "US Core"
+      ],
+      "upstreamRepository": "https://github.com/inferno-framework/us-core-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "reference": "https://github.com/inferno-framework/us-core-test-kit@v1.1.6",
+        "sourceCommit": "c8701563d36c2a9eaedc976c59fd8dca4303f49a"
+      },
+      "implementationGuides": {
+        "US Core": "3.1.1, 4.0.0, 5.0.1, 6.1.0, 7.0.0 and 8.0.0 suites are generated in this release"
+      },
+      "igVersionProvenance": "Read from the generated suite directories the kit ships at the pinned tag.",
+      "exercised": true
     },
     {
       "name": "hl7/fhir-validator (validator_cli.jar)",
@@ -203,6 +243,32 @@
       "testedVersion": null
     },
     {
+      "id": "INFERNO-USCORE-SERVER-001",
+      "title": "Inferno US Core 3.1.1 server suite against CHO's Patient and Encounter groups",
+      "protocol": "US Core",
+      "choRole": "Server",
+      "externalTarget": "inferno-us-core",
+      "implemented": true,
+      "linkedFromScenario": null,
+      "description": "Run the us-core-test-kit us_core_v311 groups that correspond to what CHO's CapabilityStatement claims, against the seeded interop-cho profile. Deliberately the named groups rather than the whole suite: US Core 3.1.1 covers roughly thirty clinical resource types and CHO is a payer that publishes almost none of them, so a whole-suite run would bury the Patient and Encounter verdicts under failures for resources CHO never claimed. Naming the groups says which claim is tested; it does not soften the verdict on those groups. US Core 3.1.1+ is the floor CMS-0057-F sets, and us_core_v610 is the natural second run.",
+      "status": "NotRun",
+      "linkedArtifact": null,
+      "testedVersion": null
+    },
+    {
+      "id": "INFERNO-C4BB-SERVER-001",
+      "title": "Inferno CARIN BB v2.0.0 server groups CHO claims to serve",
+      "protocol": "CARIN BB",
+      "choRole": "Server",
+      "externalTarget": "inferno-c4bb",
+      "implemented": true,
+      "linkedFromScenario": null,
+      "description": "Run the carin-for-blue-button-test-kit c4bb_v200 (financial) groups against the seeded interop-cho profile: the CapabilityStatement, and the Patient, Coverage, ExplanationOfBenefit, Organization and Practitioner groups. The RelatedPerson group is not run because CHO publishes no RelatedPerson; the SMART launch group is not run because the harness supplies an already-issued token rather than driving a launch; and the visual inspection and attestation group is manual by construction. The kit's c4bb_v200devnonfinancial suite is NOT run at the current pin: it checks the superseded '-NonFinancial' canonicals from the April 2023 branch snapshot it bundles, while CHO declares the CARIN BB 2.2.0 '-Basis' profiles, so it could not match CHO's EOBs in either direction. See knownMismatches for inferno-c4bb in interop/versions.json.",
+      "status": "NotRun",
+      "linkedArtifact": null,
+      "testedVersion": null
+    },
+    {
       "id": "INFERNO-PDEX-CLIENT-001",
       "title": "Inferno PDex payer-client suite driven by CHO",
       "protocol": "PDex",
@@ -217,17 +283,17 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-10-23T00:26:12.8064562+00:00",
+    "generatedAtUtc": "2026-10-23T02:26:04.4860965+00:00",
     "environment": "CI",
-    "choCommit": "eb8b2085355bf869c6e97aaea33de538556ebbaf",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/eb8b2085355bf869c6e97aaea33de538556ebbaf",
+    "choCommit": "8b06acba9a4514727f194a1260ee0475bcb44988",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/8b06acba9a4514727f194a1260ee0475bcb44988",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "notRun": 4,
-      "total": 7
+      "notRun": 6,
+      "total": 9
     },
     "findings": [
       {
