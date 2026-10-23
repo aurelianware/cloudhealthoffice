@@ -13,10 +13,10 @@
 #   interop-br           HL7 br-payer                  (CRD/DTR/PAS payer RI)
 #   interop-br-provider  HL7 br-provider               (provider-side RI)
 #   interop-cho          CHO native stack + mongo      (CHO as the server under test)
-#   interop-pdex         Inferno PDex test kit         (seam only — see docs/interop/davinci.md)
-#   interop-dtr-inferno  Inferno DTR test kit          (seam only — see docs/interop/davinci.md)
-#   interop-c4bb         Inferno CARIN BB test kit     (seam only — judges Provider Access EOBs)
-#   interop-us-core      Inferno US Core test kit      (seam only — see docs/interop/davinci.md)
+#   interop-pdex         Inferno PDex test kit         (no scenario yet — see docs/interop/davinci.md)
+#   interop-dtr-inferno  Inferno DTR test kit          (no scenario yet — see docs/interop/davinci.md)
+#   interop-c4bb         Inferno CARIN BB test kit     (INFERNO-C4BB-SERVER-001; judges Provider Access EOBs)
+#   interop-us-core      Inferno US Core test kit      (INFERNO-USCORE-SERVER-001; the US Core floor)
 #
 # Normally you do not run this file by hand — `scripts/interop/run.sh` and the
 # harness (InteropEnvironment) bring up exactly the services a scenario needs.
@@ -41,6 +41,14 @@ networks:
 
 volumes:
   interop_mongo_data:
+  # One per kit: the app and its worker share a SQLite database, and each kit
+  # has its own schema and migrations.
+  inferno_pdex_data:
+  inferno_dtr_data:
+  inferno_c4bb_data:
+  inferno_us_core_data:
+  inferno_redis_data:
+  inferno_validator_igs:
 
 services:
 
@@ -306,23 +314,103 @@ services:
   # ── Inferno conformance runners ───────────────────────────────────────────
   # Upstream publishes no image for these kits: they are built from a checkout
   # at the pinned tag during explicit setup (scripts/interop/fetch-inferno.sh).
-  # The service definitions below describe the shape the runner expects; they
-  # are inert until that checkout exists, and no scenario starts them yet.
+  #
+  # A kit is not one container. Upstream's own docker-compose.yml at each pinned
+  # tag runs five services, and four of them are load-bearing:
+  #
+  #   inferno                the web app and JSON API the harness drives
+  #   worker                 `bundle exec sidekiq -r ./worker.rb`; Inferno queues
+  #                          every test run through it, so without the worker a
+  #                          run is accepted and never executes
+  #   redis                  the queue itself
+  #   hl7_validator_service  the FHIR validator; the suite's verdict IS its output
+  #   nginx                  a browser-side proxy only (`location /` forwards to
+  #                          inferno:4567, `/hl7validatorapi/` to the validator).
+  #                          The harness talks to the app directly, so it is the
+  #                          one upstream service deliberately not reproduced.
+  #
+  # Each app also needs a writable data directory: config/database.yml at every
+  # pinned tag puts the SQLite database at `data/inferno_production.db`, relative
+  # to the image's WORKDIR of /opt/inferno. The app and the worker must see the
+  # same file, which is what the shared named volume below is for. Without it
+  # both containers die on boot with SQLite3::CantOpenException, which is how
+  # these profiles behaved before this wiring existed.
+  #
+  # The app and the worker reach redis and the validator by the addresses in
+  # each kit's own .env.production (REDIS_URL, FHIR_RESOURCE_VALIDATOR_URL).
+  # Inferno loads that file with Dotenv.load, which does not overwrite a variable
+  # already set in the environment, so the `environment:` blocks below redirect
+  # both to the shared sidecars rather than to upstream's `redis` and
+  # `hl7_validator_service` hostnames. Nothing is guessed: the variable names and
+  # the port were read out of the kits at their pinned tags.
+  #
+  # One redis and one validator serve all four kit profiles. Exactly one kit
+  # profile is ever started at a time — a scenario names a single external
+  # target — and teardown is `down --volumes`, so no state crosses between kits.
+
   inferno-pdex:
     profiles: [interop-pdex]
     networks: [interop]
+    image: cho-interop/inferno-pdex:local
     build:
       context: ${INTEROP_INFERNO_PDEX_DIR:-./.external/davinci-pdex-test-kit}
+    environment: &inferno-sidecars
+      REDIS_URL: redis://inferno-redis:6379/0
+      FHIR_RESOURCE_VALIDATOR_URL: http://inferno-validator:3500
+    volumes:
+      - inferno_pdex_data:/opt/inferno/data
+    depends_on: &inferno-depends
+      inferno-redis:
+        condition: service_healthy
+      inferno-validator:
+        condition: service_healthy
     ports:
       - "127.0.0.1:${INTEROP_INFERNO_PDEX_PORT:-14567}:4567"
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-pdex-worker:
+    profiles: [interop-pdex]
+    networks: [interop]
+    image: cho-interop/inferno-pdex:local
+    build:
+      context: ${INTEROP_INFERNO_PDEX_DIR:-./.external/davinci-pdex-test-kit}
+    command: ["bundle", "exec", "sidekiq", "-r", "./worker.rb"]
+    environment: *inferno-sidecars
+    volumes:
+      - inferno_pdex_data:/opt/inferno/data
+    depends_on: *inferno-depends
+    security_opt:
+      - no-new-privileges:true
 
   inferno-dtr:
     profiles: [interop-dtr-inferno]
     networks: [interop]
+    image: cho-interop/inferno-dtr:local
     build:
       context: ${INTEROP_INFERNO_DTR_DIR:-./.external/davinci-dtr-test-kit}
+    environment: *inferno-sidecars
+    volumes:
+      - inferno_dtr_data:/opt/inferno/data
+    depends_on: *inferno-depends
     ports:
       - "127.0.0.1:${INTEROP_INFERNO_DTR_PORT:-14568}:4567"
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-dtr-worker:
+    profiles: [interop-dtr-inferno]
+    networks: [interop]
+    image: cho-interop/inferno-dtr:local
+    build:
+      context: ${INTEROP_INFERNO_DTR_DIR:-./.external/davinci-dtr-test-kit}
+    command: ["bundle", "exec", "sidekiq", "-r", "./worker.rb"]
+    environment: *inferno-sidecars
+    volumes:
+      - inferno_dtr_data:/opt/inferno/data
+    depends_on: *inferno-depends
+    security_opt:
+      - no-new-privileges:true
 
   # The kit that judges Provider Access EOB conformance (gap-matrix G-14).
   # Neither the PDex nor the DTR kit covers CARIN BB. See the knownMismatches
@@ -331,15 +419,113 @@ services:
   inferno-c4bb:
     profiles: [interop-c4bb]
     networks: [interop]
+    image: cho-interop/inferno-c4bb:local
     build:
       context: ${INTEROP_INFERNO_C4BB_DIR:-./.external/carin-for-blue-button-test-kit}
+    environment: *inferno-sidecars
+    volumes:
+      - inferno_c4bb_data:/opt/inferno/data
+    depends_on: *inferno-depends
     ports:
       - "127.0.0.1:${INTEROP_INFERNO_C4BB_PORT:-14569}:4567"
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-c4bb-worker:
+    profiles: [interop-c4bb]
+    networks: [interop]
+    image: cho-interop/inferno-c4bb:local
+    build:
+      context: ${INTEROP_INFERNO_C4BB_DIR:-./.external/carin-for-blue-button-test-kit}
+    command: ["bundle", "exec", "sidekiq", "-r", "./worker.rb"]
+    environment: *inferno-sidecars
+    volumes:
+      - inferno_c4bb_data:/opt/inferno/data
+    depends_on: *inferno-depends
+    security_opt:
+      - no-new-privileges:true
 
   inferno-us-core:
     profiles: [interop-us-core]
     networks: [interop]
+    image: cho-interop/inferno-us-core:local
     build:
       context: ${INTEROP_INFERNO_US_CORE_DIR:-./.external/us-core-test-kit}
+    environment: *inferno-sidecars
+    volumes:
+      - inferno_us_core_data:/opt/inferno/data
+    depends_on: *inferno-depends
     ports:
       - "127.0.0.1:${INTEROP_INFERNO_US_CORE_PORT:-14570}:4567"
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-us-core-worker:
+    profiles: [interop-us-core]
+    networks: [interop]
+    image: cho-interop/inferno-us-core:local
+    build:
+      context: ${INTEROP_INFERNO_US_CORE_DIR:-./.external/us-core-test-kit}
+    command: ["bundle", "exec", "sidekiq", "-r", "./worker.rb"]
+    environment: *inferno-sidecars
+    volumes:
+      - inferno_us_core_data:/opt/inferno/data
+    depends_on: *inferno-depends
+    security_opt:
+      - no-new-privileges:true
+
+  # ── Shared sidecars for the kit profiles ──────────────────────────────────
+  # Both carry every kit profile, so starting a kit starts them and nothing
+  # else does. Pinned by digest for the same reason the reference
+  # implementations are: the validator's output IS the conformance verdict, so a
+  # floating tag would mean the verdict could change without a reviewable diff.
+  inferno-redis:
+    profiles: [interop-pdex, interop-dtr-inferno, interop-c4bb, interop-us-core]
+    networks: [interop]
+    # redis:7-alpine, resolved on 2026-10-23. Upstream's own compose uses a
+    # floating `redis`; the queue's exact version does not affect a verdict, but
+    # an unpinned image in this file would still be a reproducibility hole.
+    image: redis@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - inferno_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-validator:
+    profiles: [interop-pdex, interop-dtr-inferno, interop-c4bb, interop-us-core]
+    networks: [interop]
+    # infernocommunity/inferno-resource-validator:latest, resolved on
+    # 2026-10-23. This is the service each suite's `fhir_resource_validator`
+    # block calls, so its version is part of any result read from these kits.
+    image: infernocommunity/inferno-resource-validator@sha256:92ec7a22e3c6f4cdf5eed9db210150a93531034e100c7521e4930c975b3c9058
+    environment:
+      # Upstream's value: negative means a validator session never expires, so a
+      # long suite run does not lose its loaded IG packages halfway through.
+      SESSION_CACHE_DURATION: "-1"
+    volumes:
+      # The IG packages each suite asks for are downloaded here at first use.
+      # The volume is removed at teardown, so every run starts from a clean
+      # package cache rather than one a previous run left behind.
+      - inferno_validator_igs:/app/igs
+    # Upstream ships no healthcheck for this image, and a kit that starts before
+    # the validator answers reports errors against CHO that are not CHO's. The
+    # image carries curl, and the service answers `GET /validator/version` with
+    # 200 and a JSON body once it is serving, so `depends_on: service_healthy`
+    # can hold the kit back until it does. What this does NOT prove is that the
+    # IG packages a suite needs are cached: those are fetched per validator
+    # session at first use. That fetch is synchronous, so it makes the first
+    # validation of a run slow rather than wrong.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3500/validator/version"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    security_opt:
+      - no-new-privileges:true
