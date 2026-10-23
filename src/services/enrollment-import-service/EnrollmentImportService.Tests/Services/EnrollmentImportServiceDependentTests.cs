@@ -43,7 +43,7 @@ public partial class EnrollmentImportServiceDependentTests
 
         // Orphaned dependents (enrollment-operations.md §10, decision 5).
         public MutableTime Clock { get; } = new(DateTime.UtcNow);
-        public EnrollmentImportService.Services.Settings.InMemoryEnrollmentSettingsStore Settings { get; } = new();
+        public CloudHealthOffice.PlanConfiguration.InMemoryPlanSettings Settings { get; } = new();
         /// <summary>sponsor-service's line of business for every group (its enum number); null = sponsor not on file.</summary>
         public string? LineOfBusiness { get; set; }
         /// <summary>When set, member creates wait on it (to hold a reprocess in flight).</summary>
@@ -182,8 +182,7 @@ public partial class EnrollmentImportServiceDependentTests
 
             var publisher = new EnrollmentEventPublisher(Events, NullLogger<EnrollmentEventPublisher>.Instance);
 
-            var grace = new EnrollmentImportService.Services.Orphans.OrphanGracePolicy(sponsorClient.Object, benefitPlanClient.Object,
-                new EnrollmentImportService.Services.Settings.EnrollmentSettingsResolver(Settings),
+            var grace = new EnrollmentImportService.Services.Orphans.OrphanGracePolicy(sponsorClient.Object, Settings,
                 NullLogger<EnrollmentImportService.Services.Orphans.OrphanGracePolicy>.Instance);
             Service = new ImportSvc(
                 memberClient.Object, sponsorClient.Object, benefitPlanClient.Object, coverageClient.Object,

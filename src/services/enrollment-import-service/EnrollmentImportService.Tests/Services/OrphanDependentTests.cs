@@ -1,6 +1,7 @@
 using EnrollmentImportService.Models;
 using EnrollmentImportService.Services;
 using EnrollmentImportService.Services.Orphans;
+using CloudHealthOffice.PlanConfiguration;
 using EnrollmentImportService.Services.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -73,21 +74,19 @@ public partial class EnrollmentImportServiceDependentTests
     }
 
     [Fact]
-    public async Task ASponsorOverride_BeatsThePlanOverride_WhichBeatsTheLineOfBusiness()
+    public async Task ASponsorOverride_BeatsTheLineOfBusiness()
     {
+        // Benefit-plan overrides return with the plan level (plan-configuration.md §12, step 2).
         var h = new Harness { LineOfBusiness = Commercial };
-        await h.Settings.UpsertAsync(Override("t1", EnrollmentSettingLevel.LineOfBusiness, LinesOfBusiness.Commercial, 10));
-        await h.Settings.UpsertAsync(Override("t1", EnrollmentSettingLevel.BenefitPlan, "resolved-plan-id", 4));
-        var withPlan = Orphan("ANNA");
-        withPlan.Coverage = [new CoverageDetail { InsuranceLineCode = "HLT", PlanCoverageDescription = "PPO" }];
+        h.Settings.Set("t1", GraceKey, SettingLevel.LineOfBusiness, LinesOfBusiness.Commercial, "10");
 
-        await h.ImportViaHostAsync(DependentFile("D1", withPlan));
-        h.Exceptions.All.Single().HeldUntil.Should().Be(h.Clock.Now.AddDays(4), "the plan's setting is more specific than the line of business");
+        await h.ImportViaHostAsync(DependentFile("D1", Orphan("ANNA")));
+        var first = h.Exceptions.All.Single();
+        first.HeldUntil.Should().Be(h.Clock.Now.AddDays(10), "the tenant's Commercial setting replaces the platform default");
+        first.Actions.Single().Note.Should().Contain("Commercial setting");
 
-        await h.Settings.UpsertAsync(Override("t1", EnrollmentSettingLevel.Sponsor, "GRP0001", 2));
-        var again = Orphan("BEN");
-        again.Coverage = withPlan.Coverage;
-        await h.ImportViaHostAsync(DependentFile("D2", again));
+        h.Settings.Set("t1", GraceKey, SettingLevel.Sponsor, "GRP0001", "2");
+        await h.ImportViaHostAsync(DependentFile("D2", Orphan("BEN")));
         h.Exceptions.All.Single(e => e.MemberName!.StartsWith("BEN")).HeldUntil.Should().Be(h.Clock.Now.AddDays(2));
     }
 
@@ -95,7 +94,7 @@ public partial class EnrollmentImportServiceDependentTests
     public async Task ASponsorSettingOfZero_OpensTheOrphanEvenOnACommercialLine()
     {
         var h = new Harness { LineOfBusiness = Commercial };
-        await h.Settings.UpsertAsync(Override("t1", EnrollmentSettingLevel.Sponsor, "GRP0001", 0));
+        h.Settings.Set("t1", GraceKey, SettingLevel.Sponsor, "GRP0001", "0");
 
         await h.ImportViaHostAsync(DependentFile("D1", Orphan()));
 
@@ -321,39 +320,39 @@ public partial class EnrollmentImportServiceDependentTests
         h.Exceptions.All.Single().AutoHeld.Should().BeFalse();
     }
 
-    // ── The settings chain ───────────────────────────────────────────────
+    // ── The setting, from the plan configuration catalog ─────────────────
 
-    private static EnrollmentSettingOverride Override(string tenant, EnrollmentSettingLevel level, string key, int days) => new()
-    {
-        Id = EnrollmentSettingOverride.IdFor(tenant, level, key),
-        TenantId = tenant,
-        Level = level,
-        Key = key,
-        Values = { [EnrollmentSettingKeys.OrphanGraceDays] = days },
-    };
+    private static readonly string GraceKey = EnrollmentSettingKeys.OrphanGraceDays;
 
     [Fact]
-    public async Task TheChain_MostSpecificLevelWins_ThenTheBuiltInDefault()
+    public async Task TheGracePeriod_ResolvesSponsorThenLineOfBusinessThenTheDefault_PerTenant()
     {
-        var store = new InMemoryEnrollmentSettingsStore();
-        var resolver = new EnrollmentSettingsResolver(store);
-        const string key = EnrollmentSettingKeys.OrphanGraceDays;
+        var settings = new InMemoryPlanSettings();
+        var sponsors = new Mock<EnrollmentImportService.Clients.ISponsorServiceClient>();
+        sponsors.Setup(s => s.GetLineOfBusinessAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync("1");
+        var policy = new OrphanGracePolicy(sponsors.Object, settings, NullLogger<OrphanGracePolicy>.Instance);
+        Dependent In(string group) => new() { FirstName = "A", GroupNumber = group };
 
-        (await resolver.ResolveAsync("t1", key, LinesOfBusiness.Commercial, "P1", "G1")).Should()
-            .Be(new ResolvedEnrollmentSetting(key, 7, "Default", LinesOfBusiness.Commercial));
-        (await resolver.ResolveAsync("t1", key, LinesOfBusiness.Medicaid, null, null)).Value.Should().Be(0);
-        (await resolver.ResolveAsync("t1", key, null, null, "G1")).Value.Should().Be(0, "no line of business, no default");
+        (await policy.ResolveAsync("t1", In("G1"))).Should().Be(new ResolvedEnrollmentSetting(GraceKey, 7, "Default", LinesOfBusiness.Commercial));
 
-        await store.UpsertAsync(Override("t1", EnrollmentSettingLevel.LineOfBusiness, LinesOfBusiness.Commercial, 5));
-        await store.UpsertAsync(Override("t1", EnrollmentSettingLevel.BenefitPlan, "P1", 3));
-        await store.UpsertAsync(Override("t1", EnrollmentSettingLevel.Sponsor, "G1", 2));
-        await store.UpsertAsync(Override("t2", EnrollmentSettingLevel.Sponsor, "G2", 9));
+        settings.Set("t1", GraceKey, SettingLevel.LineOfBusiness, LinesOfBusiness.Commercial, "5");
+        settings.Set("t1", GraceKey, SettingLevel.Sponsor, "G1", "2");
+        settings.Set("t2", GraceKey, SettingLevel.Sponsor, "G2", "9");
 
-        (await resolver.ResolveAsync("t1", key, LinesOfBusiness.Commercial, "P1", "G1")).Should()
-            .Be(new ResolvedEnrollmentSetting(key, 2, "Sponsor", "G1"));
-        (await resolver.ResolveAsync("t1", key, LinesOfBusiness.Commercial, "P1", "OTHER")).Value.Should().Be(3);
-        (await resolver.ResolveAsync("t1", key, LinesOfBusiness.Commercial, "P9", "OTHER")).Value.Should().Be(5);
-        (await resolver.ResolveAsync("t1", key, LinesOfBusiness.Commercial, null, "G2")).Value.Should().Be(5, "another tenant's sponsor setting");
+        (await policy.ResolveAsync("t1", In("G1"))).Should().Be(new ResolvedEnrollmentSetting(GraceKey, 2, "Sponsor", "G1"));
+        (await policy.ResolveAsync("t1", In("OTHER"))).Value.Should().Be(5);
+        (await policy.ResolveAsync("t1", In("G2"))).Value.Should().Be(5, "another tenant's sponsor setting");
+    }
+
+    [Fact]
+    public async Task WhenTenantServiceCannotBeRead_TheOrphanOpensRatherThanWaitingOnAGuess()
+    {
+        var h = new Harness { LineOfBusiness = Commercial };
+        h.Settings.Unavailable = true;
+
+        await h.ImportViaHostAsync(DependentFile("D1", Orphan()));
+
+        h.Exceptions.All.Single().Status.Should().Be(EnrollmentExceptionStatus.Open);
     }
 
     [Theory]

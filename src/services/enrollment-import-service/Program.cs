@@ -1,3 +1,4 @@
+using CloudHealthOffice.PlanConfiguration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using CloudHealthOffice.Infrastructure.Edi.Files;
 using CloudHealthOffice.Infrastructure.Edi.Interchange;
@@ -58,11 +59,10 @@ builder.Services.AddSingleton<IEnrollmentEventRepository, EnrollmentEventReposit
 builder.Services.AddScoped<IEnrollmentEventPublisher, EnrollmentEventPublisher>();
 builder.Services.AddSingleton<IEnrollmentValidator, EnrollmentValidator>();
 builder.Services.AddSingleton<IEnrollmentExceptionRepository, EnrollmentExceptionRepository>();
-// Enrollment settings through the chain of levels (line of business → benefit
-// plan → sponsor), and the orphaned-dependent grace period and retry built on
-// it (docs/architecture/enrollment-operations.md §10, decision 5).
-builder.Services.AddSingleton<EnrollmentImportService.Services.Settings.IEnrollmentSettingsStore, EnrollmentImportService.Services.Settings.MongoEnrollmentSettingsStore>();
-builder.Services.AddSingleton<EnrollmentImportService.Services.Settings.EnrollmentSettingsResolver>();
+// The orphaned-dependent grace period and retry (enrollment-operations.md §10,
+// decision 5). The grace period is a plan setting read from tenant-service
+// (docs/architecture/plan-configuration.md): line of business → sponsor.
+builder.Services.AddPlanSettingsClient(builder.Configuration);
 builder.Services.AddSingleton<EnrollmentImportService.Services.Orphans.IOrphanGracePolicy, EnrollmentImportService.Services.Orphans.OrphanGracePolicy>();
 builder.Services.AddScoped<EnrollmentImportService.Services.Orphans.OrphanDependentRetrier>();
 // Every import path goes through the orphan retry: the import itself, then a

@@ -21,6 +21,41 @@ public static class ChoRolePermissions
     public const string TenantAdmin = "TenantAdmin";
     public const string PlatformAdmin = "PlatformAdmin";
 
+    /// <summary>Enters a group's terms on the sponsor contract (plan-configuration.md §9a).</summary>
+    public const string AccountManager = "AccountManager";
+
+    /// <summary>Approves terms outside the product's negotiable ranges.</summary>
+    public const string Underwriter = "Underwriter";
+
+    /// <summary>Builds programs and plans and sets the negotiable ranges.</summary>
+    public const string ConfigurationAnalyst = "ConfigurationAnalyst";
+
+    /// <summary>Locks, tenant and carrier settings, approvals and promotion.</summary>
+    public const string ConfigurationManager = "ConfigurationManager";
+
+    /// <summary>
+    /// Plan configuration (tenant-service, plan-configuration.md §9a).
+    /// <c>config:read</c> sees effective settings and explains them;
+    /// <c>config:sponsor</c> changes sponsor-side settings,
+    /// <c>config:product</c> program and plan settings,
+    /// <c>config:enterprise</c> tenant, carrier and line-of-business settings
+    /// and locks; <c>config:approve</c> approves a two-person change, never
+    /// one's own. TenantAdmin holds all through <c>*:*</c>.
+    /// </summary>
+    public const string ConfigRead = "config:read";
+
+    /// <inheritdoc cref="ConfigRead"/>
+    public const string ConfigSponsor = "config:sponsor";
+
+    /// <inheritdoc cref="ConfigRead"/>
+    public const string ConfigProduct = "config:product";
+
+    /// <inheritdoc cref="ConfigRead"/>
+    public const string ConfigEnterprise = "config:enterprise";
+
+    /// <inheritdoc cref="ConfigRead"/>
+    public const string ConfigApprove = "config:approve";
+
     /// <summary>
     /// Sets and releases a legal hold on a record (member documents today).
     /// It is a write: <c>*:read</c> never satisfies it, and neither does a
@@ -143,7 +178,9 @@ public static class ChoRolePermissions
                 // queue configuration (work-management-service).
                 "workqueue:admin",
                 "reports:claims", "claims:void", "claims:adjust", "trading-partners:read",
-                "encounters:read", "encounters:write"
+                "encounters:read", "encounters:write",
+                // See the configuration claims run against; changes go to the owner.
+                ConfigRead
             ],
             [MemberServices] =
             [
@@ -159,7 +196,8 @@ public static class ChoRolePermissions
                 // Member correspondence and forms taken on calls.
                 DocumentsRead, DocumentsWrite,
                 // Members ask for a Payer-to-Payer transfer through member services.
-                "payer-to-payer:initiate"
+                "payer-to-payer:initiate",
+                ConfigRead
             ],
             [EnrollmentSpecialist] =
             [
@@ -174,7 +212,10 @@ public static class ChoRolePermissions
                 DocumentsRead, DocumentsWrite,
                 // Coverage transitions are enrollment work; a member's request
                 // for a Payer-to-Payer transfer can also arrive here.
-                "payer-to-payer:initiate"
+                "payer-to-payer:initiate",
+                // See the configuration enrollment runs against (orphan grace,
+                // retro limits); changes go to the sponsor's account manager.
+                ConfigRead
             ],
             [UMCoordinator] =
             [
@@ -250,7 +291,30 @@ public static class ChoRolePermissions
             [
                 WorkspaceUse,
                 "compliance:read", "authorizations:read", "audit:read",
-                "reference-data:read"
+                "reference-data:read", ConfigRead
+            ],
+            // Plan configuration roles (plan-configuration.md §9a). Sponsor-side
+            // changes are bounded by each setting's constraints until programs
+            // bring negotiable ranges (step 2).
+            [AccountManager] =
+            [
+                WorkspaceUse, ConfigRead, ConfigSponsor,
+                "benefits:read", "reference-data:read"
+            ],
+            [Underwriter] =
+            [
+                WorkspaceUse, ConfigRead, ConfigApprove,
+                "benefits:read", "reference-data:read"
+            ],
+            [ConfigurationAnalyst] =
+            [
+                WorkspaceUse, ConfigRead, ConfigProduct, ConfigSponsor,
+                "benefits:read", "reference-data:read"
+            ],
+            [ConfigurationManager] =
+            [
+                WorkspaceUse, ConfigRead, ConfigSponsor, ConfigProduct, ConfigEnterprise, ConfigApprove,
+                "benefits:read", "reference-data:read"
             ],
             [TenantAdmin] =
             [

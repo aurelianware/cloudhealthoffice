@@ -52,11 +52,38 @@ public class StandardRolesTests
     [InlineData("ComplianceViewer", "records:legal-hold", false)]
     [InlineData("EnrollmentSpecialist", "records:legal-hold", false)]
     [InlineData("MemberServices", "records:legal-hold", false)]
+    // Plan configuration (plan-configuration.md §9a).
+    [InlineData("EnrollmentSpecialist", "config:read", true)]
+    [InlineData("EnrollmentSpecialist", "config:sponsor", false)]
+    [InlineData("ClaimsSupervisor", "config:read", true)]
+    [InlineData("MemberServices", "config:read", true)]
+    [InlineData("ComplianceOfficer", "config:read", true)]
+    [InlineData("ComplianceOfficer", "config:approve", false)]
+    [InlineData("ComplianceViewer", "config:read", true)]
+    [InlineData("AccountManager", "config:sponsor", true)]
+    [InlineData("AccountManager", "config:enterprise", false)]
+    [InlineData("AccountManager", "config:approve", false)]
+    [InlineData("Underwriter", "config:approve", true)]
+    [InlineData("Underwriter", "config:sponsor", false)]
+    [InlineData("ConfigurationAnalyst", "config:product", true)]
+    [InlineData("ConfigurationAnalyst", "config:enterprise", false)]
+    [InlineData("ConfigurationManager", "config:enterprise", true)]
+    [InlineData("ConfigurationManager", "config:approve", true)]
+    [InlineData("TenantAdmin", "config:enterprise", true)]
+    [InlineData("ClaimsExaminer", "config:read", false)]
     public void Catalogue_grants_match_the_shared_table(string role, string permission, bool expected)
     {
         StandardRoles.HasPermission([role], permission, StandardRoles.All).Should().Be(expected);
         ChoRolePermissions.Satisfies(ChoRolePermissions.ForRole(role), permission).Should().Be(expected);
     }
+
+    [Theory]
+    [InlineData("AccountManager")]
+    [InlineData("Underwriter")]
+    [InlineData("ConfigurationAnalyst")]
+    [InlineData("ConfigurationManager")]
+    public void Configuration_roles_match_the_shared_table(string role) =>
+        StandardRoles.All.Single(r => r.RoleName == role).Permissions.Should().BeEquivalentTo(ChoRolePermissions.ForRole(role));
 
     [Fact]
     public void ComplianceOfficer_permissions_match_the_shared_table()

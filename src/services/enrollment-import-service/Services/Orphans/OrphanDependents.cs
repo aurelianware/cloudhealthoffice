@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Logging;
 using EnrollmentImportService.Clients;
 using EnrollmentImportService.Models;
 using EnrollmentImportService.Repositories;
+using CloudHealthOffice.PlanConfiguration;
 using EnrollmentImportService.Services.Settings;
 
 namespace EnrollmentImportService.Services.Orphans;
@@ -29,25 +30,25 @@ public static class OrphanDependents
 public interface IOrphanGracePolicy
 {
     /// <summary>
-    /// The grace period for an orphaned dependent, through the settings chain
-    /// (line of business → benefit plan → sponsor). Never throws: when the
-    /// sponsor or plan cannot be looked up, those levels are skipped, and an
-    /// unknown line of business has no default (0 days, so the exception opens).
+    /// The grace period for an orphaned dependent: <c>enrollment.orphan.graceDays</c>
+    /// from the plan configuration catalog, resolved for the sponsor (group
+    /// number) and its line of business. Never throws. When the sponsor's line
+    /// of business cannot be read, that level is skipped; when tenant-service
+    /// cannot be read, the result is 0 days (source <c>Unavailable</c>), so the
+    /// exception opens and a person sees it rather than it waiting on a guess.
     /// </summary>
     Task<ResolvedEnrollmentSetting> ResolveAsync(string tenantId, Dependent dependent, CancellationToken ct = default);
 }
 
 public sealed class OrphanGracePolicy(
     ISponsorServiceClient sponsors,
-    IBenefitPlanServiceClient plans,
-    EnrollmentSettingsResolver settings,
+    IPlanSettings settings,
     ILogger<OrphanGracePolicy> logger) : IOrphanGracePolicy
 {
     public async Task<ResolvedEnrollmentSetting> ResolveAsync(string tenantId, Dependent dependent, CancellationToken ct = default)
     {
         var group = string.IsNullOrWhiteSpace(dependent.GroupNumber) ? null : dependent.GroupNumber.Trim();
         string? lineOfBusiness = null;
-        string? planId = null;
         if (group is not null)
         {
             try
@@ -59,30 +60,20 @@ public sealed class OrphanGracePolicy(
                 logger.LogWarning(ex, "Could not read the line of business for group {GroupNumber}; resolving the orphan grace period without it",
                     LogSanitizer.Sanitize(group));
             }
-
-            var coverage = dependent.Coverage?.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.PlanCoverageDescription));
-            if (coverage is not null)
-            {
-                try
-                {
-                    planId = await plans.ResolvePlanIdAsync(tenantId, group, coverage.InsuranceLineCode, coverage.PlanCoverageDescription!, ct);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    logger.LogWarning(ex, "Could not resolve the benefit plan for group {GroupNumber}; resolving the orphan grace period without it",
-                        LogSanitizer.Sanitize(group));
-                }
-            }
         }
 
         try
         {
-            return await settings.ResolveAsync(tenantId, EnrollmentSettingKeys.OrphanGraceDays, lineOfBusiness, planId, group, ct);
+            var resolved = await settings.ResolveAsync(tenantId, EnrollmentSettingKeys.OrphanGraceDays,
+                new SettingScope { LineOfBusiness = lineOfBusiness, Sponsor = group }, ct: ct);
+            // A fallback default could hold an orphan the tenant set to open at once: open it instead.
+            return resolved.IsFallback
+                ? new ResolvedEnrollmentSetting(EnrollmentSettingKeys.OrphanGraceDays, 0, "Unavailable", null)
+                : ResolvedEnrollmentSetting.From(resolved);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Open rather than hold when the settings cannot be read: a person sees it.
-            logger.LogWarning(ex, "Could not read enrollment settings; the orphaned dependent opens without a grace period");
+            logger.LogWarning(ex, "Could not read plan settings; the orphaned dependent opens without a grace period");
             return new ResolvedEnrollmentSetting(EnrollmentSettingKeys.OrphanGraceDays, 0, "Unavailable", null);
         }
     }

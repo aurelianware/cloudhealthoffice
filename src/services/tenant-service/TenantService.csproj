@@ -9,6 +9,8 @@
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.OperatingMode\CloudHealthOffice.OperatingMode.csproj" />
+    <ProjectReference Include="..\shared\CloudHealthOffice.PlanConfiguration\CloudHealthOffice.PlanConfiguration.csproj" />
+    <ProjectReference Include="..\shared\CloudHealthOffice.Events\CloudHealthOffice.Events.csproj" />
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Swashbuckle.AspNetCore" />

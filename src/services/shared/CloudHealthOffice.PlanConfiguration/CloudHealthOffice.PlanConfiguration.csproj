@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CloudHealthOffice.PlanConfiguration</RootNamespace>
+    <AssemblyName>CloudHealthOffice.PlanConfiguration</AssemblyName>
+  </PropertyGroup>
+
+  <!-- Plan configuration (docs/architecture/plan-configuration.md): setting
+       definitions, the resolution rules, and the client services use to read
+       settings from tenant-service. -->
+  <ItemGroup>
+    <ProjectReference Include="..\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+    <PackageReference Include="Confluent.Kafka" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>
