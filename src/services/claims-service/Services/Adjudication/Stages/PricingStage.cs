@@ -174,15 +174,21 @@ public sealed class PricingStage : IClaimAdjudicationStage
         var totalLines = claim.ClaimLines.Count;
 
         // Institutional (837I) claim-level inputs, repeated on every line.
-        // The DRG is the one billed on the claim (HI*DR) — CHO has no MS-DRG
-        // grouper, so a DRG-contracted claim without one finds no DRG rate
-        // and pends NOCONTRACT rather than being grouped or guessed. The
-        // engine pays a DRG case rate / all-inclusive per diem once per
-        // claim, allocated across the lines in proportion to billed charges,
-        // so sending the DRG on every line never pays N case rates.
-        var drgCode = string.IsNullOrWhiteSpace(claim.Institutional?.DrgCode)
+        // The DRG is whichever one InpatientGroupingStage (Order=240) settled
+        // on: the one CHO's grouper assigned where the plan prices by the
+        // grouped DRG, and the one the facility billed (HI*DR) otherwise,
+        // which is what every claim priced before that stage existed. A
+        // DRG-contracted claim with no DRG at all finds no DRG rate and pends
+        // NOCONTRACT rather than being guessed at. The engine pays a DRG case
+        // rate / all-inclusive per diem once per claim, allocated across the
+        // lines in proportion to billed charges, so sending the DRG on every
+        // line never pays N case rates.
+        var billedDrg = string.IsNullOrWhiteSpace(claim.Institutional?.DrgCode)
             ? null
             : claim.Institutional!.DrgCode!.Trim();
+        var drgCode = context.InpatientGrouping is { } grouping
+            ? grouping.PricedDrg
+            : billedDrg;
         // Length of stay only for a stay: 837I DTP*435 (admission date) is
         // required on inpatient claims and absent on outpatient ones, so an
         // outpatient claim never presents a day count that a per-diem
