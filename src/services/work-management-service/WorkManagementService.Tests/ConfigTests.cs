@@ -15,17 +15,20 @@ public class ConfigTests
     {
         var first = await _kit.Config().ListQueuesAsync(T);
         // A second replica (its own seed tracker) seeding the same tenant concurrently.
-        var otherProcess = new WorkConfigService(_kit.Store, new WorkSeedTracker(), _kit.Clock,
+        var otherProcess = new WorkConfigService(_kit.Store, new WorkSeedTracker(), _kit.Entitlements, _kit.Clock,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkConfigService>.Instance);
         await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => otherProcess.EnsureSeededAsync(T)));
 
         var queues = await _kit.Store.ListQueuesAsync(T);
-        queues.Should().HaveCount(DefaultClaimQueues.All.Count + DefaultEnrollmentQueues.All.Count);
+        queues.Should().HaveCount(
+            DefaultClaimQueues.All.Count + DefaultEnrollmentQueues.All.Count + DefaultInquiryQueues.All.Count);
         first.Where(q => q.WorkType == WorkType.Claim).Select(q => q.SystemKey)
             .Should().Equal(DefaultClaimQueues.All.OrderBy(d => d.Order).Select(d => d.Key));
         first.Where(q => q.WorkType == WorkType.Enrollment834).Select(q => q.SystemKey)
             .Should().Equal(DefaultEnrollmentQueues.All.OrderBy(d => d.Order).Select(d => d.Key));
-        queues.Count(q => q.IsFallback).Should().Be(2, "one fallback per work type");
+        first.Where(q => q.WorkType == WorkType.Inquiry).Select(q => q.SystemKey)
+            .Should().Equal(DefaultInquiryQueues.All.OrderBy(d => d.Order).Select(d => d.Key));
+        queues.Count(q => q.IsFallback).Should().Be(3, "one fallback per work type");
     }
 
     [Fact]
@@ -93,12 +96,12 @@ public class ConfigTests
         (await config.CreateQueueAsync(T, new QueueInput { Name = "x", Weights = new PriorityWeights { Age = -1 } }, "a")).Status.Should().Be(400);
         (await config.CreateQueueAsync(T, new QueueInput
         {
-            Name = "x", Criteria = new ClaimQueueCriteria { MinAmount = 10, MaxAmount = 5 },
+            Name = "x", Criteria = new WorkQueueCriteria { MinAmount = 10, MaxAmount = 5 },
         }, "a")).Status.Should().Be(400);
         (await config.CreateQueueAsync(T, new QueueInput
         {
-            Name = "appeals x", WorkType = WorkType.Appeal, IsFallback = true, Criteria = new ClaimQueueCriteria { PendCodes = ["COB"] },
-        }, "a")).Error.Should().Contain("Claim queues only");
+            Name = "x", Criteria = new WorkQueueCriteria { Facets = new() { ["Not A Facet"] = ["x"] } },
+        }, "a")).Error.Should().Contain("Facet name");
     }
 
     [Fact]

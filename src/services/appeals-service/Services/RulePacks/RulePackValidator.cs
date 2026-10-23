@@ -4,10 +4,10 @@ namespace AppealsService.Services.RulePacks;
 
 /// <summary>
 /// Checks a <see cref="RulePack"/> against the federal floor before it can be
-/// used: a State may tighten a federal clock but never loosen it, and every
-/// value must cite a source. The ceilings come from
-/// <see cref="AppealResponseDeadlinePolicy"/>, so the existing tested policy
-/// stays the floor every pack is measured against.
+/// used: a pack may tighten a federal clock but never loosen it, and every
+/// value must cite a source. The floor is <see cref="RulePackFloor"/>, whose
+/// ceilings come from <see cref="AppealResponseDeadlinePolicy"/>, so the
+/// existing tested policy stays what every pack is measured against.
 ///
 /// Business- and working-day clocks have no fixed calendar length, so they
 /// are checked by evaluating them from every day of a two-year sweep under
@@ -27,17 +27,11 @@ public static class RulePackValidator
     private static readonly DateTime SweepStart = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
     private const int SweepDays = 730;
 
-    public static TimeSpan MedicaidAppealCeiling =>
-        AppealResponseDeadlinePolicy.EnforceableMaximumWindow(
-            LineOfBusiness.Medicaid, AppealType.Reconsideration, AppealLevel.FirstLevel, isUrgent: false)!.Value;
+    public static TimeSpan MedicaidAppealCeiling => RulePackFloor.Medicaid.AppealCeiling;
 
-    public static TimeSpan MedicaidExpeditedAppealCeiling =>
-        AppealResponseDeadlinePolicy.EnforceableMaximumWindow(
-            LineOfBusiness.Medicaid, AppealType.Reconsideration, AppealLevel.FirstLevel, isUrgent: true)!.Value;
+    public static TimeSpan MedicaidExpeditedAppealCeiling => RulePackFloor.Medicaid.ExpeditedAppealCeiling;
 
-    public static TimeSpan MedicaidGrievanceCeiling =>
-        AppealResponseDeadlinePolicy.EnforceableMaximumWindow(
-            LineOfBusiness.Medicaid, AppealType.Grievance, AppealLevel.FirstLevel, isUrgent: false)!.Value;
+    public static TimeSpan MedicaidGrievanceCeiling => RulePackFloor.Medicaid.GrievanceCeiling;
 
     /// <summary>Every problem with <paramref name="pack"/>; empty when it is valid.</summary>
     public static IReadOnlyList<string> Validate(RulePack pack)
@@ -46,10 +40,14 @@ public static class RulePackValidator
         void Error(string message) => errors.Add($"{(string.IsNullOrEmpty(pack.Id) ? "(no id)" : pack.Id)}: {message}");
 
         if (string.IsNullOrWhiteSpace(pack.Id)) Error("id is required.");
-        if (pack.State.Length != 2 || !pack.State.All(char.IsAsciiLetterUpper))
-            Error($"state '{pack.State}' must be a two-letter upper-case code.");
-        if (pack.LineOfBusiness != LineOfBusiness.Medicaid)
-            Error($"lineOfBusiness {pack.LineOfBusiness} has no federal floor defined here yet; only Medicaid packs are supported.");
+        if (pack.State is { } state && (state.Length != 2 || !state.All(char.IsAsciiLetterUpper)))
+            Error($"state '{state}' must be a two-letter upper-case code, or absent for a national pack.");
+        var floor = RulePackFloor.For(pack.LineOfBusiness);
+        if (floor is null)
+        {
+            Error($"lineOfBusiness {pack.LineOfBusiness} has no federal floor defined here yet; supported: {RulePackFloor.SupportedNames}.");
+            return errors; // every check below measures against the floor
+        }
         if (string.IsNullOrWhiteSpace(pack.Version)) Error("version is required.");
         if (pack.EffectiveTo is { } to && to < pack.EffectiveFrom) Error("effectiveTo is before effectiveFrom.");
 
@@ -66,27 +64,45 @@ public static class RulePackValidator
         }
 
         var appeal = pack.MemberAppeal;
-        if (appeal.FilingWindow.Unit != ClockUnit.CalendarDays || appeal.FilingWindow.Amount != MedicaidFilingWindowDays)
-            Error($"memberAppeal.filingWindow must be {MedicaidFilingWindowDays} calendar days (42 CFR 438.402(c)(2)(ii)).");
-
-        if (appeal.FairHearingRequestWindow.Unit != ClockUnit.CalendarDays
-            || appeal.FairHearingRequestWindow.Amount is < FairHearingWindowMinDays or > FairHearingWindowMaxDays)
+        var (filingMin, filingMax) = floor.FilingWindowDays;
+        if (appeal.FilingWindow.Unit != ClockUnit.CalendarDays
+            || appeal.FilingWindow.Amount < filingMin
+            || (filingMax is { } cap && appeal.FilingWindow.Amount > cap))
         {
-            Error($"memberAppeal.fairHearingRequestWindow must be {FairHearingWindowMinDays}–{FairHearingWindowMaxDays} calendar days (42 CFR 438.408(f)(2)).");
+            Error(filingMax == filingMin
+                ? $"memberAppeal.filingWindow must be {filingMin} calendar days ({floor.FilingWindowCitation})."
+                : $"memberAppeal.filingWindow must be at least {filingMin} calendar days ({floor.FilingWindowCitation}): "
+                  + "the member may be given longer, never less.");
         }
 
-        RequireWithin("memberAppeal.resolution", appeal.Resolution, MedicaidAppealCeiling, Error);
-        RequireWithin("memberAppeal.resolutionExpedited", appeal.ResolutionExpedited, MedicaidExpeditedAppealCeiling, Error);
-        RequireExtension("memberAppeal.extension", appeal.Extension, Error);
+        if (floor.FairHearingWindowDays is { } fairHearing)
+        {
+            if (appeal.FairHearingRequestWindow is not { } window)
+                Error($"memberAppeal.fairHearingRequestWindow is required for {pack.LineOfBusiness} (42 CFR 438.408(f)(2)).");
+            else if (window.Unit != ClockUnit.CalendarDays
+                     || window.Amount < fairHearing.Min || window.Amount > fairHearing.Max)
+                Error($"memberAppeal.fairHearingRequestWindow must be {fairHearing.Min}–{fairHearing.Max} calendar days (42 CFR 438.408(f)(2)).");
+        }
+        else if (appeal.FairHearingRequestWindow is not null)
+        {
+            Error($"memberAppeal.fairHearingRequestWindow does not apply to {pack.LineOfBusiness}: "
+                  + "an upheld decision goes to the independent reviewer, not to a State fair hearing.");
+        }
+
+        RequireWithin("memberAppeal.resolution", appeal.Resolution, floor.AppealCeiling, floor.AppealCitation, Error);
+        RequireWithin("memberAppeal.resolutionExpedited", appeal.ResolutionExpedited, floor.ExpeditedAppealCeiling,
+            floor.ExpeditedAppealCitation, Error);
+        RequireExtension("memberAppeal.extension", appeal.Extension, floor, Error);
 
         var grievance = pack.MemberGrievance;
-        RequireWithin("memberGrievance.resolution", grievance.Resolution, MedicaidGrievanceCeiling, Error);
+        RequireWithin("memberGrievance.resolution", grievance.Resolution, floor.GrievanceCeiling, floor.GrievanceCitation, Error);
         if (grievance.ResolutionExpedited is { } expedited)
-            RequireWithin("memberGrievance.resolutionExpedited", expedited, MedicaidGrievanceCeiling, Error);
+            RequireWithin("memberGrievance.resolutionExpedited", expedited, floor.GrievanceCeiling, floor.GrievanceCitation, Error);
         foreach (var variant in grievance.Variants)
-            RequireWithin($"memberGrievance.variants[{variant.Name}]", variant.Clock, MedicaidGrievanceCeiling, Error);
+            RequireWithin($"memberGrievance.variants[{variant.Name}]", variant.Clock, floor.GrievanceCeiling,
+                floor.GrievanceCitation, Error);
         if (grievance.Extension is { } grievanceExtension)
-            RequireExtension("memberGrievance.extension", grievanceExtension, Error);
+            RequireExtension("memberGrievance.extension", grievanceExtension, floor, Error);
 
         foreach (var (name, clock) in MemberDecisionClocks(pack))
         {
@@ -100,7 +116,7 @@ public static class RulePackValidator
         return errors;
     }
 
-    private static void RequireWithin(string name, Clock clock, TimeSpan ceiling, Action<string> error)
+    private static void RequireWithin(string name, Clock clock, TimeSpan ceiling, string citation, Action<string> error)
     {
         if (clock.Amount <= 0) return; // reported already
         for (var day = 0; day < SweepDays; day++)
@@ -109,18 +125,18 @@ public static class RulePackValidator
             var due = RulePackClock.Due(start, clock, UsFederalHolidayCalendar.Instance);
             if (due > start + ceiling)
             {
-                error($"{name} ({clock}) can fall later than the federal ceiling of {Describe(ceiling)} " +
+                error($"{name} ({clock}) can fall later than the federal ceiling of {Describe(ceiling)} ({citation}) " +
                       $"(e.g. from {start:yyyy-MM-dd}: due {due:yyyy-MM-dd HH:mm}).");
                 return;
             }
         }
     }
 
-    private static void RequireExtension(string name, ExtensionRule extension, Action<string> error)
+    private static void RequireExtension(string name, ExtensionRule extension, RulePackFloor floor, Action<string> error)
     {
         if (extension.MaxDays < 0) error($"{name}.maxDays must not be negative.");
-        if (extension.MaxDays > AppealResponseDeadlinePolicy.MaxExtension.TotalDays)
-            error($"{name}.maxDays {extension.MaxDays} exceeds the federal {AppealResponseDeadlinePolicy.MaxExtension.TotalDays} days (42 CFR 438.408(c)).");
+        if (extension.MaxDays > floor.MaxExtensionDays)
+            error($"{name}.maxDays {extension.MaxDays} exceeds the federal {floor.MaxExtensionDays} days ({floor.ExtensionCitation}).");
     }
 
     private static string Describe(TimeSpan span) =>
@@ -146,7 +162,7 @@ public static class RulePackValidator
         yield return ("memberAppeal.filingWindow", a.FilingWindow);
         yield return ("memberAppeal.resolution", a.Resolution);
         yield return ("memberAppeal.resolutionExpedited", a.ResolutionExpedited);
-        yield return ("memberAppeal.fairHearingRequestWindow", a.FairHearingRequestWindow);
+        if (a.FairHearingRequestWindow is { } fairHearing) yield return ("memberAppeal.fairHearingRequestWindow", fairHearing);
         if (a.Acknowledgment is { } ack) yield return ("memberAppeal.acknowledgment", ack);
         if (a.AcknowledgmentExpedited is { } ackX) yield return ("memberAppeal.acknowledgmentExpedited", ackX);
         if (a.ContinuationRequestWindow is { } cont) yield return ("memberAppeal.continuationRequestWindow", cont);

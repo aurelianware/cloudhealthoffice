@@ -92,3 +92,47 @@ public static class FhirGenderCodes
     public static bool IsValid(string? code) =>
         code is Male or Female or Other or Unknown;
 }
+
+/// <summary>
+/// The gender codes CHO stores on a <see cref="Member"/>, as X12 834 DMG03 carries
+/// them.
+///
+/// <para>
+/// These are the codes the FHIR projection translates from, and the only ones it
+/// recognises. Nothing enforced them on the way in, so a value such as
+/// <c>"X"</c>, <c>"Male"</c> or a typo was accepted, stored, and then projected
+/// as US Core <c>gender: "unknown"</c> — an assertion CHO never had grounds to
+/// make, and indistinguishable from a member who genuinely declined to state.
+/// US Core requires <c>Patient.gender</c>, so the projection cannot omit the
+/// element to signal "CHO does not know what this value means"; the only place
+/// to catch it is the request.
+/// </para>
+/// </summary>
+public static class StoredGenderCodes
+{
+    public const string Male = "M";
+    public const string Female = "F";
+    public const string Unknown = "U";
+
+    /// <summary>
+    /// For <c>[RegularExpression]</c> on a request model, which needs a compile-time
+    /// constant. Case-insensitive, because the projection upper-cases before mapping.
+    ///
+    /// <para>
+    /// The empty string is allowed alongside null: both mean "not stated", which is
+    /// what the projection's <c>unknown</c> honestly reflects. An unrecognised
+    /// <em>code</em> is the thing being refused, not an absent one — and the 834
+    /// tokenizer already returns null for an empty DMG03, so an import is unaffected.
+    /// </para>
+    /// </summary>
+    public const string Pattern = "^([MFUmfu])?$";
+
+    public const string ValidationMessage =
+        "Gender must be M, F or U (X12 834 DMG03), or omitted. An unrecognised value "
+        + "cannot be projected to FHIR without asserting a gender CHO was not told.";
+
+    public static bool IsValid(string? code) =>
+        code is not null && code.Length == 1
+        && (code is Male or Female or Unknown
+            || code.ToUpperInvariant() is Male or Female or Unknown);
+}

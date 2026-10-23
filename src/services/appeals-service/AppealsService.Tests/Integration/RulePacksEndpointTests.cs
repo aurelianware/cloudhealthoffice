@@ -22,13 +22,29 @@ public class RulePacksEndpointTests : IClassFixture<AppealsWebApplicationFactory
         JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
 
     [Fact]
-    public async Task List_returns_all_ten_packs()
+    public async Task List_returns_every_pack_including_the_national_one()
     {
         var response = await NewClient().GetAsync("/api/appeals/rule-packs");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var states = (await Json(response)).EnumerateArray().Select(p => p.GetProperty("state").GetString()).ToList();
-        states.Should().HaveCount(10).And.Contain(new[] { "TX", "CA", "OH" });
+        // The ten Medicaid States, plus Medicare Advantage, which is federal
+        // and so reports "US" rather than a State.
+        states.Should().HaveCount(11).And.Contain(new[] { "TX", "CA", "OH", "US" });
+    }
+
+    [Fact]
+    public async Task The_national_pack_answers_for_any_State()
+    {
+        // A Medicare Advantage member in Wyoming has the same clocks as one
+        // in Texas, so the lookup must not need a pack per State.
+        foreach (var state in new[] { "wy", "TX" })
+        {
+            var response = await NewClient().GetAsync($"/api/appeals/rule-packs/{state}?lineOfBusiness=Medicare");
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await Json(response)).GetProperty("id").GetString().Should().Be("medicare-advantage");
+        }
     }
 
     [Fact]
@@ -45,6 +61,7 @@ public class RulePacksEndpointTests : IClassFixture<AppealsWebApplicationFactory
     [Fact]
     public async Task Unknown_State_returns_404()
     {
+        // Medicaid has no national pack to fall back to.
         var response = await NewClient().GetAsync("/api/appeals/rule-packs/wy");
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }

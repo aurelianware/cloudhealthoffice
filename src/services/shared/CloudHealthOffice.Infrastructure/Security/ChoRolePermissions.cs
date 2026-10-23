@@ -193,6 +193,10 @@ public static class ChoRolePermissions
                 // The call itself: member services is the role that lives in
                 // the contact screen.
                 ServiceRead, ServiceContact,
+                // Follow-ups from a contact are work items, and member
+                // services is who works the follow-up queues: without these
+                // they could raise a follow-up nobody could ever pull.
+                WorkQueueRead, WorkQueueWork,
                 // Member correspondence and forms taken on calls.
                 DocumentsRead, DocumentsWrite,
                 // Members ask for a Payer-to-Payer transfer through member services.
@@ -240,8 +244,10 @@ public static class ChoRolePermissions
                 // Claim status, denials and payments for provider calls, and
                 // the call recorded on the claim. Never claims:work.
                 "claims:read", "claims:note",
-                // Provider calls are contacts too, recorded the same way.
+                // Provider calls are contacts too, recorded the same way,
+                // and their follow-ups are worked in the same queues.
                 ServiceRead, ServiceContact,
+                WorkQueueRead, WorkQueueWork,
                 "providers:read", "providers:write", "providers:credential",
                 "contracts:read", "contracts:write",
                 "networks:read", "networks:write",

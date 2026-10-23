@@ -97,6 +97,20 @@ builder.Services.AddHttpClient(HttpEnrollmentWorkSource.HttpClientName, client =
 }).SetHandlerLifetime(TimeSpan.FromMinutes(5));
 builder.Services.AddScoped<IEnrollmentWorkSource, HttpEnrollmentWorkSource>();
 
+// tenant-service: whether a user other than the caller holds a permission,
+// for supervisor push and queue membership. Cached, and refused rather than
+// guessed when it cannot be read; see WorkEntitlementDirectory.
+builder.Services.AddHttpClient(WorkEntitlementDirectory.HttpClientName, client =>
+{
+    var baseUrl = builder.Configuration["TenantService:BaseUrl"]
+                  ?? builder.Configuration["Services:TenantService"]
+                  ?? "http://tenant-service.cloudhealthoffice";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+builder.Services.AddSingleton<IWorkEntitlementDirectory, WorkEntitlementDirectory>();
+
 // claims.work.v1 consumer (disabled without Kafka) and the periodic
 // reconcile / re-score (reconcile on automatically when there is no Kafka).
 builder.Services.AddHostedService<ClaimWorkEventConsumer>();

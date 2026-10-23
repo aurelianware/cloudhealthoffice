@@ -950,7 +950,9 @@ public class CreateMemberRequest
     [Required]
     public DateTime DateOfBirth { get; set; }
 
+    [RegularExpression(StoredGenderCodes.Pattern, ErrorMessage = StoredGenderCodes.ValidationMessage)]
     public string? Gender { get; set; }
+
     public string? Address { get; set; }
     public string? City { get; set; }
     public string? State { get; set; }

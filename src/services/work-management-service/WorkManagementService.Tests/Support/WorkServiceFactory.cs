@@ -20,6 +20,9 @@ public sealed class WorkServiceFactory : WebApplicationFactory<Program>
     public WorkSeedTracker Seeds { get; } = new();
     public InMemoryWorkspaceStore Workspace { get; } = new();
 
+    /// <summary>Stands in for tenant-service, which these tests do not run.</summary>
+    public FakeEntitlementDirectory Entitlements { get; } = new();
+
     public void Reset()
     {
         Store.Clear();
@@ -27,6 +30,10 @@ public sealed class WorkServiceFactory : WebApplicationFactory<Program>
         Seeds.Clear();
         Claims.Pended.Clear();
         Claims.Fail = false;
+        Entitlements.Deny.Clear();
+        Entitlements.Unanswerable.Clear();
+        Entitlements.DenyAll = false;
+        Entitlements.Calls.Clear();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -48,6 +55,8 @@ public sealed class WorkServiceFactory : WebApplicationFactory<Program>
             services.AddSingleton(Seeds);
             services.RemoveAll<IClaimsWorkSource>();
             services.AddSingleton<IClaimsWorkSource>(Claims);
+            services.RemoveAll<IWorkEntitlementDirectory>();
+            services.AddSingleton<IWorkEntitlementDirectory>(Entitlements);
         });
     }
 

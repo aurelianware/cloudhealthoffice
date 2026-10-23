@@ -162,7 +162,10 @@ public class ChoRolePermissionsTests
     }
 
     // work-management-service: examiners pull work; supervisors push it and
-    // manage queues / memberships; TenantAdmin through *:*; nobody else.
+    // manage queues / memberships; TenantAdmin through *:*. Member services
+    // and provider relations pull too, since 2026-10-23, because the
+    // follow-ups they raise from a contact are work items in their own
+    // queues; they still cannot push or configure.
     [Theory]
     [InlineData(ChoRolePermissions.ClaimsExaminer, ChoRolePermissions.WorkQueueRead, true)]
     [InlineData(ChoRolePermissions.ClaimsExaminer, ChoRolePermissions.WorkQueueWork, true)]
@@ -172,7 +175,17 @@ public class ChoRolePermissionsTests
     [InlineData(ChoRolePermissions.ClaimsSupervisor, ChoRolePermissions.WorkQueueAssign, true)]
     [InlineData(ChoRolePermissions.ClaimsSupervisor, ChoRolePermissions.WorkQueueAdmin, true)]
     [InlineData(ChoRolePermissions.TenantAdmin, ChoRolePermissions.WorkQueueAdmin, true)]
-    [InlineData(ChoRolePermissions.MemberServices, ChoRolePermissions.WorkQueueWork, false)]
+    [InlineData(ChoRolePermissions.MemberServices, ChoRolePermissions.WorkQueueWork, true)]
+    [InlineData(ChoRolePermissions.MemberServices, ChoRolePermissions.WorkQueueAssign, false)]
+    [InlineData(ChoRolePermissions.MemberServices, ChoRolePermissions.WorkQueueAdmin, false)]
+    [InlineData(ChoRolePermissions.ProviderRelations, ChoRolePermissions.WorkQueueWork, true)]
+    [InlineData(ChoRolePermissions.ProviderRelations, ChoRolePermissions.WorkQueueAdmin, false)]
+    // Holding workqueue:work must not carry claims:work with it: claims-service
+    // gated /resolve on the former until 2026-10-23, so granting it to the
+    // service roles would have let them approve and deny pended claims.
+    [InlineData(ChoRolePermissions.MemberServices, "claims:work", false)]
+    [InlineData(ChoRolePermissions.ProviderRelations, "claims:work", false)]
+    [InlineData(ChoRolePermissions.ClaimsExaminer, "claims:work", true)]
     [InlineData(ChoRolePermissions.ComplianceOfficer, ChoRolePermissions.WorkQueueRead, true)]
     [InlineData(ChoRolePermissions.ComplianceOfficer, ChoRolePermissions.WorkQueueAssign, false)]
     public void Work_management_grants(string role, string permission, bool expected)

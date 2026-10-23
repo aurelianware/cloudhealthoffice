@@ -21,6 +21,15 @@ public static class ClaimsPermissions
     public const string AuditRead = "audit:read";
     public const string WorkQueueAssign = "workqueue:assign";
 
-    /// <summary>Work the examiner queue: resolve (approve / deny) a pended claim.</summary>
-    public const string WorkQueueWork = "workqueue:work";
+    /// <summary>
+    /// Resolve (approve / deny) a pended claim, and override its edits.
+    ///
+    /// <para>This is <c>claims:work</c>, not <c>workqueue:work</c>. It was
+    /// the latter until 2026-10-23, when member services and provider
+    /// relations gained <c>workqueue:work</c> so they could pull the contact
+    /// follow-ups they raise — which would otherwise have let them approve
+    /// and deny pended claims. Resolving a claim is a claims authority; the
+    /// work-queue permission only says a person may use the work engine.</para>
+    /// </summary>
+    public const string Work = "claims:work";
 }

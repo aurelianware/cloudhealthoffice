@@ -68,6 +68,34 @@ public sealed class FakeClaimsWorkSource : IClaimsWorkSource
     }
 }
 
+/// <summary>
+/// A scripted entitlement directory. Grants everything by default, so tests
+/// about routing and distribution say nothing about roles; a test about the
+/// check sets <see cref="Deny"/>, <see cref="Unanswerable"/> or
+/// <see cref="DenyAll"/>.
+/// </summary>
+public sealed class FakeEntitlementDirectory : IWorkEntitlementDirectory
+{
+    /// <summary>(userId, permission) pairs answered Denied.</summary>
+    public HashSet<(string User, string Permission)> Deny { get; } = new();
+
+    /// <summary>User ids the directory cannot answer for at all.</summary>
+    public HashSet<string> Unanswerable { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Denies every check, whoever asks.</summary>
+    public bool DenyAll { get; set; }
+
+    public List<(string Tenant, string User, string Permission)> Calls { get; } = new();
+
+    public Task<Entitlement> CheckAsync(string tenantId, string userId, string permission, CancellationToken ct = default)
+    {
+        Calls.Add((tenantId, userId, permission));
+        if (Unanswerable.Contains(userId)) return Task.FromResult(Entitlement.Unknown);
+        if (DenyAll || Deny.Contains((userId, permission))) return Task.FromResult(Entitlement.Denied);
+        return Task.FromResult(Entitlement.Granted);
+    }
+}
+
 /// <summary>Builds the engine over a store, with a manual clock.</summary>
 public sealed class WorkTestKit
 {
@@ -77,6 +105,7 @@ public sealed class WorkTestKit
     public ManualTimeProvider Clock { get; } = new();
     public WorkManagementOptions Options { get; } = new();
     public WorkSeedTracker Seeds { get; } = new();
+    public FakeEntitlementDirectory Entitlements { get; } = new();
 
     private long _version = 1;
 
@@ -85,12 +114,12 @@ public sealed class WorkTestKit
     public DateTime Now => Clock.GetUtcNow().UtcDateTime;
 
     public WorkConfigService Config() =>
-        new(Store, Seeds, Clock, NullLogger<WorkConfigService>.Instance, Microsoft.Extensions.Options.Options.Create(Options));
+        new(Store, Seeds, Entitlements, Clock, NullLogger<WorkConfigService>.Instance, Microsoft.Extensions.Options.Options.Create(Options));
 
     public WorkIntakeService Intake() => new(Store, Config(), Clock, NullLogger<WorkIntakeService>.Instance);
 
     public WorkDistributionService Distribution() =>
-        new(Store, Config(), Microsoft.Extensions.Options.Options.Create(Options), Clock, NullLogger<WorkDistributionService>.Instance);
+        new(Store, Config(), Entitlements, Microsoft.Extensions.Options.Options.Create(Options), Clock, NullLogger<WorkDistributionService>.Instance);
 
     /// <summary>A claim work-needed event, newer than any before it.</summary>
     public ClaimWorkEvent Needed(string claimId, string pendCode = "NCCI", decimal amount = 100m, string tenant = Tenant,

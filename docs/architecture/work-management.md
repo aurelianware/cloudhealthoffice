@@ -27,16 +27,33 @@ all hold; otherwise the work type's **fallback** queue. A work type with active
 queues must have exactly one active fallback (validated on every create, update
 and delete).
 
-Claim criteria (`ClaimQueueCriteria`): pend codes (by default the claim's
-*routing* pend code, `PendDetails.PendCode`; `MatchAnyPendCode` matches any pend
-on the claim), lines of business, claim types, min / max amount (total charge),
-billing provider NPIs and TINs, network tiers, expedited. Lists are "any of",
-an empty list does not constrain, and every set criterion must hold. Other work
-types' queues route by order alone in this phase.
+Criteria (`WorkQueueCriteria`) apply to **every** work type, through one
+matcher. The named fields are the attributes nearly every source has: reason
+codes (by default the item's *routing* reason — a claim's `PendDetails.PendCode`,
+an enrollment exception's reason, a contact's reason; `MatchAnyPendCode` matches
+any of them), lines of business, claim types, min / max amount, billing provider
+NPIs and TINs, network tiers, expedited. Lists are "any of", an empty list does
+not constrain, and every set criterion must hold.
+
+What a source has and the named fields do not is a **facet**: `criteria.facets`
+maps a facet name to the values that match, against `attributes.facets` on the
+item. Facets are "all of, each any of" — every named facet must hold, any listed
+value does, and a facet with no values does not constrain. Names are lower-cased
+and limited to `a-z0-9_` (a Mongo key cannot contain `.`), at most 10 per queue.
+A contact routes on `channel`, `caller` and `classification`, where a claim has
+none of the three and should not grow three empty fields for them.
+
+*Before 2026-10-23, criteria were `ClaimQueueCriteria` and only Claim and
+Enrollment834 queues were matched on them; every other work type routed by order
+alone, and the admin API refused to save criteria on their queues at all. One
+matcher now serves all of them, which is what Appeal, PriorAuth and Inquiry each
+needed.*
 
 A queue change applies to new work at once. **Recompute**
-(`POST /api/v1/work/admin/recompute`) re-routes and re-scores the open items;
-leases are kept.
+(`POST /api/v1/work/admin/recompute`) re-routes and re-scores the open items of
+every work type; leases are kept. (It walked Claim items only until
+2026-10-23, so enrollment work kept the score it was born with however long it
+waited.)
 
 ### Default claim queues
 
@@ -71,10 +88,37 @@ permits, whatever the memberships say:
 | PriorAuth | `authorizations:decide` | 2 |
 | Enrollment834 | `enrollment:process` | 3 |
 | Payment | `payments:run` | 3 |
+| Inquiry | `service:contact` | 1 |
 
-A membership can therefore only ever narrow what the role permits. (The admin
-API cannot check another user's roles: users live in tenant-service. The check is
-made where it matters, at distribution, on the puller's token.)
+A membership can therefore only ever narrow what the role permits.
+
+The caller's own permissions come from their token, so pulling needs no lookup.
+The two places work management decides something about **somebody else** —
+pushing an item to an assignee, and putting a member in a queue — ask
+tenant-service through `IWorkEntitlementDirectory`
+(`GET api/v1/tenants/{tenantId}/users/{userId}/permissions/{permission}`).
+
+Both refuse when the answer is no, and **also when there is no answer**. The
+reasoning, because fail-open is the tempting choice here: this is not the
+authority to do the work — that lives in the owning service and is checked
+against the worker's own token — so allowing an unchecked push grants nobody
+anything. What it does is park the item. A pushed item is `Leased`, so Get Next
+hides it from the people who could do it, and the queue's SLA runs for the
+whole lease while nobody is looking at it. A refusal costs a supervisor a retry
+they can see immediately; an unchecked push costs a member an item nobody
+notices for eight hours. Visible-now beats invisible-later.
+
+What keeps that refusal rare is the directory's cache rather than a softer
+default: an answer is reused for five minutes, and when a live call fails an
+answer up to an hour old is still served (logged as stale). Only with nothing
+cached at all is the answer unknown. Failures themselves are never cached, so a
+blip cannot pin a user out of their own work. A 404 is an answer, not a
+failure — tenant-service has no such user in this tenant — which also makes a
+mistyped user id a clean refusal.
+
+There is deliberately no supervisor override. An override would hand somebody
+work they provably cannot finish; the remedy for "I want this person on claims"
+is a role, one screen away in tenant admin.
 
 ### Memberships and teams
 
@@ -117,8 +161,14 @@ a timer: the item simply becomes eligible again and the next Get Next reclaims i
 `assign` leases the item to the named user for `AssignedLeaseMinutes` (480) with
 `assignedBy` = the supervisor (from the token, never the body), replacing any
 holder (audited `Assigned` / `Reassigned`); `unassign` returns it to the queue.
-Push is an override: the assignee needs no membership. The assignee's Get Next
-returns the pushed item first (it is their lease).
+The assignee's Get Next returns the pushed item first (it is their lease).
+
+Push overrides the assignee's **membership**, which is a routing preference,
+but not their **entitlement**, which is a role: the assignee is checked against
+the item's work type first, and the push is refused (409) both when they lack
+the permission and when the check cannot be run. See Entitlement above. The
+same check runs when a membership is saved, for a named user or for every
+member of a team, so a queue cannot list somebody who can never pull from it.
 
 ### Concurrency
 
@@ -257,6 +307,41 @@ held. `POST admin/reconcile/enrollment` runs it on demand. Default queues are in
 the claim queues, and demo seed users get no membership in them until the
 exception screen exists.
 
+### Contact follow-ups (`Inquiry`)
+
+The first work type **no source service owns**. A claim's item exists because
+claims-service says the claim is pended and disappears when it says otherwise;
+a follow-up from a contact exists because a service representative asked for
+it, and only a person closes it. `WorkTypes.IsPersonCreated` is that boundary,
+and two endpoints turn on it:
+
+* `POST /api/v1/work` raises one. It refuses any source-owned type, so nobody
+  can put a claim in a queue no claim is pended for, and it checks the work
+  type's own entitlement (`service:contact`) on top of `workqueue:work`. The
+  source id is generated by the service, not supplied: two follow-ups from one
+  contact are two pieces of work, and a caller-chosen id would let one
+  overwrite the other.
+* `POST /api/v1/work/{id}/complete` closes one. Source-owned work is refused
+  with 409 rather than letting the queue disagree with the record.
+
+`attributes.openUrl` lets such a source name its own screen — a follow-up opens
+the contact it came from, not a screen named after the follow-up. It must be a
+single-slash-rooted relative path with no scheme or control characters, else
+`WorkEntitlements.OpenUrl` ignores it and falls back to the work type's screen:
+the attributes arrive from another service, and My Work's "Open" must not become
+an open redirect. `attributes.title` is the sentence the queue shows for a
+record whose number means nothing on its own.
+
+Default queues, seeded with the claim queues: Follow-up: Complaints (SLA 2 days,
+routed on `classification` in grievance / appeal, because a benefits question
+can *become* a grievance and it is the classification that starts the clock),
+Claims and Payment (5), Authorizations (3), Eligibility and Benefits (5), Other
+(fallback, 5). MemberServices and ProviderRelations hold `workqueue:read` and
+`workqueue:work` so there is somebody to pull them.
+
+Still to come for cho-service.md §8 step 3: contact-service raising the
+follow-up from the contact screen and showing it there. The engine side is here.
+
 ## API and permissions
 
 Base `/api/v1/work`. Tenant and actor always from the CHO token.
@@ -264,14 +349,24 @@ Base `/api/v1/work`. Tenant and actor always from the CHO token.
 | Endpoint | Permission |
 |---|---|
 | `POST next`, `GET mine`, `POST {id}/release`, `POST {id}/renew` | `workqueue:work` |
+| `POST /` (raise person-created work), `POST {id}/complete` | `workqueue:work` **and** the work type's own entitlement |
 | `GET` (list: `queueId`, `status`, `assignedTo`, `workType`, paged, score order), `POST {id}/assign {userId}`, `POST {id}/unassign`, `GET assignees` | `workqueue:assign` |
 | `GET queues` (with open / leased counts), `GET {id}` (with audit) | `workqueue:read` |
 | `admin/queues` CRUD, `admin/queues/reorder`, `admin/teams` CRUD, `admin/memberships` CRUD, `admin/users/{userId}/queues`, `admin/recompute`, `admin/reconcile` | `workqueue:admin` |
 
+`workqueue:work` says a person may use the work engine; what they may *do*
+with an item is the work type's own entitlement, enforced by its domain
+service. Claims-service gated its own `/resolve` and edit overrides on
+`workqueue:work` until 2026-10-23 and now requires `claims:work`, which is
+what resolving a claim actually needs: member services holds `workqueue:work`
+for its follow-ups and must never approve or deny a claim.
+
 Roles: ClaimsExaminer `workqueue:read`, `workqueue:work`; ClaimsSupervisor adds
 `workqueue:assign`, `workqueue:reassign`, `workqueue:admin` (supervisors manage
 their teams' memberships and the queue configuration); TenantAdmin all through
-`*:*`; ComplianceOfficer `workqueue:read` through `*:read`. The four names are
+`*:*`; ComplianceOfficer `workqueue:read` through `*:read`; MemberServices and
+ProviderRelations `workqueue:read` and `workqueue:work`, for the contact
+follow-ups they raise, and nothing more. The four names are
 constants on `ChoRolePermissions` (`WorkQueueRead/Work/Assign/Admin`), reusing
 the `workqueue:*` names claims-service and the role catalogue already had.
 
@@ -309,6 +404,10 @@ refuses to start).
 3. **834 enrollment and payment exceptions**: enrollment-import and
    payment-service exceptions as work. *Enrollment built 2026-10-22 (reconcile
    only; see above).*
+4. **Contact follow-ups** (`Inquiry`): *built 2026-10-23.* Person-created work,
+   and with it criteria for every work type. Phase 2 no longer needs criteria
+   work of its own: appeals and prior auth now only have to publish their events
+   and fill `attributes`.
 
 Forecasting arrival, projecting deadline breach and suggesting where people
 should work are designed in
@@ -317,8 +416,8 @@ service's queues, due dates, memberships and audit stream and adds an hourly
 `WorkQueueSnapshot` series to it. Nothing there is built.
 
 Deferred from phase 1: lease enforcement in claims-service (the resolve refusing
-a claim leased to someone else); per-user Get Next serialization; criteria for
-non-claim work types; a user directory for the admin pickers (user ids are typed;
+a claim leased to someone else); per-user Get Next serialization; a user
+directory for the admin pickers (user ids are typed;
 the reassign picker lists users named by memberships); claims-service has no
 billing-provider TIN on the claim, so TIN criteria only match once a source
 provides it.

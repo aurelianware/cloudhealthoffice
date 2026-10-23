@@ -428,7 +428,7 @@ A pended claim writes no accumulators, so finalizing it by flipping
 Pended → Approved used to pay it with **no deductible or OOP ever
 recorded**. Approval now re-adjudicates it:
 
-1. `POST /api/claims/work-queue/{id}/resolve` (permission `workqueue:work`)
+1. `POST /api/claims/work-queue/{id}/resolve` (permission `claims:work`)
    with `disposition: "Approved"` (or `/override`, `claims:override-approve`)
    takes a conditional **resolution lock** on the Pended claim (a concurrent
    resolution gets 409), then calls

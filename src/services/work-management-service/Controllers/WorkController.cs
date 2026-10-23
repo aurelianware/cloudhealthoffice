@@ -1,5 +1,6 @@
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
+using WorkManagementService.Domain;
 using WorkManagementService.Models;
 using WorkManagementService.Repositories;
 using WorkManagementService.Services;
@@ -23,15 +24,18 @@ namespace WorkManagementService.Controllers;
 public sealed class WorkController : ControllerBase
 {
     private readonly WorkDistributionService _distribution;
+    private readonly WorkIntakeService _intake;
     private readonly WorkConfigService _config;
     private readonly IWorkStore _store;
     private readonly ICurrentActor _actor;
     private readonly TimeProvider _time;
 
     public WorkController(
-        WorkDistributionService distribution, WorkConfigService config, IWorkStore store, ICurrentActor actor, TimeProvider time)
+        WorkDistributionService distribution, WorkIntakeService intake, WorkConfigService config, IWorkStore store,
+        ICurrentActor actor, TimeProvider time)
     {
         _distribution = distribution;
+        _intake = intake;
         _config = config;
         _store = store;
         _actor = actor;
@@ -94,6 +98,55 @@ public sealed class WorkController : ControllerBase
     public async Task<ActionResult> Renew(string id, CancellationToken ct)
     {
         var result = await _distribution.RenewAsync(_actor, id, ct);
+        return Outcome(result, result.Item is null ? null : await ViewAsync(result.Item, ct));
+    }
+
+    /// <summary>
+    /// Raises one piece of work a person asked for: a follow-up from a
+    /// contact. Only work types no source service owns
+    /// (<see cref="WorkTypes.IsPersonCreated"/>) can be created this way, and
+    /// only by someone the type's own entitlement permits — the same
+    /// permission its domain service enforces on the action the work leads to.
+    /// </summary>
+    [HttpPost]
+    [RequirePermission(ChoRolePermissions.WorkQueueWork)]
+    [ProducesResponseType(typeof(WorkItemView), StatusCodes.Status201Created)]
+    public async Task<ActionResult<WorkItemView>> Create([FromBody] CreateWorkRequest request, CancellationToken ct)
+    {
+        if (!WorkTypes.IsPersonCreated(request.WorkType))
+            return BadRequest(new { error = $"{request.WorkType} work comes from its source service, not from a person." });
+        if (!WorkEntitlements.Permits(_actor, request.WorkType))
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = $"You may not raise {request.WorkType} work." });
+
+        var title = request.Title?.Trim();
+        if (string.IsNullOrWhiteSpace(title)) return BadRequest(new { error = "title is required." });
+        if (title.Length > 500) return BadRequest(new { error = "title is at most 500 characters." });
+        if (request.OpenUrl is { } url && !WorkEntitlements.IsSafePortalPath(url))
+            return BadRequest(new { error = "openUrl must be a relative portal path, such as /calls/abc." });
+        // A deadline already past would be born overdue and jump every real
+        // deadline in the queue; an absurd one would never surface at all.
+        if (request.DueAt is { } due && (due < Now.AddDays(-1) || due > Now.AddYears(2)))
+            return BadRequest(new { error = "dueAt must be within the next two years and not already past." });
+
+        var item = await _intake.CreateAdHocAsync(new WorkIntakeService.AdHocWork(
+            _actor.TenantId, request.WorkType, request.SourceNumber?.Trim() ?? string.Empty, title, request.OpenUrl,
+            request.ReasonCodes ?? [], request.Facets ?? new(), request.MemberId?.Trim(), request.ProviderNpi?.Trim(),
+            request.LineOfBusiness?.Trim(), request.Expedited, request.DueAt, _actor.UserId), ct);
+
+        var view = await ViewAsync(item, ct);
+        return CreatedAtAction(nameof(Get), new { id = item.Id }, view);
+    }
+
+    /// <summary>
+    /// The holder marks person-created work done. Source-owned work (a claim,
+    /// an enrollment exception) is completed by its source, and this refuses
+    /// it with 409 rather than letting the queue disagree with the record.
+    /// </summary>
+    [HttpPost("{id}/complete")]
+    [RequirePermission(ChoRolePermissions.WorkQueueWork)]
+    public async Task<ActionResult> Complete(string id, [FromBody] CompleteRequest? request, CancellationToken ct)
+    {
+        var result = await _distribution.CompleteAsync(_actor, id, request?.Resolution, ct);
         return Outcome(result, result.Item is null ? null : await ViewAsync(result.Item, ct));
     }
 

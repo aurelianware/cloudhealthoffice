@@ -286,6 +286,82 @@ public class WorkApiTests
         response.StatusCode.Should().Be(HttpStatusCode.BadGateway);
     }
 
+    // ── Raising and closing a follow-up over HTTP ────────────────────
+
+    private static object FollowUp() => new
+    {
+        workType = "Inquiry",
+        title = "Call the member back about the denial",
+        sourceNumber = "C-20261023-AAAA1111",
+        openUrl = "/calls/contact-1",
+        reasonCodes = new[] { "CLAIM_DENIAL" },
+        facets = new Dictionary<string, string[]> { ["channel"] = ["Phone"] },
+        memberId = "M1",
+    };
+
+    [Fact]
+    public async Task AServiceRep_RaisesAFollowUp_AndClosesIt()
+    {
+        var rep = _factory.Client("rep-1", ChoRolePermissions.MemberServices);
+
+        var created = await rep.PostAsJsonAsync("/api/v1/work", FollowUp());
+        created.StatusCode.Should().Be(HttpStatusCode.Created);
+        var item = await Json(created);
+        item["queueName"]!.GetValue<string>().Should().Be("Follow-up: Claims and Payment");
+        item["openUrl"]!.GetValue<string>().Should().Be("/calls/contact-1");
+
+        var id = item["id"]!.GetValue<string>();
+        var closed = await rep.PostAsJsonAsync($"/api/v1/work/{id}/complete", new { resolution = "Explained the denial" });
+        closed.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Json(closed))["status"]!.GetValue<string>().Should().Be("Done");
+    }
+
+    [Fact]
+    public async Task AnExaminer_CannotRaiseAFollowUp()
+    {
+        // workqueue:work gets them to the endpoint; the work type's own
+        // entitlement (service:contact) is what decides.
+        var response = await _factory.Client("examiner", Examiner).PostAsJsonAsync("/api/v1/work", FollowUp());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task ClaimWork_CannotBeCreatedThroughTheApi()
+    {
+        var response = await _factory.Client("admin", Admin).PostAsJsonAsync("/api/v1/work", new
+        {
+            workType = "Claim", title = "a claim that is not pended",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await Json(response))["error"]!.GetValue<string>().Should().Contain("source service");
+    }
+
+    [Fact]
+    public async Task AnOpenUrl_ThatLeavesThePortal_IsRefused()
+    {
+        var response = await _factory.Client("rep-1", ChoRolePermissions.MemberServices)
+            .PostAsJsonAsync("/api/v1/work", new
+            {
+                workType = "Inquiry", title = "a follow-up", openUrl = "https://evil.test/steal",
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await Json(response))["error"]!.GetValue<string>().Should().Contain("relative portal path");
+    }
+
+    [Fact]
+    public async Task AClaimItem_CannotBeCompletedFromTheWorkList()
+    {
+        await PendedClaim("claim-1");
+
+        var response = await _factory.Client("sue", Supervisor)
+            .PostAsJsonAsync($"/api/v1/work/{WorkTestKit.ItemId("claim-1")}/complete", new { resolution = "done" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
     [Fact]
     public async Task AnotherTenantsItems_AreNotVisible()
     {

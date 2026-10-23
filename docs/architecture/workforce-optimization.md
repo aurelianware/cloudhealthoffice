@@ -31,9 +31,9 @@ and suggest where people should work — with a person approving every change.
 ## 1. Scope, and the line this does not cross
 
 **In scope: CHO's own work inventory.** Every work item in
-`work-management-service` — claim pends, enrollment exceptions, and (as
-[PR #1512](https://github.com/aurelianware/cloudhealthoffice/pull/1512) lands)
-person-raised service follow-ups, appeals and prior-authorization reviews — plus
+`work-management-service` — claim pends, enrollment exceptions, person-raised
+service follow-ups (`Inquiry`, built 2026-10-23), and appeals and
+prior-authorization reviews once those services publish their events — plus
 the contact volume that drives it. For these, CHO is the owner of record and of
 the deadline, so CHO is the only system that can forecast them honestly.
 
@@ -101,7 +101,7 @@ is mostly a read model over data CHO already produces.
 | Handling time | `Leased` → `Completed`, and `Released` / `LeaseReclaimed` in between | Per-queue service time distribution; also the honest measure of rework |
 | Who may work what | Memberships and teams, rank, `IsOverflow`, `AuthorityLimit`, and `GET /admin/users/{userId}/queues` | A rebalancing suggestion that is actually legal (§6) |
 | Entitlement | `ChoRolePermissions` checked on the puller's own token at distribution | The hard limit a suggestion can never widen (§6.4) |
-| Routing attributes and facets | `WorkQueueCriteria` + `attributes.facets` (PR #1512) | Forecasting a *segment* — e.g. expedited appeals, one LOB, one pend code — not just a queue |
+| Routing attributes and facets | `WorkQueueCriteria` + `attributes.facets`, one matcher for every work type | Forecasting a *segment* — e.g. expedited appeals, one LOB, one pend code — not just a queue |
 | A 15-minute background host | `WorkMaintenanceService`, which already re-scores open items every `RescoreIntervalMinutes` | Where the snapshot writer goes (§4.1); no new host process |
 
 ### 3.2 From `contact-service`
@@ -115,8 +115,8 @@ after-call work, which is everything the volume forecast needs — and no contac
 content at all (§8).
 
 Classification, and therefore grievance and appeal arrival from calls, needs
-step 2 of [`cho-service.md`](cho-service.md) §8; the clocks it will run exist as
-of PR #1512's rule packs.
+step 2 of [`cho-service.md`](cho-service.md) §8; the clocks it will run already
+exist, as the Medicare Advantage pack and the per-line-of-business federal floor.
 
 ### 3.3 From the rule packs and deadline policy
 
@@ -124,8 +124,8 @@ of PR #1512's rule packs.
 regulatory clocks per line of business — MA 30-day grievances, 72-hour and
 24-hour expedited clocks, 14-day extensions. A deadline-risk projection on
 appeal and grievance work must read the same policy the service enforces, not a
-copy of it, for the reason PR #1512 gives for the floor: two restatements of one
-clock drift.
+copy of it, for the reason the floor itself gives: two restatements of one clock
+drift.
 
 ### 3.4 What does not exist
 
@@ -200,7 +200,7 @@ contact store.
 ### 4.3 Bounding the facet dimension
 
 `facetCounts` is the useful part and the dangerous one: facets are open-ended
-(PR #1512 allows any `a-z0-9_` name), and a snapshot that cross-products every
+(any `a-z0-9_` name), and a snapshot that cross-products every
 facet value explodes. Rule: a tenant nominates at most **8 forecast facets** per
 work type in configuration, each with at most **40 values** retained plus an
 `__other` bucket; anything else is not snapshotted. A forecast is only as fine

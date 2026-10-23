@@ -10,8 +10,13 @@ public interface IRulePackCatalog
 {
     IReadOnlyList<RulePack> All { get; }
 
-    /// <summary>The pack in effect for <paramref name="state"/> on <paramref name="asOf"/>, or <c>null</c>.</summary>
-    RulePack? Find(string state, LineOfBusiness lineOfBusiness, DateOnly asOf);
+    /// <summary>
+    /// The pack in effect for <paramref name="state"/> on
+    /// <paramref name="asOf"/>, or <c>null</c>. A State's own pack wins; a
+    /// national pack of that line of business answers where there is none,
+    /// which is how one Medicare Advantage pack serves every State.
+    /// </summary>
+    RulePack? Find(string? state, LineOfBusiness lineOfBusiness, DateOnly asOf);
 }
 
 /// <summary>
@@ -42,7 +47,7 @@ public sealed class RulePackCatalog : IRulePackCatalog
     public RulePackCatalog(IEnumerable<RulePack> packs)
     {
         _packs = packs
-            .OrderBy(p => p.State, StringComparer.Ordinal)
+            .OrderBy(p => p.Jurisdiction, StringComparer.Ordinal)
             .ThenBy(p => p.LineOfBusiness)
             .ThenBy(p => p.EffectiveFrom)
             .ToList();
@@ -52,14 +57,14 @@ public sealed class RulePackCatalog : IRulePackCatalog
         foreach (var duplicate in _packs.GroupBy(p => p.Id).Where(g => g.Count() > 1))
             errors.Add($"{duplicate.Key}: id is used by more than one pack.");
 
-        foreach (var series in _packs.GroupBy(p => (p.State, p.LineOfBusiness)))
+        foreach (var series in _packs.GroupBy(p => (p.Jurisdiction, p.LineOfBusiness)))
         {
             var ordered = series.OrderBy(p => p.EffectiveFrom).ToList();
             for (var i = 1; i < ordered.Count; i++)
             {
                 var previous = ordered[i - 1];
                 if (previous.EffectiveTo is null || previous.EffectiveTo >= ordered[i].EffectiveFrom)
-                    errors.Add($"{ordered[i].Id}: overlaps {previous.Id} for {series.Key.State} {series.Key.LineOfBusiness}.");
+                    errors.Add($"{ordered[i].Id}: overlaps {previous.Id} for {series.Key.Jurisdiction} {series.Key.LineOfBusiness}.");
             }
         }
 
@@ -75,11 +80,13 @@ public sealed class RulePackCatalog : IRulePackCatalog
 
     public IReadOnlyList<RulePack> All => _packs;
 
-    public RulePack? Find(string state, LineOfBusiness lineOfBusiness, DateOnly asOf) =>
-        _packs.FirstOrDefault(p =>
-            string.Equals(p.State, state, StringComparison.OrdinalIgnoreCase)
-            && p.LineOfBusiness == lineOfBusiness
-            && p.AppliesOn(asOf));
+    public RulePack? Find(string? state, LineOfBusiness lineOfBusiness, DateOnly asOf)
+    {
+        var inEffect = _packs.Where(p => p.LineOfBusiness == lineOfBusiness && p.AppliesOn(asOf)).ToList();
+        return inEffect.FirstOrDefault(p =>
+                   !p.IsNational && string.Equals(p.State, state, StringComparison.OrdinalIgnoreCase))
+               ?? inEffect.FirstOrDefault(p => p.IsNational);
+    }
 
     internal static IEnumerable<RulePack> LoadEmbedded(Assembly assembly)
     {
