@@ -335,6 +335,104 @@
         "ehrReductionIndicator": "Y",
         "hospitalQualityIndicator": "0"
       }
+    },
+    {
+      "name": "readmissions-reduction",
+      "why": "412.154's readmissions adjustment, which CMS takes as (factor - 1) times the base DRG payment and carries as a signed amount in the sum. The hospital also has an uncompensated care payment, so a calculator taking the adjustment on the whole operating side rather than on the base payment alone disagrees here.",
+      "ccn": "450010",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "hrrParticipantIndicator": "1",
+        "hrrAdjustment": 0.98,
+        "uncompensatedCareAmount": 1000.0
+      }
+    },
+    {
+      "name": "value-based-purchasing-bonus",
+      "why": "The value-based purchasing adjustment paying more rather than less. CMS's range is 0.98 to 2.0, where the readmissions range stops at 1.0, which is why the two cannot be one input.",
+      "ccn": "450011",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "vbpParticipantIndicator": "Y",
+        "vbpAdjustment": 1.02
+      }
+    },
+    {
+      "name": "low-volume-adjustment",
+      "why": "412.101's low-volume uplift on a cost outlier case, which is what pins its base: CMS takes it on both sides, the outlier and the uncompensated care payment, not on the DRG amount. A calculator taking it on the base payment is wrong by the most on exactly these cases.",
+      "ccn": "450012",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 400000.0,
+      "reviewCode": "00",
+      "provider": {
+        "temporaryReliefIndicator": "Y",
+        "lowVolumeAdjustmentFactor": 0.2,
+        "operatingCostToChargeRatio": 0.3,
+        "capitalCostToChargeRatio": 0.05,
+        "uncompensatedCareAmount": 1000.0
+      }
+    },
+    {
+      "name": "hospital-acquired-condition-penalty",
+      "why": "412.170's one percent penalty on an outlier case. It is one percent of the assembled payment and not of the DRG amount, so on an outlier it is several times what a 'one percent reduction' reading would give.",
+      "ccn": "450013",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 400000.0,
+      "reviewCode": "00",
+      "provider": {
+        "hacReductionParticipantIndicator": "Y",
+        "operatingCostToChargeRatio": 0.3,
+        "capitalCostToChargeRatio": 0.05
+      }
+    },
+    {
+      "name": "all-four-adjustments-in-order",
+      "why": "All four at once, on a cost outlier case with an uncompensated care payment. This is the row that pins the ORDER: the low-volume uplift is taken on everything through the outlier but not on the other two adjustments, and the penalty is one percent of all of it together. Any other ordering agrees on each adjustment in isolation and disagrees here.",
+      "ccn": "450014",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 400000.0,
+      "reviewCode": "00",
+      "provider": {
+        "temporaryReliefIndicator": "Y",
+        "lowVolumeAdjustmentFactor": 0.25,
+        "hrrParticipantIndicator": "1",
+        "hrrAdjustment": 0.97,
+        "vbpParticipantIndicator": "Y",
+        "vbpAdjustment": 1.02,
+        "hacReductionParticipantIndicator": "Y",
+        "operatingCostToChargeRatio": 0.3,
+        "capitalCostToChargeRatio": 0.05,
+        "uncompensatedCareAmount": 1000.0
+      }
     }
   ]
 }

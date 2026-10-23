@@ -288,6 +288,198 @@ public class IppsPaymentCalculatorTests
     }
 
     // ─────────────────────────────────────────────────────────
+    //  The four hospital-level adjustments, and their order
+    // ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A hospital with an outlier and an uncompensated care payment, so that
+    /// an adjustment taken on the wrong base is visible rather than hidden
+    /// inside a DRG amount.
+    /// </summary>
+    private static IppsProvider WithOutlierAndUncompensatedCare() =>
+        IppsProvider.Plain("123456", wageIndex: 1m) with
+        {
+            OperatingCostToChargeRatio = 0.30m,
+            UncompensatedCarePerDischarge = 1000m
+        };
+
+    [Fact]
+    public void A_hospital_in_none_of_the_programmes_gets_no_adjustments()
+    {
+        var payment = IppsPaymentCalculator.Pay(
+            Year(), IppsProvider.Plain("123456", 1m), Stay());
+
+        Assert.Equal(0m, payment.Adjustments.Total);
+        Assert.Equal(payment.PaymentBeforeAdjustments, payment.Total);
+    }
+
+    [Fact]
+    public void The_readmissions_adjustment_is_the_factor_less_one_on_the_base_drg_payment()
+    {
+        var provider = WithOutlierAndUncompensatedCare() with
+        {
+            ReadmissionsAdjustmentFactor = 0.98m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        // On the base DRG payment alone: -0.02 × 6,000 = -120. Not on the
+        // uncompensated care payment, which would make it -140, and not on the
+        // whole operating side.
+        Assert.Equal(-120m, payment.Adjustments.Readmissions);
+    }
+
+    [Fact]
+    public void The_value_based_purchasing_adjustment_can_pay_more_where_readmissions_cannot()
+    {
+        var provider = IppsProvider.Plain("123456", 1m) with
+        {
+            ValueBasedPurchasingAdjustmentFactor = 1.01m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        // CMS's range for this one is 0.98 to 2.0, so above 1.0 is a payment
+        // and not an error. The readmissions range stops at 1.0, which is why
+        // the two are separate inputs rather than one adjustment factor.
+        Assert.Equal(60m, payment.Adjustments.ValueBasedPurchasing);
+    }
+
+    [Theory]
+    [InlineData(0.96)]
+    [InlineData(1.01)]
+    public void A_readmissions_factor_outside_CMS_range_is_refused_rather_than_paid(decimal factor)
+    {
+        var provider = IppsProvider.Plain("123456", 1m) with
+        {
+            ReadmissionsAdjustmentFactor = factor
+        };
+
+        // CMS returns return code 65 and does not price the claim. Paying it
+        // anyway would pay an amount nobody published, from a provider file
+        // that is wrong.
+        Assert.Throws<IppsPaymentFailedException>(
+            () => IppsPaymentCalculator.Pay(Year(), provider, Stay()));
+    }
+
+    [Fact]
+    public void The_low_volume_uplift_is_taken_on_the_outlier_and_uncompensated_care_too()
+    {
+        var provider = WithOutlierAndUncompensatedCare() with
+        {
+            LowVolumeTemporaryRelief = true,
+            LowVolumeAdjustmentFactor = 0.10m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay(charges: 400_000m));
+
+        // 412.101's uplift is a percentage of almost the whole payment, not of
+        // the DRG amount: both sides, the cost outlier and the uncompensated
+        // care payment. A calculator taking it on the base payment pays far
+        // less on exactly the outlier cases where it matters most.
+        Assert.True(payment.Outlier.Operating.Payment > 0m);
+        Assert.Equal(0.10m * payment.PaymentBeforeAdjustments, payment.Adjustments.LowVolume);
+    }
+
+    [Fact]
+    public void The_low_volume_uplift_is_not_taken_on_the_other_two_adjustments()
+    {
+        var provider = IppsProvider.Plain("123456", 1m) with
+        {
+            LowVolumeTemporaryRelief = true,
+            LowVolumeAdjustmentFactor = 0.20m,
+            ReadmissionsAdjustmentFactor = 0.98m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        // CMS computes the uplift on lines one to eight of its sum and takes
+        // the readmissions and value-based adjustments afterwards, so the
+        // uplift is 0.20 × 6,500 and not 0.20 × (6,500 - 120).
+        Assert.Equal(0.20m * payment.PaymentBeforeAdjustments, payment.Adjustments.LowVolume);
+        Assert.Equal(-120m, payment.Adjustments.Readmissions);
+    }
+
+    [Fact]
+    public void A_low_volume_factor_above_the_published_maximum_pays_nothing_and_is_not_capped()
+    {
+        var provider = IppsProvider.Plain("123456", 1m) with
+        {
+            LowVolumeTemporaryRelief = true,
+            LowVolumeAdjustmentFactor = 0.30m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        // CMS's gate is `> 0 and <= 0.25`, and a factor above it falls through
+        // to zero. Capping at 0.25 would pay a hospital whose provider file is
+        // wrong, and pay it the maximum.
+        Assert.Equal(0m, payment.Adjustments.LowVolume);
+        Assert.Contains(payment.Notes, note => note.Contains("rather than capping"));
+    }
+
+    [Fact]
+    public void The_low_volume_adjustment_needs_the_approval_as_well_as_the_factor()
+    {
+        var factorOnly = IppsProvider.Plain("123456", 1m) with
+        {
+            LowVolumeAdjustmentFactor = 0.20m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), factorOnly, Stay());
+
+        // Two gates. A factor on file at a hospital whose low-volume status was
+        // not approved for the year pays nothing.
+        Assert.Equal(0m, payment.Adjustments.LowVolume);
+    }
+
+    [Fact]
+    public void The_hospital_acquired_condition_penalty_reaches_the_outlier()
+    {
+        var provider = WithOutlierAndUncompensatedCare() with
+        {
+            HospitalAcquiredConditionReduction = true
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay(charges: 400_000m));
+
+        // One percent of everything above it. The penalty is written as a
+        // percentage of the payment rather than of the DRG amount, so on an
+        // outlier case it is far larger than one percent of the DRG — which is
+        // the arithmetic a "one percent reduction" reading of 412.170 misses.
+        Assert.True(payment.Outlier.Payment > 0m);
+        Assert.Equal(
+            -0.01m * payment.PaymentBeforeAdjustments,
+            payment.Adjustments.HospitalAcquiredConditionPenalty);
+    }
+
+    [Fact]
+    public void The_penalty_is_taken_after_the_other_three_and_so_on_their_total()
+    {
+        var provider = IppsProvider.Plain("123456", 1m) with
+        {
+            LowVolumeTemporaryRelief = true,
+            LowVolumeAdjustmentFactor = 0.25m,
+            ReadmissionsAdjustmentFactor = 0.97m,
+            ValueBasedPurchasingAdjustmentFactor = 1.02m,
+            HospitalAcquiredConditionReduction = true
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        // The order, end to end. Case payment 6,500 (6,000 operating + 500
+        // capital); low volume 0.25 × 6,500 = 1,625; readmissions -0.03 ×
+        // 6,000 = -180; value-based 0.02 × 6,000 = 120. The penalty is one
+        // percent of all of that: -0.01 × 8,065 = -80.65.
+        Assert.Equal(6500m, payment.PaymentBeforeAdjustments);
+        Assert.Equal(1625m, payment.Adjustments.LowVolume);
+        Assert.Equal(-180m, payment.Adjustments.Readmissions);
+        Assert.Equal(120m, payment.Adjustments.ValueBasedPurchasing);
+        Assert.Equal(-80.65m, payment.Adjustments.HospitalAcquiredConditionPenalty);
+        Assert.Equal(7984.35m, payment.Total);
+    }
+
+    // ─────────────────────────────────────────────────────────
     //  Indirect medical education (42 CFR 412.105)
     // ─────────────────────────────────────────────────────────
 

@@ -865,7 +865,7 @@ Build order:
    the pricer itself as a runnable jar, to satisfy Freedom of Information Act
    requests, along with its Java source *with the original COBOL quoted as
    comments above each rule*. `tools/cms-ipps-pricer-oracle` runs it over
-   nineteen invented stays and commits what it paid;
+   twenty-four invented stays and commits what it paid;
    `IppsPricerParityTests` holds the calculator to those amounts on every
    build, with no CMS artifact present. The tool's README has the whole of it,
    including the five undocumented provider-record fields that stop a
@@ -953,30 +953,52 @@ Build order:
    CMS's selection branch as well as its amounts, where reading the file would
    not have.
 
-   **What the run showed is still missing**, and why this is not yet wired into
-   adjudication. CMS pays several components the calculator has no notion of:
-   the value-based purchasing and hospital-readmissions-reduction adjustments,
-   the low-volume adjustment, the hospital-acquired-condition penalty, the
-   hospital-specific portion for sole-community and Medicare-dependent
-   hospitals, pass-through amounts for direct medical education and organ
-   acquisition, and new-technology add-ons. And CMS works in covered days and
-   lifetime reserve days, reporting regular, reserve and outlier days used,
-   where `IppsStay` has no beneficiary-day concept at all. Several of those
-   scale the DRG payment, so they are not optional extras.
-
-   **The order those four adjustments are taken in is not derivable from
-   42 CFR, and it changes amounts.** From
+   **The four hospital-level adjustments are built, and the order is the whole
+   content of them.** The readmissions reduction, the value-based purchasing
+   adjustment, the low-volume adjustment and the hospital-acquired-condition
+   penalty are taken on the assembled payment rather than on the DRG amount,
+   in an order that is not derivable from 42 CFR and that changes amounts. From
    `CalculateHospitalAcquiredConditionReduction`, which despite its name
-   assembles the total, and `CalculateLowVolumeTotals`: the low-volume uplift
-   is a percentage of everything through the new-technology add-on — outliers
-   and uncompensated care included — but **not** of the readmissions or
-   value-based adjustments, which are each `(factor − 1)` times the base DRG
-   payment alone and are carried as signed amounts in the sum. The
-   hospital-acquired-condition penalty is then one percent of all of that
-   together, so it reaches the outlier and the uncompensated care payment and
-   is itself reduced by the two adjustments above it. Pass-throughs, the
-   bundled adjustment and the islet isolation add-on are added afterwards and
-   escape both. That ordering is the next piece of work.
+   assembles the total, and `CalculateLowVolumeTotals`:
+
+   - The **low-volume uplift** is a percentage of everything through the
+     new-technology add-on — both sides, the cost outlier and the
+     uncompensated care payment included — and **not** of the readmissions or
+     value-based adjustments. On the corpus's low-volume stay that is 0.20 ×
+     83,208.50, and a calculator taking it on the DRG amount would pay 2,560
+     instead of 16,641.70.
+   - **Readmissions and value-based purchasing** are each `(factor − 1)` times
+     the base DRG payment *alone*, carried as signed amounts in the sum. Not
+     the whole operating side: the teaching, disproportionate share and
+     uncompensated care payments are all outside them.
+   - The **penalty** is one percent of all of that together, so it reaches the
+     outlier and the uncompensated care payment and is itself reduced by the two
+     adjustments above it. On the corpus's all-four stay that is
+     −0.01 × 103,882.64 = −1,038.83, against −128 for one percent of the DRG
+     amount.
+   - Pass-throughs, the bundled adjustment and the islet isolation add-on are
+     added afterwards and **escape both**.
+
+   Each of the four is compared against CMS separately rather than through a
+   total, because a wrong order agrees on each one in isolation; the corpus has
+   a stay carrying all four at once for the same reason. Two validation rules
+   are copied as written, because both are provider-file facts and guessing
+   either invents the hospital's payment: a factor outside CMS's range (0.97 to
+   1.0 for readmissions, 0.98 to 2.0 for value-based purchasing) raises rather
+   than being clamped, as CMS refuses the claim; and the low-volume adjustment
+   needs the year's approval *and* a factor of at most 0.25, where a larger
+   factor pays nothing rather than being capped.
+
+   **What is still missing**, and why this is not yet wired into adjudication.
+   CMS pays the hospital-specific portion for sole-community and
+   Medicare-dependent hospitals, pass-through amounts for direct medical
+   education and organ acquisition, new-technology add-ons and the
+   bundled-payment adjustment, and this pays none of them. And CMS works in
+   covered days and lifetime reserve days, reporting regular, reserve and
+   outlier days used, where `IppsStay` has no beneficiary-day concept at all —
+   the last of those is a model change rather than an arithmetic one, and
+   return code 67, "outlier LOS greater than covered days", is the pricer
+   refusing a claim on day arithmetic.
 
    Deliberately absent, because approximating it would be worse than omitting
    it: new technology add-on payments, which are a published list of devices

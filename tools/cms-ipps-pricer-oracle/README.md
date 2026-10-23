@@ -97,7 +97,7 @@ perdiem".
 
 ## The corpus
 
-Nineteen invented stays. There is no member, no claim number and no real
+Twenty-four invented stays. There is no member, no claim number and no real
 provider: the CMS certification numbers are fabricated, chosen only so their
 first two digits are a plausible state code, because the pricer reads the state
 from them. The wage-index localities are real published CBSA codes, which is
@@ -182,12 +182,22 @@ asserts that each exclusion is still a real corpus row:
   table that nothing here imports yet.
 
 And the pricer pays several things the calculator still has no notion of: the
-value-based purchasing and readmissions-reduction adjustments, the low-volume
-adjustment, the hospital-acquired-condition penalty, the hospital-specific
-portion, pass-through amounts and new-technology add-ons. It also works in
-covered days and lifetime reserve days, where `IppsStay` has no beneficiary-day
-concept. Those are recorded in ADR 024 as the remaining work, and they are why
-this calculator is still not wired into adjudication.
+hospital-specific portion for sole-community and Medicare-dependent hospitals,
+pass-through amounts, new-technology add-ons and the bundled-payment
+adjustment. It also works in covered days and lifetime reserve days, where
+`IppsStay` has no beneficiary-day concept. Those are recorded in ADR 024 as the
+remaining work, and they are why this calculator is still not wired into
+adjudication.
+
+## One column is misleadingly named, and it is CMS's name
+
+`average_length_of_stay` is the **geometric** mean. CMS's field is
+`averageLengthOfStay` and its COBOL variable is `H-ALOS`, but
+`InitializeCalculationFields` populates it from the DRG table's
+`geometricMeanLengthOfStay`, which is also what 42 CFR 412.4(f) says a transfer
+per diem divides by. The arithmetic mean is in the DRG table and the pricer
+does not use it for this. The column keeps CMS's name so the mapping back to
+its response is obvious; this paragraph is the correction.
 
 ## What the second run added: the rate table
 

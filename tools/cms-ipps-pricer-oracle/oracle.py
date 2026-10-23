@@ -51,6 +51,14 @@ COLUMNS = [
     "cost_threshold",
     "outlier_days",
     "regular_days_used",
+    # The four hospital-level adjustments. They are taken on the assembled
+    # payment rather than on the DRG amount, and in an order 42 CFR does not
+    # give, so each one is reported separately: a total that agrees says
+    # nothing about whether the order was right.
+    "low_volume_payment",
+    "readmissions_adjustment",
+    "value_based_purchasing_adjustment",
+    "hospital_acquired_condition_payment",
 ]
 
 
@@ -154,6 +162,16 @@ def row_for(name: str, response: dict, drg_entry: dict | None) -> dict:
         "cost_threshold": extra["costThreshold"],
         "outlier_days": payment["outlierDays"],
         "regular_days_used": payment["regularDaysUsed"],
+        "low_volume_payment": extra["lowVolumePayment"],
+        "readmissions_adjustment": information[
+            "hospitalReadmissionReductionAdjustmentPayment"
+        ],
+        "value_based_purchasing_adjustment": information[
+            "valueBasedPurchasingAdjustmentPayment"
+        ],
+        "hospital_acquired_condition_payment": information[
+            "hospitalAcquiredConditionPayment"
+        ],
     }
 
 

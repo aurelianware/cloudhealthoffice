@@ -97,6 +97,42 @@ namespace CloudHealthOffice.GrouperEngine.Ipps;
 /// hospital can carry both reductions, and CMS publishes a standardized amount
 /// for each of the four combinations.
 /// </param>
+/// <param name="ReadmissionsAdjustmentFactor">
+/// The hospital's readmissions payment adjustment factor (42 CFR 412.154),
+/// or null where the hospital is not in the programme — which is a different
+/// thing from a factor of 1.0 and is how CMS's provider file distinguishes
+/// them.
+///
+/// <para>
+/// CMS enforces a range of 0.97 to 1.0 and refuses the claim outside it, so
+/// the factor is always a reduction. A value outside that range is a bad
+/// provider file rather than an unusual hospital.
+/// </para>
+/// </param>
+/// <param name="ValueBasedPurchasingAdjustmentFactor">
+/// The hospital's value-based purchasing adjustment factor (412.160 and
+/// following), or null where it is not a participant. Unlike the readmissions
+/// factor this one goes both ways: CMS's range is 0.98 to 2.0, so a hospital
+/// can be paid more for it.
+/// </param>
+/// <param name="LowVolumeTemporaryRelief">
+/// Whether the hospital has the low-volume adjustment approved for this year.
+/// A gate in its own right: CMS pays the adjustment only when this is set
+/// <i>and</i> the factor is in range, and a factor alone is not enough.
+/// </param>
+/// <param name="LowVolumeAdjustmentFactor">
+/// The low-volume adjustment factor (412.101), zero at the great majority of
+/// hospitals. CMS's range is above 0 and at most 0.25, and a factor above 0.25
+/// pays <b>nothing</b> rather than being capped — a cap would quietly pay a
+/// hospital whose provider file is wrong.
+/// </param>
+/// <param name="HospitalAcquiredConditionReduction">
+/// Whether the hospital is in the worst-performing quartile for
+/// hospital-acquired conditions and so subject to the one percent penalty
+/// (412.170 and 412.172). Reaches further than it looks: the penalty is taken
+/// on almost the whole payment, the cost outlier and the uncompensated care
+/// payment included.
+/// </param>
 public sealed record IppsProvider(
     string CcnNumber,
     decimal WageIndex,
@@ -110,14 +146,19 @@ public sealed record IppsProvider(
     decimal CapitalIndirectMedicalEducationFactor,
     decimal CapitalDisproportionateShareFactor,
     bool QualityDataSubmitted,
-    bool ElectronicRecordsReduction)
+    bool ElectronicRecordsReduction,
+    decimal? ReadmissionsAdjustmentFactor,
+    decimal? ValueBasedPurchasingAdjustmentFactor,
+    bool LowVolumeTemporaryRelief,
+    decimal LowVolumeAdjustmentFactor,
+    bool HospitalAcquiredConditionReduction)
 {
     /// <summary>
     /// A hospital with no teaching programme, no disproportionate share
-    /// adjustment, the national average geography and neither payment
-    /// reduction: the shape a test uses when it is about something else, and a
-    /// reasonable starting point for a deployment that has one wage index and
-    /// nothing further.
+    /// adjustment, the national average geography, neither payment reduction
+    /// and none of the quality programmes: the shape a test uses when it is
+    /// about something else, and a reasonable starting point for a deployment
+    /// that has one wage index and nothing further.
     /// </summary>
     public static IppsProvider Plain(string ccnNumber, decimal wageIndex) => new(
         ccnNumber,
@@ -132,7 +173,12 @@ public sealed record IppsProvider(
         CapitalIndirectMedicalEducationFactor: 0m,
         CapitalDisproportionateShareFactor: 0m,
         QualityDataSubmitted: true,
-        ElectronicRecordsReduction: false);
+        ElectronicRecordsReduction: false,
+        ReadmissionsAdjustmentFactor: null,
+        ValueBasedPurchasingAdjustmentFactor: null,
+        LowVolumeTemporaryRelief: false,
+        LowVolumeAdjustmentFactor: 0m,
+        HospitalAcquiredConditionReduction: false);
 }
 
 /// <summary>
