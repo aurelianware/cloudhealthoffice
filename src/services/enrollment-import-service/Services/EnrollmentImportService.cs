@@ -425,6 +425,22 @@ public class EnrollmentImportService : IEnrollmentImportService
     {
         /// <summary>The subscriber loop being processed, for transaction positions ("INS 3").</summary>
         public string? SubscriberPosition { get; set; }
+
+        /// <summary>
+        /// The sponsor policy the member loop being processed is held under,
+        /// when its REF*1L named a policy number rather than a group number
+        /// (docs/architecture/plan-configuration.md §9b). Per-member loop
+        /// state like <see cref="SubscriberPosition"/>, and so assigned —
+        /// including back to null — at the top of every member loop, never
+        /// only when there is a policy to record.
+        /// </summary>
+        public string? SponsorPolicyNumber { get; set; }
+
+        /// <summary>
+        /// What each distinct REF*1L in this batch resolved to, so that a file
+        /// of thousands of members under one group asks sponsor-service once.
+        /// </summary>
+        public Dictionary<string, SponsorIdentifier> ResolvedSponsorIdentifiers { get; } = new(StringComparer.Ordinal);
     }
 
     private async Task ProcessMemberEnrollmentAsync(
@@ -432,6 +448,11 @@ public class EnrollmentImportService : IEnrollmentImportService
     {
         var tenantId = ctx.TenantId;
         var result = ctx.Result;
+
+        // 0. Work out what REF*1L actually names before anything is filed
+        // against it, because every step below keys on the group number.
+        enrollment.GroupNumber = await ApplySponsorIdentifierAsync(enrollment.GroupNumber, ctx);
+
         // 1. Ensure the sponsor (employer/group) exists. Sponsor-service keys
         // sponsors by GroupNumber (REF*1L, e.g. "GRP0001") — NOT by the N1
         // segment's own id (typically the employer's FEIN), which is a
@@ -578,6 +599,9 @@ public class EnrollmentImportService : IEnrollmentImportService
     {
         var result = ctx.Result;
         var subscriberId = dependent.SubscriberId;
+        // Its own top-level transaction, with no subscriber loop before it to
+        // inherit from: the previous member's policy must not carry in.
+        ctx.SponsorPolicyNumber = null;
         var projected = ToMemberEnrollment(dependent, null, dependent.MaintenanceType);
         if (string.IsNullOrWhiteSpace(subscriberId) || string.IsNullOrWhiteSpace(dependent.MaintenanceType))
         {
@@ -747,6 +771,83 @@ public class EnrollmentImportService : IEnrollmentImportService
         },
         Coverage = dependent.Coverage ?? new()
     };
+
+    /// <summary>
+    /// Settles whether a REF*1L is the sponsor's own group number or one of
+    /// that sponsor's policy numbers, and answers the group number either way,
+    /// so that the member, their coverage and the sponsor sync all key on a
+    /// group number as they always have
+    /// (docs/architecture/plan-configuration.md §9b, §12.12). The policy
+    /// number, when there was one, is left on the context for the coverage
+    /// about to be written.
+    ///
+    /// <para>
+    /// The change is additive by construction: sponsor-service tries the group
+    /// number first and lets it win outright, so a value that resolves today
+    /// resolves to the same sponsor, and a policy number is consulted only for
+    /// a value that means nothing at all today. A value that is still neither
+    /// is answered back unchanged, which keeps the existing
+    /// create-the-sponsor-from-the-N1-loop path intact.
+    /// </para>
+    /// </summary>
+    private async Task<string?> ApplySponsorIdentifierAsync(string? sent, BatchContext ctx)
+    {
+        // Assigned on every call, not only when there is a policy: leaving the
+        // previous member's policy in place would file this member's coverage
+        // under it.
+        ctx.SponsorPolicyNumber = null;
+
+        if (string.IsNullOrWhiteSpace(sent)) return sent;
+
+        var resolved = await ResolveSponsorIdentifierAsync(sent, ctx);
+        switch (resolved.Kind)
+        {
+            case SponsorIdentifierKind.PolicyNumber:
+                ctx.SponsorPolicyNumber = resolved.PolicyNumber;
+                _logger.LogInformation(
+                    "REF*1L {Sent} is a policy number of group {GroupNumber}; filing under that group",
+                    LogSanitizer.Sanitize(sent), LogSanitizer.Sanitize(resolved.GroupNumber));
+                return resolved.GroupNumber;
+
+            case SponsorIdentifierKind.Ambiguous:
+                // Rejected into the exception queue by the loop's own catch.
+                // Guessing would put a member under the wrong employer with
+                // nothing downstream showing it happened.
+                throw new AmbiguousSponsorIdentifierException(sent, resolved.CandidateGroupNumbers ?? []);
+
+            case SponsorIdentifierKind.GroupNumber:
+                // What REF*1L has always meant. Nothing to record.
+                return sent;
+
+            default:
+                // Neither number is on file. Unchanged behaviour: the sponsor
+                // sync creates the group from the N1 loop, which is how a
+                // first file for a new employer has always landed.
+                return sent;
+        }
+    }
+
+    /// <summary>
+    /// One answer per distinct REF*1L in a batch. A file routinely carries
+    /// thousands of members under a handful of groups, and asking per member
+    /// would add an HTTP round trip each; the sponsor file does not change
+    /// under an import.
+    ///
+    /// <para>
+    /// Only a recognised answer is kept. "Neither number is on file" is the
+    /// one answer this import can itself invalidate — the N1 loop creates the
+    /// sponsor a moment later — so it is asked again rather than remembered.
+    /// </para>
+    /// </summary>
+    private async Task<SponsorIdentifier> ResolveSponsorIdentifierAsync(string sent, BatchContext ctx)
+    {
+        if (ctx.ResolvedSponsorIdentifiers.TryGetValue(sent, out var remembered)) return remembered;
+
+        var resolved = await _sponsorClient.ResolveIdentifierAsync(ctx.TenantId, sent);
+        if (resolved.Kind != SponsorIdentifierKind.Unknown)
+            ctx.ResolvedSponsorIdentifiers[sent] = resolved;
+        return resolved;
+    }
 
     private async Task EnsureSponsorExistsAsync(Sponsor sponsor, string? groupNumber, string tenantId)
     {
@@ -1403,6 +1504,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         {
             MemberId = memberId,
             GroupNumber = groupNumber,
+            SponsorPolicyNumber = ctx.SponsorPolicyNumber,
             PlanId = planId,
             InsuranceLineCode = line.InsuranceLineCode,
             CoverageLevel = coverageLevel ?? "EMP",
@@ -1545,7 +1647,13 @@ public class EnrollmentImportService : IEnrollmentImportService
     {
         var tenantId = ctx.TenantId;
         var result = ctx.Result;
-        var groupNumber = dependent.GroupNumber ?? subscriber?.GroupNumber;
+        // A dependent's Loop 2000 carries its own REF*1L, which may name a
+        // policy just as the subscriber's does. With none of its own it is held
+        // under exactly what its subscriber resolved to — group and policy
+        // both — so the context is left as that loop set it.
+        var groupNumber = dependent.GroupNumber is { } ownGroupNumber
+            ? await ApplySponsorIdentifierAsync(ownGroupNumber, ctx)
+            : subscriber?.GroupNumber;
         var exists = await _memberClient.ExistsAsync(tenantId, dependentMemberId);
         bool applied;
 

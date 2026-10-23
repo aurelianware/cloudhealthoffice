@@ -58,6 +58,14 @@ public class CreateCoverageRequestDto
 {
     public string MemberId { get; set; } = string.Empty;
     public string GroupNumber { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The sponsor policy the member is held under, when REF*1L named a policy
+    /// number rather than a group number. Null for a file that named the group
+    /// directly, which is still the commonest case.
+    /// </summary>
+    public string? SponsorPolicyNumber { get; set; }
+
     public string PlanId { get; set; } = string.Empty;
     public string? CoverageLevel { get; set; }
     public string? InsuranceLineCode { get; set; }

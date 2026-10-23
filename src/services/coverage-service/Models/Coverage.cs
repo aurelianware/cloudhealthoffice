@@ -52,6 +52,25 @@ public class Coverage
     public string PlanId { get; set; } = string.Empty;
 
     /// <summary>
+    /// The sponsor policy this coverage is held under (834 REF*1L, when the
+    /// value sent was a policy number rather than a group number). A policy is
+    /// a group plus a policy number pointing at a benefit plan
+    /// (docs/architecture/plan-configuration.md §9b), so together with
+    /// <see cref="GroupNumber"/> and <see cref="PlanId"/> this completes that
+    /// identity; the number is stored rather than the policy id, which would
+    /// repeat the tenant and group already held here and could drift from them.
+    ///
+    /// Null on every coverage written before policies existed, and on any
+    /// coverage whose 834 named the group directly — which is still the
+    /// commonest case and not a defect.
+    ///
+    /// Not to be confused with <c>OtherInsurance.PolicyNumber</c>, which is
+    /// another carrier's policy for coordination of benefits.
+    /// </summary>
+    [StringLength(50)]
+    public string? SponsorPolicyNumber { get; set; }
+
+    /// <summary>
     /// Coverage level from 834 HD01 segment
     /// EMP = Employee Only, ESP = Employee and Spouse, ECH = Employee and Children, FAM = Family
     /// </summary>

@@ -83,6 +83,14 @@ public static class EnrollmentRejectionReasons
     /// <summary>A dependent has no REF*23 and no first name + date of birth to key it by, or lacks REF*0F / INS03.</summary>
     public const string DependentNotIdentified = "DEPENDENT_NOT_IDENTIFIED";
 
+    /// <summary>
+    /// REF*1L is a policy number held by more than one group, so the file does
+    /// not say which employer it is about. Reprocessable once the sending
+    /// partner uses the group number, or once the duplicate policy number is
+    /// resolved on the sponsor side.
+    /// </summary>
+    public const string AmbiguousSponsorIdentifier = "AMBIGUOUS_SPONSOR_IDENTIFIER";
+
     /// <summary>The transaction asked for something CHO refuses (unsupported maintenance type, bad date).</summary>
     public const string InvalidTransaction = "INVALID_TRANSACTION";
 

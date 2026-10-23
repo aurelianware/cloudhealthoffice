@@ -27,6 +27,10 @@ internal sealed record EnrollmentRejection(string ReasonCode, IReadOnlyList<Enro
         var code = ex switch
         {
             EnrollmentConcurrencyException => EnrollmentRejectionReasons.ConcurrentUpdate,
+            // Before the InvalidOperationException arm it derives from, so the
+            // queue can tell "the file names two employers" from any other
+            // refusal.
+            AmbiguousSponsorIdentifierException => EnrollmentRejectionReasons.AmbiguousSponsorIdentifier,
             MemberServiceException m => Downstream(m.StatusCode),
             CoverageServiceException c => Downstream(c.StatusCode),
             SponsorServiceException s => Downstream(s.StatusCode),

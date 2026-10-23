@@ -327,6 +327,7 @@ public class CoverageController : ControllerBase
             TenantId = TenantId,
             MemberId = request.MemberId,
             GroupNumber = request.GroupNumber,
+            SponsorPolicyNumber = request.SponsorPolicyNumber,
             PlanId = request.PlanId,
             CoverageLevel = request.CoverageLevel,
             InsuranceLineCode = request.InsuranceLineCode,
@@ -882,6 +883,14 @@ public class CreateCoverageRequest
 
     [Required]
     public string PlanId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The sponsor policy number the 834's REF*1L named, when it named a policy
+    /// rather than a group. Optional, and deliberately absent from
+    /// <see cref="UpdateCoverageRequest"/>: a member moving between policies at
+    /// renewal is a new coverage span, not an edit to the old one.
+    /// </summary>
+    public string? SponsorPolicyNumber { get; set; }
 
     public string? CoverageLevel { get; set; }
     public string? InsuranceLineCode { get; set; }
