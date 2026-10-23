@@ -348,6 +348,7 @@ public class CrdCoverageInformationTests
         _engine.Object,
         Options.Create(Config),
         new CrdClassificationStore(new MemoryCache(new MemoryCacheOptions { SizeLimit = 1024 })),
+        CrdContextResolverDouble.Resolved(),
         NullLogger<CrdService>.Instance);
 
     private async Task<JsonElement> OnlyExtensionAsync(string code)

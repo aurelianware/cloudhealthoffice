@@ -103,6 +103,32 @@ public class CrdDraftOrderResource
 
     [JsonPropertyName("medicationCodeableConcept")]
     public CrdCodeableConcept? MedicationCodeableConcept { get; set; }
+
+    /// <summary>
+    /// Why the service was ordered. The one piece of context CHO cannot supply
+    /// itself: only the ordering system knows the indication, and a
+    /// diagnosis-required rule handed an empty list passes vacuously (D-21).
+    /// </summary>
+    [JsonPropertyName("reasonCode")]
+    public List<CrdCodeableConcept>? ReasonCode { get; set; }
+
+    /// <summary>When the service is to be performed, as a dateTime.</summary>
+    [JsonPropertyName("occurrenceDateTime")]
+    public string? OccurrenceDateTime { get; set; }
+
+    /// <summary>When the service is to be performed, as a Period.</summary>
+    [JsonPropertyName("occurrencePeriod")]
+    public CrdPeriod? OccurrencePeriod { get; set; }
+}
+
+/// <summary>A FHIR Period, as far as CRD evaluation reads one.</summary>
+public class CrdPeriod
+{
+    [JsonPropertyName("start")]
+    public string? Start { get; set; }
+
+    [JsonPropertyName("end")]
+    public string? End { get; set; }
 }
 
 public class CrdCodeableConcept

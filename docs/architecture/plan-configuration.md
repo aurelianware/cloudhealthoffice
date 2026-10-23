@@ -235,6 +235,22 @@ Changes needing a reason or a second approver use the same pattern as two-person
    - Tenant controls become catalog settings at tenant level: payment separation of duties, personal-representative activation by a second user. Technical and integration configuration (modules, region, SFTP, clearinghouse, platform adapters) stays tenant configuration.
    - Benefit plans and sponsors gain a program.
    - Line-of-business defaults move from the enum to programs (a program carries its line-of-business type).
+   - **A consumer already waiting on this:** `CrdContextResolver` in fhir-service
+     (2026-10-23) builds the prior-authorization rule context for a CRD hook. The
+     rule engine keys its rule sets on `StateCode` + `Lob` + `Program`, which is
+     the same information a program carries as one record. Today the resolver
+     reads state from the member's Patient address and line of business from the
+     `cho-line-of-business` coding on their Coverage, and sets `Program` to
+     **null** — because CHO has no program field to read. It is worth knowing
+     what that costs: the engine falls back from program-specific rule sets to
+     program-agnostic ones, so state-and-line-of-business rules resolve
+     correctly, but a rule set keyed on a program such as `STAR` fires for
+     nobody. (Before this, a hard-coded `TX` / `Medicaid` / `STAR` context made
+     it fire for everybody, including a commercial member in Ohio — so this is
+     strictly fewer wrong answers, and also fewer answers.) When programs land,
+     the resolver should read the member's benefit plan → program and take all
+     three from that one record, and the engine's `ResolvedRuleSetKey` can
+     become a program id rather than a string concatenation.
 3. **Sponsor contracts** (§9b) in sponsor-service, with sponsor policies and classes, draft terms and underwriting approval (enrollment step 4), and their levels in the resolver.
 4. **First consumers:**
    - enrollment retro limits, waiting periods, orphan grace and the full-replace guard;
