@@ -476,6 +476,11 @@ builder.Services.AddScoped<FhirService.Services.IPriorAuthorizationStore,
     FhirService.Services.HttpPriorAuthorizationStore>();
 builder.Services.AddScoped<FhirService.Services.IPriorAuthorizationInquiryService,
     FhirService.Services.PriorAuthorizationInquiryService>();
+// D-26 caller binding. Absent configuration the patient binding observes and
+// refuses nothing; the provider binding needs no setting because it applies
+// only where a trusted issuer declared ServesProviderCallers.
+builder.Services.Configure<FhirService.Services.PasCallerBindingOptions>(
+    builder.Configuration.GetSection(FhirService.Services.PasCallerBindingOptions.SectionName));
 
 // ── Da Vinci CDex additional information (PAS-07) ─────────────────────────────
 // The request half is a Task projection served by TaskController; the response

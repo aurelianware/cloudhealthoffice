@@ -246,4 +246,43 @@ public class SmartTrustConfigurationTests
             .Should().Throw<SmartTrustValidationException>()
             .WithMessage("*ClockSkewSeconds*");
     }
+
+    // ── D-26: an issuer that claims to serve providers must identify them ─────
+
+    [Fact]
+    public void AnIssuerServingProviderCallers_WithoutAnNpiClaim_FailsStartup()
+    {
+        // The silent failure this prevents: the deployment believes PAS binds
+        // its callers, and PAS falls back to corroborating keys out of the
+        // request body because no claim was ever configured to bind them with.
+        var issuer = ExternalIssuer();
+        issuer.ServesProviderCallers = true;
+
+        External(issuer).Invoking(o => o.Validate(false))
+            .Should().Throw<SmartTrustValidationException>()
+            .WithMessage("*ServesProviderCallers*ProviderNpiClaim*");
+    }
+
+    [Fact]
+    public void AnIssuerServingProviderCallers_WithAnNpiClaim_IsAccepted()
+    {
+        var issuer = ExternalIssuer();
+        issuer.ServesProviderCallers = true;
+        issuer.Claims.ProviderNpiClaim = "https://payer.example/npi";
+
+        External(Authority(), issuer).Invoking(o => o.Validate(false)).Should().NotThrow();
+    }
+
+    [Fact]
+    public void AnIssuerThatDeclaresNothing_NeedsNoNpiClaim()
+    {
+        // The tighten-only guarantee, asserted as configuration: a deployment
+        // that has not opted in must keep starting exactly as it did. A patient
+        // app's issuer has no NPI to assert, so requiring one of every issuer
+        // would be requiring a claim that cannot exist.
+        var issuer = ExternalIssuer();
+        issuer.Claims.ProviderNpiClaim.Should().BeNull("it is unset by default");
+
+        External(Authority(), issuer).Invoking(o => o.Validate(false)).Should().NotThrow();
+    }
 }

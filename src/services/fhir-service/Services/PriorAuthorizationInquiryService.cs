@@ -1,3 +1,6 @@
+using CloudHealthOffice.Infrastructure.Logging;
+using FhirService.Services.Identity;
+
 namespace FhirService.Services;
 
 /// <summary>
@@ -74,6 +77,52 @@ public sealed record PriorAuthorizationInquiryRequest
     /// see the limitation note on <see cref="IPriorAuthorizationInquiryService"/>.
     /// </summary>
     public string? CallerId { get; init; }
+
+    /// <summary>
+    /// The caller's provider NPI as a TRUSTED ISSUER asserted it, never as the
+    /// body claimed it. Present only for an issuer that declared
+    /// <c>ServesProviderCallers</c> and therefore configured the claim; absent
+    /// otherwise, which is not "this caller has no NPI" but "no issuer CHO
+    /// trusts has said what it is", so nothing may be authorized on it.
+    /// </summary>
+    public string? VerifiedProviderNpi { get; init; }
+
+    /// <summary>
+    /// The member a patient-context token is bound to, from the token. Unlike
+    /// the provider claim this is populated by default
+    /// (<c>IssuerClaimMappingOptions.PatientClaim</c> defaults to
+    /// <c>"patient"</c>), so a binding on it reaches live callers.
+    /// </summary>
+    public string? VerifiedPatientId { get; init; }
+}
+
+/// <summary>
+/// How hard the PAS caller binding fails (D-26).
+///
+/// <para>
+/// The provider binding needs no switch: it applies only where a trusted issuer
+/// asserted an NPI, which happens only where a deployment declared
+/// <c>ServesProviderCallers</c>, so it cannot surprise anyone who did not ask
+/// for it.
+/// </para>
+///
+/// <para>
+/// The PATIENT binding can, because its claim is configured by default. So it
+/// ships observing: it records what it would have refused and refuses nothing,
+/// until a deployment has seen its own traffic and turns
+/// <see cref="EnforcePatientBinding"/> on. An authorization change whose blast
+/// radius nobody measured is how a working integration breaks at 2am.
+/// </para>
+/// </summary>
+public sealed class PasCallerBindingOptions
+{
+    public const string SectionName = "Pas:CallerBinding";
+
+    /// <summary>
+    /// Refuse, rather than merely record, an inquiry whose patient-context token
+    /// is bound to a different member than the authorization.
+    /// </summary>
+    public bool EnforcePatientBinding { get; set; }
 }
 
 /// <summary>
@@ -106,18 +155,30 @@ public enum PriorAuthorizationInquiryFailureKind
 /// which has no write method: an inquiry cannot create a record, move a status,
 /// restart a decision clock, or cause a payer submission.
 ///
-/// CALLER BINDING — a documented limitation. PAS is a system-to-system surface
-/// here: <c>$submit</c> does not check that the caller IS the provider named in
-/// the Claim, and there is no mapping in this repository from a token subject to
-/// a provider NPI. So an inquiry is bound to its authorization by the
-/// corroborating key, not by the caller's own identity: a caller who knows both
-/// the authorization number AND a matching member or provider key can read it,
-/// within their own tenant. Inventing a subject-to-NPI mapping to close that
-/// would be security theatre — NPIs are public — so the caller is recorded in
-/// the audit trail instead, and tightening this waits on a real provider
-/// identity claim. Provider Access consent is deliberately NOT applied: it
-/// governs a provider reading a member's clinical record, not a submitter asking
-/// after its own prior-authorization request.
+/// CALLER BINDING (D-26). The corroborating key above is a property of the
+/// REQUEST, not of the caller: both halves of it are things the caller supplies,
+/// and an NPI is public. Where CHO has a VERIFIED identity it is now used, and
+/// it takes precedence over anything the body says:
+///
+/// <list type="bullet">
+/// <item>a <b>patient-context</b> token is pinned to its own member. There is no
+/// legitimate call in which a member asks after another member's prior
+/// authorization. This binding reaches live callers, so it ships observing —
+/// see <see cref="PasCallerBindingOptions"/>.</item>
+/// <item>a <b>provider</b> caller is pinned to the NPI their trusted issuer
+/// asserted. This applies only where a deployment declared
+/// <c>ServesProviderCallers</c> on that issuer, so it tightens and never
+/// loosens: where no issuer asserts an NPI, the corroborating key is still the
+/// whole of the check and this is still a documented limitation.</item>
+/// </list>
+///
+/// The verified identity is never INVENTED from a conventionally named claim —
+/// that would turn a public number into an authorization decision. It comes only
+/// from the claim a named, trusted issuer was configured to assert.
+///
+/// Provider Access consent is deliberately NOT applied: it governs a provider
+/// reading a member's clinical record, not a submitter asking after its own
+/// prior-authorization request.
 /// </summary>
 public interface IPriorAuthorizationInquiryService
 {
@@ -129,21 +190,40 @@ public interface IPriorAuthorizationInquiryService
     /// key is a property of the PAS request shape, so it belongs with the lookup
     /// rules rather than in the HTTP layer.
     /// </summary>
+    /// <param name="caller">
+    /// The authenticated caller, resolved from the validated token. Optional so
+    /// that a deployment or a test with no verified identity behaves exactly as
+    /// before; where it is supplied, its claims BIND the inquiry (D-26).
+    /// </param>
     PriorAuthorizationInquiryRequest FromInquiryClaim(
-        Hl7.Fhir.Model.Claim claim, string tenantId, string? callerId);
+        Hl7.Fhir.Model.Claim claim, string tenantId, string? callerId,
+        AuthenticatedCaller? caller = null);
 }
 
 /// <inheritdoc />
 public sealed class PriorAuthorizationInquiryService : IPriorAuthorizationInquiryService
 {
     private readonly IPriorAuthorizationStore _store;
+    private readonly PasCallerBindingOptions _binding;
+    private readonly ILogger<PriorAuthorizationInquiryService>? _logger;
 
-    public PriorAuthorizationInquiryService(IPriorAuthorizationStore store)
-        => _store = store;
+    public PriorAuthorizationInquiryService(
+        IPriorAuthorizationStore store,
+        Microsoft.Extensions.Options.IOptions<PasCallerBindingOptions>? binding = null,
+        ILogger<PriorAuthorizationInquiryService>? logger = null)
+    {
+        _store = store;
+        // Defaulting to observe-only is the safe default in both directions: a
+        // deployment that configures nothing refuses nothing new, and the
+        // setting has to be turned on deliberately.
+        _binding = binding?.Value ?? new PasCallerBindingOptions();
+        _logger = logger;
+    }
 
     /// <inheritdoc />
     public PriorAuthorizationInquiryRequest FromInquiryClaim(
-        Hl7.Fhir.Model.Claim claim, string tenantId, string? callerId) => new()
+        Hl7.Fhir.Model.Claim claim, string tenantId, string? callerId,
+        AuthenticatedCaller? caller = null) => new()
     {
         // Tenant is the authenticated context's. A tenant named anywhere in the
         // body is data, never authority.
@@ -154,6 +234,10 @@ public sealed class PriorAuthorizationInquiryService : IPriorAuthorizationInquir
         AuthorizationNumber = Normalize(ExtractAuthorizationNumber(claim)),
         MemberReference = Normalize(claim.Patient?.Reference),
         RequestingProviderNpi = Normalize(claim.Provider?.Identifier?.Value),
+        // From the TOKEN, and only ever from the token. Both are null unless a
+        // trusted issuer was configured to assert them.
+        VerifiedProviderNpi = Normalize(caller?.ProviderNpi),
+        VerifiedPatientId = Normalize(caller?.PatientId),
     };
 
     private static string? Normalize(string? value)
@@ -203,6 +287,14 @@ public sealed class PriorAuthorizationInquiryService : IPriorAuthorizationInquir
             return PriorAuthorizationInquiryResult.Refused(
                 PriorAuthorizationInquiryOutcome.TenantMismatch, authorizationNumber);
 
+        // VERIFIED IDENTITY FIRST (D-26). What a trusted issuer asserted beats
+        // anything the body says, and a mismatch here is refused whether or not
+        // the body's corroborating key happens to match.
+        if (!VerifiedCallerMatches(request, record, authorizationNumber))
+            return PriorAuthorizationInquiryResult.Refused(
+                PriorAuthorizationInquiryOutcome.NotAuthorizedForCaller,
+                authorizationNumber);
+
         if (!CorroboratingKeyMatches(request, record))
             return PriorAuthorizationInquiryResult.Refused(
                 PriorAuthorizationInquiryOutcome.NotAuthorizedForCaller,
@@ -214,6 +306,69 @@ public sealed class PriorAuthorizationInquiryService : IPriorAuthorizationInquir
             Authorization = record,
             RequestedAuthorizationNumber = authorizationNumber,
         };
+    }
+
+    /// <summary>
+    /// The D-26 binding: where CHO has a verified identity for this caller, the
+    /// record must belong to it.
+    ///
+    /// <para>
+    /// Returns true when nothing is verified, which is the ONLY way this method
+    /// loosens anything — and it is not a loosening, it is the pre-existing
+    /// behaviour continuing where no issuer has asserted an identity.
+    /// </para>
+    ///
+    /// <para>
+    /// The patient half returns true while
+    /// <see cref="PasCallerBindingOptions.EnforcePatientBinding"/> is off,
+    /// recording what it would have refused. The log line names the
+    /// authorization and the caller, never the two member ids, because a line
+    /// saying "token for member A asked about member B" puts the pair of them in
+    /// a log to answer a question the authorization number already answers.
+    /// </para>
+    /// </summary>
+    private bool VerifiedCallerMatches(
+        PriorAuthorizationInquiryRequest request,
+        PriorAuthorizationRecord record,
+        string? authorizationNumber)
+    {
+        if (!string.IsNullOrWhiteSpace(request.VerifiedProviderNpi)
+            && !string.Equals(
+                request.VerifiedProviderNpi.Trim(),
+                record.RequestingProviderNpi?.Trim(),
+                StringComparison.Ordinal))
+        {
+            _logger?.LogWarning(
+                "PAS $inquire: the provider identity asserted by the caller's trusted issuer "
+                + "does not match authorization {Authorization}.",
+                LogSanitizer.Sanitize(authorizationNumber));
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.VerifiedPatientId)
+            && !MemberMatches(request.VerifiedPatientId, record.MemberId)
+            && !MemberMatches(request.VerifiedPatientId, record.PatientReference))
+        {
+            if (!_binding.EnforcePatientBinding)
+            {
+                _logger?.LogWarning(
+                    "PAS $inquire: patient-context caller {Caller} is bound to a different member "
+                    + "than authorization {Authorization}. Observing only — set "
+                    + "Pas:CallerBinding:EnforcePatientBinding to refuse.",
+                    LogSanitizer.Sanitize(request.CallerId),
+                    LogSanitizer.Sanitize(authorizationNumber));
+                return true;
+            }
+
+            _logger?.LogWarning(
+                "PAS $inquire: refused patient-context caller {Caller} for authorization "
+                + "{Authorization}: the token is bound to a different member.",
+                LogSanitizer.Sanitize(request.CallerId),
+                LogSanitizer.Sanitize(authorizationNumber));
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>
