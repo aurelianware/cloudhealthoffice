@@ -1,24 +1,24 @@
 {
-  "generated_at": "2026-10-23T21:54:49Z",
-  "git_sha": "ea16a1540fa5472730931a3e0cdbc72f94542b6c",
+  "generated_at": "2026-10-23T23:03:07Z",
+  "git_sha": "abbbf9934c89b46ba94969805c427b56321ab703",
   "git_ref": "main",
   "summary": {
-    "total_tests": 17810,
-    "passed": 17677,
+    "total_tests": 17831,
+    "passed": 17698,
     "failed": 0,
     "skipped": 0,
-    "duration_ms": 2484852,
+    "duration_ms": 2552954,
     "coverage_pct": 73.6,
     "all_passing": true
   },
   "suites": {
     "dotnet": {
       "framework": "xUnit",
-      "total": 17132,
-      "passed": 16999,
+      "total": 17153,
+      "passed": 17020,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 2468912,
+      "duration_ms": 2539905,
       "coverage_pct": 73
     },
     "jest": {
@@ -27,7 +27,7 @@
       "passed": 678,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 14162,
+      "duration_ms": 11182,
       "coverage_pct": 88.75
     },
     "python": {
@@ -36,7 +36,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 1778,
+      "duration_ms": 1867,
       "coverage_pct": 0
     }
   }
