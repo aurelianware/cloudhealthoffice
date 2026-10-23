@@ -72,7 +72,7 @@ public sealed class PriorAuthRuleEngineService : IPriorAuthRuleEngine
         context = await EnrichContextAsync(context, ct);
 
         // Resolve and load applicable rules
-        var rules = await ResolveRulesAsync(context, ct);
+        var (ruleSet, rules) = await ResolveRulesAsync(context, ct);
 
         if (rules.Count == 0)
         {
@@ -80,7 +80,8 @@ public sealed class PriorAuthRuleEngineService : IPriorAuthRuleEngine
                 "No rules found for {State}/{Lob}/{Program} (tenant {Tenant}) — Pend",
                 context.StateCode, context.Lob, context.Program ?? "any", context.TenantId);
 
-            return Pend("NoRulesConfigured", context, sw);
+            // No rule set resolved, so there is none to name.
+            return Pend("NoRulesConfigured", context, null, sw);
         }
 
         _logger.LogDebug(
@@ -116,7 +117,7 @@ public sealed class PriorAuthRuleEngineService : IPriorAuthRuleEngine
                     "Rule {RuleId} ({RuleType}) threw during evaluation — Pending per PendOnRuleError=true",
                     ruleDoc.RuleId, ruleDoc.RuleType);
 
-                return Pend($"RuleError:{ruleDoc.RuleId}", context, sw) with
+                return Pend($"RuleError:{ruleDoc.RuleId}", context, ruleSet, sw) with
                 {
                     EvaluatedRules = evaluatedIds
                 };
@@ -135,13 +136,16 @@ public sealed class PriorAuthRuleEngineService : IPriorAuthRuleEngine
 
             return decision with
             {
-                EvaluatedRules = evaluatedIds,
-                ElapsedMs      = sw.ElapsedMilliseconds
+                // The engine knows which rule set it loaded; the rule only
+                // knows its own document, so the key is stamped here.
+                ResolvedRuleSetKey = ruleSet?.AuditKey ?? decision.ResolvedRuleSetKey,
+                EvaluatedRules     = evaluatedIds,
+                ElapsedMs          = sw.ElapsedMilliseconds
             };
         }
 
         // All rules exhausted — Pend for clinical review
-        return Pend("NoRuleMatch", context, sw) with { EvaluatedRules = evaluatedIds };
+        return Pend("NoRuleMatch", context, ruleSet, sw) with { EvaluatedRules = evaluatedIds };
     }
 
     public async Task<IReadOnlyList<PaRuleDocument>> GetApplicableRulesAsync(
@@ -198,7 +202,13 @@ public sealed class PriorAuthRuleEngineService : IPriorAuthRuleEngine
 
     // ── Rule resolution ───────────────────────────────────────────
 
-    private async Task<IReadOnlyList<PaRuleDocument>> ResolveRulesAsync(
+    /// <summary>
+    /// The rule set that applies, and the key it was found under, so that the
+    /// decision can name it. The program id travels on the two program-specific
+    /// candidates only: a state-and-line-of-business fallback is not one
+    /// program's rule set, and saying it was would hide the fallback.
+    /// </summary>
+    private async Task<(RuleSetKey? Key, IReadOnlyList<PaRuleDocument> Rules)> ResolveRulesAsync(
         PaRuleContext context, CancellationToken ct)
     {
         // Try resolution hierarchy from most to least specific.
@@ -206,8 +216,8 @@ public sealed class PriorAuthRuleEngineService : IPriorAuthRuleEngine
 
         var candidates = new[]
         {
-            new RuleSetKey { StateCode = context.StateCode, Lob = context.Lob, Program = context.Program, TenantId = context.TenantId },
-            new RuleSetKey { StateCode = context.StateCode, Lob = context.Lob, Program = context.Program, TenantId = null },
+            new RuleSetKey { StateCode = context.StateCode, Lob = context.Lob, Program = context.Program, TenantId = context.TenantId, ProgramId = context.ProgramId },
+            new RuleSetKey { StateCode = context.StateCode, Lob = context.Lob, Program = context.Program, TenantId = null,             ProgramId = context.ProgramId },
             new RuleSetKey { StateCode = context.StateCode, Lob = context.Lob, Program = null,            TenantId = context.TenantId },
             new RuleSetKey { StateCode = context.StateCode, Lob = context.Lob, Program = null,            TenantId = null }
         };
@@ -229,20 +239,27 @@ public sealed class PriorAuthRuleEngineService : IPriorAuthRuleEngine
                 .ToList();
 
             if (rules.Count > 0)
-                return rules;
+                return (key, rules);
         }
 
-        return Array.Empty<PaRuleDocument>();
+        return (null, Array.Empty<PaRuleDocument>());
     }
 
     // ── Helpers ───────────────────────────────────────────────────
 
-    private static PaRuleDecision Pend(string reason, PaRuleContext ctx, Stopwatch sw) => new()
+    /// <summary>
+    /// A pend names the rule set that was resolved, where one was. Where none
+    /// was, it names what was looked for rather than the member's program: a
+    /// program id here would read as "this program's rules pended it", and
+    /// nothing of that program's was loaded.
+    /// </summary>
+    private static PaRuleDecision Pend(string reason, PaRuleContext ctx, RuleSetKey? ruleSet, Stopwatch sw) => new()
     {
         Outcome            = PaDecisionOutcome.Pend,
         FiringRuleId       = reason,
         FiringRuleName     = reason,
-        ResolvedRuleSetKey = $"{ctx.TenantId ?? "platform"}/{ctx.StateCode}/{ctx.Lob}/{ctx.Program ?? "any"}",
+        ResolvedRuleSetKey = ruleSet?.AuditKey
+            ?? $"{ctx.TenantId ?? "platform"}/{ctx.StateCode}/{ctx.Lob}/{ctx.Program ?? "any"}",
         ElapsedMs          = sw.ElapsedMilliseconds
     };
 }

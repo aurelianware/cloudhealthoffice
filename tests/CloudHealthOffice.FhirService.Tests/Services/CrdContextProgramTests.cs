@@ -65,6 +65,10 @@ public class CrdContextProgramTests
         context.StateCode.Should().Be("TX");
         context.Lob.Should().Be(PaLineOfBusiness.Medicaid);
         context.Program.Should().Be("STAR");
+        // The record behind the code travels too, so a decision made on these
+        // rules names a program that can be looked up afterwards
+        // (plan-configuration.md §12.6).
+        context.ProgramId.Should().Be(TexasStar.Id);
     }
 
     [Fact]
@@ -78,6 +82,7 @@ public class CrdContextProgramTests
         context.StateCode.Should().Be("OH");
         context.Lob.Should().Be(PaLineOfBusiness.Commercial);
         context.Program.Should().BeNull();
+        context.ProgramId.Should().BeNull("there is no program record to name");
     }
 
     [Fact]
