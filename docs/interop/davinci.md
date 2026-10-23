@@ -245,11 +245,16 @@ sends production data to a third-party system.
   documented per target in `versions.json` under `requiredEgress`.
 * **CHO's trust model is untouched.** There is no `DisableAuthentication` switch,
   and nothing here weakens SMART middleware. When CHO runs as the system under
-  test (`interop-cho` profile), it runs in the existing Demo adapter mode with a
-  synthetic tenant and a test issuer — a test *configuration*, not a bypass. If a
-  future exchange needs an authentication profile an upstream RI cannot satisfy,
-  document that fact and configure a narrowly scoped, standards-appropriate test
-  path; never a global bypass.
+  test (`interop-cho` profile), every service in it runs
+  `ASPNETCORE_ENVIRONMENT=Development` and therefore loads the development
+  issuers and the public development symmetric key, which `ChoAuthOptions.Validate`
+  refuses on any host that is not Development or Testing. The tenant is synthetic
+  and the issuer is a test issuer. That is a test *configuration*, not a bypass:
+  fhir-service still authenticates its calls to member-service and the rest, and
+  SMART middleware still validates every inbound token. If a future exchange needs
+  an authentication profile an upstream RI cannot satisfy, document that fact and
+  configure a narrowly scoped, standards-appropriate test path; never a global
+  bypass.
 * **Cleanup.** The harness tears its stack down even when a scenario throws;
   `scripts/interop/run.sh` traps `EXIT`/`INT`/`TERM` as a backstop; and the CI job
   audits that no `cho-interop` container survived.
@@ -303,7 +308,8 @@ What the next PR has to do:
   Upstream publishes no image for either kit, which is why the checkout is an
   explicit setup step.
 * Start CHO with the `interop-cho` profile, since these suites drive CHO as the
-  system under test.
+  system under test. See "What the `interop-cho` profile runs" below for what
+  that profile is and why it is not the mock.
 * Confirm the exact input names each suite declares (they are versioned with the
   kit) and supply CHO's endpoint accordingly.
 
@@ -313,6 +319,73 @@ Suite ids at the current pins:
 | --- | --- |
 | PDex `v0.13.2` | `pdex_payer_server`, `pdex_payer_client`, `pdex_provider_client` |
 | DTR `v0.17.1` | `dtr_payer_server`, `dtr_full_ehr`, `dtr_light_ehr`, `dtr_smart_app` |
+
+Provider Access serves CARIN Blue Button and US Core, and **no CARIN BB or US
+Core kit is pinned in `interop/versions.json` yet**. Pinning those two is the
+prerequisite for judging the Provider Access profile conformance that G-14 and
+G-60 are about; PDex and DTR do not cover it.
+
+### What the `interop-cho` profile runs
+
+The profile is the system under test, so what it binds decides what a passing
+suite means. It serves CHO's **real** path:
+
+| fhir-service binding | Served by |
+| --- | --- |
+| `FhirAdapters:Sources:Patient` = `ChoNative` | `cho-member-service` |
+| `FhirAdapters:Sources:Coverage` = `ChoNative` | `cho-coverage-service` |
+| `FhirAdapters:Sources:Encounter` = `ChoNative` | `cho-encounter-service` |
+| `FhirAdapters:Sources:Claim` = `ChoNative` | `cho-claims-service` |
+| `FhirAdapters:Resources:Practitioner` (Hybrid, proxied) | `cho-provider-service` |
+
+`FhirAdapters:Mode` is `Hybrid`, not `Demo`, because that is what the bindings
+make true — `Demo` is the honest label only while `MockFhirDataAdapter` serves
+these resources. `DataClassification` stays `synthetic`: the data is seeded into
+the services' own stores, not invented by the adapter.
+
+An Inferno suite run against a mock-backed profile certifies the mock. That is
+worse than no result, because it reads as conformance, so
+`InteropChoProfileTests` fails the build if the profile drifts back onto `Mock`,
+if a `ChoNative` binding names no service, or if the SMART issuer names a host
+the profile does not start.
+
+`cho-smart-auth-service` is part of the profile. Before, `SmartAuth__Issuer`
+defaulted to `http://localhost:18024`, where nothing listened: discovery and JWKS
+retrieval could not succeed, so no SMART suite could have obtained a token. The
+issuer is the in-network name (`http://cho-smart-auth-service:8080`) because that
+is the address both fhir-service and an Inferno container reach it on, and it
+must be byte-identical on the two services — tokens, discovery and JWKS all name
+it whatever `Host` a request arrives with.
+
+#### Running the same path without Docker
+
+Useful when diagnosing a suite failure, and the way the recipe above was
+verified. Run member-service and fhir-service from the SDK against a local
+mongod, and set on fhir-service:
+
+```
+FhirAdapters__Mode=Hybrid
+FhirAdapters__Sources__Patient=ChoNative
+Services__MemberServiceUrl=http://127.0.0.1:<member-port>/
+ChoAuth__Outbound__DevelopmentHosts__0=127.0.0.1
+```
+
+That last line is the trap. `ChoOutboundHosts` auto-allowlists every
+`Services:*` host so a service token is attached to it, but it deliberately
+**skips loopback** (`!IsLoopbackOrIp(uri.Host)`), and `ChoAuth:Outbound:DevelopmentHosts`
+is the documented escape hatch. Without it the call reaches member-service with
+no token and `GET /fhir/r4/Patient/{id}` answers 502 "Patient upstream is
+unavailable", which reads like a missing service token rather than a refused
+one. Inside Compose the hosts are service names rather than loopback, so the
+setting is neither needed nor set there.
+
+#### What the profile still needs
+
+* **Data.** The services' stores start empty, so the profile currently serves
+  404s. Seeding goes through each service's own API with a development-signed
+  token, not by writing to Mongo behind them, so the seed exercises the same
+  validation a real write does.
+* **A first run.** No suite has been run against it.
 
 ## 12. Version awareness and known mismatches
 
@@ -364,14 +437,19 @@ Known at the current pins:
   production code on the CHO side (`MetadataController` for PAS,
   `CrdController` for CRD). CHO's FHIR service does not run as a container in
   any of them; the `interop-cho` profile exists for the scenarios where CHO is
-  the server, and is exercised by no scenario yet.
+  the server, and is exercised by no scenario yet. Its contents are described
+  under "What the `interop-cho` profile runs".
 * `BR-CRD-001` proves protocol interoperability and that the external payer's
   rules ran. It does **not** compare coverage decisions between CHO and the
   payer — see "Protocol compatibility vs payer rule parity" below.
 * `br-provider` is pinned and defined, but nothing drives it. Upstream pairs it
   with the FAST UDAP security server in its own Compose stack; that topology is
   not reproduced here.
-* No Inferno suite executes. Only the runner seam exists.
+* No Inferno suite executes. Only the runner seam exists, and the `interop-cho`
+  profile — although it now runs CHO's real path rather than the mock — has never
+  been started by a scenario, and its services' stores are not seeded.
+* No CARIN Blue Button or US Core Inferno kit is pinned, which is precisely what
+  Provider Access profile conformance (G-14, G-60) would be judged against.
 * CDS-Library is pinned but unused: the pinned br-payer image already bundles the
   clinical content its own rules need, including the CRD rule fixtures
   `BR-CRD-001` exercises.
@@ -712,7 +790,9 @@ After that, the Inferno suites (`INFERNO-DTR-PAYER-001`,
 step, because they reverse the direction. CHO becomes the system under test
 rather than the client, which means the `interop-cho` profile has to run for the
 first time. That profile has existed since #1159 and has never been exercised;
-expect it to need work.
+expect it to need work. It now runs CHO's native stack rather than the mock, and
+its SMART issuer names a server that exists, but it still has no seeded data and
+no suite has been pointed at it.
 
 
 ### Bounded payer startup recovery
