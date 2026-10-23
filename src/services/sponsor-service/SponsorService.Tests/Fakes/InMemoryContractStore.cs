@@ -103,6 +103,13 @@ public sealed class InMemoryContractStore : IContractStore
             .OrderBy(p => p.PolicyNumber, StringComparer.Ordinal)
             .ToList());
 
+    public Task<IReadOnlyList<SponsorPolicy>> FindPoliciesByNumberAsync(
+        string tenantId, string policyNumber, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<SponsorPolicy>>(All<SponsorPolicy>(_policies)
+            .Where(p => p.TenantId == tenantId && p.PolicyNumber == policyNumber)
+            .OrderBy(p => p.GroupNumber, StringComparer.Ordinal)
+            .ToList());
+
     public Task<SponsorPolicy?> GetPolicyAsync(string tenantId, string id, CancellationToken ct = default) =>
         Task.FromResult(Read<SponsorPolicy>(_policies, Key(tenantId, id)));
 

@@ -132,6 +132,64 @@ public sealed class SponsorContractsController(ContractService contracts, ICurre
         });
     }
 
+    /// <summary>
+    /// What an inbound identifier names — a group number or a policy number
+    /// (§9b, step 3d). Built for the 834's <c>REF*1L</c>, which a trading
+    /// partner may fill with either.
+    ///
+    /// <para>
+    /// This route is tenant-wide rather than under one group, because the
+    /// question is which group the value belongs to. The group number is tried
+    /// first and wins, so a value that resolves today resolves the same way;
+    /// only a value that means nothing today is matched against policy numbers.
+    /// </para>
+    ///
+    /// <para>
+    /// An ambiguous value answers 409 with the groups it could be, rather than
+    /// picking one. Two groups using the same policy number is a thing nothing
+    /// prevents, and guessing between them would file a member under the wrong
+    /// employer.
+    /// </para>
+    /// </summary>
+    [HttpGet("/api/v1/sponsors/resolve-identifier")]
+    [RequirePermission("enrollment:read,config:read")]
+    public async Task<IActionResult> ResolveIdentifier([FromQuery] string? value, CancellationToken ct)
+    {
+        var resolved = await contracts.ResolveGroupOrPolicyAsync(TenantId, value ?? string.Empty, ct);
+        return resolved.Outcome switch
+        {
+            GroupOrPolicyOutcome.GroupNumber => Ok(new
+            {
+                value,
+                kind = nameof(GroupOrPolicyOutcome.GroupNumber),
+                groupNumber = resolved.GroupNumber,
+            }),
+            GroupOrPolicyOutcome.PolicyNumber => Ok(new
+            {
+                value,
+                kind = nameof(GroupOrPolicyOutcome.PolicyNumber),
+                groupNumber = resolved.GroupNumber,
+                policyNumber = resolved.Policy!.PolicyNumber,
+                benefitPlanId = resolved.Policy.BenefitPlanId,
+                programId = resolved.Policy.ProgramId,
+            }),
+            GroupOrPolicyOutcome.Ambiguous => Conflict(new
+            {
+                value,
+                kind = nameof(GroupOrPolicyOutcome.Ambiguous),
+                candidateGroupNumbers = resolved.CandidateGroupNumbers,
+                error = $"'{value}' is the policy number of more than one group "
+                    + $"({string.Join(", ", resolved.CandidateGroupNumbers!)}); it does not say which sponsor is meant.",
+            }),
+            _ => NotFound(new
+            {
+                value,
+                kind = nameof(GroupOrPolicyOutcome.Unknown),
+                error = $"'{value}' is neither a group number nor a policy number of this tenant.",
+            }),
+        };
+    }
+
     /// <summary>Opens a draft term for a contract period.</summary>
     [HttpPost("contract-terms")]
     [RequirePermission("config:sponsor")]
