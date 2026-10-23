@@ -130,7 +130,7 @@ Extend `IDocumentStore` with **Google Cloud Storage** and **S3** providers along
 3. **Move attachment-service onto the catalog:** existing `Attachment` rows migrate to documents with links. Keep the PWK attachment control number on the claim for 275 matching. *Attachments built (2026-10-20): attachment-service files through the catalog; there was no stored attachment data to migrate. Member documents built (2026-10-20, §13). PWK matching built (2026-10-21, §14).*
 4. **Correspondence** ([correspondence.md](correspondence.md)), starting with appeal notices. Generated letters are the first new producer on the catalog, and ID cards move onto it in the same phase.
 5. **Documents panel** on claim, authorization and appeal screens. *Built (2026-10-23), read-only, and on provider too (§15).*
-6. **Claim RFAI:** extend rfai-service from authorizations to claims, with 277 RFAI out, 275 / upload / fax in, matching, and clean-date events.
+6. **Claim RFAI:** extend rfai-service from authorizations to claims, with 277 RFAI out, 275 / upload / fax in, matching, and clean-date events. *Implementation design: [claim-rfai.md](claim-rfai.md).*
 7. **Fax/scan intake** with OCR and the unmatched-documents queue; paper-claim keying against the image.
 8. **Call recordings and transcripts** for CHO Service.
 
