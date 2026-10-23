@@ -16,6 +16,7 @@ public class CrdService : ICrdService
     private readonly IPriorAuthRuleEngine _priorAuthRuleEngine;
     private readonly CrdCodeClassification _defaultClassification;
     private readonly ICrdClassificationStore _classificationStore;
+    private readonly ICrdContextResolver _contextResolver;
     private readonly ILogger<CrdService> _logger;
 
     public CrdService(
@@ -23,12 +24,14 @@ public class CrdService : ICrdService
         IPriorAuthRuleEngine priorAuthRuleEngine,
         IOptions<CrdConfig> config,
         ICrdClassificationStore classificationStore,
+        ICrdContextResolver contextResolver,
         ILogger<CrdService> logger)
     {
         _terminologyClient = httpClientFactory.CreateClient("TerminologyService");
         _priorAuthRuleEngine = priorAuthRuleEngine;
         _defaultClassification = LoadFromConfig(config.Value);
         _classificationStore = classificationStore;
+        _contextResolver = contextResolver;
         _logger = logger;
     }
 
@@ -49,7 +52,22 @@ public class CrdService : ICrdService
         // 2. Translate SNOMED codes if needed
         var translated = await TranslateCodesAsync(codes, tenantId, ct);
 
-        // 3. Evaluate each code against benefit configuration (O(1) HashSet lookup)
+        // 3. Resolve the member context ONCE, before any code is evaluated.
+        //    It is the same member for every draft order in the hook, and a
+        //    per-code lookup would read CHO's stores n times to get n identical
+        //    answers.
+        var context = await _contextResolver.ResolveAsync(
+            request, tenantId, ExtractCodes(request).Select(c => c.Code).ToList(), ct);
+
+        if (!context.IsResolved)
+        {
+            _logger.LogInformation(
+                "CRD could not resolve a member context ({Failure}); the rule engine will not be called "
+                + "and determinations come from the explicit classification alone",
+                context.Failure);
+        }
+
+        // 4. Evaluate each code against benefit configuration (O(1) HashSet lookup)
         var classification = GetClassification(tenantId);
         var cards = new List<CrdCard>();
         var assertions = new List<(int EntryIndex, CrdDetermination Determination,
@@ -65,7 +83,7 @@ public class CrdService : ICrdService
             try
             {
                 var outcome = await EvaluateCodeAsync(
-                    request, tenantId, classification, effectiveCode, display, ct);
+                    context, tenantId, classification, effectiveCode, display, ct);
                 cards.Add(outcome.Card);
                 assertions.Add((entryIndex, outcome.Determination, outcome.Reason, coding));
             }
@@ -275,11 +293,18 @@ public class CrdService : ICrdService
         CrdCard Card, CrdDetermination Determination, CrdIndeterminateReason? Reason);
 
     private async Task<CrdCodeOutcome> EvaluateCodeAsync(
-        CrdHookRequest request, string tenantId, CrdCodeClassification classification,
+        CrdContextResolution context, string tenantId, CrdCodeClassification classification,
         string effectiveCode, string display, CancellationToken ct)
     {
-        var ruleDecision = await EvaluatePriorAuthRuleAsync(
-            request, tenantId, effectiveCode, ct);
+        // The engine is called only with a context read from the member CHO
+        // actually holds. Before, it was called with a hard-coded
+        // TX / Medicaid / STAR context for every member in every state, so
+        // whatever that rule set said was reported as this member's coverage
+        // determination (D-21, second part; G-05). An unresolved member means
+        // no rule set applies — not that a different member's does.
+        var ruleDecision = context.IsResolved
+            ? await EvaluatePriorAuthRuleAsync(context.Context!, effectiveCode, ct)
+            : null;
 
         // Fail closed (D-21): "no prior authorization needed" only on an
         // explicit, positive determination. Today that is an explicit
@@ -312,37 +337,37 @@ public class CrdService : ICrdService
         if (classification.AutoApprovedCodes.Contains(effectiveCode))
             return new(BuildAutoApprovedCard(display), CrdDetermination.NoAuthorizationRequired, null);
 
-        // Unknown is not one case but two, and the extension can say which:
-        // the engine failed to answer (technical, which the IG has a code for),
-        // or nothing classifies the code at all.
+        // Unknown is not one case: the member could not be resolved, the engine
+        // could not answer, or nothing classifies the code. The IG's reason
+        // value set distinguishes the first two, and a provider deciding what
+        // to do next needs to know which it is — "we cannot find your patient"
+        // and "try again later" call for different actions.
         return new(
             BuildRequirementsUnknownCard(display),
             CrdDetermination.Indeterminate,
-            ruleDecision is null ? CrdIndeterminateReason.Technical : CrdIndeterminateReason.Unclassified);
+            context.Failure switch
+            {
+                CrdContextFailure.MemberNotFound => CrdIndeterminateReason.MemberNotFound,
+                CrdContextFailure.NoActiveCoverage => CrdIndeterminateReason.NoActiveCoverage,
+                CrdContextFailure.ContextIncomplete => CrdIndeterminateReason.CoverageContextIncomplete,
+                CrdContextFailure.Unavailable => CrdIndeterminateReason.Technical,
+                _ => ruleDecision is null
+                    ? CrdIndeterminateReason.Technical
+                    : CrdIndeterminateReason.Unclassified,
+            });
     }
 
     private async Task<PaRuleDecision?> EvaluatePriorAuthRuleAsync(
-        CrdHookRequest request,
-        string tenantId,
+        PaRuleContext context,
         string procedureCode,
         CancellationToken ct)
     {
         try
         {
-            return await _priorAuthRuleEngine.EvaluateAsync(new PaRuleContext
-            {
-                TenantId = tenantId,
-                StateCode = "TX",
-                Lob = PaLineOfBusiness.Medicaid,
-                Program = "STAR",
-                RequestingProviderNpi = ExtractPractitionerId(request),
-                ServicingProviderNpi = ExtractPractitionerId(request),
-                MemberId = request.Context?.PatientId ?? string.Empty,
-                ServiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                ProcedureCodes = [procedureCode],
-                DiagnosisCodes = [],
-                EstimatedCost = 0m,
-            }, ct);
+            // The resolved context carries every code in the hook, for rules that
+            // look across an order set; this call is about one of them.
+            return await _priorAuthRuleEngine.EvaluateAsync(
+                context with { ProcedureCodes = [procedureCode] }, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -355,18 +380,6 @@ public class CrdService : ICrdService
                 LogSanitizer.Sanitize(procedureCode, 256));
             return null;
         }
-    }
-
-    private static string ExtractPractitionerId(CrdHookRequest request)
-    {
-        var userId = request.Context?.UserId;
-        if (string.IsNullOrWhiteSpace(userId))
-            return string.Empty;
-
-        var slash = userId.LastIndexOf('/');
-        return slash >= 0 && slash < userId.Length - 1
-            ? userId[(slash + 1)..]
-            : userId;
     }
 
     // ── Classification cache ─────────────────────────────────────────────────

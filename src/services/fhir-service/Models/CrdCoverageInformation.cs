@@ -58,6 +58,18 @@ public enum CrdIndeterminateReason
     /// about prior authorization — which is not the same as saying none is needed.
     /// </summary>
     DocumentationOnlyClassification,
+
+    /// <summary>No member matched the hook's patient. IG code <c>no-member-found</c>.</summary>
+    MemberNotFound,
+
+    /// <summary>The member has no coverage in effect. IG code <c>no-active-coverage</c>.</summary>
+    NoActiveCoverage,
+
+    /// <summary>
+    /// The member and coverage exist but do not carry what the coverage rules
+    /// are keyed on, so no rule set resolves. IG code <c>coverage-not-found</c>.
+    /// </summary>
+    CoverageContextIncomplete,
 }
 
 /// <summary>
@@ -188,23 +200,39 @@ public sealed record CrdCoverageInformation
     {
         var concept = new Dictionary<string, object?> { ["text"] = text ?? DefaultReasonText(reason) };
 
-        // Only one of CHO's reasons has a code in the IG's value set. The rest
-        // carry text alone rather than a coding CHO cannot justify.
-        if (reason == CrdIndeterminateReason.Technical)
+        // Several of CHO's reasons have a code in the IG's Coverage Assertion
+        // Reasons value set, and those carry it. The rest carry text alone
+        // rather than a coding CHO cannot justify — crd-ci-q7 is satisfied by
+        // the text either way.
+        if (IgReasonCode(reason) is { } code)
         {
             concept["coding"] = new[]
             {
                 new Dictionary<string, object?>
                 {
                     ["system"] = TempCodeSystem,
-                    ["code"] = "technical",
-                    ["display"] = "Technical issues",
+                    ["code"] = code.Code,
+                    ["display"] = code.Display,
                 },
             };
         }
 
         return concept;
     }
+
+    /// <summary>
+    /// The IG code for a reason, where the value set has one. Null where it does
+    /// not: nothing in it means "this payer has no classification for the code",
+    /// and inventing a code would be a wrong claim rather than a missing one.
+    /// </summary>
+    internal static (string Code, string Display)? IgReasonCode(CrdIndeterminateReason reason) => reason switch
+    {
+        CrdIndeterminateReason.Technical => ("technical", "Technical issues"),
+        CrdIndeterminateReason.MemberNotFound => ("no-member-found", "Member not found"),
+        CrdIndeterminateReason.NoActiveCoverage => ("no-active-coverage", "Coverage not active"),
+        CrdIndeterminateReason.CoverageContextIncomplete => ("coverage-not-found", "Coverage not found"),
+        _ => null,
+    };
 
     /// <summary>The text a reason carries when the caller supplies none.</summary>
     public static string DefaultReasonText(CrdIndeterminateReason reason) => reason switch
@@ -220,6 +248,15 @@ public sealed record CrdCoverageInformation
         CrdIndeterminateReason.DocumentationOnlyClassification =>
             "Cloud Health Office requires additional documentation for this service and has made no "
             + "determination about prior authorization.",
+        CrdIndeterminateReason.MemberNotFound =>
+            "Cloud Health Office could not identify the member, so it cannot apply this member's coverage "
+            + "rules to the service.",
+        CrdIndeterminateReason.NoActiveCoverage =>
+            "Cloud Health Office holds no coverage in effect for this member, so it cannot state the "
+            + "coverage requirements for the service.",
+        CrdIndeterminateReason.CoverageContextIncomplete =>
+            "Cloud Health Office could not determine the state and line of business this member's coverage "
+            + "rules are selected by, so no rule set applies.",
         _ => "Cloud Health Office could not determine the coverage requirements for this service.",
     };
 

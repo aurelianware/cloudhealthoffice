@@ -644,6 +644,9 @@ builder.Services.AddHttpClient(UpstreamClientNames.ClaimsService, client =>
 builder.Services.Configure<CrdConfig>(builder.Configuration.GetSection("Cms0057:Crd"));
 builder.Services.AddMemoryCache(options => options.SizeLimit = 1024);
 builder.Services.AddSingleton<ICrdClassificationStore, CrdClassificationStore>();
+// CRD resolves the member context from CHO's own Patient and Coverage before it
+// calls the rule engine. Scoped, because IFhirDataAdapter is.
+builder.Services.AddScoped<ICrdContextResolver, CrdContextResolver>();
 builder.Services.AddScoped<ICrdService, CrdService>();
 builder.Services.Configure<DtrConfig>(builder.Configuration.GetSection("Cms0057:Dtr"));
 // Singleton: the store ensures its indexes at construction.

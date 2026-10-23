@@ -46,6 +46,7 @@ public class CrdCodeClassificationTests
             priorAuthRuleEngine.Object,
             Options.Create(config),
             new CrdClassificationStore(CreateMemoryCache()),
+            CrdContextResolverDouble.Resolved(),
             new Mock<ILogger<CrdService>>().Object);
     }
 
