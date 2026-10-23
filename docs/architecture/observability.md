@@ -163,6 +163,13 @@ Available instruments (all under the `CloudHealthOffice` meter):
 
 ## Reading `/metrics`
 
+Telling a person *inside the plan* that something needs them — a deadline at
+risk, a job finished, an integration broken — is a different capability from
+infrastructure monitoring, and is designed in
+[operational-notifications.md](operational-notifications.md). It does not
+replace anything here: the plan's own monitoring stack stays the IT path, and
+the genuinely technical topics are exposed as gauges below as well.
+
 Every service exposes Prometheus-format metrics at `/metrics`. The dot-
 separated OTel names convert to underscores; a histogram ends up as three
 series (`_bucket`, `_count`, `_sum`). Example:
