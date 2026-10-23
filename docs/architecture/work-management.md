@@ -310,6 +310,12 @@ refuses to start).
    payment-service exceptions as work. *Enrollment built 2026-10-22 (reconcile
    only; see above).*
 
+Forecasting arrival, projecting deadline breach and suggesting where people
+should work are designed in
+[workforce-optimization.md](workforce-optimization.md), which reads this
+service's queues, due dates, memberships and audit stream and adds an hourly
+`WorkQueueSnapshot` series to it. Nothing there is built.
+
 Deferred from phase 1: lease enforcement in claims-service (the resolve refusing
 a claim leased to someone else); per-user Get Next serialization; criteria for
 non-claim work types; a user directory for the admin pickers (user ids are typed;

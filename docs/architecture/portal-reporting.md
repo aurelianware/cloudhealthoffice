@@ -272,6 +272,12 @@ Add:
 7. **Cross-domain and regulatory reports** under `/reports`; the old tabs retire as their replacements ship.
 8. **Data extracts** and change feeds, per tenant.
 
+The supervisor reports in §4.1 (pended inventory, throughput) need an hourly
+queue series that nothing writes today. That series, and the forecasting and
+deadline-risk work built on it, are designed in
+[workforce-optimization.md](workforce-optimization.md) §4; it should be built
+once, in work-management-service, and read by both efforts rather than twice.
+
 ## 9. Open questions
 
 | # | Question | Recommendation |
