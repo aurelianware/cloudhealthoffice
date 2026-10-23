@@ -412,8 +412,11 @@ public class PasInquireCallerTests
     {
         string? caller = "unset";
         var inquiry = new Mock<IPriorAuthorizationInquiryService>();
-        inquiry.Setup(i => i.FromInquiryClaim(It.IsAny<Claim>(), It.IsAny<string>(), It.IsAny<string?>()))
-            .Callback<Claim, string, string?>((_, _, c) => caller = c)
+        inquiry.Setup(i => i.FromInquiryClaim(
+                It.IsAny<Claim>(), It.IsAny<string>(), It.IsAny<string?>(),
+                It.IsAny<global::FhirService.Services.Identity.AuthenticatedCaller?>()))
+            .Callback<Claim, string, string?, global::FhirService.Services.Identity.AuthenticatedCaller?>(
+                (_, _, c, _) => caller = c)
             .Returns(new PriorAuthorizationInquiryRequest { TenantId = "tenant-a" });
         inquiry.Setup(i => i.InquireAsync(It.IsAny<PriorAuthorizationInquiryRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(PriorAuthorizationInquiryResult.Refused(PriorAuthorizationInquiryOutcome.NotFound));

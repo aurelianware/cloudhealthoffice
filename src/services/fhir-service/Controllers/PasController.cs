@@ -80,6 +80,15 @@ public class PasController : FhirControllerBase
             }
             var claim = validatedClaim!;
 
+            // 1.1 D-26: a caller whose issuer asserts an NPI may only submit for
+            // that provider. Before anything is decided or recorded, because the
+            // NPI this records becomes a key $inquire later trusts.
+            var notTheProvider = RefuseIfSubmitterIsNotTheProvider(requestBundle, claim);
+            if (notTheProvider != null)
+            {
+                return notTheProvider;
+            }
+
             _logger.LogInformation(
                 "PAS $submit received for tenant {TenantId}, claim type {ClaimType}",
                 LogSanitizer.Sanitize(TenantId),
@@ -416,7 +425,7 @@ public class PasController : FhirControllerBase
         // neither is read from the request body. Lifting the lookup keys out of
         // the Claim is the service's job, so this action stays routing plus
         // HTTP mapping.
-        var request = _inquiry.FromInquiryClaim(claim!, TenantId, CallerId());
+        var request = _inquiry.FromInquiryClaim(claim!, TenantId, CallerId(), VerifiedCaller());
 
         var result = await _inquiry.InquireAsync(request, HttpContext.RequestAborted);
 
@@ -534,6 +543,57 @@ public class PasController : FhirControllerBase
     /// from a header or the body.
     /// </summary>
     private string? CallerId() => AuthenticatedActorId;
+
+    /// <summary>
+    /// The authenticated caller resolved from the validated token — the same
+    /// object CDex binds its submitter against. Null when no trusted issuer
+    /// resolved one, which leaves every check below exactly as it was.
+    /// </summary>
+    private FhirService.Services.Identity.AuthenticatedCaller? VerifiedCaller()
+        => HttpContext.Items[FhirService.Services.Identity.AuthenticatedCaller.HttpContextItemKey]
+            as FhirService.Services.Identity.AuthenticatedCaller;
+
+    /// <summary>
+    /// D-26 on the submit side: a caller whose trusted issuer asserted an NPI
+    /// may not record a prior authorization for a DIFFERENT provider.
+    ///
+    /// <para>
+    /// This half matters more than it looks. The requesting provider's NPI is
+    /// one of the two corroborating keys <c>$inquire</c> later trusts, so
+    /// without this check whoever can submit also chooses the key that will
+    /// later unlock the record.
+    /// </para>
+    ///
+    /// <para>
+    /// Tighten-only: null when nothing was asserted, so a deployment that has
+    /// declared no provider-serving issuer is unaffected.
+    /// </para>
+    /// </summary>
+    private IActionResult? RefuseIfSubmitterIsNotTheProvider(Bundle bundle, Claim claim)
+    {
+        var verified = VerifiedCaller()?.ProviderNpi;
+        if (string.IsNullOrWhiteSpace(verified))
+            return null;
+
+        var (named, _) = FhirService.Services.Pas.PasAuthorizationMapper.ProviderNpi(bundle, claim.Provider);
+
+        // A Claim naming no resolvable NPI is the mapper's error to report, not
+        // this check's: refusing here would turn a mapping defect into an
+        // authorization message and hide which one it was.
+        if (string.IsNullOrWhiteSpace(named)
+            || string.Equals(named.Trim(), verified.Trim(), StringComparison.Ordinal))
+            return null;
+
+        _logger.LogWarning(
+            "PAS $submit: the provider identity asserted by the caller's trusted issuer does not "
+            + "match the provider the Claim names. Refusing.");
+
+        // Deliberately not "you are not NPI x": the refusal says what the caller
+        // may do about it without confirming which provider CHO thinks they are.
+        return FhirBadRequest(
+            "The prior authorization names a different requesting provider than the "
+            + "authenticated caller is identified as.");
+    }
 
     /// <summary>Tracking handle issued at submit and used to inquire later.</summary>
     private static string NewAuthorizationNumber()

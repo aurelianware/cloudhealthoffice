@@ -78,6 +78,32 @@ public sealed class TrustedIssuerOptions
     /// </summary>
     public bool IssuesChoClientRegistrations { get; set; }
 
+    /// <summary>
+    /// This issuer's tokens are used by PROVIDER callers — a provider or their
+    /// system submitting and inquiring about prior authorizations.
+    ///
+    /// <para>
+    /// Declaring it has one consequence, and it is deliberately narrow: the
+    /// issuer must also configure <see cref="IssuerClaimMappingOptions.ProviderNpiClaim"/>,
+    /// checked at startup, and PAS then BINDS that issuer's callers to the NPI
+    /// it asserts (D-26). An issuer that does not declare it is untouched —
+    /// a patient app's issuer has no NPI to assert, and demanding one of every
+    /// issuer would mean demanding a claim that cannot exist.
+    /// </para>
+    ///
+    /// <para>
+    /// WHY THIS IS A PER-ISSUER FLAG RATHER THAN A GLOBAL REQUIREMENT. CHO
+    /// cannot make a customer's identity provider emit an NPI claim, so a
+    /// deployment-wide requirement would hold the whole service hostage to
+    /// something outside CHO's control — and would take down the member-facing
+    /// APIs over a prior-authorization gap. Declaring intent per issuer puts the
+    /// requirement exactly where the capability is, and
+    /// <see cref="IssuesChoClientRegistrations"/> is the same shape already:
+    /// a per-issuer statement about what CHO will believe from its tokens.
+    /// </para>
+    /// </summary>
+    public bool ServesProviderCallers { get; set; }
+
     /// <summary>Development escape hatch for a local IdP over plain HTTP.</summary>
     public bool RequireHttpsMetadata { get; set; } = true;
 
@@ -166,6 +192,22 @@ public sealed class TrustedIssuerOptions
                     $"Trusted issuer '{Issuer}' allows signing algorithm '{algorithm}', which is "
                     + $"not supported. Supported: {string.Join(", ", SupportedAlgorithms.OrderBy(a => a, StringComparer.Ordinal))}.");
             }
+        }
+
+        // An issuer that says its callers are providers, but asserts no NPI,
+        // is a configuration that cannot do what it claims: PAS would fall back
+        // to corroborating keys out of the request body and the binding would
+        // be off while the configuration said it was on. That is the failure
+        // this flag exists to make impossible, so it is fatal at startup —
+        // for THIS issuer, never for a deployment that declared nothing.
+        if (ServesProviderCallers && string.IsNullOrWhiteSpace(Claims.ProviderNpiClaim))
+        {
+            throw new SmartTrustValidationException(
+                $"Trusted issuer '{Issuer}' sets ServesProviderCallers=true but configures no "
+                + "Claims.ProviderNpiClaim. Prior-authorization callers from this issuer would "
+                + "then be authorized by keys they supply in the request body rather than by "
+                + "their verified identity. Configure the claim the issuer asserts an NPI in, "
+                + "or clear ServesProviderCallers if its callers are not providers.");
         }
 
         ValidateMetadataUrl(EffectiveDiscoveryUrl(), "DiscoveryUrl", isDevelopmentHost);
