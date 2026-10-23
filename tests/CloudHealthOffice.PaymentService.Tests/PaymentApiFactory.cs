@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using CloudHealthOffice.PlanConfiguration;
 using NSubstitute;
 using PaymentService.Repositories;
 using PaymentService.Services;
@@ -20,6 +21,15 @@ public class PaymentApiFactory : WebApplicationFactory<Program>
     public IEraEnvelopeRepository EraEnvelopeRepository { get; } = Substitute.For<IEraEnvelopeRepository>();
     public ITradingPartnersClient TradingPartnersClient { get; } = Substitute.For<ITradingPartnersClient>();
 
+    /// <summary>
+    /// The tenant's carriers. Empty, so a run originates and pays under the
+    /// deployment's configured identity; the host's real directory would reach
+    /// tenant-service, and the carrier read is deliberately fail-closed
+    /// (plan-configuration.md §12.3), so leaving it in place would turn every
+    /// run in these tests into a 500.
+    /// </summary>
+    public InMemoryCarrierDirectory Carriers { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
@@ -37,7 +47,8 @@ public class PaymentApiFactory : WebApplicationFactory<Program>
                          || d.ServiceType == typeof(IBatchEraGeneratorService)
                          || d.ServiceType == typeof(ICarcRarcMappingService)
                          || d.ServiceType == typeof(IEraEnvelopeRepository)
-                         || d.ServiceType == typeof(ITradingPartnersClient))
+                         || d.ServiceType == typeof(ITradingPartnersClient)
+                         || d.ServiceType == typeof(ICarrierDirectory))
                 .ToList();
 
             foreach (var descriptor in descriptorsToRemove)
@@ -68,6 +79,7 @@ public class PaymentApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(CarcRarcMappingService);
             services.AddSingleton(EraEnvelopeRepository);
             services.AddSingleton(TradingPartnersClient);
+            services.AddSingleton<ICarrierDirectory>(Carriers);
             services.AddSingleton<IClaimReservationRepository>(new InMemoryClaimReservationRepository());
             services.AddSingleton<IReservationAuditLog>(new InMemoryReservationAuditLog());
             services.AddSingleton<IProviderReceivableRepository>(new InMemoryProviderReceivableRepository());

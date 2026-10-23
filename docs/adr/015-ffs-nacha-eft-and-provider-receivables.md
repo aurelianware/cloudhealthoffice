@@ -28,8 +28,9 @@ BPR = one TRN, and the CCD+ addenda carries the 835 TRN (CAQH CORE 370).
 
 - `FfsNachaCreditFileBuilder` is pure and deterministic. It produces one batch:
   service class 220, SEC CCD, entry description `HCCLAIMPMT`, and company id =
-  `Era:OriginatingCompanyId` (the 835 TRN03). Any other `Nacha:CompanyId` is
-  refused. Each payee gets one type 6 entry followed by one type 7 addenda
+  `Era:OriginatingCompanyId` (the 835 TRN03). Any other stated company id is
+  refused, whether it comes from `Nacha:CompanyId` or from the tenant's carrier
+  (plan-configuration.md §12.3). Each payee gets one type 6 entry followed by one type 7 addenda
   (type 05) holding `TRN*1*{TRN02}*{TRN03}\`. Records are 94 characters and the
   file is blocked by 10. The entry hash and the totals are computed from the
   entries.

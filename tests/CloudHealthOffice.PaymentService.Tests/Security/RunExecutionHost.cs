@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using CloudHealthOffice.PlanConfiguration;
 using PaymentService.Models;
 using PaymentService.Repositories;
 using PaymentService.Services;
@@ -36,6 +37,14 @@ public sealed class RunExecutionHost : WebApplicationFactory<Program>
     public StandInClaimsService Claims { get; } = new();
     public StandInTradingPartnerService TradingPartners { get; } = new();
     public InMemoryReservationAuditLog Audit { get; } = new();
+
+    /// <summary>
+    /// The tenant's carriers. Empty, so a run originates and pays under the
+    /// configured identity; the host's real directory would reach tenant-service,
+    /// and the carrier read is deliberately fail-closed
+    /// (plan-configuration.md §12.3), so leaving it in would make every run a 500.
+    /// </summary>
+    public InMemoryCarrierDirectory Carriers { get; } = new();
     public ManualClock Clock { get; } = new();
 
     /// <summary>
@@ -93,6 +102,7 @@ public sealed class RunExecutionHost : WebApplicationFactory<Program>
                          || d.ServiceType == typeof(IPaymentRunRepository)
                          || d.ServiceType == typeof(IReversalRunRepository)
                          || d.ServiceType == typeof(IEraEnvelopeRepository)
+                         || d.ServiceType == typeof(ICarrierDirectory)
                          || d.ServiceType.FullName?.Contains("Mongo") == true
                          || d.ImplementationType?.FullName?.Contains("Mongo") == true)
                 .ToList();
@@ -103,6 +113,7 @@ public sealed class RunExecutionHost : WebApplicationFactory<Program>
             services.AddSingleton<IPaymentRunRepository>(Runs);
             services.AddSingleton<IReversalRunRepository>(ReversalRuns);
             services.AddSingleton<IEraEnvelopeRepository>(Envelopes);
+            services.AddSingleton<ICarrierDirectory>(Carriers);
             services.AddSingleton<IClaimReservationRepository>(Reservations);
             services.AddSingleton<IReservationAuditLog>(Audit);
             services.AddSingleton<IProviderReceivableRepository>(new InMemoryProviderReceivableRepository());

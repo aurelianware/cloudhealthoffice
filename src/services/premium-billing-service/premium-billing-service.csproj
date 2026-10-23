@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+    <ProjectReference Include="..\shared\CloudHealthOffice.PlanConfiguration\CloudHealthOffice.PlanConfiguration.csproj" />
     <ProjectReference Include="..\shared\CloudHealthOffice.FieldProtection\CloudHealthOffice.FieldProtection.csproj" />
     <ProjectReference Include="..\shared\CloudHealthOffice.NachaTransmission\CloudHealthOffice.NachaTransmission.csproj" />
     <ProjectReference Include="..\shared\CloudHealthOffice.BankReconciliation\CloudHealthOffice.BankReconciliation.csproj" />

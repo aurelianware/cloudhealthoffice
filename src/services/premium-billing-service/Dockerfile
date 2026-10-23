@@ -12,6 +12,7 @@ COPY src/Directory.Build.props src/
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/premium-billing-service/premium-billing-service.csproj src/services/premium-billing-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/CloudHealthOffice.PlanConfiguration.csproj src/services/shared/CloudHealthOffice.PlanConfiguration/
 COPY src/services/shared/CloudHealthOffice.FieldProtection/CloudHealthOffice.FieldProtection.csproj src/services/shared/CloudHealthOffice.FieldProtection/
 COPY src/services/shared/CloudHealthOffice.NachaTransmission/CloudHealthOffice.NachaTransmission.csproj src/services/shared/CloudHealthOffice.NachaTransmission/
 COPY src/services/shared/CloudHealthOffice.BankReconciliation/CloudHealthOffice.BankReconciliation.csproj src/services/shared/CloudHealthOffice.BankReconciliation/
@@ -20,6 +21,7 @@ RUN dotnet restore src/services/premium-billing-service/premium-billing-service.
 # Copy source code and build
 COPY src/services/premium-billing-service/ src/services/premium-billing-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/ src/services/shared/CloudHealthOffice.PlanConfiguration/
 COPY src/services/shared/CloudHealthOffice.FieldProtection/ src/services/shared/CloudHealthOffice.FieldProtection/
 COPY src/services/shared/CloudHealthOffice.NachaTransmission/ src/services/shared/CloudHealthOffice.NachaTransmission/
 COPY src/services/shared/CloudHealthOffice.BankReconciliation/ src/services/shared/CloudHealthOffice.BankReconciliation/

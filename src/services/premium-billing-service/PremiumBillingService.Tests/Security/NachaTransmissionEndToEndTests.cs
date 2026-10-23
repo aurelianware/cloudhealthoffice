@@ -16,6 +16,7 @@ using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
 using PremiumBillingService.Services;
 using static PremiumBillingService.Tests.Security.SponsorBankAccountEndToEndTests;
+using PremiumBillingService.Tests.Support;
 
 namespace PremiumBillingService.Tests.Security;
 
@@ -86,6 +87,7 @@ public class NachaTransmissionEndToEndTests : IClassFixture<NachaTransmissionEnd
             builder.ConfigureLogging(logging => logging.AddProvider(Logs));
             builder.ConfigureServices(services =>
             {
+                StubCarriers.Register(services);
                 services.RemoveAll<IBillingRunRepository>();
                 services.RemoveAll<IPremiumInvoiceRepository>();
                 services.RemoveAll<IEftDraftRepository>();

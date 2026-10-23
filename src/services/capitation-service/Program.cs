@@ -1,3 +1,4 @@
+using CloudHealthOffice.PlanConfiguration;
 using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
@@ -59,6 +60,11 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
     auth.DefaultReadPermission = "payments:read";
     auth.DefaultWritePermission = "payments:run";
 });
+// The tenant's carrier: the legal entity ACH files and 835s go out under. Where
+// the carrier states nothing, the deployment's own Nacha:*/Payer:* values stand
+// (plan-configuration.md §12.2, step 2b).
+builder.Services.AddCarrierDirectoryClient(builder.Configuration);
+
 
 // Database — MongoDB is the only capitation store (ADR 006); the client is
 // registered by the shared lib.

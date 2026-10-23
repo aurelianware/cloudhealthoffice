@@ -1,3 +1,4 @@
+using CloudHealthOffice.PlanConfiguration;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
@@ -37,6 +38,11 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
     auth.DefaultReadPermission = "billing:read";
     auth.DefaultWritePermission = "billing:run";
 });
+// The tenant's carrier: the legal entity ACH files and 835s go out under. Where
+// the carrier states nothing, the deployment's own Nacha:*/Payer:* values stand
+// (plan-configuration.md §12.2, step 2b).
+builder.Services.AddCarrierDirectoryClient(builder.Configuration);
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {

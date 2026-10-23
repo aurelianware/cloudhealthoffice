@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.PlanConfiguration;
 using PaymentService.Models;
 using PaymentService.Repositories;
 using System.Net.Http.Json;
@@ -41,6 +42,7 @@ public class PaymentRunService : IPaymentRunService
     private readonly IClaimsServiceClient _claimsService;
     private readonly ILogger<PaymentRunService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly PayerIdentityResolver _payers;
     private readonly ICurrentActor _actor;
     private readonly IRunSeparationOfDuties _separationOfDuties;
     private readonly IClaimReservationRepository _reservations;
@@ -63,7 +65,8 @@ public class PaymentRunService : IPaymentRunService
         IClaimReservationRepository reservations,
         IProviderReceivableLedger? receivables = null,
         IProviderPayeeAccountSource? payeeAccounts = null,
-        AchEffectiveDatePolicy? effectiveDates = null)
+        AchEffectiveDatePolicy? effectiveDates = null,
+        ICarrierDirectory? carriers = null)
     {
         _effectiveDates = effectiveDates
             ?? new AchEffectiveDatePolicy(Microsoft.Extensions.Options.Options.Create(new BankTransmissionOptions()), TimeProvider.System);
@@ -81,6 +84,7 @@ public class PaymentRunService : IPaymentRunService
         _separationOfDuties = separationOfDuties;
         _logger = logger;
         _configuration = configuration;
+        _payers = new PayerIdentityResolver(carriers, configuration);
     }
 
     public async Task<PaymentRun> CreatePaymentRunAsync(PaymentRunCriteria criteria, string? createdBy = null, DateTime? paymentDate = null)
@@ -362,7 +366,8 @@ public class PaymentRunService : IPaymentRunService
             //          after the payments so a partner's envelope keeps its
             //          payment's check number as TRN02. They add 0 to BPR02; a
             //          partner with only denials gets a NON 835 (BPR02 = 0).
-            var denialInputs = BuildDenialInputs(denials, resolvedTradingPartners, checkByTradingPartner, paymentRun);
+            var denialInputs = BuildDenialInputs(denials, resolvedTradingPartners, checkByTradingPartner, paymentRun,
+                await _payers.ResolveAsync(paymentRun.TenantId));
             eraInputs.AddRange(denialInputs);
 
             // Step 6: Batched 835 generation — one envelope per trading partner.
@@ -1224,6 +1229,7 @@ public class PaymentRunService : IPaymentRunService
     {
         var firstClaim = claims.First();
         var providerNpi = firstClaim.PayeeNpi;
+        var payer = await _payers.ResolveAsync(paymentRun.TenantId);
 
         var payment = new Payment
         {
@@ -1231,8 +1237,8 @@ public class PaymentRunService : IPaymentRunService
             PaymentMethod = paymentMethod ?? paymentRun.PaymentMethod,
             TotalPaymentAmount = claims.Sum(PlanPaidAmountOf),
             PaymentDate = paymentRun.PaymentDate,
-            PayerName = _configuration["Payer:Name"] ?? "Cloud Health Office",
-            PayerId = _configuration["Payer:Id"] ?? "CHO",
+            PayerName = payer.Name,
+            PayerId = payer.Id,
             PayeeName = firstClaim.PayeeNameOr(providerKey),
             PayeeNPI = providerNpi,
             PayeeAddress = SharedPayToAddress(claims),
@@ -1382,7 +1388,8 @@ public class PaymentRunService : IPaymentRunService
         List<ClaimDto> denials,
         IReadOnlyDictionary<string, TradingPartnerSummary> resolved,
         IReadOnlyDictionary<string, string> checkByTradingPartner,
-        PaymentRun paymentRun)
+        PaymentRun paymentRun,
+        PayerIdentity payer)
     {
         var inputs = new List<EraPaymentInput>();
         var traceSequence = 0;
@@ -1407,8 +1414,8 @@ public class PaymentRunService : IPaymentRunService
                     PaymentMethod = paymentRun.PaymentMethod,
                     TotalPaymentAmount = 0m,
                     PaymentDate = paymentRun.PaymentDate,
-                    PayerName = _configuration["Payer:Name"] ?? "Cloud Health Office",
-                    PayerId = _configuration["Payer:Id"] ?? "CHO",
+                    PayerName = payer.Name,
+                    PayerId = payer.Id,
                     PayeeName = first.Claim.PayeeNameOr(first.Npi),
                     PayeeNPI = first.Npi,
                     PayeeAddress = SharedPayToAddress(group.Select(x => x.Claim).ToList()),

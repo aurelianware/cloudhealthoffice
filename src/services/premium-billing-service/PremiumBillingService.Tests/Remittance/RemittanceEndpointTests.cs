@@ -15,6 +15,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
+using PremiumBillingService.Tests.Support;
 
 namespace PremiumBillingService.Tests.Remittance;
 
@@ -50,6 +51,7 @@ public sealed class RemittanceEndpointTests : IAsyncLifetime
             }));
             builder.ConfigureServices(services =>
             {
+                StubCarriers.Register(services);
                 services.RemoveAll<IPremiumInvoiceRepository>();
                 services.RemoveAll<IRemittanceBatchRepository>();
                 services.RemoveAll<IRemittanceExceptionRepository>();
