@@ -10,6 +10,7 @@ using PersonalRepresentativeService.Repositories;
 using PersonalRepresentativeService.Services;
 
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using CloudHealthOffice.PlanConfiguration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -93,11 +94,12 @@ else
 
 // ── Activation controls ─────────────────────────────────────────────
 // Activating a representative needs a user other than its creator (unless the
-// tenant's configuration.personalRepresentativeControls.requireSecondPerson is
-// false in tenant-service) and, for guardians, healthcare powers of attorney and
+// tenant sets personalRepresentative.requireSecondUserActivation to false in
+// plan configuration) and, for guardians, healthcare powers of attorney and
 // surrogates, a proof-of-authority document in member-document-service. Both
 // clients forward the caller's token through the shared outbound handler
 // (ChoAuth:Outbound:Hosts names their hosts).
+builder.Services.AddPlanSettingsClient(builder.Configuration);
 builder.Services.AddSingleton<ITenantPersonalRepControls, TenantPersonalRepControls>();
 builder.Services.AddSingleton<IProofOfAuthorityDocuments, MemberDocumentProofOfAuthorityDocuments>();
 builder.Services.AddScoped<IPersonalRepActivationControls, PersonalRepActivationControls>();

@@ -15,8 +15,15 @@
     <EmbeddedResource Remove="CorrespondenceService.Tests/**" />
   </ItemGroup>
 
+  <!-- The composer's merge model and write-once snapshot are internal; the
+       tests assert what goes into them, as the other services' tests do. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="CorrespondenceService.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+    <ProjectReference Include="..\shared\CloudHealthOffice.PlanConfiguration\CloudHealthOffice.PlanConfiguration.csproj" />
     <ProjectReference Include="..\shared\CloudHealthOffice.PdfLayout\CloudHealthOffice.PdfLayout.csproj" />
     <PackageReference Include="Fluid.Core" />
     <PackageReference Include="MongoDB.Driver" />

@@ -1,3 +1,4 @@
+using CloudHealthOffice.PlanConfiguration;
 using System.Globalization;
 using PaymentService.Models;
 using PaymentService.Repositories;
@@ -89,6 +90,7 @@ public sealed class FfsEftFileService : IFfsEftFileService
     private readonly IPaymentRepository _payments;
     private readonly IProviderPayeeAccountSource _accounts;
     private readonly IConfiguration _configuration;
+    private readonly ICarrierDirectory? _carriers;
     private readonly INachaFileIdModifierAllocator _modifiers;
     private readonly AchEffectiveDatePolicy _dates;
     private readonly IEraEnvelopeRepository _envelopes;
@@ -104,7 +106,8 @@ public sealed class FfsEftFileService : IFfsEftFileService
         AchEffectiveDatePolicy effectiveDates,
         IEraEnvelopeRepository envelopes,
         ILogger<FfsEftFileService> logger,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        ICarrierDirectory? carriers = null)
     {
         _dates = effectiveDates;
         _envelopes = envelopes;
@@ -113,6 +116,7 @@ public sealed class FfsEftFileService : IFfsEftFileService
         _accounts = accounts;
         _modifiers = modifiers;
         _configuration = configuration;
+        _carriers = carriers;
         _logger = logger;
         _time = time ?? TimeProvider.System;
     }
@@ -120,6 +124,7 @@ public sealed class FfsEftFileService : IFfsEftFileService
     public async Task<FfsEftFileOutcome> GenerateAsync(string paymentRunId, string actorUserId, CancellationToken cancellationToken = default)
     {
         var (run, plan) = await LoadAndPlanAsync(paymentRunId, actorUserId, cancellationToken);
+        var carrier = await CarrierAsync(run.TenantId, cancellationToken);
 
         // A pinned file is rebuilt from its own pinned header values (creation time,
         // effective date, modifier). A first file takes its creation time from the
@@ -142,9 +147,9 @@ public sealed class FfsEftFileService : IFfsEftFileService
             // send is refused and the file is re-dated (audited, with a notice that the
             // 835s carry the old date), never silently given another date here.
             effective = run.PaymentDate.Date;
-            modifier = plan.Entries.Count == 0 ? "A" : await AllocateAsync(run, created, effective, run.Id);
+            modifier = plan.Entries.Count == 0 ? "A" : await AllocateAsync(run, carrier, created, effective, run.Id);
         }
-        var header = BuildHeader(run, modifier, created, effective);
+        var header = BuildHeader(run, carrier, modifier, created, effective);
         var built = plan.Entries.Count == 0
             ? null
             : FfsNachaCreditFileBuilder.Build(header, plan.Entries.Select(e => e.Entry).ToList());
@@ -239,6 +244,7 @@ public sealed class FfsEftFileService : IFfsEftFileService
         if (plan.Entries.Count == 0 && voids.Count == 0)
             throw new InvalidOperationException($"Payment run {run.PaymentRunNumber} has no EFT credits any more; there is nothing to re-date.");
 
+        var carrier = await CarrierAsync(run.TenantId, cancellationToken);
         var now = _time.GetUtcNow().UtcDateTime;
         var revision = old.Revision + 1;
         // A new file: created now, with its own modifier for today. It keeps the old
@@ -248,8 +254,8 @@ public sealed class FfsEftFileService : IFfsEftFileService
         var effective = _dates.SendProblem(old.EffectiveEntryDate) == null
             ? old.EffectiveEntryDate.Date
             : _dates.Choose(run.PaymentDateRequested ? run.PaymentDate : null);
-        var modifier = await AllocateAsync(run, created, effective, $"{run.Id}#r{revision}");
-        var header = BuildHeader(run, modifier, created, effective);
+        var modifier = await AllocateAsync(run, carrier, created, effective, $"{run.Id}#r{revision}");
+        var header = BuildHeader(run, carrier, modifier, created, effective);
         // Every payment voided: an empty pin (nothing to send), kept for the record.
         var built = plan.Entries.Count == 0 ? null : FfsNachaCreditFileBuilder.Build(header, plan.Entries.Select(e => e.Entry).ToList());
         var file = NewFile(plan, built, header, modifier, now, actorUserId,
@@ -373,9 +379,13 @@ public sealed class FfsEftFileService : IFfsEftFileService
         return (run, await PlanAsync(run, payments, cancellationToken));
     }
 
-    private Task<string> AllocateAsync(PaymentRun run, DateTime created, DateTime effective, string holder)
+    private Task<string> AllocateAsync(
+        PaymentRun run, CarrierIdentity? carrier, DateTime created, DateTime effective, string holder)
     {
-        var probe = BuildHeader(run, "A", created, effective);
+        // The modifier is claimed per destination and origin, so the probe must
+        // carry the same origination the file will: a carrier that states its
+        // own origin is a different originator at the bank.
+        var probe = BuildHeader(run, carrier, "A", created, effective);
         return _modifiers.AllocateAsync(run.TenantId, probe.ImmediateDestination, probe.ImmediateOrigin, created.Date, holder);
     }
 
@@ -552,28 +562,43 @@ public sealed class FfsEftFileService : IFfsEftFileService
     }
 
     /// <summary>
-    /// File and batch values from configuration (<c>Nacha:*</c>) and the run.
-    /// The batch company id is the 835 TRN03 (<c>Era:OriginatingCompanyId</c>);
-    /// a different <c>Nacha:CompanyId</c> is refused, since the provider
-    /// reassociates on it.
+    /// The tenant's carrier where it states an origination, and configuration
+    /// (<c>Nacha:*</c>, <c>Payer:Name</c>) for everything it leaves unstated
+    /// (plan-configuration.md §12.3).
+    ///
+    /// <para>
+    /// The batch company id is the 835 TRN03 (<c>Era:OriginatingCompanyId</c>),
+    /// and a stated company id that differs from it is refused, whether it came
+    /// from the carrier or from configuration: the provider reassociates the
+    /// deposit with the remittance on that one value, so the two cannot be
+    /// allowed to drift. A carrier that states nothing leaves the deployment's
+    /// values in place.
+    /// </para>
     /// </summary>
-    private FfsNachaFileHeader BuildHeader(PaymentRun run, string fileIdModifier, DateTime created, DateTime effective)
+    private FfsNachaFileHeader BuildHeader(
+        PaymentRun run, CarrierIdentity? carrier, string fileIdModifier, DateTime created, DateTime effective)
     {
         var companyId = _configuration["Era:OriginatingCompanyId"] ?? string.Empty;
-        var configuredCompanyId = _configuration["Nacha:CompanyId"];
-        if (!string.IsNullOrEmpty(configuredCompanyId) && !string.Equals(configuredCompanyId, companyId, StringComparison.Ordinal))
+        var statedCompanyId = Stated(carrier?.NachaCompanyIdentification) ?? _configuration["Nacha:CompanyId"];
+        if (!string.IsNullOrEmpty(statedCompanyId) && !string.Equals(statedCompanyId, companyId, StringComparison.Ordinal))
             throw new InvalidOperationException(
-                "Nacha:CompanyId must equal Era:OriginatingCompanyId (the 835 TRN03); otherwise providers cannot reassociate the EFT with the 835");
+                "The originating company id must equal Era:OriginatingCompanyId (the 835 TRN03); otherwise providers cannot "
+                + $"reassociate the EFT with the 835. Carrier '{carrier?.Code ?? "(none)"}' or Nacha:CompanyId states "
+                + "a different one.");
 
         var destination = _configuration["Nacha:ImmediateDestination"] ?? string.Empty;
+        // The carrier's letterhead first, as in premium-billing and capitation:
+        // a stated carrier name is the more specific answer, and a deployment
+        // that has stated none keeps its own configured names.
+        var letterhead = carrier?.LetterheadName;
 
         return new FfsNachaFileHeader
         {
             ImmediateDestination = destination,
-            ImmediateOrigin = _configuration["Nacha:ImmediateOrigin"] ?? companyId,
+            ImmediateOrigin = Stated(carrier?.NachaImmediateOrigin) ?? _configuration["Nacha:ImmediateOrigin"] ?? companyId,
             ImmediateDestinationName = _configuration["Nacha:ImmediateDestinationName"] ?? string.Empty,
-            ImmediateOriginName = _configuration["Nacha:ImmediateOriginName"] ?? _configuration["Payer:Name"] ?? string.Empty,
-            CompanyName = _configuration["Nacha:CompanyName"] ?? _configuration["Payer:Name"] ?? string.Empty,
+            ImmediateOriginName = letterhead ?? _configuration["Nacha:ImmediateOriginName"] ?? _configuration["Payer:Name"] ?? string.Empty,
+            CompanyName = letterhead ?? _configuration["Nacha:CompanyName"] ?? _configuration["Payer:Name"] ?? string.Empty,
             CompanyId = companyId,
             OriginatingDfi = _configuration["Nacha:OriginatingDfi"] ?? (destination.Length >= 8 ? destination[..8] : string.Empty),
             CompanyDiscretionaryData = _configuration["Nacha:CompanyDiscretionaryData"],
@@ -583,6 +608,20 @@ public sealed class FfsEftFileService : IFfsEftFileService
             EffectiveEntryDate = effective.Date,
         };
     }
+
+    /// <summary>
+    /// The tenant's carrier, or null where this host runs without a carrier
+    /// directory. An unreachable tenant-service throws rather than answering
+    /// null: a carrier that states nothing and a carrier that could not be read
+    /// look the same from here, and only the first is safe to pay under the
+    /// configured entity.
+    /// </summary>
+    private Task<CarrierIdentity?> CarrierAsync(string tenantId, CancellationToken ct) =>
+        _carriers is null || string.IsNullOrWhiteSpace(tenantId)
+            ? Task.FromResult<CarrierIdentity?>(null)
+            : _carriers.DefaultAsync(tenantId, ct);
+
+    private static string? Stated(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string? Last4(string? value)
         => string.IsNullOrEmpty(value) ? null : value.Length <= 4 ? value : value[^4..];

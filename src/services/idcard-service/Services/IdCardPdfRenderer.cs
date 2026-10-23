@@ -39,7 +39,10 @@ internal static class IdCardPdfRenderer
         var contentWidth = PageWidth - 2 * Margin;
         var header = new List<Block>
         {
-            Block.Of(contentWidth - QrSize, new Run(b.SponsorName ?? "Member ID Card", Style.SemiBold(14))),
+            // The issuing entity heads the card where the carrier states one,
+            // and the sponsor where it does not, which is what every card was
+            // headed by before carriers existed (plan-configuration.md §12.4).
+            Block.Of(contentWidth - QrSize, new Run(b.IssuerName ?? b.SponsorName ?? "Member ID Card", Style.SemiBold(14))),
             Block.Of(contentWidth - QrSize, new Run(b.PlanName ?? string.Empty, Style.Regular(10))),
         };
 
@@ -63,6 +66,8 @@ internal static class IdCardPdfRenderer
             footer.Add(Block.Of(contentWidth, new Run(template.BackText, Style.Regular(7))));
         foreach (var disclaimer in template.Disclaimers)
             footer.Add(Block.Of(contentWidth, new Run(disclaimer, Style.Regular(7))));
+        if (!string.IsNullOrEmpty(b.IssuerAddress))
+            footer.Add(Block.Of(contentWidth, new Run(b.IssuerAddress, Style.Regular(7, Muted))));
         footer.Add(Block.Of(contentWidth, new Run(
             $"Card {b.CardId} • Issued {b.IssuedAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}", Style.Regular(7, Muted))));
 

@@ -1,3 +1,4 @@
+using CloudHealthOffice.PlanConfiguration;
 using IdCardService.Models;
 using IdCardService.Services;
 using CloudHealthOffice.Infrastructure.Logging;
@@ -22,6 +23,7 @@ public class ChoIdCardAdapter : IIdCardAdapter
     private readonly IQrCodeService _qr;
     private readonly IIdCardGenerator _generator;
     private readonly IMemberDocumentClient _documents;
+    private readonly ICarrierDirectory? _carriers;
     private readonly ILogger<ChoIdCardAdapter> _logger;
 
     public ChoIdCardAdapter(
@@ -33,7 +35,8 @@ public class ChoIdCardAdapter : IIdCardAdapter
         IQrCodeService qr,
         IIdCardGenerator generator,
         IMemberDocumentClient documents,
-        ILogger<ChoIdCardAdapter> logger)
+        ILogger<ChoIdCardAdapter> logger,
+        ICarrierDirectory? carriers = null)
     {
         _memberClient = memberClient;
         _coverageClient = coverageClient;
@@ -43,6 +46,7 @@ public class ChoIdCardAdapter : IIdCardAdapter
         _qr = qr;
         _generator = generator;
         _documents = documents;
+        _carriers = carriers;
         _logger = logger;
     }
 
@@ -80,11 +84,19 @@ public class ChoIdCardAdapter : IIdCardAdapter
         var planTask = string.IsNullOrEmpty(planId)
             ? Task.FromResult<BenefitPlanDto?>(null)
             : _benefitPlanClient.GetAsync(tenantId, planId, ct);
+        // The issuing entity, in the same wave: it needs nothing from the
+        // coverage, and an unreachable tenant-service fails the order rather
+        // than issuing a card that names the wrong issuer
+        // (plan-configuration.md §12.4).
+        var carrierTask = _carriers is null
+            ? Task.FromResult<CarrierIdentity?>(null)
+            : _carriers.DefaultAsync(tenantId, ct);
 
-        await Task.WhenAll(sponsorTask, planTask);
+        await Task.WhenAll(sponsorTask, planTask, carrierTask);
 
         var sponsor = await sponsorTask;
         var plan = await planTask;
+        var carrier = await carrierTask;
 
         var languageCode = request.LanguageCode ?? member.PreferredLanguage ?? "en-US";
         var template = await _templateResolver.ResolveAsync(tenantId, coverage.GroupNumber, coverage.PlanId, languageCode, ct);
@@ -103,7 +115,7 @@ public class ChoIdCardAdapter : IIdCardAdapter
         var (qrPng, qrPayloadString, keyVersion, canonical) = await _qr.GenerateAsync(
             tenantId, memberId, cardId, issuedAt, ct);
 
-        var bindings = BuildBindings(member, coverage, sponsor, plan, cardId, issuedAt, languageCode);
+        var bindings = BuildBindings(member, coverage, sponsor, plan, carrier, cardId, issuedAt, languageCode);
 
         var rendered = await _generator.RenderAsync(template, bindings, qrPng, ct);
 
@@ -153,7 +165,7 @@ public class ChoIdCardAdapter : IIdCardAdapter
 
     private static CardBindings BuildBindings(
         MemberDto member, CoverageDto coverage, SponsorDto? sponsor, BenefitPlanDto? plan,
-        string cardId, DateTime issuedAt, string languageCode)
+        CarrierIdentity? carrier, string cardId, DateTime issuedAt, string languageCode)
     {
         return new CardBindings
         {
@@ -166,6 +178,9 @@ public class ChoIdCardAdapter : IIdCardAdapter
             GroupNumber = coverage.GroupNumber,
             SponsorName = sponsor?.EmployerName,
             SponsorSupportPhone = sponsor?.SupportPhone ?? sponsor?.ContactPhone,
+
+            IssuerName = carrier?.LetterheadName,
+            IssuerAddress = IssuerAddressLine(carrier),
 
             PlanId = coverage.PlanId,
             PlanName = plan?.PlanName ?? coverage.PlanName,
@@ -182,6 +197,21 @@ public class ChoIdCardAdapter : IIdCardAdapter
             IssuedAt = issuedAt,
             LanguageCode = languageCode
         };
+    }
+
+    /// <summary>
+    /// The issuer's address on one line, for the back of a card where space is
+    /// the constraint. Null where the carrier states no address.
+    /// </summary>
+    public static string? IssuerAddressLine(CarrierIdentity? carrier)
+    {
+        var a = carrier?.CorrespondenceAddress;
+        if (a is null) return null;
+
+        var cityLine = string.Join(" ", new[] { a.City?.Trim() is { Length: > 0 } c ? c + "," : null, a.State?.Trim(), a.ZipCode?.Trim() }
+            .Where(part => !string.IsNullOrWhiteSpace(part)));
+        var line = string.Join(" • ", new[] { a.Street?.Trim(), cityLine }.Where(part => !string.IsNullOrWhiteSpace(part)));
+        return line.Length == 0 ? null : line;
     }
 
     private static IdCardIssueResult Fail(string code, string reason) => new()

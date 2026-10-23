@@ -72,6 +72,15 @@ public class IdCardGenerator : IIdCardGenerator
             ["GroupNumber"] = b.GroupNumber,
             ["SponsorName"] = b.SponsorName,
             ["SponsorSupportPhone"] = b.SponsorSupportPhone,
+            ["IssuerName"] = b.IssuerName,
+            ["IssuerAddress"] = b.IssuerAddress,
+            // What heads the card. Conventionally the health plan that issued
+            // the coverage, with the employer group in the Group field; it
+            // stayed the sponsor only because CHO had no issuer to put there.
+            // Falls back to the sponsor, so a tenant whose carrier states no
+            // letterhead name gets exactly the card it got before
+            // (plan-configuration.md §12.4).
+            ["CardTitle"] = b.IssuerName ?? b.SponsorName,
             ["PlanId"] = b.PlanId,
             ["PlanName"] = b.PlanName,
             ["NetworkName"] = b.NetworkName,
@@ -134,13 +143,14 @@ public class IdCardGenerator : IIdCardGenerator
     private const string DefaultLayoutSvg = """
         <svg xmlns="http://www.w3.org/2000/svg" width="600" height="360" viewBox="0 0 600 360">
           <rect width="600" height="360" fill="#ffffff" stroke="#dddddd"/>
-          <text x="24" y="44" font-size="22" fill="#111111" font-family="Arial">{{SponsorName}}</text>
+          <text x="24" y="44" font-size="22" fill="#111111" font-family="Arial">{{CardTitle}}</text>
           <text x="24" y="72" font-size="14" fill="#555555" font-family="Arial">{{PlanName}}</text>
           <text x="24" y="140" font-size="16" fill="#111111" font-family="Arial">Member: {{MemberName}}</text>
           <text x="24" y="168" font-size="14" fill="#333333" font-family="Arial">ID: {{MemberNumber}}</text>
           <text x="24" y="196" font-size="14" fill="#333333" font-family="Arial">Group: {{GroupNumber}}</text>
           <text x="24" y="224" font-size="14" fill="#333333" font-family="Arial">Plan: {{PlanId}}</text>
           <text x="24" y="252" font-size="12" fill="#666666" font-family="Arial">Copays: {{CopaySummary}}</text>
+          <text x="24" y="318" font-size="10" fill="#999999" font-family="Arial">{{IssuerAddress}}</text>
           <text x="24" y="336" font-size="10" fill="#999999" font-family="Arial">Card {{CardId}} • Issued {{IssuedAt}}</text>
         </svg>
         """;

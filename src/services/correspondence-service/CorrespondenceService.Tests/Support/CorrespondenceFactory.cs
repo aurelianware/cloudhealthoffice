@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using CloudHealthOffice.PlanConfiguration;
 
 namespace CorrespondenceService.Tests.Support;
 
@@ -15,6 +16,15 @@ public sealed class CorrespondenceFactory : WebApplicationFactory<Program>
 
     public InMemoryCorrespondenceRepository Repo { get; } = new();
     public FakeLetterDocumentStore Documents { get; } = new();
+
+    /// <summary>
+    /// The tenant's carriers. Empty by default, so letters compose with no
+    /// sender, which is what every existing template expects. The host's real
+    /// directory would reach tenant-service and the read is deliberately
+    /// fail-closed (plan-configuration.md §12.4), so leaving it in place would
+    /// make every compose a 500. A test that wants a letterhead adds one.
+    /// </summary>
+    public InMemoryCarrierDirectory Carriers { get; } = new();
 
     protected override IHost CreateHost(IHostBuilder builder)
     {
@@ -33,6 +43,8 @@ public sealed class CorrespondenceFactory : WebApplicationFactory<Program>
             services.AddSingleton<ICorrespondenceRepository>(Repo);
             services.RemoveAll<ILetterDocumentStore>();
             services.AddSingleton<ILetterDocumentStore>(Documents);
+            services.RemoveAll<ICarrierDirectory>();
+            services.AddSingleton<ICarrierDirectory>(Carriers);
         });
         return base.CreateHost(builder);
     }

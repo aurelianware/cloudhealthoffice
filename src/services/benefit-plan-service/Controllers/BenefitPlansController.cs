@@ -46,19 +46,23 @@ public class BenefitPlansController : ControllerBase
     private string TenantId => HttpContext.GetTenantId() ?? throw new InvalidOperationException("Tenant context missing");
 
     /// <summary>
-    /// Get all benefit plans with optional filtering
+    /// Get all benefit plans with optional filtering.
+    /// <paramref name="program"/> narrows the list to one program
+    /// (docs/architecture/plan-configuration.md §3): the link runs from the
+    /// plan to its program, so this is the only way to read a program's plans.
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<BenefitPlan>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<BenefitPlan>>> GetPlans(
         [FromQuery] string? payer = null,
         [FromQuery] string? planType = null,
-        [FromQuery] bool? activeOnly = true)
+        [FromQuery] bool? activeOnly = true,
+        [FromQuery] string? program = null)
     {
-        _logger.LogInformation("Getting benefit plans for tenant {TenantId}: payer={Payer}, planType={PlanType}, activeOnly={ActiveOnly}", 
-            LogSanitizer.Sanitize(TenantId), LogSanitizer.Sanitize(payer), LogSanitizer.Sanitize(planType), activeOnly);
-        
-        var plans = await _service.GetPlansAsync(TenantId, payer, planType, activeOnly ?? true);
+        _logger.LogInformation("Getting benefit plans for tenant {TenantId}: payer={Payer}, planType={PlanType}, activeOnly={ActiveOnly}, program={Program}",
+            LogSanitizer.Sanitize(TenantId), LogSanitizer.Sanitize(payer), LogSanitizer.Sanitize(planType), activeOnly, LogSanitizer.Sanitize(program));
+
+        var plans = await _service.GetPlansAsync(TenantId, payer, planType, activeOnly ?? true, program);
         return Ok(plans);
     }
 

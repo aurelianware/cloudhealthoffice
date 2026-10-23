@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.PlanConfiguration;
 using CloudHealthOffice.NachaTransmission;
 using PremiumBillingService.Clients;
 using PremiumBillingService.Models;
@@ -117,6 +118,7 @@ public class EftDraftService : IEftDraftService
     private readonly ICurrentActor _actor;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IConfiguration _configuration;
+    private readonly ICarrierDirectory? _carriers;
     private readonly ILogger<EftDraftService> _logger;
     private readonly DebitSeparationOfDuties _separationOfDuties;
 
@@ -134,7 +136,8 @@ public class EftDraftService : IEftDraftService
         ICurrentActor actor,
         IHttpContextAccessor httpContextAccessor,
         IConfiguration configuration,
-        ILogger<EftDraftService> logger)
+        ILogger<EftDraftService> logger,
+        ICarrierDirectory? carriers = null)
     {
         _draftRepository = draftRepository;
         _invoiceRepository = invoiceRepository;
@@ -146,6 +149,7 @@ public class EftDraftService : IEftDraftService
         _actor = actor;
         _httpContextAccessor = httpContextAccessor;
         _configuration = configuration;
+        _carriers = carriers;
         _logger = logger;
         _separationOfDuties = new DebitSeparationOfDuties(billingRunRepository, actor, logger);
     }
@@ -598,7 +602,8 @@ public class EftDraftService : IEftDraftService
         NachaFileFacts facts;
         try
         {
-            file = _nachaFileService.GenerateNachaFile(entries, BuildNachaOptionsFromConfig());
+            var options = await BuildNachaOptionsAsync(_actor.TenantId, CancellationToken.None);
+            file = _nachaFileService.GenerateNachaFile(entries, options);
             facts = NachaFileFacts.From(file.FileContent);
         }
         catch
@@ -1271,20 +1276,41 @@ public class EftDraftService : IEftDraftService
         }
     }
 
-    private NachaFileOptions BuildNachaOptionsFromConfig()
+    /// <summary>
+    /// Who the debits are originated by: the tenant's carrier where it states
+    /// an origination, and the deployment's <c>Nacha:*</c> configuration for
+    /// everything it leaves unstated (plan-configuration.md §12.3).
+    ///
+    /// <para>
+    /// The bank is told which legal entity is drawing on a sponsor's account,
+    /// so a wrong answer here debits in somebody else's name. That is why an
+    /// unreachable tenant-service throws rather than quietly falling back to
+    /// configuration: the caller cannot tell a carrier that states nothing from
+    /// a carrier it did not get to read, and only the first of those is safe to
+    /// originate under the configured entity. The throw leaves the drafts
+    /// Pending for the next release.
+    /// </para>
+    /// </summary>
+    private async Task<NachaFileOptions> BuildNachaOptionsAsync(string tenantId, CancellationToken ct)
     {
+        var carrier = _carriers is null || string.IsNullOrWhiteSpace(tenantId)
+            ? null
+            : await _carriers.DefaultAsync(tenantId, ct);
+
         return new NachaFileOptions
         {
             ImmediateDestination = _configuration["Nacha:ImmediateDestination"] ?? "",
-            ImmediateOrigin = _configuration["Nacha:ImmediateOrigin"] ?? "",
+            ImmediateOrigin = Stated(carrier?.NachaImmediateOrigin) ?? _configuration["Nacha:ImmediateOrigin"] ?? "",
             ImmediateDestinationName = _configuration["Nacha:ImmediateDestinationName"] ?? "",
-            ImmediateOriginName = _configuration["Nacha:ImmediateOriginName"] ?? "",
-            CompanyName = _configuration["Nacha:CompanyName"] ?? "",
-            CompanyId = _configuration["Nacha:CompanyId"] ?? "",
+            ImmediateOriginName = carrier?.LetterheadName ?? _configuration["Nacha:ImmediateOriginName"] ?? "",
+            CompanyName = carrier?.LetterheadName ?? _configuration["Nacha:CompanyName"] ?? "",
+            CompanyId = Stated(carrier?.NachaCompanyIdentification) ?? _configuration["Nacha:CompanyId"] ?? "",
             OriginatingDfi = long.TryParse(_configuration["Nacha:OriginatingDfi"], out var dfi) ? dfi : 0,
             CompanyEntryDescription = _configuration["Nacha:CompanyEntryDescription"] ?? "PREMIUM"
         };
     }
+
+    private static string? Stated(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static bool ShouldRetry(EftDraft draft)
     {

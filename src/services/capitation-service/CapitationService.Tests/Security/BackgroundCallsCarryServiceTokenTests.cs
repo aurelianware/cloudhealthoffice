@@ -7,6 +7,7 @@ using CapitationService.Tests.Support;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.PlanConfiguration;
 
 namespace CapitationService.Tests.Security;
 
@@ -145,7 +146,9 @@ public class BackgroundCallsCarryServiceTokenTests
     public async Task PaymentControlsLookup_WithoutCaller_CarriesServiceTokenForNamedTenant()
     {
         using var host = Host();
-        var controls = new TenantPaymentControls(
+        // No value in plan configuration, so the control falls through to the
+        // tenant document — which is the call whose token this test is about.
+        var controls = new TenantPaymentControls(new InMemoryPlanSettings(),
             host.Services.GetRequiredService<IHttpClientFactory>(), Mock.Of<ILogger<TenantPaymentControls>>());
 
         await controls.IsSeparationOfDutiesEnforcedAsync(Tenant);

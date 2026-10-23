@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.PlanConfiguration;
 using PaymentService.Models;
 using PaymentService.Repositories;
 using System.Net;
@@ -52,6 +53,7 @@ public class ReversalRunService : IReversalRunService
     private readonly IClaimsServiceClient _claimsService;
     private readonly ILogger<ReversalRunService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly PayerIdentityResolver _payers;
     private readonly ICurrentActor _actor;
     private readonly IRunSeparationOfDuties _separationOfDuties;
     private readonly IClaimReservationRepository _reservations;
@@ -74,7 +76,8 @@ public class ReversalRunService : IReversalRunService
         IClaimReservationRepository reservations,
         ICarcRarcMappingService carcRarcMapper,
         IProviderReceivableLedger? receivables = null,
-        IUnsentAchPayments? unsentPayments = null)
+        IUnsentAchPayments? unsentPayments = null,
+        ICarrierDirectory? carriers = null)
     {
         _unsentPayments = unsentPayments;
         _reservations = reservations;
@@ -90,6 +93,7 @@ public class ReversalRunService : IReversalRunService
         _separationOfDuties = separationOfDuties;
         _logger = logger;
         _configuration = configuration;
+        _payers = new PayerIdentityResolver(carriers, configuration);
     }
 
     public async Task<ReversalRun> CreateReversalRunAsync(
@@ -841,6 +845,7 @@ public class ReversalRunService : IReversalRunService
         string approver)
     {
         var providerNpi = pred.PayeeNpi;
+        var payer = await _payers.ResolveAsync(run.TenantId);
         var payment = new Payment
         {
             CheckNumber = checkNumber,
@@ -848,8 +853,8 @@ public class ReversalRunService : IReversalRunService
             // The negated recorded payment (CLP04 of the reversal).
             TotalPaymentAmount = reversalClaim.PaymentAmount,
             PaymentDate = run.ExecutionStartedAt ?? DateTime.UtcNow,
-            PayerName = _configuration["Payer:Name"] ?? "Cloud Health Office",
-            PayerId = _configuration["Payer:Id"] ?? "CHO",
+            PayerName = payer.Name,
+            PayerId = payer.Id,
             PayeeName = pred.PayeeNameOr(string.IsNullOrWhiteSpace(providerNpi) ? "Provider" : providerNpi),
             PayeeNPI = providerNpi,
             // The original payment's payee N3/N4, not the predecessor's

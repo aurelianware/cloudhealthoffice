@@ -64,7 +64,7 @@ public class ConfigurationServiceTests
 
         (await Service.ResolveAsync("t2", Grace, Acme, null))!.Value.Should().Be("7", "t2 sees only the default");
         (await Service.HistoryAsync("t2", Grace, SettingLevel.Sponsor, "ACME"))!.Should().BeEmpty();
-        (await Service.OverridesAsync("t2", Grace, SettingLevel.Tenant, null, null))!.Should().BeEmpty();
+        (await Service.OverridesAsync("t2", Grace, SettingLevel.Tenant, null, null))!.Overrides.Should().BeEmpty();
         (await Service.ChangesAsync("t2", null, 10)).Should().BeEmpty();
     }
 
@@ -95,7 +95,7 @@ public class ConfigurationServiceTests
         (await Service.ResolveAsync("t1", Grace, Acme, null))!.Value.Should().Be("3");
         (await Service.ResolveAsync("t1", Grace, Acme, jan1))!.Value.Should().Be("14");
         (await Service.ResolveAsync("t1", Grace, Acme, jan1.AddMonths(7)))!.Value.Should().Be("7");
-        var overrides = (await Service.OverridesAsync("t1", Grace, SettingLevel.LineOfBusiness, "Commercial", null))!;
+        var overrides = (await Service.OverridesAsync("t1", Grace, SettingLevel.LineOfBusiness, "Commercial", null))!.Overrides;
         overrides.Should().ContainSingle().Which.Should().Match<SettingOverride>(o => o.Value == "3" && o.NextChangeOn == jan1 && o.NextValue == "14");
     }
 

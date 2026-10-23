@@ -105,5 +105,58 @@ public static class PlanSettings
         ChangeControl = ChangeControl.ReasonRequired,
     };
 
-    public static IReadOnlyList<SettingDefinition> All { get; } = [OrphanGraceDays, GroupInpatientDrg];
+    /// <summary>
+    /// Whether releasing money needs a second user (maker-checker):
+    /// capitation disbursements and premium drafts cannot be released by the
+    /// person who prepared them (plan-configuration.md §12 step 2b).
+    ///
+    /// <para>
+    /// Default <c>true</c>, which is also what the client answers when
+    /// tenant-service cannot be reached, so an outage never turns the rule off.
+    /// Only the tenant level: this is an internal control over the tenant's own
+    /// staff, not something a sponsor or a program negotiates. Turning it off
+    /// needs a second person with <c>config:approve</c>, because a control that
+    /// one person can remove alone is not a two-person control.
+    /// </para>
+    /// </summary>
+    public static readonly SettingDefinition PaymentEnforceSeparationOfDuties = new()
+    {
+        Key = "payment.enforceSeparationOfDuties",
+        Type = SettingType.Boolean,
+        Owner = "capitation-service",
+        Description = "Whether releasing a payment run needs a user other than the one who prepared it (maker-checker).",
+        Default = "true",
+        AllowedLevels = new HashSet<SettingLevel> { SettingLevel.Tenant },
+        ChangeControl = ChangeControl.TwoPersonApproval,
+    };
+
+    /// <summary>
+    /// Whether activating a personal representative needs a user other than the
+    /// one who established it (plan-configuration.md §12 step 2b).
+    ///
+    /// <para>
+    /// The same shape and the same reasoning as
+    /// <see cref="PaymentEnforceSeparationOfDuties"/>. What is being decided is
+    /// who may act on somebody's protected health information on their behalf,
+    /// so the default is <c>true</c> and the fallback answer is <c>true</c>.
+    /// </para>
+    /// </summary>
+    public static readonly SettingDefinition PersonalRepresentativeRequireSecondUserActivation = new()
+    {
+        Key = "personalRepresentative.requireSecondUserActivation",
+        Type = SettingType.Boolean,
+        Owner = "personal-representative-service",
+        Description = "Whether activating a personal representative needs a user other than the one who established it.",
+        Default = "true",
+        AllowedLevels = new HashSet<SettingLevel> { SettingLevel.Tenant },
+        ChangeControl = ChangeControl.TwoPersonApproval,
+    };
+
+    public static IReadOnlyList<SettingDefinition> All { get; } =
+    [
+        OrphanGraceDays,
+        GroupInpatientDrg,
+        PaymentEnforceSeparationOfDuties,
+        PersonalRepresentativeRequireSecondUserActivation,
+    ];
 }

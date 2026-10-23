@@ -193,6 +193,11 @@ public sealed class CrdContextResolver : ICrdContextResolver
             // PaRuleContext documents for a non-program state. Hard-coding STAR
             // made every member a Texas STAR member.
             Program = program?.Code,
+            // The record behind that code, so a decision's audit trail names a
+            // program that can be looked up rather than a string built out of
+            // a state, a line of business and a code (plan-configuration.md
+            // §12.6).
+            ProgramId = program?.Id,
             RequestingProviderNpi = npi,
             ServicingProviderNpi = npi,
             MemberId = patientId,

@@ -3,6 +3,7 @@ using CapitationService.Models;
 using CapitationService.Repositories;
 using CloudHealthOffice.Infrastructure.Data;
 using CloudHealthOffice.NachaTransmission;
+using CloudHealthOffice.PlanConfiguration;
 using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CapitationService.Services;
@@ -113,6 +114,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
     private readonly IStripeConnectService _stripeConnectService;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
+    private readonly ICarrierDirectory? _carriers;
     private readonly IPaymentSeparationOfDuties _separationOfDuties;
     private readonly IProviderBankAccountSource _bankAccounts;
     private readonly INachaDispatcher _dispatcher;
@@ -136,7 +138,8 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         IProviderBankAccountSource bankAccounts,
         INachaDispatcher dispatcher,
         ILogger<CapitationDisbursementService> logger,
-        IHttpContextAccessor? httpContextAccessor = null)
+        IHttpContextAccessor? httpContextAccessor = null,
+        ICarrierDirectory? carriers = null)
     {
         _httpContextAccessor = httpContextAccessor;
         _separationOfDuties = separationOfDuties;
@@ -149,6 +152,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         _stripeConnectService = stripeConnectService;
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
+        _carriers = carriers;
         _logger = logger;
     }
 
@@ -672,7 +676,8 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         NachaFileFacts facts;
         try
         {
-            file = _nachaCreditFileService.GenerateNachaCreditFile(entries, BuildNachaCreditOptionsFromConfig());
+            var options = await BuildNachaCreditOptionsAsync(tenantId, CancellationToken.None);
+            file = _nachaCreditFileService.GenerateNachaCreditFile(entries, options);
             facts = NachaFileFacts.From(file.FileContent);
         }
         catch
@@ -1468,20 +1473,40 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         };
     }
 
-    private NachaCreditFileOptions BuildNachaCreditOptionsFromConfig()
+    /// <summary>
+    /// Who the credits are originated by: the tenant's carrier where it states
+    /// an origination, and the deployment's <c>Nacha:*</c> configuration for
+    /// everything it leaves unstated (plan-configuration.md §12.3).
+    ///
+    /// <para>
+    /// A provider reconciles the deposit against the entity that sent it, so an
+    /// unreachable tenant-service throws rather than falling back to
+    /// configuration: a carrier that states nothing and a carrier that could
+    /// not be read look the same from here, and only the first is safe to pay
+    /// under the configured entity. The throw leaves the disbursements Pending
+    /// for the next release.
+    /// </para>
+    /// </summary>
+    private async Task<NachaCreditFileOptions> BuildNachaCreditOptionsAsync(string tenantId, CancellationToken ct)
     {
+        var carrier = _carriers is null || string.IsNullOrWhiteSpace(tenantId)
+            ? null
+            : await _carriers.DefaultAsync(tenantId, ct);
+
         return new NachaCreditFileOptions
         {
             ImmediateDestination = _configuration["Nacha:ImmediateDestination"] ?? "",
-            ImmediateOrigin = _configuration["Nacha:ImmediateOrigin"] ?? "",
+            ImmediateOrigin = Stated(carrier?.NachaImmediateOrigin) ?? _configuration["Nacha:ImmediateOrigin"] ?? "",
             ImmediateDestinationName = _configuration["Nacha:ImmediateDestinationName"] ?? "",
-            ImmediateOriginName = _configuration["Nacha:ImmediateOriginName"] ?? "",
-            CompanyName = _configuration["Nacha:CompanyName"] ?? "",
-            CompanyId = _configuration["Nacha:CompanyId"] ?? "",
+            ImmediateOriginName = carrier?.LetterheadName ?? _configuration["Nacha:ImmediateOriginName"] ?? "",
+            CompanyName = carrier?.LetterheadName ?? _configuration["Nacha:CompanyName"] ?? "",
+            CompanyId = Stated(carrier?.NachaCompanyIdentification) ?? _configuration["Nacha:CompanyId"] ?? "",
             OriginatingDfi = long.TryParse(_configuration["Nacha:OriginatingDfi"], out var dfi) ? dfi : 0,
             CompanyEntryDescription = _configuration["Nacha:CreditEntryDescription"] ?? "CAPITATION"
         };
     }
+
+    private static string? Stated(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static bool ShouldRetry(CapitationDisbursement disbursement)
     {

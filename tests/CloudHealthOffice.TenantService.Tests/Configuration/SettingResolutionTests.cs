@@ -146,4 +146,58 @@ public class SettingResolutionTests
         d.AllowedLevels.Should().BeEquivalentTo([SettingLevel.Tenant, SettingLevel.LineOfBusiness, SettingLevel.Sponsor]);
         d.ChangeControl.Should().Be(ChangeControl.ReasonRequired);
     }
+
+    /// <summary>
+    /// The two controls moved out of the tenant document in §12.5. Both decide
+    /// whether one person can act alone, so both default to on, sit only at
+    /// tenant level, and need a second person to change.
+    /// </summary>
+    [Theory]
+    [InlineData("payment.enforceSeparationOfDuties")]
+    [InlineData("personalRepresentative.requireSecondUserActivation")]
+    public void The_two_person_controls_are_tenant_level_and_default_to_on(string key)
+    {
+        var d = PlanSettingCatalog.Require(key);
+
+        d.Type.Should().Be(SettingType.Boolean);
+        d.Default.Should().Be("true");
+        d.DefaultsByLineOfBusiness.Should().BeEmpty("a control over the tenant's own staff does not vary by line of business");
+        d.AllowedLevels.Should().BeEquivalentTo([SettingLevel.Tenant]);
+        d.ChangeControl.Should().Be(ChangeControl.TwoPersonApproval);
+    }
+
+    [Theory]
+    [InlineData("payment.enforceSeparationOfDuties")]
+    [InlineData("personalRepresentative.requireSecondUserActivation")]
+    public void A_two_person_control_cannot_be_set_below_the_tenant_or_without_a_reason(string key)
+    {
+        var d = PlanSettingCatalog.Require(key);
+
+        // Not negotiable per sponsor or per program, so tenant-service refuses the write.
+        SettingValidator.Validate(d, SettingLevel.Sponsor, "ACME", "false", false, "they asked")
+            .Should().ContainSingle().Which.Should().Contain("cannot be set at Sponsor");
+        SettingValidator.Validate(d, SettingLevel.Tenant, string.Empty, "false", false, null)
+            .Should().ContainSingle().Which.Should().Contain("reason");
+        SettingValidator.Validate(d, SettingLevel.Tenant, string.Empty, "\"false\"", false, "typed as a string")
+            .Should().ContainSingle();
+        SettingValidator.Validate(d, SettingLevel.Tenant, string.Empty, "false", false, "the plan has one finance user")
+            .Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Both default to the enforced answer, which is what the client returns
+    /// when tenant-service cannot be reached, so an outage cannot remove either
+    /// control (§12.5).
+    /// </summary>
+    [Theory]
+    [InlineData("payment.enforceSeparationOfDuties")]
+    [InlineData("personalRepresentative.requireSecondUserActivation")]
+    public void An_unreachable_tenant_service_resolves_a_two_person_control_to_on(string key)
+    {
+        var fallback = SettingResolver.Resolve(PlanSettingCatalog.Require(key), SettingScope.Empty, Jan1, [], isFallback: true);
+
+        fallback.IsFallback.Should().BeTrue();
+        fallback.AsBool().Should().BeTrue();
+        fallback.SourceLevel.Should().Be(SettingLevel.Platform);
+    }
 }

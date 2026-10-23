@@ -1,3 +1,4 @@
+using CloudHealthOffice.PlanConfiguration;
 using IdCardService.Repositories;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -31,6 +32,12 @@ internal static class IdCardTestHost
             services.AddSingleton<IIdCardOrderRepository, InMemoryIdCardOrderRepository>();
             services.AddSingleton<IIdCardRecordRepository, InMemoryIdCardRecordRepository>();
             services.AddSingleton<IIdCardTemplateRepository, InMemoryIdCardTemplateRepository>();
+            // The host's real carrier directory would reach tenant-service, and
+            // the read is deliberately fail-closed (plan-configuration.md
+            // §12.4), so every order would fail. Empty: no carrier states a
+            // letterhead, so a card is headed by the sponsor as before.
+            services.RemoveAll<ICarrierDirectory>();
+            services.AddSingleton<ICarrierDirectory>(new InMemoryCarrierDirectory());
         });
         return builder;
     }

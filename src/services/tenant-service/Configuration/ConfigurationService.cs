@@ -38,6 +38,29 @@ public sealed record SettingWrite
 public sealed record SettingOverride(SettingLevel Level, string ScopeId, string? Value, bool Locked, DateTime? EffectiveFrom, int? Version,
     DateTime? NextChangeOn, string? NextValue);
 
+/// <summary>A level the list could not be confined to the node's own branch, and why.</summary>
+public sealed record UnnarrowedLevel(SettingLevel Level, string Reason);
+
+/// <summary>
+/// The overrides at a node and below, with how far down the hierarchy the list
+/// could actually be confined to that node's branch (plan-configuration.md
+/// §12.6).
+///
+/// <para>
+/// <see cref="Unnarrowed"/> is the honest part: at those levels the list holds
+/// every node in the tenant, not only the ones under this one. A caller reading
+/// a narrowed list as if it were the whole tenant's, or an unnarrowed one as if
+/// it were this branch's, would be wrong either way, so the response says which
+/// it is instead of leaving it to be inferred.
+/// </para>
+/// </summary>
+public sealed record SettingOverrides(
+    SettingLevel Level,
+    string ScopeId,
+    IReadOnlyList<SettingOverride> Overrides,
+    IReadOnlyList<SettingLevel> Narrowed,
+    IReadOnlyList<UnnarrowedLevel> Unnarrowed);
+
 /// <summary>
 /// The configuration module's rules (plan-configuration.md §§4–7, 9a):
 /// resolve, explain, write with validation, per-level permission and change
@@ -50,8 +73,30 @@ public sealed class ConfigurationService(
     IConfigurationChangePublisher publisher,
     TimeProvider clock,
     ILogger<ConfigurationService> logger,
-    ISponsorLineOfBusinessLookup? sponsors = null)
+    ISponsorLineOfBusinessLookup? sponsors = null,
+    IHierarchyDescendants? descendants = null)
 {
+    /// <summary>Why a sponsor-level node cannot be placed in a branch yet.</summary>
+    public const string SponsorsAwaitStepThree =
+        "The sponsor contract and its policies and classes arrive with step 3 of plan configuration; until then a node at this level is listed "
+        + "whichever branch it belongs to.";
+
+    /// <summary>Why a level was not narrowed in a host with no hierarchy reader.</summary>
+    public const string NoHierarchyReader =
+        "This host reads no hierarchy records, so nodes at this level are listed whichever branch they belong to.";
+
+    /// <summary>Why a level that could be narrowed was not.</summary>
+    public const string HierarchyUnreadable =
+        "The hierarchy records under this node could not be read, so nodes at this level are listed whichever branch they belong to.";
+
+    /// <summary>The levels whose nodes hang off a carrier, a line of business or a program.</summary>
+    private static readonly SettingLevel[] Narrowable =
+        [SettingLevel.LineOfBusiness, SettingLevel.Program, SettingLevel.BenefitPlan];
+
+    /// <summary>The levels under the sponsor contract, which step 2 cannot reach from above.</summary>
+    private static readonly SettingLevel[] Deferred =
+        [SettingLevel.Sponsor, SettingLevel.SponsorPolicy, SettingLevel.Class];
+
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
     private DateTime Today => DateTime.SpecifyKind(Now.Date, DateTimeKind.Utc);
 
@@ -64,18 +109,24 @@ public sealed class ConfigurationService(
         return SettingResolver.Resolve(definition, scope, date, versions);
     }
 
-    /// <summary>Every override of a key at the node's level and all more specific levels, with what is in force on <paramref name="asOf"/>.</summary>
-    public async Task<IReadOnlyList<SettingOverride>?> OverridesAsync(string tenantId, string key, SettingLevel level, string? scopeId, DateTime? asOf, CancellationToken ct = default)
+    /// <summary>
+    /// Every override of a key at the node's level and all more specific
+    /// levels, with what is in force on <paramref name="asOf"/>, confined to
+    /// the node's own branch as far as the hierarchy records reach
+    /// (plan-configuration.md §12.6).
+    /// </summary>
+    public async Task<SettingOverrides?> OverridesAsync(string tenantId, string key, SettingLevel level, string? scopeId, DateTime? asOf, CancellationToken ct = default)
     {
         if (catalog.Find(key) is null) return null;
         var date = (asOf ?? Today).Date;
         var node = Normalize(level, scopeId);
+        var branch = await BranchAsync(tenantId, level, node, ct);
         var versions = await store.GetVersionsAtOrBelowAsync(tenantId, key, level, ct);
-        return versions
-            // At the node's own level, only that node; below it, every node
-            // (the hierarchy links that would narrow this arrive with programs,
-            // plans and sponsor policies).
-            .Where(v => v.Level > level || string.IsNullOrEmpty(node) || v.ScopeId == node)
+        var overrides = versions
+            // At the node's own level, only that node; below it, the nodes in
+            // this node's branch, and at the levels the branch could not be
+            // followed to, every node.
+            .Where(v => v.Level > level ? branch.Holds(v.Level, v.ScopeId) : string.IsNullOrEmpty(node) || v.ScopeId == node)
             .GroupBy(v => (v.Level, v.ScopeId))
             .Select(g =>
             {
@@ -87,6 +138,97 @@ public sealed class ConfigurationService(
             .Where(o => o.Value is not null || o.NextChangeOn is not null)
             .OrderBy(o => o.Level).ThenBy(o => o.ScopeId)
             .ToList();
+        return new SettingOverrides(level, node, overrides, branch.Narrowed, branch.Unnarrowed);
+    }
+
+    /// <summary>
+    /// Which nodes below <paramref name="node"/> belong to its branch. A carrier
+    /// reaches its programs from tenant-service's own records; a program reaches
+    /// its benefit plans through benefit-plan-service, which owns the link. Below
+    /// the sponsor contract nothing is reachable yet (§12.6), and the caller is
+    /// told so rather than left to assume the list was confined.
+    /// </summary>
+    private async Task<Branch> BranchAsync(string tenantId, SettingLevel level, string node, CancellationToken ct)
+    {
+        var branch = new Branch();
+        // The tenant's branch is the whole tenant, so there is nothing to narrow.
+        if (node.Length == 0) return branch;
+
+        foreach (var deferred in Deferred.Where(l => l > level)) branch.Cannot(deferred, SponsorsAwaitStepThree);
+        var narrowable = Narrowable.Where(l => l > level).ToList();
+        if (narrowable.Count == 0) return branch;
+
+        if (descendants is null)
+        {
+            // A host built without one: say so rather than claiming a branch
+            // nobody looked for, and say it differently from an outage, which
+            // is worth knowing about and this is not.
+            foreach (var l in narrowable) branch.Cannot(l, NoHierarchyReader);
+            return branch;
+        }
+
+        try
+        {
+            IReadOnlyList<ProgramNode>? programs = level switch
+            {
+                SettingLevel.Carrier => await descendants.ProgramsAsync(tenantId, node, ct),
+                SettingLevel.LineOfBusiness => (await descendants.ProgramsAsync(tenantId, null, ct))
+                    .Where(p => string.Equals(p.LineOfBusiness, node, StringComparison.OrdinalIgnoreCase)).ToList(),
+                SettingLevel.Program => new List<ProgramNode> { new(node, string.Empty) },
+                _ => null,
+            };
+            // Nothing below a benefit plan hangs off a program, so there is
+            // nothing left to follow; `narrowable` is already empty there and
+            // this is the belt to that braces.
+            if (programs is null) return branch;
+
+            var programIds = programs.Select(p => p.Id).Where(id => id.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+            if (SettingLevel.LineOfBusiness > level)
+                branch.Narrow(SettingLevel.LineOfBusiness, programs.Select(p => p.LineOfBusiness).Where(l => l.Length > 0),
+                    StringComparer.OrdinalIgnoreCase);
+            if (SettingLevel.Program > level)
+                branch.Narrow(SettingLevel.Program, programIds, StringComparer.Ordinal);
+            if (SettingLevel.BenefitPlan > level)
+                branch.Narrow(SettingLevel.BenefitPlan,
+                    programIds.Count == 0 ? Array.Empty<string>() : await descendants.BenefitPlanIdsAsync(tenantId, programIds, ct),
+                    StringComparer.Ordinal);
+            return branch;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // One unreadable level would make a narrowing on the others
+            // misleading, so the whole narrowing is given up at once and the
+            // overrides are still returned, unconfined and labelled.
+            logger.LogWarning(ex, "Could not read the hierarchy under {Level} {Node} for tenant {TenantId}; the override list is not narrowed",
+                level, LogSanitizer.Sanitize(node), LogSanitizer.Sanitize(tenantId));
+            return new Branch(branch.Unnarrowed.Concat(narrowable.Select(l => new UnnarrowedLevel(l, HierarchyUnreadable))));
+        }
+    }
+
+    /// <summary>The nodes of each level that belong to one branch; a level nobody narrowed holds every node.</summary>
+    private sealed class Branch
+    {
+        private readonly Dictionary<SettingLevel, HashSet<string>> _nodes = new();
+        private readonly List<SettingLevel> _narrowed = [];
+        private readonly List<UnnarrowedLevel> _unnarrowed = [];
+
+        public Branch() { }
+
+        public Branch(IEnumerable<UnnarrowedLevel> unnarrowed) => _unnarrowed.AddRange(unnarrowed);
+
+        public IReadOnlyList<SettingLevel> Narrowed => _narrowed;
+        public IReadOnlyList<UnnarrowedLevel> Unnarrowed => _unnarrowed;
+
+        public void Narrow(SettingLevel level, IEnumerable<string> nodes, StringComparer comparer)
+        {
+            _nodes[level] = new HashSet<string>(nodes, comparer);
+            _narrowed.Add(level);
+        }
+
+        public void Cannot(SettingLevel level, string reason) => _unnarrowed.Add(new UnnarrowedLevel(level, reason));
+
+        public bool Holds(SettingLevel level, string scopeId) =>
+            !_nodes.TryGetValue(level, out var nodes) || nodes.Contains(scopeId);
     }
 
     public async Task<IReadOnlyList<SettingValue>?> HistoryAsync(string tenantId, string key, SettingLevel level, string? scopeId, CancellationToken ct = default)

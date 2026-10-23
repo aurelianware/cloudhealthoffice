@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using CloudHealthOffice.PaymentService.Tests.Security;
+using CloudHealthOffice.PlanConfiguration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -32,6 +33,13 @@ internal sealed class FfsRunHarness
     public IConfiguration Configuration { get; }
     public ProviderReceivableLedger Ledger { get; }
     public TestActor Approver { get; } = TestActor.Approver();
+
+    /// <summary>
+    /// The tenant's carriers. Empty by default, so a run originates and pays
+    /// under the deployment's own configured identity — what every deployment
+    /// does until someone fills a carrier in (plan-configuration.md §12.2).
+    /// </summary>
+    public InMemoryCarrierDirectory Carriers { get; } = new();
 
     /// <summary>The clock and options the effective-date rules use (tests that move time set them).</summary>
     public TimeProvider Clock { get; set; } = TimeProvider.System;
@@ -105,10 +113,11 @@ internal sealed class FfsRunHarness
     public PaymentRunService Service(IProviderPayeeAccountSource? accounts = null) => new(
         Payments, Runs, new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance),
         _mapper, _envelopes, _partners, _http, NullLogger<PaymentRunService>.Instance, Configuration,
-        Approver, Approver.SeparationOfDuties(), Reservations, Ledger, accounts ?? Accounts, Dates);
+        Approver, Approver.SeparationOfDuties(), Reservations, Ledger, accounts ?? Accounts, Dates, Carriers);
 
     public FfsEftFileService EftFiles(IProviderPayeeAccountSource? accounts = null)
-        => new(Runs, Payments, accounts ?? Accounts, Configuration, Modifiers, Dates, _envelopes, NullLogger<FfsEftFileService>.Instance, Clock);
+        => new(Runs, Payments, accounts ?? Accounts, Configuration, Modifiers, Dates, _envelopes,
+            NullLogger<FfsEftFileService>.Instance, Clock, Carriers);
 
     /// <summary>Creates and executes one ACH payment run paying <paramref name="claims"/>.</summary>
     public async Task<PaymentRun> ExecuteRunAsync(params ClaimDto[] claims)

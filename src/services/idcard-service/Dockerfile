@@ -11,10 +11,12 @@ COPY src/Directory.Build.props src/
 
 COPY src/services/idcard-service/idcard-service.csproj src/services/idcard-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/CloudHealthOffice.PlanConfiguration.csproj src/services/shared/CloudHealthOffice.PlanConfiguration/
 RUN dotnet restore src/services/idcard-service/idcard-service.csproj
 
 COPY src/services/idcard-service/ src/services/idcard-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/ src/services/shared/CloudHealthOffice.PlanConfiguration/
 RUN dotnet build src/services/idcard-service/idcard-service.csproj -c Release --no-restore
 
 FROM build AS publish

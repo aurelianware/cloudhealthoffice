@@ -22,7 +22,14 @@ public enum TemplateFormat { Standard, LargePrint, Braille, AccessiblePdf }
 
 public enum TemplateStatus { Draft, Approved, Retired }
 
-public enum TemplateBlockKind { Heading, Paragraph, AddressBlock, Signature, PageBreak }
+/// <summary>
+/// What a block is, which decides how it is laid out and, for the two address
+/// kinds, what fills it when its own text is blank:
+/// <see cref="AddressBlock"/> takes the recipient's address and
+/// <see cref="ReturnAddressBlock"/> the sending carrier's
+/// (plan-configuration.md §12.4).
+/// </summary>
+public enum TemplateBlockKind { Heading, Paragraph, AddressBlock, Signature, PageBreak, ReturnAddressBlock }
 
 public enum LetterStatus
 {

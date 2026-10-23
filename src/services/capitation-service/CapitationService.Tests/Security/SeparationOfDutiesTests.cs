@@ -6,6 +6,7 @@ using CapitationService.Repositories;
 using CapitationService.Services;
 using CapitationService.Tests.Services;
 using CapitationService.Tests.Support;
+using CloudHealthOffice.PlanConfiguration;
 
 namespace CapitationService.Tests.Security;
 
@@ -369,7 +370,7 @@ public class SeparationOfDutiesTests
         var factory = new Mock<IHttpClientFactory>();
         factory.Setup(f => f.CreateClient(TenantPaymentControls.HttpClientName))
             .Returns(new HttpClient(new StatusHandler(status)) { BaseAddress = new Uri("http://tenant-service") });
-        var controls = new TenantPaymentControls(factory.Object, Mock.Of<ILogger<TenantPaymentControls>>());
+        var controls = new TenantPaymentControls(new InMemoryPlanSettings(), factory.Object, Mock.Of<ILogger<TenantPaymentControls>>());
 
         (await controls.IsSeparationOfDutiesEnforcedAsync("tenant-1")).Should().BeTrue();
     }
@@ -383,7 +384,7 @@ public class SeparationOfDutiesTests
             .Returns(() => new HttpClient(new StatusHandler(HttpStatusCode.OK,
                 "{\"tenantId\":\"tenant-1\",\"configuration\":{\"paymentControls\":{\"enforceSeparationOfDuties\":false}}}",
                 uri => requested = uri)) { BaseAddress = new Uri("http://tenant-service") });
-        var controls = new TenantPaymentControls(factory.Object, Mock.Of<ILogger<TenantPaymentControls>>());
+        var controls = new TenantPaymentControls(new InMemoryPlanSettings(), factory.Object, Mock.Of<ILogger<TenantPaymentControls>>());
 
         (await controls.IsSeparationOfDutiesEnforcedAsync("tenant-1")).Should().BeFalse();
         requested.Should().Be("http://tenant-service/api/v1/tenants/tenant-1");

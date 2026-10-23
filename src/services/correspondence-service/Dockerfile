@@ -12,12 +12,14 @@ COPY src/Directory.Build.props src/
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/correspondence-service/correspondence-service.csproj src/services/correspondence-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/CloudHealthOffice.PlanConfiguration.csproj src/services/shared/CloudHealthOffice.PlanConfiguration/
 COPY src/services/shared/CloudHealthOffice.PdfLayout/CloudHealthOffice.PdfLayout.csproj src/services/shared/CloudHealthOffice.PdfLayout/
 RUN dotnet restore src/services/correspondence-service/correspondence-service.csproj
 
 # Copy source code and build
 COPY src/services/correspondence-service/ src/services/correspondence-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/ src/services/shared/CloudHealthOffice.PlanConfiguration/
 COPY src/services/shared/CloudHealthOffice.PdfLayout/ src/services/shared/CloudHealthOffice.PdfLayout/
 RUN dotnet build src/services/correspondence-service/correspondence-service.csproj -c Release --no-restore
 

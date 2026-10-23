@@ -10,12 +10,16 @@ namespace TenantService.Hierarchy;
 /// letterhead.
 ///
 /// <para>
-/// The legal-entity fields here are where those details belong. They are not
-/// yet what the sending services read: NACHA origination, the mailing name and
-/// address and the payer ids are still taken from tenant configuration until
-/// step 2b moves each consumer over (plan-configuration.md §12.2). Setting
-/// them on a carrier today records them; it does not change what goes out on a
-/// file or a letter.
+/// The legal-entity fields here are what the sending services read, through
+/// <see cref="CarrierIdentity"/>: premium-billing, capitation and payment take
+/// their NACHA origination and 835 payer from the carrier, and fall back to the
+/// deployment's own <c>Nacha:*</c> and <c>Payer:*</c> configuration for
+/// whatever a carrier leaves unstated (plan-configuration.md §§12.2-12.4). So
+/// filling a field in here is what changes what goes out; leaving it blank
+/// keeps the deployment's value. The correspondence name and address are what
+/// head a letter and an ID card (§12.4), where there is no deployment value to
+/// fall back to: a letter with no sender is not sent, and a card with no issuer
+/// is headed by the sponsor as it was before carriers existed.
 /// </para>
 /// </summary>
 public sealed class Carrier
@@ -91,6 +95,35 @@ public sealed class Carrier
     public long Revision { get; set; }
 
     public static string IdFor(string tenantId, string code) => $"{tenantId}|{code}";
+
+    /// <summary>
+    /// This carrier as the services acting in its name read it. The payer ids
+    /// are copied rather than shared: this record is mutable and a reader caches
+    /// what it is given, so a later write here must not reach a cached answer.
+    /// </summary>
+    public CarrierIdentity ToIdentity() => new()
+    {
+        Id = Id,
+        Code = Code,
+        Name = Name,
+        LegalName = LegalName,
+        TaxId = TaxId,
+        NaicCode = NaicCode,
+        PayerIds = new Dictionary<string, string>(PayerIds, StringComparer.Ordinal),
+        NachaImmediateOrigin = NachaImmediateOrigin,
+        NachaCompanyIdentification = NachaCompanyIdentification,
+        CorrespondenceName = CorrespondenceName,
+        CorrespondenceAddress = CorrespondenceAddress is null ? null : new CarrierAddress
+        {
+            Street = CorrespondenceAddress.Street,
+            City = CorrespondenceAddress.City,
+            State = CorrespondenceAddress.State,
+            ZipCode = CorrespondenceAddress.ZipCode,
+            Country = CorrespondenceAddress.Country,
+        },
+        Active = Active,
+        IsDefault = IsDefault,
+    };
 }
 
 /// <summary>

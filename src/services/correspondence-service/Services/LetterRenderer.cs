@@ -2,11 +2,19 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using CloudHealthOffice.PdfLayout;
+using CloudHealthOffice.PlanConfiguration;
 using CorrespondenceService.Models;
 
 namespace CorrespondenceService.Services;
 
 /// <summary>Everything a letter is rendered from.</summary>
+/// <param name="Carrier">
+/// The legal entity sending the letter, or null where the tenant's carrier
+/// states no letterhead (plan-configuration.md §12.4). A
+/// <see cref="TemplateBlockKind.ReturnAddressBlock"/> left blank renders from
+/// this; null leaves it empty, so a template that needs a return address fails
+/// its required-blocks check rather than going out with a blank one.
+/// </param>
 public sealed record LetterRenderInput(
     LetterTemplate Template,
     IReadOnlyList<LetterTemplate> AttachmentTemplates,
@@ -15,7 +23,8 @@ public sealed record LetterRenderInput(
     LetterRecipient Recipient,
     string LetterId,
     DateOnly LetterDate,
-    DateTime RenderedAt);
+    DateTime RenderedAt,
+    CarrierIdentity? Carrier = null);
 
 public sealed record RenderedBlock(string TemplateId, TemplateBlock Block, string Text, float FontSize);
 
@@ -62,8 +71,13 @@ public static partial class LetterRenderer
                     continue;
                 }
 
-                var text = block.Kind == TemplateBlockKind.AddressBlock && string.IsNullOrWhiteSpace(block.Text)
-                    ? AddressText(input.Recipient)
+                var text = string.IsNullOrWhiteSpace(block.Text)
+                    ? block.Kind switch
+                    {
+                        TemplateBlockKind.AddressBlock => AddressText(input.Recipient),
+                        TemplateBlockKind.ReturnAddressBlock => ReturnAddressText(input.Carrier),
+                        _ => MergeFields.Render(block.Text, input.Model, missing),
+                    }
                     : MergeFields.Render(block.Text, input.Model, missing);
                 var size = SizeOf(template, block);
                 rendered.Add(new RenderedBlock(template.TemplateId, block, text, size));
@@ -76,7 +90,8 @@ public static partial class LetterRenderer
                     Lines = TextLayout.Wrap([new TextRun(text, style)], page.ContentWidth),
                     SpaceBefore = block.Kind == TemplateBlockKind.Heading ? ParagraphGap * 1.5f : ParagraphGap,
                     PageBreakBefore = pageBreakNext,
-                    KeepTogether = block.Kind is TemplateBlockKind.AddressBlock or TemplateBlockKind.Signature or TemplateBlockKind.Heading,
+                    KeepTogether = block.Kind is TemplateBlockKind.AddressBlock or TemplateBlockKind.ReturnAddressBlock
+                        or TemplateBlockKind.Signature or TemplateBlockKind.Heading,
                 });
                 pageBreakNext = false;
             }
@@ -113,6 +128,25 @@ public static partial class LetterRenderer
 
     internal static float SizeOf(LetterTemplate template, TemplateBlock block) =>
         block.FontSize ?? (block.Kind == TemplateBlockKind.Heading ? template.BodyFontPt + 2 : template.BodyFontPt);
+
+    /// <summary>
+    /// The sending carrier's name and address, as a letterhead or a return
+    /// address. Empty where the carrier states no letterhead name: a letter
+    /// headed by a blank line, or by whatever the deployment happens to be
+    /// called, is worse than a letter that fails its checks and is not sent.
+    /// </summary>
+    internal static string ReturnAddressText(CarrierIdentity? carrier)
+    {
+        if (carrier?.LetterheadName is not { } name) return string.Empty;
+
+        var lines = new List<string> { name };
+        var a = carrier.CorrespondenceAddress;
+        if (!string.IsNullOrWhiteSpace(a?.Street)) lines.Add(a!.Street!.Trim());
+        var cityLine = string.Join(" ", new[] { a?.City is null ? null : a.City.Trim() + ",", a?.State?.Trim(), a?.ZipCode?.Trim() }
+            .Where(part => !string.IsNullOrWhiteSpace(part)));
+        if (cityLine.Length > 0) lines.Add(cityLine);
+        return string.Join("\n", lines);
+    }
 
     internal static string AddressText(LetterRecipient r)
     {

@@ -14,6 +14,7 @@ using PremiumBillingService.Clients;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
 using PremiumBillingService.Services;
+using PremiumBillingService.Tests.Support;
 
 namespace PremiumBillingService.Tests.Security;
 
@@ -62,6 +63,7 @@ public class SponsorBankAccountEndToEndTests : IClassFixture<SponsorBankAccountE
             builder.ConfigureLogging(logging => logging.AddProvider(Logs));
             builder.ConfigureServices(services =>
             {
+                StubCarriers.Register(services);
                 services.RemoveAll<IBillingRunRepository>();
                 services.RemoveAll<IPremiumInvoiceRepository>();
                 services.RemoveAll<IEftDraftRepository>();

@@ -13,6 +13,15 @@ public interface IBenefitPlanProgramLookup
     /// caller is never told "no program" because a service was down.
     /// </summary>
     Task<string?> GetProgramIdAsync(string tenantId, string planId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The plan ids of every plan in a program, active or not. Empty when the
+    /// program has none. Throws when benefit-plan-service could not be asked,
+    /// for the same reason as <see cref="GetProgramIdAsync"/>: a caller
+    /// narrowing a list by program must not be handed "no plans" because a
+    /// service was down.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetPlanIdsForProgramAsync(string tenantId, string programId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -52,5 +61,39 @@ public sealed class HttpBenefitPlanProgramLookup(IHttpClientFactory factory) : I
             return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
         return null;
+    }
+
+    /// <summary>
+    /// Reads <c>GET api/v1/plans?program={programId}&amp;activeOnly=false</c> and
+    /// keeps the plan ids. Every plan of the program comes back whole, which is
+    /// more than this needs; a projection on that endpoint is the obvious
+    /// improvement once something reads it often enough to matter.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GetPlanIdsForProgramAsync(string tenantId, string programId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(programId)) return [];
+
+        var client = factory.CreateClient(HttpClientName);
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            $"api/v1/plans?activeOnly=false&program={Uri.EscapeDataString(programId.Trim())}");
+        request.Headers.Add("X-Tenant-ID", tenantId);
+        request.UseChoServiceIdentity();
+        using var response = await client.SendAsync(request, ct);
+        // A 404 here would be the route missing, not an empty program: the list
+        // endpoint answers an empty array for a program with no plans, so a 404
+        // is a failure and is not read as "none".
+        response.EnsureSuccessStatusCode();
+
+        using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+        if (doc.RootElement.ValueKind != JsonValueKind.Array) return [];
+        var ids = new List<string>();
+        foreach (var plan in doc.RootElement.EnumerateArray())
+        {
+            if (plan.ValueKind != JsonValueKind.Object) continue;
+            if (!plan.TryGetProperty("planId", out var id) || id.ValueKind != JsonValueKind.String) continue;
+            var value = id.GetString();
+            if (!string.IsNullOrWhiteSpace(value)) ids.Add(value.Trim());
+        }
+        return ids;
     }
 }

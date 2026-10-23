@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.PlanConfiguration;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,6 +28,22 @@ public class CapitationApiFactory : WebApplicationFactory<Program>
     public ICapitationDisbursementService DisbursementService { get; } = Substitute.For<ICapitationDisbursementService>();
     public ICapitationEraService EraService { get; } = Substitute.For<ICapitationEraService>();
 
+    /// <summary>
+    /// The carriers this host can see. Empty by default, so every consumer falls
+    /// back on the deployment's <c>Nacha:*</c> configuration exactly as it did
+    /// before carriers existed; a test that cares what legal entity originates a
+    /// file adds one.
+    /// </summary>
+    public InMemoryCarrierDirectory Carriers { get; } = new();
+
+    /// <summary>
+    /// The settings this host resolves. Empty, so every setting answers its
+    /// catalog default: payment separation of duties is enforced unless a test
+    /// sets it otherwise, which is what the suite assumed before plan
+    /// configuration held it.
+    /// </summary>
+    public InMemoryPlanSettings Settings { get; } = new();
+
     /// <summary>A client whose X-Tenant-ID becomes a signed development token.</summary>
     public HttpClient CreateTenantClient(string tenantId, string subject = "dev-user", params string[] roles)
     {
@@ -54,6 +71,8 @@ public class CapitationApiFactory : WebApplicationFactory<Program>
                 typeof(INachaCreditFileService),
                 typeof(IStripeConnectService),
                 typeof(IStripeTransferClient),
+                typeof(ICarrierDirectory),
+                typeof(IPlanSettings),
             };
 
             var descriptorsToRemove = services
@@ -87,6 +106,8 @@ public class CapitationApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(Substitute.For<INachaCreditFileService>());
             services.AddSingleton(Substitute.For<IStripeConnectService>());
             services.AddSingleton(Substitute.For<IStripeTransferClient>());
+            services.AddSingleton<ICarrierDirectory>(Carriers);
+            services.AddSingleton<IPlanSettings>(Settings);
         });
     }
 }

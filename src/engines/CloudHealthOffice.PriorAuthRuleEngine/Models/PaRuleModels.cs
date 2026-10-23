@@ -26,6 +26,26 @@ public record RuleSetKey
     public string? Program                  { get; init; }  // "STAR", "STARPlus", "STARKids", null
     public string? TenantId                 { get; init; }  // null = platform rule
 
+    /// <summary>
+    /// The program record this rule set belongs to, where it belongs to one
+    /// (tenant-service's program id, docs/architecture/plan-configuration.md
+    /// §3). It is not part of the lookup — rules are stored and cached under
+    /// the four fields above — but it is what a decision names in its audit
+    /// trail, so that the record can be looked up afterwards. Null on the
+    /// state-and-line-of-business rule sets, which genuinely are not one
+    /// program's.
+    /// </summary>
+    public string? ProgramId                { get; init; }
+
+    /// <summary>
+    /// How this rule set is named in a decision's audit trail: the program id
+    /// where it has one, otherwise what the rule set actually is. A reader can
+    /// tell the two apart, which is the point — a string concatenation of
+    /// state, line of business and program code looks like an identifier
+    /// without being one, and nothing can be looked up by it.
+    /// </summary>
+    public string AuditKey => ProgramId ?? ToString();
+
     public override string ToString() =>
         $"{TenantId ?? "platform"}/{StateCode}/{Lob}/{Program ?? "any"}";
 }
@@ -51,6 +71,17 @@ public record PaRuleContext
     /// "STAR" | "STARPlus" | "STARKids" | null (non-program states)
     /// </summary>
     public string? Program                                      { get; init; }
+
+    /// <summary>
+    /// The program record the member's coverage was placed in
+    /// (tenant-service's program id), where the coverage names a plan sold
+    /// under one. Null where it does not, which is an answer and not a gap.
+    /// The engine carries it into the decision's
+    /// <see cref="PaRuleDecision.ResolvedRuleSetKey"/>; the rule set is still
+    /// looked up on <see cref="StateCode"/>, <see cref="Lob"/> and
+    /// <see cref="Program"/>, which is what the stored rules are keyed on.
+    /// </summary>
+    public string? ProgramId                                    { get; init; }
 
     // ── The request ───────────────────────────────────────────────
     public required string RequestingProviderNpi                { get; init; }
@@ -122,7 +153,14 @@ public record PaRuleDecision
     public string? DenialReason                 { get; init; }
     public required string FiringRuleId         { get; init; }  // which rule produced this
     public required string FiringRuleName       { get; init; }
-    public required string ResolvedRuleSetKey   { get; init; }  // for audit trail
+    /// <summary>
+    /// Which rule set decided, for the audit trail: the program id where the
+    /// rule set that fired belongs to a program, otherwise the state and line
+    /// of business it covers (<see cref="RuleSetKey.AuditKey"/>). The engine
+    /// stamps this from the rule set it actually resolved, so a rule that
+    /// builds one from its own document need not get it right.
+    /// </summary>
+    public required string ResolvedRuleSetKey   { get; init; }
     public IReadOnlyList<string> EvaluatedRules { get; init; } = []; // all rule IDs tried
     public long ElapsedMs                       { get; init; }
 }

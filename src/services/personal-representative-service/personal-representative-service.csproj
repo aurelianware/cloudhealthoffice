@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+    <ProjectReference Include="..\shared\CloudHealthOffice.PlanConfiguration\CloudHealthOffice.PlanConfiguration.csproj" />
     <PackageReference Include="Confluent.Kafka" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="MongoDB.Driver" />

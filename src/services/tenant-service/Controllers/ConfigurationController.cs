@@ -84,7 +84,13 @@ public sealed class ConfigurationController(
             ? scope
             : scope.CompletedFrom(program.ToDescriptor());
 
-    /// <summary>Every override of a key at a node's level and every more specific level ("where is this overridden?").</summary>
+    /// <summary>
+    /// Every override of a key at a node's level and every more specific level
+    /// ("where is this overridden?"), confined to the node's own branch as far
+    /// as the hierarchy reaches. The response names the levels it was confined
+    /// to and the levels it was not, with the reason — at those, the list holds
+    /// every node in the tenant (plan-configuration.md §12.6).
+    /// </summary>
     [HttpGet("overrides")]
     public async Task<IActionResult> Overrides([FromQuery] string key, [FromQuery] string level = "tenant", [FromQuery] string? scopeId = null,
         [FromQuery] DateTime? asOf = null, CancellationToken ct = default)
