@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "davinci-interoperability",
-  "generatedAtUtc": "2026-10-22T20:47:02Z",
-  "sourceCommit": "6ad44867fa4fa62c584add99cb8fe55e75591514",
-  "sourceCommitShort": "6ad44867fa4f",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/6ad44867fa4fa62c584add99cb8fe55e75591514",
+  "generatedAtUtc": "2026-10-23T00:26:25Z",
+  "sourceCommit": "eb8b2085355bf869c6e97aaea33de538556ebbaf",
+  "sourceCommitShort": "eb8b2085355b",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/eb8b2085355bf869c6e97aaea33de538556ebbaf",
   "inventoryReviewedUtc": "2026-10-22T00:00:00Z",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence. External interoperability results never change a CMS-0057-F scenario status, and CMS acceptance statuses never imply an interoperability result. See docs/interop/davinci.md and docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md.",
@@ -217,10 +217,10 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-10-22T20:46:47.7287170+00:00",
+    "generatedAtUtc": "2026-10-23T00:26:12.8064562+00:00",
     "environment": "CI",
-    "choCommit": "6ad44867fa4fa62c584add99cb8fe55e75591514",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/6ad44867fa4fa62c584add99cb8fe55e75591514",
+    "choCommit": "eb8b2085355bf869c6e97aaea33de538556ebbaf",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/eb8b2085355bf869c6e97aaea33de538556ebbaf",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 3,
