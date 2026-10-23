@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Logging;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.PlanConfiguration;
+using TenantService.Hierarchy;
 
 namespace TenantService.Configuration;
 
@@ -76,10 +77,18 @@ public sealed class ConfigurationService(
     ISponsorLineOfBusinessLookup? sponsors = null,
     IHierarchyDescendants? descendants = null)
 {
-    /// <summary>Why a sponsor-level node cannot be placed in a branch yet.</summary>
-    public const string SponsorsAwaitStepThree =
-        "The sponsor contract and its policies and classes arrive with step 3 of plan configuration; until then a node at this level is listed "
-        + "whichever branch it belongs to.";
+    /// <summary>
+    /// Why a contract-side node is not placed in a branch when the node asked
+    /// about is on the plan side.
+    /// </summary>
+    public const string ContractNotReachedFromHere =
+        "The sponsor contract is not reached from a carrier, a line of business, a program or a benefit plan: a sponsor buys plans rather than "
+        + "belonging to one, so nodes at this level are listed whichever branch they belong to.";
+
+    /// <summary>Why a class could not be placed when only its policy's id was given.</summary>
+    public const string PolicyGroupUnknown =
+        "This policy's id does not say which group it belongs to, so its classes could not be looked up and are listed whichever policy they "
+        + "belong to.";
 
     /// <summary>Why a level was not narrowed in a host with no hierarchy reader.</summary>
     public const string NoHierarchyReader =
@@ -90,11 +99,11 @@ public sealed class ConfigurationService(
         "The hierarchy records under this node could not be read, so nodes at this level are listed whichever branch they belong to.";
 
     /// <summary>The levels whose nodes hang off a carrier, a line of business or a program.</summary>
-    private static readonly SettingLevel[] Narrowable =
+    private static readonly SettingLevel[] PlanSide =
         [SettingLevel.LineOfBusiness, SettingLevel.Program, SettingLevel.BenefitPlan];
 
-    /// <summary>The levels under the sponsor contract, which step 2 cannot reach from above.</summary>
-    private static readonly SettingLevel[] Deferred =
+    /// <summary>The levels of the sponsor contract (§9b).</summary>
+    private static readonly SettingLevel[] ContractSide =
         [SettingLevel.Sponsor, SettingLevel.SponsorPolicy, SettingLevel.Class];
 
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
@@ -144,9 +153,11 @@ public sealed class ConfigurationService(
     /// <summary>
     /// Which nodes below <paramref name="node"/> belong to its branch. A carrier
     /// reaches its programs from tenant-service's own records; a program reaches
-    /// its benefit plans through benefit-plan-service, which owns the link. Below
-    /// the sponsor contract nothing is reachable yet (§12.6), and the caller is
-    /// told so rather than left to assume the list was confined.
+    /// its benefit plans through benefit-plan-service, which owns the link; and
+    /// a sponsor reaches its policies, and through them their classes, through
+    /// sponsor-service, which owns the contract (§9b, §12.9). A level that could
+    /// not be followed to is reported as such rather than left to be assumed
+    /// confined.
     /// </summary>
     private async Task<Branch> BranchAsync(string tenantId, SettingLevel level, string node, CancellationToken ct)
     {
@@ -154,8 +165,20 @@ public sealed class ConfigurationService(
         // The tenant's branch is the whole tenant, so there is nothing to narrow.
         if (node.Length == 0) return branch;
 
-        foreach (var deferred in Deferred.Where(l => l > level)) branch.Cannot(deferred, SponsorsAwaitStepThree);
-        var narrowable = Narrowable.Where(l => l > level).ToList();
+        // Two separate reads reach downwards, and which one applies depends on
+        // which side of the hierarchy the node sits on. A sponsor is not
+        // reachable from a plan: the link runs from the policy to the plan, so
+        // from a carrier or a program the contract levels stay unnarrowed.
+        var below = PlanSide.Concat(ContractSide).Where(l => l > level).ToList();
+        var fromProgram = level is SettingLevel.Carrier or SettingLevel.LineOfBusiness or SettingLevel.Program
+            ? below.Where(PlanSide.Contains).ToList()
+            : [];
+        var fromContract = level is SettingLevel.Sponsor or SettingLevel.SponsorPolicy
+            ? below.Where(l => l is SettingLevel.SponsorPolicy or SettingLevel.Class).ToList()
+            : [];
+        var narrowable = fromProgram.Concat(fromContract).ToList();
+
+        foreach (var l in below.Except(narrowable)) branch.Cannot(l, ContractNotReachedFromHere);
         if (narrowable.Count == 0) return branch;
 
         if (descendants is null)
@@ -169,30 +192,8 @@ public sealed class ConfigurationService(
 
         try
         {
-            IReadOnlyList<ProgramNode>? programs = level switch
-            {
-                SettingLevel.Carrier => await descendants.ProgramsAsync(tenantId, node, ct),
-                SettingLevel.LineOfBusiness => (await descendants.ProgramsAsync(tenantId, null, ct))
-                    .Where(p => string.Equals(p.LineOfBusiness, node, StringComparison.OrdinalIgnoreCase)).ToList(),
-                SettingLevel.Program => new List<ProgramNode> { new(node, string.Empty) },
-                _ => null,
-            };
-            // Nothing below a benefit plan hangs off a program, so there is
-            // nothing left to follow; `narrowable` is already empty there and
-            // this is the belt to that braces.
-            if (programs is null) return branch;
-
-            var programIds = programs.Select(p => p.Id).Where(id => id.Length > 0).Distinct(StringComparer.Ordinal).ToList();
-            if (SettingLevel.LineOfBusiness > level)
-                branch.Narrow(SettingLevel.LineOfBusiness, programs.Select(p => p.LineOfBusiness).Where(l => l.Length > 0),
-                    StringComparer.OrdinalIgnoreCase);
-            if (SettingLevel.Program > level)
-                branch.Narrow(SettingLevel.Program, programIds, StringComparer.Ordinal);
-            if (SettingLevel.BenefitPlan > level)
-                branch.Narrow(SettingLevel.BenefitPlan,
-                    programIds.Count == 0 ? Array.Empty<string>() : await descendants.BenefitPlanIdsAsync(tenantId, programIds, ct),
-                    StringComparer.Ordinal);
-            return branch;
+            if (fromContract.Count > 0) return await ContractBranchAsync(tenantId, level, node, branch, fromContract, ct);
+            return await ProgramBranchAsync(tenantId, level, node, branch, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -203,6 +204,71 @@ public sealed class ConfigurationService(
                 level, LogSanitizer.Sanitize(node), LogSanitizer.Sanitize(tenantId));
             return new Branch(branch.Unnarrowed.Concat(narrowable.Select(l => new UnnarrowedLevel(l, HierarchyUnreadable))));
         }
+    }
+
+    /// <summary>A carrier, a line of business or a program down to its benefit plans (§12.6).</summary>
+    private async Task<Branch> ProgramBranchAsync(string tenantId, SettingLevel level, string node, Branch branch, CancellationToken ct)
+    {
+        IReadOnlyList<ProgramNode>? programs = level switch
+        {
+            SettingLevel.Carrier => await descendants!.ProgramsAsync(tenantId, node, ct),
+            SettingLevel.LineOfBusiness => (await descendants!.ProgramsAsync(tenantId, null, ct))
+                .Where(p => string.Equals(p.LineOfBusiness, node, StringComparison.OrdinalIgnoreCase)).ToList(),
+            SettingLevel.Program => new List<ProgramNode> { new(node, string.Empty) },
+            _ => null,
+        };
+        // Nothing below a benefit plan hangs off a program, so there is
+        // nothing left to follow; the caller has already established that
+        // something is narrowable and this is the belt to that braces.
+        if (programs is null) return branch;
+
+        var programIds = programs.Select(p => p.Id).Where(id => id.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+        if (SettingLevel.LineOfBusiness > level)
+            branch.Narrow(SettingLevel.LineOfBusiness, programs.Select(p => p.LineOfBusiness).Where(l => l.Length > 0),
+                StringComparer.OrdinalIgnoreCase);
+        if (SettingLevel.Program > level)
+            branch.Narrow(SettingLevel.Program, programIds, StringComparer.Ordinal);
+        if (SettingLevel.BenefitPlan > level)
+            branch.Narrow(SettingLevel.BenefitPlan,
+                programIds.Count == 0 ? Array.Empty<string>() : await descendants!.BenefitPlanIdsAsync(tenantId, programIds, ct),
+                StringComparer.Ordinal);
+        return branch;
+    }
+
+    /// <summary>
+    /// A sponsor down to its policies and their classes, or one policy down to
+    /// its own classes (§9b, §12.9).
+    ///
+    /// <para>
+    /// sponsor-service lists policies by group number, and a policy node names
+    /// only itself, so the group is taken from the policy's id. Where the id is
+    /// not in that form the class level is reported unnarrowed rather than
+    /// narrowed to nothing: a policy whose group nobody can tell overrides
+    /// classes that still exist.
+    /// </para>
+    /// </summary>
+    private async Task<Branch> ContractBranchAsync(
+        string tenantId, SettingLevel level, string node, Branch branch, List<SettingLevel> fromContract, CancellationToken ct)
+    {
+        string? groupNumber = level == SettingLevel.Sponsor ? node : SponsorScopeIds.GroupNumberOf(node);
+        if (groupNumber is null)
+        {
+            foreach (var l in fromContract) branch.Cannot(l, PolicyGroupUnknown);
+            return branch;
+        }
+
+        var policies = await descendants!.PoliciesAsync(tenantId, groupNumber, ct);
+        // Asked about one policy, only that policy's classes are in the branch,
+        // and a policy the group does not have has none.
+        var inBranch = level == SettingLevel.Sponsor
+            ? policies
+            : policies.Where(p => string.Equals(p.Id, node, StringComparison.Ordinal)).ToList();
+
+        if (SettingLevel.SponsorPolicy > level)
+            branch.Narrow(SettingLevel.SponsorPolicy, inBranch.Select(p => p.Id), StringComparer.Ordinal);
+        if (SettingLevel.Class > level)
+            branch.Narrow(SettingLevel.Class, inBranch.SelectMany(p => p.ClassScopeIds), StringComparer.Ordinal);
+        return branch;
     }
 
     /// <summary>The nodes of each level that belong to one branch; a level nobody narrowed holds every node.</summary>

@@ -116,6 +116,8 @@ public sealed class HttpPlanSettings(
         if (!string.IsNullOrWhiteSpace(scope.Program)) query += $"&program={Uri.EscapeDataString(scope.Program.Trim())}";
         if (!string.IsNullOrWhiteSpace(scope.BenefitPlan)) query += $"&benefitPlan={Uri.EscapeDataString(scope.BenefitPlan.Trim())}";
         if (!string.IsNullOrWhiteSpace(scope.Sponsor)) query += $"&sponsor={Uri.EscapeDataString(scope.Sponsor.Trim())}";
+        if (!string.IsNullOrWhiteSpace(scope.SponsorPolicy)) query += $"&sponsorPolicy={Uri.EscapeDataString(scope.SponsorPolicy.Trim())}";
+        if (!string.IsNullOrWhiteSpace(scope.Class)) query += $"&class={Uri.EscapeDataString(scope.Class.Trim())}";
 
         var client = httpClientFactory.CreateClient(HttpClientName);
         using var request = new HttpRequestMessage(HttpMethod.Get, query);

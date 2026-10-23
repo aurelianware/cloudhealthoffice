@@ -59,10 +59,27 @@ public sealed record SettingScope
     /// <summary>The sponsor's group number.</summary>
     public string? Sponsor { get; init; }
 
+    /// <summary>
+    /// The sponsor policy's id, as sponsor-service records it: the plan the
+    /// group offers under its own policy (sub-group) number
+    /// (plan-configuration.md §9b).
+    /// </summary>
+    public string? SponsorPolicy { get; init; }
+
+    /// <summary>
+    /// The eligibility class's id under that policy, as sponsor-service
+    /// computes it from the policy and the class code. One spelling, so a
+    /// setting written at class level and a class read from the contract cannot
+    /// drift apart.
+    /// </summary>
+    public string? Class { get; init; }
+
     /// <summary>The node id at each level, most specific first. Tenant is always present (empty id).</summary>
     public IReadOnlyList<(SettingLevel Level, string ScopeId)> Chain()
     {
         var chain = new List<(SettingLevel, string)>();
+        if (!string.IsNullOrWhiteSpace(Class)) chain.Add((SettingLevel.Class, Class.Trim()));
+        if (!string.IsNullOrWhiteSpace(SponsorPolicy)) chain.Add((SettingLevel.SponsorPolicy, SponsorPolicy.Trim()));
         if (!string.IsNullOrWhiteSpace(Sponsor)) chain.Add((SettingLevel.Sponsor, Sponsor.Trim()));
         if (!string.IsNullOrWhiteSpace(BenefitPlan)) chain.Add((SettingLevel.BenefitPlan, BenefitPlan.Trim()));
         if (!string.IsNullOrWhiteSpace(Program)) chain.Add((SettingLevel.Program, Program.Trim()));
@@ -85,8 +102,33 @@ public sealed record SettingScope
         LineOfBusiness = LinesOfBusiness.Normalize(LineOfBusiness) ?? program.LineOfBusiness,
     };
 
+    /// <summary>
+    /// The levels named without the level they hang off, with what is missing.
+    /// A class belongs to a policy and a policy to a sponsor, so a scope that
+    /// names the one without the other is not a position a member can be in.
+    ///
+    /// <para>
+    /// Worth refusing rather than resolving, because resolving it would skip
+    /// the levels in between and answer with the tenant's value as though
+    /// nothing above the class had been set — the "could not look" reading as
+    /// "there is none" that §12.6 and §12.8 are built against. The caller
+    /// holding a class id holds the policy's too: the class id is built from
+    /// it.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> Incoherent()
+    {
+        var problems = new List<string>();
+        if (!string.IsNullOrWhiteSpace(Class) && string.IsNullOrWhiteSpace(SponsorPolicy))
+            problems.Add("A class belongs to a sponsor policy: name the policy as well, or the levels between the class and the tenant are skipped.");
+        if (!string.IsNullOrWhiteSpace(SponsorPolicy) && string.IsNullOrWhiteSpace(Sponsor))
+            problems.Add("A sponsor policy belongs to a sponsor: name the sponsor's group number as well, or the sponsor's own settings are skipped.");
+        return problems;
+    }
+
     public string CacheKey =>
-        $"{LinesOfBusiness.Normalize(LineOfBusiness)}|{Carrier?.Trim()}|{Program?.Trim()}|{BenefitPlan?.Trim()}|{Sponsor?.Trim()}";
+        $"{LinesOfBusiness.Normalize(LineOfBusiness)}|{Carrier?.Trim()}|{Program?.Trim()}|{BenefitPlan?.Trim()}|{Sponsor?.Trim()}"
+        + $"|{SponsorPolicy?.Trim()}|{Class?.Trim()}";
 }
 
 public sealed record SettingTraceEntry(SettingLevel Level, string ScopeId, string? Value, bool Locked, int? Version, string Note);

@@ -110,8 +110,9 @@ builder.Services.AddHttpClient(TenantService.Configuration.HttpSponsorLineOfBusi
 builder.Services.AddScoped<TenantService.Configuration.ISponsorLineOfBusinessLookup, TenantService.Configuration.HttpSponsorLineOfBusinessLookup>();
 builder.Services.AddScoped<TenantService.Configuration.ConfigurationService>();
 // Narrowing an override list to one branch reads programs from the hierarchy
-// records and plans from benefit-plan-service (plan-configuration.md §12.6);
-// both are registered below.
+// records, plans from benefit-plan-service (plan-configuration.md §12.6) and a
+// sponsor's policies and classes from sponsor-service (§12.9); all are
+// registered below.
 builder.Services.AddScoped<TenantService.Configuration.IHierarchyDescendants, TenantService.Configuration.HierarchyDescendants>();
 builder.Services.AddHostedService<TenantService.Configuration.ConfigurationIndexInitializer>();
 
@@ -125,6 +126,17 @@ builder.Services.AddHttpClient(TenantService.Hierarchy.HttpBenefitPlanProgramLoo
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
 builder.Services.AddScoped<TenantService.Hierarchy.IBenefitPlanProgramLookup, TenantService.Hierarchy.HttpBenefitPlanProgramLookup>();
+
+// The sponsor contract (plan-configuration.md §9b), read only to follow a
+// sponsor down to its policies and their classes when narrowing an override
+// list. tenant-service never writes a contract.
+builder.Services.AddHttpClient(TenantService.Hierarchy.HttpSponsorPolicyLookup.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri((builder.Configuration["Services:SponsorService"] ?? "http://sponsor-service").TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+builder.Services.AddScoped<TenantService.Hierarchy.ISponsorPolicyLookup, TenantService.Hierarchy.HttpSponsorPolicyLookup>();
 builder.Services.AddScoped<TenantService.Hierarchy.HierarchyService>();
 builder.Services.AddHostedService<TenantService.Hierarchy.HierarchyIndexInitializer>();
 
