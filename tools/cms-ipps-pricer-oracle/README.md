@@ -97,7 +97,7 @@ perdiem".
 
 ## The corpus
 
-Thirty-two invented stays. There is no member, no claim number and no real
+Forty-two invented stays. There is no member, no claim number and no real
 provider: the CMS certification numbers are fabricated, chosen only so their
 first two digits are a plausible state code, because the pricer reads the state
 from them. The wage-index localities are real published CBSA codes, which is
@@ -286,7 +286,7 @@ touches those provider-record fields. It is gated on `isWebPricerRequest()`,
 which is the header `cms-pricer-client: WEB-PRICER` — and sending that header
 to `/v2/price-claim` changes nothing, because the web-pricer path is not
 reachable on this build. The `passthrough_total_plus_misc` column is therefore
-empty on all thirty-two rows, and `pass-through-amount-on-file` carries a
+empty on all forty-two rows, and `pass-through-amount-on-file` carries a
 100-dollar-per-day figure on the provider record purely so that fact stays
 checked: CMS pays it the plain total.
 
@@ -315,3 +315,84 @@ Confirmed rather than assumed: the same corpus row carries a 10 percent
 discount and demonstration code 61, and CMS pays it the same total as the plain
 stay. There is a parity test on that equality, so if CMS ever revives the
 factor the repository finds out.
+
+## What the fourth run added: the beneficiary's days
+
+A claim carries how many of the stay's days Medicare covered and how many of
+those came out of the 60-day lifetime reserve. Ten corpus rows were added for
+them, and the run settled four things.
+
+### Covered days do not scale the payment
+
+The obvious thing to do with three covered days out of nine is to pay
+three-ninths. CMS pays all of it. `covered-days-short-of-the-stay` is
+`long-stay-no-transfer` with the covered days cut from nine to three and
+nothing else changed, and both pay **13,888.67**. A prospective payment buys
+the discharge, not the days. There is a parity test on that equality, because
+it is the one claim this corpus can make that a prorating calculator would
+fail and no other row would catch.
+
+### A cost outlier past the covered days is paid nothing at all
+
+This is the return code the day counts exist for. `cost-outlier` pays
+**86,206.55**; the same stay with three covered days instead of twelve returns
+**return code 67 and a total of zero**. Not the covered fraction of 86,206.55
+— zero. `cost-outlier-one-day-short` cuts the covered days to eleven of twelve
+and the whole payment still goes, so the rule has no tolerance in it.
+
+Two further things about it:
+
+- **It is about the outlier, not about the covered days.** A partially covered
+  stay with no cost-to-charge ratio on file earns no outlier and is paid in
+  full, which is why the test sits after the outlier is known rather than
+  beside the two billing edits.
+- **Reserve days count towards it.** CMS writes the condition as regular days
+  plus reserve days, and that sum is the covered days by construction, so
+  `cost-outlier-covered-by-reserve-days` — twelve covered days of which nine
+  are reserve — pays the full 86,206.55.
+
+### CMS reports one kind of day used, never both
+
+`regular_days_used` and `lifetime_reserve_days_used` look like a utilization
+ledger and are not one. Where any regular day remains CMS reports the regular
+days and reports **zero** reserve days, however many the claim carried:
+`cost-outlier-covered-by-reserve-days` has nine reserve days and comes back as
+three regular days used and zero reserve days used. CHO is faithful to that,
+and `IppsDayUtilization` says in its own documentation that a caller
+decrementing a beneficiary's reserve balance must not read it off these two
+fields.
+
+Both are capped at the length of the stay rather than at the days on the claim,
+which `reserve-days-capped-at-the-stay` pins: nine reserve days on a stay of
+five report five.
+
+### The two billing edits need separate rows, because of their order
+
+Three codes refuse a claim over its day counts, and which one comes back
+depends on the order CMS applies them in:
+
+| Row | Code | Why |
+| --- | --- | --- |
+| `sixty-one-reserve-days` | 61 | A beneficiary has sixty reserve days, ever. |
+| `no-covered-days-on-a-stay-with-days` | 62 | Zero covered days, and the patient was here. |
+| `reserve-days-exceeding-covered-days` | 62 | Sixty reserve days against nine covered ones. |
+
+The third row is the one worth having. Sixty reserve days **passes** the
+lifetime limit, so what refuses it is the covered-day comparison and not the
+limit — and a calculator that checked them the other way round, or reported one
+code for both, would look right on the first two rows.
+
+CHO answers the three of them differently from the outlier refusal, on purpose:
+contradictory day counts cannot be priced at all and throw, while a cost
+outlier past the covered days prices perfectly well and is simply worth
+nothing. A refusal from CMS also reports zero for every amount it had computed,
+including its own cost threshold; CHO keeps those amounts so that whoever reads
+the refusal can see why, which is a deliberate difference from CMS and is
+stated as one rather than compared against.
+
+### Day outliers stayed abolished
+
+`outlier_days` and `daysCutoff` are initialised to zero by CMS's FY2026 program
+and never written to again — day outliers ended in 1997. The column is in the
+output so that a future year reviving them shows up as a failing test rather
+than as a field nobody looked at.

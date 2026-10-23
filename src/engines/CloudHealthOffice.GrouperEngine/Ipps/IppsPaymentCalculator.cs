@@ -27,6 +27,101 @@ public enum IppsDischargeKind
 }
 
 /// <summary>
+/// Medicare's day counts for the stay: how many of its days the beneficiary
+/// still had entitlement for, and how many of those came out of the lifetime
+/// reserve.
+///
+/// <para>
+/// <b>These do not scale the payment.</b> A prospective payment buys the
+/// discharge, not the days, so a stay of ten days with three covered days is
+/// paid exactly what the same stay would be paid with ten — confirmed against
+/// CMS's pricer, which pays 13,791.43 either way. The temptation is to prorate
+/// by <c>Covered / LengthOfStay</c>, and a calculator that does will be wrong
+/// on every partially covered stay it sees. What the day counts do instead is
+/// decide whether the stay is payable at all: see
+/// <see cref="IppsPayment.Unpayable"/>.
+/// </para>
+/// </summary>
+/// <param name="Covered">
+/// Days of the stay the beneficiary had Medicare Part A entitlement for. Must
+/// be above zero on a stay with any length at all (CMS return code 62); a
+/// zero-day stay may have zero, and is paid.
+/// </param>
+/// <param name="LifetimeReserve">
+/// How many of the covered days came from the 60-day lifetime reserve. Capped
+/// at 60 (return code 61) and may not exceed <paramref name="Covered"/>
+/// (return code 62), because reserve days are a subset of the covered ones and
+/// not an addition to them.
+/// </param>
+public sealed record IppsBeneficiaryDays(int Covered, int LifetimeReserve)
+{
+    /// <summary>
+    /// The covered days that were not reserve days. CMS calls this
+    /// <c>H-REG-DAYS</c> and computes it as a subtraction, which is why
+    /// <see cref="LifetimeReserve"/> exceeding <see cref="Covered"/> is an
+    /// error rather than something to clamp.
+    /// </summary>
+    public int Regular => Covered - LifetimeReserve;
+}
+
+/// <summary>
+/// What CMS reports was drawn down for the stay.
+///
+/// <para>
+/// <b>Not a utilization ledger, and it would be a mistake to post it as one.</b>
+/// CMS reports one or the other, never both: where any regular day remains it
+/// reports regular days and reports zero reserve days, whatever the claim said.
+/// A stay with twelve covered days of which nine are reserve days comes back
+/// from CMS's pricer as three regular days used and <i>zero</i> reserve days
+/// used, though nine reserve days were plainly consumed. This record is
+/// faithful to that, because the parity run compares against it; a caller that
+/// needs to decrement a beneficiary's reserve balance must work it out from
+/// <see cref="IppsBeneficiaryDays"/> and the length of stay instead.
+/// </para>
+/// </summary>
+/// <param name="RegularDaysUsed">Regular days used, capped at the length of stay.</param>
+/// <param name="LifetimeReserveDaysUsed">
+/// Reserve days used, which is zero whenever any regular day was available.
+/// </param>
+public sealed record IppsDayUtilization(int RegularDaysUsed, int LifetimeReserveDaysUsed)
+{
+    /// <summary>Nothing used, which is what a stay with no day counts reports.</summary>
+    public static readonly IppsDayUtilization None = new(0, 0);
+
+    /// <summary>
+    /// CMS's <c>3100-CALC-STAY-UTILIZATION</c>: the regular days unless there
+    /// are none, and either way no more than the days the patient was here.
+    /// </summary>
+    /// <param name="days">The beneficiary's day counts.</param>
+    /// <param name="lengthOfStayDays">The length of the stay.</param>
+    /// <returns>What to report.</returns>
+    public static IppsDayUtilization For(IppsBeneficiaryDays days, int lengthOfStayDays)
+    {
+        ArgumentNullException.ThrowIfNull(days);
+
+        return days.Regular > 0
+            ? new IppsDayUtilization(Math.Min(days.Regular, lengthOfStayDays), 0)
+            : new IppsDayUtilization(0, Math.Min(days.LifetimeReserve, lengthOfStayDays));
+    }
+}
+
+/// <summary>
+/// Why a stay that priced cleanly is nonetheless paid nothing.
+/// </summary>
+public enum IppsUnpayableReason
+{
+    /// <summary>The stay is payable.</summary>
+    None = 0,
+
+    /// <summary>
+    /// A cost outlier whose length of stay ran past the beneficiary's covered
+    /// days (CMS return code 67). The outlier is the reason it matters: a
+    /// partially covered stay that earns no outlier is paid in full.
+    /// </summary>
+    CostOutlierBeyondCoveredDays
+}
+
+/// <summary>
 /// What a stay has to say about itself before it can be paid.
 /// </summary>
 /// <param name="Drg">The MS-DRG, which the grouper assigned.</param>
@@ -48,6 +143,19 @@ public enum IppsDischargeKind
 /// by the caller: CMS's own pricer takes it from two columns of its DRG table
 /// and ignores what the claim says about it.
 /// </param>
+/// <param name="Days">
+/// The beneficiary's covered and lifetime reserve days, or null where the claim
+/// did not carry them.
+///
+/// <para>
+/// Null is not a neutral value and is not a default anyone should reach for. It
+/// means the one rule that depends on these counts — the cost-outlier refusal
+/// of <see cref="IppsUnpayableReason.CostOutlierBeyondCoveredDays"/> — cannot
+/// be applied, so a stay CMS would pay nothing for is paid in full here. It is
+/// optional only because CHO's own claim model does not carry the counts yet,
+/// and every real 837I does.
+/// </para>
+/// </param>
 public sealed record IppsStay(
     int Drg,
     decimal RelativeWeight,
@@ -55,7 +163,8 @@ public sealed record IppsStay(
     int LengthOfStayDays,
     decimal CoveredCharges,
     IppsDischargeKind Kind,
-    IppsPostAcuteTransferRule PostAcuteTransferRule = IppsPostAcuteTransferRule.None);
+    IppsPostAcuteTransferRule PostAcuteTransferRule = IppsPostAcuteTransferRule.None,
+    IppsBeneficiaryDays? Days = null);
 
 /// <summary>
 /// Which post-acute transfer rule a DRG carries (42 CFR 412.4(f)).
@@ -375,6 +484,10 @@ public sealed record IppsAdjustments(
 /// See the note on <see cref="IppsPaymentCalculator"/>.
 /// </para>
 /// </param>
+/// <param name="Utilization">
+/// The regular and lifetime reserve days CMS reports for the stay. Reporting
+/// only — see <see cref="IppsDayUtilization"/>.
+/// </param>
 /// <param name="Notes">What a reader of the payment should know about it.</param>
 public sealed record IppsPayment(
     int FiscalYear,
@@ -385,6 +498,7 @@ public sealed record IppsPayment(
     IppsHospitalSpecificPortion HospitalSpecific,
     IppsAdjustments Adjustments,
     decimal PassThroughPayment,
+    IppsDayUtilization Utilization,
     IReadOnlyList<string> Notes)
 {
     /// <summary>The full DRG payment, before any transfer reduction or outlier.</summary>
@@ -407,10 +521,30 @@ public sealed record IppsPayment(
         PaymentBeforeOutliers + Outlier.Payment + HospitalSpecific.Payment;
 
     /// <summary>
+    /// Why the stay is paid nothing, where it is.
+    ///
+    /// <para>
+    /// A stay can price every line correctly and still be worth nothing: CMS
+    /// computes the whole payment, finds that a cost outlier ran past the
+    /// beneficiary's covered days, and discards it. The intermediate amounts
+    /// below are <i>what CMS computed before discarding them</i>, kept because
+    /// the reason the claim was refused is usually in one of them. CMS keeps
+    /// none of them: its refusal reports zeroes throughout, its cost threshold
+    /// included, so this is a deliberate difference and not a parity claim.
+    /// <see cref="Total"/> is zero, and it is the only amount here that is safe
+    /// to pay.
+    /// </para>
+    /// </summary>
+    public IppsUnpayableReason Unpayable { get; init; } = IppsUnpayableReason.None;
+
+    /// <summary>
     /// The total paid: the case payment, the four adjustments, and then the
     /// pass-through amount, which CMS adds last and so outside the penalty.
+    /// Zero where <see cref="Unpayable"/> is set.
     /// </summary>
-    public decimal Total => PaymentBeforeAdjustments + Adjustments.Total + PassThroughPayment;
+    public decimal Total => Unpayable != IppsUnpayableReason.None
+        ? 0m
+        : PaymentBeforeAdjustments + Adjustments.Total + PassThroughPayment;
 }
 
 /// <summary>Raised when a stay cannot be paid from the data given.</summary>
@@ -485,6 +619,7 @@ public static class IppsPaymentCalculator
         ArgumentNullException.ThrowIfNull(stay);
 
         var notes = new List<string>();
+        var utilization = Days(stay, notes);
 
         // The DRG is paid from the dollar amounts in the rate table row this
         // hospital selects; the percentage pair below is for the outlier
@@ -557,6 +692,30 @@ public static class IppsPaymentCalculator
                 + $"{outlier.Capital.EstimatedCost:C} against {outlier.Capital.Threshold:C}.");
         }
 
+        // A cost outlier that outran the beneficiary's covered days is not paid
+        // — not prorated to the covered days, paid nothing. CMS computes the
+        // whole payment first and then discards it, which is why this test sits
+        // here and not beside the other two edits: it needs the outlier, and a
+        // partially covered stay that earns no outlier is paid in full. One
+        // uncovered day is enough: a stay of twelve days with eleven covered
+        // goes from 86,206.55 to zero.
+        var unpayable = stay.Days is not null
+            && outlier.Payment > 0
+            && stay.LengthOfStayDays > stay.Days.Covered
+                ? IppsUnpayableReason.CostOutlierBeyondCoveredDays
+                : IppsUnpayableReason.None;
+
+        if (unpayable != IppsUnpayableReason.None)
+        {
+            notes.Add(
+                $"Not payable: a cost outlier of {outlier.Payment:C} on a stay of "
+                + $"{stay.LengthOfStayDays} days against {stay.Days!.Covered} covered days. "
+                + "CMS pays nothing for this claim rather than paying the covered part of "
+                + "it, and reports no threshold either — its own cost threshold comes back as "
+                + "zero on a refusal. The amounts below are what was computed before being "
+                + "discarded, and are kept here because the reason is usually in one of them.");
+        }
+
         // The hospital-specific portion is settled against the operating side
         // as paid, outlier included — and before the four adjustments, because
         // the low-volume uplift and the penalty are both taken on it.
@@ -597,11 +756,76 @@ public static class IppsPaymentCalculator
             hospitalSpecific,
             adjustments,
             passThrough,
+            // CMS zeroes the day counts along with the payment, and this
+            // mirrors it so that a refused claim reports the same thing from
+            // both programs.
+            unpayable == IppsUnpayableReason.None ? utilization : IppsDayUtilization.None,
             notes)
         {
-            PaymentBeforeOutliers = paid
+            PaymentBeforeOutliers = paid,
+            Unpayable = unpayable
         };
     }
+
+    /// <summary>
+    /// Checks the beneficiary's day counts and works out what to report as
+    /// used (CMS's <c>1000-EDIT-THE-BILL-INFO</c> and
+    /// <c>3100-CALC-STAY-UTILIZATION</c>).
+    /// </summary>
+    /// <param name="stay">The stay.</param>
+    /// <param name="notes">Notes to add to.</param>
+    /// <returns>What to report as used, or nothing where the claim carried no counts.</returns>
+    /// <exception cref="IppsPaymentFailedException">
+    /// When the counts contradict each other. These are three separate edits in
+    /// CMS's program and the order matters for which code comes back: sixty
+    /// reserve days against three covered days is refused for the covered days
+    /// (62), not for the reserve limit, because the limit is sixty and sixty
+    /// passes it.
+    /// </exception>
+    private static IppsDayUtilization Days(IppsStay stay, List<string> notes)
+    {
+        if (stay.Days is null)
+        {
+            notes.Add(
+                "No covered-day counts on the claim, so the cost-outlier covered-days "
+                + "refusal was not applied. A stay CMS would pay nothing for is paid in "
+                + "full here.");
+            return IppsDayUtilization.None;
+        }
+
+        var days = stay.Days;
+
+        if (days.LifetimeReserve > LifetimeReserveDayLimit)
+        {
+            throw new IppsPaymentFailedException(
+                $"{days.LifetimeReserve} lifetime reserve days, and a beneficiary has "
+                + $"{LifetimeReserveDayLimit} in a lifetime.");
+        }
+
+        // A zero-day stay with no covered days is paid: CMS's edit fires only
+        // where the patient was actually here.
+        if (days.Covered == 0 && stay.LengthOfStayDays > 0)
+        {
+            throw new IppsPaymentFailedException(
+                $"No covered days on a stay of {stay.LengthOfStayDays} days.");
+        }
+
+        if (days.LifetimeReserve > days.Covered)
+        {
+            throw new IppsPaymentFailedException(
+                $"{days.LifetimeReserve} lifetime reserve days out of {days.Covered} covered "
+                + "days: reserve days are a subset of the covered days, not an addition to "
+                + "them.");
+        }
+
+        return IppsDayUtilization.For(days, stay.LengthOfStayDays);
+    }
+
+    /// <summary>
+    /// The lifetime reserve days a Medicare beneficiary gets, once, ever
+    /// (42 CFR 409.61(a)(2)).
+    /// </summary>
+    private const int LifetimeReserveDayLimit = 60;
 
     /// <summary>
     /// The hospital-specific portion: the difference where this hospital's own

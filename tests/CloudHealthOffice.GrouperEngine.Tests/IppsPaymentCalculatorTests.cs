@@ -91,8 +91,9 @@ public class IppsPaymentCalculatorTests
         decimal geometricMean = 4m,
         decimal charges = 0m,
         int drg = 470,
-        IppsPostAcuteTransferRule transferRule = IppsPostAcuteTransferRule.None) =>
-        new(drg, weight, geometricMean, los, charges, kind, transferRule);
+        IppsPostAcuteTransferRule transferRule = IppsPostAcuteTransferRule.None,
+        IppsBeneficiaryDays? days = null) =>
+        new(drg, weight, geometricMean, los, charges, kind, transferRule, days);
 
     // ─────────────────────────────────────────────────────────
     //  The wage adjustment (42 CFR 412.64(h))
@@ -1235,6 +1236,210 @@ public class IppsPaymentCalculatorTests
         var provider = new IppsRateYears([Year()]);
 
         Assert.Null(await provider.GetForDischargeDateAsync(new DateOnly(2030, 1, 1)));
+    }
+
+    // ─────────────────────────────────────────────────────────
+    //  Beneficiary days (42 CFR 409.61, 412.84)
+    // ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Covered_days_shorter_than_the_stay_do_not_reduce_the_payment()
+    {
+        // The whole point of a prospective payment is that it buys the
+        // discharge and not the days, so three covered days out of ten pays
+        // what ten out of ten pays. This is the test that would catch a
+        // calculator that prorated by the covered fraction, which is the
+        // obvious wrong thing to do and the one CMS does not do.
+        var fully = IppsPaymentCalculator.Pay(
+            Year(),
+            IppsProvider.Plain("123456", wageIndex: 1m),
+            Stay(los: 10, geometricMean: 10m, days: new IppsBeneficiaryDays(10, 0)));
+
+        var partly = IppsPaymentCalculator.Pay(
+            Year(),
+            IppsProvider.Plain("123456", wageIndex: 1m),
+            Stay(los: 10, geometricMean: 10m, days: new IppsBeneficiaryDays(3, 0)));
+
+        Assert.Equal(fully.Total, partly.Total);
+        Assert.Equal(IppsUnpayableReason.None, partly.Unpayable);
+    }
+
+    [Fact]
+    public void A_stay_with_no_day_counts_is_paid_and_says_the_refusal_was_not_applied()
+    {
+        var payment = IppsPaymentCalculator.Pay(
+            Year(), WithRatios(0.30m, 0.05m), Stay(charges: 400_000m, days: null));
+
+        Assert.True(payment.Outlier.Payment > 0m);
+        Assert.Equal(IppsUnpayableReason.None, payment.Unpayable);
+        Assert.Equal(IppsDayUtilization.None, payment.Utilization);
+        Assert.Contains(
+            payment.Notes,
+            note => note.Contains("No covered-day counts", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(10, 0, 4, 0)]      // Ten covered days, four days here: four used.
+    [InlineData(4, 0, 4, 0)]       // Exactly covered.
+    [InlineData(3, 0, 3, 0)]       // Short of the stay: still only the covered ones.
+    [InlineData(10, 6, 4, 0)]      // Four regular days left, so four regular used.
+    [InlineData(10, 8, 2, 0)]      // Two regular days left: reserve days not reported.
+    [InlineData(4, 4, 0, 4)]       // No regular day at all, so the reserve is reported.
+    [InlineData(10, 10, 0, 4)]     // Reserve capped at the length of the stay.
+    public void Utilization_reports_regular_days_or_reserve_days_but_never_both(
+        int covered, int reserve, int expectedRegularUsed, int expectedReserveUsed)
+    {
+        var payment = IppsPaymentCalculator.Pay(
+            Year(),
+            IppsProvider.Plain("123456", wageIndex: 1m),
+            Stay(los: 4, days: new IppsBeneficiaryDays(covered, reserve)));
+
+        Assert.Equal(expectedRegularUsed, payment.Utilization.RegularDaysUsed);
+        Assert.Equal(expectedReserveUsed, payment.Utilization.LifetimeReserveDaysUsed);
+    }
+
+    [Fact]
+    public void Nine_reserve_days_under_three_regular_ones_are_reported_as_none_used()
+    {
+        // CMS's own quirk, kept deliberately: where any regular day remains it
+        // reports the regular days and reports zero reserve days, though nine
+        // reserve days were plainly consumed. A caller that needs to decrement
+        // the beneficiary's reserve balance cannot read it off this.
+        var payment = IppsPaymentCalculator.Pay(
+            Year(),
+            IppsProvider.Plain("123456", wageIndex: 1m),
+            Stay(los: 12, geometricMean: 12m, days: new IppsBeneficiaryDays(12, 9)));
+
+        Assert.Equal(3, payment.Utilization.RegularDaysUsed);
+        Assert.Equal(0, payment.Utilization.LifetimeReserveDaysUsed);
+    }
+
+    [Fact]
+    public void A_cost_outlier_that_outran_the_covered_days_is_paid_nothing()
+    {
+        var provider = WithRatios(0.30m, 0.05m);
+
+        var payment = IppsPaymentCalculator.Pay(
+            Year(),
+            provider,
+            Stay(los: 12, geometricMean: 12m, charges: 400_000m,
+                days: new IppsBeneficiaryDays(3, 0)));
+
+        Assert.Equal(IppsUnpayableReason.CostOutlierBeyondCoveredDays, payment.Unpayable);
+        Assert.Equal(0m, payment.Total);
+
+        // The amounts CMS computed before discarding them survive, because the
+        // reason the claim was refused is usually in one of them.
+        Assert.True(payment.Outlier.Payment > 0m);
+        Assert.True(payment.Outlier.Operating.Threshold > 0m);
+        Assert.Equal(IppsDayUtilization.None, payment.Utilization);
+    }
+
+    [Fact]
+    public void One_uncovered_day_is_enough_to_refuse_an_outlier_stay()
+    {
+        var provider = WithRatios(0.30m, 0.05m);
+        var stay = Stay(los: 12, geometricMean: 12m, charges: 400_000m,
+            days: new IppsBeneficiaryDays(12, 0));
+
+        var covered = IppsPaymentCalculator.Pay(Year(), provider, stay);
+        var oneShort = IppsPaymentCalculator.Pay(
+            Year(), provider, stay with { Days = new IppsBeneficiaryDays(11, 0) });
+
+        Assert.True(covered.Total > 0m);
+        Assert.Equal(0m, oneShort.Total);
+    }
+
+    [Fact]
+    public void Reserve_days_count_towards_the_covered_days_the_outlier_test_uses()
+    {
+        // CMS writes the test as regular days plus reserve days, and that sum
+        // is the covered days by construction, so splitting the covered days
+        // into reserve days cannot change the answer.
+        var provider = WithRatios(0.30m, 0.05m);
+
+        var plain = IppsPaymentCalculator.Pay(
+            Year(),
+            provider,
+            Stay(los: 12, geometricMean: 12m, charges: 400_000m,
+                days: new IppsBeneficiaryDays(12, 0)));
+
+        var reserve = IppsPaymentCalculator.Pay(
+            Year(),
+            provider,
+            Stay(los: 12, geometricMean: 12m, charges: 400_000m,
+                days: new IppsBeneficiaryDays(12, 9)));
+
+        Assert.Equal(IppsUnpayableReason.None, reserve.Unpayable);
+        Assert.Equal(plain.Total, reserve.Total);
+    }
+
+    [Fact]
+    public void A_partly_covered_stay_with_no_outlier_is_paid_in_full()
+    {
+        // The refusal is about the outlier, not about the covered days: with no
+        // cost-to-charge ratio on file there is no outlier and nothing to
+        // refuse, on exactly the stay that would otherwise be refused.
+        var payment = IppsPaymentCalculator.Pay(
+            Year(),
+            IppsProvider.Plain("123456", wageIndex: 1m),
+            Stay(los: 12, geometricMean: 12m, charges: 400_000m,
+                days: new IppsBeneficiaryDays(3, 0)));
+
+        Assert.Equal(0m, payment.Outlier.Payment);
+        Assert.Equal(IppsUnpayableReason.None, payment.Unpayable);
+        Assert.True(payment.Total > 0m);
+    }
+
+    [Fact]
+    public void Sixty_one_reserve_days_is_more_than_a_beneficiary_has_in_a_lifetime()
+    {
+        var failure = Assert.Throws<IppsPaymentFailedException>(() =>
+            IppsPaymentCalculator.Pay(
+                Year(),
+                IppsProvider.Plain("123456", wageIndex: 1m),
+                Stay(los: 3, days: new IppsBeneficiaryDays(70, 61))));
+
+        Assert.Contains("lifetime", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Sixty_reserve_days_against_three_covered_ones_is_refused_for_the_covered_days()
+    {
+        // The order of CMS's two edits is visible here: sixty passes the
+        // lifetime limit, so what refuses this stay is the covered-day
+        // comparison, and the message has to say so or it sends whoever reads
+        // it looking at the wrong field.
+        var failure = Assert.Throws<IppsPaymentFailedException>(() =>
+            IppsPaymentCalculator.Pay(
+                Year(),
+                IppsProvider.Plain("123456", wageIndex: 1m),
+                Stay(los: 3, days: new IppsBeneficiaryDays(3, 60))));
+
+        Assert.Contains("subset", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void No_covered_days_on_a_stay_with_days_in_it_is_refused()
+    {
+        Assert.Throws<IppsPaymentFailedException>(() =>
+            IppsPaymentCalculator.Pay(
+                Year(),
+                IppsProvider.Plain("123456", wageIndex: 1m),
+                Stay(los: 3, days: new IppsBeneficiaryDays(0, 0))));
+    }
+
+    [Fact]
+    public void No_covered_days_on_a_stay_with_no_days_in_it_is_paid()
+    {
+        // A same-day discharge has nothing to cover, and CMS pays it.
+        var payment = IppsPaymentCalculator.Pay(
+            Year(),
+            IppsProvider.Plain("123456", wageIndex: 1m),
+            Stay(los: 0, days: new IppsBeneficiaryDays(0, 0)));
+
+        Assert.True(payment.Total > 0m);
+        Assert.Equal(IppsDayUtilization.None, payment.Utilization);
     }
 
     private static IppsProvider WithRatios(decimal operating, decimal capital) =>

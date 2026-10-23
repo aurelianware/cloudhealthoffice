@@ -1080,15 +1080,43 @@ Build order:
    have been modelling dead code, which is worth saying because it was written
    down as a gap for two revisions of this ADR.
 
+   **The beneficiary's days**, which `IppsStay` now carries as
+   `IppsBeneficiaryDays`, with the parity run settling four things about them:
+
+   - **They do not scale the payment.** A prospective payment buys the
+     discharge, not the days, so three covered days out of nine pays what nine
+     out of nine pays — 13,888.67 either way on two corpus rows built to differ
+     in nothing else. The temptation is to prorate by the covered fraction, and
+     a calculator that does is wrong on every partially covered stay.
+   - **A cost outlier past the covered days is paid nothing at all.** Return
+     code 67, and it is a refusal rather than a reduction: the same stay pays
+     86,206.55 with twelve covered days and zero with eleven. It is about the
+     outlier, not the covered days — a partially covered stay that earns no
+     outlier is paid in full — and reserve days count towards the comparison,
+     because CMS writes it as regular plus reserve days and that sum is the
+     covered days by construction.
+   - **CMS reports one kind of day used, never both.** Where any regular day
+     remains it reports the regular days and zero reserve days, however many
+     reserve days the claim carried: twelve covered days of which nine are
+     reserve come back as three regular used and zero reserve used.
+     `IppsDayUtilization` is faithful to that and says in its own
+     documentation that it is not a utilization ledger.
+   - **Three codes refuse a claim over its day counts, and the order decides
+     which.** Sixty reserve days against nine covered ones is refused for the
+     covered days (62), not for the sixty-day lifetime limit (61), because
+     sixty passes that limit. CHO throws on the two contradiction edits and
+     returns a priced-but-unpayable result for the outlier one, which is the
+     distinction CMS's own program draws.
+
+   Day outliers stayed abolished: `outlierDays` and `daysCutoff` are
+   initialised to zero and never written to again. There is a parity test
+   asserting that, so a future year reviving them is a failing build rather
+   than an ignored field.
+
    **What is still missing**, and why this is not yet wired into adjudication.
    CMS pays new-technology add-ons and the islet isolation add-on — a flat
    18,848 for one qualifying procedure code and 37,696 for more than one — and
-   this pays neither. Both need CMS's code tables rather than a formula. And CMS works in
-   covered days and lifetime reserve days, reporting regular, reserve and
-   outlier days used, where `IppsStay` has no beneficiary-day concept at all —
-   the last of those is a model change rather than an arithmetic one, and
-   return code 67, "outlier LOS greater than covered days", is the pricer
-   refusing a claim on day arithmetic.
+   this pays neither. Both need CMS's code tables rather than a formula.
 
    Deliberately absent, because approximating it would be worse than omitting
    it: new technology add-on payments, which are a published list of devices

@@ -56,6 +56,23 @@ public class IppsPricerParityTests
             + "is a column of CMS's DRG table that this repository has no importer for yet.",
     };
 
+    /// <summary>
+    /// Rows CMS refuses over the beneficiary's day counts. They are compared,
+    /// but not column by column: a refusal from CMS reports zero for every
+    /// amount it had computed, and CHO deliberately keeps those amounts so that
+    /// whoever reads the refusal can see why. The two tests at the end of this
+    /// file compare what is actually comparable about them, which is that both
+    /// programs refuse the same rows and pay nothing for them.
+    /// </summary>
+    private static readonly Dictionary<string, string> RefusedOverDays = new()
+    {
+        ["cost-outlier-beyond-covered-days"] = "67",
+        ["cost-outlier-one-day-short"] = "67",
+        ["sixty-one-reserve-days"] = "61",
+        ["no-covered-days-on-a-stay-with-days"] = "62",
+        ["reserve-days-exceeding-covered-days"] = "62",
+    };
+
     private sealed record Answer(string Case, Dictionary<string, string> Columns)
     {
         public decimal? Number(string column) =>
@@ -86,7 +103,9 @@ public class IppsPricerParityTests
         decimal PassThroughPerDiem,
         IppsHospitalSpecificCategory HospitalSpecificCategory,
         decimal FacilitySpecificRate,
-        bool HospitalAcquiredConditionReduction);
+        bool HospitalAcquiredConditionReduction,
+        int CoveredDays,
+        int LifetimeReserveDays);
 
     // ─────────────────────────────────────────────────────────
     //  Reading what the oracle wrote
@@ -190,7 +209,13 @@ public class IppsPricerParityTests
                 HospitalSpecificCategory: CategoryFor(Indicator("providerType")),
                 FacilitySpecificRate: Provider("ppsFacilitySpecificRate"),
                 HospitalAcquiredConditionReduction:
-                    Indicator("hacReductionParticipantIndicator") == "Y");
+                    Indicator("hacReductionParticipantIndicator") == "Y",
+                CoveredDays: element.GetProperty("coveredDays").GetInt32(),
+                // Absent on most rows, and absent means none: a beneficiary
+                // with no reserve days on the claim drew none.
+                LifetimeReserveDays: element.TryGetProperty("lifetimeReserveDays", out var ltr)
+                    ? ltr.GetInt32()
+                    : 0);
         }).ToList();
     }
 
@@ -429,7 +454,8 @@ public class IppsPricerParityTests
                 answer.Number("average_length_of_stay")!.Value,
                 input.LengthOfStay,
                 input.CoveredCharges,
-                kind));
+                kind,
+                Days: new IppsBeneficiaryDays(input.CoveredDays, input.LifetimeReserveDays)));
     }
 
     private static IEnumerable<(Case Input, Answer Expected, IppsPayment Actual)> Comparable()
@@ -440,7 +466,7 @@ public class IppsPricerParityTests
 
         foreach (var input in cases)
         {
-            if (NotComparable.ContainsKey(input.Name))
+            if (NotComparable.ContainsKey(input.Name) || RefusedOverDays.ContainsKey(input.Name))
                 continue;
 
             var expected = answers.First(answer => answer.Case == input.Name);
@@ -463,6 +489,172 @@ public class IppsPricerParityTests
         Assert.Equal(
             cases.Select(input => input.Name).OrderBy(name => name),
             answers.Select(answer => answer.Case).OrderBy(name => name));
+    }
+
+    // ─────────────────────────────────────────────────────────
+    //  Beneficiary days
+    // ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Covered_days_shorter_than_the_stay_change_nothing_about_the_payment()
+    {
+        var answers = Answers();
+        decimal Total(string name) =>
+            answers.First(answer => answer.Case == name).Number("total_payment")!.Value;
+
+        // Two rows built to be identical apart from the covered days: nine of
+        // nine against three of nine. CMS pays the same total for both, which
+        // is the claim a calculator that prorated by the covered fraction would
+        // fail and nothing else in this corpus would catch.
+        Assert.Equal(Total("long-stay-no-transfer"), Total("covered-days-short-of-the-stay"));
+
+        var partly = Comparable()
+            .First(row => row.Input.Name == "covered-days-short-of-the-stay");
+        var fully = Comparable()
+            .First(row => row.Input.Name == "long-stay-no-transfer");
+
+        Assert.Equal(3, partly.Input.CoveredDays);
+        Assert.Equal(9, fully.Input.CoveredDays);
+        Assert.Equal(fully.Actual.Total, partly.Actual.Total);
+        Assert.Equal(IppsUnpayableReason.None, partly.Actual.Unpayable);
+    }
+
+    [Fact]
+    public void The_days_CMS_reports_as_used_are_the_days_CHO_reports_as_used()
+    {
+        var failures = new List<string>();
+        var reserveRowsSeen = 0;
+
+        foreach (var (input, expected, actual) in Comparable())
+        {
+            var regular = expected.Number("regular_days_used");
+            var reserve = expected.Number("lifetime_reserve_days_used");
+            if (regular is null || reserve is null)
+                continue;
+
+            if (reserve > 0)
+                reserveRowsSeen++;
+
+            if (regular.Value != actual.Utilization.RegularDaysUsed
+                || reserve.Value != actual.Utilization.LifetimeReserveDaysUsed)
+            {
+                failures.Add(
+                    $"{input.Name}: CMS reports {regular} regular and {reserve} reserve days "
+                    + $"used, CHO reports {actual.Utilization.RegularDaysUsed} and "
+                    + $"{actual.Utilization.LifetimeReserveDaysUsed}.");
+            }
+        }
+
+        Assert.Empty(failures);
+
+        // The reserve branch is the one that is easy to get wrong and easy to
+        // leave unexercised, so the corpus has to reach it or this test is
+        // comparing one branch twice.
+        Assert.True(
+            reserveRowsSeen >= 2,
+            $"only {reserveRowsSeen} rows report reserve days used; the corpus needs rows where "
+            + "no regular day remains, or this test does not exercise that branch at all");
+    }
+
+    [Fact]
+    public void Day_outliers_stayed_abolished()
+    {
+        // CMS's FY2026 program initialises the outlier-day count and never
+        // writes to it again. The column is here so that a future year
+        // bringing day outliers back shows up as a failing test rather than as
+        // a quietly ignored field.
+        foreach (var answer in Answers())
+        {
+            Assert.Equal(0m, answer.Number("outlier_days") ?? 0m);
+        }
+    }
+
+    [Fact]
+    public void Contradictory_day_counts_are_refused_by_both_programs()
+    {
+        var answers = Answers();
+        var cases = Cases();
+        var rates = RatesFrom(cases, answers);
+        var seen = new List<string>();
+
+        foreach (var input in cases.Where(c => RefusedOverDays.ContainsKey(c.Name)))
+        {
+            var expected = answers.First(answer => answer.Case == input.Name);
+            var code = RefusedOverDays[input.Name];
+
+            // What CMS did: refused with the code this row exists to pin, and
+            // paid nothing.
+            Assert.Equal(code, expected.Text("return_code"));
+            Assert.Equal(0m, expected.Number("total_payment"));
+
+            // What CHO does. The two kinds of refusal are different on purpose:
+            // a claim whose day counts contradict each other cannot be priced
+            // and throws, while a cost outlier past the covered days prices
+            // perfectly well and is simply worth nothing.
+            if (code == "67")
+            {
+                var actual = Price(rates, input, WithGeography(expected, answers));
+                Assert.Equal(
+                    IppsUnpayableReason.CostOutlierBeyondCoveredDays, actual.Unpayable);
+                Assert.Equal(0m, actual.Total);
+                Assert.True(
+                    actual.Outlier.Payment > 0m,
+                    $"{input.Name}: the refusal is about the outlier, so there has to be one");
+            }
+            else
+            {
+                Assert.Throws<IppsPaymentFailedException>(
+                    () => Price(rates, input, WithGeography(expected, answers)));
+            }
+
+            seen.Add(input.Name);
+        }
+
+        // Both refusal codes and both of CHO's two responses have to be
+        // exercised, or this test passes on a corpus that only has one kind.
+        Assert.Contains("67", RefusedOverDays.Values);
+        Assert.Contains("61", RefusedOverDays.Values);
+        Assert.Contains("62", RefusedOverDays.Values);
+        Assert.Equal(RefusedOverDays.Count, seen.Count);
+    }
+
+    /// <summary>
+    /// Fills in the geographic figures CMS blanks out when it refuses a row.
+    ///
+    /// <para>
+    /// A refusal reports zero for the wage index, the capital geographic
+    /// adjustment factor and the average length of stay, which are inputs to
+    /// CHO's calculator rather than outputs of it — so a refused row cannot be
+    /// priced from its own answer at all. Every stay in this corpus is in CBSA
+    /// 10180, so the geography of any priced row is the geography of this one;
+    /// taking it from a named row rather than hard-coding the numbers keeps
+    /// that true if the published wage index moves.
+    /// </para>
+    /// </summary>
+    /// <param name="refused">The refused row's answer.</param>
+    /// <param name="answers">Every answer, to borrow the geography from.</param>
+    /// <returns>The answer with the geography filled in.</returns>
+    private static Answer WithGeography(Answer refused, IReadOnlyList<Answer> answers)
+    {
+        var reference = answers.First(answer => answer.Case == "wage-index-below-one");
+        Assert.NotEqual(0m, reference.Number("wage_index"));
+
+        var columns = new Dictionary<string, string>(refused.Columns);
+        foreach (var column in new[]
+                 {
+                     "wage_index",
+                     "capital_geographic_adjustment_factor",
+                     "average_length_of_stay"
+                 })
+        {
+            if (string.IsNullOrEmpty(columns.GetValueOrDefault(column))
+                || columns[column] == "0.0")
+            {
+                columns[column] = reference.Columns[column];
+            }
+        }
+
+        return refused with { Columns = columns };
     }
 
     [Fact]
