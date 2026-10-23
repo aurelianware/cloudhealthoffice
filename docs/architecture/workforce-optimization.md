@@ -144,6 +144,15 @@ drift.
    cold start instead of pretending.
 4. **No throughput-per-person measure the portal shows.** The events are there;
    nothing aggregates them.
+5. **No way to tell blocked work from workable work.** `WorkItemStatus` has no
+   waiting state, so a queue of 500 items with 200 blocked on provider records
+   looks like 500 workable ones. This makes the backlog, the measured throughput
+   and therefore the breach projection wrong, in the directions set out in
+   [work-waiting-and-cycle-time.md](work-waiting-and-cycle-time.md) §10 — which
+   also carries the correction, and the cycle-time decomposition that matters
+   more than the forecast does, since waiting is most of cycle time and touch
+   time is the small term. That design should be sequenced with phases 1–3
+   here.
 
 ---
 

@@ -409,6 +409,14 @@ refuses to start).
    work of its own: appeals and prior auth now only have to publish their events
    and fill `attributes`.
 
+An item whose worker has done their part and is waiting on someone else — an
+RFAI to a provider, a member callback, another department — has no state today,
+so it is either parked invisibly under a held lease or released back to the
+queue with its context lost. A fifth status, what ends a wait, and the
+cycle-time decomposition it makes possible are designed in
+[work-waiting-and-cycle-time.md](work-waiting-and-cycle-time.md). Nothing there
+is built.
+
 Forecasting arrival, projecting deadline breach and suggesting where people
 should work are designed in
 [workforce-optimization.md](workforce-optimization.md), which reads this
