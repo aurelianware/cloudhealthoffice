@@ -84,10 +84,16 @@ public enum IppsPostAcuteTransferRule
 /// <summary>
 /// The operating side of the payment, itemised.
 /// </summary>
-/// <param name="WageAdjustedStandardizedAmount">
-/// The federal operating rate after the labor split and the wage index.
+/// <param name="StandardizedAmount">
+/// The row of the year's operating rate table this hospital was paid from,
+/// before the wage index. Kept rather than reduced to the one adjusted figure
+/// because which row was chosen is three facts about the hospital, and a
+/// payment that disagrees with CMS by a few percent usually disagrees about
+/// one of them.
 /// </param>
-/// <param name="LaborRelatedShare">Which of the year's two shares was used.</param>
+/// <param name="WageAdjustedStandardizedAmount">
+/// That row after the wage index and any cost-of-living adjustment.
+/// </param>
 /// <param name="BasePayment">
 /// The wage-adjusted amount times the DRG weight: the DRG payment before any
 /// add-on.
@@ -101,8 +107,8 @@ public enum IppsPostAcuteTransferRule
 /// The per-discharge uncompensated care payment (412.106(g)).
 /// </param>
 public sealed record IppsOperatingPayment(
+    IppsStandardizedAmount StandardizedAmount,
     decimal WageAdjustedStandardizedAmount,
-    decimal LaborRelatedShare,
     decimal BasePayment,
     decimal TeachingAddOn,
     decimal DisproportionateShareAddOn,
@@ -224,6 +230,66 @@ public sealed record IppsOutlier(
 }
 
 /// <summary>
+/// The four adjustments CMS takes on the assembled payment rather than on the
+/// DRG amount, each as a signed dollar amount in the sum.
+///
+/// <para>
+/// <b>The order is the whole content of this type, and it is not derivable
+/// from 42 CFR.</b> It comes from
+/// <c>CalculateHospitalAcquiredConditionReduction</c>, which despite its name
+/// assembles the total, and <c>CalculateLowVolumeTotals</c>. Three things in it
+/// a plausible implementation gets wrong:
+/// </para>
+///
+/// <para>
+/// The low-volume uplift is a percentage of <i>almost the whole payment</i> —
+/// both sides, the cost outlier and the uncompensated care payment included —
+/// and not of the DRG amount. The readmissions and value-based adjustments are
+/// taken on the base DRG payment <i>alone</i>, and the low-volume uplift is not
+/// taken on them. And the hospital-acquired-condition penalty is one percent of
+/// everything above it, so it reaches the outlier and the uncompensated care
+/// payment and is itself reduced by the two adjustments above it.
+/// </para>
+///
+/// <para>
+/// Pass-through amounts, the bundled-payment adjustment and the islet isolation
+/// add-on escape both the low-volume base and the penalty, because CMS adds
+/// them after. None of the three is modelled here; when they are, they belong
+/// after <see cref="Total" /> and not inside it.
+/// </para>
+/// </summary>
+/// <param name="LowVolume">
+/// The low-volume uplift (42 CFR 412.101), zero unless the hospital has it
+/// approved and a factor in range.
+/// </param>
+/// <param name="Readmissions">
+/// The readmissions adjustment (412.154): the factor less one, times the base
+/// DRG payment. Always zero or negative, because CMS's factor range stops at
+/// 1.0.
+/// </param>
+/// <param name="ValueBasedPurchasing">
+/// The value-based purchasing adjustment (412.160 and following), computed the
+/// same way but able to go either direction.
+/// </param>
+/// <param name="HospitalAcquiredConditionPenalty">
+/// One percent of everything above, negative, and zero unless the hospital is
+/// in the penalised quartile (412.170).
+/// </param>
+public sealed record IppsAdjustments(
+    decimal LowVolume,
+    decimal Readmissions,
+    decimal ValueBasedPurchasing,
+    decimal HospitalAcquiredConditionPenalty)
+{
+    /// <summary>A hospital in none of the four programmes, which is the common case.</summary>
+    public static readonly IppsAdjustments None = new(0m, 0m, 0m, 0m);
+
+    /// <summary>The four together, which may be of either sign.</summary>
+    public decimal Total =>
+        LowVolume + Readmissions + ValueBasedPurchasing + HospitalAcquiredConditionPenalty;
+}
+
+/// <summary>
 /// What a stay is paid under IPPS, with every intermediate kept.
 ///
 /// <para>
@@ -239,6 +305,9 @@ public sealed record IppsOutlier(
 /// <param name="Capital">The capital side.</param>
 /// <param name="Transfer">The transfer reduction, or null on a discharge.</param>
 /// <param name="Outlier">The cost outlier.</param>
+/// <param name="Adjustments">
+/// The four hospital-level adjustments taken on the assembled payment.
+/// </param>
 /// <param name="Notes">What a reader of the payment should know about it.</param>
 public sealed record IppsPayment(
     int FiscalYear,
@@ -246,6 +315,7 @@ public sealed record IppsPayment(
     IppsCapitalPayment Capital,
     IppsTransferReduction? Transfer,
     IppsOutlier Outlier,
+    IppsAdjustments Adjustments,
     IReadOnlyList<string> Notes)
 {
     /// <summary>The full DRG payment, before any transfer reduction or outlier.</summary>
@@ -257,8 +327,15 @@ public sealed record IppsPayment(
     /// </summary>
     public decimal PaymentBeforeOutliers { get; init; }
 
+    /// <summary>
+    /// The case payment: both sides after any transfer reduction, plus the cost
+    /// outlier. This is what the low-volume uplift is a percentage of, and what
+    /// the hospital-acquired-condition penalty is taken on.
+    /// </summary>
+    public decimal PaymentBeforeAdjustments => PaymentBeforeOutliers + Outlier.Payment;
+
     /// <summary>The total paid.</summary>
-    public decimal Total => PaymentBeforeOutliers + Outlier.Payment;
+    public decimal Total => PaymentBeforeAdjustments + Adjustments.Total;
 }
 
 /// <summary>Raised when a stay cannot be paid from the data given.</summary>
@@ -270,22 +347,27 @@ public sealed class IppsPaymentFailedException(string message) : Exception(messa
 /// add-ons, the capital payment, the transfer per diems and the cost outliers.
 ///
 /// <para>
-/// <b>Not yet validated against CMS's PRICER.</b> Every formula here is taken
-/// from the regulation rather than from memory, and the paragraph is cited at
-/// each one — but reading a formula correctly and implementing it the way
-/// CMS's own program does are different claims, and only the second one gets a
-/// payment right. The grouper next door is trustworthy because it was run
-/// against CMS's grouper and agreed on every case, not because it was written
-/// carefully. This needs the same treatment before a plan pays on it, and
-/// <see cref="IppsPayment"/> keeps every intermediate so that run can compare
-/// step by step rather than just comparing totals.
+/// <b>Validated against CMS's own pricer</b> on the base DRG payment, the
+/// standardized amount and its labor split, every transfer fraction and the
+/// capital outlier: <c>tools/cms-ipps-pricer-oracle</c> prices a reference
+/// corpus through the CMS program and
+/// <c>IppsPricerParityTests</c> holds this code to those amounts on every
+/// build. That matters more than the care taken writing it — every formula
+/// here cites the paragraph of 42 CFR that it implements, and the parity run
+/// still reversed one of them, because reading a regulation correctly and
+/// paying a claim the way CMS's program pays it are different claims and only
+/// the second one is the amount.
 /// </para>
 ///
 /// <para>
-/// Two things are deliberately absent and would be wrong to approximate: new
-/// technology add-on payments, which are a published list of devices and
-/// amounts, and the low-volume and Medicare-dependent hospital adjustments,
-/// which turn on a hospital's status rather than on the case.
+/// <b>This is still not a Medicare payment.</b> Components CMS pays and this
+/// does not: the hospital-specific portion for sole-community and
+/// Medicare-dependent hospitals, pass-through amounts for direct medical
+/// education and organ acquisition, new-technology add-ons (a published list
+/// of devices and amounts, so an importer rather than a formula), and the
+/// bundled-payment adjustment. <see cref="IppsPayment"/> keeps every
+/// intermediate, which is what lets the parity run find a disagreement in one
+/// line rather than in a total.
 /// </para>
 /// </summary>
 public static class IppsPaymentCalculator
@@ -307,9 +389,13 @@ public static class IppsPaymentCalculator
 
         var notes = new List<string>();
 
-        var share = rates.ShareFor(provider.WageIndex);
-        var wageAdjusted = rates.OperatingStandardizedAmount
-            * share.Adjust(provider.WageIndex, provider.CostOfLivingAdjustment);
+        // The DRG is paid from the dollar amounts in the rate table row this
+        // hospital selects; the percentage pair below is for the outlier
+        // threshold alone, which is the only place CMS uses it.
+        var standardizedAmount = rates.StandardizedAmountFor(provider);
+        var percentages = rates.PercentagesFor(provider.WageIndex);
+        var wageAdjusted = standardizedAmount.Adjust(
+            provider.WageIndex, provider.CostOfLivingAdjustment);
 
         var operatingBase = wageAdjusted * stay.RelativeWeight;
         var teachingFactor = rates.Teaching.FactorFor(provider.ResidentToBedRatio);
@@ -321,8 +407,8 @@ public static class IppsPaymentCalculator
         var dshFactor = provider.OperatingDshAdjustment * rates.EmpiricallyJustifiedDshShare;
 
         var operating = new IppsOperatingPayment(
+            standardizedAmount,
             wageAdjusted,
-            share.LaborRelated,
             operatingBase,
             TeachingAddOn: operatingBase * teachingFactor,
             DisproportionateShareAddOn: operatingBase * dshFactor,
@@ -364,7 +450,7 @@ public static class IppsPaymentCalculator
                 + $"{rates.EmpiricallyJustifiedDshShare:P0} still paid through the claim.");
         }
 
-        var outlier = Outlier(rates, provider, stay, operatingPaid, capitalPaid, share);
+        var outlier = Outlier(rates, provider, stay, operatingPaid, capitalPaid, percentages);
         if (outlier.Payment > 0)
         {
             notes.Add(
@@ -374,10 +460,148 @@ public static class IppsPaymentCalculator
                 + $"{outlier.Capital.EstimatedCost:C} against {outlier.Capital.Threshold:C}.");
         }
 
-        return new IppsPayment(rates.FiscalYear, operating, capital, transfer, outlier, notes)
+        // The readmissions and value-based adjustments are taken on the base
+        // DRG payment alone — the federal specific portion after any transfer
+        // reduction, and nothing else. Passing the whole operating side here
+        // would take them on the teaching, disproportionate share and
+        // uncompensated care payments too, which CMS does not.
+        var adjustments = Adjustments(
+            provider,
+            casePayment: paid + outlier.Payment,
+            operatingBaseDrgPayment: operating.BasePayment * fraction,
+            notes);
+
+        return new IppsPayment(
+            rates.FiscalYear, operating, capital, transfer, outlier, adjustments, notes)
         {
             PaymentBeforeOutliers = paid
         };
+    }
+
+    /// <summary>
+    /// The four hospital-level adjustments, in CMS's order. See
+    /// <see cref="IppsAdjustments"/> for why the order is the content.
+    /// </summary>
+    /// <param name="provider">The hospital.</param>
+    /// <param name="casePayment">
+    /// Both sides after any transfer reduction, plus the cost outlier: lines
+    /// one to eight of CMS's sum, less the new-technology add-on this
+    /// calculator does not pay.
+    /// </param>
+    /// <param name="operatingBaseDrgPayment">
+    /// The operating payment the readmissions and value-based adjustments are
+    /// taken on. CMS's <c>H-OPER-BASE-DRG-PAY</c> is the federal specific
+    /// portion plus any new-technology add-on, after the transfer reduction —
+    /// not the whole operating side, so the teaching, disproportionate share
+    /// and uncompensated care payments are all excluded from it.
+    /// </param>
+    /// <param name="notes">Notes to add to.</param>
+    private static IppsAdjustments Adjustments(
+        IppsProvider provider,
+        decimal casePayment,
+        decimal operatingBaseDrgPayment,
+        List<string> notes)
+    {
+        var lowVolume = LowVolume(provider, casePayment, notes);
+        var readmissions = Factored(
+            provider.ReadmissionsAdjustmentFactor,
+            operatingBaseDrgPayment,
+            lowest: 0.97m,
+            highest: 1m,
+            name: "readmissions adjustment factor");
+        var valueBased = Factored(
+            provider.ValueBasedPurchasingAdjustmentFactor,
+            operatingBaseDrgPayment,
+            lowest: 0.98m,
+            highest: 2m,
+            name: "value-based purchasing adjustment factor");
+
+        // One percent of everything above, which is why the penalty is taken
+        // here and not on the DRG amount: it reaches the cost outlier and the
+        // uncompensated care payment, and the two adjustments above it reduce
+        // the amount it is taken on.
+        var penaltyBase = casePayment + lowVolume + readmissions + valueBased;
+        var penalty = provider.HospitalAcquiredConditionReduction ? -0.01m * penaltyBase : 0m;
+
+        if (penalty != 0m)
+        {
+            notes.Add(
+                $"Hospital-acquired-condition penalty of {penalty:C}: one percent of the "
+                + $"{penaltyBase:C} payable before it, the cost outlier and the uncompensated "
+                + "care payment included.");
+        }
+
+        if (readmissions != 0m || valueBased != 0m)
+        {
+            notes.Add(
+                $"Readmissions adjustment {readmissions:C} and value-based purchasing "
+                + $"adjustment {valueBased:C}, both taken on the {operatingBaseDrgPayment:C} "
+                + "base DRG payment alone.");
+        }
+
+        return new IppsAdjustments(lowVolume, readmissions, valueBased, penalty);
+    }
+
+    /// <summary>
+    /// An adjustment expressed as a factor on the base DRG payment, as the
+    /// difference it makes rather than as a multiplier — which is how CMS
+    /// carries both of them, and the reason they do not compound with
+    /// anything.
+    /// </summary>
+    /// <exception cref="IppsPaymentFailedException">
+    /// When the factor is outside the range CMS enforces. CMS refuses to price
+    /// the claim in that case rather than paying it, and so does this: a
+    /// factor outside the range is a bad provider file, and the alternative is
+    /// paying an amount nobody published.
+    /// </exception>
+    private static decimal Factored(
+        decimal? factor, decimal baseDrgPayment, decimal lowest, decimal highest, string name)
+    {
+        if (factor is null)
+            return 0m;
+
+        if (factor < lowest || factor > highest)
+        {
+            throw new IppsPaymentFailedException(
+                $"A {name} of {factor} is outside the {lowest} to {highest} range CMS allows, "
+                + "so there is no published amount to pay.");
+        }
+
+        return (factor.Value - 1m) * baseDrgPayment;
+    }
+
+    /// <summary>
+    /// The low-volume uplift (42 CFR 412.101), a percentage of the whole case
+    /// payment.
+    ///
+    /// <para>
+    /// Two gates, not one. CMS requires the adjustment to be approved for the
+    /// year <i>and</i> the factor to be above zero and at most 0.25, and a
+    /// factor above 0.25 pays nothing rather than being capped there. Capping
+    /// it would quietly pay a hospital whose provider file is wrong, and pay
+    /// it the maximum.
+    /// </para>
+    /// </summary>
+    private static decimal LowVolume(IppsProvider provider, decimal casePayment, List<string> notes)
+    {
+        var factor = provider.LowVolumeAdjustmentFactor;
+        if (!provider.LowVolumeTemporaryRelief || factor <= 0m || factor > 0.25m)
+        {
+            if (factor > 0.25m)
+            {
+                notes.Add(
+                    $"No low-volume adjustment: the factor on file, {factor:0.####}, is above the "
+                    + "0.25 CMS allows, and CMS pays nothing rather than capping it.");
+            }
+
+            return 0m;
+        }
+
+        var uplift = factor * casePayment;
+        notes.Add(
+            $"Low-volume adjustment of {uplift:C} at {factor:P2} of the {casePayment:C} case "
+            + "payment, the cost outlier and the uncompensated care payment included.");
+        return uplift;
     }
 
     /// <summary>
@@ -453,7 +677,7 @@ public static class IppsPaymentCalculator
         IppsStay stay,
         decimal operatingPayment,
         decimal capitalPayment,
-        IppsLaborShare share)
+        IppsLaborShare percentages)
     {
         var operatingRatio = provider.OperatingCostToChargeRatio;
         var capitalRatio = provider.CapitalCostToChargeRatio;
@@ -468,11 +692,14 @@ public static class IppsPaymentCalculator
         var factor = rates.Outlier.FactorFor(stay.Drg);
         var fixedLoss = rates.Outlier.FixedLossAmount;
 
-        // The operating side's share of the fixed loss amount, adjusted on the
-        // same labor split as the standardized amount.
+        // The operating side's share of the fixed loss amount, wage-adjusted
+        // by the year's labor percentages. This is the one place the
+        // percentages are used, and CMS uses them here and nowhere else: its
+        // threshold is the cost threshold times the percentages, with the
+        // standardized amount playing no part.
         var operatingFixedLoss = fixedLoss
             * (operatingRatio / ratio)
-            * share.Adjust(provider.WageIndex, provider.CostOfLivingAdjustment);
+            * percentages.Adjust(provider.WageIndex, provider.CostOfLivingAdjustment);
 
         // The capital side's share, adjusted by the capital geographic
         // adjustment factor instead. Capital has no labor split: the whole

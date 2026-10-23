@@ -843,9 +843,9 @@ Build order:
    indistinguishable from one that agrees by luck.
 
    **No rate is in the code.** A fiscal year is an `IppsRateSet` loaded like a
-   grouper version: the standardized amount, both labor splits, the capital
-   rate, the fixed loss amount, the burn DRGs, the teaching exponent and
-   multiplier. CMS republishes all of it every August for the October
+   grouper version: the eight-row operating rate table, both labor percentage
+   pairs, the capital rate, the fixed loss amount, the burn DRGs, the teaching
+   exponent and multiplier. CMS republishes all of it every August for the October
    discharges, and an engine with a rate compiled into it is wrong from
    1 October until someone ships a release.
 
@@ -865,7 +865,7 @@ Build order:
    the pricer itself as a runnable jar, to satisfy Freedom of Information Act
    requests, along with its Java source *with the original COBOL quoted as
    comments above each rule*. `tools/cms-ipps-pricer-oracle` runs it over
-   fourteen invented stays and commits what it paid;
+   twenty-four invented stays and commits what it paid;
    `IppsPricerParityTests` holds the calculator to those amounts on every
    build, with no CMS artifact present. The tool's README has the whole of it,
    including the five undocumented provider-record fields that stop a
@@ -919,24 +919,90 @@ Build order:
      and CMS's own pricer takes it from two columns of its DRG table and
      ignores what the claim says.
 
-   **What the run showed is still missing**, and why this is not yet wired into
-   adjudication. CMS pays several components the calculator has no notion of:
-   the value-based purchasing and hospital-readmissions-reduction adjustments,
-   the low-volume adjustment, the hospital-specific portion for sole-community
-   and Medicare-dependent hospitals, pass-through amounts for direct medical
-   education and organ acquisition, new-technology add-ons, and the
-   hospital-acquired-condition and electronic-health-record reductions. The
-   hospital quality indicator selects the full or reduced market basket update
-   and so the standardized amount itself, which `IppsRateSet` cannot express
-   with one amount. And CMS works in covered days and lifetime reserve days,
-   reporting regular, reserve and outlier days used, where `IppsStay` has no
-   beneficiary-day concept at all. Several of those scale the DRG payment, so
-   they are not optional extras.
+   **The standardized amount is an eight-row table, and that closed two gaps
+   at once.** The first run found the hospital quality indicator moving the
+   standardized amount itself, which one amount and a pair of shares could not
+   express. Reading CMS's source for how showed a bigger shape:
+   `2050-RATES-TB` is a straight eight-way branch on three facts — whether the
+   hospital met the inpatient quality reporting requirement, whether it carries
+   the electronic-health-record reduction, and whether its wage index is above
+   1.0 — and the eight rows are four standardized amounts, one per combination
+   of the two reductions, each split two ways by the wage-index rule. So the
+   quality gap and the record-reduction gap were one gap, and the fix was to
+   replace the single amount with CMS's table rather than to bolt two flags on.
 
-   Deliberately absent, because approximating them would be worse than
-   omitting them: new technology add-on payments, which are a published list
-   of devices and amounts, and the low-volume and Medicare-dependent hospital
-   adjustments, which turn on a hospital's status rather than on the case.
+   Two things the table settles that a reduction factor would have got wrong.
+   The reductions are **independent**, so a hospital can carry both and is paid
+   a fourth published amount rather than two reductions applied in turn. And
+   the rows hold **dollars, not a percentage of one amount**: the
+   record-reduced row above a wage index of 1.0 is 4,349.21 labor and 2,240.51
+   non-labor, which sum to 6,589.72 exactly, while 6,589.72 × 0.66 is
+   4,349.2152 and × 0.34 is 2,240.5048 — CMS rounds the two independently and
+   deriving either from a share moves the answer by a cent on every claim in
+   that row.
+
+   The labor percentages stayed, with one job. CMS's outlier threshold is the
+   year's cost threshold times the percentages, wage- and
+   cost-of-living-adjusted, and the standardized amount plays no part in it.
+   They are the only thing the 62-versus-66 rule now decides.
+
+   The pricer exposes no endpoint for its rate table, so the only way to learn
+   a row is to price a claim that selects it. Five corpus stays were added for
+   that, and `IppsPricerParityTests` now builds the whole eight-row table out
+   of CMS's answers and asserts CHO paid from the same row — which exercises
+   CMS's selection branch as well as its amounts, where reading the file would
+   not have.
+
+   **The four hospital-level adjustments are built, and the order is the whole
+   content of them.** The readmissions reduction, the value-based purchasing
+   adjustment, the low-volume adjustment and the hospital-acquired-condition
+   penalty are taken on the assembled payment rather than on the DRG amount,
+   in an order that is not derivable from 42 CFR and that changes amounts. From
+   `CalculateHospitalAcquiredConditionReduction`, which despite its name
+   assembles the total, and `CalculateLowVolumeTotals`:
+
+   - The **low-volume uplift** is a percentage of everything through the
+     new-technology add-on — both sides, the cost outlier and the
+     uncompensated care payment included — and **not** of the readmissions or
+     value-based adjustments. On the corpus's low-volume stay that is 0.20 ×
+     83,208.50, and a calculator taking it on the DRG amount would pay 2,560
+     instead of 16,641.70.
+   - **Readmissions and value-based purchasing** are each `(factor − 1)` times
+     the base DRG payment *alone*, carried as signed amounts in the sum. Not
+     the whole operating side: the teaching, disproportionate share and
+     uncompensated care payments are all outside them.
+   - The **penalty** is one percent of all of that together, so it reaches the
+     outlier and the uncompensated care payment and is itself reduced by the two
+     adjustments above it. On the corpus's all-four stay that is
+     −0.01 × 103,882.64 = −1,038.83, against −128 for one percent of the DRG
+     amount.
+   - Pass-throughs, the bundled adjustment and the islet isolation add-on are
+     added afterwards and **escape both**.
+
+   Each of the four is compared against CMS separately rather than through a
+   total, because a wrong order agrees on each one in isolation; the corpus has
+   a stay carrying all four at once for the same reason. Two validation rules
+   are copied as written, because both are provider-file facts and guessing
+   either invents the hospital's payment: a factor outside CMS's range (0.97 to
+   1.0 for readmissions, 0.98 to 2.0 for value-based purchasing) raises rather
+   than being clamped, as CMS refuses the claim; and the low-volume adjustment
+   needs the year's approval *and* a factor of at most 0.25, where a larger
+   factor pays nothing rather than being capped.
+
+   **What is still missing**, and why this is not yet wired into adjudication.
+   CMS pays the hospital-specific portion for sole-community and
+   Medicare-dependent hospitals, pass-through amounts for direct medical
+   education and organ acquisition, new-technology add-ons and the
+   bundled-payment adjustment, and this pays none of them. And CMS works in
+   covered days and lifetime reserve days, reporting regular, reserve and
+   outlier days used, where `IppsStay` has no beneficiary-day concept at all —
+   the last of those is a model change rather than an arithmetic one, and
+   return code 67, "outlier LOS greater than covered days", is the pricer
+   refusing a claim on day arithmetic.
+
+   Deliberately absent, because approximating it would be worse than omitting
+   it: new technology add-on payments, which are a published list of devices
+   and amounts and so need an importer rather than a formula.
 6. `AddendumBApcAssigner` and OPPS packaging: status indicators, N packaging,
    Q1/Q2/Q3 conditional packaging, J1/J2 comprehensive APCs, composite APCs,
    multiple-procedure discounting on status T.

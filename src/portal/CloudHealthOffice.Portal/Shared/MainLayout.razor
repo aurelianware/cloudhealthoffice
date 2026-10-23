@@ -167,6 +167,16 @@
                         </MudNavLink>
                     </MudNavGroup>
 
+                    <!-- SERVICE — the calls, chats and walk-ins (cho-service.md) -->
+                    @if (_canTakeContacts)
+                    {
+                        <MudNavGroup Title="Service" Icon="@Icons.Material.Filled.SupportAgent" Expanded="true">
+                            <MudNavLink Href="/service" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Phone">
+                                Contacts
+                            </MudNavLink>
+                        </MudNavGroup>
+                    }
+
                     <!-- WORK — my work and the queues -->
                     <MudNavGroup Title="Work" Icon="@Icons.Material.Filled.Inbox" Expanded="true">
                         @if (_canWork)
@@ -420,6 +430,8 @@
     private bool _canAdminWork;
     private bool _canPostNotices;
     private bool _canReadCorrespondence;
+    // Call tracking: the contact screen (contact-service).
+    private bool _canTakeContacts;
     private bool _tenantLoadComplete;
     private List<TenantSubscription> _availableTenants = new();
 
@@ -451,6 +463,7 @@
             _canAdminWork = userContext != null && UserContextService.HasPermission("workqueue:admin");
             _canPostNotices = userContext != null && UserContextService.HasPermission("notices:write");
             _canReadCorrespondence = userContext != null && UserContextService.HasPermission("correspondence:read");
+            _canTakeContacts = userContext != null && UserContextService.HasPermission("service:contact");
         }
         catch (Exception ex)
         {

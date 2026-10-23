@@ -191,6 +191,7 @@ jobs:
             {"service":"claims-service"},
             {"service":"CloudHealthOffice.PricingApi","image_name":"cloudhealthoffice-pricing-api"},
             {"service":"consent-service"},
+            {"service":"contact-service"},
             {"service":"correspondence-service"},
             {"service":"coverage-service"},
             {"service":"document-service"},

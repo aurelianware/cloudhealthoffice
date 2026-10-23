@@ -9,9 +9,10 @@ namespace CloudHealthOffice.GrouperEngine.Tests;
 /// <para>
 /// These are regulation tests, not parity tests. Each one names the paragraph
 /// of 42 CFR it comes from and checks that this code does what the paragraph
-/// says — which is a weaker claim than the grouper's, where the oracle is CMS's
-/// own program. Until a PRICER parity run exists, that difference is the
-/// honest statement of how much this is worth.
+/// says. <c>IppsPricerParityTests</c> is the other half and the stronger
+/// claim: it holds the same code to the amounts CMS's own pricer paid. Both
+/// are needed — the parity run reversed a rule these tests had agreed with,
+/// and these tests catch the arithmetic the corpus does not happen to reach.
 /// </para>
 ///
 /// <para>
@@ -26,16 +27,42 @@ public class IppsPaymentCalculatorTests
     private const decimal CapitalRate = 500m;
 
     /// <summary>
-    /// A year whose two labor splits are 60/40 and 50/50, so that which one
-    /// was chosen is visible in the answer.
+    /// An operating rate table whose eight rows are all distinguishable by
+    /// eye, so that a test can say which one was used rather than only that
+    /// the arithmetic was consistent.
+    ///
+    /// <para>
+    /// Four base amounts, one per combination of the two payment reductions —
+    /// 6,000 with neither, 5,000 without the quality data, 4,000 with the
+    /// electronic-health-record reduction, 3,000 with both — each split 60/40
+    /// above a wage index of 1.0 and 50/50 at or below it. The splits match
+    /// the percentage pair below so that the outlier tests stay checkable by
+    /// hand.
+    /// </para>
+    /// </summary>
+    private static IppsOperatingRateTable RateTable() => new(new Dictionary<int, IppsStandardizedAmount>
+    {
+        [1] = new(3600m, 2400m),  // quality data, no reduction, wage index above 1.0
+        [2] = new(3000m, 2000m),  // no quality data, no reduction, above 1.0
+        [3] = new(3000m, 3000m),  // quality data, no reduction, at or below 1.0
+        [4] = new(2500m, 2500m),  // no quality data, no reduction, at or below 1.0
+        [5] = new(2400m, 1600m),  // quality data, record reduction, above 1.0
+        [6] = new(1800m, 1200m),  // no quality data, record reduction, above 1.0
+        [7] = new(2000m, 2000m),  // quality data, record reduction, at or below 1.0
+        [8] = new(1500m, 1500m)   // no quality data, record reduction, at or below 1.0
+    });
+
+    /// <summary>
+    /// A year whose two labor percentage pairs are 60/40 and 50/50, so that
+    /// which one was chosen is visible in the answer.
     /// </summary>
     private static IppsRateSet Year(decimal fixedLoss = 30_000m) => new(
         FiscalYear: 2026,
         FirstDischargeDate: new DateOnly(2025, 10, 1),
         LastDischargeDate: new DateOnly(2026, 9, 30),
-        OperatingStandardizedAmount: StandardizedAmount,
-        HigherLaborShare: new IppsLaborShare(0.60m, 0.40m),
-        StatutoryLaborShare: new IppsLaborShare(0.50m, 0.50m),
+        OperatingRates: RateTable(),
+        HigherLaborPercentages: new IppsLaborShare(0.60m, 0.40m),
+        StatutoryLaborPercentages: new IppsLaborShare(0.50m, 0.50m),
         CapitalFederalRate: CapitalRate,
         Outlier: new IppsOutlierPolicy(fixedLoss, 0.80m, 0.90m, new HashSet<int> { 927, 928 }),
         Teaching: new IppsTeachingPolicy(0.405d, 1.35m),
@@ -76,7 +103,7 @@ public class IppsPaymentCalculatorTests
         // share: 0.60 × 1.5 + 0.40 = 1.30. It also happens to be the share
         // that pays more here, which is why the two readings of 412.64(h)(3)
         // agree on this row.
-        Assert.Equal(0.60m, payment.Operating.LaborRelatedShare);
+        Assert.Equal(3600m, payment.Operating.StandardizedAmount.LaborRelated);
         Assert.Equal(StandardizedAmount * 1.30m, payment.Operating.WageAdjustedStandardizedAmount);
     }
 
@@ -89,7 +116,7 @@ public class IppsPaymentCalculatorTests
         // At or below 1.0 CMS uses the statutory share: 0.50 × 0.5 + 0.50 =
         // 0.75, against 0.60 × 0.5 + 0.40 = 0.70. Again both readings agree,
         // because the cost-of-living adjustment is 1.0.
-        Assert.Equal(0.50m, payment.Operating.LaborRelatedShare);
+        Assert.Equal(3000m, payment.Operating.StandardizedAmount.LaborRelated);
         Assert.Equal(StandardizedAmount * 0.75m, payment.Operating.WageAdjustedStandardizedAmount);
     }
 
@@ -141,7 +168,7 @@ public class IppsPaymentCalculatorTests
 
         var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
 
-        Assert.Equal(0.60m, payment.Operating.LaborRelatedShare);
+        Assert.Equal(3600m, payment.Operating.StandardizedAmount.LaborRelated);
         Assert.Equal(StandardizedAmount * 1.22m, payment.Operating.WageAdjustedStandardizedAmount);
         Assert.NotEqual(
             StandardizedAmount * 1.225m, payment.Operating.WageAdjustedStandardizedAmount);
@@ -155,6 +182,301 @@ public class IppsPaymentCalculatorTests
 
         Assert.Equal(StandardizedAmount * 2.5m, payment.Operating.BasePayment);
         Assert.Equal(CapitalRate * 2.5m, payment.Capital.BasePayment);
+    }
+
+    // ─────────────────────────────────────────────────────────
+    //  The operating rate table (CMS's 2050-RATES-TB)
+    // ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void A_hospital_that_did_not_submit_quality_data_is_paid_a_smaller_standardized_amount()
+    {
+        var withheld = IppsProvider.Plain("123456", wageIndex: 1.5m) with
+        {
+            QualityDataSubmitted = false
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), withheld, Stay());
+
+        // The reduction is a smaller standardized amount, not a percentage
+        // taken off the payment: 5,000 split 3,000/2,000 rather than 6,000
+        // split 3,600/2,400. So it scales with the wage index and the DRG
+        // weight exactly as the full amount does, and 3,000 × 1.5 + 2,000 is
+        // 6,500 where the full row pays 7,800.
+        Assert.Equal(3000m, payment.Operating.StandardizedAmount.LaborRelated);
+        Assert.Equal(6500m, payment.Operating.WageAdjustedStandardizedAmount);
+    }
+
+    [Fact]
+    public void The_two_payment_reductions_are_independent_and_a_hospital_can_carry_both()
+    {
+        var provider = IppsProvider.Plain("123456", wageIndex: 1.5m);
+        var full = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+        var records = IppsPaymentCalculator.Pay(
+            Year(), provider with { ElectronicRecordsReduction = true }, Stay());
+        var both = IppsPaymentCalculator.Pay(
+            Year(),
+            provider with { QualityDataSubmitted = false, ElectronicRecordsReduction = true },
+            Stay());
+
+        // Four standardized amounts, one per combination, which is why CMS
+        // publishes eight rows and not a reduction factor: 6,000, 4,000 and
+        // 3,000 here. A hospital carrying both is paid the fourth row rather
+        // than two reductions applied in turn.
+        Assert.Equal(6000m, full.Operating.StandardizedAmount.Total);
+        Assert.Equal(4000m, records.Operating.StandardizedAmount.Total);
+        Assert.Equal(3000m, both.Operating.StandardizedAmount.Total);
+    }
+
+    [Fact]
+    public void The_wage_index_chooses_the_row_within_a_pair_and_not_the_pair()
+    {
+        var provider = IppsProvider.Plain("123456", wageIndex: 0.8m) with
+        {
+            ElectronicRecordsReduction = true
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        // At or below a wage index of 1.0 the record-reduced hospital is paid
+        // the 50/50 split of its own 4,000, not the 50/50 split of the full
+        // 6,000: the two axes are independent, and crossing them is the kind
+        // of mistake a single reduction factor invites.
+        Assert.Equal(4000m, payment.Operating.StandardizedAmount.Total);
+        Assert.Equal(2000m, payment.Operating.StandardizedAmount.LaborRelated);
+        Assert.Equal(3600m, payment.Operating.WageAdjustedStandardizedAmount);
+    }
+
+    [Theory]
+    [InlineData(true, false, true, 1)]
+    [InlineData(false, false, true, 2)]
+    [InlineData(true, false, false, 3)]
+    [InlineData(false, false, false, 4)]
+    [InlineData(true, true, true, 5)]
+    [InlineData(false, true, true, 6)]
+    [InlineData(true, true, false, 7)]
+    [InlineData(false, true, false, 8)]
+    public void The_eight_rows_are_numbered_as_CMS_numbers_them(
+        bool qualityData, bool recordsReduction, bool wageIndexAboveOne, int cmsTableNumber)
+    {
+        // Pinned against CMS's own branch, which is 2050-RATES-TB in the COBOL
+        // and DetermineRateTableWith(out)Reduction in its Java. The mapping is
+        // the one thing here that cannot be derived from the regulation, and
+        // getting it wrong pays a reduced hospital in full or a full hospital
+        // reduced — a plausible amount either way.
+        var key = new IppsRateTableKey(qualityData, recordsReduction, wageIndexAboveOne);
+
+        Assert.Equal(cmsTableNumber, key.CmsTableNumber);
+    }
+
+    [Fact]
+    public void A_half_loaded_rate_table_is_refused_rather_than_paid_from()
+    {
+        var rows = new Dictionary<int, IppsStandardizedAmount>
+        {
+            [1] = new(3600m, 2400m),
+            [3] = new(3000m, 3000m)
+        };
+
+        // A fiscal year loaded with two of its eight rows would pay most
+        // hospitals correctly and the reduced ones from whatever row the
+        // lookup happened to find. Failing names the missing rows instead.
+        var thrown = Assert.Throws<ArgumentException>(() => new IppsOperatingRateTable(rows));
+
+        Assert.Contains("tab2", thrown.Message);
+        Assert.Contains("tab8", thrown.Message);
+    }
+
+    // ─────────────────────────────────────────────────────────
+    //  The four hospital-level adjustments, and their order
+    // ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A hospital with an outlier and an uncompensated care payment, so that
+    /// an adjustment taken on the wrong base is visible rather than hidden
+    /// inside a DRG amount.
+    /// </summary>
+    private static IppsProvider WithOutlierAndUncompensatedCare() =>
+        IppsProvider.Plain("123456", wageIndex: 1m) with
+        {
+            OperatingCostToChargeRatio = 0.30m,
+            UncompensatedCarePerDischarge = 1000m
+        };
+
+    [Fact]
+    public void A_hospital_in_none_of_the_programmes_gets_no_adjustments()
+    {
+        var payment = IppsPaymentCalculator.Pay(
+            Year(), IppsProvider.Plain("123456", 1m), Stay());
+
+        Assert.Equal(0m, payment.Adjustments.Total);
+        Assert.Equal(payment.PaymentBeforeAdjustments, payment.Total);
+    }
+
+    [Fact]
+    public void The_readmissions_adjustment_is_the_factor_less_one_on_the_base_drg_payment()
+    {
+        var provider = WithOutlierAndUncompensatedCare() with
+        {
+            ReadmissionsAdjustmentFactor = 0.98m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        // On the base DRG payment alone: -0.02 × 6,000 = -120. Not on the
+        // uncompensated care payment, which would make it -140, and not on the
+        // whole operating side.
+        Assert.Equal(-120m, payment.Adjustments.Readmissions);
+    }
+
+    [Fact]
+    public void The_value_based_purchasing_adjustment_can_pay_more_where_readmissions_cannot()
+    {
+        var provider = IppsProvider.Plain("123456", 1m) with
+        {
+            ValueBasedPurchasingAdjustmentFactor = 1.01m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        // CMS's range for this one is 0.98 to 2.0, so above 1.0 is a payment
+        // and not an error. The readmissions range stops at 1.0, which is why
+        // the two are separate inputs rather than one adjustment factor.
+        Assert.Equal(60m, payment.Adjustments.ValueBasedPurchasing);
+    }
+
+    [Theory]
+    [InlineData(0.96)]
+    [InlineData(1.01)]
+    public void A_readmissions_factor_outside_CMS_range_is_refused_rather_than_paid(decimal factor)
+    {
+        var provider = IppsProvider.Plain("123456", 1m) with
+        {
+            ReadmissionsAdjustmentFactor = factor
+        };
+
+        // CMS returns return code 65 and does not price the claim. Paying it
+        // anyway would pay an amount nobody published, from a provider file
+        // that is wrong.
+        Assert.Throws<IppsPaymentFailedException>(
+            () => IppsPaymentCalculator.Pay(Year(), provider, Stay()));
+    }
+
+    [Fact]
+    public void The_low_volume_uplift_is_taken_on_the_outlier_and_uncompensated_care_too()
+    {
+        var provider = WithOutlierAndUncompensatedCare() with
+        {
+            LowVolumeTemporaryRelief = true,
+            LowVolumeAdjustmentFactor = 0.10m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay(charges: 400_000m));
+
+        // 412.101's uplift is a percentage of almost the whole payment, not of
+        // the DRG amount: both sides, the cost outlier and the uncompensated
+        // care payment. A calculator taking it on the base payment pays far
+        // less on exactly the outlier cases where it matters most.
+        Assert.True(payment.Outlier.Operating.Payment > 0m);
+        Assert.Equal(0.10m * payment.PaymentBeforeAdjustments, payment.Adjustments.LowVolume);
+    }
+
+    [Fact]
+    public void The_low_volume_uplift_is_not_taken_on_the_other_two_adjustments()
+    {
+        var provider = IppsProvider.Plain("123456", 1m) with
+        {
+            LowVolumeTemporaryRelief = true,
+            LowVolumeAdjustmentFactor = 0.20m,
+            ReadmissionsAdjustmentFactor = 0.98m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        // CMS computes the uplift on lines one to eight of its sum and takes
+        // the readmissions and value-based adjustments afterwards, so the
+        // uplift is 0.20 × 6,500 and not 0.20 × (6,500 - 120).
+        Assert.Equal(0.20m * payment.PaymentBeforeAdjustments, payment.Adjustments.LowVolume);
+        Assert.Equal(-120m, payment.Adjustments.Readmissions);
+    }
+
+    [Fact]
+    public void A_low_volume_factor_above_the_published_maximum_pays_nothing_and_is_not_capped()
+    {
+        var provider = IppsProvider.Plain("123456", 1m) with
+        {
+            LowVolumeTemporaryRelief = true,
+            LowVolumeAdjustmentFactor = 0.30m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        // CMS's gate is `> 0 and <= 0.25`, and a factor above it falls through
+        // to zero. Capping at 0.25 would pay a hospital whose provider file is
+        // wrong, and pay it the maximum.
+        Assert.Equal(0m, payment.Adjustments.LowVolume);
+        Assert.Contains(payment.Notes, note => note.Contains("rather than capping"));
+    }
+
+    [Fact]
+    public void The_low_volume_adjustment_needs_the_approval_as_well_as_the_factor()
+    {
+        var factorOnly = IppsProvider.Plain("123456", 1m) with
+        {
+            LowVolumeAdjustmentFactor = 0.20m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), factorOnly, Stay());
+
+        // Two gates. A factor on file at a hospital whose low-volume status was
+        // not approved for the year pays nothing.
+        Assert.Equal(0m, payment.Adjustments.LowVolume);
+    }
+
+    [Fact]
+    public void The_hospital_acquired_condition_penalty_reaches_the_outlier()
+    {
+        var provider = WithOutlierAndUncompensatedCare() with
+        {
+            HospitalAcquiredConditionReduction = true
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay(charges: 400_000m));
+
+        // One percent of everything above it. The penalty is written as a
+        // percentage of the payment rather than of the DRG amount, so on an
+        // outlier case it is far larger than one percent of the DRG — which is
+        // the arithmetic a "one percent reduction" reading of 412.170 misses.
+        Assert.True(payment.Outlier.Payment > 0m);
+        Assert.Equal(
+            -0.01m * payment.PaymentBeforeAdjustments,
+            payment.Adjustments.HospitalAcquiredConditionPenalty);
+    }
+
+    [Fact]
+    public void The_penalty_is_taken_after_the_other_three_and_so_on_their_total()
+    {
+        var provider = IppsProvider.Plain("123456", 1m) with
+        {
+            LowVolumeTemporaryRelief = true,
+            LowVolumeAdjustmentFactor = 0.25m,
+            ReadmissionsAdjustmentFactor = 0.97m,
+            ValueBasedPurchasingAdjustmentFactor = 1.02m,
+            HospitalAcquiredConditionReduction = true
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        // The order, end to end. Case payment 6,500 (6,000 operating + 500
+        // capital); low volume 0.25 × 6,500 = 1,625; readmissions -0.03 ×
+        // 6,000 = -180; value-based 0.02 × 6,000 = 120. The penalty is one
+        // percent of all of that: -0.01 × 8,065 = -80.65.
+        Assert.Equal(6500m, payment.PaymentBeforeAdjustments);
+        Assert.Equal(1625m, payment.Adjustments.LowVolume);
+        Assert.Equal(-180m, payment.Adjustments.Readmissions);
+        Assert.Equal(120m, payment.Adjustments.ValueBasedPurchasing);
+        Assert.Equal(-80.65m, payment.Adjustments.HospitalAcquiredConditionPenalty);
+        Assert.Equal(7984.35m, payment.Total);
     }
 
     // ─────────────────────────────────────────────────────────

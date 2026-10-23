@@ -253,6 +253,186 @@
       "provider": {
         "hospitalQualityIndicator": "0"
       }
+    },
+    {
+      "name": "quality-indicator-withheld-above-one",
+      "why": "CMS table row 2: the quality reduction above a wage index of 1.0. With the row below it this says the two axes are independent -- the reduced hospital gets the 66 percent split of its own smaller amount, not the 62 percent split of anything.",
+      "ccn": "330002",
+      "cbsa": "35614",
+      "stateCode": "33",
+      "countyCode": "33061",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "hospitalQualityIndicator": "0"
+      }
+    },
+    {
+      "name": "record-reduction-above-one",
+      "why": "CMS table row 5: the reduction for not being a meaningful electronic health record user, which is a smaller standardized amount again and independent of the quality requirement.",
+      "ccn": "330003",
+      "cbsa": "35614",
+      "stateCode": "33",
+      "countyCode": "33061",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "ehrReductionIndicator": "Y"
+      }
+    },
+    {
+      "name": "record-reduction-and-quality-withheld-above-one",
+      "why": "CMS table row 6: both reductions at once. A hospital carrying both is paid a fourth published amount, not two reductions applied in turn, which is the whole reason CMS publishes eight rows rather than a reduction factor.",
+      "ccn": "330004",
+      "cbsa": "35614",
+      "stateCode": "33",
+      "countyCode": "33061",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "ehrReductionIndicator": "Y",
+        "hospitalQualityIndicator": "0"
+      }
+    },
+    {
+      "name": "record-reduction-below-one",
+      "why": "CMS table row 7: the record reduction at or below a wage index of 1.0.",
+      "ccn": "450006",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "ehrReductionIndicator": "Y"
+      }
+    },
+    {
+      "name": "record-reduction-and-quality-withheld-below-one",
+      "why": "CMS table row 8: both reductions at or below 1.0. The eighth row, which completes the table the parity test builds and so is what lets the test assert CHO picked the same row CMS did rather than only that its arithmetic was self-consistent.",
+      "ccn": "450007",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "ehrReductionIndicator": "Y",
+        "hospitalQualityIndicator": "0"
+      }
+    },
+    {
+      "name": "readmissions-reduction",
+      "why": "412.154's readmissions adjustment, which CMS takes as (factor - 1) times the base DRG payment and carries as a signed amount in the sum. The hospital also has an uncompensated care payment, so a calculator taking the adjustment on the whole operating side rather than on the base payment alone disagrees here.",
+      "ccn": "450010",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "hrrParticipantIndicator": "1",
+        "hrrAdjustment": 0.98,
+        "uncompensatedCareAmount": 1000.0
+      }
+    },
+    {
+      "name": "value-based-purchasing-bonus",
+      "why": "The value-based purchasing adjustment paying more rather than less. CMS's range is 0.98 to 2.0, where the readmissions range stops at 1.0, which is why the two cannot be one input.",
+      "ccn": "450011",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "vbpParticipantIndicator": "Y",
+        "vbpAdjustment": 1.02
+      }
+    },
+    {
+      "name": "low-volume-adjustment",
+      "why": "412.101's low-volume uplift on a cost outlier case, which is what pins its base: CMS takes it on both sides, the outlier and the uncompensated care payment, not on the DRG amount. A calculator taking it on the base payment is wrong by the most on exactly these cases.",
+      "ccn": "450012",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 400000.0,
+      "reviewCode": "00",
+      "provider": {
+        "temporaryReliefIndicator": "Y",
+        "lowVolumeAdjustmentFactor": 0.2,
+        "operatingCostToChargeRatio": 0.3,
+        "capitalCostToChargeRatio": 0.05,
+        "uncompensatedCareAmount": 1000.0
+      }
+    },
+    {
+      "name": "hospital-acquired-condition-penalty",
+      "why": "412.170's one percent penalty on an outlier case. It is one percent of the assembled payment and not of the DRG amount, so on an outlier it is several times what a 'one percent reduction' reading would give.",
+      "ccn": "450013",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 400000.0,
+      "reviewCode": "00",
+      "provider": {
+        "hacReductionParticipantIndicator": "Y",
+        "operatingCostToChargeRatio": 0.3,
+        "capitalCostToChargeRatio": 0.05
+      }
+    },
+    {
+      "name": "all-four-adjustments-in-order",
+      "why": "All four at once, on a cost outlier case with an uncompensated care payment. This is the row that pins the ORDER: the low-volume uplift is taken on everything through the outlier but not on the other two adjustments, and the penalty is one percent of all of it together. Any other ordering agrees on each adjustment in isolation and disagrees here.",
+      "ccn": "450014",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 400000.0,
+      "reviewCode": "00",
+      "provider": {
+        "temporaryReliefIndicator": "Y",
+        "lowVolumeAdjustmentFactor": 0.25,
+        "hrrParticipantIndicator": "1",
+        "hrrAdjustment": 0.97,
+        "vbpParticipantIndicator": "Y",
+        "vbpAdjustment": 1.02,
+        "hacReductionParticipantIndicator": "Y",
+        "operatingCostToChargeRatio": 0.3,
+        "capitalCostToChargeRatio": 0.05,
+        "uncompensatedCareAmount": 1000.0
+      }
     }
   ]
 }

@@ -1,0 +1,131 @@
+# Workload identity for contact-service: its user-assigned managed identity, federated to
+# system:serviceaccount:cloudhealthoffice:contact-service-sa. token-service issues this
+# service's CHO service tokens to that identity only (ServiceTokens:ServiceClients); the service
+# holds no signing key. See docs/security/portal-token-service.md ("Service tokens").
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: contact-service-sa
+  namespace: cloudhealthoffice
+  annotations:
+    azure.workload.identity/client-id: "<CONTACT_SERVICE_MANAGED_IDENTITY_CLIENT_ID>"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: contact-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  MongoDb__DatabaseName: "CloudHealthOffice"
+  MongoDb__ContactsCollection: "Contacts"
+  MongoDb__ContactReasonsCollection: "ContactReasons"
+  # Linking a claim to a contact writes a contact note on the claim here.
+  # Unset, the link is still recorded on the contact; only the claim's own
+  # history misses the call.
+  Services__ClaimsServiceUrl: "http://claims-service"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: contact-service
+  namespace: cloudhealthoffice
+  labels:
+    app: contact-service
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: contact-service
+  template:
+    metadata:
+      labels:
+        azure.workload.identity/use: "true"
+        app: contact-service
+        tier: backend
+    spec:
+      serviceAccountName: contact-service-sa
+      containers:
+      - name: contact-service
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-contact-service:latest
+        imagePullPolicy: Always
+        envFrom:
+        # Source=TokenService, token-service URL and Entra scope (shared by all services).
+        - configMapRef:
+            name: cho-service-tokens
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ChoAuth__ServiceToken__ClientId
+          value: "contact-service"
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: contact-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: connectionString
+        - name: MongoDb__DatabaseName
+          valueFrom:
+            configMapKeyRef:
+              name: contact-service-config
+              key: MongoDb__DatabaseName
+        - name: MongoDb__ContactsCollection
+          valueFrom:
+            configMapKeyRef:
+              name: contact-service-config
+              key: MongoDb__ContactsCollection
+        - name: MongoDb__ContactReasonsCollection
+          valueFrom:
+            configMapKeyRef:
+              name: contact-service-config
+              key: MongoDb__ContactReasonsCollection
+        - name: Services__ClaimsServiceUrl
+          valueFrom:
+            configMapKeyRef:
+              name: contact-service-config
+              key: Services__ClaimsServiceUrl
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: contact-service
+  namespace: cloudhealthoffice
+  labels:
+    app: contact-service
+spec:
+  type: ClusterIP
+  selector:
+    app: contact-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP

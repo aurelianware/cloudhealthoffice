@@ -97,7 +97,7 @@ perdiem".
 
 ## The corpus
 
-Fourteen invented stays. There is no member, no claim number and no real
+Twenty-four invented stays. There is no member, no claim number and no real
 provider: the CMS certification numbers are fabricated, chosen only so their
 first two digits are a plausible state code, because the pricer reads the state
 from them. The wage-index localities are real published CBSA codes, which is
@@ -177,18 +177,60 @@ asserts that each exclusion is still a real corpus row:
 - **`disproportionate-share`** — CMS derives the adjustment from the hospital's
   SSI and Medicaid day ratios; `IppsProvider` takes the resulting factor as an
   input, so there is nothing to compare.
-- **`quality-indicator-withheld`** — the hospital quality indicator selects the
-  full or reduced market basket update, and so the standardized amount itself.
-  `IppsRateSet` holds one standardized amount and cannot express the reduced
-  one.
 - **`transfer-fifty-fifty-special-payment-drg`** — CMS refused it with return
   code 12, and which post-acute rule a DRG carries is a column of CMS's DRG
   table that nothing here imports yet.
 
 And the pricer pays several things the calculator still has no notion of: the
-value-based purchasing and readmissions-reduction adjustments, the low-volume
-adjustment, the hospital-specific portion, pass-through amounts, new-technology
-add-ons, and the HAC and EHR reductions. It also works in covered days and
-lifetime reserve days, where `IppsStay` has no beneficiary-day concept. Those
-are recorded in ADR 024 as the remaining work, and they are why this calculator
-is still not wired into adjudication.
+hospital-specific portion for sole-community and Medicare-dependent hospitals,
+pass-through amounts, new-technology add-ons and the bundled-payment
+adjustment. It also works in covered days and lifetime reserve days, where
+`IppsStay` has no beneficiary-day concept. Those are recorded in ADR 024 as the
+remaining work, and they are why this calculator is still not wired into
+adjudication.
+
+## One column is misleadingly named, and it is CMS's name
+
+`average_length_of_stay` is the **geometric** mean. CMS's field is
+`averageLengthOfStay` and its COBOL variable is `H-ALOS`, but
+`InitializeCalculationFields` populates it from the DRG table's
+`geometricMeanLengthOfStay`, which is also what 42 CFR 412.4(f) says a transfer
+per diem divides by. The arithmetic mean is in the DRG table and the pricer
+does not use it for this. The column keeps CMS's name so the mapping back to
+its response is obvious; this paragraph is the correction.
+
+## What the second run added: the rate table
+
+The first run found the hospital quality indicator moving the standardized
+amount itself, which `IppsRateSet` could not express with one amount. Reading
+CMS's source for how showed the shape was bigger than a flag.
+
+**CMS holds eight operating rate tables and picks one on three facts:** whether
+the hospital met the inpatient quality reporting requirement, whether it is
+subject to the electronic-health-record reduction, and whether its wage index
+is above 1.0. `2050-RATES-TB` in the COBOL is a straight eight-way branch on
+exactly those. The eight rows are four standardized amounts — one per
+combination of the two reductions — each split two ways by the wage-index rule.
+
+Two consequences that a reduction factor would have got wrong:
+
+- **The reductions are independent and a hospital can carry both**, and the
+  both-reductions amount is published rather than being the two reductions
+  applied in turn.
+- **The rows hold dollars, not a percentage of one amount.** The
+  record-reduced row above a wage index of 1.0 is 4,349.21 labor and 2,240.51
+  non-labor. They sum to 6,589.72 exactly, but 6,589.72 × 0.66 is 4,349.2152
+  and × 0.34 is 2,240.5048, so neither amount is the sum times a share. CMS
+  rounds them independently and deriving either moves the answer by a cent on
+  every claim in that row.
+
+So the labor percentages stayed, with one job: CMS's outlier threshold is the
+cost threshold times the percentages, and the standardized amount plays no part
+in it. A reader who finds the percentages multiplying a rate should suspect the
+rate.
+
+The pricer has no endpoint for its rate table, so the only way to learn a row
+is to price a claim that selects it. Five corpus rows were added for that, and
+the parity test now builds the whole eight-row table out of CMS's answers and
+asserts CHO paid from the same row — which also exercises CMS's own selection
+branch, where reading the file would not have.

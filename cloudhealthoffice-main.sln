@@ -337,6 +337,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CareManagementService.Tests
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.PlanConfiguration", "src\services\shared\CloudHealthOffice.PlanConfiguration\CloudHealthOffice.PlanConfiguration.csproj", "{7223E095-8D1C-46E3-91A2-DAF9FDAAF347}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "contact-service", "src\services\contact-service\contact-service.csproj", "{6D1640D6-8D62-4679-85B4-B35F137CB906}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ContactService.Tests", "src\services\contact-service\ContactService.Tests\ContactService.Tests.csproj", "{598F81AE-149F-4813-A73D-1164FA20D145}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -2087,6 +2091,30 @@ Global
 		{7223E095-8D1C-46E3-91A2-DAF9FDAAF347}.Release|x64.Build.0 = Release|Any CPU
 		{7223E095-8D1C-46E3-91A2-DAF9FDAAF347}.Release|x86.ActiveCfg = Release|Any CPU
 		{7223E095-8D1C-46E3-91A2-DAF9FDAAF347}.Release|x86.Build.0 = Release|Any CPU
+		{6D1640D6-8D62-4679-85B4-B35F137CB906}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6D1640D6-8D62-4679-85B4-B35F137CB906}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6D1640D6-8D62-4679-85B4-B35F137CB906}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6D1640D6-8D62-4679-85B4-B35F137CB906}.Debug|x64.Build.0 = Debug|Any CPU
+		{6D1640D6-8D62-4679-85B4-B35F137CB906}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6D1640D6-8D62-4679-85B4-B35F137CB906}.Debug|x86.Build.0 = Debug|Any CPU
+		{6D1640D6-8D62-4679-85B4-B35F137CB906}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6D1640D6-8D62-4679-85B4-B35F137CB906}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6D1640D6-8D62-4679-85B4-B35F137CB906}.Release|x64.ActiveCfg = Release|Any CPU
+		{6D1640D6-8D62-4679-85B4-B35F137CB906}.Release|x64.Build.0 = Release|Any CPU
+		{6D1640D6-8D62-4679-85B4-B35F137CB906}.Release|x86.ActiveCfg = Release|Any CPU
+		{6D1640D6-8D62-4679-85B4-B35F137CB906}.Release|x86.Build.0 = Release|Any CPU
+		{598F81AE-149F-4813-A73D-1164FA20D145}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{598F81AE-149F-4813-A73D-1164FA20D145}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{598F81AE-149F-4813-A73D-1164FA20D145}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{598F81AE-149F-4813-A73D-1164FA20D145}.Debug|x64.Build.0 = Debug|Any CPU
+		{598F81AE-149F-4813-A73D-1164FA20D145}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{598F81AE-149F-4813-A73D-1164FA20D145}.Debug|x86.Build.0 = Debug|Any CPU
+		{598F81AE-149F-4813-A73D-1164FA20D145}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{598F81AE-149F-4813-A73D-1164FA20D145}.Release|Any CPU.Build.0 = Release|Any CPU
+		{598F81AE-149F-4813-A73D-1164FA20D145}.Release|x64.ActiveCfg = Release|Any CPU
+		{598F81AE-149F-4813-A73D-1164FA20D145}.Release|x64.Build.0 = Release|Any CPU
+		{598F81AE-149F-4813-A73D-1164FA20D145}.Release|x86.ActiveCfg = Release|Any CPU
+		{598F81AE-149F-4813-A73D-1164FA20D145}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -2234,6 +2262,8 @@ Global
 		{02D682F7-A5E2-49B7-8526-1F635A768B28} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{160F6CC7-A579-4CDD-8563-992BD6CC5260} = {984BB9B3-3FA3-BE33-9484-CAC21695A33C}
 		{7223E095-8D1C-46E3-91A2-DAF9FDAAF347} = {A152AE0B-3259-491C-82C1-D7342C1086F8}
+		{6D1640D6-8D62-4679-85B4-B35F137CB906} = {5854FF58-B8C5-05C6-5BF2-ACE42193F22B}
+		{598F81AE-149F-4813-A73D-1164FA20D145} = {5854FF58-B8C5-05C6-5BF2-ACE42193F22B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C10C3349-5BEE-4B34-9987-23F0142F9D98}
