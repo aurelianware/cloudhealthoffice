@@ -292,6 +292,7 @@ builder.Services.AddScoped<IEligibilityService, EligibilityService>();
 builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
 builder.Services.AddScoped<ICms0057Service, Cms0057Service>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
+builder.Services.AddScoped<IUnmatchedAttachmentService, UnmatchedAttachmentService>();
 builder.Services.AddScoped<IMemberDocumentService, MemberDocumentService>();
 builder.Services.AddScoped<IDocumentCatalogService, DocumentCatalogService>();
 builder.Services.AddScoped<IIdCardService, CloudHealthOffice.Portal.Services.IdCardService>();

@@ -376,6 +376,90 @@ public class AttachmentsController : ControllerBase
     }
 
     /// <summary>
+    /// Link a held 275 to a claim by hand, for the case the background matcher
+    /// cannot resolve: the provider's TRN02 and the claim's PWK06 disagree (a
+    /// typo, or the attachment renumbered), but a person can see the document
+    /// belongs to the claim.
+    /// <para>
+    /// The billing NPI must still agree. That rule is what stops one
+    /// provider's document landing on another provider's patient's claim, and
+    /// a person looking at a screen is no more able to tell two providers'
+    /// sequential control numbers apart than the matcher is — so there is
+    /// deliberately no override. A genuine cross-provider case is a different
+    /// document, not a mislinked one.
+    /// </para>
+    /// </summary>
+    [HttpPost("{id}/link")]
+    public async Task<ActionResult<Attachment>> LinkToClaim(string id, [FromBody] LinkAttachmentToClaimRequest request)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.ClaimId))
+            return BadRequest("A claim id is required.");
+
+        // Naming a claim is a claims read, whoever is asking.
+        if (!_actor.HasPermission(ClaimsRead))
+            return Forbid();
+
+        var attachment = await _repository.GetByIdAsync(id, _actor.TenantId);
+        if (attachment is null) return NotFound();
+
+        if (!string.Equals(attachment.Status, "Unmatched", StringComparison.Ordinal))
+            return Conflict($"This attachment is {attachment.Status.ToLowerInvariant()}, not held, so there is nothing to link.");
+
+        var claimId = request.ClaimId.Trim();
+        if (!AttachmentUploadRules.IsValidParentId(claimId))
+            return BadRequest("That is not a valid claim id.");
+
+        ClaimControlNumberMatch? claim;
+        try
+        {
+            claim = await _matcher.GetClaimAsync(attachment.TenantId, claimId, HttpContext.RequestAborted);
+        }
+        catch (AttachmentParentLookupException ex)
+        {
+            _logger.LogError(ex, "Could not read the claim for a manual attachment link (trace id {TraceId})",
+                ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Could not reach claims-service to check the claim; nothing was linked. Retry shortly.",
+                StatusCodes.Status502BadGateway);
+        }
+
+        if (claim is null)
+            return BadRequest("No such claim in this tenant.");
+
+        if (string.IsNullOrWhiteSpace(claim.BillingProviderNPI)
+            || !string.Equals(claim.BillingProviderNPI, attachment.ProviderId?.Trim(), StringComparison.Ordinal))
+        {
+            return Conflict(
+                "That claim's billing provider is not the provider who sent this attachment, so it cannot be "
+                + "linked. Providers number their own attachments, so a control number alone cannot tell two "
+                + "providers apart — this check is what keeps one provider's document off another provider's "
+                + "patient's claim.");
+        }
+
+        if (attachment.DocumentId is { } documentId)
+        {
+            var found = await _catalog.AddLinkAsync(attachment.TenantId, onBehalfOf: _actor.UserId, documentId,
+                AttachmentParentType.Provider, attachment.ProviderId!, AttachmentParentType.Claim, claim.ClaimId,
+                HttpContext.RequestAborted);
+            if (!found)
+            {
+                _logger.LogError("Held attachment {AttachmentId} points at catalog document {DocumentId}, which is not on provider {ProviderId}",
+                    LogSanitizer.Sanitize(attachment.Id), LogSanitizer.Sanitize(documentId), LogSanitizer.Sanitize(attachment.ProviderId));
+                return this.ServerError("The attachment's file is not where the catalog expects it; nothing was linked.",
+                    StatusCodes.Status502BadGateway);
+            }
+        }
+
+        attachment.ClaimId = claim.ClaimId;
+        attachment.Status = "Linked";
+        attachment.Notes = $"Linked to claim {claim.ClaimId} by hand"
+            + (string.IsNullOrWhiteSpace(request.Reason) ? "." : $": {request.Reason.Trim()}");
+        attachment.LastUpdatedBy = _actor.UserId;
+        await _repository.UpdateAsync(attachment);
+
+        return Ok(attachment);
+    }
+
+    /// <summary>
     /// Get attachment by RFAI reference (solicited attachments)
     /// </summary>
     [HttpGet("rfai/{rfaiReference}")]
@@ -627,4 +711,17 @@ public class AttachmentRequest
     public string DocumentFormat { get; set; } = string.Empty;
     public string? RawX12 { get; set; }
     public DateTime? SubmittedDate { get; set; }
+}
+
+/// <summary>
+/// Links a held 275 to a claim by hand. The tenant and the person come from
+/// the caller's token; the billing NPI is checked, not supplied.
+/// </summary>
+public class LinkAttachmentToClaimRequest
+{
+    /// <summary>The claim to file this attachment on.</summary>
+    public string? ClaimId { get; set; }
+
+    /// <summary>Why, in the linker's words. Kept on the attachment's notes.</summary>
+    public string? Reason { get; set; }
 }
