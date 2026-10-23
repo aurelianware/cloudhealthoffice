@@ -238,7 +238,7 @@ The portal reads the catalog and renders a module's Reports view from it. Adding
 ### 7.2 Runs and outputs
 
 - **Interactive runs** return the first page to the screen, in the same `ResultsGrid` as search (`portal-search.md` §7.4).
-- **Background runs** go to a report job queue. The output is written encrypted to the tenant's document store with a 7-day expiry. The user is notified (Home and email link).
+- **Background runs** go to a report job queue. The output is written encrypted to the tenant's document store with a 7-day expiry. The user is notified (Home and email link) — through the `report.run.completed` and `report.run.failed` topics in [operational-notifications.md](operational-notifications.md), which nothing implements yet and which names these two as its first publishers.
 - **Formats:** CSV and Excel. PDF only for regulator formats that require it.
 - **Run records** (parameters, as-of time, user, row count, record IDs for record-level reports) go to the access log.
 

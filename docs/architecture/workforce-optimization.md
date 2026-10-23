@@ -510,6 +510,18 @@ routing context.
   call-tracking work is the natural neighbour, and a rebalancing recommendation
   should link straight into it.
 - **Home tile** for a supervisor: queues at risk, and the day's brief.
+- **Delivered, not just displayed.** A supervisor who is not looking at the
+  portal when a queue starts to slip has not been warned. Deadline risk,
+  anomalies and proposed recommendations are published as topics
+  (`work.queue.deadline_risk`, `work.queue.anomaly`,
+  `work.recommendation.proposed`) through the notification capability designed in
+  [operational-notifications.md](operational-notifications.md), which is where
+  subscription, acknowledgement, escalation to an operations or IT backstop, and
+  the rules that keep an alert from becoming noise live. Two consequences for
+  this design: the risk-level thresholds in §5.2 are also the alert thresholds,
+  under the one-definition rule, and every figure in §5 must render PHI-free,
+  which it does — counts, queue names and dates. That capability does not exist
+  either; phases 1 and 3 here depend on its phases 1 and 3.
 - **Insights, not a new reporting mechanism.** These figures are
   [`portal-reporting.md`](portal-reporting.md) layer 1 for the work module, and
   the pended-inventory and throughput reports in its §4.1 are layer 2 over the
