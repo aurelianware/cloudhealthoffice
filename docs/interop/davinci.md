@@ -319,11 +319,21 @@ Suite ids at the current pins:
 | --- | --- |
 | PDex `v0.13.2` | `pdex_payer_server`, `pdex_payer_client`, `pdex_provider_client` |
 | DTR `v0.17.1` | `dtr_payer_server`, `dtr_full_ehr`, `dtr_light_ehr`, `dtr_smart_app` |
+| CARIN BB `v0.16.3` | `c4bb_v110`, `c4bb_v200`, `c4bb_v200devnonfinancial`, `c4bb_v200_client` |
+| US Core `v1.1.6` | `us_core_v311`, `us_core_v400`, `us_core_v501`, `us_core_v610`, `us_core_v700`, `us_core_v800` (plus a `us_core_client_*` suite per version) |
 
-Provider Access serves CARIN Blue Button and US Core, and **no CARIN BB or US
-Core kit is pinned in `interop/versions.json` yet**. Pinning those two is the
-prerequisite for judging the Provider Access profile conformance that G-14 and
-G-60 are about; PDex and DTR do not cover it.
+Every id above is read from the `Inferno::TestSuite` ids in each kit's own `lib/`
+at the pinned tag, not from documentation.
+
+CARIN BB and US Core are what Provider Access actually serves, so those two kits
+are the ones G-14 and G-60 would be judged against; PDex and DTR do not cover
+them. `us_core_v311` is CHO's suite — `Cms0057ComplianceChecker` and the
+CapabilityStatement target US Core 3.1.1+, the floor CMS-0057-F sets — with
+`us_core_v610` the natural second run.
+
+Fetch either with `./scripts/interop/fetch-inferno.sh c4bb` or
+`./scripts/interop/fetch-inferno.sh us-core`; both were fetched at these pins and
+the script's pin check passed.
 
 ### What the `interop-cho` profile runs
 
@@ -387,6 +397,34 @@ setting is neither needed nor set there.
   validation a real write does.
 * **A first run.** No suite has been run against it.
 
+### CARIN BB non-financial: `-Basis` against `-NonFinancial`
+
+This one blocks a result rather than merely colouring it, so it is worth stating
+plainly.
+
+CHO's non-financial ExplanationOfBenefit declares the CARIN BB 2.2.0 profiles:
+
+```
+http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Inpatient-Institutional-Basis
+…-Outpatient-Institutional-Basis, …-Professional-NonClinician-Basis, …-Oral-Basis
+```
+
+The `c4bb_v200devnonfinancial` suite at kit `v0.16.3` checks the earlier
+canonicals from the non-financial *branch* snapshot it bundles, which end in
+`-NonFinancial` rather than `-Basis`. That snapshot's `package.json`
+self-identifies as `hl7.fhir.us.carin-bb` 2.0.0 dated 2023-04-24; the names were
+changed to `-Basis` before 2.2.0.
+
+Different canonical URLs mean the suite cannot match CHO's EOBs at all, so a run
+of it today would report nothing useful in either direction. The resolution is a
+later kit release regenerated against CARIN BB 2.2.0 — **not** renaming CHO's
+profiles to match a superseded draft, which would make the suite pass by making
+CHO wrong.
+
+`c4bb_v200` (the financial suite) is unaffected by this and is a legitimate run
+against CHO's Patient, Coverage, Organization and Practitioner projections, which
+the non-financial branch did not rename.
+
 ## 12. Version awareness and known mismatches
 
 Da Vinci IGs evolve, Inferno kits may be draft, and an external RI may track a
@@ -448,8 +486,9 @@ Known at the current pins:
 * No Inferno suite executes. Only the runner seam exists, and the `interop-cho`
   profile — although it now runs CHO's real path rather than the mock — has never
   been started by a scenario, and its services' stores are not seeded.
-* No CARIN Blue Button or US Core Inferno kit is pinned, which is precisely what
-  Provider Access profile conformance (G-14, G-60) would be judged against.
+* The CARIN BB kit's non-financial suite cannot judge CHO's EOBs at the current
+  pin — see "CARIN BB non-financial: `-Basis` against `-NonFinancial`" below. US
+  Core has no such gap.
 * CDS-Library is pinned but unused: the pinned br-payer image already bundles the
   clinical content its own rules need, including the CRD rule fixtures
   `BR-CRD-001` exercises.

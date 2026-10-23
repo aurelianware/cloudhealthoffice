@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "description": "Pinned external Da Vinci implementations used by the Cloud Health Office interoperability harness. Every entry MUST be reproducible: an image digest, a release tag plus commit SHA, or a commit SHA. Never a floating tag or unpinned branch. See docs/interop/davinci.md for the upgrade procedure.",
-  "lastReviewedUtc": "2026-10-22T00:00:00Z",
+  "lastReviewedUtc": "2026-10-23T00:00:00Z",
   "targets": [
     {
       "name": "HL7-DaVinci/br-payer",
@@ -139,6 +139,90 @@
         "https://packages.fhir.org — the bundled hl7_validator_service loads IG packages"
       ],
       "startupNotes": "Not started in this PR. Same integration seam as the PDex kit."
+    },
+    {
+      "name": "inferno-framework/carin-for-blue-button-test-kit",
+      "key": "inferno-c4bb",
+      "role": "ConformanceRunner",
+      "protocols": ["CARIN BB"],
+      "upstreamRepository": "https://github.com/inferno-framework/carin-for-blue-button-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "tag": "v0.16.3",
+        "commit": "386f6a0b024e47cda82d2ed0fd15dc6495557ca8",
+        "reference": "https://github.com/inferno-framework/carin-for-blue-button-test-kit@v0.16.3",
+        "pinProvenance": "git ls-remote --tags resolved refs/tags/v0.16.3 to this commit on 2026-10-23, and it was the latest release on that date."
+      },
+      "compose": { "service": "inferno-c4bb", "profiles": ["interop-c4bb"] },
+      "endpoints": {
+        "fhirBaseUrl": null,
+        "cdsHooksBaseUrl": null,
+        "readinessUrl": "http://127.0.0.1:14569/"
+      },
+      "auth": { "mode": "None", "note": "Inferno drives CHO as the system under test; CHO's SMART configuration is supplied as suite input, never by weakening CHO." },
+      "inferno": {
+        "apiBaseUrl": "http://127.0.0.1:14569/api",
+        "suites": ["c4bb_v110", "c4bb_v200", "c4bb_v200devnonfinancial", "c4bb_v200_client"],
+        "suitesProvenance": "Read from the Inferno::TestSuite ids in the kit's own lib/ at the pinned tag, not from documentation.",
+        "runner": "docker compose build && docker compose up (upstream run.sh) from a checkout at the pinned tag"
+      },
+      "implementationGuides": {
+        "CARIN BB": "1.1.0 and 2.0.0, plus a 2.0.0 development snapshot of the non-financial branch"
+      },
+      "igVersionProvenance": "Read from package.json inside the IG packages the kit bundles at the pinned tag. The non-financial package (igs/carin4bb-200-dev-nonfinancial-fixed) self-identifies as hl7.fhir.us.carin-bb 2.0.0 dated 2023-04-24.",
+      "knownMismatches": [
+        "CHO's non-financial ExplanationOfBenefit declares the CARIN BB 2.2.0 '-Basis' profiles (C4BB-ExplanationOfBenefit-Inpatient-Institutional-Basis and its siblings). The c4bb_v200devnonfinancial suite at this pin checks the earlier '-NonFinancial' canonicals from the April 2023 branch snapshot it bundles. The canonical URLs differ, so that suite cannot judge CHO's EOBs as they stand. The resolution is a later kit release regenerated against CARIN BB 2.2.0, never renaming CHO's profiles to match a superseded draft."
+      ],
+      "requiredEgress": [
+        "https://github.com — the kit is fetched at the pinned tag during explicit setup",
+        "https://rubygems.org and Docker Hub — the kit image is built locally from upstream's Dockerfile",
+        "https://packages.fhir.org — the bundled hl7_validator_service loads IG packages"
+      ],
+      "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Not started by any scenario yet. This is the kit that would judge Provider Access EOB conformance (gap-matrix G-14); neither the PDex nor the DTR kit covers CARIN BB."
+    },
+    {
+      "name": "inferno-framework/us-core-test-kit",
+      "key": "inferno-us-core",
+      "role": "ConformanceRunner",
+      "protocols": ["US Core"],
+      "upstreamRepository": "https://github.com/inferno-framework/us-core-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "tag": "v1.1.6",
+        "commit": "c8701563d36c2a9eaedc976c59fd8dca4303f49a",
+        "reference": "https://github.com/inferno-framework/us-core-test-kit@v1.1.6",
+        "pinProvenance": "git ls-remote --tags resolved refs/tags/v1.1.6 to this commit on 2026-10-23, and it was the latest release on that date."
+      },
+      "compose": { "service": "inferno-us-core", "profiles": ["interop-us-core"] },
+      "endpoints": {
+        "fhirBaseUrl": null,
+        "cdsHooksBaseUrl": null,
+        "readinessUrl": "http://127.0.0.1:14570/"
+      },
+      "auth": { "mode": "None", "note": "Same as the other kits: CHO is the system under test and supplies endpoint configuration as suite input." },
+      "inferno": {
+        "apiBaseUrl": "http://127.0.0.1:14570/api",
+        "suites": [
+          "us_core_v311", "us_core_v400", "us_core_v501", "us_core_v610", "us_core_v700", "us_core_v800",
+          "us_core_client_v311", "us_core_client_v400", "us_core_client_v501", "us_core_client_v610",
+          "us_core_client_v700", "us_core_client_v800"
+        ],
+        "suitesProvenance": "Read from the Inferno::TestSuite ids in the kit's own lib/ at the pinned tag, not from documentation.",
+        "choSuite": "us_core_v311 — CHO's CapabilityStatement and Cms0057ComplianceChecker target US Core 3.1.1+, the floor CMS-0057-F sets. us_core_v610 is the natural second run.",
+        "runner": "docker compose build && docker compose up (upstream run.sh) from a checkout at the pinned tag"
+      },
+      "implementationGuides": {
+        "US Core": "3.1.1, 4.0.0, 5.0.1, 6.1.0, 7.0.0 and 8.0.0 suites are generated in this release"
+      },
+      "igVersionProvenance": "Read from the generated suite directories the kit ships at the pinned tag.",
+      "requiredEgress": [
+        "https://github.com — the kit is fetched at the pinned tag during explicit setup",
+        "https://rubygems.org and Docker Hub — the kit image is built locally from upstream's Dockerfile",
+        "https://packages.fhir.org — the bundled hl7_validator_service loads IG packages"
+      ],
+      "startupNotes": "Not started by any scenario yet. v1.1.6 stops suppressing HL7 validator messages in the 6.1.0 server suite, so a system that passed an earlier release may not pass this one — a stricter result rather than a regression."
     },
     {
       "name": "hl7/fhir-validator (validator_cli.jar)",

@@ -15,6 +15,8 @@
 #   interop-cho          CHO native stack + mongo      (CHO as the server under test)
 #   interop-pdex         Inferno PDex test kit         (seam only — see docs/interop/davinci.md)
 #   interop-dtr-inferno  Inferno DTR test kit          (seam only — see docs/interop/davinci.md)
+#   interop-c4bb         Inferno CARIN BB test kit     (seam only — judges Provider Access EOBs)
+#   interop-us-core      Inferno US Core test kit      (seam only — see docs/interop/davinci.md)
 #
 # Normally you do not run this file by hand — `scripts/interop/run.sh` and the
 # harness (InteropEnvironment) bring up exactly the services a scenario needs.
@@ -321,3 +323,23 @@ services:
       context: ${INTEROP_INFERNO_DTR_DIR:-./.external/davinci-dtr-test-kit}
     ports:
       - "127.0.0.1:${INTEROP_INFERNO_DTR_PORT:-14568}:4567"
+
+  # The kit that judges Provider Access EOB conformance (gap-matrix G-14).
+  # Neither the PDex nor the DTR kit covers CARIN BB. See the knownMismatches
+  # entry for this target in interop/versions.json before reading a result from
+  # its non-financial suite.
+  inferno-c4bb:
+    profiles: [interop-c4bb]
+    networks: [interop]
+    build:
+      context: ${INTEROP_INFERNO_C4BB_DIR:-./.external/carin-for-blue-button-test-kit}
+    ports:
+      - "127.0.0.1:${INTEROP_INFERNO_C4BB_PORT:-14569}:4567"
+
+  inferno-us-core:
+    profiles: [interop-us-core]
+    networks: [interop]
+    build:
+      context: ${INTEROP_INFERNO_US_CORE_DIR:-./.external/us-core-test-kit}
+    ports:
+      - "127.0.0.1:${INTEROP_INFERNO_US_CORE_PORT:-14570}:4567"

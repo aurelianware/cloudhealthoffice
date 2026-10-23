@@ -49,6 +49,57 @@ public sealed class InteropVersionsTests
     }
 
     [Fact]
+    public void Every_compose_placement_names_a_service_and_profile_that_exist()
+    {
+        // A manifest that names a service the compose file does not define reads
+        // as working orchestration and is not. The pin tests above cover only
+        // image-digest targets, so a kit built from a checkout had no guard.
+        var compose = File.ReadAllLines(InteropPaths.ComposeFile)
+            .SkipWhile(l => l.TrimEnd() != "services:")
+            .ToArray();
+        var services = compose
+            .Where(l => Indent(l) == 2 && l.TrimEnd().EndsWith(':') && !l.TrimStart().StartsWith('#'))
+            .Select(l => l.Trim().TrimEnd(':'))
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var target in Versions.Targets.Where(t => !string.IsNullOrEmpty(t.Compose?.Service)))
+        {
+            var placement = target.Compose!;
+            services.Should().Contain(placement.Service,
+                "interop/versions.json places '{0}' at compose service '{1}'", target.Key, placement.Service);
+
+            foreach (var profile in placement.Profiles)
+            {
+                ComposeProfilesOf(compose, placement.Service).Should().Contain(profile,
+                    "'{0}' claims profile '{1}'", placement.Service, profile);
+            }
+        }
+    }
+
+    /// <summary>The <c>profiles:</c> list of one service, as the inline form this file uses.</summary>
+    private static IReadOnlyList<string> ComposeProfilesOf(IReadOnlyList<string> compose, string service)
+    {
+        var inService = false;
+        foreach (var line in compose)
+        {
+            if (Indent(line) == 2 && line.TrimEnd().EndsWith(':') && !line.TrimStart().StartsWith('#'))
+            {
+                if (inService) break;
+                inService = line.Trim() == service + ":";
+                continue;
+            }
+            if (!inService || Indent(line) != 4 || !line.TrimStart().StartsWith("profiles:", StringComparison.Ordinal))
+                continue;
+
+            return line.Split('[', ']')[1].Split(',').Select(p => p.Trim()).ToList();
+        }
+
+        return [];
+    }
+
+    private static int Indent(string line) => line.Length - line.TrimStart().Length;
+
+    [Fact]
     public void Every_target_records_its_upstream_repository_and_license()
     {
         foreach (var target in Versions.Targets)

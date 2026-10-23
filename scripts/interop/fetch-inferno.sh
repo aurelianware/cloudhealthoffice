@@ -4,6 +4,8 @@
 #
 #   ./scripts/interop/fetch-inferno.sh pdex
 #   ./scripts/interop/fetch-inferno.sh dtr
+#   ./scripts/interop/fetch-inferno.sh c4bb
+#   ./scripts/interop/fetch-inferno.sh us-core
 #
 # Upstream publishes no container image for these kits, so the harness builds one
 # from a checkout. This is an EXPLICIT setup step on purpose: no ordinary test run
@@ -21,9 +23,11 @@ VERSIONS="$REPO_ROOT/interop/versions.json"
 
 KIT="${1:-}"
 case "$KIT" in
-  pdex) KEY="inferno-pdex"; DIR_NAME="davinci-pdex-test-kit" ;;
-  dtr)  KEY="inferno-dtr";  DIR_NAME="davinci-dtr-test-kit" ;;
-  *)    echo "Usage: $0 {pdex|dtr}" >&2; exit 2 ;;
+  pdex)    KEY="inferno-pdex";    DIR_NAME="davinci-pdex-test-kit" ;;
+  dtr)     KEY="inferno-dtr";     DIR_NAME="davinci-dtr-test-kit" ;;
+  c4bb)    KEY="inferno-c4bb";    DIR_NAME="carin-for-blue-button-test-kit" ;;
+  us-core) KEY="inferno-us-core"; DIR_NAME="us-core-test-kit" ;;
+  *)       echo "Usage: $0 {pdex|dtr|c4bb|us-core}" >&2; exit 2 ;;
 esac
 
 read -r REPO TAG COMMIT < <(python3 - "$VERSIONS" "$KEY" <<'PY'
