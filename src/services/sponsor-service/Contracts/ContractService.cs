@@ -24,6 +24,22 @@ public sealed record ContractResult<T>(ContractOutcome Outcome, IReadOnlyList<st
     public static ContractResult<T> Fail(ContractOutcome outcome, params string[] errors) => new(outcome, errors);
 }
 
+/// <summary>
+/// Why a date has, or has not, billing terms from the contract. The two ways
+/// of having none are not interchangeable: see
+/// <c>ContractService.BillingInForceAsync</c>.
+/// </summary>
+public enum BillingResolutionOutcome
+{
+    Resolved,
+    NoContractTerm,
+    BillingNotEntered,
+}
+
+/// <summary>The billing terms in force on a date, and which contract period they came from.</summary>
+public sealed record BillingResolution(
+    BillingResolutionOutcome Outcome, BillingTerms? Billing = null, ContractTerm? ContractTerm = null);
+
 /// <summary>What a caller may set on a sponsor policy.</summary>
 public sealed record PolicyWrite
 {
@@ -223,6 +239,32 @@ public sealed class ContractService(
     /// </summary>
     public async Task<ContractTerm?> TermInForceAsync(string tenantId, string groupNumber, DateTime on, CancellationToken ct = default) =>
         (await store.ListTermsAsync(tenantId, groupNumber, ct)).FirstOrDefault(t => t.IsInForce(on));
+
+    /// <summary>
+    /// The billing terms to bill a date on, found through the contract term in
+    /// force over it (§9b, step 3d).
+    ///
+    /// <para>
+    /// The two ways of having none are kept apart. <see cref="BillingResolutionOutcome.NoContractTerm"/>
+    /// is a group that has no contract covering the date, which is every group
+    /// until one is entered, and a consumer falls back on the sponsor record's
+    /// own billing information. <see cref="BillingResolutionOutcome.BillingNotEntered"/>
+    /// is a contract that exists and says nothing about billing — the same
+    /// fallback applies, because the sponsor record is where billing lived
+    /// before the contract existed and is not stale on a contract's account,
+    /// but it is worth seeing separately: somebody agreed a contract and left
+    /// its billing blank.
+    /// </para>
+    /// </summary>
+    public async Task<BillingResolution> BillingInForceAsync(
+        string tenantId, string groupNumber, DateTime on, CancellationToken ct = default)
+    {
+        var term = await TermInForceAsync(tenantId, groupNumber, on, ct);
+        if (term is null) return new BillingResolution(BillingResolutionOutcome.NoContractTerm);
+        return term.Billing is null
+            ? new BillingResolution(BillingResolutionOutcome.BillingNotEntered, ContractTerm: term)
+            : new BillingResolution(BillingResolutionOutcome.Resolved, term.Billing, term);
+    }
 
     public async Task<ContractResult<ContractTerm>> CreateTermAsync(
         ICurrentActor actor, string groupNumber, TermWrite write, CancellationToken ct = default)

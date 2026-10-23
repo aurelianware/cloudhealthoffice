@@ -1,6 +1,6 @@
 # Plan configuration: settings that cascade, with overrides
 
-**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), and steps 3a to 3c of step 3 (§§12.7–12.9); 3d, the consumers, is next.
+**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), steps 3a to 3c of step 3 (§§12.7–12.9) and 3d's first consumer (§12.10); the rest of 3d is next.
 **Scope:** One way for every CHO service to define a business setting, set it at the right level of the plan's structure, override it further down, and explain where an effective value came from.
 
 **Related:**
@@ -244,7 +244,7 @@ Changes needing a reason or a second approver use the same pattern as two-person
    - **3a, the records:** sponsor policies with their classes, and contract terms with §9b's status flow. *Built 2026-10-23 (§12.7).*
    - **3b, terms versioned per contract year:** the tiers, rates, contribution, billing terms, eligibility, waiting period and life events of §9b's table, held per period so that a renewal adds a version rather than replacing a policy. *Built 2026-10-23 (§12.8), the policy's own sections and the contract term's.*
    - **3c, the levels:** `SponsorPolicy` and `Class` in `SettingScope` and in resolution, and the sponsor → policies narrowing of `GET overrides` that step 2b deferred here (§12.6). *Built 2026-10-23 (§12.9).*
-   - **3d, the consumers,** one at a time behind a fallback: the 834's `REF*1L` resolving against policy numbers, ID cards and the 837's `SBR03`, and claims eligibility.
+   - **3d, the consumers,** one at a time behind a fallback: billing terms replacing `Sponsor.BillingInfo` *(built 2026-10-23, §12.10)*, the 834's `REF*1L` resolving against policy numbers, ID cards and the 837's `SBR03`, and claims eligibility.
 4. **First consumers:**
    - enrollment retro limits, waiting periods, orphan grace and the full-replace guard;
    - the premium grace period, moved off the sponsor's billing info.
@@ -375,7 +375,21 @@ Built 2026-10-23. This closes the item step 2b deferred (§12.6) and wires the t
 - **An outage gives up the narrowing rather than the list,** as on the plan side. A sponsor whose contract could not be read still has every policy and class override returned, labelled unnarrowed, because narrowing on "no policies" would answer that the sponsor overrides nothing. A group that genuinely has no contract — which is every group until one is entered — *does* narrow to nothing, and that is correct: it has no policies.
 - **A policy id that does not name its group is reported, not guessed.** sponsor-service lists policies by group, and a policy node names only itself, so the group is taken from the policy's id. Where the id is not in that form, the class level comes back unnarrowed with its own reason rather than narrowed to nothing. The id format is therefore known in two services that share no package; it is pinned by a test on the tenant-service side, so a change on either side fails loudly instead of quietly matching nothing. If a third service needs it, it belongs in a shared contract.
 
-24 tests. Step 3d, the consumers, is next: billing terms replacing `Sponsor.BillingInfo`, the 834's `REF*1L` resolving against policy numbers, ID cards and the 837's `SBR03`, and claims eligibility — each behind a fallback, so a tenant with no contract behaves exactly as it does today.
+24 tests.
+
+### 12.10 Step 3d, first consumer: billing on the contract's terms
+
+Built 2026-10-23. The first thing to read a sponsor contract rather than merely store one: premium billing takes the day a premium falls due, how long it may run late, and how it is paid from the contract term in force over the period being billed, and from the sponsor record where there is no contract. This is the field §9b explicitly moves off `Sponsor.BillingInfo`.
+
+- **The fallback is the feature.** A group with no contract term covering the period bills exactly as it does today, which is every group until a contract is entered. Nothing has to be migrated, no tenant has to opt in, and a tenant that never enters a contract never sees a difference.
+- **"Could not read the contract" is not "there is no contract".** A sponsor-service failure, or a permission the deployment has not granted, leaves that one sponsor unbilled with a warning on the run — the same shape coverage-service failures already have, which never produce a $0 invoice. Billing them on the sponsor record instead would quietly bill last year's due day under this year's signed agreement, and nothing downstream would ever show which it used. One sponsor's unreadable contract does not stop the rest of the run.
+- **A contract with its billing left blank falls back, but says so.** It is a separate answer from "no contract" (`BillingNotEntered` against `NoContractTerm`) and is logged once per sponsor per run, because the two read very differently to a person: one is a group nobody has contracted with, the other is a contract somebody left half entered. A consumer treats them the same, which is why the endpoint rather than the consumer draws the distinction.
+- **Billing terms sit on their own route, not inside the term.** `GET api/v1/sponsors/{group}/billing-terms?asOf=` admits `billing:read` — what premium billing already holds to read the sponsor list — while the whole contract term needs `config:read`. Finance has no business reading a group's rates, eligibility or underwriting conditions to find out when its premium falls due, and the same reasoning already put the status-only `PUT` beside the full sponsor update.
+- **The date asked about is the period being billed, never today.** Terms are per contract year, so asking about "now" would bill March on next January's renewal the moment that renewal is entered.
+- **A contract term's billing account number is now masked like the sponsor record's.** It was not when 3b built it: the masking converter covered `BillingInfo` only, so the same number was written in the clear one route over, and the stricter rule decided nothing. A matching converter now covers `BillingTerms`, request bodies are still read unchanged so the number can be set, and storage is unaffected. Premium billing never reads the number at all.
+- **Only the three fields premium billing already uses move.** The contract's billing method and frequency are stored and read by nothing: honouring a quarterly frequency would change which periods are invoiced at all, which is a change to the billing run rather than to one sponsor's dates, and it belongs with whatever asks for it. A payment method the contract leaves blank keeps the sponsor record's, since a blank is an operational detail nobody agreed rather than a method of "none".
+
+21 tests. Still to come in 3d, each behind the same kind of fallback: the 834's `REF*1L` resolving against policy numbers, ID cards and the 837's `SBR03`, and claims eligibility.
 
 ## 13. Decisions (2026-10-22)
 

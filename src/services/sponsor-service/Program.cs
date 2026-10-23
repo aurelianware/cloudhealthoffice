@@ -27,8 +27,13 @@ if (args.Contains(SponsorService.Migrations.EncryptSponsorBankAccounts.Switch))
 
 builder.Services.AddControllers(options => options.Filters.Add<FieldProtectionExceptionFilter>())
     .AddCloudHealthOfficeJsonOptions()
-    // Responses never carry the full billing account number (last 4 only).
-    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Insert(0, new MaskedBillingInfoJsonConverter()));
+    // Responses never carry the full billing account number (last 4 only),
+    // on the sponsor record or on a contract term.
+    .AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.Converters.Insert(0, new MaskedBillingInfoJsonConverter());
+        o.JsonSerializerOptions.Converters.Insert(0, new MaskedBillingTermsJsonConverter());
+    });
 
 // ── Encryption at rest ─────────────────────────────────────────────
 // Bank routing/account numbers and the billing account number are stored

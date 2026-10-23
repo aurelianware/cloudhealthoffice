@@ -113,10 +113,20 @@ public class PremiumBillingService : IPremiumBillingService
             if (rated && _ratedInvoices == null)
                 throw new InvalidOperationException("Rated billing is enabled for this tenant but the rated invoice generator is not registered");
 
-            foreach (var sponsor in sponsors)
+            foreach (var listed in sponsors)
             {
+                var sponsor = listed;
                 try
                 {
+                    // The contract decides the due day, the grace period and
+                    // how the premium is paid where there is one; the sponsor
+                    // record decides where there is not. A contract that could
+                    // not be read throws, and the catch below leaves this
+                    // sponsor unbilled with a warning on the run, exactly as a
+                    // coverage-service failure does — it never bills them on
+                    // defaults the contract may have replaced.
+                    sponsor = await OnContractTermsAsync(listed, billingRun.TenantId, billingRun.BillingPeriod);
+
                     PremiumInvoice invoice;
                     if (rated)
                     {
@@ -595,6 +605,42 @@ public class PremiumBillingService : IPremiumBillingService
         invoice.RecalculateTotals();
 
         return await _invoiceRepository.CreateAsync(invoice);
+    }
+
+    /// <summary>
+    /// The sponsor as the contract in force over the billing period bills
+    /// them, or unchanged where the contract says nothing about billing
+    /// (plan-configuration.md §9b, step 3d).
+    ///
+    /// <para>
+    /// Only the three fields premium billing already uses move: the due day,
+    /// the grace period and the payment method. The contract's billing method
+    /// and frequency are read by nothing yet — honouring a quarterly frequency
+    /// would change which periods are invoiced at all, which is a change to the
+    /// run, not to one sponsor's dates.
+    /// </para>
+    /// </summary>
+    private async Task<SponsorDto> OnContractTermsAsync(SponsorDto sponsor, string tenantId, DateTime billingPeriod)
+    {
+        var terms = await _sponsorClient.GetBillingTermsAsync(tenantId, sponsor.GroupNumber, billingPeriod);
+        if (terms is null) return sponsor;
+
+        _logger.LogDebug(
+            "Group {GroupNumber} billed on its contract period starting {PeriodStart:yyyy-MM-dd}: due day {DueDay}, grace {GraceDays} days",
+            sponsor.GroupNumber, terms.ContractPeriodStart, terms.DueDay, terms.GracePeriodDays);
+
+        return new SponsorDto
+        {
+            GroupNumber = sponsor.GroupNumber,
+            EmployerName = sponsor.EmployerName,
+            LineOfBusiness = sponsor.LineOfBusiness,
+            BillingDay = terms.DueDay,
+            GracePeriodDays = terms.GracePeriodDays,
+            // The contract's own method where it names one; the sponsor
+            // record's where the contract left it blank, since a blank is an
+            // operational detail nobody agreed rather than a method of "none".
+            PaymentMethod = string.IsNullOrWhiteSpace(terms.PaymentMethod) ? sponsor.PaymentMethod : terms.PaymentMethod,
+        };
     }
 
     private async Task<List<SponsorDto>> FetchActiveSponsorsAsync(string tenantId, BillingRunCriteria criteria)

@@ -30,6 +30,17 @@ public interface ISponsorServiceClient
     /// </summary>
     Task<SponsorSuspensionOutcome> SuspendSponsorAsync(
         string tenantId, string groupNumber, string reason, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The billing terms the group's contract puts in force on
+    /// <paramref name="asOf"/>, or null where the contract has none to give —
+    /// no term covering the date, or a term whose billing was left blank. Null
+    /// is a real answer and the caller bills on the sponsor record as before.
+    /// Throws on anything else, because a contract that could not be read must
+    /// not be billed as a contract that says nothing.
+    /// </summary>
+    Task<SponsorBillingTerms?> GetBillingTermsAsync(
+        string tenantId, string groupNumber, DateTime asOf, CancellationToken cancellationToken = default);
 }
 
 public sealed class SponsorServiceClient : ISponsorServiceClient
@@ -142,6 +153,65 @@ public sealed class SponsorServiceClient : ISponsorServiceClient
         }
     }
 
+    public async Task<SponsorBillingTerms?> GetBillingTermsAsync(
+        string tenantId, string groupNumber, DateTime asOf, CancellationToken cancellationToken = default)
+    {
+        RequireTenant(tenantId);
+        var client = _httpClientFactory.CreateClient(HttpClientName);
+        var url = $"/api/v1/sponsors/{Uri.EscapeDataString(groupNumber)}/billing-terms?asOf={asOf:yyyy-MM-dd}";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add(TenantMiddleware.TenantHeaderName, tenantId);
+        using var response = await client.SendAsync(request, cancellationToken);
+
+        // 404 is the contract having no billing terms for the date, which is
+        // every group until a contract is entered. Anything else is thrown: a
+        // sponsor-service that is down, or a route that has moved, must not
+        // bill a year on last year's defaults without anyone noticing.
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            var reason = await ReadReasonAsync(response, cancellationToken);
+            if (reason == "BillingNotEntered")
+                _logger.LogInformation(
+                    "Group {GroupNumber} has a contract term in force on {AsOf:yyyy-MM-dd} with no billing terms entered; billing on the sponsor record",
+                    groupNumber.Replace("\r", string.Empty).Replace("\n", string.Empty), asOf);
+            return null;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await SafeReadAsync(response, cancellationToken);
+            throw new HttpRequestException(
+                $"sponsor-service answered {(int)response.StatusCode} {response.StatusCode} to the contract billing terms: {body}",
+                null, response.StatusCode);
+        }
+
+        var payload = await response.Content.ReadFromJsonAsync<BillingTermsWire>(JsonOptions, cancellationToken);
+        if (payload?.Billing is null)
+            throw new InvalidOperationException(
+                "sponsor-service answered 200 to the contract billing terms with no billing block");
+
+        return new SponsorBillingTerms(
+            payload.Billing.DueDay,
+            payload.Billing.GracePeriodDays,
+            payload.Billing.PaymentMethod,
+            payload.ContractPeriodStart);
+    }
+
+    /// <summary>The <c>reason</c> on a 404 body, or null where there is none.</summary>
+    private static async Task<string?> ReadReasonAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var body = await response.Content.ReadFromJsonAsync<BillingTermsNotFoundWire>(JsonOptions, cancellationToken);
+            return body?.Reason;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static SponsorDto ToSponsorDto(SponsorWire wire) => new()
     {
         GroupNumber = wire.GroupNumber,
@@ -196,7 +266,35 @@ public sealed class SponsorServiceClient : ISponsorServiceClient
         public int GracePeriodDays { get; set; } = 30;
         public string? PaymentMethod { get; set; }
     }
+
+    // ── GET /api/v1/sponsors/{group}/billing-terms ─────────────────────
+
+    internal sealed class BillingTermsWire
+    {
+        public DateTime ContractPeriodStart { get; set; }
+        public ContractBillingWire? Billing { get; set; }
+    }
+
+    internal sealed class ContractBillingWire
+    {
+        public int DueDay { get; set; } = 1;
+        public int GracePeriodDays { get; set; } = 30;
+        public string? PaymentMethod { get; set; }
+    }
+
+    internal sealed class BillingTermsNotFoundWire
+    {
+        public string? Reason { get; set; }
+    }
 }
+
+/// <summary>
+/// What a sponsor's contract says about billing on a date: the day the premium
+/// falls due, how long it may run late, how it is paid, and the contract period
+/// it was agreed for. The account number is deliberately absent — sponsor-service
+/// masks it and premium billing has never needed it.
+/// </summary>
+public sealed record SponsorBillingTerms(int DueDay, int GracePeriodDays, string? PaymentMethod, DateTime ContractPeriodStart);
 
 /// <summary>The result of asking sponsor-service to suspend a sponsor.</summary>
 public sealed record SponsorSuspensionOutcome(bool Success, int? StatusCode, string? Error)
