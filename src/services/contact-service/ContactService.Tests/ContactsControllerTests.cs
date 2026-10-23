@@ -137,6 +137,101 @@ public class ContactsControllerTests
         created!.ReasonCodes.Should().Equal("CLAIM_STATUS");
     }
 
+    // ── Reading ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_contact_that_does_not_exist_is_a_404_on_every_route()
+    {
+        _contacts.Setup(c => c.GetByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync((Contact?)null);
+
+        var controller = Controller();
+
+        (await controller.GetById("nope", default)).Result.Should().BeOfType<NotFoundResult>();
+        (await controller.Update("nope", new UpdateContactRequest { Revision = 1 }, default))
+            .Result.Should().BeOfType<NotFoundResult>();
+        (await controller.LinkSubject("nope",
+            new LinkSubjectRequest { Revision = 1, SubjectId = "claim-7" }, default))
+            .Result.Should().BeOfType<NotFoundResult>();
+        (await controller.Close("nope",
+            new CloseContactRequest { Revision = 1, Resolution = ContactResolution.ResolvedOnCall }, default))
+            .Result.Should().BeOfType<NotFoundResult>();
+        (await controller.Reopen("nope", new ReopenContactRequest { Revision = 1 }, default))
+            .Result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task A_contact_is_summarised_for_a_list_without_its_conversation()
+    {
+        var contact = Stored();
+        contact.Summary = "the whole conversation";
+        contact.DurationSeconds = 272;
+        contact.Subjects.Add(new ContactSubject
+        {
+            Type = ContactSubjectType.Claim, SubjectId = "claim-7", LinkedAt = Now,
+        });
+        _contacts.Setup(c => c.ListByMemberAsync("M1", It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync([contact]);
+
+        var result = await Controller().ListByMember("M1", 50, default);
+
+        var summary = result.Result.Should().BeOfType<OkObjectResult>()
+              .Which.Value.Should().BeAssignableTo<IReadOnlyList<ContactSummary>>()
+              .Which.Should().ContainSingle().Subject;
+
+        summary.ContactNumber.Should().Be("C-20261022-AAAA1111");
+        summary.CallerName.Should().Be("Ada Lovelace");
+        summary.SubjectCount.Should().Be(1);
+        summary.DurationSeconds.Should().Be(272);
+        summary.AgentId.Should().Be(ActorId);
+    }
+
+    [Fact]
+    public async Task A_provider_history_and_a_subject_search_each_summarise_too()
+    {
+        _contacts.Setup(c => c.ListByProviderAsync("1234567893", It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync([Stored(callerType: CallerType.Provider)]);
+        _contacts.Setup(c => c.ListBySubjectAsync(
+                     ContactSubjectType.Claim, "claim-7", It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync([Stored()]);
+
+        var controller = Controller();
+
+        (await controller.ListByProvider("1234567893", 50, default)).Result
+            .Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeAssignableTo<IReadOnlyList<ContactSummary>>()
+            .Which.Should().ContainSingle();
+
+        (await controller.ListBySubject(ContactSubjectType.Claim, "claim-7", 50, default)).Result
+            .Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeAssignableTo<IReadOnlyList<ContactSummary>>()
+            .Which.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task A_rep_asks_for_their_own_contacts_not_someone_elses()
+    {
+        _contacts.Setup(c => c.ListByAgentAsync(
+                     It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync([]);
+
+        await Controller().ListMine(openOnly: true, limit: 25, default);
+
+        // The agent comes from the token, never from the query string.
+        _contacts.Verify(c => c.ListByAgentAsync(ActorId, true, 25, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_contact_is_fetched_by_its_id()
+    {
+        Exists(Stored());
+
+        (await Controller().GetById("contact-1", default)).Result
+            .Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<Contact>()
+            .Which.ContactNumber.Should().Be("C-20261022-AAAA1111");
+    }
+
     // ── Working it ────────────────────────────────────────────────
 
     [Fact]
@@ -230,6 +325,118 @@ public class ContactsControllerTests
 
         contact.ProviderName.Should().Be("Mercy General");
         _contacts.Verify(c => c.UpdateAsync(It.IsAny<Contact>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Update_records_who_the_caller_turned_out_to_be()
+    {
+        var contact = Stored();
+        Exists(contact);
+        SavesSuccessfully();
+
+        await Controller().Update("contact-1", new UpdateContactRequest
+        {
+            Revision = 1,
+            MemberId = "M2",
+            MemberVerification = "member ID and date of birth",
+            Caller = new ContactCaller
+            {
+                Type = CallerType.Representative,
+                Name = "Grace Hopper",
+                Phone = "555-0100",
+                Relationship = "daughter",
+                AorOnFile = true,
+            },
+        }, default);
+
+        contact.MemberId.Should().Be("M2");
+        contact.MemberVerification.Should().Be("member ID and date of birth");
+        contact.Caller.Type.Should().Be(CallerType.Representative);
+        contact.Caller.AorOnFile.Should().BeTrue();
+        contact.History.Should().ContainSingle()
+               .Which.Detail.Should().Contain("member").And.Contain("verification").And.Contain("caller");
+    }
+
+    [Fact]
+    public async Task Update_records_the_provider_the_call_was_about()
+    {
+        var contact = Stored(callerType: CallerType.Provider);
+        Exists(contact);
+        SavesSuccessfully();
+
+        await Controller().Update("contact-1", new UpdateContactRequest
+        {
+            Revision = 1,
+            ProviderNpi = "1234567893",
+            ProviderName = "Mercy General",
+        }, default);
+
+        contact.ProviderNpi.Should().Be("1234567893");
+        contact.ProviderName.Should().Be("Mercy General");
+    }
+
+    [Fact]
+    public async Task Update_keeps_the_link_to_the_recording_and_the_transcript()
+    {
+        // The audio stays with the phone platform; CHO keeps a link to it and
+        // the transcript, which is text (cho-service.md §9, question 2).
+        var contact = Stored();
+        Exists(contact);
+        SavesSuccessfully();
+
+        await Controller().Update("contact-1", new UpdateContactRequest
+        {
+            Revision = 1,
+            RecordingLink = "https://platform.example/recordings/abc",
+            RecordingPlatform = "Amazon Connect",
+            TranscriptDocumentId = "doc-55",
+            Summary = "Explained the denial and reissued the EOB.",
+        }, default);
+
+        contact.RecordingLink.Should().Be("https://platform.example/recordings/abc");
+        contact.RecordingPlatform.Should().Be("Amazon Connect");
+        contact.TranscriptDocumentId.Should().Be("doc-55");
+        contact.Summary.Should().Be("Explained the denial and reissued the EOB.");
+        contact.History.Should().ContainSingle()
+               .Which.Detail.Should().Contain("recording").And.Contain("transcript").And.Contain("summary");
+    }
+
+    [Fact]
+    public async Task Update_replaces_the_reasons_but_ignores_an_empty_list()
+    {
+        var contact = Stored();
+        contact.ReasonCodes = ["CLAIM_STATUS"];
+        Exists(contact);
+        SavesSuccessfully();
+
+        await Controller().Update("contact-1", new UpdateContactRequest
+        {
+            Revision = 1, ReasonCodes = ["ID_CARD", "BENEFITS"],
+        }, default);
+        contact.ReasonCodes.Should().Equal("ID_CARD", "BENEFITS");
+
+        // An empty list is "I am not changing the reasons", not "clear them":
+        // a contact closed with no reason at all is a hole in the reporting.
+        await Controller().Update("contact-1", new UpdateContactRequest
+        {
+            Revision = contact.Revision, ReasonCodes = [],
+        }, default);
+        contact.ReasonCodes.Should().Equal("ID_CARD", "BENEFITS");
+    }
+
+    [Fact]
+    public async Task Update_drops_a_reason_the_tenant_no_longer_has()
+    {
+        var contact = Stored();
+        Exists(contact);
+        SavesSuccessfully();
+
+        await Controller().Update("contact-1", new UpdateContactRequest
+        {
+            Revision = 1, ReasonCodes = ["BENEFITS", "RETIRED_LAST_WEEK"],
+        }, default);
+
+        contact.ReasonCodes.Should().Equal("BENEFITS");
     }
 
     // ── Linking what was discussed ────────────────────────────────
