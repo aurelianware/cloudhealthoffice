@@ -158,8 +158,19 @@ public class PasInquiryTests
         var response = Single(new PasResponseBuilder().BuildInquiryResponse(result.Authorization!));
 
         response.Outcome.Should().Be(ClaimProcessingCodes.Complete);
-        response.Error.Should().ContainSingle();
-        response.Error[0].Code.Coding[0].Code.Should().Be("A3-CRITERIA");
+
+        // The decision is coded on the reviewAction extension (A3, from the
+        // record's own review action code); the reason is prose. Not a
+        // ClaimResponse.error: that element binds required to X12 list 901 and
+        // means the request was rejected. See PasResponseBuilder.DenialNote.
+        response.Error.Should().BeEmpty();
+        response.Extension.Should().ContainSingle(e =>
+            e.Url == "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewAction")
+            .Which.Extension.Should().ContainSingle().Which.Value.Should().BeOfType<Coding>()
+            .Which.Code.Should().Be("A3");
+        response.ProcessNote.Should().ContainSingle()
+            .Which.Text.Should().Contain("A3-CRITERIA")
+            .And.Contain("Does not meet clinical criteria.");
     }
 
     // ── Status freshness ───────────────────────────────────────────────────────

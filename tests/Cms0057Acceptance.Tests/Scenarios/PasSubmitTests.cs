@@ -369,13 +369,30 @@ public class PasSubmitTests
             .Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
 
         claimResponse.Disposition.Should().Be("denied");
-        var error = claimResponse.Error.Should().ContainSingle().Subject;
-        var coding = error.Code!.Coding.Should().ContainSingle().Subject;
-        coding.Code.Should().Be("X12-A3-278");
-        coding.System.Should().Be("http://terminology.hl7.org/CodeSystem/adjudication-error");
+
+        // The DECISION is coded where PAS defines it: the reviewAction
+        // extension's action code, A3 "not certified", from X12 list 306 — the
+        // same system and shape the pended path already uses for A4.
+        var reviewAction = claimResponse.Extension.Should().ContainSingle(e =>
+            e.Url == "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewAction").Subject;
+        var action = reviewAction.Extension.Should().ContainSingle().Subject
+            .Value.Should().BeOfType<Coding>().Subject;
+        action.Code.Should().Be("A3");
+        action.System.Should().Be("https://codesystem.x12.org/005010/306");
+
+        // The REASON is prose. It is deliberately not a ClaimResponse.error:
+        // that element binds required to X12 list 901 and asks whether the
+        // REQUEST was rejected, which a clinical denial is not. The element that
+        // asks why the review decided as it did is reviewAction.reasonCode,
+        // bound required to X12 list 886, which X12 licenses and the IG package
+        // enumerates none of — it is 0..*, so absent is conformant and invented
+        // is not.
+        claimResponse.Error.Should().BeEmpty();
+        var note = claimResponse.ProcessNote.Should().ContainSingle().Subject;
+        note.Text.Should().NotBeNullOrWhiteSpace();
         // The reason must be specific, never a bare "not medically necessary".
-        error.Code!.Text.Should().NotBeNullOrWhiteSpace();
-        error.Code!.Text!.ToLowerInvariant().Should().NotBe("not medically necessary");
+        note.Text!.ToLowerInvariant().Should().NotBe("not medically necessary");
+        note.Text.Should().Contain("X12-A3-278");
     }
 
     [Fact]
