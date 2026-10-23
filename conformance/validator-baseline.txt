@@ -55,3 +55,12 @@ carin-professional-basis: ExplanationOfBenefit.careTeam[0]: Error - Constraint f
 carin-oral-basis: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-prof-careTeam-practitioner: 'Professional EOB:  Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Oral-Basis)
 carin-inpatient-basis: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-inst-careTeam-practitioner: 'Institutional EOB: Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Inpatient-Institutional-Basis)
 carin-outpatient-basis: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-inst-careTeam-practitioner: 'Institutional EOB: Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Outpatient-Institutional-Basis)
+
+# The financial profiles inherit the invariant from their Basis baseDefinition,
+# so the same single-file residue appears once per profile on the Patient Access
+# goldens. Same cause, same resolution: a Bundle run, or Inferno against a
+# running server.
+claim-eob: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-prof-careTeam-practitioner: 'Professional EOB:  Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Professional-NonClinician-Basis)
+carin-oral-financial: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-prof-careTeam-practitioner: 'Professional EOB:  Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Oral-Basis)
+carin-inpatient-financial: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-inst-careTeam-practitioner: 'Institutional EOB: Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Inpatient-Institutional-Basis)
+carin-outpatient-financial: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-inst-careTeam-practitioner: 'Institutional EOB: Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Outpatient-Institutional-Basis)

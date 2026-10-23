@@ -30,9 +30,19 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 /// in-memory stand-in (tenant scoping is the Mongo repository's and is tested
 /// there). Synthetic data only.
 ///
-/// What this does not show: CARIN Blue Button conformance. The projection
-/// declares no CARIN BB profile and lacks elements the profile requires (see
-/// the PAT-01 row in docs/epa-gap-matrix.md §11), so the scenario is PARTIAL.
+/// What this does and does not show about CARIN Blue Button conformance: the
+/// projection now declares the CARIN BB 2.2.0 financial profile for its claim
+/// type and satisfies it structurally — the HL7 validator judges that over
+/// <c>conformance/golden/</c>, which is where cardinality, slicing and
+/// invariants belong rather than in an assertion written against the same
+/// understanding that produced the resource. What is asserted here is the one
+/// thing a validator run cannot show: that the resource a member actually
+/// receives through the real path carries the profile, so the validated shape
+/// and the served shape are the same resource.
+///
+/// The scenario stays PARTIAL on what neither can close: no external
+/// conformance suite has judged CHO as a server (gap G-60) — see the PAT-01 row
+/// in docs/epa-gap-matrix.md §11.
 /// </summary>
 public class PatientAccessClaimsTests
 {
@@ -135,6 +145,35 @@ public class PatientAccessClaimsTests
 
         Status(result).Should().Be(HttpStatusCode.BadGateway);
         Text(result).Should().NotContain(OtherMember);
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAT-01")]
+    [Trait("Backend", "Replace")]
+    public async Task PAT01_Replace_TheEobAMemberReceivesDeclaresTheCarinBlueButtonFinancialProfile()
+    {
+        var path = new Path(Claim("C1", Member));
+
+        var eob = Body(await path.ReadAsPatient(Member, "C1"), HttpStatusCode.OK);
+
+        // The profile the HL7 validator judges conformance against. An 837P
+        // selects the Professional NonClinician profile; the institutional and
+        // oral variants are exercised by their own goldens.
+        eob.GetProperty("meta").GetProperty("profile").EnumerateArray()
+            .Select(p => p.GetString())
+            .Should().Equal(
+                "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Professional-NonClinician");
+
+        // Two elements the profile requires and the earlier projection did not
+        // carry, read off the served resource rather than the projector: a
+        // total whose category is a member of C4BB's own adjudication value set,
+        // and the unique-claim-id identifier slice.
+        eob.GetProperty("total").EnumerateArray()
+            .Select(t => t.GetProperty("category").GetProperty("coding")[0].GetProperty("code").GetString())
+            .Should().Contain("submitted");
+
+        eob.GetProperty("identifier")[0].GetProperty("type").GetProperty("coding")[0]
+            .GetProperty("code").GetString().Should().Be("uc");
     }
 
     // ── Harness ────────────────────────────────────────────────────────────
