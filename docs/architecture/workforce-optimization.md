@@ -560,7 +560,9 @@ A forecast nobody scores is a decoration, and an investor will ask.
    privacy property of the design and it should not be traded away for a
    marginal accuracy gain.
 2. **Workers are identified only where the mechanism requires it.** Snapshots
-   carry `distinctWorkers` as a count. Memberships and per-worker throughput are
+   carry `distinctWorkers` as a count, decided and not merely deferred (§12 Q3):
+   the audit stream already holds the per-person events, so declining to
+   pre-aggregate them loses no answer. Memberships and per-worker throughput are
    read live, at the moment a rebalancing recommendation is computed, and the
    recommendation names the workers it proposes to move because a supervisor
    cannot act on an anonymous one. Per-worker series are **not** snapshotted, so
@@ -681,7 +683,7 @@ be sequenced together rather than each building half a reporting layer.
 |---|---|---|
 | 1 | Does this live in `work-management-service` or a new service? | **In work-management-service.** It needs queue configuration, memberships, items, due dates and the audit stream, and a separate service would have to copy or call for all of it. Contact volume comes in through one read endpoint. Revisit only if the forecaster's compute starts to interfere with `Get Next`. |
 | 2 | ~~Where does **available hours** come from (§5.3)?~~ | **Answered 2026-10-23 (Mark asked what was best).** Nowhere: the question was wrong. §5.3 now measures throughput per queue per weekday-hour from the snapshots, adds a tenant holiday calendar the arrival side needs anyway, and takes sparse dated exceptions from a supervisor for known future changes. No schedule, no shift table, no adapter on the critical path. |
-| 3 | Should per-worker throughput be snapshotted so a supervisor can see trends? | **No** in this capability. Per-person measurement belongs to the throughput report under its own permission, with its own retention. Making it a by-product of forecasting creates a two-year performance record nobody asked for. |
+| 3 | ~~Should per-worker throughput be snapshotted so a supervisor can see trends?~~ | **Answered 2026-10-23 (Mark): no, leave it out.** And it costs nothing to leave out, which is why it is an easy no: `WorkAuditEvent` already records every lease and completion with who did it, and is retained, so the throughput report in [portal-reporting.md](portal-reporting.md) §4.1 computes per-person figures **live** from those events when somebody runs it. Nothing becomes unanswerable; what is avoided is a standing per-person productivity record accruing as a by-product of forecasting. The forecast does not want it either, since §5.3 measures capacity per queue rather than per person. The counter-argument on the record: some buyers will ask for agent scorecards and call it the feature. If CHO ever sells that, it should be built deliberately — retention, access rules, a correction path — not inherited from here. |
 | 4 | Do we show forecasts to supervisors before the backtest gate passes? | No. Show "not enough history" with the date. A forecast that embarrasses itself once will not be trusted again. |
 | 5 | ~~Should `StaffingGap` findings be visible to anyone above the supervisor?~~ | **Answered 2026-10-23 (Mark).** The supervisor sees it and it rolls up to the director or VP who owns meeting compliance, who also needs to be able to intervene. Designed in §6.4, which turns "rolls up" into scope rather than a reporting line, and names the two gaps it exposes (no director role, no scope on `workqueue:admin`). |
 | 8 | Does scope on `workqueue:admin` land with the director tier, or on its own? | On its own, before it. It narrows what every existing supervisor can do, so it needs a migration and a conversation with any plan already running CHO — it should not arrive as a side effect of a forecasting capability. |

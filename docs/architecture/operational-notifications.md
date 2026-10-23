@@ -272,7 +272,10 @@ state:
   emptied team, a list whose members all left).
 
 This digest is counts and configuration. It contains no PHI by construction, it
-is small, and it is the artefact an IT group will genuinely read.
+is small, and it is the artefact an IT group will genuinely read. **It is
+therefore on for the IT list by default, whatever §10 Q3 nominates for
+individual escalations** — the narrow default applies to per-notification
+escalation, never to the digest.
 
 ### 5.4 Where IT's own channel is
 
@@ -386,7 +389,7 @@ delivery time rather than copying them.
 | 1 | Is the IT group a distribution list, or should CHO gain a real group concept in tenant-service? | A distribution list for IT specifically, since "IT" is not a CHO role and never will be. But the scope-based escalation in §5.2 wants the same structure that report schedule recipients and approval routing will want, so the **list belongs in tenant-service beside users and roles**, not as a notification-service concept — otherwise the second and third consumer each grow their own. |
 | 7 | Does this capability wait for the director role and scope (§5.2)? | No. Build tiers against distribution lists, and let a scoped role tier replace the hand-maintained list later without changing the topic contracts. Waiting would hold the notification capability behind a permissions change that narrows what supervisors can do today. |
 | 2 | Should individuals be able to mute a topic an admin subscribed them to? | Yes, except on topics marked `mandatory` (compliance, financial approvals), and the mute is visible to the admin in the coverage view. A mute an admin cannot see is how coverage silently disappears. |
-| 3 | Escalation to IT: every acknowledgeable business topic, or only the ones a plan nominates? | Nominated per tenant, defaulting to the ones with a regulatory or financial consequence. A plan whose IT group wants everything can say so; the default should not hand IT the firehose. |
+| 3 | ~~Escalation to IT: every acknowledgeable business topic, or only the ones a plan nominates?~~ | **Answered 2026-10-23 (Mark): nominated.** Narrow on individual escalations, and **always on for the §5.3 coverage digest**, which is the actual backstop and is PHI-free and small. Individual escalation defaults on only where there is a regulatory or financial consequence: `appeals.case.deadline_risk`, `work.queue.deadline_risk` on queues whose deadline comes from a rule pack, `payment.run.awaiting_approval`, `edi.inbound.failed`. Off by default: `report.run.failed`, `work.recommendation.proposed`, a single `correspondence.delivery.failed`, `enrollment.load.exceptions` below its share-of-file threshold. The reasoning is that a plan gets one chance at an IT group's attention — the first week of everything-on is what teaches them to filter the feed to a folder, and it does not come back. It stays tenant configuration because a small pilot plan whose IT group also runs operations may genuinely want everything, and that should not need a product change. |
 | 4 | Do we allow `bodyDetailed` (naming a member or claim) on **any** channel but in-portal? | No. It is one rule, it matches correspondence's, and every exception becomes a PHI review. |
 | 5 | How long are notifications kept? | 13 months, which covers a program-audit look-back on "were you told"; the delivery log the same. Longer only if a plan's own policy requires it. |
 | 6 | Does an unacknowledged `Critical` eventually become a work item? | Probably yes for the regulated clocks, which gives it an owner and a due date rather than an ever-louder alert — but it needs the work type and the queue, so it is a phase-3+ decision, not a phase-1 one. |
