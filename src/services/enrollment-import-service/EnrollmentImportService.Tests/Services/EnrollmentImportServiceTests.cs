@@ -43,6 +43,12 @@ public class EnrollmentImportServiceTests
         sponsorClient.Setup(s => s.CreateAsync(It.IsAny<string>(), It.IsAny<CreateSponsorRequestDto>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
+        // Default: REF*1L is neither a group number nor a policy number on
+        // file, which is the path that existed before policies did — the
+        // sponsor is created from the N1 loop and the value stands as sent.
+        sponsorClient.Setup(s => s.ResolveIdentifierAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SponsorIdentifier(SponsorIdentifierKind.Unknown));
+
         var benefitPlanClient = new Mock<IBenefitPlanServiceClient>();
         // Default: every plan code resolves, so tests that don't care about
         // coverage-mapping behavior see coverage created same as before.

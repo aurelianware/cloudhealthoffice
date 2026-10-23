@@ -58,6 +58,77 @@ public class HttpSponsorServiceClient : ISponsorServiceClient
         return null;
     }
 
+    public async Task<SponsorIdentifier> ResolveIdentifierAsync(
+        string tenantId, string value, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return new SponsorIdentifier(SponsorIdentifierKind.Unknown);
+
+        var client = _httpClientFactory.CreateClient(HttpClientName);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get, $"/api/v1/sponsors/resolve-identifier?value={Uri.EscapeDataString(value)}");
+        request.Headers.Add("X-Tenant-ID", tenantId);
+
+        using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
+
+        // 404 is an answer, not a failure: the value is on file as neither
+        // number. 409 is the ambiguous answer. Everything else — a 403, a 500,
+        // sponsor-service being down — must throw, because "could not look"
+        // read as "there is none" would send the import down the path that
+        // invents a sponsor.
+        if (response.StatusCode != HttpStatusCode.NotFound
+            && response.StatusCode != HttpStatusCode.Conflict)
+        {
+            response.EnsureSuccessStatusCode();
+        }
+
+        using var doc = await System.Text.Json.JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false), cancellationToken: ct)
+            .ConfigureAwait(false);
+        var root = doc.RootElement;
+
+        var kind = Text(root, "kind") switch
+        {
+            nameof(SponsorIdentifierKind.GroupNumber) => SponsorIdentifierKind.GroupNumber,
+            nameof(SponsorIdentifierKind.PolicyNumber) => SponsorIdentifierKind.PolicyNumber,
+            nameof(SponsorIdentifierKind.Ambiguous) => SponsorIdentifierKind.Ambiguous,
+            _ => SponsorIdentifierKind.Unknown,
+        };
+
+        if (kind == SponsorIdentifierKind.Ambiguous)
+        {
+            var candidates = new List<string>();
+            if (root.TryGetProperty("candidateGroupNumbers", out var listed)
+                && listed.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var candidate in listed.EnumerateArray())
+                {
+                    if (candidate.GetString() is { Length: > 0 } text) candidates.Add(text);
+                }
+            }
+            return new SponsorIdentifier(kind, CandidateGroupNumbers: candidates);
+        }
+
+        if (kind == SponsorIdentifierKind.Unknown) return new SponsorIdentifier(kind);
+
+        // A recognised kind with no group number is a wire mismatch, not an
+        // unknown value: failing loudly beats filing coverage against nothing.
+        var groupNumber = Text(root, "groupNumber");
+        if (string.IsNullOrEmpty(groupNumber))
+        {
+            throw new SponsorServiceException(
+                $"sponsor-service resolved '{value}' as {kind} but returned no group number",
+                response.StatusCode);
+        }
+
+        return new SponsorIdentifier(kind, groupNumber, Text(root, "policyNumber"));
+    }
+
+    private static string? Text(System.Text.Json.JsonElement element, string name) =>
+        element.TryGetProperty(name, out var found)
+        && found.ValueKind == System.Text.Json.JsonValueKind.String
+            ? found.GetString()
+            : null;
+
     public async Task CreateAsync(string tenantId, CreateSponsorRequestDto request, CancellationToken ct = default)
     {
         var client = _httpClientFactory.CreateClient(HttpClientName);

@@ -35,6 +35,23 @@ public partial class EnrollmentImportServiceDependentTests
         public int RunsCreated { get; private set; }
         public InMemoryEnrollmentEventRepository Events { get; } = new();
         public string? ResolvedPlanId { get; set; } = "resolved-plan-id";
+
+        /// <summary>
+        /// What sponsor-service says each REF*1L is. The default is the answer
+        /// that existed before policies did: neither number is on file, so the
+        /// value stands as sent and the sponsor is created from the N1 loop.
+        /// </summary>
+        public Func<string, SponsorIdentifier> ResolveIdentifier { get; set; } =
+            _ => new SponsorIdentifier(SponsorIdentifierKind.Unknown);
+
+        /// <summary>Every REF*1L the import actually asked about, in order.</summary>
+        public List<string> IdentifierLookups { get; } = new();
+
+        /// <summary>The group numbers sponsor-service already holds.</summary>
+        public HashSet<string> SponsorsOnFile { get; } = new(StringComparer.Ordinal) { "GRP0001", "GRP0009" };
+
+        /// <summary>Group numbers the import created a sponsor for, from the N1 loop.</summary>
+        public List<string> SponsorsCreated { get; } = new();
         public bool ReturnCreatedCoverageId { get; set; } = true;
         public string? ThrowOnExistsFor { get; set; }
         /// <summary>coverage-service fails the reinstate call for this coverage id.</summary>
@@ -162,9 +179,22 @@ public partial class EnrollmentImportServiceDependentTests
 
             var sponsorClient = new Mock<ISponsorServiceClient>();
             sponsorClient.Setup(s => s.ExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(true);
+                .ReturnsAsync((string _, string groupNumber, CancellationToken _) => SponsorsOnFile.Contains(groupNumber));
+            sponsorClient.Setup(s => s.CreateAsync(It.IsAny<string>(), It.IsAny<CreateSponsorRequestDto>(), It.IsAny<CancellationToken>()))
+                .Callback((string _, CreateSponsorRequestDto r, CancellationToken _) =>
+                {
+                    SponsorsCreated.Add(r.GroupNumber);
+                    SponsorsOnFile.Add(r.GroupNumber);
+                })
+                .Returns(Task.CompletedTask);
             sponsorClient.Setup(s => s.GetLineOfBusinessAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => LineOfBusiness);
+            sponsorClient.Setup(s => s.ResolveIdentifierAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((string _, string value, CancellationToken _) =>
+                {
+                    IdentifierLookups.Add(value);
+                    return ResolveIdentifier(value);
+                });
 
             var benefitPlanClient = new Mock<IBenefitPlanServiceClient>();
             benefitPlanClient.Setup(b => b.ResolvePlanIdAsync(

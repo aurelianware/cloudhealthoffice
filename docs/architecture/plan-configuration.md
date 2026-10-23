@@ -1,6 +1,6 @@
 # Plan configuration: settings that cascade, with overrides
 
-**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), steps 3a to 3c of step 3 (§§12.7–12.9), 3d's first consumer (§12.10) and the sponsor-service half of its second (§12.11); the rest of 3d is next.
+**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), steps 3a to 3c of step 3 (§§12.7–12.9) and two of 3d's consumers (§§12.10–12.12); ID cards, the 837's `SBR03` and claims eligibility are the rest of 3d.
 **Scope:** One way for every CHO service to define a business setting, set it at the right level of the plan's structure, override it further down, and explain where an effective value came from.
 
 **Related:**
@@ -244,7 +244,7 @@ Changes needing a reason or a second approver use the same pattern as two-person
    - **3a, the records:** sponsor policies with their classes, and contract terms with §9b's status flow. *Built 2026-10-23 (§12.7).*
    - **3b, terms versioned per contract year:** the tiers, rates, contribution, billing terms, eligibility, waiting period and life events of §9b's table, held per period so that a renewal adds a version rather than replacing a policy. *Built 2026-10-23 (§12.8), the policy's own sections and the contract term's.*
    - **3c, the levels:** `SponsorPolicy` and `Class` in `SettingScope` and in resolution, and the sponsor → policies narrowing of `GET overrides` that step 2b deferred here (§12.6). *Built 2026-10-23 (§12.9).*
-   - **3d, the consumers,** one at a time behind a fallback: billing terms replacing `Sponsor.BillingInfo` *(built 2026-10-23, §12.10)*, the 834's `REF*1L` resolving against policy numbers, ID cards and the 837's `SBR03`, and claims eligibility.
+   - **3d, the consumers,** one at a time behind a fallback: billing terms replacing `Sponsor.BillingInfo` *(built 2026-10-23, §12.10)*, the 834's `REF*1L` resolving against policy numbers *(built 2026-10-23, §§12.11–12.12)*, ID cards and the 837's `SBR03`, and claims eligibility.
 4. **First consumers:**
    - enrollment retro limits, waiting periods, orphan grace and the full-replace guard;
    - the premium grace period, moved off the sponsor's billing info.
@@ -399,7 +399,7 @@ Built 2026-10-23. The first thing to read a sponsor contract rather than merely 
 
 ### 12.11 Step 3d, second consumer, first half: what an inbound `REF*1L` names
 
-Built 2026-10-23, in sponsor-service. The 834's `REF*1L` is "group or policy number" and a trading partner may send either; CHO has always read it as a group number and nothing else. This half answers which one a value is. The enrollment half, which records the answer, waits on a decision (below).
+Built 2026-10-23, in sponsor-service. The 834's `REF*1L` is "group or policy number" and a trading partner may send either; CHO has always read it as a group number and nothing else. This half answers which one a value is; §12.12 records the answer.
 
 - **The group number is tried first and wins outright.** That one ordering is what makes this additive: a value that resolves to a group today resolves to the same group afterwards, and a policy number is only ever consulted for a value that means nothing at all today. If a group is called `SHARED` and some *other* group happens to have a policy numbered `SHARED`, the file has always meant the group and still does. Reversing the order would silently re-file an existing partner's members under a different employer, which is why the order has a test of its own rather than being left to a reading of the code.
 - **One policy number on two groups answers ambiguous, with the groups named.** A policy number is unique within a group and nothing makes it unique across groups, so this is a reachable state rather than a corrupt one. Picking either would file a member under the wrong employer; the response says which groups it could be and refuses to choose. `GET api/v1/sponsors/resolve-identifier` answers 409 for it, 200 for either resolved kind and 404 for a value that is neither.
@@ -408,9 +408,25 @@ Built 2026-10-23, in sponsor-service. The 834's `REF*1L` is "group or policy num
 
 11 tests, most of them about the two orderings above.
 
-**What is not built, and why.** The enrollment importer does not yet record which policy a member enrolled under, because there is nowhere to put it: a coverage record carries a group number and a plan id and no policy of its own (the only `PolicyNumber` on it belongs to *other* insurance, for coordination of benefits). Adding that field is what the second half does, and it is also what ID cards, the 837's `SBR03` and claims eligibility are all actually waiting for — none of them can show a member's policy until enrolment records one. Resolving it instead by matching a member's benefit plan against the group's policies goes ambiguous exactly when a sponsor offers two policies on one plan, which is the case §9b exists to model, so it is not a usable substitute.
+Resolving a member's policy instead by matching their benefit plan against the group's policies goes ambiguous exactly when a sponsor offers two policies on one plan, which is the case §9b exists to model, so it is not a usable substitute for the file saying which.
 
-Still to come in 3d, each behind the same kind of fallback: the enrollment half above, then ID cards and the 837's `SBR03`, and claims eligibility.
+### 12.12 Step 3d, second consumer, second half: enrolment records the policy
+
+Built 2026-10-23. The enrollment importer now asks §12.11 what each `REF*1L` is, files the member under the group either way, and keeps the policy number on the coverage it writes.
+
+- **It closes a defect rather than only adding a field.** An unrecognised `REF*1L` has always fallen through to the create path, so a partner sending a policy number got a brand new employer whose group number *was* that policy number — silently, alongside the real employer, with that member's coverage, premium and reporting hanging off the wrong one. A policy number is now recognised for what it is, and the group it belongs to is the group the member is filed under.
+- **The policy goes on the coverage record, not the member.** A §9b policy is a group plus a policy number pointing at a benefit plan, and coverage already carried the other two parts of that identity. It is a property of the coverage rather than of the person: one member can hold medical under one policy and dental under another, and at renewal the same member moves policy while staying the same member — on a member record those two cases are indistinguishable. Coverage is already effective-dated the way a policy is, so a renewal that moves someone is a new coverage span, which is machinery that already exists. Every consumer still waiting (ID cards, the 837's `SBR03`, claims eligibility) already reads coverage, so no other home would have saved them a read.
+- **Named `SponsorPolicyNumber`, holding the number and not the id.** `Coverage` already has a `PolicyNumber` — on `OtherInsuranceInfo`, meaning the *other* carrier's policy for coordination of benefits — and the two sitting an object apart meaning opposite things is a trap worth naming out of existence. The number rather than the policy id because the id is `{tenant}|{group}|{policyNumber}`, both of which the coverage already knows, so the id would repeat them and could drift from them.
+- **An ambiguous number rejects that transaction, naming both employers.** It lands in the enrollment exception queue under its own reason code (`AMBIGUOUS_SPONSOR_IDENTIFIER`) rather than any generic refusal, so the queue can tell "the file names two employers" from everything else, and it is reprocessable once the partner sends the group number or the duplicate policy number is resolved. Picking a candidate would file a member, their coverage and their premium under the wrong employer with nothing downstream showing it happened.
+- **"Could not ask" must never read as "neither number is on file",** because that is precisely the branch that creates an employer. A sponsor-service outage or a missing permission fails that member into the queue as reprocessable; a 404 and a 409 are answers and are acted on, and a 200 naming a kind but no group number is refused as a wire mismatch rather than filing coverage against nothing.
+- **One lookup per distinct `REF*1L` in a file, not one per member.** A real 834 carries thousands of members under a handful of groups, and the sponsor file does not change under an import. Only a recognised answer is remembered: "neither number is on file" is the one answer the import itself invalidates a moment later, when the N1 loop creates the sponsor, so it is asked again.
+- **A dependent with no `REF*1L` of its own is held under exactly its subscriber's policy;** one carrying its own resolves it separately, since a dependent's Loop 2000 may name a policy just as a subscriber's may. A standalone dependent clears the state first, so the previous member's policy cannot carry into it.
+- **The eligibility class deliberately did not ride along.** There is no migration to share — coverage is a Mongo document and a new nullable field reads as null on every existing record — so the only thing bundling them would have bought is a field nothing writes (a class would have to come out of the 834's reporting categories, which nothing maps) and nothing reads (the only class in the codebase is the rate table inside the contract). Always-null would read as "this member has no class" rather than "we do not capture class", which is worse than absent. It goes in with the first thing that rates or restricts eligibility by class, which is also where where-it-comes-from gets answered rather than guessed.
+- **What the policy's own benefit plan does not do.** `resolve-identifier` also answers the policy's `BenefitPlanId`, and the importer still resolves the plan from the HD plan code as before. Letting the policy override that would change which plan members land on, which is a separate decision with its own fallback, not a side effect of reading the identifier.
+
+24 tests, split between what the wire answers mean and what the importer does with each answer.
+
+Still to come in 3d, each behind the same kind of fallback: ID cards and the 837's `SBR03`, then claims eligibility.
 
 ## 13. Decisions (2026-10-22)
 
