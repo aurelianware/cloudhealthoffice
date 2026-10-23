@@ -83,6 +83,7 @@ public class IppsPricerParityTests
         decimal? ValueBasedPurchasingAdjustmentFactor,
         bool LowVolumeTemporaryRelief,
         decimal LowVolumeAdjustmentFactor,
+        decimal PassThroughPerDiem,
         IppsHospitalSpecificCategory HospitalSpecificCategory,
         decimal FacilitySpecificRate,
         bool HospitalAcquiredConditionReduction);
@@ -185,6 +186,7 @@ public class IppsPricerParityTests
                         : null,
                 LowVolumeTemporaryRelief: Indicator("temporaryReliefIndicator") == "Y",
                 LowVolumeAdjustmentFactor: Provider("lowVolumeAdjustmentFactor"),
+                PassThroughPerDiem: Provider("passThroughTotalAmount"),
                 HospitalSpecificCategory: CategoryFor(Indicator("providerType")),
                 FacilitySpecificRate: Provider("ppsFacilitySpecificRate"),
                 HospitalAcquiredConditionReduction:
@@ -404,6 +406,7 @@ public class IppsPricerParityTests
             ValueBasedPurchasingAdjustmentFactor = input.ValueBasedPurchasingAdjustmentFactor,
             LowVolumeTemporaryRelief = input.LowVolumeTemporaryRelief,
             LowVolumeAdjustmentFactor = input.LowVolumeAdjustmentFactor,
+            PassThroughPerDiem = input.PassThroughPerDiem,
             HospitalSpecificCategory = input.HospitalSpecificCategory,
             FacilitySpecificRate = input.FacilitySpecificRate,
             HospitalAcquiredConditionReduction = input.HospitalAcquiredConditionReduction,
@@ -612,6 +615,66 @@ public class IppsPricerParityTests
         // HospitalSpecificUpdateFrom calibrates against; the rest are not.
         Assert.True(paid >= 4, $"only {paid} stays were paid a hospital-specific portion");
         Assert.True(refused >= 1, "no stay in the corpus lost the hospital-specific comparison");
+    }
+
+    [Fact]
+    public void The_pass_through_is_the_one_amount_this_oracle_cannot_confirm()
+    {
+        var withAmountOnFile = 0;
+
+        foreach (var (input, expected, actual) in Comparable())
+        {
+            // CMS computes the pass-through only for a request marked as coming
+            // from its web pricer — `cms-pricer-client: WEB-PRICER` — and the
+            // price-claim endpoint this oracle drives never takes that path.
+            // So the column is empty on every row, and this asserts it rather
+            // than assuming it: the day CMS starts reporting a figure, this
+            // fails and the pass-through becomes comparable like everything
+            // else.
+            Assert.Null(expected.Number("passthrough_total_plus_misc"));
+
+            if (input.PassThroughPerDiem <= 0m)
+            {
+                Assert.Equal(0m, actual.PassThroughPayment);
+                continue;
+            }
+
+            withAmountOnFile++;
+
+            // And CHO does pay one, so the disagreement is explicit. This is
+            // the one place in this file where CHO paying more than CMS
+            // reported is the expected result, and the reason is that CMS did
+            // not compute the amount rather than that it computed zero.
+            Assert.Equal(
+                input.PassThroughPerDiem * input.LengthOfStay, actual.PassThroughPayment);
+            Assert.True(actual.PassThroughPayment > 0m);
+        }
+
+        // The corpus has to carry such a hospital, or the assertion above is
+        // about nothing and the boundary goes unrecorded.
+        Assert.True(
+            withAmountOnFile >= 1,
+            "no reference stay has a pass-through amount on its provider record");
+    }
+
+    [Fact]
+    public void The_model_one_bundled_adjustment_is_dead_for_this_fiscal_year()
+    {
+        // CMS's rule multiplies the hospital's Model 1 discount by zero for any
+        // discharge after 31 December 2016, so the adjustment is identically
+        // zero however the provider record is filled in. The corpus's
+        // pass-through row carries a 10 percent discount for exactly this
+        // check: CMS pays it the same total as the plain stay it is otherwise
+        // identical to in every rate-determining respect, which is why nothing
+        // in CHO models the adjustment at all.
+        var answers = Answers().ToDictionary(answer => answer.Case);
+
+        var bundled = answers["pass-through-amount-on-file"].Number("total_payment");
+        var plain = answers["wage-index-below-one"].Number("total_payment");
+
+        Assert.NotNull(bundled);
+        Assert.NotNull(plain);
+        Assert.Equal(plain!.Value, bundled!.Value);
     }
 
     [Fact]

@@ -97,7 +97,7 @@ perdiem".
 
 ## The corpus
 
-Thirty-one invented stays. There is no member, no claim number and no real
+Thirty-two invented stays. There is no member, no claim number and no real
 provider: the CMS certification numbers are fabricated, chosen only so their
 first two digits are a plausible state code, because the pricer reads the state
 from them. The wage-index localities are real published CBSA codes, which is
@@ -181,9 +181,8 @@ asserts that each exclusion is still a real corpus row:
   code 12, and which post-acute rule a DRG carries is a column of CMS's DRG
   table that nothing here imports yet.
 
-And the pricer pays several things the calculator still has no notion of:
-pass-through amounts, new-technology add-ons and the bundled-payment
-adjustment. It also works in covered days and lifetime reserve days, where
+And the pricer pays two things the calculator still has no notion of:
+new-technology add-ons and the islet isolation add-on. It also works in covered days and lifetime reserve days, where
 `IppsStay` has no beneficiary-day concept. Those are recorded in ADR 024 as the
 remaining work, and they are why this calculator is still not wired into
 adjudication.
@@ -276,3 +275,43 @@ invertible to a hundredth of a cent. Those two rows are therefore calibration
 rather than comparison — the standing `wage-index-below-one` already has for
 the capital rate — and the parity test says so where it does the inversion. The
 other five rows are not implied by them.
+
+## The one thing this oracle cannot check, and one it turned out not to need
+
+### Pass-through costs are behind a door this endpoint does not open
+
+CMS pays the hospital's pass-through amount for costs outside the prospective
+rate, and `CalculateHmoTotals` is the only rule in the whole IPPS set that
+touches those provider-record fields. It is gated on `isWebPricerRequest()`,
+which is the header `cms-pricer-client: WEB-PRICER` — and sending that header
+to `/v2/price-claim` changes nothing, because the web-pricer path is not
+reachable on this build. The `passthrough_total_plus_misc` column is therefore
+empty on all thirty-two rows, and `pass-through-amount-on-file` carries a
+100-dollar-per-day figure on the provider record purely so that fact stays
+checked: CMS pays it the plain total.
+
+So the pass-through is **the single amount CHO pays that this oracle cannot
+confirm**, and `IppsPricerParityTests` says so in a test rather than leaving it
+to be noticed. Two things were still worth taking from CMS's source:
+
+- **It is per covered day, not per discharge.** `passThroughTotalAmount × B-N-LOS`.
+  The provider-record field is named as a total and is a per diem, so reading
+  the name underpays a 30-day stay thirtyfold.
+- **The organ-acquisition, direct-medical-education and stem-cell amounts are
+  components inside that figure, not additions to it.** CMS subtracts them back
+  out on a managed-care claim and otherwise never reads them. Summing all four
+  pays the same costs twice.
+
+### The Model 1 bundled adjustment is dead code
+
+It was on the missing list and should not have been. FY2026 uses
+`CalculateBundleReduction2021`, whose COBOL reads
+`IF B-DISCHARGE-DATE > 20161231 COMPUTE WK-MODEL1-BUNDLE-DISPRCNT = (1 - (P-MODEL1-BUNDLE-DISPRCNT * 0))`
+— the discount is multiplied by **zero**, so the adjustment is `baseDrgPay −
+baseDrgPay` for every FY2026 discharge. Model 1 bundling ended on 31 December
+2016 and CMS kept the code path with the factor neutered.
+
+Confirmed rather than assumed: the same corpus row carries a 10 percent
+discount and demonstration code 61, and CMS pays it the same total as the plain
+stay. There is a parity test on that equality, so if CMS ever revives the
+factor the repository finds out.

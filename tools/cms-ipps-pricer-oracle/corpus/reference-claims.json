@@ -559,6 +559,25 @@
         "lowVolumeAdjustmentFactor": 0.2,
         "hacReductionParticipantIndicator": "Y"
       }
+    },
+    {
+      "name": "pass-through-amount-on-file",
+      "why": "A hospital with a pass-through amount per covered day on its provider record. CMS pays NOTHING for it here, and that is the point: its pricer computes the pass-through only for a request marked as coming from its web pricer, and this endpoint never takes that path. So this row pins the one boundary of the oracle -- the pass-through is the single amount CHO pays that CMS's program cannot be made to confirm -- and it will start reporting a figure the day that changes.",
+      "ccn": "450030",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 30,
+      "coveredDays": 30,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "passThroughTotalAmount": 100.0,
+        "passThroughAmountForOrganAcquisition": 30.0,
+        "passThroughAmountForDirectMedicalEducation": 20.0,
+        "bundleModel1Discount": 0.1
+      }
     }
   ]
 }

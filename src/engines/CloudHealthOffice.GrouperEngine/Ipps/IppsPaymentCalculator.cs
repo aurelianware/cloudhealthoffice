@@ -365,6 +365,16 @@ public sealed record IppsAdjustments(
 /// <param name="Adjustments">
 /// The four hospital-level adjustments taken on the assembled payment.
 /// </param>
+/// <param name="PassThroughPayment">
+/// Costs paid outside the prospective rate, per covered day. Added after the
+/// hospital-acquired-condition penalty, so it escapes both the penalty and the
+/// low-volume base.
+///
+/// <para>
+/// <b>The one amount here that CMS's pricer could not be made to confirm.</b>
+/// See the note on <see cref="IppsPaymentCalculator"/>.
+/// </para>
+/// </param>
 /// <param name="Notes">What a reader of the payment should know about it.</param>
 public sealed record IppsPayment(
     int FiscalYear,
@@ -374,6 +384,7 @@ public sealed record IppsPayment(
     IppsOutlier Outlier,
     IppsHospitalSpecificPortion HospitalSpecific,
     IppsAdjustments Adjustments,
+    decimal PassThroughPayment,
     IReadOnlyList<string> Notes)
 {
     /// <summary>The full DRG payment, before any transfer reduction or outlier.</summary>
@@ -395,8 +406,11 @@ public sealed record IppsPayment(
     public decimal PaymentBeforeAdjustments =>
         PaymentBeforeOutliers + Outlier.Payment + HospitalSpecific.Payment;
 
-    /// <summary>The total paid.</summary>
-    public decimal Total => PaymentBeforeAdjustments + Adjustments.Total;
+    /// <summary>
+    /// The total paid: the case payment, the four adjustments, and then the
+    /// pass-through amount, which CMS adds last and so outside the penalty.
+    /// </summary>
+    public decimal Total => PaymentBeforeAdjustments + Adjustments.Total + PassThroughPayment;
 }
 
 /// <summary>Raised when a stay cannot be paid from the data given.</summary>
@@ -422,11 +436,33 @@ public sealed class IppsPaymentFailedException(string message) : Exception(messa
 /// </para>
 ///
 /// <para>
+/// <b>One amount here is not parity-validated, and it is the pass-through
+/// payment.</b> Everything else in this class is held to CMS's own pricer on
+/// every build. The pass-through cannot be: CMS computes it only for a request
+/// marked as coming from its web pricer, and the price-claim endpoint the
+/// oracle drives never takes that path — the amount comes back absent whatever
+/// is on the provider record. So the formula here is read off
+/// <c>CalculateHmoTotals</c>, with the COBOL quoted above it, and the
+/// arithmetic is three lines; but it has not been <i>executed</i> by CMS, which
+/// is a weaker claim than the rest of this file makes and the reason it says so
+/// here rather than in a commit message. The managed-care variant, where CMS
+/// subtracts the organ-acquisition and education components back out and pays
+/// no teaching adjustment at all, is not modelled: nothing in CHO distinguishes
+/// a managed-care claim yet.
+/// </para>
+///
+/// <para>
 /// <b>This is still not a Medicare payment.</b> Components CMS pays and this
-/// does not: pass-through amounts for direct medical education and organ
-/// acquisition, new-technology add-ons (a published list of devices and
-/// amounts, so an importer rather than a formula), and the bundled-payment
-/// adjustment. <see cref="IppsPayment"/> keeps every
+/// does not: new-technology add-ons (a published list of devices and amounts,
+/// so an importer rather than a formula) and the islet isolation add-on (a flat
+/// 18,848 for one qualifying procedure code and 37,696 for more than one, which
+/// needs CMS's diagnosis and procedure code tables rather than a formula).
+/// <b>The Model 1 bundled-payment adjustment is not in that list, and used to
+/// be:</b> CMS's rule for it multiplies the hospital's discount by zero for any
+/// discharge after 31 December 2016, so it is identically zero for every FY2026
+/// claim. Confirmed against the pricer with a 10 percent discount and the
+/// demonstration code on file, which pays the same total as without them.
+/// Modelling it would be modelling dead code. <see cref="IppsPayment"/> keeps every
 /// intermediate, which is what lets the parity run find a disagreement in one
 /// line rather than in a total.
 /// </para>
@@ -539,6 +575,19 @@ public static class IppsPaymentCalculator
             operatingBaseDrgPayment: operating.BasePayment * fraction,
             notes);
 
+        // Last, and so outside the penalty and outside the low-volume base.
+        // Per covered day, not per discharge, and not reduced by a transfer:
+        // the figure is already a per diem, so the length of the stay is the
+        // only thing that scales it.
+        var passThrough = provider.PassThroughPerDiem * stay.LengthOfStayDays;
+        if (passThrough != 0m)
+        {
+            notes.Add(
+                $"Pass-through costs of {passThrough:C}: {provider.PassThroughPerDiem:C} per day "
+                + $"for {stay.LengthOfStayDays} days, added after the "
+                + "hospital-acquired-condition penalty and so untouched by it.");
+        }
+
         return new IppsPayment(
             rates.FiscalYear,
             operating,
@@ -547,6 +596,7 @@ public static class IppsPaymentCalculator
             outlier,
             hospitalSpecific,
             adjustments,
+            passThrough,
             notes)
         {
             PaymentBeforeOutliers = paid

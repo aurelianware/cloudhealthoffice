@@ -865,7 +865,7 @@ Build order:
    the pricer itself as a runnable jar, to satisfy Freedom of Information Act
    requests, along with its Java source *with the original COBOL quoted as
    comments above each rule*. `tools/cms-ipps-pricer-oracle` runs it over
-   thirty-one invented stays and commits what it paid;
+   thirty-two invented stays and commits what it paid;
    `IppsPricerParityTests` holds the calculator to those amounts on every
    build, with no CMS artifact present. The tool's README has the whole of it,
    including the five undocumented provider-record fields that stop a
@@ -1040,10 +1040,50 @@ Build order:
    has — and the parity test says so at the inversion. The other five
    hospital-specific rows are not implied by them.
 
+   **Pass-through costs are paid, and they are the one amount the oracle
+   cannot confirm.** `CalculateHmoTotals` is the only rule in the whole IPPS set
+   that reads the provider record's pass-through fields, and it is gated on
+   `isWebPricerRequest()` — the header `cms-pricer-client: WEB-PRICER`. Sending
+   that header to the price-claim endpoint changes nothing, because the
+   web-pricer path is not reachable on the published jar. So the formula is read
+   off CMS's source with the COBOL quoted above it, the arithmetic is three
+   lines, and it has not been *executed* by CMS. That is a weaker claim than the
+   rest of this step makes, which is why it is stated at
+   `IppsPayment.PassThroughPayment`, in the oracle's README, and here, rather
+   than only in a commit message. Two things came out of the source anyway:
+
+   - **It is per covered day, not per discharge:** `passThroughTotalAmount ×
+     length of stay`. The provider-record field is named as a total and is a per
+     diem, so reading the name underpays a 30-day stay thirtyfold. A transfer
+     does not reduce it either — it is already a per diem.
+   - **The organ-acquisition, direct-medical-education and stem-cell amounts are
+     components inside that figure, not additions to it.** CMS subtracts them
+     back out on a managed-care claim and otherwise never reads them; summing
+     all four pays the same costs twice. The managed-care variant, where CMS
+     also pays no teaching adjustment at all, is not modelled, because nothing
+     in CHO distinguishes a managed-care claim yet.
+
+   A corpus row carries a pass-through amount on file so the boundary stays
+   checked: the column is empty on all thirty-two rows, a parity test asserts
+   that, and the day CMS starts reporting a figure the test fails and the
+   amount becomes comparable like everything else.
+
+   **The Model 1 bundled adjustment was on this list and should not have been:
+   it is dead code.** FY2026 uses `CalculateBundleReduction2021`, whose COBOL
+   reads `IF B-DISCHARGE-DATE > 20161231 COMPUTE WK-MODEL1-BUNDLE-DISPRCNT = (1
+   - (P-MODEL1-BUNDLE-DISPRCNT * 0))` — the discount is multiplied by **zero**,
+   so the adjustment is `baseDrgPay − baseDrgPay` for every FY2026 discharge.
+   Model 1 bundling ended on 31 December 2016 and CMS kept the path with the
+   factor neutered. Confirmed rather than assumed: the same corpus row carries a
+   10 percent discount and demonstration code 61, and CMS pays it the same total
+   as the plain stay, with a parity test on that equality. Modelling it would
+   have been modelling dead code, which is worth saying because it was written
+   down as a gap for two revisions of this ADR.
+
    **What is still missing**, and why this is not yet wired into adjudication.
-   CMS pays pass-through amounts for direct medical education and organ
-   acquisition, new-technology add-ons and the bundled-payment adjustment, and
-   this pays none of them. And CMS works in
+   CMS pays new-technology add-ons and the islet isolation add-on — a flat
+   18,848 for one qualifying procedure code and 37,696 for more than one — and
+   this pays neither. Both need CMS's code tables rather than a formula. And CMS works in
    covered days and lifetime reserve days, reporting regular, reserve and
    outlier days used, where `IppsStay` has no beneficiary-day concept at all —
    the last of those is a model change rather than an arithmetic one, and

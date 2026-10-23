@@ -1088,6 +1088,85 @@ public class IppsPaymentCalculatorTests
     }
 
     // ─────────────────────────────────────────────────────────
+    //  Pass-through costs, and where they sit in the total
+    // ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Pass_through_costs_are_paid_per_covered_day_and_not_per_discharge()
+    {
+        var provider = IppsProvider.Plain("123456", wageIndex: 1m) with
+        {
+            PassThroughPerDiem = 100m
+        };
+
+        var short_ = IppsPaymentCalculator.Pay(Year(), provider, Stay(los: 3));
+        var long_ = IppsPaymentCalculator.Pay(Year(), provider, Stay(los: 30));
+
+        // CMS multiplies the provider file's figure by the length of stay, so a
+        // ten-times-longer stay is paid ten times the pass-through. The field
+        // CMS holds it in is named as though it were a total, which is the
+        // mistake this test exists to catch.
+        Assert.Equal(300m, short_.PassThroughPayment);
+        Assert.Equal(3_000m, long_.PassThroughPayment);
+    }
+
+    [Fact]
+    public void Pass_through_costs_escape_the_low_volume_base_and_the_penalty()
+    {
+        var provider = IppsProvider.Plain("123456", wageIndex: 1m) with
+        {
+            PassThroughPerDiem = 100m,
+            LowVolumeTemporaryRelief = true,
+            LowVolumeAdjustmentFactor = 0.25m,
+            HospitalAcquiredConditionReduction = true
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay(los: 3));
+
+        // CMS adds the pass-through after the penalty, so neither the uplift nor
+        // the penalty sees it: the 6,500 case payment gives a 1,625 uplift and a
+        // -81.25 penalty, exactly as it would with no pass-through at all, and
+        // the 300 lands on top.
+        Assert.Equal(6_500m, payment.PaymentBeforeAdjustments);
+        Assert.Equal(1_625m, payment.Adjustments.LowVolume);
+        Assert.Equal(-81.25m, payment.Adjustments.HospitalAcquiredConditionPenalty);
+        Assert.Equal(300m, payment.PassThroughPayment);
+        Assert.Equal(8_343.75m, payment.Total);
+    }
+
+    [Fact]
+    public void A_transfer_does_not_reduce_the_pass_through()
+    {
+        var provider = IppsProvider.Plain("123456", wageIndex: 1m) with
+        {
+            PassThroughPerDiem = 100m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(
+            Year(),
+            provider,
+            Stay(kind: IppsDischargeKind.TransferredToAcuteCare, los: 1, geometricMean: 4m));
+
+        // The figure is already a per diem, so the days of the stay are the only
+        // thing that scales it. Applying the transfer fraction on top would pay
+        // half a day's costs for a day the patient was there. Note this is the
+        // claim's length of stay, one day, and not the two per diems 412.4(f)(1)
+        // pays the DRG by.
+        Assert.Equal(0.5m, payment.Transfer!.Fraction);
+        Assert.Equal(100m, payment.PassThroughPayment);
+    }
+
+    [Fact]
+    public void A_hospital_with_no_pass_through_amount_on_file_is_paid_none()
+    {
+        var payment = IppsPaymentCalculator.Pay(
+            Year(), IppsProvider.Plain("123456", 1m), Stay(los: 30));
+
+        Assert.Equal(0m, payment.PassThroughPayment);
+        Assert.Equal(6_500m, payment.Total);
+    }
+
+    // ─────────────────────────────────────────────────────────
     //  The total, and the fiscal year
     // ─────────────────────────────────────────────────────────
 

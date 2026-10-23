@@ -169,6 +169,27 @@ public enum IppsHospitalSpecificCategory
 /// pays <b>nothing</b> rather than being capped — a cap would quietly pay a
 /// hospital whose provider file is wrong.
 /// </param>
+/// <param name="PassThroughPerDiem">
+/// The hospital's pass-through amount <b>per covered day</b> for costs paid
+/// outside the prospective rate — direct medical education, organ acquisition,
+/// allogeneic stem cell acquisition and a few miscellaneous items.
+///
+/// <para>
+/// <b>CMS's provider-specific file calls this field a total amount, and it is
+/// nothing of the kind.</b> Its pricer multiplies it by the claim's length of
+/// stay, so a 30-day stay at a hospital with a 100-dollar figure on file is
+/// paid 3,000 and not 100. Reading the field name and paying it per discharge
+/// underpays a long stay by a factor of its length.
+/// </para>
+///
+/// <para>
+/// The provider file also carries the organ-acquisition, direct-medical-education
+/// and stem-cell amounts separately, and those are <i>components already inside
+/// this figure</i>, not additions to it: CMS subtracts them back out on a
+/// managed-care claim and otherwise never reads them. Summing all four would
+/// pay the same costs twice.
+/// </para>
+/// </param>
 /// <param name="HospitalSpecificCategory">
 /// Whether this hospital is paid a hospital-specific portion, and on which
 /// terms. <see cref="IppsHospitalSpecificCategory.None"/> at almost every
@@ -212,6 +233,7 @@ public sealed record IppsProvider(
     decimal? ValueBasedPurchasingAdjustmentFactor,
     bool LowVolumeTemporaryRelief,
     decimal LowVolumeAdjustmentFactor,
+    decimal PassThroughPerDiem,
     IppsHospitalSpecificCategory HospitalSpecificCategory,
     decimal FacilitySpecificRate,
     bool HospitalAcquiredConditionReduction)
@@ -241,6 +263,7 @@ public sealed record IppsProvider(
         ValueBasedPurchasingAdjustmentFactor: null,
         LowVolumeTemporaryRelief: false,
         LowVolumeAdjustmentFactor: 0m,
+        PassThroughPerDiem: 0m,
         HospitalSpecificCategory: IppsHospitalSpecificCategory.None,
         FacilitySpecificRate: 0m,
         HospitalAcquiredConditionReduction: false);
