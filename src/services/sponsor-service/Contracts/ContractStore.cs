@@ -23,6 +23,11 @@ public interface IContractStore
     /// </summary>
     Task<bool> ReplacePolicyAsync(SponsorPolicy policy, long expectedRevision, CancellationToken ct = default);
 
+    Task<IReadOnlyList<PolicyTerms>> ListPolicyTermsAsync(string tenantId, string policyId, CancellationToken ct = default);
+    Task<PolicyTerms?> GetPolicyTermsAsync(string tenantId, string id, CancellationToken ct = default);
+    Task<PolicyTerms> InsertPolicyTermsAsync(PolicyTerms terms, CancellationToken ct = default);
+    Task<bool> ReplacePolicyTermsAsync(PolicyTerms terms, long expectedRevision, CancellationToken ct = default);
+
     Task<IReadOnlyList<ContractTerm>> ListTermsAsync(string tenantId, string groupNumber, CancellationToken ct = default);
     Task<ContractTerm?> GetTermAsync(string tenantId, string id, CancellationToken ct = default);
     Task<ContractTerm> InsertTermAsync(ContractTerm term, CancellationToken ct = default);
@@ -30,8 +35,8 @@ public interface IContractStore
 }
 
 /// <summary>
-/// MongoDB, collections <c>sponsor-policies</c> and
-/// <c>sponsor-contract-terms</c>. Both are revision-guarded the same way the
+/// MongoDB, collections <c>sponsor-policies</c>, <c>sponsor-policy-terms</c>
+/// and <c>sponsor-contract-terms</c>. All are revision-guarded the same way the
 /// sponsor record is: a replace succeeds only while the stored revision is
 /// still the one the write was based on, so a concurrent edit fails rather
 /// than being silently undone.
@@ -39,12 +44,15 @@ public interface IContractStore
 public sealed class ContractStoreMongo : IContractStore
 {
     private readonly IMongoCollection<SponsorPolicy> _policies;
+    private readonly IMongoCollection<PolicyTerms> _policyTerms;
     private readonly IMongoCollection<ContractTerm> _terms;
 
     public ContractStoreMongo(IMongoDatabase database, IConfiguration configuration)
     {
         _policies = database.GetCollection<SponsorPolicy>(
             configuration["SponsorContracts:PolicyCollection"] ?? "sponsor-policies");
+        _policyTerms = database.GetCollection<PolicyTerms>(
+            configuration["SponsorContracts:PolicyTermCollection"] ?? "sponsor-policy-terms");
         _terms = database.GetCollection<ContractTerm>(
             configuration["SponsorContracts:TermCollection"] ?? "sponsor-contract-terms");
     }
@@ -79,6 +87,38 @@ public sealed class ContractStoreMongo : IContractStore
             policy, cancellationToken: ct);
         if (result.MatchedCount != 0) return true;
         policy.Revision = expectedRevision;
+        return false;
+    }
+
+    public async Task<IReadOnlyList<PolicyTerms>> ListPolicyTermsAsync(string tenantId, string policyId, CancellationToken ct = default)
+    {
+        var b = Builders<PolicyTerms>.Filter;
+        var found = await _policyTerms.Find(b.Eq(t => t.TenantId, tenantId) & b.Eq(t => t.PolicyId, policyId)).ToListAsync(ct);
+        return found.OrderBy(t => t.PeriodStart).ToList();
+    }
+
+    public async Task<PolicyTerms?> GetPolicyTermsAsync(string tenantId, string id, CancellationToken ct = default)
+    {
+        var b = Builders<PolicyTerms>.Filter;
+        return await _policyTerms.Find(b.Eq(t => t.TenantId, tenantId) & b.Eq(t => t.Id, id)).FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<PolicyTerms> InsertPolicyTermsAsync(PolicyTerms terms, CancellationToken ct = default)
+    {
+        terms.Revision = 0;
+        await _policyTerms.InsertOneAsync(terms, cancellationToken: ct);
+        return terms;
+    }
+
+    public async Task<bool> ReplacePolicyTermsAsync(PolicyTerms terms, long expectedRevision, CancellationToken ct = default)
+    {
+        var b = Builders<PolicyTerms>.Filter;
+        terms.Revision = expectedRevision + 1;
+        var result = await _policyTerms.ReplaceOneAsync(
+            b.Eq(t => t.TenantId, terms.TenantId) & b.Eq(t => t.Id, terms.Id) & PolicyTermsRevisionIs(expectedRevision),
+            terms, cancellationToken: ct);
+        if (result.MatchedCount != 0) return true;
+        terms.Revision = expectedRevision;
         return false;
     }
 
@@ -125,6 +165,14 @@ public sealed class ContractStoreMongo : IContractStore
         return expected == 0
             ? b.Or(b.Eq(p => p.Revision, 0L), b.Exists(p => p.Revision, false))
             : b.Eq(p => p.Revision, expected);
+    }
+
+    private static FilterDefinition<PolicyTerms> PolicyTermsRevisionIs(long expected)
+    {
+        var b = Builders<PolicyTerms>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(t => t.Revision, 0L), b.Exists(t => t.Revision, false))
+            : b.Eq(t => t.Revision, expected);
     }
 
     private static FilterDefinition<ContractTerm> TermRevisionIs(long expected)

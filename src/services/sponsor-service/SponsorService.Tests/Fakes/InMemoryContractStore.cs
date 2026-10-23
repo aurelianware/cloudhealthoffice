@@ -30,6 +30,7 @@ public sealed class InMemoryContractStore : IContractStore
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly Dictionary<string, Stored> _policies = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Stored> _policyTerms = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Stored> _terms = new(StringComparer.Ordinal);
 
     /// <summary>A document as it sits in the store, with the revision it is at.</summary>
@@ -48,6 +49,13 @@ public sealed class InMemoryContractStore : IContractStore
         set => _beforeReplacePolicy = value;
     }
 
+    /// <summary>The same interleaving point for a policy's terms.</summary>
+    public Action? BeforeReplacePolicyTerms
+    {
+        get => _beforeReplacePolicyTerms;
+        set => _beforeReplacePolicyTerms = value;
+    }
+
     /// <summary>The same interleaving point for a contract term.</summary>
     public Action? BeforeReplaceTerm
     {
@@ -56,6 +64,7 @@ public sealed class InMemoryContractStore : IContractStore
     }
 
     private Action? _beforeReplacePolicy;
+    private Action? _beforeReplacePolicyTerms;
     private Action? _beforeReplaceTerm;
 
     /// <summary>Runs the other writer, and only once, so the retry can land.</summary>
@@ -72,6 +81,13 @@ public sealed class InMemoryContractStore : IContractStore
         var key = Key(tenantId, id);
         var stored = _policies[key];
         _policies[key] = stored with { Revision = stored.Revision + 1 };
+    }
+
+    public void BumpPolicyTermsRevision(string tenantId, string id)
+    {
+        var key = Key(tenantId, id);
+        var stored = _policyTerms[key];
+        _policyTerms[key] = stored with { Revision = stored.Revision + 1 };
     }
 
     public void BumpTermRevision(string tenantId, string id)
@@ -108,6 +124,36 @@ public sealed class InMemoryContractStore : IContractStore
         }
         policy.Revision = expectedRevision + 1;
         _policies[key] = new Stored(JsonSerializer.Serialize(policy, Json), policy.Revision);
+        return Task.FromResult(true);
+    }
+
+    public Task<IReadOnlyList<PolicyTerms>> ListPolicyTermsAsync(string tenantId, string policyId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<PolicyTerms>>(All<PolicyTerms>(_policyTerms)
+            .Where(t => t.TenantId == tenantId && t.PolicyId == policyId)
+            .OrderBy(t => t.PeriodStart)
+            .ToList());
+
+    public Task<PolicyTerms?> GetPolicyTermsAsync(string tenantId, string id, CancellationToken ct = default) =>
+        Task.FromResult(Read<PolicyTerms>(_policyTerms, Key(tenantId, id)));
+
+    public Task<PolicyTerms> InsertPolicyTermsAsync(PolicyTerms terms, CancellationToken ct = default)
+    {
+        terms.Revision = 0;
+        _policyTerms[Key(terms.TenantId, terms.Id)] = new Stored(JsonSerializer.Serialize(terms, Json), 0);
+        return Task.FromResult(terms);
+    }
+
+    public Task<bool> ReplacePolicyTermsAsync(PolicyTerms terms, long expectedRevision, CancellationToken ct = default)
+    {
+        Interleave(ref _beforeReplacePolicyTerms);
+        var key = Key(terms.TenantId, terms.Id);
+        if (!_policyTerms.TryGetValue(key, out var stored) || stored.Revision != expectedRevision)
+        {
+            terms.Revision = expectedRevision;
+            return Task.FromResult(false);
+        }
+        terms.Revision = expectedRevision + 1;
+        _policyTerms[key] = new Stored(JsonSerializer.Serialize(terms, Json), terms.Revision);
         return Task.FromResult(true);
     }
 
@@ -155,6 +201,7 @@ public sealed class InMemoryContractStore : IContractStore
         switch (document)
         {
             case SponsorPolicy policy: policy.Revision = stored.Revision; break;
+            case PolicyTerms terms: terms.Revision = stored.Revision; break;
             case ContractTerm term: term.Revision = stored.Revision; break;
         }
         return document;
