@@ -235,11 +235,22 @@ public sealed class FhirPatientProjector : IFhirPatientProjector
         return patient;
     }
 
+    /// <summary>
+    /// X12 834 DMG03 to FHIR administrative-gender.
+    ///
+    /// <para>
+    /// The fallthrough is not a mapping. US Core requires <c>Patient.gender</c>, so
+    /// the element cannot be omitted to say "CHO holds a value it does not
+    /// recognise", and <c>unknown</c> is the only conformant code left — which is
+    /// why <see cref="StoredGenderCodes"/> refuses an unrecognised code at the
+    /// request instead. Records written before that validation existed still reach
+    /// here, and still have to project to something.
+    /// </para>
+    /// </summary>
     private static string MapGender(string? g) => g?.ToUpperInvariant() switch
     {
-        "M" => "male",
-        "F" => "female",
-        "U" => "unknown",
+        StoredGenderCodes.Male => "male",
+        StoredGenderCodes.Female => "female",
         _ => "unknown"
     };
 

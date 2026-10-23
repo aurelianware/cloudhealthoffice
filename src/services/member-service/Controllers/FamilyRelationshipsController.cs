@@ -366,6 +366,8 @@ public class AddDependentMember
     [Required] public string LastName { get; set; } = string.Empty;
     public string? MiddleName { get; set; }
     [Required] public DateTime DateOfBirth { get; set; }
+
+    [RegularExpression(StoredGenderCodes.Pattern, ErrorMessage = StoredGenderCodes.ValidationMessage)]
     public string? Gender { get; set; }
     public string? SSN { get; set; }
     public string? GroupNumber { get; set; }
