@@ -321,10 +321,19 @@ Base `/api/v1/work`. Tenant and actor always from the CHO token.
 | `GET queues` (with open / leased counts), `GET {id}` (with audit) | `workqueue:read` |
 | `admin/queues` CRUD, `admin/queues/reorder`, `admin/teams` CRUD, `admin/memberships` CRUD, `admin/users/{userId}/queues`, `admin/recompute`, `admin/reconcile` | `workqueue:admin` |
 
+`workqueue:work` says a person may use the work engine; what they may *do*
+with an item is the work type's own entitlement, enforced by its domain
+service. Claims-service gated its own `/resolve` and edit overrides on
+`workqueue:work` until 2026-10-23 and now requires `claims:work`, which is
+what resolving a claim actually needs: member services holds `workqueue:work`
+for its follow-ups and must never approve or deny a claim.
+
 Roles: ClaimsExaminer `workqueue:read`, `workqueue:work`; ClaimsSupervisor adds
 `workqueue:assign`, `workqueue:reassign`, `workqueue:admin` (supervisors manage
 their teams' memberships and the queue configuration); TenantAdmin all through
-`*:*`; ComplianceOfficer `workqueue:read` through `*:read`. The four names are
+`*:*`; ComplianceOfficer `workqueue:read` through `*:read`; MemberServices and
+ProviderRelations `workqueue:read` and `workqueue:work`, for the contact
+follow-ups they raise, and nothing more. The four names are
 constants on `ChoRolePermissions` (`WorkQueueRead/Work/Assign/Admin`), reusing
 the `workqueue:*` names claims-service and the role catalogue already had.
 

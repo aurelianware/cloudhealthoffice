@@ -41,7 +41,7 @@ public class ClaimEditsController : ControllerBase
         var claim = await _claims.GetByIdAsync(claimId);
         if (claim is null) return NotFound();
 
-        var canWork = _actor.HasPermission(ClaimsPermissions.WorkQueueWork);
+        var canWork = _actor.HasPermission(ClaimsPermissions.Work);
         var canSupervise = _actor.HasPermission(ClaimsPermissions.OverrideEdit);
         var edits = ClaimEditCatalog.Edits(claim.PendDetails).Select(e =>
         {

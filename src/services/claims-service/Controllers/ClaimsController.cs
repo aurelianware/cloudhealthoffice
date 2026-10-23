@@ -1434,7 +1434,7 @@ public class ClaimsController : ControllerBase
 
     /// <summary>Marks a claim's accumulator adjustment review resolved.</summary>
     [HttpPost("work-queue/{claimId}/accumulator-adjustment/resolve")]
-    [RequirePermission(ClaimsPermissions.WorkQueueWork)]
+    [RequirePermission(ClaimsPermissions.Work)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> ResolveAccumulatorAdjustment(string claimId) =>
@@ -1520,7 +1520,7 @@ public class ClaimsController : ControllerBase
     /// </list></para>
     /// </summary>
     [HttpPost("work-queue/{claimId}/resolve")]
-    [RequirePermission(ClaimsPermissions.WorkQueueWork)]
+    [RequirePermission(ClaimsPermissions.Work)]
     [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

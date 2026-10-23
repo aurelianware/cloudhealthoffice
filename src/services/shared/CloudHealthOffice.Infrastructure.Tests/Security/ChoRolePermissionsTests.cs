@@ -180,6 +180,12 @@ public class ChoRolePermissionsTests
     [InlineData(ChoRolePermissions.MemberServices, ChoRolePermissions.WorkQueueAdmin, false)]
     [InlineData(ChoRolePermissions.ProviderRelations, ChoRolePermissions.WorkQueueWork, true)]
     [InlineData(ChoRolePermissions.ProviderRelations, ChoRolePermissions.WorkQueueAdmin, false)]
+    // Holding workqueue:work must not carry claims:work with it: claims-service
+    // gated /resolve on the former until 2026-10-23, so granting it to the
+    // service roles would have let them approve and deny pended claims.
+    [InlineData(ChoRolePermissions.MemberServices, "claims:work", false)]
+    [InlineData(ChoRolePermissions.ProviderRelations, "claims:work", false)]
+    [InlineData(ChoRolePermissions.ClaimsExaminer, "claims:work", true)]
     [InlineData(ChoRolePermissions.ComplianceOfficer, ChoRolePermissions.WorkQueueRead, true)]
     [InlineData(ChoRolePermissions.ComplianceOfficer, ChoRolePermissions.WorkQueueAssign, false)]
     public void Work_management_grants(string role, string permission, bool expected)
