@@ -214,6 +214,7 @@ services:
       - "5008:8080"
     environment:
       <<: *common-env
+      Services__SponsorService: http://sponsor-service:8080
     depends_on:
       mongodb:
         condition: service_healthy
@@ -240,6 +241,7 @@ services:
       - "5010:8080"
     environment:
       <<: *common-env
+      Services__TenantService: http://tenant-service:8080
     depends_on:
       mongodb:
         condition: service_healthy

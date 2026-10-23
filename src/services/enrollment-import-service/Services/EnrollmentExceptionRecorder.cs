@@ -146,6 +146,8 @@ internal sealed class EnrollmentExceptionRecorder
     private static string DescribeSource(Settings.ResolvedEnrollmentSetting s) => s.Source switch
     {
         "Default" => s.SourceKey is null ? "platform default" : $"platform default for {s.SourceKey}",
+        "LineOfBusiness" => $"{s.SourceKey} setting",
+        "Tenant" => "tenant setting",
         _ => $"{s.Source} setting",
     };
 

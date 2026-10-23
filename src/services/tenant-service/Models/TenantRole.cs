@@ -94,7 +94,8 @@ public static class StandardRoles
             "claims:override-approve", "claims:override-edit", "workqueue:assign", "workqueue:reassign",
             "workqueue:admin",
             "reports:claims", "claims:void", "claims:adjust",
-            "encounters:read", "encounters:write"
+            "encounters:read", "encounters:write",
+            "config:read"
         }
     };
 
@@ -110,7 +111,8 @@ public static class StandardRoles
             "eligibility:check", "claims:read", "claims:note", "coverage:read",
             "authorizations:read", "providers:read",
             "documents:read", "documents:write",
-            "payer-to-payer:initiate"
+            "payer-to-payer:initiate",
+            "config:read"
         }
     };
 
@@ -126,7 +128,8 @@ public static class StandardRoles
             "enrollment:read", "enrollment:process",
             "coverage:read", "coverage:write", "benefits:read", "providers:read",
             "documents:read", "documents:write",
-            "payer-to-payer:initiate"
+            "payer-to-payer:initiate",
+            "config:read"
         }
     };
 
@@ -220,7 +223,53 @@ public static class StandardRoles
         {
             "workspace:use",
             "compliance:read", "authorizations:read", "audit:read",
-            "reference-data:read"
+            "reference-data:read", "config:read"
+        }
+    };
+
+    // Plan configuration roles (docs/architecture/plan-configuration.md §9a).
+    public static readonly TenantRole AccountManager = new()
+    {
+        RoleName = "AccountManager",
+        Description = "Enter a group's terms (sponsor, policy and class settings) while working new business and renewals",
+        IsBuiltIn = true,
+        Permissions = new List<string>
+        {
+            "workspace:use", "config:read", "config:sponsor", "benefits:read", "reference-data:read"
+        }
+    };
+
+    public static readonly TenantRole Underwriter = new()
+    {
+        RoleName = "Underwriter",
+        Description = "Approve terms outside the product's negotiable ranges",
+        IsBuiltIn = true,
+        Permissions = new List<string>
+        {
+            "workspace:use", "config:read", "config:approve", "benefits:read", "reference-data:read"
+        }
+    };
+
+    public static readonly TenantRole ConfigurationAnalyst = new()
+    {
+        RoleName = "ConfigurationAnalyst",
+        Description = "Build programs and plans, set negotiable ranges, configure sponsors",
+        IsBuiltIn = true,
+        Permissions = new List<string>
+        {
+            "workspace:use", "config:read", "config:product", "config:sponsor", "benefits:read", "reference-data:read"
+        }
+    };
+
+    public static readonly TenantRole ConfigurationManager = new()
+    {
+        RoleName = "ConfigurationManager",
+        Description = "All plan configuration: tenant, carrier and line-of-business settings, locks, approvals and promotion",
+        IsBuiltIn = true,
+        Permissions = new List<string>
+        {
+            "workspace:use", "config:read", "config:sponsor", "config:product", "config:enterprise", "config:approve",
+            "benefits:read", "reference-data:read"
         }
     };
 
@@ -251,6 +300,10 @@ public static class StandardRoles
         FinanceApprover,
         ComplianceOfficer,
         ComplianceViewer,
+        AccountManager,
+        Underwriter,
+        ConfigurationAnalyst,
+        ConfigurationManager,
         TenantAdmin
     };
 

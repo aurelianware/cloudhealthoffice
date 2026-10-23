@@ -46,21 +46,13 @@ public class ProviderAndPatientAccessTests
         eobBundle.Entry.Should().NotBeNull();
     }
 
-    // ── PROV-02 attribution enforcement ─────────────────────────────────────────
-
-    [Fact]
-    [Trait("Scenario", "PROV-02")]
-    public async Task PROV02_NonAttributedMember_ReturnsNoData()
-    {
-        // A member the provider is not attributed to yields no data at the data
-        // layer. (The 403-class FHIR OperationOutcome for a missing/again-scoped
-        // token is enforced by SmartScopeEnforcementMiddleware — see SEC-01.)
-        var members = await Provider.GetMembersByPatientIdAsync("pat-999-not-attributed");
-        members.Should().BeEmpty();
-
-        var payments = await Provider.GetPaymentsByPatientIdAsync("pat-999-not-attributed");
-        payments.Should().BeEmpty();
-    }
+    // PROV-02 (attribution enforcement) is driven through the real composed
+    // decision, the real attribution sources and a real HTTP hop into
+    // claims-service in ProviderAccessAttributionTests.PROV02_Replace_*. The
+    // test that stood here asked the mock data layer for a member id that does
+    // not exist, so "not attributed" and "no such member" were the same
+    // assertion (§6.1, D-30); the replacement's negative cases are real members
+    // the provider has no relationship with.
 
     // PROV-03 (patient opt-out honored) is driven through the real composed
     // decision in ProviderAccessConsentTests.PROV03_*.
