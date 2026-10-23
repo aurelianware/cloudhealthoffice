@@ -974,20 +974,49 @@ public class PremiumBillingServiceTests
 internal class BillingMockHttpMessageHandler : HttpMessageHandler
 {
     private readonly Func<HttpRequestMessage, HttpResponseMessage> _handler;
+    private readonly bool _routeUnmatchedContractReads;
 
     public BillingMockHttpMessageHandler(HttpResponseMessage response)
     {
         _handler = _ => response;
+        _routeUnmatchedContractReads = true;
     }
 
-    public BillingMockHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> handler)
+    /// <param name="answersContractReads">
+    /// true where the handler answers the contract billing-terms route itself,
+    /// so this class leaves it alone.
+    /// </param>
+    public BillingMockHttpMessageHandler(
+        Func<HttpRequestMessage, HttpResponseMessage> handler, bool answersContractReads = false)
     {
         _handler = handler;
+        _routeUnmatchedContractReads = !answersContractReads;
     }
+
+    /// <summary>
+    /// The contract billing-terms route answers 404 <c>NoContractTerm</c>
+    /// unless the test's own handler is written for it. A tenant with no
+    /// sponsor contract is what every test here describes, and that route
+    /// returning a sponsor list instead would be a wire mismatch the client is
+    /// right to refuse (plan-configuration.md §12.10). A test about the
+    /// contract passes a handler that matches the path itself.
+    /// </summary>
+    private static bool IsContractBillingTerms(HttpRequestMessage request) =>
+        request.RequestUri?.AbsolutePath.EndsWith("/billing-terms", StringComparison.Ordinal) == true;
 
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        if (_routeUnmatchedContractReads && IsContractBillingTerms(request))
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
+            {
+                Content = new StringContent(
+                    """{"reason":"NoContractTerm","error":"no contract term in force"}""",
+                    System.Text.Encoding.UTF8, "application/json"),
+            });
+        }
+
         var response = _handler(request);
         response.Content ??= new StringContent(string.Empty);
         if (response.Content.Headers.ContentType == null)

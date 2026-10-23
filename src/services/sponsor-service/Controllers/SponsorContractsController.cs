@@ -86,6 +86,52 @@ public sealed class SponsorContractsController(ContractService contracts, ICurre
             : Ok(term);
     }
 
+    /// <summary>
+    /// The billing terms to bill a date on, taken from the contract term in
+    /// force over it (step 3d).
+    ///
+    /// <para>
+    /// This sits beside the full term rather than inside it because premium
+    /// billing holds <c>billing:read</c>, not the <c>config:read</c> the whole
+    /// contract needs, and has no business reading a group's rates,
+    /// eligibility or underwriting conditions to find out when its premium
+    /// falls due. The account number is masked here as it is everywhere else.
+    /// </para>
+    ///
+    /// <para>
+    /// 404 carries the reason, because the two ways of having no contract
+    /// billing read differently to a human even though a consumer falls back
+    /// the same way for both: <c>NoContractTerm</c> is a group with no contract
+    /// covering the date, and <c>BillingNotEntered</c> is a contract whose
+    /// billing was left blank.
+    /// </para>
+    /// </summary>
+    [HttpGet("billing-terms")]
+    [RequirePermission("billing:read,config:read,enrollment:read")]
+    public async Task<IActionResult> BillingInForce([FromRoute] string groupNumber, [FromQuery] DateTime? asOf, CancellationToken ct)
+    {
+        var on = asOf ?? DateTime.UtcNow;
+        var resolved = await contracts.BillingInForceAsync(TenantId, groupNumber, on, ct);
+        if (resolved.Outcome == BillingResolutionOutcome.Resolved)
+            return Ok(new
+            {
+                asOf = on.Date,
+                contractPeriodStart = resolved.ContractTerm!.PeriodStart,
+                contractStatus = resolved.ContractTerm.Status.ToString(),
+                billing = resolved.Billing,
+            });
+
+        return NotFound(new
+        {
+            asOf = on.Date,
+            reason = resolved.Outcome.ToString(),
+            error = resolved.Outcome == BillingResolutionOutcome.BillingNotEntered
+                ? $"Group '{groupNumber}' has a contract term for the period starting "
+                  + $"{resolved.ContractTerm!.PeriodStart:yyyy-MM-dd}, but its billing terms were never entered."
+                : $"Group '{groupNumber}' has no contract term signed or active on {on:yyyy-MM-dd}.",
+        });
+    }
+
     /// <summary>Opens a draft term for a contract period.</summary>
     [HttpPost("contract-terms")]
     [RequirePermission("config:sponsor")]
