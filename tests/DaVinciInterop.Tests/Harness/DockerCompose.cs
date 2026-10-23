@@ -128,6 +128,35 @@ public sealed class DockerCompose
         return outcome.Combined;
     }
 
+    /// <summary>
+    /// The compose services of this project that currently have a running
+    /// container, as Compose itself names them.
+    ///
+    /// <para>
+    /// Log capture asks for this rather than iterating the scenario's declared
+    /// targets. A target is one service, and the thing it needs in order to
+    /// answer at all may be another: an Inferno kit is an app, a worker, a queue
+    /// and a validator, and when a run goes wrong the sentence explaining why is
+    /// usually in one of the three the scenario never names.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<string>> RunningServicesAsync(
+        IEnumerable<string> profiles, TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        var args = BaseArgs(profiles);
+        args.AddRange(["ps", "--status", "running", "--format", "{{.Service}}"]);
+        var outcome = await InvokeAsync(args, timeout, cancellationToken);
+
+        return outcome.Succeeded
+            ? outcome.StandardOutput
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0)
+                .Distinct(StringComparer.Ordinal)
+                .ToList()
+            : [];
+    }
+
     /// <summary>Reports whether a service's container is running.</summary>
     public async Task<bool> IsRunningAsync(string service, TimeSpan timeout, CancellationToken cancellationToken = default)
     {

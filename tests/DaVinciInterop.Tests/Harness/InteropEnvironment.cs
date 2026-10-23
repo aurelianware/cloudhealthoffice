@@ -156,22 +156,58 @@ public sealed class InteropEnvironment : IAsyncDisposable
         StartupDuration = stopwatch.Elapsed;
     }
 
-    /// <summary>Captures the tail of each service's container logs for diagnostics.</summary>
+    /// <summary>
+    /// Captures the tail of each started container's logs for diagnostics.
+    ///
+    /// <para>
+    /// Every running service of the project, not only the scenario's declared
+    /// targets. An Inferno kit is four containers — app, worker, queue,
+    /// validator — and a failed run's explanation is usually in one of the three
+    /// the scenario never names. A service that was started but has already died
+    /// is still asked for: its logs are the only record of why.
+    /// </para>
+    /// </summary>
     public async Task CaptureLogsAsync(CancellationToken cancellationToken = default)
     {
-        foreach (var service in _services)
+        foreach (var service in await LogTargetsAsync(cancellationToken))
         {
             try
             {
                 var logs = await _compose.LogsAsync(
-                    service.Compose.Service, tailLines: 400, TimeSpan.FromSeconds(60), cancellationToken);
-                _serviceLogs[service.Compose.Service] = Redaction.Body(logs);
+                    service, tailLines: 400, TimeSpan.FromSeconds(60), cancellationToken);
+                _serviceLogs[service] = Redaction.Body(logs);
             }
             catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or IOException)
             {
-                _serviceLogs[service.Compose.Service] = $"(log capture failed: {ex.Message})";
+                _serviceLogs[service] = $"(log capture failed: {ex.Message})";
             }
         }
+    }
+
+    /// <summary>
+    /// The services to capture logs for: every declared target, plus whatever
+    /// else the started profiles are running. The targets are included
+    /// unconditionally — a container that crashed is no longer running, and that
+    /// is exactly the case where its logs matter.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> LogTargetsAsync(CancellationToken cancellationToken)
+    {
+        var declared = _services.Select(s => s.Compose.Service);
+
+        IReadOnlyList<string> running;
+        try
+        {
+            running = await _compose.RunningServicesAsync(
+                _profiles, TimeSpan.FromSeconds(60), cancellationToken);
+        }
+        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or IOException)
+        {
+            // Listing is a convenience; the declared targets are the floor.
+            Console.Error.WriteLine($"[interop] could not list running services: {ex.Message}");
+            running = [];
+        }
+
+        return declared.Concat(running).Distinct(StringComparer.Ordinal).ToList();
     }
 
     /// <summary>
