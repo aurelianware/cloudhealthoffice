@@ -52,22 +52,34 @@ public class ProviderAccessEncounterSourcesTests
     [Fact]
     public void ClaimsServiceIsTheOnlyProjectorOfTheNonFinancialEob()
     {
-        // The CARIN BB Basis profiles are the Provider Access payload. One
-        // projector owns them; a second one appearing elsewhere in the tree is
-        // the duplication ADR 028 rules out.
-        var projectors = Directory
+        // The CARIN BB Basis profiles are the Provider Access payload, and the
+        // canonicals that name them are the thing to count: whichever file
+        // declares one is shaping that payload. Exactly one file may, and it
+        // has to be claims-service's — a second anywhere in the tree is the
+        // duplication ADR 028 rules out, and the same file under another
+        // service is that duplication having moved rather than gone.
+        //
+        // The owner is asserted by PATH rather than by filename on purpose.
+        // Both EOB projectors now delegate their Basis shaping to one place
+        // (CarinEobBasis), because CARIN BB makes each -Basis profile the
+        // baseDefinition of its financial sibling; naming that file here would
+        // mean this guard failed on the next rearrangement inside claims-service
+        // while still not catching a copy made next to it.
+        var owners = Directory
             .EnumerateFiles(Path.Combine(Root(), "src"), "*.cs", SearchOption.AllDirectories)
             .Where(f => File.ReadAllText(f).Contains(
                 "C4BB-ExplanationOfBenefit-Professional-NonClinician-Basis", StringComparison.Ordinal))
-            .Select(f => Path.GetFileName(f))
+            .Select(f => Path.GetRelativePath(Root(), f).Replace('\\', '/'))
             .OrderBy(f => f, StringComparer.Ordinal)
             .ToArray();
 
         Assert.True(
-            projectors is ["CarinNonFinancialEobProjector.cs"],
-            "claims-service owns the non-financial EOB projection, and is meant to be its only "
-            + "owner. Found: " + string.Join(", ", projectors) + ". "
+            owners.Length == 1,
+            "exactly one file may declare the CARIN BB Basis canonicals, and both EOB "
+            + "projectors delegate to it. Found: " + string.Join(", ", owners) + ". "
             + "See docs/adr/028-provider-access-encounters-are-claims.md.");
+
+        Assert.StartsWith("src/services/claims-service/", owners[0], StringComparison.Ordinal);
     }
 
     private static string Root()
