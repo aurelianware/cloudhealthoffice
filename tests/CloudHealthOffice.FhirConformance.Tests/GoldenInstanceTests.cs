@@ -59,9 +59,33 @@ public class GoldenInstanceTests
     public void Prior_authorization_explanation_of_benefit()
         => Golden("prior-authorization-eob", new PriorAuthorizationEobProjector().Project(Authorization()));
 
+    // ── Patient Access: the CARIN BB financial EOB, one per profile ─────────
+    //
+    // Four goldens for the same reason the Basis family has four: CARIN BB
+    // splits the financial profiles by claim type too, and each asks for
+    // something the others do not. The professional and oral profiles require
+    // two adjudication entries on every line; the institutional pair require
+    // the benefit payment status at the header instead. A single golden would
+    // leave three unexercised.
+
     [Fact]
     public void Claim_explanation_of_benefit()
         => Golden("claim-eob", new ExplanationOfBenefitProjector().Project(Claim()));
+
+    [Fact]
+    public void Carin_inpatient_institutional_financial_eob()
+        => Golden("carin-inpatient-financial",
+            new ExplanationOfBenefitProjector().Project(InstitutionalClaim("11")));
+
+    [Fact]
+    public void Carin_outpatient_institutional_financial_eob()
+        => Golden("carin-outpatient-financial",
+            new ExplanationOfBenefitProjector().Project(InstitutionalClaim("13")));
+
+    [Fact]
+    public void Carin_oral_financial_eob()
+        => Golden("carin-oral-financial",
+            new ExplanationOfBenefitProjector().Project(DentalClaim()));
 
     [Fact]
     public void Claim_as_billed()

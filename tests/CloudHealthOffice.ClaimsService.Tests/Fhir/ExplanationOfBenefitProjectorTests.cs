@@ -7,12 +7,26 @@ using FluentAssertions;
 namespace CloudHealthOffice.ClaimsService.Tests.Fhir;
 
 /// <summary>
-/// Unit tests for the FHIR R4 ExplanationOfBenefit projector (capability
-/// 5.11). Covers the legacy field set inherited from the v1 member-search
-/// endpoint plus the 5.11 enhancements: totals expansion (coinsurance +
-/// patient-responsibility), header denial adjudication, line-level NCCI/MUE
-/// edit-failure adjudication, AI-examination supportingInfo, and Coverage
-/// reference (Decision 15 amendment — uses CoverageId, not MemberId).
+/// Unit tests for the Patient Access ExplanationOfBenefit projection, which
+/// now declares and satisfies the CARIN BB 2.2.0 <b>financial</b> profiles.
+///
+/// <para>
+/// The shaping the two EOB projections share is tested through the Basis
+/// goldens and <c>CarinNonFinancialEobProjectorTests</c>; what these cover is
+/// the money and the reasons this projector adds — the total set, the
+/// adjudication amount per line, and the denial, adjustment and remark trail as
+/// <c>adjustmentreason</c> slices.
+/// </para>
+///
+/// <para>
+/// Several of these tests changed shape when the profile was declared, and the
+/// reason is the same in each case: CARIN BB binds adjudication
+/// <c>category</c> to its own discriminator value set and puts the X12 code in
+/// <c>reason</c>. Before, each CARC was emitted as the category, which named a
+/// code where a consumer looks for a discriminator. The codes did not change;
+/// where they sit did. What the instances now satisfy is checked by the HL7
+/// validator over <c>conformance/golden/</c>, not here.
+/// </para>
 /// </summary>
 public class ExplanationOfBenefitProjectorTests
 {
@@ -74,16 +88,30 @@ public class ExplanationOfBenefitProjectorTests
 
     // ── Status / type / outcome mappers ──────────────────────────────────────
 
+    /// <summary>
+    /// <c>status</c> is the resource's fm-status and <c>outcome</c> is how far
+    /// adjudication got — the rule the Provider Access projection of the same
+    /// claim already followed, and now the only rule, because one claim cannot
+    /// be <c>draft</c> on one API and <c>active</c> on the other.
+    ///
+    /// <para>
+    /// Two values changed with it. A claim in adjudication is <c>active</c>
+    /// rather than <c>draft</c>: it exists and stands, and <c>draft</c> in FHIR
+    /// means a resource not yet in force. And a denial is <c>complete</c> rather
+    /// than <c>error</c>: the claim was processed and the answer was no, where
+    /// <c>error</c> says it could not be processed at all.
+    /// </para>
+    /// </summary>
     [Theory]
-    [InlineData(ClaimStatus.Submitted, "draft", "queued")]
-    [InlineData(ClaimStatus.Received, "draft", "queued")]
-    [InlineData(ClaimStatus.InAdjudication, "draft", "queued")]
-    [InlineData(ClaimStatus.Pended, "draft", "queued")]
+    [InlineData(ClaimStatus.Submitted, "active", "queued")]
+    [InlineData(ClaimStatus.Received, "active", "queued")]
+    [InlineData(ClaimStatus.InAdjudication, "active", "queued")]
+    [InlineData(ClaimStatus.Pended, "active", "queued")]
     [InlineData(ClaimStatus.Approved, "active", "complete")]
     [InlineData(ClaimStatus.Paid, "active", "complete")]
     [InlineData(ClaimStatus.PartiallyPaid, "active", "partial")]
-    [InlineData(ClaimStatus.Denied, "active", "error")]
-    [InlineData(ClaimStatus.Voided, "cancelled", "queued")]
+    [InlineData(ClaimStatus.Denied, "active", "complete")]
+    [InlineData(ClaimStatus.Voided, "cancelled", "complete")]
     public void Project_maps_status_and_outcome_consistently(
         ClaimStatus status, string expectedStatus, string expectedOutcome)
     {
@@ -128,15 +156,19 @@ public class ExplanationOfBenefitProjectorTests
     }
 
     [Fact]
-    public void Project_omits_insurance_when_CoverageId_null()
+    public void Project_names_the_plan_by_display_when_no_CoverageId_is_on_the_claim()
     {
         var claim = MinimalClaim();
         claim.CoverageId = null;
 
         var json = _projector.Project(claim);
 
-        json.ContainsKey("insurance").Should().BeFalse(
-            "Decision 15 — Coverage reference is omitted when no CoverageId is on the claim");
+        var insurance = json["insurance"]!.AsArray();
+        insurance.Should().HaveCount(1,
+            "CARIN BB makes insurance 1..* with a required coverage, so it can never be omitted");
+        insurance[0]!["coverage"]!.AsObject().ContainsKey("reference").Should().BeFalse(
+            "a literal reference to a Coverage that would 404 is worse than one that says what is known");
+        insurance[0]!["coverage"]!["display"]!.GetValue<string>().Should().Be("CloudHealthOffice");
     }
 
     // ── totals expansion ─────────────────────────────────────────────────────
@@ -166,21 +198,38 @@ public class ExplanationOfBenefitProjectorTests
         totals.Should().Contain(t => CategoryCode(t!) == "benefit" && Amount(t!) == 280m);
         totals.Should().Contain(t => CategoryCode(t!) == "copay" && Amount(t!) == 25m);
         totals.Should().Contain(t => CategoryCode(t!) == "deductible" && Amount(t!) == 50m);
-        totals.Should().Contain(t => CategoryCode(t!) == "coinsurance" && Amount(t!) == 35m);
-        totals.Should().Contain(t => CategoryCode(t!) == "patientresponsibility"
-                                  && Amount(t!) == 110m);
+
+        // Coinsurance and member liability are C4BB's own codes: the FHIR
+        // adjudication system defines neither, and "patientresponsibility" —
+        // which this projection emitted before — is not a code in any system, so
+        // it was never one a consumer could resolve.
+        var coinsurance = totals.Single(t => CategoryCode(t!) == "coinsurance")!;
+        CategorySystem(coinsurance).Should().Be(C4bbAdjudication);
+        Amount(coinsurance).Should().Be(35m);
+
+        var memberLiability = totals.Single(t => CategoryCode(t!) == "memberliability")!;
+        CategorySystem(memberLiability).Should().Be(C4bbAdjudication);
+        Amount(memberLiability).Should().Be(110m);
+
+        totals.Should().NotContain(t => CategoryCode(t!) == "patientresponsibility");
     }
 
     [Fact]
-    public void Project_omits_total_and_payment_when_AdjudicationResult_null()
+    public void Project_still_states_what_was_submitted_when_the_claim_is_not_adjudicated()
     {
         var claim = MinimalClaim();
+        claim.TotalChargeAmount = 100m;
         claim.AdjudicationResult = null;
 
         var json = _projector.Project(claim);
+        var totals = json["total"]!.AsArray();
 
-        json.ContainsKey("total").Should().BeFalse(
-            "Decision 14 — total[] is gated on AdjudicationResult being populated");
+        totals.Should().HaveCount(1,
+            "total is 1..* on every CARIN BB financial profile, and what was submitted is known "
+            + "from the moment the claim arrives — the plan's share is not");
+        CategoryCode(totals[0]!).Should().Be("submitted");
+        Amount(totals[0]!).Should().Be(100m);
+
         json.ContainsKey("payment").Should().BeFalse();
     }
 
@@ -214,12 +263,13 @@ public class ExplanationOfBenefitProjectorTests
 
         var json = _projector.Project(claim);
 
-        var adjudication = json["adjudication"]!.AsArray();
-        adjudication.Should().NotBeEmpty();
+        var denial = AdjustmentReasons(json).Should().ContainSingle().Subject;
 
-        var denial = adjudication[0]!;
-        denial["category"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>().Should().Be("29");
-        denial["reason"]!["coding"]!.AsArray()[0]!["display"]!.GetValue<string>()
+        CategoryCode(denial).Should().Be("adjustmentreason",
+            "CARIN BB binds category to its own discriminator; the X12 code goes in reason");
+        CategorySystem(denial).Should().Be(Discriminator);
+        ReasonCoding(denial, Carc)["code"]!.GetValue<string>().Should().Be("29");
+        ReasonCoding(denial, Carc)["display"]!.GetValue<string>()
             .Should().Be("The time limit for filing has expired");
     }
 
@@ -249,14 +299,17 @@ public class ExplanationOfBenefitProjectorTests
         };
 
         var json = _projector.Project(claim);
-        var adjudication = json["adjudication"]!.AsArray();
+        var reasons = AdjustmentReasons(json);
 
-        adjudication.Should().HaveCount(2);
-        adjudication[0]!["category"]!["text"]!.GetValue<string>().Should().Be("CO");
-        adjudication[0]!["category"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>()
-            .Should().Be("45");
-        Amount(adjudication[0]!).Should().Be(30m);
-        adjudication[1]!["category"]!["text"]!.GetValue<string>().Should().Be("PR");
+        reasons.Should().HaveCount(2);
+        ReasonCoding(reasons[0], Carc)["code"]!.GetValue<string>().Should().Be("45");
+        Amount(reasons[0]).Should().Be(30m);
+
+        // The X12 group code says who the adjustment falls to. It is not a CARC
+        // and has no element of its own, so it is the reason's text rather than a
+        // coding that would fail the bound value set.
+        reasons[0]["reason"]!["text"]!.GetValue<string>().Should().Be("CO");
+        reasons[1]["reason"]!["text"]!.GetValue<string>().Should().Be("PR");
     }
 
     [Fact]
@@ -269,15 +322,15 @@ public class ExplanationOfBenefitProjectorTests
         };
 
         var json = _projector.Project(claim);
-        var adjudication = json["adjudication"]!.AsArray();
+        var reasons = AdjustmentReasons(json);
 
-        adjudication.Should().HaveCount(2);
-        adjudication[0]!["category"]!["coding"]!.AsArray()[0]!["system"]!.GetValue<string>()
-            .Should().Be("https://x12.org/codes/remittance-advice-remark-codes");
-        adjudication[0]!["category"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>()
-            .Should().Be("M76");
-        adjudication[1]!["category"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>()
-            .Should().Be("N122");
+        reasons.Should().HaveCount(2);
+
+        // A remark is an adjustment reason too: the value set CARIN BB binds the
+        // reason to draws from both the CARC and the RARC code systems, so a
+        // remark does not need — and may not have — a category of its own.
+        ReasonCoding(reasons[0], Rarc)["code"]!.GetValue<string>().Should().Be("M76");
+        ReasonCoding(reasons[1], Rarc)["code"]!.GetValue<string>().Should().Be("N122");
     }
 
     [Fact]
@@ -291,8 +344,8 @@ public class ExplanationOfBenefitProjectorTests
 
         var json = _projector.Project(claim);
 
-        json.ContainsKey("adjudication").Should().BeFalse(
-            "header adjudication[] should be absent on a clean approval");
+        AdjustmentReasons(json).Should().BeEmpty(
+            "a clean approval has no adjustment trail to state");
     }
 
     // ── item[].net / unitPrice (ChargeAmount = line total) ─────────────────
@@ -384,22 +437,26 @@ public class ExplanationOfBenefitProjectorTests
         var json = _projector.Project(claim);
         var items = json["item"]!.AsArray();
 
-        // Line 1 has no edit failure — no adjudication[] under it.
-        items[0]!.AsObject().ContainsKey("adjudication").Should().BeFalse();
+        // Line 1 has no edit failure — only the entries the profile requires.
+        AdjustmentReasons(items[0]!).Should().BeEmpty();
 
         // Line 2 carries the bundled edit.
-        var line2Adj = items[1]!["adjudication"]!.AsArray();
-        line2Adj.Should().HaveCount(1);
-        line2Adj[0]!["category"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>()
-            .Should().Be("B15");
-        line2Adj[0]!["reason"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>()
-            .Should().Be("27447-27486");
-        line2Adj[0]!["reason"]!["coding"]!.AsArray()[0]!["display"]!.GetValue<string>()
+        var edit = AdjustmentReasons(items[1]!).Should().ContainSingle().Subject;
+        ReasonCoding(edit, Carc)["code"]!.GetValue<string>().Should().Be("B15");
+
+        // The engine rule rides alongside the CARC as a second coding in the
+        // same concept, so the reason says both what the adjustment is and which
+        // rule produced it.
+        ReasonCoding(edit, NcciEdit)["code"]!.GetValue<string>().Should().Be("27447-27486");
+        ReasonCoding(edit, NcciEdit)["display"]!.GetValue<string>()
             .Should().Be("Component code bundled into comprehensive code");
-        line2Adj[0]!["extension"]!.AsArray()[0]!["url"]!.GetValue<string>()
-            .Should().Be("urn:cho:ncci-rarc");
-        line2Adj[0]!["extension"]!.AsArray()[0]!["valueString"]!.GetValue<string>()
-            .Should().Be("M51");
+
+        // The suggested RARC is a third coding rather than the CHO-private
+        // extension it used to be. A urn: canonical can never be dereferenced,
+        // so the validator reports such an extension as not allowed; the remark
+        // belongs in the bound value set, which it is a member of.
+        ReasonCoding(edit, Rarc)["code"]!.GetValue<string>().Should().Be("M51");
+        edit.AsObject().ContainsKey("extension").Should().BeFalse();
     }
 
     [Fact]
@@ -448,26 +505,20 @@ public class ExplanationOfBenefitProjectorTests
         var json = _projector.Project(claim);
         var items = json["item"]!.AsArray();
 
-        var line1Adj = items[0]!["adjudication"]!.AsArray();
-        line1Adj.Should().HaveCount(1);
-        line1Adj[0]!["category"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>()
+        var suspect = AdjustmentReasons(items[0]!).Should().ContainSingle().Subject;
+        ReasonCoding(suspect, Carc)["code"]!.GetValue<string>()
             .Should().Be("18", "CARC 18 is the fallback for duplicate findings");
-        line1Adj[0]!["reason"]!["coding"]!.AsArray()[0]!["system"]!.GetValue<string>()
-            .Should().Be("urn:cho:duplicate-edit");
-        line1Adj[0]!["reason"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>()
-            .Should().Be("DUP002");
+        ReasonCoding(suspect, DuplicateEdit)["code"]!.GetValue<string>().Should().Be("DUP002");
 
         // Line 2 carries both the NCCI edit and the duplicate, each under its own system.
-        var line2Adj = items[1]!["adjudication"]!.AsArray();
-        line2Adj.Should().HaveCount(2);
-        var systems = line2Adj
-            .Select(a => a!["reason"]!["coding"]!.AsArray()[0]!["system"]!.GetValue<string>())
-            .ToList();
-        systems.Should().BeEquivalentTo(new[] { "urn:cho:ncci-edit", "urn:cho:duplicate-edit" });
-        var duplicateEntry = line2Adj.Single(a =>
-            a!["reason"]!["coding"]!.AsArray()[0]!["system"]!.GetValue<string>() == "urn:cho:duplicate-edit")!;
-        duplicateEntry["reason"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>().Should().Be("DUP001");
-        duplicateEntry["category"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>().Should().Be("18");
+        var line2 = AdjustmentReasons(items[1]!);
+        line2.Should().HaveCount(2);
+
+        var duplicate = line2.Should().ContainSingle(a => HasCoding(a, DuplicateEdit)).Subject;
+        ReasonCoding(duplicate, DuplicateEdit)["code"]!.GetValue<string>().Should().Be("DUP001");
+        ReasonCoding(duplicate, Carc)["code"]!.GetValue<string>().Should().Be("18");
+
+        line2.Should().ContainSingle(a => HasCoding(a, NcciEdit));
         json.ToJsonString().Should().NotContain("\"urn:cho:ncci-edit\",\"code\":\"DUP");
     }
 
@@ -496,9 +547,9 @@ public class ExplanationOfBenefitProjectorTests
         };
 
         var json = _projector.Project(claim);
-        var line1Adj = json["item"]!.AsArray()[0]!["adjudication"]!.AsArray();
+        var edit = AdjustmentReasons(json["item"]!.AsArray()[0]!).Should().ContainSingle().Subject;
 
-        line1Adj[0]!["category"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>()
+        ReasonCoding(edit, Carc)["code"]!.GetValue<string>()
             .Should().Be("237", "default CARC for engine-supplied edits without a SuggestedCarc");
     }
 
@@ -528,9 +579,9 @@ public class ExplanationOfBenefitProjectorTests
         };
 
         var json = _projector.Project(claim);
-        var line1Adj = json["item"]!.AsArray()[0]!["adjudication"]!.AsArray();
+        var edit = AdjustmentReasons(json["item"]!.AsArray()[0]!).Should().ContainSingle().Subject;
 
-        line1Adj[0]!["reason"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>()
+        ReasonCoding(edit, NcciEdit)["code"]!.GetValue<string>()
             .Should().Be("NE002", "MUE failures fall back to RuleId because there is no Column1/Column2 pair");
     }
 
@@ -554,7 +605,7 @@ public class ExplanationOfBenefitProjectorTests
 
         var json = _projector.Project(claim);
 
-        json["item"]!.AsArray()[0]!.AsObject().ContainsKey("adjudication").Should().BeFalse();
+        AdjustmentReasons(json["item"]!.AsArray()[0]!).Should().BeEmpty();
     }
 
     // ── supportingInfo[] (AI examination, Decision 5) ────────────────────────
@@ -577,7 +628,9 @@ public class ExplanationOfBenefitProjectorTests
         info.Should().HaveCount(1);
 
         var entry = info[0]!;
-        entry["sequence"]!.GetValue<int>().Should().Be(1);
+        entry["sequence"]!.GetValue<int>().Should().Be(1,
+            "the entry continues the numbering of whatever the profile's own supporting-info "
+            + "slices put in the array first — here, nothing");
         entry["category"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>().Should().Be("info");
         entry["code"]!["coding"]!.AsArray()[0]!["system"]!.GetValue<string>()
             .Should().Be("urn:cho:ai-examination-disposition");
@@ -617,7 +670,8 @@ public class ExplanationOfBenefitProjectorTests
 
         var json = _projector.Project(claim);
 
-        json.ContainsKey("supportingInfo").Should().BeFalse();
+        json.ContainsKey("supportingInfo").Should().BeFalse(
+            "this claim carries nothing else the profile's supporting-info slices ask for either");
     }
 
     // ── End-to-end JSON parseability ─────────────────────────────────────────
@@ -692,9 +746,43 @@ public class ExplanationOfBenefitProjectorTests
         return claim;
     }
 
+    private const string Discriminator =
+        "http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBAdjudicationDiscriminator";
+    private const string C4bbAdjudication =
+        "http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBAdjudication";
+    private const string Carc = "https://x12.org/codes/claim-adjustment-reason-codes";
+    private const string Rarc = "https://x12.org/codes/remittance-advice-remark-codes";
+    private const string NcciEdit = "urn:cho:ncci-edit";
+    private const string DuplicateEdit = "urn:cho:duplicate-edit";
+
     private static string CategoryCode(JsonNode node) =>
         node["category"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>();
 
+    private static string CategorySystem(JsonNode node) =>
+        node["category"]!["coding"]!.AsArray()[0]!["system"]!.GetValue<string>();
+
     private static decimal Amount(JsonNode node) =>
         node["amount"]!["value"]!.GetValue<decimal>();
+
+    /// <summary>
+    /// The <c>adjustmentreason</c> slices of an owner's adjudication array —
+    /// the resource header's or one item's. Picking them out by discriminator
+    /// rather than by position is the point: the entries the profile requires
+    /// share the array, and an assertion on <c>[0]</c> would silently start
+    /// reading one of those instead.
+    /// </summary>
+    private static List<JsonNode> AdjustmentReasons(JsonNode owner) =>
+        (owner["adjudication"]?.AsArray() ?? new JsonArray())
+            .Where(entry => entry is not null && CategoryCode(entry) == "adjustmentreason")
+            .Select(entry => entry!)
+            .ToList();
+
+    private static JsonObject ReasonCoding(JsonNode adjustment, string system) =>
+        adjustment["reason"]!["coding"]!.AsArray()
+            .Single(coding => coding!["system"]!.GetValue<string>() == system)!
+            .AsObject();
+
+    private static bool HasCoding(JsonNode adjustment, string system) =>
+        adjustment["reason"]!["coding"]!.AsArray()
+            .Any(coding => coding!["system"]!.GetValue<string>() == system);
 }
