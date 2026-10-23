@@ -14,10 +14,12 @@ namespace TenantService.Hierarchy;
 /// <see cref="CarrierIdentity"/>: premium-billing, capitation and payment take
 /// their NACHA origination and 835 payer from the carrier, and fall back to the
 /// deployment's own <c>Nacha:*</c> and <c>Payer:*</c> configuration for
-/// whatever a carrier leaves unstated (plan-configuration.md §§12.2, 12.3). So filling
-/// a field in here is what changes what goes out; leaving it blank keeps the
-/// deployment's value. The letter and ID-card name and address are recorded but
-/// not yet rendered.
+/// whatever a carrier leaves unstated (plan-configuration.md §§12.2-12.4). So
+/// filling a field in here is what changes what goes out; leaving it blank
+/// keeps the deployment's value. The correspondence name and address are what
+/// head a letter and an ID card (§12.4), where there is no deployment value to
+/// fall back to: a letter with no sender is not sent, and a card with no issuer
+/// is headed by the sponsor as it was before carriers existed.
 /// </para>
 /// </summary>
 public sealed class Carrier

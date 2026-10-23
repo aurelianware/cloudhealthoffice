@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.PlanConfiguration;
 using CorrespondenceService.Models;
 using CorrespondenceService.Repositories;
 
@@ -26,15 +27,35 @@ public sealed partial class LetterComposer
     private readonly ICorrespondenceRepository _repository;
     private readonly ILetterDocumentStore _documents;
     private readonly TimeProvider _clock;
+    private readonly ICarrierDirectory? _carriers;
     private readonly ILogger<LetterComposer> _logger;
 
-    public LetterComposer(ICorrespondenceRepository repository, ILetterDocumentStore documents, TimeProvider clock, ILogger<LetterComposer> logger)
+    public LetterComposer(
+        ICorrespondenceRepository repository,
+        ILetterDocumentStore documents,
+        TimeProvider clock,
+        ILogger<LetterComposer> logger,
+        ICarrierDirectory? carriers = null)
     {
         _repository = repository;
         _documents = documents;
         _clock = clock;
+        _carriers = carriers;
         _logger = logger;
     }
+
+    /// <summary>
+    /// The legal entity the letter goes out from, or null where this host runs
+    /// without a carrier directory (plan-configuration.md §12.4). An
+    /// unreachable tenant-service throws, as it does on the money files
+    /// (§12.3): a letter is a statement about somebody's benefits made in a
+    /// named entity's name, and composing is not so urgent that it is worth
+    /// sending one headed by the wrong entity, or by nothing.
+    /// </summary>
+    private Task<CarrierIdentity?> CarrierAsync(string tenantId, CancellationToken ct) =>
+        _carriers is null || string.IsNullOrWhiteSpace(tenantId)
+            ? Task.FromResult<CarrierIdentity?>(null)
+            : _carriers.DefaultAsync(tenantId, ct);
 
     public async Task<ComposeResult> ComposeAsync(string tenantId, string actorId, LetterRequest request, CancellationToken ct = default)
     {
@@ -68,11 +89,12 @@ public sealed partial class LetterComposer
             .Select(s => new LetterSubject { Kind = LetterAccess.CanonicalKind(s.Kind.Trim()), Id = s.Id.Trim() })
             .DistinctBy(s => (s.Kind, s.Id))
             .ToList();
-        var model = BuildModel(request, letterType, letterId, letterDate);
+        var carrier = await CarrierAsync(tenantId, ct);
+        var model = BuildModel(request, letterType, letterId, letterDate, carrier);
         var render = LetterRenderer.Render(new LetterRenderInput(
-            template, attachments, missingAttachments, model, request.Recipient, letterId, letterDate, now));
+            template, attachments, missingAttachments, model, request.Recipient, letterId, letterDate, now, carrier));
 
-        var snapshot = Snapshot(template, attachments, request, letterDate);
+        var snapshot = Snapshot(template, attachments, request, letterDate, carrier);
         var letter = new Letter
         {
             Id = letterId,
@@ -157,12 +179,16 @@ public sealed partial class LetterComposer
         var templateRequest = new TemplateRequest(template.LetterTypeCode, template.Language, template.Format, letterDate,
             template.Scope.LineOfBusiness, template.Scope.State, template.Scope.Product, template.Scope.PlanId);
         var (attachments, missing) = await ResolveAttachmentsAsync(tenantId, template, templateRequest, ct);
-        var model = BuildModel(new LetterRequest { Data = request.Data, Recipient = request.Recipient }, letterType, "PREVIEW", letterDate);
+        // The preview is the carrier's own letterhead too: a reviewer approving
+        // a template needs to see what will actually be on the page.
+        var carrier = await CarrierAsync(tenantId, ct);
+        var model = BuildModel(new LetterRequest { Data = request.Data, Recipient = request.Recipient }, letterType, "PREVIEW", letterDate, carrier);
 
         // A draft is previewed as if approved, so the locked-text check speaks
         // to what approval would freeze.
         var rendered = template.Status == TemplateStatus.Draft ? Approved(template) : template;
-        return LetterRenderer.Render(new LetterRenderInput(rendered, attachments, missing, model, request.Recipient, "PREVIEW", letterDate, now));
+        return LetterRenderer.Render(new LetterRenderInput(
+            rendered, attachments, missing, model, request.Recipient, "PREVIEW", letterDate, now, carrier));
     }
 
     private async Task<(List<LetterTemplate> Found, List<string> Missing)> ResolveAttachmentsAsync(
@@ -181,7 +207,8 @@ public sealed partial class LetterComposer
         return (found, missing);
     }
 
-    internal static Dictionary<string, object?> BuildModel(LetterRequest request, LetterType letterType, string letterId, DateOnly letterDate)
+    internal static Dictionary<string, object?> BuildModel(
+        LetterRequest request, LetterType letterType, string letterId, DateOnly letterDate, CarrierIdentity? carrier = null)
     {
         var model = MergeFields.FromJson(request.Data);
         // Filled by the service, never by the caller.
@@ -204,11 +231,30 @@ public sealed partial class LetterComposer
             ["postalCode"] = r.PostalCode,
             ["party"] = r.Party.ToString(),
         };
+        // The sender, for a template that writes its own letterhead rather than
+        // using a ReturnAddressBlock. Only stated values are offered: a template
+        // naming {{ carrier.name }} where the carrier states none leaves the
+        // path unresolved, which fails the MergeFieldsResolved check and stops
+        // the letter — the right outcome for a letter with no sender.
+        model["carrier"] = carrier is null ? new Dictionary<string, object?>() : new Dictionary<string, object?>
+        {
+            ["name"] = carrier.LetterheadName,
+            ["legalName"] = carrier.LegalName,
+            ["code"] = carrier.Code,
+            ["addressLine1"] = Stated(carrier.CorrespondenceAddress?.Street),
+            ["city"] = Stated(carrier.CorrespondenceAddress?.City),
+            ["state"] = Stated(carrier.CorrespondenceAddress?.State),
+            ["postalCode"] = Stated(carrier.CorrespondenceAddress?.ZipCode),
+        };
         return model;
     }
 
+    private static string? Stated(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     /// <summary>The merge data, recipient and template exactly as rendered, as canonical JSON (keys sorted).</summary>
-    internal static string Snapshot(LetterTemplate template, IReadOnlyList<LetterTemplate> attachments, LetterRequest request, DateOnly letterDate)
+    internal static string Snapshot(
+        LetterTemplate template, IReadOnlyList<LetterTemplate> attachments, LetterRequest request, DateOnly letterDate,
+        CarrierIdentity? carrier = null)
     {
         var node = new JsonObject
         {
@@ -219,6 +265,14 @@ public sealed partial class LetterComposer
             ["format"] = template.Format.ToString(),
             ["letterDate"] = letterDate.ToString("yyyy-MM-dd"),
             ["recipient"] = JsonSerializer.SerializeToNode(request.Recipient),
+            // The sender is part of what was rendered, so it belongs in the
+            // write-once record: a letter's audit trail has to say which legal
+            // entity's name it went out under, not only who it went to.
+            ["carrier"] = carrier is null ? null : new JsonObject
+            {
+                ["id"] = carrier.Id,
+                ["letterheadName"] = carrier.LetterheadName,
+            },
             ["data"] = request.Data?.DeepClone(),
         };
         return Canonical(node)!.ToJsonString();

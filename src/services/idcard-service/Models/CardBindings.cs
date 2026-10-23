@@ -17,6 +17,17 @@ public class CardBindings
     public string? SponsorName { get; set; }
     public string? SponsorSupportPhone { get; set; }
 
+    /// <summary>
+    /// The legal entity that issued the coverage, from the tenant's carrier
+    /// (plan-configuration.md §12.4). Null where the carrier states no
+    /// letterhead name, in which case the card is headed by the sponsor as it
+    /// was before carriers existed.
+    /// </summary>
+    public string? IssuerName { get; set; }
+
+    /// <summary>The issuer's address, one line, for the back of the card. Null where the carrier states none.</summary>
+    public string? IssuerAddress { get; set; }
+
     public string? PlanId { get; set; }
     public string? PlanName { get; set; }
     public string? NetworkName { get; set; }

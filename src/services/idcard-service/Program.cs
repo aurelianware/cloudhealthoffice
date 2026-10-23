@@ -1,3 +1,4 @@
+using CloudHealthOffice.PlanConfiguration;
 using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Extensions;
 using System.Threading.RateLimiting;
@@ -34,6 +35,11 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
     auth.DefaultReadPermission = "members:read";
     auth.DefaultWritePermission = "members:write";
 });
+// The tenant's carrier: the legal entity whose card this is, for the card's
+// masthead and claims address
+// (plan-configuration.md §12.4).
+builder.Services.AddCarrierDirectoryClient(builder.Configuration);
+
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>

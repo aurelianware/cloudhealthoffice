@@ -1,3 +1,4 @@
+using CloudHealthOffice.PlanConfiguration;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.HealthChecks;
@@ -25,6 +26,11 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
     auth.DefaultReadPermission = CorrespondenceService.Controllers.CorrespondenceController.Read;
     auth.DefaultWritePermission = CorrespondenceService.Controllers.CorrespondenceController.Write;
 });
+// The tenant's carrier: the legal entity a letter goes out from, for a
+// ReturnAddressBlock or a {{ carrier.* }} merge field
+// (plan-configuration.md §12.4).
+builder.Services.AddCarrierDirectoryClient(builder.Configuration);
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
