@@ -578,6 +578,154 @@
         "passThroughAmountForDirectMedicalEducation": 20.0,
         "bundleModel1Discount": 0.1
       }
+    },
+    {
+      "name": "covered-days-short-of-the-stay",
+      "why": "A prospective payment buys the discharge, not the days. Same stay as long-stay-no-transfer with three covered days instead of nine, and CMS pays the identical total. Pins that nothing prorates by the covered fraction, which is the obvious wrong thing to do here.",
+      "ccn": "450040",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "871",
+      "lengthOfStay": 9,
+      "coveredDays": 3,
+      "coveredCharges": 55000.0,
+      "reviewCode": "00"
+    },
+    {
+      "name": "reserve-days-under-regular-ones",
+      "why": "Six of nine covered days drawn from the lifetime reserve. CMS reports the three remaining regular days and zero reserve days used. Pins IppsDayUtilization reporting one or the other.",
+      "ccn": "450041",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "871",
+      "lengthOfStay": 9,
+      "coveredDays": 9,
+      "lifetimeReserveDays": 6,
+      "coveredCharges": 55000.0,
+      "reviewCode": "00"
+    },
+    {
+      "name": "reserve-days-only",
+      "why": "Every covered day is a reserve day, so no regular day remains and CMS reports the reserve side instead. Pins the other branch of 3100-CALC-STAY-UTILIZATION.",
+      "ccn": "450042",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "871",
+      "lengthOfStay": 9,
+      "coveredDays": 9,
+      "lifetimeReserveDays": 9,
+      "coveredCharges": 55000.0,
+      "reviewCode": "00"
+    },
+    {
+      "name": "reserve-days-capped-at-the-stay",
+      "why": "Nine reserve days against a stay of five: CMS reports five, not nine. Pins the cap at the length of the stay rather than at the days on the claim.",
+      "ccn": "450043",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "871",
+      "lengthOfStay": 5,
+      "coveredDays": 9,
+      "lifetimeReserveDays": 9,
+      "coveredCharges": 55000.0,
+      "reviewCode": "00"
+    },
+    {
+      "name": "cost-outlier-beyond-covered-days",
+      "why": "42 CFR 412.84 with return code 67: a cost outlier whose stay ran past the covered days is paid nothing at all, not the covered part of it. Pins the refusal and pins that it is a refusal and not a reduction.",
+      "ccn": "450044",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 12,
+      "coveredDays": 3,
+      "coveredCharges": 400000.0,
+      "reviewCode": "00",
+      "provider": {
+        "operatingCostToChargeRatio": 0.32,
+        "capitalCostToChargeRatio": 0.04
+      }
+    },
+    {
+      "name": "cost-outlier-one-day-short",
+      "why": "Eleven covered days of twelve on the same outlier stay. One uncovered day is enough: the whole payment goes. Pins that the refusal has no tolerance in it.",
+      "ccn": "450045",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 12,
+      "coveredDays": 11,
+      "coveredCharges": 400000.0,
+      "reviewCode": "00",
+      "provider": {
+        "operatingCostToChargeRatio": 0.32,
+        "capitalCostToChargeRatio": 0.04
+      }
+    },
+    {
+      "name": "cost-outlier-covered-by-reserve-days",
+      "why": "Twelve covered days of which nine are reserve days, on the same outlier stay. CMS writes the test as regular plus reserve days and that sum is the covered days, so the split cannot change the answer. Pins that reserve days are not excluded from it.",
+      "ccn": "450046",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 12,
+      "coveredDays": 12,
+      "lifetimeReserveDays": 9,
+      "coveredCharges": 400000.0,
+      "reviewCode": "00",
+      "provider": {
+        "operatingCostToChargeRatio": 0.32,
+        "capitalCostToChargeRatio": 0.04
+      }
+    },
+    {
+      "name": "sixty-one-reserve-days",
+      "why": "Return code 61: a beneficiary has sixty lifetime reserve days, ever. Pins the refusal.",
+      "ccn": "450047",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "871",
+      "lengthOfStay": 9,
+      "coveredDays": 70,
+      "lifetimeReserveDays": 61,
+      "coveredCharges": 55000.0,
+      "reviewCode": "00"
+    },
+    {
+      "name": "no-covered-days-on-a-stay-with-days",
+      "why": "Return code 62: zero covered days on a stay with length. Pins the refusal, and pins that it is conditioned on the length rather than firing on every zero.",
+      "ccn": "450048",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "871",
+      "lengthOfStay": 9,
+      "coveredDays": 0,
+      "coveredCharges": 55000.0,
+      "reviewCode": "00"
+    },
+    {
+      "name": "reserve-days-exceeding-covered-days",
+      "why": "Return code 62 again, from the other edit: reserve days are a subset of the covered days. Sixty reserve days against nine covered ones passes the lifetime limit and is refused here instead, which is why the two edits need separate rows.",
+      "ccn": "450049",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "871",
+      "lengthOfStay": 9,
+      "coveredDays": 9,
+      "lifetimeReserveDays": 60,
+      "coveredCharges": 55000.0,
+      "reviewCode": "00"
     }
   ]
 }

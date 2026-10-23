@@ -62,8 +62,16 @@ COLUMNS = [
     # pays that this oracle cannot confirm. A corpus row carries a pass-through
     # amount on the provider record purely to keep that fact checked.
     "passthrough_total_plus_misc",
+    # Day outliers were abolished in 1997 and CMS's FY2026 program never
+    # assigns either of these anything but zero, so the column is here to keep
+    # that true rather than to be compared against: a non-zero outlier day
+    # would mean CMS had brought something back.
     "outlier_days",
+    # Which of the two CMS reports is itself the finding. It reports regular
+    # days whenever any remain and reports zero reserve days, however many
+    # reserve days the claim carried, so the pair is not a utilization ledger.
     "regular_days_used",
+    "lifetime_reserve_days_used",
     # The four hospital-level adjustments. They are taken on the assembled
     # payment rather than on the DRG amount, and in an order 42 CFR does not
     # give, so each one is reported separately: a total that agrees says
@@ -178,6 +186,7 @@ def row_for(name: str, response: dict, drg_entry: dict | None) -> dict:
         "passthrough_total_plus_misc": extra["passthroughTotalPlusMisc"],
         "outlier_days": payment["outlierDays"],
         "regular_days_used": payment["regularDaysUsed"],
+        "lifetime_reserve_days_used": payment["lifetimeReserveDaysUsed"],
         "low_volume_payment": extra["lowVolumePayment"],
         "readmissions_adjustment": information[
             "hospitalReadmissionReductionAdjustmentPayment"
