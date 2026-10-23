@@ -4,11 +4,47 @@ using System.Text.Json.Serialization;
 
 namespace DaVinciInterop.Tests.Harness;
 
-/// <summary>An Inferno suite input, supplied when a test session is created.</summary>
+/// <summary>
+/// An Inferno suite input, supplied when a test session is created.
+///
+/// <para>
+/// <see cref="Type"/> matters for anything that is not plain text. Inferno's
+/// session-data repository switches on it
+/// (<c>SessionData#value_to_persist</c>) and raises
+/// <c>UnknownSessionDataType</c> when a non-text input arrives without one, so
+/// an <c>auth_info</c> or <c>checkbox</c> input sent as bare text is rejected
+/// rather than ignored. It is omitted from the JSON when null, so a text input
+/// is sent exactly as before.
+/// </para>
+/// </summary>
 public sealed record InfernoInput
 {
     [JsonPropertyName("name")] public string Name { get; init; } = "";
     [JsonPropertyName("value")] public string Value { get; init; } = "";
+
+    [JsonPropertyName("type")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Type { get; init; }
+
+    /// <summary>
+    /// A bearer token handed straight to the suite's FHIR client, as the
+    /// <c>auth_info</c> input a US Core or CARIN BB server suite declares.
+    ///
+    /// <para>
+    /// <c>auth_type: public</c> with an <c>access_token</c> and no token
+    /// endpoint tells Inferno the authorization already happened and this is
+    /// the result — which is true: the token is minted against CHO's own
+    /// development issuer rather than fetched through a launch the suite would
+    /// have to drive. The value is a JSON <em>string</em>, not a nested object,
+    /// because that is what the repository parses.
+    /// </para>
+    /// </summary>
+    public static InfernoInput AccessToken(string name, string accessToken) => new()
+    {
+        Name = name,
+        Type = "auth_info",
+        Value = JsonSerializer.Serialize(new { auth_type = "public", access_token = accessToken }),
+    };
 }
 
 /// <summary>One result row Inferno reports for a test, group or suite.</summary>
@@ -101,16 +137,39 @@ public sealed class InfernoRunner
     }
 
     /// <summary>Starts a run of the whole suite within an existing session.</summary>
-    public async Task<InfernoTestRun> StartSuiteRunAsync(
+    public Task<InfernoTestRun> StartSuiteRunAsync(
         string sessionId,
         string suiteId,
         IReadOnlyList<InfernoInput> inputs,
         CancellationToken cancellationToken = default)
+        => StartRunAsync(
+            new { test_session_id = sessionId, test_suite_id = suiteId, inputs }, cancellationToken);
+
+    /// <summary>
+    /// Starts a run of one group within an existing session.
+    ///
+    /// <para>
+    /// This is how CHO is judged honestly rather than generously. The US Core
+    /// server suite covers roughly thirty clinical resource types — allergies,
+    /// care plans, immunizations, vital signs — and CHO is a payer that
+    /// publishes almost none of them. A whole-suite run would report a wall of
+    /// failures for resources CHO has never claimed, burying whatever the
+    /// Patient and Encounter groups actually found. Naming the groups says
+    /// which claim is being tested; it does not soften the verdict on those
+    /// groups, and <see cref="RollUp"/> still fails on any failure within them.
+    /// </para>
+    /// </summary>
+    public Task<InfernoTestRun> StartGroupRunAsync(
+        string sessionId,
+        string groupId,
+        IReadOnlyList<InfernoInput> inputs,
+        CancellationToken cancellationToken = default)
+        => StartRunAsync(
+            new { test_session_id = sessionId, test_group_id = groupId, inputs }, cancellationToken);
+
+    private async Task<InfernoTestRun> StartRunAsync(object body, CancellationToken cancellationToken)
     {
-        var response = await _http.PostAsJsonAsync(
-            $"{_apiBaseUrl}/test_runs",
-            new { test_session_id = sessionId, test_suite_id = suiteId, inputs },
-            cancellationToken);
+        var response = await _http.PostAsJsonAsync($"{_apiBaseUrl}/test_runs", body, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         return await response.Content.ReadFromJsonAsync<InfernoTestRun>(JsonOptions, cancellationToken)

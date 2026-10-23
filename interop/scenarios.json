@@ -64,6 +64,47 @@
       "description": "Run the davinci-pdex-test-kit pdex_payer_server suite with CHO's FHIR base as the suite input."
     },
     {
+      "id": "INFERNO-USCORE-SERVER-001",
+      "title": "Inferno US Core 3.1.1 server suite against CHO's Patient and Encounter groups",
+      "protocol": "US Core",
+      "choRole": "Server",
+      "externalTarget": "inferno-us-core",
+      "requiredServices": [
+        "cho-fhir-service",
+        "cho-member-service",
+        "cho-encounter-service",
+        "inferno-us-core"
+      ],
+      "implemented": false,
+      "infernoSuite": "us_core_v311",
+      "infernoGroups": [
+        "us_core_v311_capability_statement",
+        "us_core_v311_patient",
+        "us_core_v311_encounter"
+      ],
+      "infernoInputs": ["url", "patient_ids", "smart_auth_info"],
+      "description": "Run the us-core-test-kit us_core_v311 groups that correspond to what CHO's CapabilityStatement claims, against the seeded interop-cho profile. Deliberately the named groups rather than the whole suite: US Core 3.1.1 covers roughly thirty clinical resource types and CHO is a payer that publishes almost none of them, so a whole-suite run would bury the Patient and Encounter verdicts under failures for resources CHO never claimed. Naming the groups says which claim is tested; it does not soften the verdict on those groups. US Core 3.1.1+ is the floor CMS-0057-F sets, and us_core_v610 is the natural second run."
+    },
+    {
+      "id": "INFERNO-C4BB-SERVER-001",
+      "title": "Inferno CARIN BB v2.0.0 server suite against CHO",
+      "protocol": "CARIN BB",
+      "choRole": "Server",
+      "externalTarget": "inferno-c4bb",
+      "requiredServices": [
+        "cho-fhir-service",
+        "cho-member-service",
+        "cho-coverage-service",
+        "cho-claims-service",
+        "cho-provider-service",
+        "inferno-c4bb"
+      ],
+      "implemented": false,
+      "infernoSuite": "c4bb_v200",
+      "infernoInputs": ["url", "smart_auth_info"],
+      "description": "Run the carin-for-blue-button-test-kit c4bb_v200 (financial) suite against the seeded interop-cho profile. The kit's c4bb_v200devnonfinancial suite is NOT run at the current pin: it checks the superseded '-NonFinancial' canonicals from the April 2023 branch snapshot it bundles, while CHO declares the CARIN BB 2.2.0 '-Basis' profiles, so it could not match CHO's EOBs in either direction. See knownMismatches for inferno-c4bb in interop/versions.json."
+    },
+    {
       "id": "INFERNO-PDEX-CLIENT-001",
       "title": "Inferno PDex payer-client suite driven by CHO",
       "protocol": "PDex",

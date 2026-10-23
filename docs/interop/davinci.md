@@ -300,6 +300,38 @@ What already exists:
   against the run, and a suite that skipped everything reported Skipped rather
   than Passed. `InfernoRunnerTests` pins that mapping.
 
+What the runner can now do that it could not before:
+
+* `InfernoRunner.StartGroupRunAsync` — run one **group** rather than the whole
+  suite. This is how CHO is judged honestly rather than generously: US Core
+  3.1.1 covers roughly thirty clinical resource types — allergies, care plans,
+  immunizations, vital signs — and CHO is a payer that publishes almost none of
+  them. A whole-suite run would bury the Patient and Encounter verdicts under
+  failures for resources CHO never claimed. Naming the groups says which claim
+  is tested; it does not soften the verdict on those groups, and `RollUp` still
+  fails on any failure within them.
+* `InfernoInput.AccessToken` — the `auth_info` input a server suite declares.
+  `auth_type: public` with an `access_token` and no token endpoint tells Inferno
+  the authorization already happened and this is the result, which is true: the
+  token is minted against CHO's own development issuer rather than fetched
+  through a launch the suite would have to drive. Two details are not
+  negotiable, and both are pinned by tests: the value is a JSON **string**, not
+  a nested object, and the input must carry `type: auth_info`, because Inferno's
+  session-data repository switches on `type` and *raises* on a non-text input
+  that arrives without one rather than ignoring it.
+
+The two scenarios this aims at are in
+[`interop/scenarios.json`](../../interop/scenarios.json), `implemented: false`
+until a test executes them:
+
+| Scenario | Suite | What it judges |
+| --- | --- | --- |
+| `INFERNO-USCORE-SERVER-001` | `us_core_v311`, groups `capability_statement`, `patient`, `encounter` | The US Core floor CMS-0057-F sets |
+| `INFERNO-C4BB-SERVER-001` | `c4bb_v200` (financial) | Patient, Coverage, Organization, Practitioner and the adjudicated EOB |
+
+`c4bb_v200devnonfinancial` is deliberately **not** among them — see the
+`-Basis` / `-NonFinancial` mismatch above.
+
 What the next PR has to do:
 
 * Run `./scripts/interop/fetch-inferno.sh pdex` (or `dtr`) to check the kit out at

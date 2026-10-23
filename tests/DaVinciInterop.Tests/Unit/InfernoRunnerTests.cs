@@ -10,6 +10,76 @@ namespace DaVinciInterop.Tests.Unit;
 [Trait("Category", "DaVinciInteropUnit")]
 public sealed class InfernoRunnerTests
 {
+    [Fact]
+    public async Task A_group_run_names_the_group_and_a_suite_run_names_the_suite()
+    {
+        // Inferno decides what to run from which key is present. Sending
+        // test_suite_id when a group was meant runs roughly thirty clinical
+        // resource groups CHO never claimed, so the two must not blur.
+        var recorder = new RequestRecorder();
+        var runner = new InfernoRunner("http://inferno.invalid/api", new HttpClient(recorder));
+
+        await runner.StartGroupRunAsync("session-1", "us_core_v311_patient", []);
+        recorder.LastBody.Should().Contain("\"test_group_id\":\"us_core_v311_patient\"");
+        recorder.LastBody.Should().NotContain("test_suite_id");
+
+        await runner.StartSuiteRunAsync("session-1", "us_core_v311", []);
+        recorder.LastBody.Should().Contain("\"test_suite_id\":\"us_core_v311\"");
+        recorder.LastBody.Should().NotContain("test_group_id");
+    }
+
+    [Fact]
+    public async Task A_text_input_carries_no_type_and_an_auth_input_carries_one()
+    {
+        // Inferno's session-data repository switches on `type` and raises
+        // UnknownSessionDataType for a non-text input that arrives without one,
+        // so an auth_info sent as bare text is refused rather than ignored.
+        var recorder = new RequestRecorder();
+        var runner = new InfernoRunner("http://inferno.invalid/api", new HttpClient(recorder));
+
+        await runner.StartGroupRunAsync("session-1", "us_core_v311_patient",
+        [
+            new InfernoInput { Name = "url", Value = "http://cho.invalid/fhir/r4" },
+            InfernoInput.AccessToken("smart_auth_info", "token-abc"),
+        ]);
+
+        recorder.LastBody.Should().Contain("\"name\":\"url\"");
+        recorder.LastBody.Should().NotContain("\"name\":\"url\",\"value\":\"http://cho.invalid/fhir/r4\",\"type\"");
+        recorder.LastBody.Should().Contain("\"type\":\"auth_info\"");
+    }
+
+    [Fact]
+    public void An_access_token_input_is_a_JSON_string_rather_than_a_nested_object()
+    {
+        // Inferno JSON.parses the value, so a nested object would arrive as a
+        // Hash the repository refuses.
+        var input = InfernoInput.AccessToken("smart_auth_info", "token-abc");
+
+        input.Value.Should().Be("{\"auth_type\":\"public\",\"access_token\":\"token-abc\"}");
+        input.Type.Should().Be("auth_info");
+    }
+
+    /// <summary>Captures the request body and answers with an empty finished run.</summary>
+    private sealed class RequestRecorder : HttpMessageHandler
+    {
+        public string LastBody { get; private set; } = "";
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            LastBody = request.Content is null
+                ? ""
+                : await request.Content.ReadAsStringAsync(cancellationToken);
+
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"id":"run-1","status":"done","results":[]}""",
+                    System.Text.Encoding.UTF8, "application/json"),
+            };
+        }
+    }
+
     [Theory]
     [InlineData("pass", InteropStatus.Passed)]
     [InlineData("fail", InteropStatus.Failed)]
