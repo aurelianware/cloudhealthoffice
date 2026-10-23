@@ -16,6 +16,12 @@ ever **asks** for one on a claim, and no claim ever **waits** for one. The reque
 lookup is `by-auth/...`, and claims-service contains no reference to RFAI at all. So the expensive half
 is built and attached to the wrong subject.
 
+[work-waiting-and-cycle-time.md](work-waiting-and-cycle-time.md) reached the same conclusion from the
+other direction: a wait should end on an **event**, not a date, and a claim waiting on records has no
+RFAI to wake it, so the commonest wait in practice falls back to a timer. Its Q1 recommends extending
+RFAI to claim attachment requests rather than waking on a bare attachment arriving, because an
+attachment alone cannot tell solicited from unsolicited. This design is that recommendation worked out.
+
 ---
 
 ## 2. What already exists
@@ -36,9 +42,11 @@ Worth reading before writing anything, because most of this is reusable.
 
 1. **A claim subject on the RFAI case.** `AuthNumber` is required and non-nullable; there is no claim id.
 2. **A reason to wait.** No pend code means a claim needing records cannot pend for it.
-3. **A way to wait.** `WorkItemStatus` is `Open | Leased | Done | Cancelled`. There is no state for
-   *waiting on somebody outside the plan*, which is what §3.2 of the workbench requires: off Get Next,
-   SLA clock stopped, not cancelled and not merely leased.
+3. **A way to wait.** `WorkItemStatus` is `Open | Leased | Done | Cancelled`, so there is no state for
+   *waiting on somebody outside the plan* — holding the lease parks the item invisibly while the clock
+   runs, and releasing it loses the diagnosis. `Waiting` is **designed but unbuilt**
+   ([work-waiting-and-cycle-time.md](work-waiting-and-cycle-time.md), merged in #1514), so this is a
+   dependency to implement rather than a question to answer.
 4. **Clean-date events.** Nothing in `src/` references a clean date. The workbench specifies deriving it
    from events (received / requested / received-back / corrected); none of those events are recorded.
 5. **The outbound ask.** No 277 RFAI (006020X313) encoder, and no letter path for non-electronic providers.
@@ -82,15 +90,25 @@ received-attachment handling, and would drift. Rejected.
 ### 4.3 The claim waits
 
 - New pend code **`RFAI`**, with `PendReason` naming what was asked for and when it is due.
-- New `WorkItemStatus.Waiting`, with the external party and the expected date on the item. `Waiting` is
-  excluded from Get Next, does not hold a lease, and stops the SLA clock. It is distinct from `Leased`
-  (a person has it) and from `Cancelled` (nobody will).
 - A new adjudication stage raises the PWK pend. Order matters: it must sit **after** the stages that
   decide whether records are actually needed and before persistence. Exact order to be fixed during
   implementation against the current stage table.
+- The work item goes to **`Waiting`**, which is already designed — see
+  [work-waiting-and-cycle-time.md](work-waiting-and-cycle-time.md), merged in #1514 and not yet built.
+  This design does not redesign it and should not; it is a consumer of it.
 
-`Waiting` is the piece with the widest blast radius — it touches Get Next, SLA reporting, the supervisor
-views and anything that counts open work. It should land on its own, ahead of the RFAI work.
+Two things that design settles, and that this one must not quietly contradict:
+
+- **The clock does not stop.** `DueAt` is untouched and prompt-pay interest runs while an item waits,
+  because it does in law. Suspending even the internal SLA is deliberately not offered for regulated
+  work. So "the claim waits" means *whose turn it is* changes, not that a timer pauses. The prompt-pay
+  consequence of a request is handled where it belongs — in the clean-date derivation (§4.6), which
+  computes reset / pause / extend from the recorded events — and never by stopping a clock.
+  `claim-review-workbench.md` §3.2 reads as though the SLA pauses; the waiting design is the later and
+  more careful word, and this is the reading to build.
+- **Who may set it.** `Waiting` is person-initiated, with one exception already carved out: a
+  source-owned item whose source says it is blocked. A claim pended for records is exactly that
+  exception, so raising it from adjudication is in scope rather than a new precedent.
 
 ### 4.4 Documents arrive, the wait ends
 
@@ -145,8 +163,9 @@ client and an outbound service token the way the other cross-service calls do.
 
 Each lands on its own and is useful before the next.
 
-1. **`WorkItemStatus.Waiting`** in work-management, with Get Next and SLA honouring it. Widest blast
-   radius, no dependencies, nothing else is safe until it exists.
+1. **`WorkItemStatus.Waiting`** — implementing the design already merged in #1514, not redesigning it.
+   Widest blast radius, no dependencies on anything here, and nothing below is safe until it exists.
+   It is worth building for its own reasons; this work is one of its callers.
 2. **RFAI case subject** — nullable `AuthNumber`, `SubjectKind`, `ClaimId`, `by-claim` lookup, backfill.
 3. **PWK pend** — the provider-promised path end to end: pend, wait, match, release, re-adjudicate.
    This is the first point where the loop visibly closes, and it needs no new outbound EDI.
