@@ -18,6 +18,65 @@ public class PasResponseBuilder
         "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewActionCode";
 
     /// <summary>
+    /// X12 code list 306, the certification action: A1 certified in total, A3
+    /// not certified, A4 pended. This is the system the reviewAction extension's
+    /// action code is bound to, and the one coded statement CHO can make about a
+    /// decision today.
+    /// </summary>
+    private const string X12CertificationActionSystem = "https://codesystem.x12.org/005010/306";
+
+    /// <summary>
+    /// WHY A DENIAL REASON IS A NOTE RATHER THAN AN <c>error</c>.
+    ///
+    /// <para>
+    /// CHO stores a denial reason as a free string (<c>Authorization.DenialReasonCode</c>),
+    /// and PAS has no element that will take one. <c>ClaimResponse.error.code</c>
+    /// binds REQUIRED to <c>X12278RejectReasonCodes</c> — list 901, the 278's
+    /// AAA03 — and it means "your request was rejected", a malformed or
+    /// unprocessable submission, not "the service was denied". CHO emitted its
+    /// internal string there under
+    /// <c>http://terminology.hl7.org/CodeSystem/adjudication-error</c>: the wrong
+    /// system, a code defined in no system, and the wrong question answered.
+    /// </para>
+    ///
+    /// <para>
+    /// The element that does mean "why the review decided as it did" is the
+    /// reviewAction extension's <c>reasonCode</c>, bound REQUIRED to X12 external
+    /// list 886. X12 licenses that list and the IG package enumerates none of it,
+    /// so CHO cannot fill it from anything it holds, and a code invented for a
+    /// required binding is worse than an absent one. <c>reasonCode</c> is 0..*,
+    /// so leaving it out is conformant; see /mnt/project-files/pa-denial-codes
+    /// for the mapping that would fill it.
+    /// </para>
+    ///
+    /// <para>
+    /// So the FACT of denial travels coded, as action code A3 on the reviewAction
+    /// extension, and the REASON travels as prose a human reads. Nothing is lost
+    /// that CHO previously conveyed — the old coding carried CHO's private string,
+    /// which no consumer could resolve either.
+    /// </para>
+    /// </summary>
+    private static ClaimResponse.NoteComponent DenialNote(string? reasonCode, string? reason)
+        => new()
+        {
+            Type = Hl7.Fhir.Model.NoteType.Print,
+            Text = string.IsNullOrWhiteSpace(reason)
+                ? $"Denied ({reasonCode})."
+                : string.IsNullOrWhiteSpace(reasonCode) ? reason : $"{reason} ({reasonCode})",
+        };
+
+    /// <summary>The reviewAction extension carrying one X12 certification action code.</summary>
+    private static Extension ReviewAction(string actionCode, string? display = null)
+        => new()
+        {
+            Url = ReviewActionExtensionUrl,
+            Extension = new List<Extension>
+            {
+                new(ReviewActionCodeUrl, new Coding(X12CertificationActionSystem, actionCode, display)),
+            },
+        };
+
+    /// <summary>
     /// Builds an approved ClaimResponse bundle.
     /// </summary>
     public Bundle BuildApprovedResponse(Claim claim, PasDecisionResult decision, List<PriorAuthorizationService>? services = null)
@@ -52,15 +111,11 @@ public class PasResponseBuilder
         // it carries the same tracking handle an approval does.
         claimResponse.PreAuthRef = decision.AuthorizationNumber;
 
-        claimResponse.Error = new List<ClaimResponse.ErrorComponent>
-        {
-            new()
-            {
-                Code = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication-error",
-                    decision.DenialReasonCode ?? "denied",
-                    decision.DenialReason ?? "Request denied"),
-            }
-        };
+        // A3, not certified. The denied path previously carried no review action
+        // at all, so a denial was the one decision whose outcome a PAS consumer
+        // could not read from the element the IG defines for it.
+        claimResponse.Extension.Add(ReviewAction("A3", "Not Certified"));
+        claimResponse.ProcessNote.Add(DenialNote(decision.DenialReasonCode, decision.DenialReason));
 
         AddRequestedServices(claimResponse, new PriorAuthorizationRecord { RequestedServices = services ?? new() });
         return WrapInBundle(claimResponse);
@@ -80,21 +135,7 @@ public class PasResponseBuilder
         claimResponse.PreAuthRef = authorizationNumber;
 
         // Add Da Vinci PAS reviewAction extension with A4 (pended) code
-        claimResponse.Extension.Add(new Extension
-        {
-            Url = ReviewActionExtensionUrl,
-            Extension = new List<Extension>
-            {
-                new()
-                {
-                    Url = ReviewActionCodeUrl,
-                    Value = new Coding(
-                        "https://codesystem.x12.org/005010/306",
-                        "A4",
-                        "Pending"),
-                }
-            }
-        });
+        claimResponse.Extension.Add(ReviewAction("A4", "Pending"));
 
         AddRequestedServices(claimResponse, new PriorAuthorizationRecord { RequestedServices = services ?? new() });
         return WrapInBundle(claimResponse);
@@ -181,29 +222,15 @@ public class PasResponseBuilder
 
         if (reviewActionCode is not null)
         {
-            claimResponse.Extension.Add(new Extension
-            {
-                Url = ReviewActionExtensionUrl,
-                Extension = new List<Extension>
-                {
-                    new(ReviewActionCodeUrl,
-                        new Coding("https://codesystem.x12.org/005010/306",
-                            reviewActionCode, reviewActionDisplay)),
-                }
-            });
+            claimResponse.Extension.Add(ReviewAction(reviewActionCode, reviewActionDisplay));
         }
 
-        // A denial says why, in the same coded shape $submit uses.
+        // A denial says why, in the same shape $submit uses. See DenialNote.
         if (!string.IsNullOrWhiteSpace(authorization.DenialReasonCode)
             || !string.IsNullOrWhiteSpace(authorization.DenialReason))
         {
-            claimResponse.Error.Add(new ClaimResponse.ErrorComponent
-            {
-                Code = new CodeableConcept(
-                    "http://terminology.hl7.org/CodeSystem/adjudication-error",
-                    authorization.DenialReasonCode ?? "denied",
-                    authorization.DenialReason ?? "Request denied"),
-            });
+            claimResponse.ProcessNote.Add(
+                DenialNote(authorization.DenialReasonCode, authorization.DenialReason));
         }
 
         // A pended decision says what is outstanding, when the record holds it.
@@ -250,10 +277,7 @@ public class PasResponseBuilder
                             ? new CodeableConcept { Text = service.PendReason } : null,
                     Extension = new List<Extension>
                     {
-                        new() { Url = ReviewActionExtensionUrl, Extension = new List<Extension>
-                        {
-                            new(ReviewActionCodeUrl, new Coding("https://codesystem.x12.org/005010/306", service.ServiceStatus)),
-                        } },
+                        ReviewAction(service.ServiceStatus),
                     },
                 });
             }

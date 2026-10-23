@@ -96,9 +96,18 @@ public class PasResponseBuilderTests
         claimResponse.Should().NotBeNull();
         claimResponse!.Disposition.Should().Be("denied");
         claimResponse.Outcome.Should().Be(ClaimProcessingCodes.Complete);
-        claimResponse.Error.Should().HaveCount(1);
-        claimResponse.Error[0].Code.Coding.Should().Contain(c =>
-            c.Code == "NOT_COVERED");
+        // The denial is coded as the certification action A3 and explained in
+        // prose. It is NOT a ClaimResponse.error: that element binds required to
+        // X12 list 901 and means the request was rejected, not that the service
+        // was denied. See PasResponseBuilder.DenialNote.
+        claimResponse.Error.Should().BeEmpty();
+        claimResponse.Extension.Should().ContainSingle(e =>
+            e.Url == "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewAction")
+            .Which.Extension.Should().ContainSingle().Which.Value.Should().BeOfType<Coding>()
+            .Which.Code.Should().Be("A3");
+        claimResponse.ProcessNote.Should().ContainSingle()
+            .Which.Text.Should().Contain("NOT_COVERED")
+            .And.Contain("Service V2020 is not a covered benefit");
     }
 
     [Fact]
