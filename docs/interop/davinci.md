@@ -389,12 +389,45 @@ unavailable", which reads like a missing service token rather than a refused
 one. Inside Compose the hosts are service names rather than loopback, so the
 setting is neither needed nor set there.
 
+#### Seeding it
+
+`./scripts/interop/seed-cho.mjs` writes the synthetic record set in
+[`interop/cho-seed.json`](../../interop/cho-seed.json) — one member, one
+coverage, one professional claim and one inpatient institutional claim — and
+then reads it back as FHIR. No dependencies: Node's own `crypto` signs the
+development token.
+
+Writes go through each service's **own HTTP API**, never into Mongo behind it,
+so a seed passes exactly the validation a real write does. That is the point: an
+Inferno suite reading seeded data must be reading data CHO itself accepted. A
+fixture the services would reject fails the seed rather than producing a
+resource no caller could have created.
+
+The verify pass reads two things, because neither implies the other:
+
+* `GET /fhir/r4/Patient/{id}` through fhir-service — proves the whole ChoNative
+  path, not just that member-service took a write.
+* `GET /fhir/ProviderAccess/ExplanationOfBenefit?patient={id}` — the Provider
+  Access payload itself, with each claim's `expectProfile` asserted. A claim
+  landing on the wrong CARIN profile is a silently *weaker* answer rather than
+  an error: `CarinNonFinancialEobProjector` falls to the outpatient profile for
+  any institutional claim it cannot read as inpatient.
+
+It is safe to re-run. None of the three services treats a repeat write as a
+no-op — member-service answers 409, but coverage-service and claims-service both
+answer 201 and create a second record, because a resubmitted claim is a real
+thing — so the script asks before each write. Running it twice leaves two EOBs,
+not four.
+
+`InteropSeedFixtureTests` (in the claims-service suite, where the types live)
+guards the two things in the fixture that would drift quietly: the **numeric**
+`claimType` and `lineOfBusiness` values, because claims-service serializes enums
+as numbers and the fixture speaks its API; and the UB-04 `facilityTypeCode` that
+decides the institutional profile. It deserializes the fixture with the
+service's own types and runs the real projector over it.
+
 #### What the profile still needs
 
-* **Data.** The services' stores start empty, so the profile currently serves
-  404s. Seeding goes through each service's own API with a development-signed
-  token, not by writing to Mongo behind them, so the seed exercises the same
-  validation a real write does.
 * **A first run.** No suite has been run against it.
 
 ### CARIN BB non-financial: `-Basis` against `-NonFinancial`
