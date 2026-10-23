@@ -1,0 +1,192 @@
+@page "/admin/unmatched-attachments"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
+@inject IUnmatchedAttachmentService Attachments
+@inject IConfiguration Configuration
+
+<PageTitle>Held attachments - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="attachments:read">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.HelpOutline" Class="mr-2" />
+        Held attachments
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        275s whose attachment control number no claim has announced. They are filed automatically the
+        moment a claim announces one, so these are the ones that need a person.
+    </MudText>
+
+    @if (_problem is not null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4"
+                  ShowCloseIcon="true" CloseIconClicked="@(() => _problem = null)"
+                  data-testid="held-problem">@_problem</MudAlert>
+    }
+
+    @if (_filed is not null)
+    {
+        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="mb-4"
+                  ShowCloseIcon="true" CloseIconClicked="@(() => _filed = null)"
+                  data-testid="held-filed">@_filed</MudAlert>
+    }
+
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" data-testid="held-loading" />
+    }
+    else if (_held is null)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" data-testid="held-unavailable">
+            The attachment service could not be reached, so this list is not available. This does not mean
+            nothing is held — try again shortly.
+        </MudAlert>
+    }
+    else if (_held.Count == 0)
+    {
+        <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" data-testid="held-empty">
+            Nothing is held. Every 275 received has been filed on a claim.
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="@_held" Dense="true" Hover="true" data-testid="held-table">
+            <HeaderContent>
+                <MudTh>Received</MudTh>
+                <MudTh>Control number</MudTh>
+                <MudTh>Provider</MudTh>
+                <MudTh>Patient</MudTh>
+                <MudTh>Document</MudTh>
+                <MudTh>Rejected in</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Received">@context.ReceivedUtc.ToString("yyyy-MM-dd")</MudTd>
+                <MudTd DataLabel="Control number">@(context.AttachmentControlNumber ?? "—")</MudTd>
+                <MudTd DataLabel="Provider">
+                    @(string.IsNullOrWhiteSpace(context.ProviderName) ? context.ProviderId : context.ProviderName)
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@context.ProviderId</MudText>
+                </MudTd>
+                <MudTd DataLabel="Patient">@context.PatientName</MudTd>
+                <MudTd DataLabel="Document">@context.DocumentType</MudTd>
+                <MudTd DataLabel="Rejected in">
+                    <MudText Typo="Typo.body2" Color="@ExpiryColour(context)" data-testid="@ExpiryTestId(context)">
+                        @ExpiryText(context)
+                    </MudText>
+                </MudTd>
+                <MudTd>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                               OnClick="@(() => Open(context.Id))"
+                               data-testid="@FileTestId(context)">
+                        File on a claim
+                    </MudButton>
+                </MudTd>
+            </RowTemplate>
+            <ChildRowContent>
+                @if (_filing == context.Id)
+                {
+                    <MudTr>
+                        <MudTd colspan="7">
+                            <MudPaper Class="pa-4" Elevation="0" data-testid="held-filing">
+                                <MudText Typo="Typo.body2" Class="mb-2">
+                                    The claim must be billed by this same provider (@context.ProviderId).
+                                    That check is what keeps one provider's records off another provider's
+                                    patient's claim, so it cannot be overridden here.
+                                </MudText>
+                                <MudTextField @bind-Value="_claimId" Label="Claim id" Variant="Variant.Outlined"
+                                              Margin="Margin.Dense" Class="mb-2" data-testid="held-claim-id" />
+                                <MudTextField @bind-Value="_reason" Label="Why this claim" Variant="Variant.Outlined"
+                                              Margin="Margin.Dense" Class="mb-2" data-testid="held-reason" />
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mr-2"
+                                           Disabled="@(_working || string.IsNullOrWhiteSpace(_claimId))"
+                                           OnClick="@(() => File(context.Id))"
+                                           data-testid="held-confirm">File it</MudButton>
+                                <MudButton Variant="Variant.Text" OnClick="Cancel" data-testid="held-cancel">Cancel</MudButton>
+                            </MudPaper>
+                        </MudTd>
+                    </MudTr>
+                }
+            </ChildRowContent>
+        </MudTable>
+    }
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private IReadOnlyList<HeldAttachment>? _held;
+    private bool _loading = true;
+    private bool _working;
+    private string? _problem;
+    private string? _filed;
+    private string? _filing;
+    private string _claimId = string.Empty;
+    private string _reason = string.Empty;
+
+    private int HoldDays => Configuration.GetValue("Attachments:HoldDays", 30);
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        _held = await Attachments.GetHeldAsync();
+        _loading = false;
+    }
+
+    private void Open(string id)
+    {
+        _filing = id;
+        _claimId = string.Empty;
+        _reason = string.Empty;
+        _problem = null;
+    }
+
+    private void Cancel()
+    {
+        _filing = null;
+        _claimId = string.Empty;
+        _reason = string.Empty;
+    }
+
+    private async Task File(string id)
+    {
+        _working = true;
+        _problem = null;
+        var outcome = await Attachments.LinkToClaimAsync(id, _claimId.Trim(), _reason.Trim());
+        _working = false;
+
+        if (!outcome.Linked)
+        {
+            _problem = outcome.Problem;
+            return;
+        }
+
+        _filed = "Filed on claim " + _claimId.Trim() + ".";
+        Cancel();
+        await Load();
+    }
+
+    // Plain methods rather than switch expressions: a property or relational
+    // pattern inside @code breaks Razor's brace matching.
+    private string ExpiryText(HeldAttachment attachment)
+    {
+        var left = attachment.DaysLeft(DateTime.UtcNow, HoldDays);
+        if (left < 0) return "Past the hold";
+        if (left == 0) return "Today";
+        if (left == 1) return "Tomorrow";
+        return left + " days";
+    }
+
+    private Color ExpiryColour(HeldAttachment attachment)
+    {
+        var left = attachment.DaysLeft(DateTime.UtcNow, HoldDays);
+        if (left <= 0) return Color.Error;
+        if (left <= 7) return Color.Warning;
+        return Color.Default;
+    }
+
+    private string ExpiryTestId(HeldAttachment attachment) => "held-expiry-" + attachment.Id;
+
+    private static string FileTestId(HeldAttachment attachment) => "held-file-" + attachment.Id;
+}

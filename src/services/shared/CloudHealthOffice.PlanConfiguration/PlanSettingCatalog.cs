@@ -66,6 +66,46 @@ public static class PlanSettings
     };
 
     /// <summary>
+    /// Whether an inpatient claim is priced by the DRG CHO's grouper assigns
+    /// rather than the one the facility billed (ADR 024 step 8).
+    ///
+    /// <para>
+    /// Off everywhere by default, and deliberately: turning it on changes
+    /// which DRG rate row an inpatient claim prices against, so it changes
+    /// paid amounts. A payer adopts it one line of business at a time, after
+    /// it has run its own inpatient history through the grouper and looked at
+    /// the differences, not because a release shipped.
+    /// </para>
+    ///
+    /// <para>
+    /// Medicare has no higher default than the others here. CHO's grouper is
+    /// held to CMS's own grouper on a 33-stay corpus, which is enough to show
+    /// the algorithm agrees and nothing like a real plan's case mix; a
+    /// Medicare default of true would be this repository deciding that for
+    /// every deployment.
+    /// </para>
+    ///
+    /// <para>
+    /// Tenant and line of business are the levels that hold values today
+    /// (plan-configuration.md step 1). Benefit plan is the level a payer
+    /// piloting on one plan would actually want, and it joins when
+    /// plan-configuration step 2 lands — <see cref="SettingScope"/> carries no
+    /// benefit-plan id yet, so declaring the level here would accept a value
+    /// nothing could ever set.
+    /// </para>
+    /// </summary>
+    public static readonly SettingDefinition GroupInpatientDrg = new()
+    {
+        Key = "pricing.inpatient.groupDrg",
+        Type = SettingType.Boolean,
+        Owner = "claims-service",
+        Description = "Price an inpatient claim by the DRG CHO's grouper assigns instead of the DRG the facility billed.",
+        Default = "false",
+        AllowedLevels = new HashSet<SettingLevel> { SettingLevel.Tenant, SettingLevel.LineOfBusiness },
+        ChangeControl = ChangeControl.ReasonRequired,
+    };
+
+    /// <summary>
     /// Whether releasing money needs a second user (maker-checker):
     /// capitation disbursements and premium drafts cannot be released by the
     /// person who prepared them (plan-configuration.md §12 step 2b).
@@ -115,6 +155,7 @@ public static class PlanSettings
     public static IReadOnlyList<SettingDefinition> All { get; } =
     [
         OrphanGraceDays,
+        GroupInpatientDrg,
         PaymentEnforceSeparationOfDuties,
         PersonalRepresentativeRequireSecondUserActivation,
     ];

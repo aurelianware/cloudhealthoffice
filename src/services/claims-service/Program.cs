@@ -19,7 +19,9 @@ using ClaimsService.Services.Adjudication.Stages;
 using ClaimsService.Services.Migrations;
 using ClaimsService.Services.Resolution;
 using CloudHealthOffice.ClaimsScrubEngine.Configuration;
+using CloudHealthOffice.GrouperEngine.Services;
 using CloudHealthOffice.NcciEngine.Configuration;
+using CloudHealthOffice.PlanConfiguration;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -453,6 +455,19 @@ builder.Services.AddScoped<IClaimAdjudicationStage, TimelyFilingStage>(); // Ord
 builder.Services.AddScoped<IClaimAdjudicationStage, DuplicateClaimStage>(); // Order=120
 builder.Services.AddScoped<IClaimAdjudicationStage, ProviderIntegrityStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>();
+// Order=240: groups an inpatient stay so PricingStage prices by the grouped
+// DRG, when the plan setting says to (ADR 024 step 8). Both the grouper and
+// the setting default to doing nothing.
+//
+// The same two calls the Pricing API makes, so the two hosts cannot disagree
+// about what a stay groups to: AddMsDrgGrouper binds whichever grouper the
+// MsDrgGrouper section asks for — with no configured release that is
+// BilledDrgGrouper, which assigns the DRG the facility billed and nothing
+// else — and AddPlanSettingsClient reads pricing.inpatient.groupDrg from
+// tenant-service.
+builder.Services.AddMsDrgGrouper(builder.Configuration);
+builder.Services.AddPlanSettingsClient(builder.Configuration);
+builder.Services.AddScoped<IClaimAdjudicationStage, InpatientGroupingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PricingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStage>();

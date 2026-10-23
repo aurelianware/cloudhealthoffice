@@ -24,6 +24,20 @@ public interface IClaimAttachmentMatcher
     Task<IReadOnlyList<ClaimControlNumberMatch>> FindAsync(string tenantId, string controlNumber, CancellationToken ct = default);
 
     /// <summary>
+    /// The claim named by <paramref name="claimId"/> in <paramref name="tenantId"/>,
+    /// or null when claims-service answers 404 (which is also its answer for
+    /// another tenant's claim). Throws <see cref="AttachmentParentLookupException"/>
+    /// when claims-service could not answer.
+    /// <para>
+    /// Used when a person links a held 275 by hand: the control numbers
+    /// disagree, so <see cref="FindAsync"/> finds nothing, but the billing NPI
+    /// must still agree before the document is filed on the claim. See
+    /// <see cref="Choose"/> for why that rule is not negotiable.
+    /// </para>
+    /// </summary>
+    Task<ClaimControlNumberMatch?> GetClaimAsync(string tenantId, string claimId, CancellationToken ct = default);
+
+    /// <summary>
     /// The one claim the 275 belongs to, or null when none or more than one
     /// fits. A claim fits only when its billing NPI is the 275's provider:
     /// providers number their own attachments (often short, sequential
@@ -104,5 +118,62 @@ public sealed class HttpClaimAttachmentMatcher : IClaimAttachmentMatcher
             var matches = await response.Content.ReadFromJsonAsync<List<ClaimControlNumberMatch>>(cancellationToken: ct);
             return (matches ?? []).Where(m => !string.IsNullOrWhiteSpace(m.ClaimId)).ToList();
         }
+    }
+
+    public async Task<ClaimControlNumberMatch?> GetClaimAsync(string tenantId, string claimId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new InvalidOperationException("A tenant is required to read a claim.");
+
+        var client = _httpClientFactory.CreateClient(HttpAttachmentParentLookup.ClaimsClientName);
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            "api/claims/" + Uri.EscapeDataString(claimId.Trim()));
+        request.Headers.Add(TenantMiddleware.TenantHeaderName, tenantId);
+
+        HttpResponseMessage response;
+        try
+        {
+            var tokens = ChoServiceTokens.Resolve(_services);
+            var target = client.BaseAddress is null ? request.RequestUri : new Uri(client.BaseAddress, request.RequestUri!);
+            if (tokens is not null && _services.GetService<ChoOutboundHosts>()?.IsChoService(target) == true)
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokens.GetTokenAsync(tenantId));
+            response = await client.SendAsync(request, ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "claims-service unreachable reading a claim for tenant {TenantId}",
+                LogSanitizer.Sanitize(tenantId));
+            throw new AttachmentParentLookupException("claims-service unreachable", ex);
+        }
+
+        using (response)
+        {
+            if (response.StatusCode == HttpStatusCode.NotFound) return null;
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("claims-service answered {Status} reading a claim for tenant {TenantId}",
+                    (int)response.StatusCode, LogSanitizer.Sanitize(tenantId));
+                throw new AttachmentParentLookupException($"claims-service answered {(int)response.StatusCode}");
+            }
+
+            var claim = await response.Content.ReadFromJsonAsync<ClaimSummary>(cancellationToken: ct);
+            if (claim is null || string.IsNullOrWhiteSpace(claim.Id)) return null;
+
+            return new ClaimControlNumberMatch
+            {
+                ClaimId = claim.Id,
+                ClaimNumber = claim.ClaimNumber,
+                BillingProviderNPI = claim.BillingProviderNPI,
+            };
+        }
+    }
+
+    /// <summary>The handful of claim fields this service reads; the claim carries far more.</summary>
+    private sealed class ClaimSummary
+    {
+        public string Id { get; set; } = string.Empty;
+        public string? ClaimNumber { get; set; }
+        public string? BillingProviderNPI { get; set; }
     }
 }

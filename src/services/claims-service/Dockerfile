@@ -37,6 +37,11 @@ COPY src/engines/CloudHealthOffice.FeeScheduleEngine/CloudHealthOffice.FeeSchedu
 COPY src/engines/CloudHealthOffice.ReferenceData/CloudHealthOffice.ReferenceData.csproj src/engines/CloudHealthOffice.ReferenceData/
 # PlanEditsStage (ADR 019): the plan edit service contract.
 COPY src/services/shared/CloudHealthOffice.PlanEdits.Contracts/CloudHealthOffice.PlanEdits.Contracts.csproj src/services/shared/CloudHealthOffice.PlanEdits.Contracts/
+# InpatientGroupingStage (Order=240, ADR 024 step 8): the MS-DRG grouper, and
+# the plan-configuration client that reads the setting deciding whether to use
+# it.
+COPY src/engines/CloudHealthOffice.GrouperEngine/CloudHealthOffice.GrouperEngine.csproj src/engines/CloudHealthOffice.GrouperEngine/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/CloudHealthOffice.PlanConfiguration.csproj src/services/shared/CloudHealthOffice.PlanConfiguration/
 RUN dotnet restore src/services/claims-service/claims-service.csproj
 
 # Copy source code and build
@@ -51,6 +56,8 @@ COPY src/engines/CloudHealthOffice.CobEngine/ src/engines/CloudHealthOffice.CobE
 COPY src/engines/CloudHealthOffice.FeeScheduleEngine/ src/engines/CloudHealthOffice.FeeScheduleEngine/
 COPY src/engines/CloudHealthOffice.ReferenceData/ src/engines/CloudHealthOffice.ReferenceData/
 COPY src/services/shared/CloudHealthOffice.PlanEdits.Contracts/ src/services/shared/CloudHealthOffice.PlanEdits.Contracts/
+COPY src/engines/CloudHealthOffice.GrouperEngine/ src/engines/CloudHealthOffice.GrouperEngine/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/ src/services/shared/CloudHealthOffice.PlanConfiguration/
 RUN dotnet build src/services/claims-service/claims-service.csproj -c Release --no-restore
 
 # Publish stage

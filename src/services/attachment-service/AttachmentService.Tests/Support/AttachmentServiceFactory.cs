@@ -166,10 +166,22 @@ public sealed class StubParentServices : HttpMessageHandler
     private readonly ConcurrentDictionary<string, byte> _records = new();
     private readonly ConcurrentDictionary<string, ConcurrentBag<(string ClaimId, string Npi)>> _controlNumbers = new();
 
+    private readonly ConcurrentDictionary<string, string> _claimNpis = new();
+
     /// <summary>A claim in <paramref name="tenantId"/> whose 837 PWK06 is <paramref name="controlNumber"/>.</summary>
     public void AddControlNumber(string tenantId, string controlNumber, string claimId, string billingNpi = "1234567893")
     {
         _controlNumbers.GetOrAdd($"{tenantId}|{controlNumber}", _ => new()).Add((claimId, billingNpi));
+        AddClaim(tenantId, claimId, billingNpi);
+    }
+
+    /// <summary>
+    /// A claim that announced no control number — the case a manual link
+    /// exists for. <c>GET api/claims/{id}</c> answers with its billing NPI.
+    /// </summary>
+    public void AddClaim(string tenantId, string claimId, string billingNpi = "1234567893")
+    {
+        _claimNpis[Key(tenantId, "claims", claimId)] = billingNpi;
         Add(tenantId, AttachmentParentType.Claim, claimId);
     }
 
@@ -182,6 +194,7 @@ public sealed class StubParentServices : HttpMessageHandler
     {
         _records.Clear();
         _controlNumbers.Clear();
+        _claimNpis.Clear();
         Requests.Clear();
         FailWith = null;
     }
@@ -212,11 +225,24 @@ public sealed class StubParentServices : HttpMessageHandler
                 Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(matches), System.Text.Encoding.UTF8, "application/json"),
             });
         }
-        var found = segments.Length == 3 && segments[0] == "api"
-            && _records.ContainsKey(Key(tenant, segments[1], Uri.UnescapeDataString(segments[2])));
+        var key = segments.Length == 3 && segments[0] == "api"
+            ? Key(tenant, segments[1], Uri.UnescapeDataString(segments[2]))
+            : null;
+        var found = key is not null && _records.ContainsKey(key);
+
+        // A claim read answers with the fields attachment-service reads off it;
+        // everything else only has to exist.
+        var body = "{}";
+        if (found && segments[1] == "claims" && _claimNpis.TryGetValue(key!, out var npi))
+        {
+            var id = Uri.UnescapeDataString(segments[2]);
+            body = System.Text.Json.JsonSerializer.Serialize(
+                new { id, claimNumber = id, billingProviderNPI = npi });
+        }
+
         return Task.FromResult(new HttpResponseMessage(found ? HttpStatusCode.OK : HttpStatusCode.NotFound)
         {
-            Content = new StringContent("{}"),
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
         });
     }
 }

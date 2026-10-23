@@ -59,7 +59,7 @@ public class ClaimRecordTabsTests : TestContext
 
         var tabs = cut.FindAll("[data-testid^=record-tab-]");
         tabs.Select(t => t.GetAttribute("data-testid")).Should().Equal(
-            "record-tab-summary", "record-tab-lines", "record-tab-adjudication", "record-tab-history", "record-tab-notes");
+            "record-tab-summary", "record-tab-lines", "record-tab-adjudication", "record-tab-history", "record-tab-notes", "record-tab-documents");
         cut.Find("[data-testid=record-tab-lines]").GetAttribute("href").Should().Be("/claims/A/lines?fromRun=run-9");
     }
 

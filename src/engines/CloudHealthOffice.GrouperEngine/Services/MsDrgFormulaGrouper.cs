@@ -68,10 +68,12 @@ public sealed record MsDrgFormulaGroupingResult(
 ///
 /// <para>
 /// Callers reach it through <see cref="FormulaMsDrgGrouper"/>, which puts it
-/// behind <see cref="IMsDrgGrouper"/> — the Pricing API asks that seam, not
-/// this class. <c>PricingStage</c> is still to be wired (ADR 024 step 8), and
-/// that is the half that changes adjudicated payments, so a plan keeps paying
-/// the billed DRG there until it has been through parity testing of its own.
+/// behind <see cref="IMsDrgGrouper"/> — the Pricing API and adjudication ask
+/// that seam, not this class. Adjudication's end is
+/// <c>InpatientGroupingStage</c> (ADR 024 step 8), and because that is the
+/// half that changes adjudicated payments it runs only where a plan has set
+/// <c>pricing.inpatient.groupDrg</c>; everywhere else the billed DRG is still
+/// the one priced.
 /// </para>
 /// </summary>
 public sealed class MsDrgFormulaGrouper

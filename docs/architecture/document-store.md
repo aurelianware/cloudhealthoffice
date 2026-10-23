@@ -107,6 +107,8 @@ One **Documents panel** component appears on claim, authorization, appeal, membe
 - an upload button that opens with the current subject already linked;
 - an "Open requests" strip for RFAIs: what was asked, when it's due, and what has arrived.
 
+*Built 2026-10-23 (§15): the panel, read-only, on claim, authorization, appeal and provider. The viewer, upload and the RFAI strip are not built.*
+
 ## 8. Storage providers
 
 Extend `IDocumentStore` with **Google Cloud Storage** and **S3** providers alongside Azure Blob, chosen by configuration. The GKE demo then has durable storage, and AWS deployments work.
@@ -127,9 +129,9 @@ Extend `IDocumentStore` with **Google Cloud Storage** and **S3** providers along
 2. **Catalog:** the document record and service (evolved from member-document-service), with many-to-many links, sensitivity tags, access audit, and the documents API. *Built (2026-10-20) as a new document-service; member-document-service moves onto it later.*
 3. **Move attachment-service onto the catalog:** existing `Attachment` rows migrate to documents with links. Keep the PWK attachment control number on the claim for 275 matching. *Attachments built (2026-10-20): attachment-service files through the catalog; there was no stored attachment data to migrate. Member documents built (2026-10-20, §13). PWK matching built (2026-10-21, §14).*
 4. **Correspondence** ([correspondence.md](correspondence.md)), starting with appeal notices. Generated letters are the first new producer on the catalog, and ID cards move onto it in the same phase.
-5. **Documents panel** on claim, authorization and appeal screens.
-6. **Claim RFAI:** extend rfai-service from authorizations to claims, with 277 RFAI out, 275 / upload / fax in, matching, and clean-date events.
-7. **Fax/scan intake** with OCR and the unmatched-documents queue; paper-claim keying against the image.
+5. **Documents panel** on claim, authorization and appeal screens. *Built (2026-10-23), read-only, and on provider too (§15).*
+6. **Claim RFAI:** extend rfai-service from authorizations to claims, with 277 RFAI out, 275 / upload / fax in, matching, and clean-date events. *Implementation design: [claim-rfai.md](claim-rfai.md).*
+7. **Fax/scan intake** with OCR and the unmatched-documents queue; paper-claim keying against the image. *The queue half is built (§16); fax, scan and OCR are not.*
 8. **Call recordings and transcripts** for CHO Service.
 
 ## 10. Open questions
@@ -191,3 +193,26 @@ Next: member-document-service onto the catalog (§13), and keeping the 837 PWK a
 - **Explicit parents still win.** A 275 that names its claim, authorization or appeal is filed there as before; its control number is kept on the attachment and as a catalog source id.
 - **Not in this step:** the claim does not pend for missing attachments (PWK02 EL/FX/BM without a 275 yet); that comes with claim RFAI (step 6). The matcher polls; claim events could replace the polling later.
 
+
+## 15. What step 5 built (the Documents panel)
+
+Until this, the catalog was reachable only by a service. The member record had its own documents tab (member-document-service, §13), the authorization record listed its attachments behind Download and Preview buttons that had **no handler at all**, the appeal record listed names with no way to open anything, and the claim and provider records showed nothing. So a 275 matched to a claim (§14), or a letter the correspondence service generated, was filed correctly and invisible to everyone.
+
+- **One component, four records.** `DocumentsPanel` takes a subject (`SubjectKind` + `SubjectId`) and asks the catalog for "documents for this subject". It is on the claim, authorization, appeal and provider records; the authorization and appeal tabs it replaces are gone, so there is one list rather than two that disagree. The member record keeps its own tab, which carries member-specific metadata (category, effective and expiration dates, related members) the catalog does not model; folding it in is its own step.
+- **The panel decides nothing.** It applies no access rule, because the catalog decides, audits and withholds (§5), and a panel that filtered as well would only ever disagree with it. What the panel has to get right is saying honestly what it was told: **withheld**, **refused**, **unreachable** and **not yet openable** each read differently from "nothing on file". The withheld count is shown in words, because a filtered list that reads as empty is how somebody decides a claim without the record that mattered.
+- **Nothing opens before the scan is clean.** A row whose document is Pending, Infected, Failed or still uploading has no Open link and says which, in visible text rather than a tooltip: somebody scanning a table should not have to hover to learn that a file is quarantined.
+- **"Also linked to"** names the other subjects a document supports, so an examiner can see that the record in front of them is also an appeal's evidence. Subjects the caller may not read are counted by the catalog, never named, and the panel shows that count as "n you cannot see".
+- **Downloads go through the portal.** `GET /documents/{id}/download?subjectKind=&subjectId=` fetches the content for the signed-in user with their CHO token, exactly as the member-document download does. The subject travels in the query because the catalog refuses a document not asked for through one; a request without it is refused before any call. The response is always an attachment, `nosniff` and `no-store`, and a content type the portal does not render goes out as opaque bytes. A file name the catalog supplies is used only if it is one safe token.
+- **Not in this step:** the inline viewer, the upload button, the RFAI "Open requests" strip, the member tab moving onto the panel, and the Call subject (its read permission, `calls:read`, is held by no role — contact-service uses `service:read`, so that mapping has to be settled first).
+
+## 16. What the held-275 screen built (part of step 7)
+
+Step 7 is fax/scan, OCR and the unmatched-document queue. The queue half is built; the fax, scan and OCR half is not.
+
+A 275 whose attachment control number no claim has announced is held under its provider, re-checked by a background matcher every five minutes, and rejected with an 824 (`NO_MATCHING_CLAIM`) once the hold runs out — thirty days by default. Until now `GET /api/attachments/unmatched` was the only way to see that queue, and there was no way at all to resolve one by hand. So the common real case, where the provider typed a different number on the 275 than on the 837, could only end one way: thirty days of silence and an automatic rejection, with the records sitting in the catalog the whole time.
+
+- **A screen at `/admin/unmatched-attachments`**, gated on `attachments:read`, listing what is held oldest first with how long each has before it is rejected. The countdown is the point: a queue of held documents is only actionable if you can see which ones are about to expire.
+- **A manual link, `POST /api/attachments/{id}/link`.** The attachment must still be held, the claim must exist in the caller's tenant, and naming a claim needs `claims:read` on top of the `attachments:write` the route already requires. Who linked it and why are kept on the attachment.
+- **The billing NPI still has to agree, and there is deliberately no override.** The rule exists because providers number their own attachments, often with short sequential numbers, so a control number alone could file one provider's document on another provider's patient's claim (§14). A person reading a screen cannot see further than the matcher can; if anything, they are likelier to accept a plausible-looking number. So the manual link resolves a *control-number* disagreement while keeping the *provider* check — and a genuine cross-provider case is a different document, not a mislinked one.
+- **Four states kept apart**, as with the Documents panel: held, nothing held, unreachable and refused. An unreachable attachment-service must never render as a clean queue, because an empty queue is exactly what somebody would act on.
+- **Not in this step:** fax and scan intake, OCR, early rejection by hand (a junk 275 still waits out its hold), and a link to a subject other than a claim.

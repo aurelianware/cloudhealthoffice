@@ -50,6 +50,13 @@ public class ClaimAdjudicationContext
     /// </summary>
     public MemberLookupOutcome MemberLookup { get; set; } = MemberLookupOutcome.NotLookedUp;
 
+    /// <summary>
+    /// What <see cref="Stages.InpatientGroupingStage"/> (Order=240) decided
+    /// about the stay's DRG, consumed by <see cref="Stages.PricingStage"/>.
+    /// Null on a claim that stage did not run for.
+    /// </summary>
+    public Stages.InpatientGroupingOutcome? InpatientGrouping { get; set; }
+
     /// <summary>Populated by <see cref="Stages.BenefitCalculationStage"/>.</summary>
     public BenefitEngineModels.BenefitResolutionResult? BenefitResolutionResult { get; set; }
 
