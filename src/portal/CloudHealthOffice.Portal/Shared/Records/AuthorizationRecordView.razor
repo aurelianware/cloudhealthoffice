@@ -1,5 +1,6 @@
 @namespace CloudHealthOffice.Portal.Shared.Records
 @using CloudHealthOffice.Portal.Services
+@using CloudHealthOffice.Portal.Shared.Documents
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
 @inject IServiceProvider ServiceProvider
 @inject ILogger<AuthorizationRecordView> Logger
@@ -212,57 +213,13 @@
             }
             else if (ActiveTab == "documents")
             {
+                @* Was a list of the authorization's own attachments with
+                   Download and Preview buttons that had no handler. The
+                   catalog carries the same files plus everything else filed
+                   against this authorization, and its links actually open. *@
                 <div data-testid="authorization-tab-documents">
-                    <div class="mt-4">
-                        @if (_authorization.Attachments.Any())
-                        {
-                            <MudTable Items="_authorization.Attachments" 
-                                     Hover="true" 
-                                     Dense="true"
-                                     Elevation="0">
-                                <HeaderContent>
-                                    <MudTh>File Name</MudTh>
-                                    <MudTh>Type</MudTh>
-                                    <MudTh>Size</MudTh>
-                                    <MudTh>Uploaded</MudTh>
-                                    <MudTh>Actions</MudTh>
-                                </HeaderContent>
-                                <RowTemplate>
-                                    <MudTd DataLabel="File Name">
-                                        <MudIcon Icon="@GetFileIcon(context.ContentType)" Size="Size.Small" Class="mr-2" />
-                                        <MudText Typo="Typo.body2">@context.FileName</MudText>
-                                    </MudTd>
-                                    <MudTd DataLabel="Type">
-                                        <MudChip Size="Size.Small" Color="Color.Info">@context.AttachmentType</MudChip>
-                                    </MudTd>
-                                    <MudTd DataLabel="Size">
-                                        <MudText Typo="Typo.body2">@FormatFileSize(context.FileSizeBytes)</MudText>
-                                    </MudTd>
-                                    <MudTd DataLabel="Uploaded">
-                                        <MudText Typo="Typo.body2">@context.UploadedDate.ToString("MM/dd/yyyy")</MudText>
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">by @context.UploadedBy</MudText>
-                                    </MudTd>
-                                    <MudTd DataLabel="Actions">
-                                        <MudIconButton Icon="@Icons.Material.Filled.Download" 
-                                                      Color="Color.Primary" 
-                                                      Size="Size.Small"
-                                                      Title="Download" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" 
-                                                      Color="Color.Info" 
-                                                      Size="Size.Small"
-                                                      Title="Preview" />
-                                    </MudTd>
-                                </RowTemplate>
-                            </MudTable>
-                        }
-                        else
-                        {
-                            <MudAlert Severity="Severity.Info">
-                                <MudIcon Icon="@Icons.Material.Filled.AttachFile" Class="mr-2" />
-                                No attachments uploaded for this authorization
-                            </MudAlert>
-                        }
-                    </div>
+                    <DocumentsPanel SubjectKind="DocumentSubjectKind.Authorization" SubjectId="@AuthorizationId"
+                                    Title="Authorization documents" />
                 </div>
             }
             else if (ActiveTab == "claims")
@@ -379,27 +336,6 @@
 
         var rate = (_authorization.UnitsApproved.Value / (double)_authorization.UnitsRequested) * 100;
         return $"{rate:F0}%";
-    }
-
-    private string GetFileIcon(string contentType)
-    {
-        return contentType switch
-        {
-            "application/pdf" => Icons.Material.Filled.PictureAsPdf,
-            "image/jpeg" or "image/jpg" or "image/png" => Icons.Material.Filled.Image,
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => Icons.Material.Filled.Description,
-            _ => Icons.Material.Filled.AttachFile
-        };
-    }
-
-    private string FormatFileSize(long bytes)
-    {
-        if (bytes < 1024)
-            return $"{bytes} B";
-        else if (bytes < 1024 * 1024)
-            return $"{bytes / 1024.0:F1} KB";
-        else
-            return $"{bytes / (1024.0 * 1024):F1} MB";
     }
 
 }

@@ -2,6 +2,7 @@
 @page "/claims/{ClaimId}/{Tab}"
 @using Microsoft.AspNetCore.Authorization
 @using CloudHealthOffice.Portal.Services
+@using CloudHealthOffice.Portal.Shared.Documents
 @attribute [Authorize]
 @inject IClaimsService ClaimsService
 @inject IWorkQueueService WorkQueueService
@@ -1136,6 +1137,15 @@
 
             </div>
         }
+        else if (ActiveTab == "documents")
+        {
+            @* The claim had no way to see its own documents at all: a 275 the
+               provider sent, a prior-payer EOB, an itemized bill. They were
+               in the catalog, linked to this claim, and nothing asked. *@
+            <div data-testid="claim-tab-documents">
+                <DocumentsPanel SubjectKind="DocumentSubjectKind.Claim" SubjectId="@ClaimId" Title="Claim documents" />
+            </div>
+        }
         else if (ActiveTab == "access-log")
         {
             <div data-testid="claim-tab-access-log">
@@ -1207,6 +1217,7 @@
         new("payments", "Payments", Icons.Material.Filled.Payments, Visible: _canReadPayments),
         new("history", "History", Icons.Material.Filled.History),
         new("notes", "Notes", Icons.Material.Filled.StickyNote2, _notes.Count > 0 ? _notes.Count : null),
+        new("documents", "Documents", Icons.Material.Filled.AttachFile),
         new("access-log", "Access log", Icons.Material.Filled.Visibility, Visible: _canReadAccessLog),
     ];
 

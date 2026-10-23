@@ -51,7 +51,8 @@ public class ProviderRecordTests : TestContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("Lakeside Orthopedics"));
         cut.FindAll("[data-testid^=record-tab-]").Select(t => t.GetAttribute("href")).Should().Equal(
             "/providers/P1/overview", "/providers/P1/locations", "/providers/P1/networks", "/providers/P1/credentials",
-            "/providers/P1/contract", "/providers/P1/claims", "/providers/P1/payments", "/providers/P1/performance", "/providers/P1/access-log");
+            "/providers/P1/contract", "/providers/P1/claims", "/providers/P1/payments", "/providers/P1/performance",
+            "/providers/P1/documents", "/providers/P1/access-log");
         cut.FindAll("[data-testid=provider-tab-overview]").Should().ContainSingle();
         cut.Find("[data-testid=provider-edit]");
     }

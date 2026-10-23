@@ -1,0 +1,239 @@
+@using CloudHealthOffice.Portal.Infrastructure
+@using CloudHealthOffice.Portal.Services
+@inject IDocumentCatalogService DocumentCatalog
+
+<div data-testid="documents-panel">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+        <MudText Typo="Typo.h6">@Title</MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading"
+                   data-testid="documents-refresh">
+            Refresh
+        </MudButton>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+    }
+    else if (_unavailable)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" data-testid="documents-unavailable">
+            Documents are unavailable right now. Nothing here means the catalog could not be reached, not that
+            there is nothing on file.
+        </MudAlert>
+    }
+    else if (_listing.Forbidden)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" data-testid="documents-forbidden">
+            You do not have access to this record's documents.
+        </MudAlert>
+    }
+    else
+    {
+        @if (_listing.Documents.Count == 0)
+        {
+            <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true" data-testid="documents-empty">
+                No documents on file.
+            </MudAlert>
+        }
+        else
+        {
+            <MudTable Items="_listing.Documents" Dense="true" Hover="true" T="CatalogDocumentSummary"
+                      data-testid="documents-table">
+                <HeaderContent>
+                    <MudTh>Received</MudTh>
+                    <MudTh>Type</MudTh>
+                    <MudTh>Title</MudTh>
+                    <MudTh>Source</MudTh>
+                    <MudTh Style="text-align: right;">Size</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Also linked to</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Received">
+                        <MudText Typo="Typo.body2">@context.ReceivedAt.ToLocalTime().ToString("MM/dd/yyyy HH:mm")</MudText>
+                        @if (context.DocumentVersion > 1)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">version @context.DocumentVersion</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Type">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">@context.Type</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Title">
+                        <MudText Typo="Typo.body2">@(string.IsNullOrWhiteSpace(context.Title) ? "-" : context.Title)</MudText>
+                        @if (context.Sensitivity.Count > 0)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Warning">@string.Join(", ", context.Sensitivity)</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Source">
+                        <MudText Typo="Typo.body2">@(string.IsNullOrWhiteSpace(context.Source.Channel) ? "-" : context.Source.Channel)</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Size" Style="text-align: right;">
+                        <MudText Typo="Typo.body2">@FormatBytes(context.SizeBytes)</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        @if (context.UploadPending)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default">Upload pending</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="@ScanColor(context.ScanStatus)">@context.ScanStatus</MudChip>
+                        }
+                        @if (context.LegalHold)
+                        {
+                            <MudTooltip Text="On legal hold">
+                                <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Warning" />
+                            </MudTooltip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Also linked to">
+                        <MudText Typo="Typo.body2">@AlsoLinkedTo(context)</MudText>
+                    </MudTd>
+                    <MudTd Style="text-align: right;">
+                        @if (context.CanOpen)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Download"
+                                       Href="@DocumentDownloadEndpoint.PathFor(context.Id, SubjectKind, SubjectId)"
+                                       Target="_blank"
+                                       data-testid="@OpenTestId(context)">
+                                Open
+                            </MudButton>
+                        }
+                        else
+                        {
+                            @* The reason is visible rather than in a tooltip:
+                               somebody scanning a table for the record they
+                               need should not have to hover to learn that the
+                               file is quarantined. *@
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Not available</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@UnopenableReason(context)</MudText>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+
+        @if (_listing.Withheld > 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-3"
+                      data-testid="documents-withheld">
+                @WithheldMessage(_listing.Withheld)
+            </MudAlert>
+        }
+    }
+</div>
+
+@code {
+    // The one Documents panel (docs/architecture/document-store.md §7), shown
+    // on the claim, authorization, appeal and provider records. It asks the
+    // catalog for "documents for <subject>" and shows what comes back; it
+    // applies no access rule of its own, because the catalog decides, audits
+    // and withholds, and a panel that filtered too would only disagree with it.
+
+    /// <summary>The subject whose documents these are.</summary>
+    [Parameter, EditorRequired] public DocumentSubjectKind SubjectKind { get; set; }
+
+    [Parameter, EditorRequired] public string SubjectId { get; set; } = string.Empty;
+
+    [Parameter] public string Title { get; set; } = "Documents";
+
+    private DocumentSubjectListing _listing = DocumentSubjectListing.Empty;
+    private bool _loading = true;
+    private bool _unavailable;
+    private string? _loadedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // The subject arrives after the parent's own fetch, and can change
+        // without the panel being rebuilt, so this reloads on the subject
+        // rather than only on first render.
+        var key = SubjectKind + ":" + SubjectId;
+        if (key == _loadedFor) return;
+        _loadedFor = key;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SubjectId))
+        {
+            _listing = DocumentSubjectListing.Empty;
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _unavailable = false;
+        try
+        {
+            _listing = await DocumentCatalog.GetForSubjectAsync(SubjectKind, SubjectId);
+        }
+        catch (ServiceUnavailableException)
+        {
+            // An unreachable catalog must not read as "no documents" to
+            // somebody deciding a claim or an appeal.
+            _listing = DocumentSubjectListing.Empty;
+            _unavailable = true;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static Color ScanColor(DocumentScanStatus status) => status switch
+    {
+        DocumentScanStatus.Clean => Color.Success,
+        DocumentScanStatus.Pending => Color.Default,
+        _ => Color.Error,
+    };
+
+    /// <summary>Why a row has no Open link, rather than a button that would be refused.</summary>
+    private static string UnopenableReason(CatalogDocumentSummary document)
+    {
+        if (document.UploadPending) return "The upload has not finished.";
+        if (document.ScanStatus == DocumentScanStatus.Pending) return "Waiting for the virus scan.";
+        if (document.ScanStatus == DocumentScanStatus.Infected) return "Quarantined: the virus scan found something.";
+        return "The virus scan could not complete.";
+    }
+
+    /// <summary>Counted in words, because a filtered list must not read as "nothing on file".</summary>
+    private static string WithheldMessage(int withheld) => withheld == 1
+        ? "One more document on this record is withheld from you because of its sensitivity."
+        : withheld + " more documents on this record are withheld from you because of their sensitivity.";
+
+    private static string OpenTestId(CatalogDocumentSummary document) => "document-open-" + document.Id;
+
+    /// <summary>
+    /// The other subjects this document supports, so an examiner can see that
+    /// what is in front of them is also an appeal's evidence. Subjects the
+    /// caller may not read are counted by the catalog, never named.
+    /// </summary>
+    private string AlsoLinkedTo(CatalogDocumentSummary document)
+    {
+        var others = document.Links
+            .Where(l => !(l.Kind == SubjectKind && string.Equals(l.Id, SubjectId, StringComparison.OrdinalIgnoreCase)))
+            .Select(l => l.Kind + " " + l.Id)
+            .ToList();
+
+        if (document.OtherLinks > 0)
+        {
+            others.Add(document.OtherLinks + " you cannot see");
+        }
+
+        return others.Count == 0 ? "-" : string.Join(", ", others);
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return (bytes / 1024.0).ToString("0.#") + " KB";
+        return (bytes / (1024.0 * 1024.0)).ToString("0.#") + " MB";
+    }
+}

@@ -40,7 +40,7 @@ Health plan staff think in records. A call comes in and they say "pull up the me
    - The API still enforces every read, so hiding a tab is a convenience, not the control.
 6. **Shared tabs are one component.** Notes, Documents, History, Calls and Access log work the same on every record they appear on, backed by one service each:
    - the notes services;
-   - the document store (`document-store.md`);
+   - the document store (`document-store.md`) — `DocumentsPanel`, built 2026-10-23 on claim, authorization, appeal and provider;
    - the access log (#1365).
 7. **Every record read is audited,** as claims are today. That extends to member, provider and authorization pages (§6).
 
@@ -164,7 +164,7 @@ Tabs marked † are shared components (principle 6). The **Exists** column says 
 | History | versions, adjustments, audit timeline | partly on page |
 | Related | duplicates, adjustments, appeals, auths | partly on page |
 | Notes † | | page panel |
-| Documents † | attachments, 275s, RFAI responses | new |
+| Documents † | attachments, 275s, RFAI responses | built 2026-10-23 |
 | Access log † | | new (`audit:read`) |
 
 ### Authorization — `/authorizations/{id}`
