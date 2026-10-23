@@ -112,6 +112,9 @@ public sealed class HttpPlanSettings(
     {
         var query = $"api/v1/configuration/resolve?key={Uri.EscapeDataString(definition.Key)}&asOf={asOf:yyyy-MM-dd}";
         if (LinesOfBusiness.Normalize(scope.LineOfBusiness) is { } lob) query += $"&lineOfBusiness={Uri.EscapeDataString(lob)}";
+        if (!string.IsNullOrWhiteSpace(scope.Carrier)) query += $"&carrier={Uri.EscapeDataString(scope.Carrier.Trim())}";
+        if (!string.IsNullOrWhiteSpace(scope.Program)) query += $"&program={Uri.EscapeDataString(scope.Program.Trim())}";
+        if (!string.IsNullOrWhiteSpace(scope.BenefitPlan)) query += $"&benefitPlan={Uri.EscapeDataString(scope.BenefitPlan.Trim())}";
         if (!string.IsNullOrWhiteSpace(scope.Sponsor)) query += $"&sponsor={Uri.EscapeDataString(scope.Sponsor.Trim())}";
 
         var client = httpClientFactory.CreateClient(HttpClientName);

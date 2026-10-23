@@ -58,6 +58,10 @@ public class AdapterBenefitPlan
     public PlanType PlanType { get; set; }
     public MetalLevel? MetalLevel { get; set; }
     public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
+
+    /// <summary>See <see cref="BenefitPlan.ProgramId"/>; carried through GET / PUT so an edit never clears it.</summary>
+    public string? ProgramId { get; set; }
+
     public FamilyAccumulatorModel FamilyAccumulatorModel { get; set; } = FamilyAccumulatorModel.Embedded;
 
     /// <summary>See <see cref="BenefitPlan.CobDeductibleCredit"/>; carried through GET / PUT so an edit never resets it.</summary>
@@ -97,6 +101,7 @@ public class AdapterBenefitPlan
         PlanType = src.PlanType,
         MetalLevel = src.MetalLevel,
         LineOfBusiness = src.LineOfBusiness,
+        ProgramId = src.ProgramId,
         FamilyAccumulatorModel = src.FamilyAccumulatorModel,
         CobDeductibleCredit = src.CobDeductibleCredit,
         Benefits = src.Benefits.Select(AdapterBenefit.From).ToList(),
@@ -131,6 +136,7 @@ public class AdapterBenefitPlan
         PlanType = PlanType,
         MetalLevel = MetalLevel,
         LineOfBusiness = LineOfBusiness,
+        ProgramId = ProgramId,
         FamilyAccumulatorModel = FamilyAccumulatorModel,
         CobDeductibleCredit = CobDeductibleCredit,
         Benefits = Benefits.Select(b => b.ToBenefit()).ToList(),

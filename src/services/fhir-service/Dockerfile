@@ -15,6 +15,7 @@ COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infr
 COPY src/services/shared/CloudHealthOffice.Appeals.Contracts/CloudHealthOffice.Appeals.Contracts.csproj src/services/shared/CloudHealthOffice.Appeals.Contracts/
 COPY src/services/shared/CloudHealthOffice.Consent.Contracts/CloudHealthOffice.Consent.Contracts.csproj src/services/shared/CloudHealthOffice.Consent.Contracts/
 COPY src/services/shared/CloudHealthOffice.Events/CloudHealthOffice.Events.csproj src/services/shared/CloudHealthOffice.Events/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/CloudHealthOffice.PlanConfiguration.csproj src/services/shared/CloudHealthOffice.PlanConfiguration/
 COPY src/engines/CloudHealthOffice.ManagedFhirStore/CloudHealthOffice.ManagedFhirStore.csproj src/engines/CloudHealthOffice.ManagedFhirStore/
 COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/CloudHealthOffice.ProviderEnrollmentService.csproj src/engines/CloudHealthOffice.ProviderEnrollmentService/
 COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/CloudHealthOffice.PriorAuthRuleEngine.csproj src/engines/CloudHealthOffice.PriorAuthRuleEngine/
@@ -26,6 +27,7 @@ COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/C
 COPY src/services/shared/CloudHealthOffice.Appeals.Contracts/ src/services/shared/CloudHealthOffice.Appeals.Contracts/
 COPY src/services/shared/CloudHealthOffice.Consent.Contracts/ src/services/shared/CloudHealthOffice.Consent.Contracts/
 COPY src/services/shared/CloudHealthOffice.Events/ src/services/shared/CloudHealthOffice.Events/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/ src/services/shared/CloudHealthOffice.PlanConfiguration/
 COPY src/engines/CloudHealthOffice.ManagedFhirStore/ src/engines/CloudHealthOffice.ManagedFhirStore/
 COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/ src/engines/CloudHealthOffice.ProviderEnrollmentService/
 COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/ src/engines/CloudHealthOffice.PriorAuthRuleEngine/

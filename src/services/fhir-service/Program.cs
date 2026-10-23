@@ -1,3 +1,4 @@
+using CloudHealthOffice.PlanConfiguration;
 using FhirService.Formatters;
 using CloudHealthOffice.Infrastructure.Extensions;
 using FhirService.Middleware;
@@ -646,6 +647,10 @@ builder.Services.AddMemoryCache(options => options.SizeLimit = 1024);
 builder.Services.AddSingleton<ICrdClassificationStore, CrdClassificationStore>();
 // CRD resolves the member context from CHO's own Patient and Coverage before it
 // calls the rule engine. Scoped, because IFhirDataAdapter is.
+// Programs (docs/architecture/plan-configuration.md §3), read from
+// tenant-service: CrdContextResolver takes the state, line of business and
+// program code for a member's benefit plan from one program record.
+builder.Services.AddProgramDirectoryClient(builder.Configuration);
 builder.Services.AddScoped<ICrdContextResolver, CrdContextResolver>();
 builder.Services.AddScoped<ICrdService, CrdService>();
 builder.Services.Configure<DtrConfig>(builder.Configuration.GetSection("Cms0057:Dtr"));

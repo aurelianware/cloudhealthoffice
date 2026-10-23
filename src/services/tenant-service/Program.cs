@@ -111,6 +111,19 @@ builder.Services.AddScoped<TenantService.Configuration.ISponsorLineOfBusinessLoo
 builder.Services.AddScoped<TenantService.Configuration.ConfigurationService>();
 builder.Services.AddHostedService<TenantService.Configuration.ConfigurationIndexInitializer>();
 
+// Carrier and program records (plan-configuration.md §12 step 2). benefit-plan-service
+// is called only to follow a plan's program for GET api/v1/programs/by-benefit-plan.
+builder.Services.AddScoped<TenantService.Hierarchy.IHierarchyStore, TenantService.Hierarchy.MongoHierarchyStore>();
+builder.Services.AddHttpClient(TenantService.Hierarchy.HttpBenefitPlanProgramLookup.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri((builder.Configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service").TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+builder.Services.AddScoped<TenantService.Hierarchy.IBenefitPlanProgramLookup, TenantService.Hierarchy.HttpBenefitPlanProgramLookup>();
+builder.Services.AddScoped<TenantService.Hierarchy.HierarchyService>();
+builder.Services.AddHostedService<TenantService.Hierarchy.HierarchyIndexInitializer>();
+
 // Health checks
 builder.Services.AddChoHealthChecks(options =>
 {

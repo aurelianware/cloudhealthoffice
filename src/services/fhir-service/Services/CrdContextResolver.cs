@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.PlanConfiguration;
 using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using FhirService.Models;
@@ -75,16 +76,32 @@ public interface ICrdContextResolver
 /// prefetch Coverage is a copy of it. The one thing only the EHR has is why the
 /// service was ordered, so the diagnoses come from the draft order.
 /// </para>
+///
+/// <para>
+/// <b>Where the three keys come from.</b> The rule engine keys its rule sets on
+/// state, line of business and program, and a <b>program</b> record carries all
+/// three (docs/architecture/plan-configuration.md §3). So when the member's
+/// coverage names a benefit plan and that plan is sold under a program, all
+/// three are taken from the program: it is the line of business the contract
+/// was actually written against, and the state the plan operates in, rather
+/// than whichever state the member's mailing address happens to be in. Without
+/// a program CHO still has no program code, and state and line of business come
+/// from the member's address and their coverage's own coding as before — a
+/// correct answer, just a less specific one.
+/// </para>
 /// </summary>
 public sealed class CrdContextResolver : ICrdContextResolver
 {
     private readonly IFhirDataAdapter _adapter;
     private readonly ILogger<CrdContextResolver> _logger;
+    private readonly IProgramDirectory? _programs;
 
-    public CrdContextResolver(IFhirDataAdapter adapter, ILogger<CrdContextResolver> logger)
+    public CrdContextResolver(
+        IFhirDataAdapter adapter, ILogger<CrdContextResolver> logger, IProgramDirectory? programs = null)
     {
         _adapter = adapter;
         _logger = logger;
+        _programs = programs;
     }
 
     public async Task<CrdContextResolution> ResolveAsync(
@@ -129,8 +146,32 @@ public sealed class CrdContextResolver : ICrdContextResolver
             return CrdContextResolution.Unresolved(CrdContextFailure.NoActiveCoverage);
         }
 
-        var state = State(patient);
-        var lob = LineOfBusiness(coverage);
+        ProgramDescriptor? program;
+        try
+        {
+            program = await ProgramAsync(coverage, tenantId, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // The coverage names a benefit plan, so there may well be a program
+            // with a state and a line of business of its own, and falling back
+            // to the member's address could resolve an Ohio rule set for a
+            // Texas STAR member. "Could not look" is reported as technical,
+            // which is the reason code the IG has for exactly this.
+            _logger.LogWarning(ex,
+                "CRD could not read the program for {PatientId}'s benefit plan; the rule engine will not be called",
+                LogSanitizer.MaskId(patientId));
+            return CrdContextResolution.Unresolved(CrdContextFailure.Unavailable);
+        }
+
+        // A program states all three keys together. Without one, the member's
+        // address and their coverage's own line-of-business coding, as before.
+        var state = program?.StateCode ?? State(patient);
+        var lob = program is null ? LineOfBusiness(coverage) : LineOfBusiness(program);
 
         // The rule set is keyed on state and line of business. Without both,
         // there is no rule set to resolve and nothing to be gained by guessing
@@ -147,11 +188,11 @@ public sealed class CrdContextResolver : ICrdContextResolver
             TenantId = tenantId,
             StateCode = state,
             Lob = lob.Value,
-            // CHO's coverage model has no state-program field, so Program is
-            // null rather than "STAR". Null is what PaRuleContext documents for
-            // a non-program state, and it is the truth here: CHO does not know.
-            // Hard-coding STAR made every member a Texas STAR member.
-            Program = null,
+            // The program's own code ("STAR"), or null where the plan carries no
+            // program — which is still the truth, not a guess, and is what
+            // PaRuleContext documents for a non-program state. Hard-coding STAR
+            // made every member a Texas STAR member.
+            Program = program?.Code,
             RequestingProviderNpi = npi,
             ServicingProviderNpi = npi,
             MemberId = patientId,
@@ -175,6 +216,42 @@ public sealed class CrdContextResolver : ICrdContextResolver
         // lapsed coverage.
         return items.FirstOrDefault(c => c.Status is null or FinancialResourceStatusCodes.Active);
     }
+
+    /// <summary>
+    /// The program the member's benefit plan is sold under, or null when the
+    /// coverage names no plan, the plan carries no program, or this host has no
+    /// program directory. Throws when the directory could not be asked, so an
+    /// outage is never read as "no program".
+    /// </summary>
+    private async Task<ProgramDescriptor?> ProgramAsync(Coverage coverage, string tenantId, CancellationToken ct)
+    {
+        if (_programs is null) return null;
+        var planId = BenefitPlanId(coverage);
+        return planId is null ? null : await _programs.ForBenefitPlanAsync(tenantId, planId, ct);
+    }
+
+    /// <summary>
+    /// The benefit plan the coverage names, from its <c>plan</c> class — the
+    /// class coverage-service projects <c>Coverage.PlanId</c> into.
+    /// </summary>
+    internal static string? BenefitPlanId(Coverage coverage) =>
+        coverage.Class
+            ?.Where(c => c.Type?.Coding?.Any(coding =>
+                coding.System == CoverageClassSystem && string.Equals(coding.Code, "plan", StringComparison.Ordinal)) == true)
+            .Select(c => c.Value)
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))
+            ?.Trim();
+
+    /// <summary>The HL7 coverage-class system coverage-service projects plan and group classes under.</summary>
+    internal const string CoverageClassSystem = "http://terminology.hl7.org/CodeSystem/coverage-class";
+
+    /// <summary>
+    /// The line of business a program states. A program whose line of business
+    /// the rule engine has no member for resolves nothing, so it answers null
+    /// rather than a neighbouring value.
+    /// </summary>
+    internal static PaLineOfBusiness? LineOfBusiness(ProgramDescriptor program) =>
+        Enum.TryParse<PaLineOfBusiness>(program.LineOfBusiness, ignoreCase: true, out var lob) ? lob : null;
 
     /// <summary>The member's state, from the first address that states one.</summary>
     internal static string? State(Patient patient) =>
