@@ -73,12 +73,16 @@ public class PasInquiryTests
         string? authNumber = AuthNumber,
         string? member = Member,
         string? npi = null,
-        string? tenant = null) => new()
+        string? tenant = null,
+        string? verifiedNpi = null,
+        string? verifiedPatient = null) => new()
     {
         TenantId = tenant ?? AcceptanceContext.TenantId,
         AuthorizationNumber = authNumber,
         MemberReference = member,
         RequestingProviderNpi = npi,
+        VerifiedProviderNpi = verifiedNpi,
+        VerifiedPatientId = verifiedPatient,
     };
 
     private static (IPriorAuthorizationInquiryService Service, RecordingStore Store) ServiceOver(
@@ -87,6 +91,14 @@ public class PasInquiryTests
         var store = new RecordingStore(records);
         return (new PriorAuthorizationInquiryService(store), store);
     }
+
+    /// <summary>A service whose patient binding REFUSES rather than observes (D-26).</summary>
+    private static IPriorAuthorizationInquiryService EnforcingService(
+        params PriorAuthorizationRecord[] records)
+        => new PriorAuthorizationInquiryService(
+            new RecordingStore(records),
+            Microsoft.Extensions.Options.Options.Create(
+                new PasCallerBindingOptions { EnforcePatientBinding = true }));
 
     // ── Happy path across the lifecycle ─────────────────────────────────────────
 
@@ -158,8 +170,117 @@ public class PasInquiryTests
         var response = Single(new PasResponseBuilder().BuildInquiryResponse(result.Authorization!));
 
         response.Outcome.Should().Be(ClaimProcessingCodes.Complete);
-        response.Error.Should().ContainSingle();
-        response.Error[0].Code.Coding[0].Code.Should().Be("A3-CRITERIA");
+
+        // The decision is coded on the reviewAction extension (A3, from the
+        // record's own review action code); the reason is prose. Not a
+        // ClaimResponse.error: that element binds required to X12 list 901 and
+        // means the request was rejected. See PasResponseBuilder.DenialNote.
+        response.Error.Should().BeEmpty();
+        response.Extension.Should().ContainSingle(e =>
+            e.Url == "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewAction")
+            .Which.Extension.Should().ContainSingle().Which.Value.Should().BeOfType<Coding>()
+            .Which.Code.Should().Be("A3");
+        response.ProcessNote.Should().ContainSingle()
+            .Which.Text.Should().Contain("A3-CRITERIA")
+            .And.Contain("Does not meet clinical criteria.");
+    }
+
+    // ── D-26: the caller's own identity binds the inquiry ──────────────────────
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public async Task PAS04_Replace_AVerifiedProviderCannotReadAnotherProvidersAuthorization()
+    {
+        // The body names the right member, so the corroborating key MATCHES and
+        // the pre-D-26 service would have answered. The token says this caller
+        // is a different provider, and that beats the body.
+        var (service, _) = ServiceOver(Record(Approved, "A1"));
+
+        var result = await service.InquireAsync(Request(verifiedNpi: "9999999999"));
+
+        result.Found.Should().BeFalse();
+        result.Outcome.Should().Be(PriorAuthorizationInquiryOutcome.NotAuthorizedForCaller);
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public async Task PAS04_Replace_AVerifiedProviderReadsTheirOwnAuthorization()
+    {
+        var (service, _) = ServiceOver(Record(Approved, "A1"));
+
+        var result = await service.InquireAsync(Request(verifiedNpi: ProviderNpi));
+
+        result.Found.Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public async Task PAS04_Replace_NoVerifiedIdentityLeavesTheCorroboratingKeyRuleUntouched()
+    {
+        // The whole of the tighten-only promise: where no trusted issuer
+        // asserted anything, the answer is exactly what it was before D-26.
+        var (service, _) = ServiceOver(Record(Approved, "A1"));
+
+        var result = await service.InquireAsync(Request());
+
+        result.Found.Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public async Task PAS04_Replace_APatientTokenForAnotherMemberIsObservedButNotRefusedByDefault()
+    {
+        // Ships observing. This asserts the DEFAULT, not the desired end state:
+        // the binding below is the one that refuses, and a deployment turns it
+        // on once it has seen its own traffic.
+        var (service, _) = ServiceOver(Record(Approved, "A1"));
+
+        var result = await service.InquireAsync(Request(verifiedPatient: "pat-999"));
+
+        result.Found.Should().BeTrue(
+            "the patient binding observes until Pas:CallerBinding:EnforcePatientBinding is set");
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public async Task PAS04_Replace_AnEnforcedPatientTokenCannotReadAnotherMembersAuthorization()
+    {
+        var service = EnforcingService(Record(Approved, "A1"));
+
+        var result = await service.InquireAsync(Request(verifiedPatient: "pat-999"));
+
+        result.Found.Should().BeFalse();
+        result.Outcome.Should().Be(PriorAuthorizationInquiryOutcome.NotAuthorizedForCaller);
+        // The refusal is the uniform one, so a member probing for another
+        // member's authorization cannot tell it apart from a number that does
+        // not exist.
+        result.FailureKind.Should().Be(PriorAuthorizationInquiryFailureKind.Unavailable);
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public async Task PAS04_Replace_AnEnforcedPatientTokenReadsItsOwnAuthorization()
+    {
+        var service = EnforcingService(Record(Approved, "A1"));
+
+        var result = await service.InquireAsync(Request(verifiedPatient: Member));
+
+        result.Found.Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public async Task PAS04_Replace_APatientTokenMatchesTheSubmittersOwnPatientReference()
+    {
+        // $submit records both the resolved member id and the submitter's own
+        // Patient/... reference. A token carrying either must resolve, or
+        // enforcing the binding would refuse the member whose own record it is.
+        var service = EnforcingService(Record(Approved, "A1", member: "Patient/pat-001"));
+
+        var result = await service.InquireAsync(
+            Request(member: "Patient/pat-001", verifiedPatient: "pat-001"));
+
+        result.Found.Should().BeTrue();
     }
 
     // ── Status freshness ───────────────────────────────────────────────────────

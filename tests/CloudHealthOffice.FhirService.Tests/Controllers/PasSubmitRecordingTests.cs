@@ -171,7 +171,7 @@ public class PasSubmitRecordingTests
         var claimResponse = ((Bundle)result.Should().BeOfType<OkObjectResult>().Subject.Value!)
             .Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
         claimResponse.Disposition.Should().Be("denied");
-        claimResponse.Error.Should().Contain(e => e.Code.Coding.Any(c => c.Code == "EXCL-NONCOV"));
+        claimResponse.ProcessNote.Should().Contain(n => n.Text!.Contains("EXCL-NONCOV"));
     }
 
     // ── SF1: the answer is built from the STORED record ─────────────────
@@ -225,7 +225,7 @@ public class PasSubmitRecordingTests
         }).ClaimSubmit(PasBundles.Complete()));
 
         claimResponse.Disposition.Should().Be("denied");
-        claimResponse.Error.Should().ContainSingle().Which.Code.Coding.Single().Code.Should().Be("PEMS-001");
+        claimResponse.ProcessNote.Should().ContainSingle().Which.Text.Should().Contain("PEMS-001");
     }
 
     [Fact]
@@ -412,8 +412,11 @@ public class PasInquireCallerTests
     {
         string? caller = "unset";
         var inquiry = new Mock<IPriorAuthorizationInquiryService>();
-        inquiry.Setup(i => i.FromInquiryClaim(It.IsAny<Claim>(), It.IsAny<string>(), It.IsAny<string?>()))
-            .Callback<Claim, string, string?>((_, _, c) => caller = c)
+        inquiry.Setup(i => i.FromInquiryClaim(
+                It.IsAny<Claim>(), It.IsAny<string>(), It.IsAny<string?>(),
+                It.IsAny<global::FhirService.Services.Identity.AuthenticatedCaller?>()))
+            .Callback<Claim, string, string?, global::FhirService.Services.Identity.AuthenticatedCaller?>(
+                (_, _, c, _) => caller = c)
             .Returns(new PriorAuthorizationInquiryRequest { TenantId = "tenant-a" });
         inquiry.Setup(i => i.InquireAsync(It.IsAny<PriorAuthorizationInquiryRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(PriorAuthorizationInquiryResult.Refused(PriorAuthorizationInquiryOutcome.NotFound));

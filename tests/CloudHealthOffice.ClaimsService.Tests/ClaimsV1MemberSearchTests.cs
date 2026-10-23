@@ -148,8 +148,16 @@ public class ClaimsV1MemberSearchTests : IClassFixture<ClaimsApiFactory>
         Assert.Equal("active", (string?)eob["status"]);
     }
 
+    /// <summary>
+    /// A claim still in adjudication has reached no outcome, so the outcome is
+    /// queued — but the resource itself is active, not draft. <c>status</c> is
+    /// the resource's fm-status: a pended claim exists and stands, where FHIR's
+    /// <c>draft</c> means one not yet in force. The Provider Access projection
+    /// of the same claim already said active, and one claim cannot be two
+    /// things on two APIs.
+    /// </summary>
     [Fact]
-    public void Projector_MapsDraftStatusesToQueued()
+    public void Projector_MapsInAdjudicationStatusesToQueuedButActive()
     {
         var projector = new ExplanationOfBenefitProjector();
         var claim = BuildClaim("MEM-8", "CLM-D");
@@ -157,7 +165,7 @@ public class ClaimsV1MemberSearchTests : IClassFixture<ClaimsApiFactory>
 
         var eob = projector.Project(claim);
         Assert.Equal("queued", (string?)eob["outcome"]);
-        Assert.Equal("draft", (string?)eob["status"]);
+        Assert.Equal("active", (string?)eob["status"]);
     }
 
     private static Claim BuildClaim(string memberId, string claimNumber) => new()

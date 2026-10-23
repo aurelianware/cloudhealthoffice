@@ -305,8 +305,12 @@ public class DrugExclusionTests
 
         var claimResponse = bundle.Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
         claimResponse.Disposition.Should().Be("denied");
-        claimResponse.Error.Should().ContainSingle()
-            .Which.Code.Coding.Should().ContainSingle()
-            .Which.Code.Should().Be(ExclusionReasonCode.NonCoveredBenefit);
+        // The exclusion reason reaches the response as prose rather than as a
+        // ClaimResponse.error coding — see PasResponseBuilder.DenialNote for why
+        // that element cannot carry a CHO-internal code. What is still asserted
+        // is that the domain's own reason code reaches the response at all.
+        claimResponse.Error.Should().BeEmpty();
+        claimResponse.ProcessNote.Should().ContainSingle()
+            .Which.Text.Should().Contain(ExclusionReasonCode.NonCoveredBenefit);
     }
 }

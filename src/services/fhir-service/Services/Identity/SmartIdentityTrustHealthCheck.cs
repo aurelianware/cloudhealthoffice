@@ -20,11 +20,16 @@ public sealed class SmartIdentityTrustHealthCheck : IHealthCheck
 {
     private readonly SmartSigningKeyRing _keyRing;
     private readonly TrustedIssuerRegistry _registry;
+    private readonly FhirService.Services.PasCallerBindingOptions _pasBinding;
 
-    public SmartIdentityTrustHealthCheck(SmartSigningKeyRing keyRing, TrustedIssuerRegistry registry)
+    public SmartIdentityTrustHealthCheck(
+        SmartSigningKeyRing keyRing,
+        TrustedIssuerRegistry registry,
+        Microsoft.Extensions.Options.IOptions<FhirService.Services.PasCallerBindingOptions>? pasBinding = null)
     {
         _keyRing = keyRing;
         _registry = registry;
+        _pasBinding = pasBinding?.Value ?? new FhirService.Services.PasCallerBindingOptions();
     }
 
     public Task<HealthCheckResult> CheckHealthAsync(
@@ -38,6 +43,22 @@ public sealed class SmartIdentityTrustHealthCheck : IHealthCheck
             ["trustedIssuers"] = statuses.Count,
             ["issuersWithKeys"] = statuses.Count(s => s.HasKeys),
         };
+
+        // PAS CALLER BINDING (D-26), reported rather than asserted. The provider
+        // half only binds callers of an issuer that declared itself
+        // provider-serving, so "the code is merged" and "this environment binds
+        // anyone" are different facts — and the second is the one worth knowing.
+        // A gap closed on paper by dormant code is exactly what this line exists
+        // to make visible. Informational only: it never moves health status,
+        // because a deployment that legitimately has no provider issuers is not
+        // unhealthy.
+        var providerIssuers = _registry.Issuers.Count(i => i.ServesProviderCallers);
+        data["pasCallerBinding:providerIssuers"] = providerIssuers;
+        data["pasCallerBinding:provider"] = providerIssuers > 0
+            ? $"binding callers of {providerIssuers} of {_registry.Issuers.Count} issuer(s)"
+            : "not in force — no trusted issuer declares ServesProviderCallers";
+        data["pasCallerBinding:patient"] =
+            _pasBinding.EnforcePatientBinding ? "enforcing" : "observing only";
 
         foreach (var status in statuses)
         {

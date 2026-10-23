@@ -187,7 +187,9 @@ public class PasControllerTests
         var responseBundle = okResult.Value.Should().BeOfType<Bundle>().Subject;
         var claimResponse = responseBundle.Entry[0].Resource as ClaimResponse;
         claimResponse!.Disposition.Should().Be("denied");
-        claimResponse.Error.Should().NotBeEmpty();
+        // The denial reason travels as a note, not as ClaimResponse.error — see
+        // PasResponseBuilder.DenialNote for why that element is the wrong one.
+        claimResponse.ProcessNote.Should().NotBeEmpty();
     }
 
     [Fact]
