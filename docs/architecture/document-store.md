@@ -131,7 +131,7 @@ Extend `IDocumentStore` with **Google Cloud Storage** and **S3** providers along
 4. **Correspondence** ([correspondence.md](correspondence.md)), starting with appeal notices. Generated letters are the first new producer on the catalog, and ID cards move onto it in the same phase.
 5. **Documents panel** on claim, authorization and appeal screens. *Built (2026-10-23), read-only, and on provider too (§15).*
 6. **Claim RFAI:** extend rfai-service from authorizations to claims, with 277 RFAI out, 275 / upload / fax in, matching, and clean-date events. *Implementation design: [claim-rfai.md](claim-rfai.md).*
-7. **Fax/scan intake** with OCR and the unmatched-documents queue; paper-claim keying against the image.
+7. **Fax/scan intake** with OCR and the unmatched-documents queue; paper-claim keying against the image. *The queue half is built (§16); fax, scan and OCR are not.*
 8. **Call recordings and transcripts** for CHO Service.
 
 ## 10. Open questions
@@ -204,3 +204,15 @@ Until this, the catalog was reachable only by a service. The member record had i
 - **"Also linked to"** names the other subjects a document supports, so an examiner can see that the record in front of them is also an appeal's evidence. Subjects the caller may not read are counted by the catalog, never named, and the panel shows that count as "n you cannot see".
 - **Downloads go through the portal.** `GET /documents/{id}/download?subjectKind=&subjectId=` fetches the content for the signed-in user with their CHO token, exactly as the member-document download does. The subject travels in the query because the catalog refuses a document not asked for through one; a request without it is refused before any call. The response is always an attachment, `nosniff` and `no-store`, and a content type the portal does not render goes out as opaque bytes. A file name the catalog supplies is used only if it is one safe token.
 - **Not in this step:** the inline viewer, the upload button, the RFAI "Open requests" strip, the member tab moving onto the panel, and the Call subject (its read permission, `calls:read`, is held by no role — contact-service uses `service:read`, so that mapping has to be settled first).
+
+## 16. What the held-275 screen built (part of step 7)
+
+Step 7 is fax/scan, OCR and the unmatched-document queue. The queue half is built; the fax, scan and OCR half is not.
+
+A 275 whose attachment control number no claim has announced is held under its provider, re-checked by a background matcher every five minutes, and rejected with an 824 (`NO_MATCHING_CLAIM`) once the hold runs out — thirty days by default. Until now `GET /api/attachments/unmatched` was the only way to see that queue, and there was no way at all to resolve one by hand. So the common real case, where the provider typed a different number on the 275 than on the 837, could only end one way: thirty days of silence and an automatic rejection, with the records sitting in the catalog the whole time.
+
+- **A screen at `/admin/unmatched-attachments`**, gated on `attachments:read`, listing what is held oldest first with how long each has before it is rejected. The countdown is the point: a queue of held documents is only actionable if you can see which ones are about to expire.
+- **A manual link, `POST /api/attachments/{id}/link`.** The attachment must still be held, the claim must exist in the caller's tenant, and naming a claim needs `claims:read` on top of the `attachments:write` the route already requires. Who linked it and why are kept on the attachment.
+- **The billing NPI still has to agree, and there is deliberately no override.** The rule exists because providers number their own attachments, often with short sequential numbers, so a control number alone could file one provider's document on another provider's patient's claim (§14). A person reading a screen cannot see further than the matcher can; if anything, they are likelier to accept a plausible-looking number. So the manual link resolves a *control-number* disagreement while keeping the *provider* check — and a genuine cross-provider case is a different document, not a mislinked one.
+- **Four states kept apart**, as with the Documents panel: held, nothing held, unreachable and refused. An unreachable attachment-service must never render as a clean queue, because an empty queue is exactly what somebody would act on.
+- **Not in this step:** fax and scan intake, OCR, early rejection by hand (a junk 275 still waits out its hold), and a link to a subject other than a claim.

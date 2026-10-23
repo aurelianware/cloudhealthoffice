@@ -173,6 +173,16 @@ complete.
 
 ## 8. Related, not in this design
 
-The unmatched-275 queue is API-only (`GET /api/attachments/unmatched`), with no manual link endpoint, so
-a held 275 that a person can see belongs to a claim cannot be attached by hand — it waits 30 days and is
-rejected with an 824. That is a smaller, separable job and is being handled alongside this.
+**The held-275 queue** was API-only, with no manual link, so a 275 a person could see belonged to a claim
+waited 30 days and was rejected with an 824. Built alongside this design; see
+[document-store.md](document-store.md) §16.
+
+**Solicited 275s name a parent the intake path does not accept.** Every attachment is classified
+`Solicited` or `Unsolicited` from whether an RFAI reference (277 TRN02) came with it, and the unsolicited
+path — PWK announcement, control-number match, billing-NPI agreement — is the well-built one. But
+`RFAIReference` is not one of the parents the intake path resolves: it accepts `ClaimId`,
+`AuthorizationId`, `AppealId` or `AttachmentControlNumber`, and rejects anything else with
+*"Must specify one of…"*. A provider answering a 277 has no particular reason to echo the authorization
+id, so a solicited 275 that names only its RFAI reference is refused at the door today. Resolving an RFAI
+reference to its case needs an attachment-service → rfai-service lookup that does not exist yet — the
+same seam §5 adds for claims — so it belongs with this work rather than before it.
