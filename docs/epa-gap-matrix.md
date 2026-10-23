@@ -399,9 +399,18 @@ The quoted outputs, test descriptions and recommendations in this section are re
 ### 6.1 The published CMS-0057-F evidence
 
 - **What the pipeline does.** `.github/workflows/cms0057-acceptance-evidence.yml`
-  runs the acceptance suite, then `tools/Cms0057Evidence` writes and commits
-  `src/site/insights/cms-0057-f/cms0057-public-evidence.json`. That file
-  currently shows **21/21 PASSABLE**.
+  runs the acceptance suite, then `tools/Cms0057Evidence` writes a sanitized
+  public snapshot. Since Q-17 (2026-10-23) the `publish` job sends it to the
+  `ci-evidence` branch, which both site deploys overlay onto
+  `src/site/insights/cms-0057-f/cms0057-public-evidence.json`; nothing is
+  committed to `main`, which takes reviewed pull requests only.
+  *(History: the file published under the original hand-declared scheme showed
+  **21/21 PASSABLE**. The snapshot that was live while publishing was paused was
+  generated 2026-10-11 at `4dc12fc` and showed 3 PASSABLE / 10 PARTIAL / 8 GAP —
+  by the end of the pause §11 read 6 PASSABLE / 15 PARTIAL / 0 GAP, so the
+  public figures understated CHO by eight gaps for twelve days. That is the cost
+  of pausing publication rather than correcting it, and it is the argument for
+  keeping the pipeline on and fixing §11 instead.)*
 - **Where statuses come from.** Each status is **hand-declared** in
   `tests/Cms0057Acceptance.Tests/scenarios.json`. *(Superseded by §11 (#1292):
   Replace statuses now come from this matrix.)* The generator only checks that
@@ -409,23 +418,41 @@ The quoted outputs, test descriptions and recommendations in this section are re
   does not check what the test asserts.
 - **Tautological backing tests:**
   - **METRICS-01:** date subtraction equals 3.0, and object properties are set.
-    No CMS metric is computed.
+    No CMS metric is computed. *(Replaced: acceptance now drives the production
+    `Cms0057Reporting` calculator. The row stays **PARTIAL** on scope — the
+    complete required metric set is not supported — not on test quality.)*
   - **PAS-06:** asserts the label strings "72 hours" / "7 calendar days" on a
     ServiceRequest. The real PAS Claim path returns `Applicable:false`.
+    *(Replaced: real-Mongo and CHO acceptance tests stand in for the label-only
+    evidence. The row stays **PARTIAL** on scope — program-specific extensions,
+    alerts and tenant-database background support remain — not on test
+    quality.)*
   - **PROV-01/02/03:** run against mock data. "Not attributed" is a nonexistent
     member ID. PROV-03 asserts `Revoked != Active`. *(PROV-03 and CONSENT-01
     replaced 2026-10-20 by `PROV03_Replace_*` / `CONSENT01_Replace_*` through
     the real attribution source, registry evaluator and policy, ADR 021.
     PROV-01 replaced 2026-10-22 by `ProviderAccessClaimsAndEncountersTests`,
     12 Replace scenarios over the real HTTP path into claims-service and
-    encounter-service, ADR 024. PROV-02 still rests on the original test.)*
+    encounter-service, ADR 024. **PROV-02 replaced 2026-10-22** (D-30): the
+    tautological `PROV02_NonAttributedMember_ReturnsNoData` is deleted and seven
+    Replace-tagged `ProviderAccessAttributionTests` scenarios run over the real
+    composed attribution decision and a real HTTP hop into claims-service's
+    `ProviderAttributionController`. See the §11 PROV-02 row.)*
   - **PAT-03:** asserted that a supported-types list contains "ClaimResponse".
     *(Replaced 2026-10-22 by `PatientAccessPriorAuthorizationTests`, 10 Replace
     scenarios over the real HTTP path from fhir-service's EOB controller into
     authorization-service's prior-authorization controller and projector. The
     original test has been deleted rather than left beside the new ones.)*
   - **CONSENT-01:** reflection on constructor parameter types. The same manifest
-    elsewhere says CONSENT-01 "stays PARTIAL".
+    elsewhere says CONSENT-01 "stays PARTIAL". *(Replaced 2026-10-20 by
+    `CONSENT01_Replace_*` through the real registry evaluator and policy,
+    ADR 021.)*
+
+  **Every scenario named in this list has now been re-backed or deleted**, which
+  is what closed the third of Q-1's three reasons for pausing. Verified
+  2026-10-23 before Q-17: no `PASSABLE` row in §11 rests on a tautological test,
+  and the two rows whose tests were weakest (METRICS-01, PAS-06) are `PARTIAL`
+  on scope, so publishing them over-claims nothing.
 - **The repo's own readiness matrix disagrees.**
   `docs/compliance/CMS-0057-F-READINESS-MATRIX.md` lists:
   - metrics: Phase 2 required (line 65);
@@ -435,6 +462,14 @@ The quoted outputs, test descriptions and recommendations in this section are re
   from this matrix, or from assertion-level criteria, rather than hand
   declaration. Until then, pause the auto-publish or republish with corrected
   statuses. Because the output is public, I have **not** changed it.
+- **Closed 2026-10-23 (Q-17).** All three reasons for the Q-1 pause are gone:
+  the generator derives Replace status from §11 (#1292), every tautological test
+  above has been replaced or deleted, and the stale snapshot is superseded by
+  the first run after the unpause. The `publish` job is enabled. Two rules
+  survive the unpause: a status reaches the public **only** by changing §11 in a
+  reviewed PR — never by editing the published snapshot — and pausing again
+  means restoring the `false &&` guard on the `publish` job, also in a reviewed
+  PR.
 
 ### 6.2 Overclaims found (quote → reality)
 
@@ -502,6 +537,7 @@ or product policy.
 | Q-13 (2026-10-11) | **Plan-outage pend kept**, under its own code `PLANUNAVAIL` (not `PAUNAVAIL`, not counted as missing authorization). A definitive plan 404 keeps the earlier path. |
 | Q-15 (2026-10-11) | **Bulk re-run denial approved.** The `PAUNAVAIL`/`PLANUNAVAIL` bulk re-run may deny with CARC 197 after a definitive "not found" or "invalid" from authorization-service. A failed lookup must never lead to a denial. *As implemented (PR #1299):* the re-run finalizes a Deny only when it is the PA check's CARC 197 and no check on that run failed (PA or plan lookup, pricing, benefit engine, NCCI engine, any stage that threw); every other Deny stays pended for an examiner. |
 | Q-16 (2026-10-11) | **Flag dependency.** `ClaimsAdjudication:PriorAuth:UsePlanFlaggedCodes` is turned on only after G-07 and two fixes: D-36 (approval re-runs call coverage-service with the examiner's token) and D-40 (plan lookups need `benefits:read` for examiner roles, or the service identity). Tracked as G-64. |
+| Q-17 (2026-10-23) | **Approved. Unpause the CMS-0057-F evidence auto-publish** (reverses Q-1's pause). All three of Q-1's reasons are closed: Replace statuses come from §11 rather than `scenarios.json` (#1292), every tautological backing test §6.1 named has been replaced by real-seam tests or deleted (§6.1), and the stale 2026-10-11 snapshot is superseded by the first run after the change. Published at the unpause: **6 PASSABLE / 15 PARTIAL / 0 GAP**. Consequence to keep in view: any §11 status edit merged to `main` now reaches the public site on the next green run, so a status change is a publishing decision. A status still reaches the public only through a reviewed PR to §11, never by editing the snapshot; pausing again means restoring the `false &&` guard on the `publish` job in a reviewed PR. **Nothing Inferno-derived is published** — no kit has judged CHO (§6.1, G-60), and the conformance pages say so. |
 
 **Owner's sequencing:**
 1. Step 0: overclaims PR, plus pausing the evidence auto-publish.
@@ -708,6 +744,7 @@ that will be confirmed at the start of Phase 3.
 | 2026-10-23 | **CRD determinations are made from the member's own record, not a hard-coded one (D-21 second part, G-05).** Every CRD determination CHO has ever issued was evaluated against a context literally written into the source: state `TX`, line of business `Medicaid`, program `STAR`, no diagnoses, cost 0 — whoever the patient in the hook actually was. A commercial member in Ohio got Texas Medicaid's answer, stated with the same confidence. `CrdContextResolver` now resolves the hook's `patientId` through `IFhirDataAdapter`: the state from the member's Patient address, the line of business from the coding on their active Coverage, the diagnoses from the draft order's `reasonCode`, the service date from `occurrenceDateTime` or `occurrencePeriod.start`. **The fail-closed path matters more than the happy one:** when no member matches, when no coverage is in effect, or when the coverage does not carry what the rules are keyed on, the rule engine is not called at all and the answer is `indeterminate` carrying the IG's `no-member-found`, `no-active-coverage` or `coverage-not-found` — it is never allowed to come back "no authorization needed" for a member CHO could not even find. A thrown exception resolves to `technical`, not to "member not found", because those are different facts. Code classifications still answer for an unresolvable member, since classifying a service is a statement about the service and not about anybody's coverage. **What is deliberately still missing:** CHO has no plan/program level yet — `docs/architecture/plan-configuration.md` is a design, not code — so `Program` is passed as null. The engine's existing fallback chain means that resolves the state-and-LOB rule sets correctly, but a rule set keyed on program `STAR` now fires for **nobody** where the hard-coded context made it fire for **everybody**. Strictly fewer wrong answers, and also fewer answers; the plan-configuration doc's build order now names this resolver as a waiting consumer. Estimated cost is still 0, so cost-threshold rules cannot fire. PAS-01 stays PARTIAL: benefit-plan PA flags are still not consulted (G-46), and `selections`, the spec card types and a persisted `coverage-assertion-id` remain (G-44). Totals unchanged: 6 PASSABLE, 15 PARTIAL, 0 GAP. |
 | 2026-10-23 | **The two kits that judge Provider Access now run, and CI is what will report the first verdict (G-60, G-14).** `INFERNO-USCORE-SERVER-001` and `INFERNO-C4BB-SERVER-001` move from `implemented: false` to executing scenarios. Each starts its pinned kit alongside the `interop-cho` profile, seeds CHO through its own service APIs with `scripts/interop/seed-cho.mjs`, reads CHO's `metadata` from the host as a preflight — which is what separates "the kit judged CHO" from "the kit could not reach CHO", two outcomes Inferno reports identically — then hands the kit CHO's **Compose-network** address and a development token minted from the same `auth` block the seeder reads. Which groups run is inventory data in `interop/scenarios.json`, not a list inside a test method: it is a claim about what CHO serves, and narrowing it should read as a change of claim rather than a refactor. The runner gained `DescribeSuiteAsync`/`ResolveGroupId`, because the group id a kit declares (`us_core_v311_patient`) is not the id its API accepts (`us_core_v311-us_core_v311_fhir_api-us_core_v311_patient`); the prefix is read from the running kit rather than composed from a naming rule, since a wrong rule names a group that does not exist and a conformance run that silently tested nothing is the worst result this harness could produce. The CI job is nightly and `workflow_dispatch` only, and `continue-on-error`: an external validator's verdict is a finding to triage, not a merge gate that would go red on unrelated pull requests until people learned to ignore it. **No scenario status changes in this row, and none should** — the scenarios exist now, but no run has reported. Totals unchanged: 6 PASSABLE, 15 PARTIAL, 0 GAP. |
 | 2026-10-23 | **The Inferno kits that would judge Provider Access are now pinned, and one of them cannot judge it yet (G-60, G-14).** `interop/versions.json` gains `inferno-c4bb` (CARIN IG for Blue Button test kit `v0.16.3`, commit `386f6a0b`) and `inferno-us-core` (US Core test kit `v1.1.6`, commit `c8701563`), each with its compose service, profile and fetch-script key; both tags were resolved with `git ls-remote` and both checkouts pass the script's pin check. PDex and DTR were the only kits pinned before, and neither covers CARIN BB or US Core, which is what Provider Access actually serves. The suite ids recorded are read from each kit's own `Inferno::TestSuite` definitions at the pinned tag rather than from documentation. **A blocking mismatch found in the process:** CHO's non-financial EOB declares the CARIN BB 2.2.0 `-Basis` profiles, while the kit's `c4bb_v200devnonfinancial` suite checks the earlier `-NonFinancial` canonicals from the April 2023 branch snapshot it bundles (its `package.json` says `hl7.fhir.us.carin-bb` 2.0.0, dated 2023-04-24). The canonical URLs differ, so that suite cannot match CHO's EOBs at all; the resolution is a later kit release regenerated against 2.2.0, never renaming CHO's profiles to match a superseded draft. `c4bb_v200` and the US Core suites are unaffected. Recorded as `knownMismatches` in the manifest and in `docs/interop/davinci.md`. Separately, the `interop-cho` profile — the system under test for every suite — was serving `MockFhirDataAdapter`; it now runs member-service, coverage-service, encounter-service, claims-service and provider-service with fhir-service bound to each, plus a SMART authorization server, since `SmartAuth:Issuer` had pointed at a port where nothing listened. A guard test fails the build if it drifts back. No scenario status changes and none should: no suite has been run. Totals unchanged: 6 PASSABLE, 15 PARTIAL, 0 GAP. |
+| 2026-10-23 | **The CMS-0057-F evidence auto-publish is unpaused (Q-17, reverses Q-1).** `.github/workflows/cms0057-acceptance-evidence.yml` loses the `false &&` guard on its `publish` job, so a fully passing, reconciled run on `main` again sends the sanitized snapshot to the `ci-evidence` branch and redeploys the site. The three reasons Q-1 paused it are closed: statuses come from §11 (#1292); every tautological backing test §6.1 named has been replaced by real-seam tests or deleted (PROV-01, PROV-02, PROV-03, PAT-03, CONSENT-01 re-backed; METRICS-01 and PAS-06 now drive production code and stay PARTIAL on scope, not on test quality); and the snapshot that sat on the site through the pause — generated 2026-10-11 at `4dc12fc`, 3 PASSABLE / 10 PARTIAL / 8 GAP — is superseded by the first run after the change. §11 reads **6 PASSABLE / 15 PARTIAL / 0 GAP** at the unpause, so the public figures stop understating CHO by eight gaps. §6.1 and §7.1 updated; **no §11 status cell changed by this entry.** Site changes in the same PR: `src/site/release-notes.html` ticked all five CMS-0057-F APIs as "✓ Implemented" against §11 rows that are PARTIAL (Payer-to-Payer and Prior Authorization among them) — replaced with the status vocabulary the rest of the site uses; and the "no Inferno or Touchstone suite has been run against CHO as a payer server" disclaimer, already on `pricing.html` and `docs/prior-auth-guide.html`, is added to `cms-0057f-compliance.html` and `evidence.html`. Consequence worth stating: a §11 status edit merged to `main` is now a publishing decision. |
 
 ---
 
