@@ -45,6 +45,13 @@ public sealed record TermWrite
     public DateTime? RenewalDate { get; init; }
 }
 
+/// <summary>What a caller may set on a contract term's billing and underwriting.</summary>
+public sealed record TermTermsWrite
+{
+    public BillingTerms? Billing { get; init; }
+    public UnderwritingConditions? Underwriting { get; init; }
+}
+
 /// <summary>What a caller may say when moving a term.</summary>
 public sealed record TermStatusWrite
 {
@@ -271,6 +278,89 @@ public sealed class ContractService(
     }
 
     /// <summary>
+    /// Enters the contract year's billing terms and the conditions the quote
+    /// was written against (§9b).
+    ///
+    /// <para>
+    /// Once the term is signed or active, the <b>agreed</b> terms are settled
+    /// the way a policy's rates are: the billing method, how often the premium
+    /// falls due, which day it falls due on and how long it may run late are
+    /// what both sides signed, and changing them in place would move them with
+    /// nothing on the record. The <b>remittance details</b> — the billing
+    /// account number and the payment method — are not agreed terms but the
+    /// plumbing for applying a payment, and a group that changes bank in March
+    /// should not need a new contract period to say so. So those two stay
+    /// editable and the rest do not.
+    /// </para>
+    /// </summary>
+    public async Task<ContractResult<ContractTerm>> SetTermTermsAsync(
+        ICurrentActor actor, string groupNumber, DateTime periodStart, TermTermsWrite write, CancellationToken ct = default)
+    {
+        var tenantId = actor.TenantId;
+        var id = ContractTerm.IdFor(tenantId, groupNumber, periodStart);
+        if (await store.GetTermAsync(tenantId, id, ct) is not { } term)
+            return ContractResult<ContractTerm>.Fail(ContractOutcome.NotFound,
+                $"Group '{groupNumber}' has no contract term starting {periodStart:yyyy-MM-dd}.");
+
+        if (term.Status is ContractTermStatus.Ended)
+            return ContractResult<ContractTerm>.Fail(ContractOutcome.Conflict,
+                $"The contract term starting {periodStart:yyyy-MM-dd} has ended; its terms cannot be changed.");
+
+        var settled = term.Status is ContractTermStatus.Signed or ContractTermStatus.Active;
+        var errors = new List<string>();
+        if (settled && write.Underwriting is not null && !SameUnderwriting(write.Underwriting, term.Underwriting))
+            errors.Add($"The contract term starting {periodStart:yyyy-MM-dd} is {Spell(term.Status)}, so the conditions it was written against are settled. Open a new contract period to change them.");
+        if (settled && write.Billing is not null && ChangesAgreedBilling(write.Billing, term.Billing))
+            errors.Add($"The contract term starting {periodStart:yyyy-MM-dd} is {Spell(term.Status)}, so the billing method, frequency, due day and grace period are settled. Open a new contract period to change them. The billing account number and payment method can still be corrected.");
+        errors.AddRange(BillingErrors(write.Billing));
+        errors.AddRange(UnderwritingErrors(write.Underwriting));
+        if (errors.Count > 0) return new ContractResult<ContractTerm>(ContractOutcome.Invalid, errors);
+
+        var expected = term.Revision;
+        if (write.Billing is not null)
+        {
+            // Settled: only the remittance details move, and the agreed terms
+            // are kept as signed rather than taken from the caller.
+            term.Billing = settled && term.Billing is { } agreed
+                ? new BillingTerms
+                {
+                    Method = agreed.Method,
+                    Frequency = agreed.Frequency,
+                    DueDay = agreed.DueDay,
+                    GracePeriodDays = agreed.GracePeriodDays,
+                    BillingAccountNumber = Trimmed(write.Billing.BillingAccountNumber) ?? agreed.BillingAccountNumber,
+                    PaymentMethod = Trimmed(write.Billing.PaymentMethod) ?? agreed.PaymentMethod,
+                }
+                : new BillingTerms
+                {
+                    Method = write.Billing.Method,
+                    Frequency = write.Billing.Frequency,
+                    DueDay = write.Billing.DueDay,
+                    GracePeriodDays = write.Billing.GracePeriodDays,
+                    BillingAccountNumber = Trimmed(write.Billing.BillingAccountNumber),
+                    PaymentMethod = Trimmed(write.Billing.PaymentMethod),
+                };
+        }
+        if (write.Underwriting is not null)
+        {
+            term.Underwriting = new UnderwritingConditions
+            {
+                MinimumParticipationPercent = write.Underwriting.MinimumParticipationPercent,
+                MinimumEmployerContributionPercent = write.Underwriting.MinimumEmployerContributionPercent,
+                MinimumEnrolledEmployees = write.Underwriting.MinimumEnrolledEmployees,
+                Notes = Trimmed(write.Underwriting.Notes),
+            };
+        }
+        term.UpdatedAt = clock.GetUtcNow().UtcDateTime;
+        term.UpdatedBy = actor.UserId;
+
+        if (!await store.ReplaceTermAsync(term, expected, ct))
+            return ContractResult<ContractTerm>.Fail(ContractOutcome.Conflict,
+                "The term changed while this edit was being made; read it again.");
+        return ContractResult<ContractTerm>.Ok(term);
+    }
+
+    /// <summary>
     /// Moves a term along §9b's flow. The checks worth having here rather than
     /// in a reviewer's head:
     /// <list type="bullet">
@@ -348,6 +438,59 @@ public sealed class ContractService(
     }
 
     private static string Normalize(string? value) => value?.Trim().ToUpperInvariant() ?? string.Empty;
+
+    private static string? Trimmed(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string Spell(ContractTermStatus status) =>
+        status == ContractTermStatus.InUnderwriting ? "in underwriting" : status.ToString().ToLowerInvariant();
+
+    /// <summary>
+    /// Whether the caller is changing one of the billing terms both sides
+    /// signed, as opposed to the remittance details. A caller that sends the
+    /// whole record back unchanged is not changing anything, so a client that
+    /// round-trips it still works after signature.
+    /// </summary>
+    private static bool ChangesAgreedBilling(BillingTerms stated, BillingTerms? stored) =>
+        stored is null
+            ? true
+            : stated.Method != stored.Method
+              || stated.Frequency != stored.Frequency
+              || stated.DueDay != stored.DueDay
+              || stated.GracePeriodDays != stored.GracePeriodDays;
+
+    private static bool SameUnderwriting(UnderwritingConditions stated, UnderwritingConditions? stored) =>
+        stored is not null
+        && stated.MinimumParticipationPercent == stored.MinimumParticipationPercent
+        && stated.MinimumEmployerContributionPercent == stored.MinimumEmployerContributionPercent
+        && stated.MinimumEnrolledEmployees == stored.MinimumEnrolledEmployees;
+
+    private static IEnumerable<string> BillingErrors(BillingTerms? billing)
+    {
+        if (billing is null) yield break;
+        if (billing.DueDay is < 1 or > 31)
+            yield return "The premium's due day must be a day of the month, 1 to 31.";
+        // The same range the sponsor record's flat grace period allowed, so
+        // that moving the field onto the contract does not change what a
+        // customer may enter.
+        if (billing.GracePeriodDays is < 0 or > 90)
+            yield return "A grace period must be between 0 and 90 days.";
+    }
+
+    private static IEnumerable<string> UnderwritingErrors(UnderwritingConditions? underwriting)
+    {
+        if (underwriting is null) yield break;
+        foreach (var (percent, what) in new[]
+                 {
+                     (underwriting.MinimumParticipationPercent, "participation"),
+                     (underwriting.MinimumEmployerContributionPercent, "employer contribution"),
+                 })
+        {
+            if (percent is { } value && value is < 0 or > 100)
+                yield return $"The minimum {what} must be a percentage between 0 and 100.";
+        }
+        if (underwriting.MinimumEnrolledEmployees is { } enrolled && enrolled < 0)
+            yield return "The fewest enrolled employees cannot be negative.";
+    }
 
     /// <summary>Whether the caller stated a value and it differs from what is stored.</summary>
     private static bool Changes(string? stated, string stored) =>

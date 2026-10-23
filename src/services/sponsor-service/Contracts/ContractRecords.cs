@@ -215,6 +215,23 @@ public sealed class ContractTerm
     [JsonPropertyName("statusReason")]
     public string? StatusReason { get; set; }
 
+    /// <summary>
+    /// How the group is billed for this contract year (§9b). Replaces the flat
+    /// <c>Sponsor.BillingInfo</c>, which carried one set of terms for the
+    /// account however many years it ran.
+    /// </summary>
+    [JsonPropertyName("billing")]
+    public BillingTerms? Billing { get; set; }
+
+    /// <summary>
+    /// What the quote was written against (§9b): minimum participation and
+    /// minimum employer contribution. The thresholds are data here; who routes
+    /// a term that misses them and who decides is the approval workflow, which
+    /// §9b leaves to enrollment step 4.
+    /// </summary>
+    [JsonPropertyName("underwriting")]
+    public UnderwritingConditions? Underwriting { get; set; }
+
     /// <summary>Every status change, oldest first.</summary>
     [JsonPropertyName("statusHistory")]
     public List<ContractTermStatusChange> StatusHistory { get; set; } = new();
@@ -247,6 +264,90 @@ public sealed class ContractTerm
     /// </summary>
     public bool IsInForce(DateTime on) =>
         Status is ContractTermStatus.Signed or ContractTermStatus.Active && Covers(on);
+}
+
+/// <summary>Who sends the bill and who it is sent to (§9b).</summary>
+public enum BillingMethod
+{
+    /// <summary>
+    /// CHO bills the employer for the whole group, listing each member. The
+    /// usual arrangement, and the one the employer reconciles against.
+    /// </summary>
+    ListBill,
+
+    /// <summary>
+    /// The employer calculates and remits its own premium, and CHO reconciles
+    /// what arrives against what it expected.
+    /// </summary>
+    SelfBill,
+}
+
+/// <summary>
+/// How the group is billed for one contract year (§9b): the method, how often,
+/// when it falls due and how long it may run late.
+/// </summary>
+public sealed class BillingTerms
+{
+    [JsonPropertyName("method")]
+    public BillingMethod Method { get; set; } = BillingMethod.ListBill;
+
+    [JsonPropertyName("frequency")]
+    public Models.BillingFrequency Frequency { get; set; } = Models.BillingFrequency.Monthly;
+
+    /// <summary>
+    /// The day of the month the premium falls due. A day past the 28th is
+    /// kept as written and read through <see cref="DueDateIn"/>, which lands
+    /// it on the last day of a month that is shorter.
+    /// </summary>
+    [JsonPropertyName("dueDay")]
+    public int DueDay { get; set; } = 1;
+
+    /// <summary>
+    /// Days the premium may run late before the group is suspended. This is
+    /// the field §9b moves off the sponsor record.
+    /// </summary>
+    [JsonPropertyName("gracePeriodDays")]
+    public int GracePeriodDays { get; set; } = 30;
+
+    /// <summary>Where the remittance is applied. An operational detail, not an agreed term.</summary>
+    [JsonPropertyName("billingAccountNumber")]
+    public string? BillingAccountNumber { get; set; }
+
+    /// <summary>ACH, wire, check, card. An operational detail, not an agreed term.</summary>
+    [JsonPropertyName("paymentMethod")]
+    public string? PaymentMethod { get; set; }
+
+    /// <summary>
+    /// The date the premium falls due in a given month. A due day of 31 means
+    /// the end of the month rather than a date that does not exist, so it is
+    /// clamped to the month's length — the alternative is every consumer
+    /// getting February wrong in its own way.
+    /// </summary>
+    public DateTime DueDateIn(int year, int month) =>
+        new(year, month, Math.Min(DueDay, DateTime.DaysInMonth(year, month)));
+}
+
+/// <summary>
+/// What the quote assumed (§9b). A renewal review checks the group against
+/// these; the deciding is the workflow §9b leaves to enrollment step 4.
+/// </summary>
+public sealed class UnderwritingConditions
+{
+    /// <summary>The share of eligible employees who must enrol, as a percentage.</summary>
+    [JsonPropertyName("minimumParticipationPercent")]
+    public decimal? MinimumParticipationPercent { get; set; }
+
+    /// <summary>The share of the employee-only premium the employer must pay, as a percentage.</summary>
+    [JsonPropertyName("minimumEmployerContributionPercent")]
+    public decimal? MinimumEmployerContributionPercent { get; set; }
+
+    /// <summary>The fewest enrolled employees the quote holds for.</summary>
+    [JsonPropertyName("minimumEnrolledEmployees")]
+    public int? MinimumEnrolledEmployees { get; set; }
+
+    /// <summary>Why the term was sent to underwriting, or what was agreed there.</summary>
+    [JsonPropertyName("notes")]
+    public string? Notes { get; set; }
 }
 
 public sealed class ContractTermStatusChange

@@ -1,6 +1,6 @@
 # Plan configuration: settings that cascade, with overrides
 
-**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), the records of step 3 (§12.7) and a policy's terms per contract year (§12.8); the contract term's own per-year sections finish 3b.
+**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), the records of step 3 (§12.7) and the terms per contract year of step 3b (§12.8); 3c, the sponsor narrowing and the two levels below it, is next.
 **Scope:** One way for every CHO service to define a business setting, set it at the right level of the plan's structure, override it further down, and explain where an effective value came from.
 
 **Related:**
@@ -242,7 +242,7 @@ Changes needing a reason or a second approver use the same pattern as two-person
      - The engine's `ResolvedRuleSetKey` becomes a program id rather than a string concatenation of state, line of business and program code, *built 2026-10-23 (§12.6)*.
 3. **Sponsor contracts** (§9b) in sponsor-service, with sponsor policies and classes, draft terms and underwriting approval (enrollment step 4), and their levels in the resolver. Staged, because the records come before anything that reads them:
    - **3a, the records:** sponsor policies with their classes, and contract terms with §9b's status flow. *Built 2026-10-23 (§12.7).*
-   - **3b, terms versioned per contract year:** the tiers, rates, contribution, billing terms, eligibility, waiting period and life events of §9b's table, held per period so that a renewal adds a version rather than replacing a policy. *The policy's own sections built 2026-10-23 (§12.8); billing terms and underwriting conditions, which belong to the contract term rather than to a policy, follow.*
+   - **3b, terms versioned per contract year:** the tiers, rates, contribution, billing terms, eligibility, waiting period and life events of §9b's table, held per period so that a renewal adds a version rather than replacing a policy. *Built 2026-10-23 (§12.8), the policy's own sections and the contract term's.*
    - **3c, the levels:** `SponsorPolicy` and `Class` in `SettingScope` and in resolution, and the sponsor → policies narrowing of `GET overrides` that step 2b deferred here (§12.6).
    - **3d, the consumers,** one at a time behind a fallback: the 834's `REF*1L` resolving against policy numbers, ID cards and the 837's `SBR03`, and claims eligibility.
 4. **First consumers:**
@@ -355,7 +355,14 @@ Built 2026-10-23. §9b's per-year sections — rates by tier, contribution, elig
 - **A rate table quotes exactly its structure's tiers.** A four-tier table missing the employee-plus-children rate is a household shape nobody can bill; a tier from another structure is a rate nothing will ever look up. Both are refused, and a table is stored in its structure's own order so that two tables of the same structure cannot look different.
 - **The federal floors §9b names are refused rather than clamped.** A waiting period over 90 days, a child age limit under 26, a special-enrolment window under 30 days, or under 60 after losing Medicaid or CHIP. A contract may be more generous than a floor and not less, and only the events federal law actually gives a window to are held to one — a plan's own rule for an internal transfer is not special enrolment. These are **not yet `SettingFloor` entries with citations to the regulation text**, which is still an open question (step 3 proposal, question 4); what is safe meanwhile is to refuse the writes that would be unlawful either way, with the number and the reason named, because a refusal cannot create a non-compliant contract and a silent clamp would hide one.
 
-36 tests. Billing terms and underwriting conditions are the remaining per-year sections; they belong to the contract term rather than to a policy, since the group is billed and underwritten as a whole, and follow next.
+**The contract term's own per-year sections** are billing terms and underwriting conditions, which belong to the term rather than to a policy because the group is billed and underwritten as a whole. The billing terms are the ones §9b moves off `Sponsor.BillingInfo`, where one set of terms covered the account however many years it ran, and the grace period keeps the same 0-to-90-day range the sponsor record allowed, so moving the field does not change what a customer may enter. Underwriting conditions are **data only** — the thresholds a quote was written against, and a note on what was agreed. Who routes a term that misses them and who decides is the approval workflow, which §9b leaves to enrollment step 4.
+
+Two things in there are worth naming:
+
+- **Signature settles the agreed terms and not the plumbing.** The billing method, how often the premium falls due, the day it falls due on and the grace period are what both sides signed, so after signature they move only by opening a new contract period. The billing account number and the payment method are not agreed terms — they are how a payment gets applied — and a group that changes bank in March should not need a new contract period to say so, so those two stay correctable. Billing terms entered for the first time *after* signature are refused rather than accepted, since that would be stating terms nobody signed.
+- **A due day past the end of a month lands on its last day.** A due day of 31 means the end of the month, not a date that does not exist, and clamping it in the record is what stops every consumer getting February wrong in its own way.
+
+57 tests across 3b.
 
 ## 13. Decisions (2026-10-22)
 

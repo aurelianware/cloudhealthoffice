@@ -98,6 +98,19 @@ public sealed class SponsorContractsController(ContractService contracts, ICurre
     }
 
     /// <summary>
+    /// Enters the contract year's billing terms and the conditions the quote
+    /// was written against. After signature the agreed terms — method,
+    /// frequency, due day, grace period — are settled, while the billing
+    /// account number and payment method stay correctable, since those are the
+    /// plumbing for applying a payment rather than part of the agreement.
+    /// </summary>
+    [HttpPut("contract-terms/{periodStart}/terms")]
+    [RequirePermission("config:sponsor")]
+    public async Task<IActionResult> SetTermTerms([FromRoute] string groupNumber, [FromRoute] DateTime periodStart,
+        [FromBody] TermTermsWrite write, CancellationToken ct) =>
+        Respond(await contracts.SetTermTermsAsync(actor, groupNumber, periodStart, write ?? new TermTermsWrite(), ct));
+
+    /// <summary>
     /// Moves a term along §9b's flow: draft → underwriting → signed → active,
     /// or ended. Signing takes the id the signed agreement was stored under.
     /// </summary>
