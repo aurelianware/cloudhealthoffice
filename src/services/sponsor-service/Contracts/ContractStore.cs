@@ -14,6 +14,14 @@ namespace SponsorService.Contracts;
 public interface IContractStore
 {
     Task<IReadOnlyList<SponsorPolicy>> ListPoliciesAsync(string tenantId, string groupNumber, CancellationToken ct = default);
+
+    /// <summary>
+    /// Every policy of the tenant carrying this policy number, whichever group
+    /// it belongs to. A policy number is unique within a group and nothing
+    /// makes it unique across them, so this answers a list rather than one
+    /// policy and the caller decides what more than one means.
+    /// </summary>
+    Task<IReadOnlyList<SponsorPolicy>> FindPoliciesByNumberAsync(string tenantId, string policyNumber, CancellationToken ct = default);
     Task<SponsorPolicy?> GetPolicyAsync(string tenantId, string id, CancellationToken ct = default);
     Task<SponsorPolicy> InsertPolicyAsync(SponsorPolicy policy, CancellationToken ct = default);
 
@@ -63,6 +71,15 @@ public sealed class ContractStoreMongo : IContractStore
         var found = await _policies.Find(b.Eq(p => p.TenantId, tenantId) & b.Eq(p => p.GroupNumber, groupNumber))
             .ToListAsync(ct);
         return found.OrderBy(p => p.PolicyNumber, StringComparer.Ordinal).ToList();
+    }
+
+    public async Task<IReadOnlyList<SponsorPolicy>> FindPoliciesByNumberAsync(
+        string tenantId, string policyNumber, CancellationToken ct = default)
+    {
+        var b = Builders<SponsorPolicy>.Filter;
+        var found = await _policies.Find(b.Eq(p => p.TenantId, tenantId) & b.Eq(p => p.PolicyNumber, policyNumber))
+            .ToListAsync(ct);
+        return found.OrderBy(p => p.GroupNumber, StringComparer.Ordinal).ToList();
     }
 
     public async Task<SponsorPolicy?> GetPolicyAsync(string tenantId, string id, CancellationToken ct = default)

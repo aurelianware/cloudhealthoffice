@@ -25,6 +25,42 @@ public sealed record ContractResult<T>(ContractOutcome Outcome, IReadOnlyList<st
 }
 
 /// <summary>
+/// What an inbound identifier turned out to name: an enrollment's
+/// <c>REF*1L</c>, which a trading partner may fill with either a group number
+/// or a policy number (§9b, step 3d).
+/// </summary>
+public enum GroupOrPolicyOutcome
+{
+    /// <summary>A sponsor has this group number. Checked first, so no partner sending one is read differently.</summary>
+    GroupNumber,
+
+    /// <summary>No sponsor has it, and exactly one policy of the tenant carries it as its policy number.</summary>
+    PolicyNumber,
+
+    /// <summary>
+    /// No sponsor has it and more than one policy carries it. Policy numbers
+    /// are unique within a group and nothing makes them unique across groups,
+    /// so this is answerable rather than exceptional — and naming the groups it
+    /// could be is the only useful thing to say about it.
+    /// </summary>
+    Ambiguous,
+
+    /// <summary>Neither a group number nor any policy number of this tenant.</summary>
+    Unknown,
+}
+
+/// <summary>
+/// What an inbound <c>REF*1L</c> named. <see cref="GroupNumber"/> is filled for
+/// both resolved outcomes, so a caller that only wants the group need not care
+/// which way it was reached.
+/// </summary>
+public sealed record GroupOrPolicyResolution(
+    GroupOrPolicyOutcome Outcome,
+    string? GroupNumber = null,
+    SponsorPolicy? Policy = null,
+    IReadOnlyList<string>? CandidateGroupNumbers = null);
+
+/// <summary>
 /// Why a date has, or has not, billing terms from the contract. The two ways
 /// of having none are not interchangeable: see
 /// <c>ContractService.BillingInForceAsync</c>.
@@ -256,6 +292,44 @@ public sealed class ContractService(
     /// its billing blank.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Resolves an inbound <c>REF*1L</c> value, which a trading partner may
+    /// fill with a group number or with a policy number (§9b, step 3d).
+    ///
+    /// <para>
+    /// The group number is tried first and wins outright. That is what keeps
+    /// this additive: every partner sending a group number today is read
+    /// exactly as it is read now, and a policy number is only ever consulted
+    /// for a value that means nothing at all today. A policy is matched whether
+    /// or not it is offered on the date, because a file naming a policy that
+    /// has ended is a file about the right group — the date is the enrollment's
+    /// problem to report, not a reason to fail to identify the sponsor.
+    /// </para>
+    /// </summary>
+    public async Task<GroupOrPolicyResolution> ResolveGroupOrPolicyAsync(
+        string tenantId, string value, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return new GroupOrPolicyResolution(GroupOrPolicyOutcome.Unknown);
+        var trimmed = value.Trim();
+
+        if (await SponsorExistsAsync(tenantId, trimmed, ct))
+            return new GroupOrPolicyResolution(GroupOrPolicyOutcome.GroupNumber, trimmed);
+
+        var policies = await store.FindPoliciesByNumberAsync(tenantId, trimmed, ct);
+        if (policies.Count == 0) return new GroupOrPolicyResolution(GroupOrPolicyOutcome.Unknown);
+
+        // Distinct groups, not distinct policies: one group cannot hold the
+        // same policy number twice, so more than one policy here means more
+        // than one group, and the groups are what a person has to choose
+        // between.
+        var groups = policies.Select(p => p.GroupNumber).Distinct(StringComparer.Ordinal).ToList();
+        if (groups.Count > 1)
+            return new GroupOrPolicyResolution(
+                GroupOrPolicyOutcome.Ambiguous, CandidateGroupNumbers: groups);
+
+        return new GroupOrPolicyResolution(GroupOrPolicyOutcome.PolicyNumber, groups[0], policies[0]);
+    }
+
     public async Task<BillingResolution> BillingInForceAsync(
         string tenantId, string groupNumber, DateTime on, CancellationToken ct = default)
     {
