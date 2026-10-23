@@ -230,6 +230,59 @@ public sealed record IppsOutlier(
 }
 
 /// <summary>
+/// The hospital-specific portion (42 CFR 412.73, 412.77, 412.108): the top-up
+/// a sole-community, essential-access or Medicare-dependent hospital is paid
+/// where its own historical rate beats what the federal rate paid this case.
+///
+/// <para>
+/// <b>It is a comparison, not an add-on.</b> CMS pays the <i>difference</i>, so
+/// the hospital ends up on the higher of the two and the portion is zero at any
+/// such hospital whose own rate has fallen behind the federal one — which is
+/// most of them, most years. An implementation that added the hospital-specific
+/// amount to the federal payment would roughly double it.
+/// </para>
+///
+/// <para>
+/// Two things in the comparison are easy to get wrong and both are visible
+/// here. The federal side includes the teaching and disproportionate share
+/// add-ons, the <i>operating</i> cost outlier and the uncompensated care
+/// payment, but no part of the capital payment — so a hospital can win the
+/// comparison while being paid more in total than its own rate. And the two
+/// sides are not weighted alike on a transfer: the federal side carries the
+/// transfer fraction and the hospital-specific rate carries the <b>full</b> DRG
+/// weight, so a short transfer at one of these hospitals almost always lands on
+/// the hospital-specific side. That asymmetry is in CMS's program, not in the
+/// regulation, and the corpus's transfer row at a sole community hospital is
+/// there to keep it honest.
+/// </para>
+/// </summary>
+/// <param name="Rate">
+/// The hospital's own rate for this case: its facility specific rate, carried
+/// forward by the year's update factor, times the full DRG weight.
+/// </param>
+/// <param name="FederalAmountCompared">
+/// What the federal side was worth for the comparison — the operating payment
+/// as paid, its outlier included. Kept because a portion that disagrees with
+/// CMS disagrees about one of the two sides and a single difference cannot say
+/// which.
+/// </param>
+/// <param name="Payment">
+/// The amount paid: the difference where the hospital's own rate won, times
+/// 0.75 at a Medicare-dependent hospital, and zero otherwise.
+/// </param>
+public sealed record IppsHospitalSpecificPortion(
+    decimal Rate,
+    decimal FederalAmountCompared,
+    decimal Payment)
+{
+    /// <summary>
+    /// No hospital-specific portion: the hospital is in none of the three
+    /// categories, which is the common case.
+    /// </summary>
+    public static readonly IppsHospitalSpecificPortion None = new(0m, 0m, 0m);
+}
+
+/// <summary>
 /// The four adjustments CMS takes on the assembled payment rather than on the
 /// DRG amount, each as a signed dollar amount in the sum.
 ///
@@ -305,8 +358,22 @@ public sealed record IppsAdjustments(
 /// <param name="Capital">The capital side.</param>
 /// <param name="Transfer">The transfer reduction, or null on a discharge.</param>
 /// <param name="Outlier">The cost outlier.</param>
+/// <param name="HospitalSpecific">
+/// The hospital-specific portion, zero at a hospital in none of the three
+/// categories that have one.
+/// </param>
 /// <param name="Adjustments">
 /// The four hospital-level adjustments taken on the assembled payment.
+/// </param>
+/// <param name="PassThroughPayment">
+/// Costs paid outside the prospective rate, per covered day. Added after the
+/// hospital-acquired-condition penalty, so it escapes both the penalty and the
+/// low-volume base.
+///
+/// <para>
+/// <b>The one amount here that CMS's pricer could not be made to confirm.</b>
+/// See the note on <see cref="IppsPaymentCalculator"/>.
+/// </para>
 /// </param>
 /// <param name="Notes">What a reader of the payment should know about it.</param>
 public sealed record IppsPayment(
@@ -315,7 +382,9 @@ public sealed record IppsPayment(
     IppsCapitalPayment Capital,
     IppsTransferReduction? Transfer,
     IppsOutlier Outlier,
+    IppsHospitalSpecificPortion HospitalSpecific,
     IppsAdjustments Adjustments,
+    decimal PassThroughPayment,
     IReadOnlyList<string> Notes)
 {
     /// <summary>The full DRG payment, before any transfer reduction or outlier.</summary>
@@ -329,13 +398,19 @@ public sealed record IppsPayment(
 
     /// <summary>
     /// The case payment: both sides after any transfer reduction, plus the cost
-    /// outlier. This is what the low-volume uplift is a percentage of, and what
-    /// the hospital-acquired-condition penalty is taken on.
+    /// outlier and any hospital-specific portion. This is what the low-volume
+    /// uplift is a percentage of, and what the hospital-acquired-condition
+    /// penalty is taken on — both of which is why the hospital-specific portion
+    /// has to be settled before either of them and not added at the end.
     /// </summary>
-    public decimal PaymentBeforeAdjustments => PaymentBeforeOutliers + Outlier.Payment;
+    public decimal PaymentBeforeAdjustments =>
+        PaymentBeforeOutliers + Outlier.Payment + HospitalSpecific.Payment;
 
-    /// <summary>The total paid.</summary>
-    public decimal Total => PaymentBeforeAdjustments + Adjustments.Total;
+    /// <summary>
+    /// The total paid: the case payment, the four adjustments, and then the
+    /// pass-through amount, which CMS adds last and so outside the penalty.
+    /// </summary>
+    public decimal Total => PaymentBeforeAdjustments + Adjustments.Total + PassThroughPayment;
 }
 
 /// <summary>Raised when a stay cannot be paid from the data given.</summary>
@@ -344,7 +419,8 @@ public sealed class IppsPaymentFailedException(string message) : Exception(messa
 /// <summary>
 /// Pays an inpatient stay under the Medicare Inpatient Prospective Payment
 /// System: the wage adjustment, the teaching and disproportionate share
-/// add-ons, the capital payment, the transfer per diems and the cost outliers.
+/// add-ons, the capital payment, the transfer per diems, the cost outliers, the
+/// hospital-specific portion and the four hospital-level adjustments.
 ///
 /// <para>
 /// <b>Validated against CMS's own pricer</b> on the base DRG payment, the
@@ -360,12 +436,33 @@ public sealed class IppsPaymentFailedException(string message) : Exception(messa
 /// </para>
 ///
 /// <para>
+/// <b>One amount here is not parity-validated, and it is the pass-through
+/// payment.</b> Everything else in this class is held to CMS's own pricer on
+/// every build. The pass-through cannot be: CMS computes it only for a request
+/// marked as coming from its web pricer, and the price-claim endpoint the
+/// oracle drives never takes that path — the amount comes back absent whatever
+/// is on the provider record. So the formula here is read off
+/// <c>CalculateHmoTotals</c>, with the COBOL quoted above it, and the
+/// arithmetic is three lines; but it has not been <i>executed</i> by CMS, which
+/// is a weaker claim than the rest of this file makes and the reason it says so
+/// here rather than in a commit message. The managed-care variant, where CMS
+/// subtracts the organ-acquisition and education components back out and pays
+/// no teaching adjustment at all, is not modelled: nothing in CHO distinguishes
+/// a managed-care claim yet.
+/// </para>
+///
+/// <para>
 /// <b>This is still not a Medicare payment.</b> Components CMS pays and this
-/// does not: the hospital-specific portion for sole-community and
-/// Medicare-dependent hospitals, pass-through amounts for direct medical
-/// education and organ acquisition, new-technology add-ons (a published list
-/// of devices and amounts, so an importer rather than a formula), and the
-/// bundled-payment adjustment. <see cref="IppsPayment"/> keeps every
+/// does not: new-technology add-ons (a published list of devices and amounts,
+/// so an importer rather than a formula) and the islet isolation add-on (a flat
+/// 18,848 for one qualifying procedure code and 37,696 for more than one, which
+/// needs CMS's diagnosis and procedure code tables rather than a formula).
+/// <b>The Model 1 bundled-payment adjustment is not in that list, and used to
+/// be:</b> CMS's rule for it multiplies the hospital's discount by zero for any
+/// discharge after 31 December 2016, so it is identically zero for every FY2026
+/// claim. Confirmed against the pricer with a 10 percent discount and the
+/// demonstration code on file, which pays the same total as without them.
+/// Modelling it would be modelling dead code. <see cref="IppsPayment"/> keeps every
 /// intermediate, which is what lets the parity run find a disagreement in one
 /// line rather than in a total.
 /// </para>
@@ -460,22 +557,108 @@ public static class IppsPaymentCalculator
                 + $"{outlier.Capital.EstimatedCost:C} against {outlier.Capital.Threshold:C}.");
         }
 
+        // The hospital-specific portion is settled against the operating side
+        // as paid, outlier included — and before the four adjustments, because
+        // the low-volume uplift and the penalty are both taken on it.
+        var hospitalSpecific = HospitalSpecificPortion(
+            rates, provider, stay, operatingPaid + outlier.Operating.Payment, notes);
+
         // The readmissions and value-based adjustments are taken on the base
         // DRG payment alone — the federal specific portion after any transfer
         // reduction, and nothing else. Passing the whole operating side here
         // would take them on the teaching, disproportionate share and
-        // uncompensated care payments too, which CMS does not.
+        // uncompensated care payments too, which CMS does not. The
+        // hospital-specific portion is excluded for the same reason.
         var adjustments = Adjustments(
             provider,
-            casePayment: paid + outlier.Payment,
+            casePayment: paid + outlier.Payment + hospitalSpecific.Payment,
             operatingBaseDrgPayment: operating.BasePayment * fraction,
             notes);
 
+        // Last, and so outside the penalty and outside the low-volume base.
+        // Per covered day, not per discharge, and not reduced by a transfer:
+        // the figure is already a per diem, so the length of the stay is the
+        // only thing that scales it.
+        var passThrough = provider.PassThroughPerDiem * stay.LengthOfStayDays;
+        if (passThrough != 0m)
+        {
+            notes.Add(
+                $"Pass-through costs of {passThrough:C}: {provider.PassThroughPerDiem:C} per day "
+                + $"for {stay.LengthOfStayDays} days, added after the "
+                + "hospital-acquired-condition penalty and so untouched by it.");
+        }
+
         return new IppsPayment(
-            rates.FiscalYear, operating, capital, transfer, outlier, adjustments, notes)
+            rates.FiscalYear,
+            operating,
+            capital,
+            transfer,
+            outlier,
+            hospitalSpecific,
+            adjustments,
+            passThrough,
+            notes)
         {
             PaymentBeforeOutliers = paid
         };
+    }
+
+    /// <summary>
+    /// The hospital-specific portion: the difference where this hospital's own
+    /// rate beats what the federal side paid. See
+    /// <see cref="IppsHospitalSpecificPortion"/> for why it is a difference and
+    /// not an add-on.
+    /// </summary>
+    /// <param name="rates">The year's rates.</param>
+    /// <param name="provider">The hospital.</param>
+    /// <param name="stay">The stay, for the DRG weight.</param>
+    /// <param name="federalOperatingPaid">
+    /// The operating side as paid — the transfer reduction applied, the
+    /// teaching, disproportionate share and uncompensated care payments and the
+    /// operating cost outlier all in, and no part of the capital payment.
+    /// </param>
+    /// <param name="notes">Notes to add to.</param>
+    private static IppsHospitalSpecificPortion HospitalSpecificPortion(
+        IppsRateSet rates,
+        IppsProvider provider,
+        IppsStay stay,
+        decimal federalOperatingPaid,
+        List<string> notes)
+    {
+        if (provider.HospitalSpecificCategory == IppsHospitalSpecificCategory.None)
+            return IppsHospitalSpecificPortion.None;
+
+        // The full DRG weight, with no transfer fraction. That is CMS's
+        // program: the federal side of the comparison is weighted by the
+        // transfer fraction and this side is not. See
+        // IppsHospitalSpecificPortion.
+        var rate = provider.FacilitySpecificRate
+            * rates.HospitalSpecificUpdate.FactorFor(provider)
+            * stay.RelativeWeight;
+
+        if (rate <= federalOperatingPaid)
+        {
+            notes.Add(
+                $"No hospital-specific portion: the hospital's own rate for this case, "
+                + $"{rate:C}, did not beat the {federalOperatingPaid:C} the federal rate paid "
+                + "on the operating side.");
+            return new IppsHospitalSpecificPortion(rate, federalOperatingPaid, 0m);
+        }
+
+        // 42 CFR 412.108(c)(2)(ii): a Medicare-dependent hospital is paid 75
+        // percent of the difference. The other two categories are paid all of
+        // it, which is the only thing that separates the three.
+        var share = provider.HospitalSpecificCategory == IppsHospitalSpecificCategory.MedicareDependent
+            ? 0.75m
+            : 1m;
+        var payment = (rate - federalOperatingPaid) * share;
+
+        notes.Add(
+            $"Hospital-specific portion of {payment:C}: the hospital's own rate for this case, "
+            + $"{rate:C}, against the {federalOperatingPaid:C} paid on the federal operating "
+            + $"side{(share == 1m ? "" : ", at the 75 percent a Medicare-dependent hospital is paid")}.");
+
+        return new IppsHospitalSpecificPortion(rate, federalOperatingPaid, payment);
     }
 
     /// <summary>

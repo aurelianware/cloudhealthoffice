@@ -433,6 +433,151 @@
         "capitalCostToChargeRatio": 0.05,
         "uncompensatedCareAmount": 1000.0
       }
+    },
+    {
+      "name": "sole-community-own-rate-wins",
+      "why": "42 CFR 412.92: a sole community hospital whose own rate beats the federal one is paid the difference. Pins the hospital-specific portion, and with it the update factor -- the one number that cannot be derived, because CMS restarted the cumulative prior-year chain at 1.0 for FY2026 after carrying every update back to FY2019 through FY2025.",
+      "ccn": "450020",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "providerType": "16",
+        "ppsFacilitySpecificRate": 8000.0
+      }
+    },
+    {
+      "name": "sole-community-federal-rate-wins",
+      "why": "The same hospital with a lower facility rate, so the federal side wins and the portion is zero. Pins the comparison as a comparison: an implementation that added the two together instead of taking the greater pays roughly double here and agrees on the row above.",
+      "ccn": "450021",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "providerType": "16",
+        "ppsFacilitySpecificRate": 4000.0
+      }
+    },
+    {
+      "name": "medicare-dependent-seventy-five-percent",
+      "why": "42 CFR 412.108: a Medicare-dependent small rural hospital is paid 75 percent of the difference, not all of it. The only thing separating the three categories, and the row that catches paying it in full.",
+      "ccn": "450022",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "providerType": "14",
+        "ppsFacilitySpecificRate": 8000.0
+      }
+    },
+    {
+      "name": "essential-access-community-hospital",
+      "why": "Provider type 21. Paid on the sole community terms rather than the Medicare-dependent ones, which is worth pinning because the three categories are three disjoint pairs of provider type codes and getting a pair into the wrong branch costs 25 percent of the portion.",
+      "ccn": "450023",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "providerType": "21",
+        "ppsFacilitySpecificRate": 8000.0
+      }
+    },
+    {
+      "name": "sole-community-record-reduction",
+      "why": "A sole community hospital carrying the electronic health record reduction. The two payment-reduction flags cut the payment twice through two different numbers -- a smaller row of the rate table and a smaller hospital-specific update factor -- and a calculator that applied the flags to only one of them agrees with CMS on neither side.",
+      "ccn": "450024",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "providerType": "16",
+        "ppsFacilitySpecificRate": 8000.0,
+        "ehrReductionIndicator": "Y"
+      }
+    },
+    {
+      "name": "sole-community-transfer-full-weight",
+      "why": "A per-diem transfer at a sole community hospital. The federal side of the comparison carries the transfer fraction and the hospital-specific rate carries the FULL DRG weight, so a short transfer lands on the hospital-specific side almost whatever the facility rate is. That asymmetry is in CMS's program and not in the regulation, which is exactly why it needs a row.",
+      "ccn": "450025",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "871",
+      "lengthOfStay": 1,
+      "coveredDays": 1,
+      "coveredCharges": 20000.0,
+      "reviewCode": "03",
+      "provider": {
+        "providerType": "16",
+        "ppsFacilitySpecificRate": 5000.0
+      }
+    },
+    {
+      "name": "sole-community-outlier-and-adjustments",
+      "why": "A sole community hospital with a cost outlier on both sides, an uncompensated care payment, the low-volume adjustment and the hospital-acquired-condition penalty at once. The charges are tuned so that the portion survives: CMS pays 3,984.58 here without the outlier and 2,294.26 with it, which is the 1,690.32 operating outlier taken off dollar for dollar, while the 5,394.00 capital outlier does not touch it at all. That is the row that pins what is inside the comparison -- the operating outlier and the uncompensated care payment, and no part of the capital payment -- and then that the portion is inside both the low-volume base and the penalty base.",
+      "ccn": "450026",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 12,
+      "coveredDays": 12,
+      "coveredCharges": 160000.0,
+      "reviewCode": "00",
+      "provider": {
+        "providerType": "16",
+        "ppsFacilitySpecificRate": 9000.0,
+        "operatingCostToChargeRatio": 0.32,
+        "capitalCostToChargeRatio": 0.04,
+        "uncompensatedCareAmount": 1000.0,
+        "temporaryReliefIndicator": "Y",
+        "lowVolumeAdjustmentFactor": 0.2,
+        "hacReductionParticipantIndicator": "Y"
+      }
+    },
+    {
+      "name": "pass-through-amount-on-file",
+      "why": "A hospital with a pass-through amount per covered day on its provider record. CMS pays NOTHING for it here, and that is the point: its pricer computes the pass-through only for a request marked as coming from its web pricer, and this endpoint never takes that path. So this row pins the one boundary of the oracle -- the pass-through is the single amount CHO pays that CMS's program cannot be made to confirm -- and it will start reporting a figure the day that changes.",
+      "ccn": "450030",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 30,
+      "coveredDays": 30,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "passThroughTotalAmount": 100.0,
+        "passThroughAmountForOrganAcquisition": 30.0,
+        "passThroughAmountForDirectMedicalEducation": 20.0,
+        "bundleModel1Discount": 0.1
+      }
     }
   ]
 }

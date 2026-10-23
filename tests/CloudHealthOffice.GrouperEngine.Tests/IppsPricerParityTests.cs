@@ -83,6 +83,9 @@ public class IppsPricerParityTests
         decimal? ValueBasedPurchasingAdjustmentFactor,
         bool LowVolumeTemporaryRelief,
         decimal LowVolumeAdjustmentFactor,
+        decimal PassThroughPerDiem,
+        IppsHospitalSpecificCategory HospitalSpecificCategory,
+        decimal FacilitySpecificRate,
         bool HospitalAcquiredConditionReduction);
 
     // ─────────────────────────────────────────────────────────
@@ -183,10 +186,29 @@ public class IppsPricerParityTests
                         : null,
                 LowVolumeTemporaryRelief: Indicator("temporaryReliefIndicator") == "Y",
                 LowVolumeAdjustmentFactor: Provider("lowVolumeAdjustmentFactor"),
+                PassThroughPerDiem: Provider("passThroughTotalAmount"),
+                HospitalSpecificCategory: CategoryFor(Indicator("providerType")),
+                FacilitySpecificRate: Provider("ppsFacilitySpecificRate"),
                 HospitalAcquiredConditionReduction:
                     Indicator("hacReductionParticipantIndicator") == "Y");
         }).ToList();
     }
+
+    /// <summary>
+    /// CMS's two-character provider type, as the three hospital-specific
+    /// categories. The mapping lives here rather than in the engine because it
+    /// is a fact about CMS's provider-specific file format, and translating it
+    /// is a loader's job — but it has to be written down somewhere exactly
+    /// once, and getting a pair into the wrong branch costs 25 percent of the
+    /// portion with no other symptom.
+    /// </summary>
+    private static IppsHospitalSpecificCategory CategoryFor(string providerType) => providerType switch
+    {
+        "16" or "17" => IppsHospitalSpecificCategory.SoleCommunity,
+        "21" or "22" => IppsHospitalSpecificCategory.EssentialAccessCommunity,
+        "14" or "15" => IppsHospitalSpecificCategory.MedicareDependent,
+        _ => IppsHospitalSpecificCategory.None,
+    };
 
     /// <summary>
     /// Which row of CMS's operating rate table a reference stay was paid from.
@@ -279,7 +301,92 @@ public class IppsPricerParityTests
                 BurnMarginalCostFactor: 0.90m,
                 BurnDrgs: new HashSet<int> { 927, 928, 929, 933, 934, 935 }),
             Teaching: new IppsTeachingPolicy(0.405d, 1.35m),
+            HospitalSpecificUpdate: HospitalSpecificUpdateFrom(cases, answers),
             EmpiricallyJustifiedDshShare: 0.25m);
+    }
+
+    /// <summary>
+    /// The year's hospital-specific update factors, derived from the reference
+    /// stays that are plain enough to invert.
+    ///
+    /// <para>
+    /// CMS reports no column for this factor, and unlike the rate table rows it
+    /// cannot be read off a payment in general: the portion CMS pays is a
+    /// <i>difference</i>, so inverting it needs the federal side exactly. On a
+    /// plain discharge with no teaching, no disproportionate share, no outlier
+    /// and no uncompensated care payment, the federal side is the reported
+    /// federal specific portion and nothing else, and the inversion is sound to
+    /// a hundredth of a cent. The corpus's two sole-community discharges are
+    /// therefore <b>calibration rather than comparison</b> — the same standing
+    /// the <c>wage-index-below-one</c> row has for the capital rate — and the
+    /// other five hospital-specific rows, which carry the 75 percent, the
+    /// full-weight transfer, the losing comparison and the ordering, are not
+    /// implied by them.
+    /// </para>
+    /// </summary>
+    private static IppsHospitalSpecificUpdate HospitalSpecificUpdateFrom(
+        IReadOnlyList<Case> cases, IReadOnlyList<Answer> answers)
+    {
+        var byName = answers.ToDictionary(answer => answer.Case);
+        var factors = new Dictionary<bool, decimal>();
+
+        foreach (var input in cases)
+        {
+            var answer = byName[input.Name];
+            var portion = answer.Number("hospital_specific_portion") ?? 0m;
+
+            // Only a row this can be inverted from: a full-rate category, a
+            // portion CMS actually paid, and nothing else on the federal side.
+            if (portion <= 0m
+                || input.HospitalSpecificCategory != IppsHospitalSpecificCategory.SoleCommunity
+                || input.ReviewCode != "00"
+                || input.FacilitySpecificRate <= 0m
+                || (answer.Number("operating_ime_adjustment") ?? 0m) != 0m
+                || (answer.Number("operating_dsh_adjustment") ?? 0m) != 0m
+                || (answer.Number("operating_outlier_payment") ?? 0m) != 0m
+                || (answer.Number("uncompensated_care_payment") ?? 0m) != 0m)
+            {
+                continue;
+            }
+
+            var federal = answer.Number("operating_federal_specific_portion")!.Value;
+            var weight = answer.Number("drg_weight")!.Value;
+            var factor = decimal.Round(
+                (portion + federal) / (input.FacilitySpecificRate * weight),
+                5,
+                MidpointRounding.AwayFromZero);
+
+            // Two such rows sharing the two payment-reduction flags must invert
+            // to the same factor, or something other than those flags moves it.
+            if (factors.TryGetValue(input.ElectronicRecordsReduction, out var already))
+            {
+                Assert.Equal(already, factor);
+                continue;
+            }
+
+            factors[input.ElectronicRecordsReduction] = factor;
+        }
+
+        Assert.True(
+            factors.ContainsKey(false) && factors.ContainsKey(true),
+            "the corpus has no sole-community discharge to derive the hospital-specific "
+            + "update factor from, with and without the electronic health record reduction");
+
+        // The two factors no corpus stay selects are left at zero rather than
+        // filled in with a plausible number. A stay that selected one would be
+        // paid no hospital-specific portion at all, which is the loud failure
+        // wanted here; a guessed factor would be a quiet wrong payment.
+        return new IppsHospitalSpecificUpdate(
+            WithQualityData: factors[false],
+            WithQualityDataAndRecordsReduction: factors[true],
+            WithoutQualityData: 0m,
+            WithoutQualityDataAndRecordsReduction: 0m,
+            // The published factor is a market basket update times two
+            // budget-neutrality factors times a cumulative prior-year chain,
+            // and only the product can be inverted from a payment. The split
+            // matters to whoever loads a fiscal year, not to the arithmetic.
+            BudgetNeutrality: 1m,
+            CumulativePriorYears: 1m);
     }
 
     private static IppsPayment Price(IppsRateSet rates, Case input, Answer answer)
@@ -299,6 +406,9 @@ public class IppsPricerParityTests
             ValueBasedPurchasingAdjustmentFactor = input.ValueBasedPurchasingAdjustmentFactor,
             LowVolumeTemporaryRelief = input.LowVolumeTemporaryRelief,
             LowVolumeAdjustmentFactor = input.LowVolumeAdjustmentFactor,
+            PassThroughPerDiem = input.PassThroughPerDiem,
+            HospitalSpecificCategory = input.HospitalSpecificCategory,
+            FacilitySpecificRate = input.FacilitySpecificRate,
             HospitalAcquiredConditionReduction = input.HospitalAcquiredConditionReduction,
         };
 
@@ -442,6 +552,129 @@ public class IppsPricerParityTests
         // isolation. The corpus has a row carrying all four at once for that,
         // and this count fails if these rows are dropped.
         Assert.True(compared >= 8, $"only {compared} adjustment amounts compared");
+    }
+
+    [Fact]
+    public void The_hospital_specific_portion_agrees_with_CMS_on_every_stay_that_has_one()
+    {
+        var failures = new List<string>();
+        var paid = 0;
+        var refused = 0;
+
+        foreach (var (input, expected, actual) in Comparable())
+        {
+            var cms = expected.Number("hospital_specific_portion") ?? 0m;
+
+            // A hospital CMS does not recognise as one of the three categories
+            // reports no percentage at all, and must be paid no portion. This
+            // is the direction that matters most: the portion is a four-figure
+            // amount, so paying one to an ordinary hospital is not a rounding
+            // disagreement.
+            if (expected.Number("hospital_specific_portion_percent") is null)
+            {
+                if (actual.HospitalSpecific.Payment != 0m)
+                {
+                    failures.Add(
+                        $"{input.Name}: CMS pays no hospital-specific portion at this hospital "
+                        + $"and CHO paid {actual.HospitalSpecific.Payment:F2}");
+                }
+
+                continue;
+            }
+
+            if (cms == 0m)
+            {
+                // Recognised, but its own rate lost the comparison. CHO has to
+                // lose it too: the alternative is an engine that pays every
+                // sole community hospital a top-up.
+                refused++;
+                if (actual.HospitalSpecific.Payment != 0m)
+                {
+                    failures.Add(
+                        $"{input.Name}: CMS paid no portion and CHO paid "
+                        + $"{actual.HospitalSpecific.Payment:F2}");
+                }
+
+                continue;
+            }
+
+            paid++;
+            var difference = Math.Abs(actual.HospitalSpecific.Payment - cms);
+            if (difference > Dollar)
+            {
+                failures.Add(
+                    $"{input.Name}: CHO {actual.HospitalSpecific.Payment:F2}, CMS {cms:F2}, "
+                    + $"off by {difference:F2}");
+            }
+        }
+
+        Assert.Empty(failures);
+
+        // The corpus has to carry both outcomes, or each half of the comparison
+        // is being asserted about nothing. Two of the paid rows are the ones
+        // HospitalSpecificUpdateFrom calibrates against; the rest are not.
+        Assert.True(paid >= 4, $"only {paid} stays were paid a hospital-specific portion");
+        Assert.True(refused >= 1, "no stay in the corpus lost the hospital-specific comparison");
+    }
+
+    [Fact]
+    public void The_pass_through_is_the_one_amount_this_oracle_cannot_confirm()
+    {
+        var withAmountOnFile = 0;
+
+        foreach (var (input, expected, actual) in Comparable())
+        {
+            // CMS computes the pass-through only for a request marked as coming
+            // from its web pricer — `cms-pricer-client: WEB-PRICER` — and the
+            // price-claim endpoint this oracle drives never takes that path.
+            // So the column is empty on every row, and this asserts it rather
+            // than assuming it: the day CMS starts reporting a figure, this
+            // fails and the pass-through becomes comparable like everything
+            // else.
+            Assert.Null(expected.Number("passthrough_total_plus_misc"));
+
+            if (input.PassThroughPerDiem <= 0m)
+            {
+                Assert.Equal(0m, actual.PassThroughPayment);
+                continue;
+            }
+
+            withAmountOnFile++;
+
+            // And CHO does pay one, so the disagreement is explicit. This is
+            // the one place in this file where CHO paying more than CMS
+            // reported is the expected result, and the reason is that CMS did
+            // not compute the amount rather than that it computed zero.
+            Assert.Equal(
+                input.PassThroughPerDiem * input.LengthOfStay, actual.PassThroughPayment);
+            Assert.True(actual.PassThroughPayment > 0m);
+        }
+
+        // The corpus has to carry such a hospital, or the assertion above is
+        // about nothing and the boundary goes unrecorded.
+        Assert.True(
+            withAmountOnFile >= 1,
+            "no reference stay has a pass-through amount on its provider record");
+    }
+
+    [Fact]
+    public void The_model_one_bundled_adjustment_is_dead_for_this_fiscal_year()
+    {
+        // CMS's rule multiplies the hospital's Model 1 discount by zero for any
+        // discharge after 31 December 2016, so the adjustment is identically
+        // zero however the provider record is filled in. The corpus's
+        // pass-through row carries a 10 percent discount for exactly this
+        // check: CMS pays it the same total as the plain stay it is otherwise
+        // identical to in every rate-determining respect, which is why nothing
+        // in CHO models the adjustment at all.
+        var answers = Answers().ToDictionary(answer => answer.Case);
+
+        var bundled = answers["pass-through-amount-on-file"].Number("total_payment");
+        var plain = answers["wage-index-below-one"].Number("total_payment");
+
+        Assert.NotNull(bundled);
+        Assert.NotNull(plain);
+        Assert.Equal(plain!.Value, bundled!.Value);
     }
 
     [Fact]

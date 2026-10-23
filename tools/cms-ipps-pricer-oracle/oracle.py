@@ -49,6 +49,19 @@ COLUMNS = [
     "capital_outlier",
     "capital_total_payment",
     "cost_threshold",
+    # The hospital-specific portion, and the percentage that says CMS
+    # recognised the hospital as one of the three categories that have one. The
+    # percentage is reported because a portion of zero is ambiguous: it is what
+    # a sole community hospital whose own rate lost the comparison is paid, and
+    # also what a hospital whose provider type the harness got wrong is paid.
+    "hospital_specific_portion",
+    "hospital_specific_portion_percent",
+    # Always empty, and reported anyway. CMS computes the pass-through only for
+    # a request marked as coming from its web pricer, and this endpoint never
+    # takes that path, so the column records the boundary: the one amount CHO
+    # pays that this oracle cannot confirm. A corpus row carries a pass-through
+    # amount on the provider record purely to keep that fact checked.
+    "passthrough_total_plus_misc",
     "outlier_days",
     "regular_days_used",
     # The four hospital-level adjustments. They are taken on the assembled
@@ -160,6 +173,9 @@ def row_for(name: str, response: dict, drg_entry: dict | None) -> dict:
         "capital_outlier": capital["capitalCostOutlier"],
         "capital_total_payment": capital["capitalTotalPayment"],
         "cost_threshold": extra["costThreshold"],
+        "hospital_specific_portion": payment["operatingHospitalSpecificPortionPart"],
+        "hospital_specific_portion_percent": extra["hospitalSpecificPortionPercent"],
+        "passthrough_total_plus_misc": extra["passthroughTotalPlusMisc"],
         "outlier_days": payment["outlierDays"],
         "regular_days_used": payment["regularDaysUsed"],
         "low_volume_payment": extra["lowVolumePayment"],
