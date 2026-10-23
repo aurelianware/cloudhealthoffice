@@ -1,6 +1,6 @@
 # Claim RFAI — implementation design
 
-**Status:** proposal, awaiting decisions in §7.
+**Status:** proposal. §7 records the decisions, the research behind them and the recommendation taken.
 **Implements:** [document-store.md](document-store.md) step 6.
 **Policy already settled elsewhere:** [claim-review-workbench.md](claim-review-workbench.md) §3 defines the
 reviewer flow, the 45-day default, the deadline behaviours and the clean-date / prompt-pay rules. This
@@ -21,6 +21,11 @@ other direction: a wait should end on an **event**, not a date, and a claim wait
 RFAI to wake it, so the commonest wait in practice falls back to a timer. Its Q1 recommends extending
 RFAI to claim attachment requests rather than waking on a bare attachment arriving, because an
 attachment alone cannot tell solicited from unsolicited. This design is that recommendation worked out.
+
+**There is a date on it.** CMS-0053-F, final 24 March 2026, requires the 275 and the **277 Request for
+Additional Information** by **26 May 2028** — and dropped prior authorization attachments from the final
+rule. So the authorization RFAI CHO has is the part that did not make the rule, and the claim RFAI it
+lacks is the part that did. See §7.1.
 
 ---
 
@@ -163,32 +168,101 @@ client and an outbound service token the way the other cross-service calls do.
 
 Each lands on its own and is useful before the next.
 
+Ordered against the CMS-0053-F compliance date of 26 May 2028 (§7.1), which the payer-initiated path
+carries and the provider-promised path does not. The draft had the PWK pend third, ahead of the
+reviewer's request; §7.2 reverses that.
+
 1. **`WorkItemStatus.Waiting`** — implementing the design already merged in #1514, not redesigning it.
    Widest blast radius, no dependencies on anything here, and nothing below is safe until it exists.
    It is worth building for its own reasons; this work is one of its callers.
-2. **RFAI case subject** — nullable `AuthNumber`, `SubjectKind`, `ClaimId`, `by-claim` lookup, backfill.
-3. **PWK pend** — the provider-promised path end to end: pend, wait, match, release, re-adjudicate.
-   This is the first point where the loop visibly closes, and it needs no new outbound EDI.
+2. **Clean-date event log** — received, information requested, information received, corrected claim
+   received. Early because it is append-only and cannot be backfilled (§7.4): anything requested before
+   it exists is unmeasurable forever. The per-state derivation is *not* here; it comes last.
+3. **RFAI case subject** — nullable `AuthNumber`, `SubjectKind`, `ClaimId`, `by-claim` lookup, backfill.
 4. **Payer-initiated RFAI** — the reviewer action, the claims → rfai seam, the "open requests" strip on
-   the Documents panel.
-5. **277 RFAI out**, plus the letter path for non-electronic providers.
+   the Documents panel. The first point where the loop closes, and the path with the mandate behind it.
+5. **277 RFAI out** (006020X313), plus the letter path for non-electronic providers. With step 4, this
+   is what CMS-0053-F requires by May 2028.
 6. **Due-date sweeper** — back-to-a-person and the auto-deny setting.
-7. **Clean-date event log** and the prompt-pay derivation.
+7. **PWK hold** — the provider-promised path, as a plan setting defaulting off, 7 days (§7.2, §7.3).
+   Last because it is the one that can cost prompt-pay interest without buying clock relief, and it is
+   worth having real traffic on the mandated path before turning it on anywhere.
+8. **Per-state clean-date derivation** — reset / pause / extend over the events step 2 records.
 
-Steps 1–3 are the ones that change what CHO can honestly claim about claim attachments. 4–7 make it
-complete.
+Steps 1–5 are what CHO needs to claim claim-attachment handling honestly and to be compliant in 2028.
+6–8 make it complete.
 
 ---
 
-## 7. Decisions needed
+## 7. Decisions, and the research behind them
 
-1. **Does the PWK pend default on or off?** It is a real behaviour change for anyone adjudicating today:
-   claims that pay now would start waiting. Recommendation: build it behind a plan setting, default off,
-   the same way inpatient grouping landed in #1517.
-2. **How long does a PWK promise hold the claim?** The provider said records are coming but named no
-   date. The 275 hold is 30 days; matching that is the obvious answer but it is not required to match.
-3. **Is step 7 (clean date and prompt-pay interest) in scope now or later?** It is the largest piece and
-   carries the most regulatory exposure. Requesting and waiting are useful without it.
+Researched 2026-10-23; recommendations below are what this design is written to.
+
+### 7.1 The deadline this work is actually against
+
+**CMS-0053-F is final.** Published in the Federal Register 24 March 2026, effective 26 May 2026,
+**compliance date 26 May 2028**. It adopts X12N 275 version 006020X314 and X12N **277 Request for
+Additional Information** version 006020X313 — the transaction a health plan uses to *ask* a provider for
+documentation — together with the March 2022 HL7 Attachments IG.
+
+Two consequences worth stating plainly:
+
+- **Prior authorization attachments were dropped from the final rule** (they were in the proposed rule;
+  CMS cited possible misalignment with the 278 standard). So the half CHO has built, authorization RFAI,
+  is the half that did *not* make the final rule, and the half it lacks — claim RFAI with a 277 out — is
+  the mandated one.
+- The 277 RFAI is therefore not step 5 polish. It is the compliance artefact, with a date.
+
+### 7.2 Pending a claim because the provider announced a PWK
+
+**Recommendation: a plan setting, default off, and built after the payer-initiated path rather than
+before it.**
+
+The original draft reasoned only that pending-on-PWK is a behaviour change. The stronger argument is
+about the clock. Every clean-date model in `claim-review-workbench.md` §3.3 keys on a **payer request**:
+Medicaid resets on the arrival of information the plan *obtained*; ERISA pauses while the *claimant*
+responds; Texas extends on a request the plan *made*. A provider volunteering "records are coming" is
+none of those. The claim is clean, the clock runs, and pending it buys no clock relief — so the plan
+holds a legally clean claim while prompt-pay interest accrues against it.
+
+Texas is the clearest case. Cleanliness there is a property of the **claim form**, not of supporting
+documentation: Tex. Ins. Code §1301.131 (PPO/EPO) and §843.336 (HMO) define a clean claim by the correct
+form and the required fields, and subsection (f) of each says extra attachments or information do not
+disqualify an otherwise-clean claim. A Texas claim with records outstanding was never unclean. (A
+secondary guide states flatly that carriers "may not require attachments to establish a clean claim";
+the statute does not say that in those words, and the structural point above is what it does support.)
+
+States do differ in the other direction — Washington's WAC 284-83-325 includes "any lack of required
+substantiating documentation" in what makes a claim unclean — which is why this belongs in the
+per-state rule of §4.6 and not in a global switch.
+
+### 7.3 How long a PWK promise holds the claim
+
+**Recommendation: 7 calendar days, configurable per plan.**
+
+Payer companion guides commonly give providers seven calendar days from claim submission to get the
+attachment in when a PWK is present, absent a regulatory or contractual date (Wellpoint's 837I and 837P
+guides state it in those terms). Providers already work to that number.
+
+The 30 days in the first draft was a mistake: it borrowed the **unmatched-275 hold**, which is how long
+attachment-service keeps an *orphan attachment* waiting for a claim to announce it. That is the opposite
+direction and a different clock. The two should not be configured from one setting.
+
+### 7.4 Whether clean-date work is in scope now
+
+**Recommendation: build the event log now; leave the per-state derivation for later.**
+
+These separate cleanly and have opposite reversibility.
+
+- **The event log** (received / information requested / information received / corrected claim received)
+  is append-only and **cannot be reconstructed after the fact**. Ship requesting and waiting without it
+  and every request made before it exists is permanently unmeasurable — including the interest exposure
+  those requests created. That is the one irreversible choice here.
+- **The derivation** — reset, pause or extend per line of business and state — is arithmetic over stored
+  events. It can land at any point afterwards and be applied retrospectively to everything recorded.
+
+So record now, derive later. Of the three decisions this is the only one that is costly to defer; 7.2
+and 7.3 are settings that can be changed once there is real traffic to look at.
 
 ## 8. Related, not in this design
 
@@ -205,3 +279,16 @@ path — PWK announcement, control-number match, billing-NPI agreement — is th
 id, so a solicited 275 that names only its RFAI reference is refused at the door today. Resolving an RFAI
 reference to its case needs an attachment-service → rfai-service lookup that does not exist yet — the
 same seam §5 adds for claims — so it belongs with this work rather than before it.
+
+---
+
+## 9. Sources
+
+Checked 2026-10-23. Statutes were read rather than taken from summaries; where a secondary source
+overstated one, §7.2 says so.
+
+- [CMS-0053-F, Federal Register, 24 March 2026](https://www.federalregister.gov/documents/2026/03/24/2026-05676/administrative-simplification-adoption-of-standards-for-health-care-claims-attachments) — adopted standards, effective and compliance dates.
+- [CMS fact sheet, Adoption of Standards for Health Care Claims Attachments](https://www.cms.gov/files/document/nsg-attachments-final-rule-fact-sheet.pdf) — scope change dropping prior authorization attachments.
+- [Tex. Ins. Code §1301.131](https://texas.public.law/statutes/tex._ins._code_section_1301.131) and [§843.336](https://texas.public.law/statutes/tex._ins._code_section_843.336) — clean claim defined by form and required fields; subsection (f) on extra attachments.
+- [WAC 284-83-325](https://app.leg.wa.gov/wac/default.aspx?cite=284-83-325) — Washington's contrasting definition, which counts missing substantiating documentation against cleanliness.
+- [Wellpoint 837I](https://www.wellpoint.com/content/dam/digital/wellpoint/documents/provider/west-virginia/other/wvwp-cd-057810-24-837I-health-care-claim-training-guide.pdf) and [837P](https://www.wellpoint.com/content/dam/digital/wellpoint/documents/provider/west-virginia/other/wvwp-cd-057811-24-837P-health-care-claim-training-guide.pdf) companion guides — the seven-calendar-day attachment window when a PWK is present.
