@@ -66,7 +66,7 @@ public class RoutingTests
         var highDollar = new WorkQueue
         {
             Id = "high", Name = "High dollar", WorkType = WorkType.Claim, Order = 5,
-            Criteria = new ClaimQueueCriteria { MinAmount = 10_000m },
+            Criteria = new WorkQueueCriteria { MinAmount = 10_000m },
         };
         queues.Add(highDollar);
 
@@ -78,9 +78,56 @@ public class RoutingTests
     }
 
     [Fact]
+    public void Facets_AreAllOfEachAnyOf()
+    {
+        var c = new WorkQueueCriteria
+        {
+            Facets = new()
+            {
+                ["classification"] = ["grievance", "appeal"],
+                ["channel"] = ["phone"],
+            },
+        };
+        static WorkItemAttributes With(params (string Name, string[] Values)[] facets) =>
+            new() { Facets = facets.ToDictionary(f => f.Name, f => f.Values.ToList()) };
+
+        WorkRouter.Matches(c, With(("classification", ["Grievance"]), ("channel", ["Phone"]))).Should().BeTrue();
+        WorkRouter.Matches(c, With(("classification", ["appeal"]), ("channel", ["phone"]))).Should().BeTrue();
+        // Every named facet must hold ...
+        WorkRouter.Matches(c, With(("classification", ["grievance"]), ("channel", ["chat"]))).Should().BeFalse();
+        // ... including one the item does not carry at all.
+        WorkRouter.Matches(c, With(("classification", ["grievance"]))).Should().BeFalse();
+        WorkRouter.Matches(c, With(("classification", ["inquiry"]), ("channel", ["phone"]))).Should().BeFalse();
+    }
+
+    [Fact]
+    public void AFacetWithNoValues_DoesNotConstrain_LikeAnEmptyList()
+    {
+        var c = new WorkQueueCriteria { Facets = new() { ["channel"] = [] } };
+
+        WorkRouter.Matches(c, new WorkItemAttributes()).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ANonClaimQueuesCriteria_NowDecideItsRouting()
+    {
+        // They were ignored: every work type but Claim and Enrollment834
+        // routed by order alone, so an Appeal queue's criteria did nothing.
+        var queues = new List<WorkQueue>
+        {
+            new() { Id = "expedited", Name = "Expedited appeals", WorkType = WorkType.Appeal, Order = 10,
+                    Criteria = new WorkQueueCriteria { Expedited = true } },
+            new() { Id = "standard", Name = "Standard appeals", WorkType = WorkType.Appeal, Order = 1000, IsFallback = true },
+        };
+
+        WorkRouter.Route(WorkType.Appeal, new WorkItemAttributes { Expedited = true }, queues)!.Id.Should().Be("expedited");
+        WorkRouter.Route(WorkType.Appeal, new WorkItemAttributes(), queues)!.Id.Should().Be("standard");
+    }
+
+    [Fact]
     public void EveryCriterion_MustHold()
     {
-        var c = new ClaimQueueCriteria
+        var c = new WorkQueueCriteria
         {
             PendCodes = ["COB"],
             LinesOfBusiness = ["Medicaid"],
@@ -97,15 +144,15 @@ public class RoutingTests
             Amount = 500m, ProviderNpi = "1111111111", NetworkTier = "OutOfNetwork", Expedited = true,
         };
 
-        WorkRouter.MatchesClaim(c, match).Should().BeTrue();
-        WorkRouter.MatchesClaim(c, Copy(match, a => a.LineOfBusiness = "Commercial")).Should().BeFalse();
-        WorkRouter.MatchesClaim(c, Copy(match, a => a.ClaimType = "Professional")).Should().BeFalse();
-        WorkRouter.MatchesClaim(c, Copy(match, a => a.Amount = 1000.01m)).Should().BeFalse();
-        WorkRouter.MatchesClaim(c, Copy(match, a => a.Amount = 99m)).Should().BeFalse();
-        WorkRouter.MatchesClaim(c, Copy(match, a => a.ProviderNpi = null)).Should().BeFalse();
-        WorkRouter.MatchesClaim(c, Copy(match, a => a.NetworkTier = "InNetwork")).Should().BeFalse();
-        WorkRouter.MatchesClaim(c, Copy(match, a => a.Expedited = false)).Should().BeFalse();
-        WorkRouter.MatchesClaim(c, Copy(match, a => a.ProviderTin = "12-3456789")).Should().BeTrue("an unset criterion does not constrain");
+        WorkRouter.Matches(c, match).Should().BeTrue();
+        WorkRouter.Matches(c, Copy(match, a => a.LineOfBusiness = "Commercial")).Should().BeFalse();
+        WorkRouter.Matches(c, Copy(match, a => a.ClaimType = "Professional")).Should().BeFalse();
+        WorkRouter.Matches(c, Copy(match, a => a.Amount = 1000.01m)).Should().BeFalse();
+        WorkRouter.Matches(c, Copy(match, a => a.Amount = 99m)).Should().BeFalse();
+        WorkRouter.Matches(c, Copy(match, a => a.ProviderNpi = null)).Should().BeFalse();
+        WorkRouter.Matches(c, Copy(match, a => a.NetworkTier = "InNetwork")).Should().BeFalse();
+        WorkRouter.Matches(c, Copy(match, a => a.Expedited = false)).Should().BeFalse();
+        WorkRouter.Matches(c, Copy(match, a => a.ProviderTin = "12-3456789")).Should().BeTrue("an unset criterion does not constrain");
     }
 
     [Fact]

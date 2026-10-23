@@ -303,7 +303,13 @@ public sealed class WorkIntakeService
         var queues = await _store.ListQueuesAsync(tenantId, ct);
         var byId = queues.ToDictionary(q => q.Id);
         var now = Now;
-        foreach (var item in await _store.ListActiveItemsAsync(tenantId, WorkType.Claim, ct))
+        // Every work type, not only Claim: priority rises while an item
+        // waits whatever produced it, and an enrollment or follow-up queue
+        // that an admin re-criteria'd has to re-route like a claim queue.
+        var active = new List<WorkItem>();
+        foreach (var type in Enum.GetValues<WorkType>())
+            active.AddRange(await _store.ListActiveItemsAsync(tenantId, type, ct));
+        foreach (var item in active)
         {
             result.Examined++;
             var expected = item.Version;
@@ -459,6 +465,84 @@ public sealed class WorkIntakeService
             "Reconciled enrollment work for tenant {TenantId}: {Needed} needing work, {Created} created, {Reopened} reopened, {Updated} updated, {Closed} closed",
             tenantId, result.Pended, result.Created, result.Reopened, result.Updated, result.Closed);
         return result;
+    }
+
+    /// <summary>What a person asked to be followed up, and where it opens.</summary>
+    public sealed record AdHocWork(
+        string TenantId, WorkType WorkType, string SourceNumber, string Title, string? OpenUrl,
+        IReadOnlyList<string> ReasonCodes, IReadOnlyDictionary<string, List<string>> Facets,
+        string? MemberId, string? ProviderNpi, string? LineOfBusiness, bool Expedited,
+        DateTime? Deadline, string Actor);
+
+    /// <summary>
+    /// Creates one item of work a person asked for, with no source service
+    /// behind it: a follow-up from a contact. It is routed and scored like
+    /// any other item, and only a person closes it — no reconcile owns it, so
+    /// nothing will cancel it out from under the queue.
+    ///
+    /// <para>Its source id is generated here rather than taken from the
+    /// caller: two follow-ups from one contact are two pieces of work, and a
+    /// caller-chosen id would let one overwrite the other.</para>
+    /// </summary>
+    public async Task<WorkItem> CreateAdHocAsync(AdHocWork request, CancellationToken ct = default)
+    {
+        if (!WorkTypes.IsPersonCreated(request.WorkType))
+            throw new ArgumentException(
+                $"{request.WorkType} work comes from its source service, not from a person.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.TenantId))
+            throw new ArgumentException("A work item needs a tenant.", nameof(request));
+
+        await _config.EnsureSeededAsync(request.TenantId, ct);
+        var now = Now;
+        var sourceId = Guid.NewGuid().ToString("N");
+        var reasons = request.ReasonCodes
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Select(r => r.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var attributes = new WorkItemAttributes
+        {
+            PrimaryPendCode = reasons.FirstOrDefault(),
+            PendCodes = reasons,
+            PendReason = request.Title,
+            Title = request.Title,
+            OpenUrl = request.OpenUrl,
+            LineOfBusiness = request.LineOfBusiness,
+            MemberId = request.MemberId,
+            ProviderNpi = request.ProviderNpi,
+            Expedited = request.Expedited,
+            Deadline = request.Deadline,
+            ReceivedDate = now,
+            Facets = request.Facets
+                .Select(f => (Key: WorkFacets.Key(f.Key), Values: f.Value
+                    .Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList()))
+                .Where(f => WorkFacets.IsValidKey(f.Key) && f.Values.Count > 0)
+                .ToDictionary(f => f.Key, f => f.Values),
+        };
+
+        var item = new WorkItem
+        {
+            Id = WorkItem.IdFor(request.TenantId, request.WorkType, sourceId),
+            TenantId = request.TenantId,
+            WorkType = request.WorkType,
+            SourceRef = WorkItem.SourceRefFor(request.WorkType, sourceId),
+            SourceId = sourceId,
+            SourceNumber = request.SourceNumber,
+            Attributes = attributes,
+            Status = WorkItemStatus.Open,
+            CreatedAt = now,
+            UpdatedAt = now,
+            // No source version to be in step with: a person is the source,
+            // and there is no later event that could be judged stale.
+            SourceVersion = now.Ticks,
+        };
+        Place(item, WorkRouter.Route(request.WorkType, attributes, await _store.ListQueuesAsync(request.TenantId, ct)), now);
+
+        if (!await _store.TryCreateItemAsync(item, ct))
+            throw new InvalidOperationException($"Work item {item.Id} already exists.");
+        await AuditAsync(item, WorkAuditActions.Created, request.Actor, queueId: item.QueueId, detail: request.Title);
+        return item;
     }
 
     private Task AuditAsync(WorkItem item, string action, string actor, string? fromUser = null, string? toUser = null,

@@ -31,16 +31,19 @@ public sealed class WorkDistributionService
 {
     private readonly IWorkStore _store;
     private readonly WorkConfigService _config;
+    private readonly IWorkEntitlementDirectory _entitlements;
     private readonly WorkManagementOptions _options;
     private readonly TimeProvider _time;
     private readonly ILogger<WorkDistributionService> _logger;
 
     public WorkDistributionService(
-        IWorkStore store, WorkConfigService config, IOptions<WorkManagementOptions> options, TimeProvider time,
+        IWorkStore store, WorkConfigService config, IWorkEntitlementDirectory entitlements,
+        IOptions<WorkManagementOptions> options, TimeProvider time,
         ILogger<WorkDistributionService> logger)
     {
         _store = store;
         _config = config;
+        _entitlements = entitlements;
         _options = options.Value;
         _time = time;
         _logger = logger;
@@ -156,10 +159,38 @@ public sealed class WorkDistributionService
     /// <summary>
     /// Supervisor push: the item is leased to <paramref name="userId"/> for
     /// <see cref="WorkManagementOptions.AssignedLeaseMinutes"/>, whoever held it.
-    /// Push is an override: the assignee's queue membership is not required.
+    ///
+    /// <para>Push overrides the assignee's queue <i>membership</i>, which is a
+    /// routing preference, but not their <i>entitlement</i>, which is a role.
+    /// Pushing a claim to somebody without <c>claims:work</c> does not let
+    /// them resolve it — the authority for that lives in claims-service and is
+    /// checked against their own token — it just parks the item: it is Leased,
+    /// so Get Next hides it from the people who could do it, and the queue's
+    /// SLA runs while nobody can act.</para>
+    ///
+    /// <para>So the assignee's entitlement is checked first, and the push is
+    /// refused when the answer is no <b>and</b> when there is no answer. See
+    /// <see cref="WorkEntitlementDirectory"/> for why refusing beats pushing
+    /// blindly: a refusal costs the supervisor a retry they can see, and a
+    /// blind push costs a member an item nobody is looking at.</para>
     /// </summary>
-    public Task<DistributionResult> AssignAsync(ICurrentActor supervisor, string id, string userId, CancellationToken ct = default) =>
-        MutateAsync(supervisor.TenantId, id, ct, item =>
+    public async Task<DistributionResult> AssignAsync(
+        ICurrentActor supervisor, string id, string userId, CancellationToken ct = default)
+    {
+        var subject = await _store.GetItemAsync(supervisor.TenantId, id, ct);
+        if (subject is null)
+            return new DistributionResult(DistributionStatus.NotFound, Error: $"Work item {id} not found.");
+
+        var permission = WorkEntitlements.PermissionFor(subject.WorkType);
+        var entitlement = await _entitlements.CheckAsync(supervisor.TenantId, userId, permission, ct);
+        if (entitlement != Entitlement.Granted)
+            return new DistributionResult(DistributionStatus.Conflict, subject, entitlement == Entitlement.Denied
+                ? $"{userId} may not work {subject.WorkType} items ({permission}), so the item would sit with " +
+                  "somebody who cannot finish it. Give them a role that grants it, or assign it to somebody who has one."
+                : $"Could not establish whether {userId} may work {subject.WorkType} items ({permission}): " +
+                  "tenant-service did not answer. The assignment was refused rather than made unchecked; try again shortly.");
+
+        return await MutateAsync(supervisor.TenantId, id, ct, item =>
         {
             if (!item.IsActive) return (DistributionStatus.Conflict, $"The item is {item.Status}; only open work can be assigned.");
             item.Status = WorkItemStatus.Leased;
@@ -168,6 +199,7 @@ public sealed class WorkDistributionService
         }, (item, before) => AuditAsync(item,
             before is null ? WorkAuditActions.Assigned : WorkAuditActions.Reassigned,
             supervisor.UserId, fromUser: before, toUser: userId));
+    }
 
     /// <summary>Supervisor push: back to the queue, whoever held it.</summary>
     public Task<DistributionResult> UnassignAsync(ICurrentActor supervisor, string id, CancellationToken ct = default) =>
@@ -178,6 +210,35 @@ public sealed class WorkDistributionService
             item.SetLease(null, null, null);
             return (DistributionStatus.Ok, null);
         }, (item, before) => AuditAsync(item, WorkAuditActions.Unassigned, supervisor.UserId, fromUser: before));
+
+    /// <summary>
+    /// The holder finishes person-created work. Source-owned work is never
+    /// completed here: a claim's item closes when claims-service says the
+    /// claim is no longer pended, and letting a person close it would leave
+    /// the queue disagreeing with the claim. A follow-up from a contact has
+    /// no such source, so the person who did it is the only one who can say
+    /// it is done.
+    /// </summary>
+    public Task<DistributionResult> CompleteAsync(
+        ICurrentActor actor, string id, string? resolution, CancellationToken ct = default) =>
+        MutateAsync(actor.TenantId, id, ct, item =>
+        {
+            if (!WorkTypes.IsPersonCreated(item.WorkType))
+                return (DistributionStatus.Conflict,
+                    $"{item.WorkType} work is completed by its source, not from the work list.");
+            if (!WorkEntitlements.Permits(actor, item.WorkType))
+                return (DistributionStatus.Forbidden, $"You may not work {item.WorkType} items.");
+            if (!item.IsActive) return (DistributionStatus.Conflict, $"The item is already {item.Status}.");
+            if (item.Status == WorkItemStatus.Leased && item.AssignedTo != actor.UserId)
+                return (DistributionStatus.Forbidden, "Only the holder can complete this item.");
+            item.Status = WorkItemStatus.Done;
+            item.SetLease(null, item.AssignedBy, null);
+            item.CompletedAt = Now;
+            item.CompletedBy = actor.UserId;
+            item.Resolution = string.IsNullOrWhiteSpace(resolution) ? null : resolution.Trim();
+            return (DistributionStatus.Ok, null);
+        }, (item, before) => AuditAsync(item, WorkAuditActions.Completed, actor.UserId, fromUser: before,
+            detail: item.Resolution));
 
     /// <summary>Read, check, change, compare-and-swap; retried while the item changes underneath.</summary>
     private async Task<DistributionResult> MutateAsync(

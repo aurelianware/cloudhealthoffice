@@ -13,23 +13,21 @@ public static class WorkRouter
     public static WorkQueue? Route(WorkType type, WorkItemAttributes attributes, IEnumerable<WorkQueue> queues)
     {
         var candidates = Ordered(queues.Where(q => q.IsActive && q.WorkType == type)).ToList();
-        return candidates.FirstOrDefault(q => !q.IsFallback && Matches(type, q, attributes))
+        return candidates.FirstOrDefault(q => !q.IsFallback && Matches(q.Criteria, attributes))
                ?? candidates.FirstOrDefault(q => q.IsFallback);
     }
 
     public static IEnumerable<WorkQueue> Ordered(IEnumerable<WorkQueue> queues) =>
         queues.OrderBy(q => q.Order).ThenBy(q => q.Name, StringComparer.Ordinal).ThenBy(q => q.Id, StringComparer.Ordinal);
 
-    public static bool Matches(WorkType type, WorkQueue queue, WorkItemAttributes a) => type switch
-    {
-        // Claim criteria are the only ones phase 1 defines. Enrollment queues
-        // reuse them: the reason code travels as the item's pend code. Other
-        // work types' queues route by order alone until their criteria land.
-        WorkType.Claim or WorkType.Enrollment834 => MatchesClaim(queue.Criteria, a),
-        _ => true,
-    };
-
-    public static bool MatchesClaim(ClaimQueueCriteria c, WorkItemAttributes a)
+    /// <summary>
+    /// Whether an item's attributes satisfy a queue's criteria. One matcher
+    /// for every work type: the named criteria are the attributes nearly
+    /// every source has, and a source's own go in facets. A work type that
+    /// configures no criteria still routes by order, as it always did, because
+    /// empty criteria match everything.
+    /// </summary>
+    public static bool Matches(WorkQueueCriteria c, WorkItemAttributes a)
     {
         if (c.PendCodes.Count > 0)
         {
@@ -48,6 +46,15 @@ public static class WorkRouter
         if (!AnyOf(c.ProviderTins, a.ProviderTin)) return false;
         if (!AnyOf(c.NetworkTiers, a.NetworkTier)) return false;
         if (c.Expedited is { } expedited && a.Expedited != expedited) return false;
+
+        foreach (var (name, wanted) in c.Facets)
+        {
+            if (wanted.Count == 0) continue; // like an empty list above: does not constrain
+            if (!a.Facets.TryGetValue(WorkFacets.Key(name), out var have)) return false;
+            if (!have.Any(v => wanted.Any(w => string.Equals(Norm(v), Norm(w), StringComparison.OrdinalIgnoreCase))))
+                return false;
+        }
+
         return true;
     }
 

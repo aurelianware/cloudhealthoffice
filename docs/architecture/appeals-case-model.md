@@ -78,7 +78,7 @@ Case        id, tenantId, caseNumber, track (Member | ProviderSubpartM | Payment
 
 ## 4. Rule packs
 
-A rule pack is versioned, effective-dated configuration per **line of business × State (× product)**, with these additions to the schema in [appeals-grievances-compliance.md](appeals-grievances-compliance.md) §3:
+A rule pack is versioned, effective-dated configuration per **line of business × jurisdiction (× product)**, where the jurisdiction is a State or, where the clocks are federal, the nation, with these additions to the schema in [appeals-grievances-compliance.md](appeals-grievances-compliance.md) §3:
 
 ```
 tracks:      which tracks exist and what each requires (claim subject, authority document)
@@ -99,9 +99,23 @@ notices:     see correspondence.md §5
 - **Plan-defined values** (a plan's own provider dispute window where the State sets none) are tenant settings inside the pack, validated against any State floor.
 - **Seeded from what exists.** `StateComplianceConfig` in reference-data-service becomes the home for State packs; its current `AppealStandardDays` and `AppealExpeditedHours` values move into the member appeal level of each pack.
 
-## 5. State packs
+### 4.1 Federal floors, per line of business
 
-Medicaid managed care first, which is CHO's main market; commercial values are noted where researched. Federal floors (42 CFR 438 subpart F) apply everywhere unless a State is stricter. Each State's level chain is shown as a line, then the values.
+Every pack is measured against a floor it may tighten and never loosen: `RulePackFloor`, whose ceilings all come from `AppealResponseDeadlinePolicy` rather than being restated, so the policy appeals-service enforces on real appeals and the floor packs are validated against cannot drift apart. A pack whose line of business has no floor is refused at startup rather than guessed at.
+
+| | Medicaid (42 CFR 438 subpart F) | Medicare Advantage (42 CFR 422 subpart M) |
+|---|---|---|
+| Appeal resolution | 30 days / 72 hours expedited | 30 days / 72 hours expedited |
+| Grievance resolution | 90 days | 30 days |
+| Filing window | exactly 60 days | at least 60 days (a plan may give longer) |
+| Extension | 14 days | 14 days, standard **and** expedited |
+| State fair hearing | 90–120 days, required | **none** — an upheld decision goes to the IRE |
+
+*Before 2026-10-23 there was one floor, written as Medicaid constants, and the validator refused every other line of business. Part D or Marketplace is now a row in `RulePackFloor`, not a rewrite.*
+
+## 5. Packs
+
+Medicaid managed care first, which is CHO's main market, and Medicare Advantage as the one federal pack; commercial values are noted where researched. Federal floors apply everywhere unless a pack is stricter. Each State's level chain is shown as a line, then the values.
 
 ### 5.1 Texas (Medicaid/CHIP)
 
@@ -259,10 +273,22 @@ Medicaid managed care first, which is CHO's main market; commercial values are n
 | External Medical Review | 30 days to request after the plan's decision; 30 days standard, 3 business days expedited; plan pays; binding on the plan if reversed | ODM EMR FAQ; Provider Agreement |
 | Recoupment | 2-year lookback; provider has 30 days to dispute; plan decides in 30 days; **recovery waits for the written determination**, then may be executed within 3 business days of sending it; notice content per ORC 5167.22 | Provider Agreement App. G §11 |
 
-### 5.11 What the States show
+### 5.11 Medicare Advantage (Part C) — national
+
+**Member:** plan reconsideration → Independent Review Entity (a CMS contractor) → OMHA Administrative Law Judge → Medicare Appeals Council → federal district court.
+
+- Filing: 60 calendar days from the organization determination notice (422.582(b)); the plan may accept a late filing for good cause.
+- Resolution: 30 calendar days pre-service (422.590(a)), 72 hours expedited (422.590(d)(1)), each extendable by 14 days.
+- Grievance: 30 calendar days (422.564(e)(1)), extendable by 14; 24 hours for a grievance about a refusal to expedite or an extension the plan took (422.564(f)).
+- **No State fair hearing.** When the plan upholds its denial in whole or part, or misses its own deadline, *the plan itself* forwards the file to the IRE (422.590(c), 422.592) — the member files nothing. That is the `autoForwardToExternalReview` outcome, which Medicaid has no equivalent of.
+- **Provider:** CMS sets no process for a contracted provider, so the contract governs (`planDefined`). A non-contracted provider becomes a party by signing a waiver of liability (422.574(b)) and then uses the enrollee's path, IRE included.
+
+Three clocks the pack deliberately does not carry, all because the appeal model has no pre-service / payment / Part B drug discriminator and `AppealResponseDeadlinePolicy` has enforced the conservative clock since it was written: payment reconsiderations (60 days, 422.590(b)) and Part B drug reconsiderations (72 hours standard, 24 hours expedited, no extension, 422.590(c)). Carrying the longer one would make the pack disagree with the ceiling the service actually applies. They are in the pack's `notes` and `toConfirm`.
+
+### 5.12 What the States show
 
 - **Member clocks vary more than expected:** expedited appeals of 24 hours (Illinois), 48 hours (Florida) and 72 hours elsewhere; standard resolution of 10 working days (Colorado), 15 business days (Illinois) and 15 calendar days (Ohio) against the federal 30 days; Ohio requires State approval for any plan extension.
-- **Missed deadlines mean different things:** deemed exhaustion (most, including Arizona's "deemed denied"), and reversal of the denial (New York utilization review).
+- **Missed deadlines mean different things:** deemed exhaustion (most, including Arizona's "deemed denied"), reversal of the denial (New York utilization review), and in Medicare Advantage the plan sending the case on to the IRE itself.
 - **Provider escalation differs everywhere:** a State agency (Texas, Illinois, Oklahoma), a State hearing (Arizona), an independent program (Florida), a regulator's complaint unit (California), a State external appeal (New York), State-run external medical review (Ohio), binding mediation or arbitration (Michigan), or only the plan's own process (Colorado managed care).
 - **Recoupment holds are State-specific:** explicit in California, Florida, Ohio, Colorado fee-for-service and Oklahoma (from 2027); partial in Texas and Illinois; not stated in New York or Michigan.
 - **Integrated duals are arriving:** Ohio's Next Generation MyCare (phased in during 2026) and Michigan's highly integrated D-SNPs (2026) need integrated notices and appeals, which [correspondence.md](correspondence.md) and these packs both have to support.
@@ -287,6 +313,7 @@ Medicaid managed care first, which is CHO's main market; commercial values are n
 1. **Case model and migration:** track, case type, requester party, subjects; schema version; Mongo migrator and Cosmos script; contract and event 2.0; FHIR mapping; portal record page.
 2. **Rule pack evaluation:** per-State level chains and units; federal floors from the existing policy; Texas, then the other nine States from §5.
    - *Shipped first, read-only:* the ten Medicaid packs as JSON embedded in appeals-service (`RulePacks/medicaid/`), loaded and validated at startup against the federal floor (`RulePackValidator`; a bad pack fails startup), with an evaluator that clamps every decision deadline to the federal ceiling. `GET api/appeals/rule-packs`, `/{state}`, `/{state}/deadlines` and `/{state}/recoupment` expose them. Appeal creation does not use them yet: that waits for the track from step 1, so provider disputes never get member clocks.
+   - *Medicare Advantage, 2026-10-23:* `RulePacks/medicare/advantage.json`, national rather than per-State (§5.11), and with it the per-line-of-business floor (§4.1). A State's own pack still wins over the national one, so a D-SNP State addendum would land without a redesign. This is what [cho-service.md](cho-service.md) §8 step 2 needed: a contact classified as a Medicare grievance or appeal now has clocks to run.
    - *Later:* move the packs to reference-data-service (`StateComplianceConfig`) with tenant and product overrides, keeping the same validator.
 3. **Intake by track:** the §2 decision at intake (portal, Availity, FHIR, call tracking), with work items for missing waivers, AORs or consent.
 4. **Provider complaints** and member grievances without a claim.

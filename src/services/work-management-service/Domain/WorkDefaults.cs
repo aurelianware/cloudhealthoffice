@@ -38,7 +38,7 @@ public static class DefaultClaimQueues
         IsActive = true,
         Order = d.Order,
         IsFallback = d.Fallback,
-        Criteria = new ClaimQueueCriteria { PendCodes = d.PendCodes.ToList() },
+        Criteria = new WorkQueueCriteria { PendCodes = d.PendCodes.ToList() },
         SlaDays = d.SlaDays,
         SystemKey = d.Key,
         CreatedAt = now,
@@ -78,6 +78,43 @@ public static class DefaultEnrollmentQueues
 }
 
 /// <summary>
+/// The follow-up queues a tenant starts with (cho-service.md §8 step 3),
+/// routed on the contact's reason code and, for the complaint queue, on the
+/// classification facet the claim shape has no field for. Seeded per tenant
+/// like the claim queues.
+///
+/// <para>Service turnaround is short, and a grievance shorter still: the
+/// member is already waiting, and in a grievance a regulatory clock is
+/// running whether or not anyone picks the follow-up up.</para>
+/// </summary>
+public static class DefaultInquiryQueues
+{
+    public static readonly IReadOnlyList<DefaultClaimQueues.Definition> All =
+    [
+        new("inquiry.complaint", "Follow-up: Complaints", "A contact classified as a grievance or an appeal; a regulatory clock is running.", 10, [], 2),
+        new("inquiry.claim", "Follow-up: Claims and Payment", "A claim, denial, billing or provider-payment question the rep could not answer on the call.", 20,
+            ["CLAIM_STATUS", "CLAIM_DENIAL", "BILLING", "PROVIDER_PAY"], 5),
+        new("inquiry.auth", "Follow-up: Authorizations", "A prior-authorization question needing a look at the authorization.", 30, ["AUTH_STATUS"], 3),
+        new("inquiry.eligibility", "Follow-up: Eligibility and Benefits", "Eligibility, benefits, ID card, PCP or address work arising from a contact.", 40,
+            ["ELIGIBILITY", "BENEFITS", "ID_CARD", "PCP_CHANGE", "ADDRESS_CHANGE"], 5),
+        new("inquiry.other", "Follow-up: Other", "Every contact follow-up no other queue matched.", 1000, [], 5, Fallback: true),
+    ];
+
+    public static WorkQueue Create(DefaultClaimQueues.Definition d, string tenantId, DateTime now)
+    {
+        var queue = DefaultClaimQueues.Create(d, tenantId, now);
+        queue.WorkType = WorkType.Inquiry;
+        // The complaint queue routes on what the contact was classified as,
+        // not on why the member called: a benefits question can become a
+        // grievance, and it is the classification that starts the clock.
+        if (d.Key == "inquiry.complaint")
+            queue.Criteria.Facets[WorkFacets.Classification] =
+                ["grievance", "expeditedgrievance", "appeal", "expeditedappeal"];
+        return queue;
+    }
+}
+
+/// <summary>
 /// Entitlement: the role is coarse security over which work TYPES a person
 /// may do. A queue membership can only narrow it: Get Next skips queues whose
 /// work type the caller's own token does not permit, whatever the membership
@@ -93,19 +130,43 @@ public static class WorkEntitlements
         WorkType.PriorAuth => "authorizations:decide",
         WorkType.Enrollment834 => "enrollment:process",
         WorkType.Payment => "payments:run",
+        WorkType.Inquiry => ChoRolePermissions.ServiceContact,
         _ => "platform:admin",
     };
 
     public static bool Permits(ICurrentActor actor, WorkType type) => actor.HasPermission(PermissionFor(type));
 
-    /// <summary>The screen a work item opens in (portal route).</summary>
-    public static string OpenUrl(WorkItem item) => item.WorkType switch
+    /// <summary>
+    /// The screen a work item opens in (portal route). A source may name its
+    /// own — a contact follow-up opens the contact — but only a relative path
+    /// under the portal: an absolute URL or a scheme would turn My Work's
+    /// "Open" into an open redirect, and the source's attributes reach us
+    /// from another service.
+    /// </summary>
+    public static string OpenUrl(WorkItem item) =>
+        IsSafePortalPath(item.Attributes.OpenUrl) ? item.Attributes.OpenUrl! : DefaultOpenUrl(item);
+
+    /// <summary>
+    /// A single-slash-rooted relative path: "/calls/abc" yes, "//evil.test",
+    /// "/\evil.test", "https://evil.test" and anything with a control
+    /// character, no.
+    /// </summary>
+    internal static bool IsSafePortalPath(string? path) =>
+        path is { Length: > 1 and <= 512 }
+        && path[0] == '/' && path[1] != '/' && path[1] != '\\'
+        && !path.Contains(':')
+        && !path.Any(char.IsControl);
+
+    private static string DefaultOpenUrl(WorkItem item) => item.WorkType switch
     {
         WorkType.Claim => $"/claims/{Uri.EscapeDataString(item.SourceId)}",
         WorkType.Appeal => $"/appeals?appealId={Uri.EscapeDataString(item.SourceId)}",
         WorkType.PriorAuth => $"/authorizations?authorizationId={Uri.EscapeDataString(item.SourceId)}",
         WorkType.Enrollment834 => $"/enrollment-ops/exceptions/{Uri.EscapeDataString(item.SourceId)}",
         WorkType.Payment => "/payment-runs",
+        // Inquiry has no screen of its own: a follow-up's source id is the
+        // follow-up, and the screen worth opening is the contact it came
+        // from, which only its own attributes name.
         _ => "/my-work",
     };
 }

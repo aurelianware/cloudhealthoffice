@@ -1,0 +1,89 @@
+{
+  // Medicare Advantage (Part C), 42 CFR Part 422 Subpart M. National rather
+  // than per-State: CMS sets these clocks, and a plan may only better them.
+  // See docs/architecture/appeals-case-model.md §5 and RulePackFloor.
+  //
+  // Two clocks the model deliberately does NOT carry, both for the same
+  // reason — the appeal model has no pre-service / payment discriminator, so
+  // carrying the longer one would disagree with the ceiling
+  // AppealResponseDeadlinePolicy actually enforces on real appeals:
+  //   - payment reconsideration: 60 calendar days (422.590(b));
+  //   - Part B drug reconsideration: 72 hours standard, 24 hours expedited
+  //     (422.590(c)(1)-(2)), and no extension (422.590(f)(1)).
+  // Both are in notes, and in toConfirm as work the model needs first.
+  "id": "medicare-advantage",
+  "lineOfBusiness": "medicare",
+  "program": "Medicare Advantage (Part C) organization determinations, reconsiderations and grievances",
+  "version": "2026.10.1",
+  "effectiveFrom": "2024-01-01",
+  "verifiedOn": "2026-10-23",
+  "sources": {
+    "cfr-422-564": { "citation": "42 CFR 422.564 (grievance procedures)", "url": "https://www.ecfr.gov/current/title-42/section-422.564" },
+    "cfr-422-568": { "citation": "42 CFR 422.568 (standard organization determinations)", "url": "https://www.ecfr.gov/current/title-42/section-422.568" },
+    "cfr-422-572": { "citation": "42 CFR 422.572 (expedited organization determinations)", "url": "https://www.ecfr.gov/current/title-42/section-422.572" },
+    "cfr-422-574": { "citation": "42 CFR 422.574 (parties to the organization determination)", "url": "https://www.ecfr.gov/current/title-42/section-422.574" },
+    "cfr-422-582": { "citation": "42 CFR 422.582 (request for a standard reconsideration)", "url": "https://www.ecfr.gov/current/title-42/section-422.582" },
+    "cfr-422-584": { "citation": "42 CFR 422.584 (expediting certain reconsiderations)", "url": "https://www.ecfr.gov/current/title-42/section-422.584" },
+    "cfr-422-590": { "citation": "42 CFR 422.590 (timeframes and responsibility for reconsiderations)", "url": "https://www.ecfr.gov/current/title-42/section-422.590" },
+    "cfr-422-592": { "citation": "42 CFR 422.592 (reconsideration by an independent entity)", "url": "https://www.ecfr.gov/current/title-42/section-422.592" },
+    "cfr-422-600": { "citation": "42 CFR 422.600 (right to an ALJ hearing)", "url": "https://www.ecfr.gov/current/title-42/section-422.600" },
+    "cfr-422-608": { "citation": "42 CFR 422.608 (Medicare Appeals Council review)", "url": "https://www.ecfr.gov/current/title-42/section-422.608" },
+    "cfr-422-612": { "citation": "42 CFR 422.612 (judicial review)", "url": "https://www.ecfr.gov/current/title-42/section-422.612" },
+    "cfr-422-326": { "citation": "42 CFR 422.326 (reporting and returning of overpayments)", "url": "https://www.ecfr.gov/current/title-42/section-422.326" },
+    "cfr-422-520": { "citation": "42 CFR 422.520 (prompt payment by MA organizations)", "url": "https://www.ecfr.gov/current/title-42/section-422.520" }
+  },
+  "memberAppeal": {
+    "filingWindow": { "amount": 60, "unit": "calendarDays", "from": "notice", "source": "cfr-422-582", "note": "From the organization determination notice. The plan may accept a late filing for good cause (422.582(c))." },
+    "resolution": { "amount": 30, "unit": "calendarDays", "source": "cfr-422-590", "note": "Pre-service (service) reconsideration. A payment reconsideration gets 60 days (422.590(b)); see notes." },
+    "resolutionExpedited": { "amount": 72, "unit": "hours", "source": "cfr-422-590" },
+    "extension": { "maxDays": 14, "source": "cfr-422-590", "note": "Standard and expedited alike, when the enrollee asks or the plan justifies a need for more information in the enrollee's interest. Not available for Part B drug requests (422.590(f)(1))." },
+    "onMissed": "autoForwardToExternalReview",
+    "chain": [
+      { "name": "Independent Review Entity reconsideration (CMS contractor)", "owner": "independentReviewer", "decision": { "amount": 30, "unit": "calendarDays", "source": "cfr-422-592" }, "source": "cfr-422-592", "note": "The plan forwards the file itself when it upholds its denial, in whole or in part, or misses its own deadline; the enrollee files nothing. 72 hours when expedited." },
+      { "name": "Administrative Law Judge hearing (OMHA)", "owner": "regulator", "requestWindow": { "amount": 60, "unit": "calendarDays", "from": "notice", "source": "cfr-422-600" }, "source": "cfr-422-600", "note": "Only where the amount in controversy meets the annually adjusted threshold." },
+      { "name": "Medicare Appeals Council review", "owner": "regulator", "requestWindow": { "amount": 60, "unit": "calendarDays", "from": "notice", "source": "cfr-422-608" }, "source": "cfr-422-608" },
+      { "name": "Federal district court", "owner": "court", "requestWindow": { "amount": 60, "unit": "calendarDays", "from": "notice", "source": "cfr-422-612" }, "binding": true, "source": "cfr-422-612" }
+    ],
+    "notes": [
+      "There is no State fair hearing in Medicare Advantage. An upheld reconsideration goes to the IRE, and the plan sends it there itself.",
+      "Payment reconsiderations get 60 calendar days (422.590(b)); this pack carries the 30-day pre-service clock, which is what the service enforces for every standard appeal.",
+      "Part B drug reconsiderations are faster, not slower: 72 hours standard and 24 hours expedited (422.590(c)), with no extension.",
+      "The upstream organization determination is 14 calendar days standard (422.568(b)) and 72 hours expedited (422.572(a)); those are coverage decisions rather than appeals, so they are not clocks on an appeal case.",
+      "A plan that denies a request to expedite must tell the enrollee within 72 hours and transfer the request to the standard clock (422.584(d))."
+    ]
+  },
+  "memberGrievance": {
+    "resolution": { "amount": 30, "unit": "calendarDays", "source": "cfr-422-564" },
+    "resolutionExpedited": { "amount": 24, "unit": "hours", "source": "cfr-422-564", "note": "422.564(f) sets 24 hours for a grievance about a refusal to expedite or about an extension the plan took. The case model cannot tell those from any other grievance, so this is the clock for every grievance the plan flags expedited, and the 30-day ceiling is what is enforced." },
+    "extension": { "maxDays": 14, "source": "cfr-422-564", "note": "Standard grievances only, in the enrollee's interest. A grievance under 422.564(f) may not be extended." },
+    "variants": [
+      { "name": "Quality of care grievance", "clock": { "amount": 30, "unit": "calendarDays", "source": "cfr-422-564", "note": "Same clock; the enrollee may also, or instead, go to the Quality Improvement Organization, and the plan must say so in its response." } },
+      { "name": "Oral grievance response", "clock": { "amount": 30, "unit": "calendarDays", "source": "cfr-422-564", "note": "An oral grievance may be answered orally unless the enrollee asks for a written answer or it concerns quality of care, which must be written." } }
+    ],
+    "notes": [
+      "A grievance is anything other than an organization determination: it has no IRE, no ALJ and no further level.",
+      "Filing window: 60 calendar days from the event (422.564(d)(2))."
+    ]
+  },
+  "providerDispute": {
+    "planDefined": true,
+    "chain": [
+      { "name": "Non-contracted provider appeal through the Part C process", "owner": "plan", "decision": { "amount": 60, "unit": "calendarDays", "source": "cfr-422-590" }, "source": "cfr-422-574", "note": "A non-contracted provider becomes a party to the organization determination by signing a waiver of liability, and then uses the enrollee's appeal path, including the IRE." },
+      { "name": "Contracted provider dispute under the contract", "owner": "plan", "source": "cfr-422-574", "note": "CMS sets no process: the provider agreement governs, which is why planDefined is true." }
+    ],
+    "clocks": [
+      { "name": "Clean claim payment (non-contracted)", "clock": { "amount": 30, "unit": "calendarDays", "source": "cfr-422-520", "note": "95% of clean claims from non-contracted providers; interest accrues after. Contracted providers are paid on the contract's terms." } }
+    ],
+    "notes": [
+      "A contracted provider's payment dispute is not a Part C appeal; only the enrollee, or a non-contracted provider who waives liability, can reach the IRE."
+    ]
+  },
+  "recoupment": [
+    { "hold": "notStated", "summary": "CMS requires an identified overpayment to be reported and returned within 60 days of identification (422.326), and sets no hold on recovery while a provider disputes it; the provider agreement governs offsets and any hold.", "source": "cfr-422-326" }
+  ],
+  "toConfirm": [
+    "Every clock against the current eCFR text of Part 422 Subpart M; the values here are read from the regulation as of the verifiedOn date and have not been re-read against a live source in this repository.",
+    "The payment-reconsideration (60 day) and Part B drug (72 hour / 24 hour) clocks, once the appeal model distinguishes pre-service, payment and Part B drug requests.",
+    "The ALJ amount-in-controversy threshold, which CMS adjusts annually and this pack does not carry."
+  ]
+}

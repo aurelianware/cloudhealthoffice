@@ -283,9 +283,13 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
             && c.ExaminerResolutions.Single().PayerSequence == 1), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
-    /// <summary>/resolve requires workqueue:work (it had no permission at all).</summary>
+    /// <summary>
+    /// /resolve requires claims:work. Member services holds workqueue:work
+    /// since 2026-10-23, to pull the contact follow-ups it raises, and that
+    /// must not let it approve or deny a pended claim.
+    /// </summary>
     [Fact]
-    public async Task Resolve_WithoutWorkQueuePermission_Is403()
+    public async Task Resolve_WithoutClaimsWorkPermission_Is403()
     {
         var response = await Resolve(Client("ms-1", ChoRolePermissions.MemberServices),
             Pended("claim-ms", "DUPLICATE", "possible duplicate"),

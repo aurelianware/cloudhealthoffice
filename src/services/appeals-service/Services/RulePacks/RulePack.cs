@@ -3,21 +3,33 @@ using AppealsService.Models;
 namespace AppealsService.Services.RulePacks;
 
 /// <summary>
-/// One State's appeals, grievance, provider-dispute and recoupment rules for
-/// one line of business, as versioned, effective-dated data
+/// One jurisdiction's appeals, grievance, provider-dispute and recoupment
+/// rules for one line of business, as versioned, effective-dated data
 /// (docs/architecture/appeals-case-model.md §4). Every clock names its unit
 /// and cites the rule it comes from. Packs ship as embedded JSON under
 /// <c>RulePacks/</c> and are validated against the federal floor at startup
-/// (<see cref="RulePackValidator"/>): a pack can tighten a federal clock,
-/// never loosen it.
+/// (<see cref="RulePackValidator"/>, <see cref="RulePackFloor"/>): a pack
+/// can tighten a federal clock, never loosen it.
 /// </summary>
 public sealed class RulePack
 {
-    /// <summary>Stable id, e.g. <c>tx-medicaid</c>.</summary>
+    /// <summary>Stable id, e.g. <c>tx-medicaid</c>, <c>medicare-advantage</c>.</summary>
     public string Id { get; init; } = string.Empty;
 
-    /// <summary>Two-letter State code, upper case.</summary>
-    public string State { get; init; } = string.Empty;
+    /// <summary>
+    /// Two-letter State code, upper case, or <c>null</c> for a national
+    /// pack. Medicare Advantage is national: CMS sets the clocks, so one
+    /// pack serves every State. A State-specific pack of the same line of
+    /// business still wins over it (<see cref="IRulePackCatalog.Find"/>),
+    /// which is how a State addendum would land without a redesign.
+    /// </summary>
+    public string? State { get; init; }
+
+    /// <summary>True when no State code is set: the pack is federal.</summary>
+    public bool IsNational => string.IsNullOrEmpty(State);
+
+    /// <summary>"TX", or "US" for a national pack, for display and logs.</summary>
+    public string Jurisdiction => IsNational ? "US" : State!;
 
     public LineOfBusiness LineOfBusiness { get; init; }
 
@@ -121,8 +133,13 @@ public sealed class MemberAppealRules
     public ExtensionRule Extension { get; init; } = new();
     public MissedDeadlineOutcome OnMissed { get; init; } = MissedDeadlineOutcome.DeemedExhaustion;
 
-    /// <summary>Time the member has to request a State fair hearing, from the plan's decision.</summary>
-    public Clock FairHearingRequestWindow { get; init; } = new();
+    /// <summary>
+    /// Time the member has to request a State fair hearing, from the plan's
+    /// decision. <c>null</c> where the line of business has no fair hearing:
+    /// an upheld Medicare Advantage reconsideration goes to the IRE, not to
+    /// a State, so the pack says nothing rather than inventing a window.
+    /// </summary>
+    public Clock? FairHearingRequestWindow { get; init; }
 
     /// <summary>Time to ask for benefits to continue, from the notice (federal: later of 10 days or the effective date).</summary>
     public Clock? ContinuationRequestWindow { get; init; }
@@ -144,6 +161,13 @@ public sealed class ExtensionRule
     /// <summary>Written notice to the member when the plan extends.</summary>
     public Clock? WrittenNotice { get; init; }
 
+    /// <summary>
+    /// What the rule says beyond the number of days — which requests the
+    /// extension is not available for, or what has to justify it. Carried
+    /// onto the computed deadline.
+    /// </summary>
+    public string? Note { get; init; }
+
     public string Source { get; init; } = string.Empty;
 }
 
@@ -156,7 +180,15 @@ public enum MissedDeadlineOutcome
     Reversal,
 
     /// <summary>The appeal is treated as denied, so the member may request the State Fair Hearing (Arizona).</summary>
-    DeemedDenied
+    DeemedDenied,
+
+    /// <summary>
+    /// The case goes to the independent reviewer on the plan's own
+    /// initiative. A Medicare Advantage plan that misses its
+    /// reconsideration deadline must forward the file to the IRE
+    /// (42 CFR 422.590(c)); the member does nothing.
+    /// </summary>
+    AutoForwardToExternalReview
 }
 
 public sealed class MemberGrievanceRules
