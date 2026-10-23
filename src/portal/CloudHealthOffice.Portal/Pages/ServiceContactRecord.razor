@@ -1,0 +1,543 @@
+@page "/calls/{ContactId}"
+@page "/service/contacts/{ContactId}"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
+@inject IContactTrackingService Contacts
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>@(_contact?.ContactNumber ?? "Contact") - Cloud Health Office</PageTitle>
+
+@*
+    The contact screen: what a service representative works in while the
+    caller is on the line. Who it is, what they are asking about, what was
+    discussed, and the wrap-up.
+
+    Step 1 of docs/architecture/cho-service.md §8. The classification is
+    recorded here but opens no case and starts no clock yet — that is step 2,
+    and the screen says so rather than implying a clock that is not running.
+*@
+<PermissionGate Permission="service:read" RoleName="MemberServices">
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true"
+                  CloseIconClicked="() => _error = null">@_error</MudAlert>
+    }
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_contact is null)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+            That contact could not be found.
+        </MudAlert>
+    }
+    else
+    {
+        <div class="d-flex align-center mb-4">
+            <MudIcon Icon="@Icons.Material.Filled.SupportAgent" Class="mr-2" Size="Size.Large" />
+            <div class="flex-grow-1">
+                <MudText Typo="Typo.h4">@_contact.ContactNumber</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    @ContactDisplay.Label(_contact.Channel), @_contact.Direction.ToString().ToLowerInvariant(),
+                    started @_contact.StartedAt.ToLocalTime().ToString("g")
+                    @if (_contact.AgentName is { Length: > 0 } agent)
+                    {
+                        <text> · @agent</text>
+                    }
+                </MudText>
+            </div>
+            @if (_contact.Status == ContactStatus.Open)
+            {
+                <MudChip T="string" Color="Color.Warning" data-testid="contact-status">Open</MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Color="Color.Default" data-testid="contact-status">
+                    Closed · @ContactDisplay.Duration(_contact.DurationSeconds)
+                </MudChip>
+            }
+        </div>
+
+        <MudGrid>
+            <!-- Left: who, what about, what was discussed -->
+            <MudItem xs="12" md="8">
+
+                <MudPaper Class="pa-4 mb-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">Who is calling</MudText>
+                    <MudGrid>
+                        <MudItem xs="12" sm="4">
+                            <MudSelect T="CallerType" @bind-Value="_callerType" Label="Caller" Dense="true"
+                                       Variant="Variant.Outlined" Disabled="@IsClosed">
+                                @foreach (var caller in Enum.GetValues<CallerType>())
+                                {
+                                    <MudSelectItem T="CallerType" Value="@caller">@ContactDisplay.Label(caller)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudTextField @bind-Value="_callerName" Label="Name" Variant="Variant.Outlined"
+                                          Disabled="@IsClosed" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudTextField @bind-Value="_callerPhone" Label="Phone" Variant="Variant.Outlined"
+                                          Disabled="@IsClosed" />
+                        </MudItem>
+
+                        @if (_callerType == CallerType.Representative)
+                        {
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="_relationship" Label="Relationship to the member"
+                                              Variant="Variant.Outlined" Disabled="@IsClosed" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6" Class="d-flex align-center">
+                                <MudCheckBox T="bool" @bind-Value="_aorOnFile" Disabled="@IsClosed"
+                                             Label="Appointment of representative on file" />
+                            </MudItem>
+                        }
+
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="_memberId" Label="Member ID" Variant="Variant.Outlined"
+                                          Disabled="@IsClosed" data-testid="member-id" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="_memberVerification" Variant="Variant.Outlined"
+                                          Label="How you verified them" Disabled="@IsClosed"
+                                          HelperText="e.g. member ID and date of birth" />
+                        </MudItem>
+
+                        @if (_callerType == CallerType.Provider)
+                        {
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="_providerNpi" Label="Provider NPI"
+                                              Variant="Variant.Outlined" Disabled="@IsClosed" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="_providerName" Label="Provider name"
+                                              Variant="Variant.Outlined" Disabled="@IsClosed" />
+                            </MudItem>
+                        }
+                    </MudGrid>
+
+                    @if (_contact.MemberId is { Length: > 0 } linkedMember)
+                    {
+                        <MudButton Class="mt-3" Variant="Variant.Text" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.OpenInNew"
+                                   Href="@($"/members/{linkedMember}")" Target="_blank">
+                            Open the member record
+                        </MudButton>
+                    }
+                </MudPaper>
+
+                <MudPaper Class="pa-4 mb-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">What they are asking about</MudText>
+                    <MudSelect T="string" MultiSelection="true" @bind-SelectedValues="_selectedReasons"
+                               Label="Reasons" Variant="Variant.Outlined" Disabled="@IsClosed"
+                               data-testid="reasons" MultiSelectionTextFunc="@ReasonSelectionText">
+                        @foreach (var reason in _reasons)
+                        {
+                            <MudSelectItem T="string" Value="@reason.Code">
+                                @reason.Label
+                                @if (reason.Category is { Length: > 0 } category)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-2">@category</MudText>
+                                }
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                    @if (_reasons.Count == 0)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                            This plan has no contact reasons configured yet.
+                        </MudText>
+                    }
+                </MudPaper>
+
+                <MudPaper Class="pa-4 mb-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-1">What was discussed</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                        Linking a claim also writes a contact note on it, so the claim's own history shows the call.
+                    </MudText>
+
+                    <MudTable Items="@_contact.Subjects" Dense="true" Hover="true" Elevation="0"
+                              data-testid="subjects">
+                        <HeaderContent>
+                            <MudTh>Type</MudTh>
+                            <MudTh>Reference</MudTh>
+                            <MudTh>What they asked</MudTh>
+                            <MudTh>Note written</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Type">@ContactDisplay.Label(context.Type)</MudTd>
+                            <MudTd DataLabel="Reference">
+                                @if (context.OpenUrl is { } url)
+                                {
+                                    <MudLink Href="@url" Target="_blank" Typo="Typo.body2">
+                                        @(context.Reference ?? context.SubjectId)
+                                    </MudLink>
+                                }
+                                else
+                                {
+                                    @(context.Reference ?? context.SubjectId)
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="What they asked">@(context.Note ?? "—")</MudTd>
+                            <MudTd DataLabel="Note written">
+                                @if (context.SubjectNoteId is not null)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small" />
+                                }
+                                else if (context.Type == ContactSubjectType.Claim)
+                                {
+                                    @* Said plainly rather than in a tooltip: a rep should not have to
+                                       hover to learn the claim does not show the call. *@
+                                    <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Warning" Size="Size.Small" />
+                                    <MudText Typo="Typo.caption" Color="Color.Warning" Class="ml-1">
+                                        the claim's own history does not show the call
+                                    </MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">n/a</MudText>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Nothing linked yet.</MudText>
+                        </NoRecordsContent>
+                    </MudTable>
+
+                    @if (!IsClosed)
+                    {
+                        <MudGrid Class="mt-2">
+                            <MudItem xs="12" sm="3">
+                                <MudSelect T="ContactSubjectType" @bind-Value="_subjectType" Label="Type"
+                                           Dense="true" Variant="Variant.Outlined">
+                                    @foreach (var type in Enum.GetValues<ContactSubjectType>())
+                                    {
+                                        <MudSelectItem T="ContactSubjectType" Value="@type">
+                                            @ContactDisplay.Label(type)
+                                        </MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="3">
+                                <MudTextField @bind-Value="_subjectId" Label="ID" Variant="Variant.Outlined"
+                                              data-testid="subject-id" />
+                            </MudItem>
+                            <MudItem xs="12" sm="4">
+                                <MudTextField @bind-Value="_subjectNote" Label="What they asked"
+                                              Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" sm="2" Class="d-flex align-center">
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                                           Disabled="@(_busy || string.IsNullOrWhiteSpace(_subjectId))"
+                                           OnClick="LinkSubjectAsync" data-testid="link-subject">
+                                    Link
+                                </MudButton>
+                            </MudItem>
+                        </MudGrid>
+                    }
+                </MudPaper>
+
+                <MudPaper Class="pa-4 mb-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">Wrap-up</MudText>
+                    <MudTextField @bind-Value="_summary" Label="Summary" Lines="4" Variant="Variant.Outlined"
+                                  Disabled="@IsClosed" data-testid="summary"
+                                  HelperText="What the caller wanted and what you did." />
+                </MudPaper>
+            </MudItem>
+
+            <!-- Right: classification, closing, history -->
+            <MudItem xs="12" md="4">
+
+                <MudPaper Class="pa-4 mb-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-1">Classification</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                        What kind of contact this was.
+                    </MudText>
+
+                    <MudSelect T="ContactClassification?" @bind-Value="_classification" Label="Classification"
+                               Variant="Variant.Outlined" Disabled="@IsClosed" Clearable="true"
+                               data-testid="classification">
+                        @foreach (var classification in Enum.GetValues<ContactClassification>())
+                        {
+                            <MudSelectItem T="ContactClassification?" Value="@classification">
+                                @ContactDisplay.Label(classification)
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    @if (_classification is { } chosen && ContactDisplay.Consequence(chosen) is { } consequence)
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-3">
+                            @consequence. Cases are not opened from a contact yet, so open it in
+                            Appeals &amp; Grievances and date it from this call.
+                        </MudAlert>
+                    }
+
+                    @if (_contact.ClassifiedAt is { } classifiedAt)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                            Classified @classifiedAt.ToLocalTime().ToString("g")
+                        </MudText>
+                    }
+                </MudPaper>
+
+                <MudPaper Class="pa-4 mb-4" Elevation="2">
+                    @if (!IsClosed)
+                    {
+                        <MudText Typo="Typo.h6" Class="mb-3">Close the contact</MudText>
+                        <MudSelect T="ContactResolution" @bind-Value="_resolution" Label="Outcome"
+                                   Variant="Variant.Outlined" Class="mb-3" data-testid="resolution">
+                            @foreach (var resolution in Enum.GetValues<ContactResolution>())
+                            {
+                                <MudSelectItem T="ContactResolution" Value="@resolution">
+                                    @ContactDisplay.Label(resolution)
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mb-2"
+                                   StartIcon="@Icons.Material.Filled.Save" Disabled="_busy"
+                                   OnClick="SaveAsync" data-testid="save-contact">
+                            Save
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true"
+                                   StartIcon="@Icons.Material.Filled.CallEnd" Disabled="_busy"
+                                   OnClick="CloseAsync" data-testid="close-contact">
+                            Save and close
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.h6" Class="mb-3">Closed</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-1">
+                            @(_contact.Resolution is { } r ? ContactDisplay.Label(r) : "—")
+                        </MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                            Talk time @ContactDisplay.Duration(_contact.DurationSeconds)
+                        </MudText>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true"
+                                   StartIcon="@Icons.Material.Filled.Undo" Disabled="_busy"
+                                   OnClick="ReopenAsync" data-testid="reopen-contact">
+                            Reopen
+                        </MudButton>
+                    }
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">History</MudText>
+                    <MudTimeline TimelinePosition="TimelinePosition.Start">
+                        @foreach (var entry in _contact.History.OrderByDescending(h => h.At))
+                        {
+                            <MudTimelineItem Size="Size.Small" Color="Color.Primary">
+                                <MudText Typo="Typo.body2">@entry.Action</MudText>
+                                @if (entry.Detail is { Length: > 0 } detail)
+                                {
+                                    <MudText Typo="Typo.caption">@detail</MudText>
+                                }
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @entry.At.ToLocalTime().ToString("g")
+                                </MudText>
+                            </MudTimelineItem>
+                        }
+                    </MudTimeline>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+</PermissionGate>
+
+@code {
+    [Parameter] public string ContactId { get; set; } = string.Empty;
+
+    private ContactRecord? _contact;
+    private List<ContactReasonOption> _reasons = [];
+
+    private CallerType _callerType = CallerType.Member;
+    private string? _callerName;
+    private string? _callerPhone;
+    private string? _relationship;
+    private bool _aorOnFile;
+    private string? _memberId;
+    private string? _memberVerification;
+    private string? _providerNpi;
+    private string? _providerName;
+    private string? _summary;
+    private IEnumerable<string> _selectedReasons = [];
+    private ContactClassification? _classification;
+    private ContactResolution _resolution = ContactResolution.ResolvedOnCall;
+
+    private ContactSubjectType _subjectType = ContactSubjectType.Claim;
+    private string _subjectId = string.Empty;
+    private string? _subjectNote;
+
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+
+    private bool IsClosed => _contact?.Status == ContactStatus.Closed;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _reasons = await Contacts.GetReasonsAsync();
+            Adopt(await Contacts.GetAsync(ContactId));
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    /// <summary>
+    /// Takes the server's version as the truth, including the revision the
+    /// next write is fenced by. Every write returns the saved contact, so the
+    /// screen never edits against a version it has only guessed at.
+    /// </summary>
+    private void Adopt(ContactRecord? contact)
+    {
+        _contact = contact;
+        if (contact is null) return;
+
+        _callerType = contact.Caller.Type;
+        _callerName = contact.Caller.Name;
+        _callerPhone = contact.Caller.Phone;
+        _relationship = contact.Caller.Relationship;
+        _aorOnFile = contact.Caller.AorOnFile ?? false;
+        _memberId = contact.MemberId;
+        _memberVerification = contact.MemberVerification;
+        _providerNpi = contact.ProviderNpi;
+        _providerName = contact.ProviderName;
+        _summary = contact.Summary;
+        _selectedReasons = contact.ReasonCodes.ToList();
+        _classification = contact.Classification;
+        if (contact.Resolution is { } resolution) _resolution = resolution;
+    }
+
+    private UpdateContactRequest Edits() => new()
+    {
+        Revision = _contact!.Revision,
+        MemberId = _memberId,
+        MemberVerification = _memberVerification,
+        ProviderNpi = _providerNpi,
+        ProviderName = _providerName,
+        Caller = new ContactCaller
+        {
+            Type = _callerType,
+            Name = _callerName,
+            Phone = _callerPhone,
+            Relationship = _callerType == CallerType.Representative ? _relationship : null,
+            AorOnFile = _callerType == CallerType.Representative ? _aorOnFile : null,
+        },
+        ReasonCodes = _selectedReasons.ToList(),
+        Summary = _summary,
+        Classification = _classification,
+    };
+
+    private async Task SaveAsync() =>
+        await WriteAsync(() => Contacts.UpdateAsync(ContactId, Edits()), "Contact saved.");
+
+    private async Task CloseAsync()
+    {
+        // Save the edits first: Close carries only the outcome, the summary
+        // and the classification, so anything else typed since the last save
+        // would be lost if the two were not done together.
+        if (!await WriteAsync(() => Contacts.UpdateAsync(ContactId, Edits()), null)) return;
+
+        await WriteAsync(() => Contacts.CloseAsync(ContactId, new CloseContactRequest
+        {
+            Revision = _contact!.Revision,
+            Resolution = _resolution,
+            Summary = _summary,
+            Classification = _classification,
+        }), "Contact closed.");
+    }
+
+    private async Task ReopenAsync() =>
+        await WriteAsync(() => Contacts.ReopenAsync(ContactId, new ReopenContactRequest
+        {
+            Revision = _contact!.Revision,
+        }), "Contact reopened.");
+
+    private async Task LinkSubjectAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_subjectId)) return;
+
+        var linked = await WriteAsync(() => Contacts.LinkSubjectAsync(ContactId, new LinkContactSubjectRequest
+        {
+            Revision = _contact!.Revision,
+            Type = _subjectType,
+            SubjectId = _subjectId.Trim(),
+            Reference = _subjectId.Trim(),
+            Note = _subjectNote,
+        }), "Linked.");
+
+        if (!linked) return;
+
+        _subjectId = string.Empty;
+        _subjectNote = null;
+    }
+
+    /// <summary>
+    /// Runs one write, adopts what comes back, and turns a refusal into a
+    /// message rather than a stack trace. Returns whether it succeeded.
+    /// </summary>
+    private async Task<bool> WriteAsync(Func<Task<ContactRecord?>> write, string? success)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var saved = await write();
+            if (saved is null)
+            {
+                _error = "That contact could not be found.";
+                return false;
+            }
+
+            Adopt(saved);
+            if (success is not null) Snackbar.Add(success, Severity.Success);
+            return true;
+        }
+        catch (ContactWriteRefusedException ex)
+        {
+            // Most often a competing write. Re-read so the screen shows the
+            // version that won, and the rep can decide what to redo.
+            _error = ex.Message;
+            try { Adopt(await Contacts.GetAsync(ContactId)); } catch (ServiceUnavailableException) { }
+            return false;
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = ex.Message;
+            return false;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private string ReasonSelectionText(List<string> selected) =>
+        selected.Count == 0
+            ? string.Empty
+            : string.Join(", ", selected.Select(code =>
+                _reasons.FirstOrDefault(r => string.Equals(r.Code, code, StringComparison.OrdinalIgnoreCase))?.Label
+                ?? code));
+}

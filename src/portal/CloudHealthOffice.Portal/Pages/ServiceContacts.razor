@@ -1,0 +1,230 @@
+@page "/service"
+@page "/calls"
+@page "/service/contacts"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
+@inject IContactTrackingService Contacts
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Service - Cloud Health Office</PageTitle>
+
+@*
+    Service: the representative's landing. Start a contact in one click when
+    the phone rings, and pick up the one left half-written when the next call
+    arrived. The contact screen itself is ServiceContactRecord.razor.
+
+    Step 1 of docs/architecture/cho-service.md §8: the record and the screen.
+    Classification clocks (step 2), follow-up work items (step 3) and service
+    metrics (step 4) each follow.
+*@
+<PermissionGate Permission="service:contact" RoleName="MemberServices">
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.SupportAgent" Class="mr-2" />
+        Service
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
+        Record a call, chat or walk-in, link what was discussed, and close it when the work is done.
+    </MudText>
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true"
+                  CloseIconClicked="() => _error = null">@_error</MudAlert>
+    }
+
+    <MudPaper Class="pa-4 mb-6" Elevation="2">
+        <MudText Typo="Typo.h6" Class="mb-3">Start a contact</MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="3">
+                <MudSelect T="ContactChannel" @bind-Value="_channel" Label="Channel" Dense="true"
+                           Variant="Variant.Outlined" data-testid="start-channel">
+                    @foreach (var channel in Enum.GetValues<ContactChannel>())
+                    {
+                        <MudSelectItem T="ContactChannel" Value="@channel">@ContactDisplay.Label(channel)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudSelect T="ContactDirection" @bind-Value="_direction" Label="Direction" Dense="true"
+                           Variant="Variant.Outlined">
+                    @foreach (var direction in Enum.GetValues<ContactDirection>())
+                    {
+                        <MudSelectItem T="ContactDirection" Value="@direction">@direction</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudSelect T="CallerType" @bind-Value="_callerType" Label="Who is calling" Dense="true"
+                           Variant="Variant.Outlined">
+                    @foreach (var caller in Enum.GetValues<CallerType>())
+                    {
+                        <MudSelectItem T="CallerType" Value="@caller">@ContactDisplay.Label(caller)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="3" Class="d-flex align-center">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                           StartIcon="@Icons.Material.Filled.Phone" Disabled="_starting"
+                           OnClick="StartAsync" data-testid="start-contact">
+                    Start
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+            Start first and fill in the rest as you go. Who is calling, what it is about and
+            what was discussed are all recorded on the contact screen.
+        </MudText>
+    </MudPaper>
+
+    @if (_open.Count > 0)
+    {
+        <MudText Typo="Typo.h5" Class="mb-2">Still open</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+            Contacts you started and have not closed.
+        </MudText>
+        @ContactTable(_open)
+    }
+
+    <MudText Typo="Typo.h5" Class="mb-2 mt-6">My recent contacts</MudText>
+    @ContactTable(_recent)
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private RenderFragment ContactTable(List<ContactListItem> items) =>
+        @<MudTable Items="@items" Dense="true" Hover="true" Elevation="2" Loading="_loading"
+                   LoadingProgressColor="Color.Primary" data-testid="contact-table">
+            <HeaderContent>
+                <MudTh>Contact</MudTh>
+                <MudTh>Started</MudTh>
+                <MudTh>Caller</MudTh>
+                <MudTh>Reasons</MudTh>
+                <MudTh>Discussed</MudTh>
+                <MudTh>Talk time</MudTh>
+                <MudTh>Outcome</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Contact">
+                    <MudLink Href="@($"/calls/{context.Id}")" Typo="Typo.body2">
+                        @context.ContactNumber
+                    </MudLink>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2">
+                        @ContactDisplay.Label(context.Channel)
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Started">@context.StartedAt.ToLocalTime().ToString("g")</MudTd>
+                <MudTd DataLabel="Caller">
+                    @(context.CallerName ?? ContactDisplay.Label(context.CallerType))
+                </MudTd>
+                <MudTd DataLabel="Reasons">
+                    @if (context.ReasonCodes.Count == 0)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">—</MudText>
+                    }
+                    else
+                    {
+                        @foreach (var code in context.ReasonCodes)
+                        {
+                            <MudChip T="string" Size="Size.Small" Class="ma-1">@ReasonLabel(code)</MudChip>
+                        }
+                    }
+                </MudTd>
+                <MudTd DataLabel="Discussed">@(context.SubjectCount == 0 ? "—" : context.SubjectCount.ToString())</MudTd>
+                <MudTd DataLabel="Talk time">@ContactDisplay.Duration(context.DurationSeconds)</MudTd>
+                <MudTd DataLabel="Outcome">
+                    @if (context.Status == ContactStatus.Open)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">Open</MudChip>
+                    }
+                    else if (context.Resolution is { } resolution)
+                    {
+                        <MudText Typo="Typo.body2">@ContactDisplay.Label(resolution)</MudText>
+                    }
+                    @if (context.Classification is { } classification)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-1">
+                            @ContactDisplay.Label(classification)
+                        </MudChip>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">No contacts yet.</MudText>
+            </NoRecordsContent>
+        </MudTable>;
+
+    private List<ContactListItem> _recent = [];
+    private List<ContactListItem> _open = [];
+    private Dictionary<string, string> _reasonLabels = new(StringComparer.OrdinalIgnoreCase);
+
+    private ContactChannel _channel = ContactChannel.Phone;
+    private ContactDirection _direction = ContactDirection.Inbound;
+    private CallerType _callerType = CallerType.Member;
+
+    private bool _loading = true;
+    private bool _starting;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _recent = await Contacts.GetMineAsync(openOnly: false, limit: 50);
+            _open = _recent.Where(c => c.Status == ContactStatus.Open).ToList();
+            _reasonLabels = (await Contacts.GetReasonsAsync())
+                .ToDictionary(r => r.Code, r => r.Label, StringComparer.OrdinalIgnoreCase);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task StartAsync()
+    {
+        _starting = true;
+        _error = null;
+        try
+        {
+            var contact = await Contacts.StartAsync(new StartContactRequest
+            {
+                Channel = _channel,
+                Direction = _direction,
+                Caller = new ContactCaller { Type = _callerType },
+            });
+
+            if (contact is null)
+            {
+                _error = "The contact could not be started.";
+                return;
+            }
+
+            Navigation.NavigateTo($"/calls/{contact.Id}");
+        }
+        catch (ContactWriteRefusedException ex)
+        {
+            _error = ex.Message;
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _starting = false;
+        }
+    }
+
+    private string ReasonLabel(string code) =>
+        _reasonLabels.TryGetValue(code, out var label) ? label : code;
+}

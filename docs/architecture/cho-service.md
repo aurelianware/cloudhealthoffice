@@ -1,6 +1,6 @@
 # CHO Service: payer-native call tracking and member/provider service
 
-**Status:** Draft for review (2026-10-15)
+**Status:** Draft for review (2026-10-15). Step 1 of the build order below shipped 2026-10-22 (`contact-service`, and Service in the portal).
 **Scope:** A customer-service module for health plan call centers:
 - call tracking;
 - classification of every contact as inquiry, grievance, coverage request or appeal;
@@ -145,7 +145,7 @@ How the module works with [correspondence.md](correspondence.md) (details in its
 
 ## 8. Build order
 
-1. **Contact record and the contact screen:** manual start, member/provider search, 360 view, reasons, linked subjects, notes on claims.
+1. ~~**Contact record and the contact screen:** manual start, member/provider search, 360 view, reasons, linked subjects, notes on claims.~~ **Shipped 2026-10-22.** `src/services/contact-service` owns the contact, the tenant reason taxonomy and subject linking; linking a claim writes its `MemberContact` / `ProviderContact` note through claims-service with the rep's own token, so the note is authored by the person who took the call. The portal's Service section carries the contact screen. Two permissions: `service:read` and `service:contact`, plus `service:admin` for the taxonomy. What step 1 deliberately left for later: the 360 view is a link to the member record rather than panels in the screen, and member/provider search is by id rather than a lookup.
 2. **Classification:** mandatory step, case creation for grievances and appeals dated from the call, rule packs for MA and Medicaid.
 3. **Follow-ups through work management:** a new `Inquiry` work type, plus appeals as a work source.
 4. **Reporting:** the grievance, coverage-request and appeal case lists, plus operating metrics.
@@ -157,8 +157,8 @@ How the module works with [correspondence.md](correspondence.md) (details in its
 ## 9. Open questions
 
 1. **Which phone platform first?** *Decided 2026-10-17:* Google (Conversational Agents for IVR, then Google CCaaS or Amazon Connect for routing and the agent desktop); see §6.2. Still open: which platform is second, based on what pilot plans run.
-2. **Recordings:** store full recordings in the document store, or only transcripts plus a link to the phone platform's recording? Recordings are large and sensitive.
-3. **Who adds contacts and notes:** the `claims:note` permission from the workbench decisions covers notes; contacts need their own (`service:contact`).
+2. ~~**Recordings:** store full recordings in the document store, or only transcripts plus a link to the phone platform's recording?~~ *Decided 2026-10-22:* **transcripts plus a link.** Recordings are large and sensitive, and the phone platform already holds them under the plan's BAA and its own retention rules. The contact carries `recordingLink` and `recordingPlatform`; the transcript, which is text and is what the step-5 AI wrap-up reads, goes in the document store as `transcriptDocumentId`.
+3. ~~**Who adds contacts and notes:** the `claims:note` permission from the workbench decisions covers notes; contacts need their own (`service:contact`).~~ *Decided 2026-10-22:* `service:read` reads contacts and the reason taxonomy, `service:contact` works a contact, and `service:admin` configures the taxonomy. MemberServices and ProviderRelations hold the first two; ComplianceOfficer reads contacts through `*:read`, which is how a grievance audit reaches the calls. Writing the claim note still needs the rep's own `claims:note`, because the note is attributed to them, not to the service.
 4. **Pricing and packaging:** per seat, per member per month, or included in CHO? This decides how the standalone version is positioned.
 5. **Work distribution:** should CHO work items also flow into the contact-center platform's task routing for plans that want one agent desktop, and if so which platforms first? CHO stays the owner of record and deadlines either way.
 

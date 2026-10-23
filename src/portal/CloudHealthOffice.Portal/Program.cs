@@ -318,6 +318,8 @@ builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IRecordAccessLogService, RecordAccessLogService>();
 builder.Services.AddScoped<IAppealsService, AppealsService>();
 builder.Services.AddScoped<ICorrespondenceService, CorrespondenceService>();
+// Call tracking: the contact screen (contact-service).
+builder.Services.AddScoped<IContactTrackingService, ContactTrackingService>();
 builder.Services.AddScoped<IPricingApiService, PricingApiService>();
 builder.Services.AddScoped<ICapitationService, CapitationService>();
 builder.Services.AddScoped<IProviderContractsService, ProviderContractsService>();
