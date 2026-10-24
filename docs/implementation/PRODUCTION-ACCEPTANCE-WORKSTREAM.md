@@ -1,5 +1,7 @@
 # Production acceptance workstream
 
+Current Texas STAR requirement and remediation contracts: [Texas Medicaid qualification](TEXAS-MEDICAID-QUALIFICATION.md), based on main after merged #1542. Actual program scope, service areas and launch date remain dependencies. The canonical ledger owns status.
+
 Current California/CMS verification and prioritized acceptance contracts:
 [California Medicaid qualification](CALIFORNIA-MEDICAID-QUALIFICATION.md)
 (October 24, 2026). The original sequence below is a dated plan; native-only
