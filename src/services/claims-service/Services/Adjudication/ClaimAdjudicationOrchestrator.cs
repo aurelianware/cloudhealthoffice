@@ -169,15 +169,22 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         // already carry a BenefitPlanId (JSON /import, MCC) are untouched.
         if (string.IsNullOrWhiteSpace(claim.BenefitPlanId) && !string.IsNullOrWhiteSpace(claim.MemberId))
         {
-            var resolvedPlanId = await _coverageResolver
-                .ResolveBenefitPlanIdAsync(
+            var coverage = await _coverageResolver
+                .ResolveCoverageAsync(
                     tenantId, claim.MemberId, claim.ServiceDateFrom,
                     MapInsuranceLineCode(claim.ClaimType), ct)
                 .ConfigureAwait(false);
 
-            if (!string.IsNullOrWhiteSpace(resolvedPlanId))
+            // The same coverage also names the sponsor and the sponsor policy,
+            // which is what lets a stage resolve a plan setting entered at
+            // those levels (plan-configuration.md §12.16). Reading them off
+            // this response costs nothing: the call was already being made,
+            // and the fields were already on the wire being discarded.
+            context.ResolvedCoverage = coverage;
+
+            if (!string.IsNullOrWhiteSpace(coverage?.PlanId))
             {
-                claim.BenefitPlanId = resolvedPlanId;
+                claim.BenefitPlanId = coverage!.PlanId;
             }
         }
 

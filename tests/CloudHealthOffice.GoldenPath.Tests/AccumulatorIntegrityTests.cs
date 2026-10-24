@@ -188,8 +188,8 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         var memberResolver = Substitute.For<IMemberResolver>();
         memberResolver.GetMemberAsync(Tenant, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(member);
         var coverageResolver = Substitute.For<ICoverageResolver>();
-        coverageResolver.ResolveBenefitPlanIdAsync(Tenant, Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(PlanGuid.ToString());
+        coverageResolver.ResolveCoverageAsync(Tenant, Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new CoverageResolution(PlanGuid.ToString()));
         var planResolver = Substitute.For<IBenefitPlanResolver>();
         planResolver.GetPlanAsync(Tenant, PlanGuid.ToString(), Arg.Any<CancellationToken>())
             .Returns(_ => new ResolvedBenefitPlan

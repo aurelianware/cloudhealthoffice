@@ -9,6 +9,11 @@ namespace ClaimsService.Services.Resolution;
 /// cache risks resolving a stale plan for claims submitted right after a
 /// coverage change. Negative results (no active coverage, or transport
 /// failure) are not cached, matching <see cref="CachingMemberResolver"/>.
+///
+/// <para>
+/// A resolution is cached whole, so a hit carries the sponsor and policy as
+/// well as the plan id.
+/// </para>
 /// </summary>
 public sealed class CachingCoverageResolver : ICoverageResolver
 {
@@ -28,7 +33,7 @@ public sealed class CachingCoverageResolver : ICoverageResolver
         _ttl = ttl;
     }
 
-    public async Task<string?> ResolveBenefitPlanIdAsync(
+    public async Task<CoverageResolution?> ResolveCoverageAsync(
         string tenantId,
         string memberId,
         DateTime serviceDate,
@@ -36,16 +41,20 @@ public sealed class CachingCoverageResolver : ICoverageResolver
         CancellationToken ct = default)
     {
         var key = BuildCacheKey(tenantId, memberId, serviceDate, insuranceLineCode);
-        if (_cache.TryGetValue<string>(key, out var cached) && !string.IsNullOrEmpty(cached))
+        // The key is unchanged -- the inputs it is built from are the same --
+        // but the cached VALUE is now the whole resolution, so the sponsor and
+        // policy are served from cache alongside the plan id rather than being
+        // dropped on a hit.
+        if (_cache.TryGetValue<CoverageResolution>(key, out var cached) && cached is not null)
         {
             return cached;
         }
 
         var fresh = await _inner
-            .ResolveBenefitPlanIdAsync(tenantId, memberId, serviceDate, insuranceLineCode, ct)
+            .ResolveCoverageAsync(tenantId, memberId, serviceDate, insuranceLineCode, ct)
             .ConfigureAwait(false);
 
-        if (!string.IsNullOrEmpty(fresh) && _ttl > TimeSpan.Zero)
+        if (fresh is not null && _ttl > TimeSpan.Zero)
         {
             _cache.Set(key, fresh, _ttl);
         }

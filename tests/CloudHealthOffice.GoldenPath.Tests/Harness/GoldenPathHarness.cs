@@ -202,8 +202,8 @@ internal sealed class GoldenPathHarness
             var memberResolver = Substitute.For<IMemberResolver>();
             memberResolver.GetMemberAsync(tenant, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(member);
             var coverageResolver = Substitute.For<ICoverageResolver>();
-            coverageResolver.ResolveBenefitPlanIdAsync(tenant, Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-                .Returns(planGuid.ToString());
+            coverageResolver.ResolveCoverageAsync(tenant, Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                .Returns(new CoverageResolution(planGuid.ToString()));
             var planResolver = Substitute.For<IBenefitPlanResolver>();
             planResolver.GetPlanAsync(tenant, planGuid.ToString(), Arg.Any<CancellationToken>())
                 .Returns(new ResolvedBenefitPlan { Id = planGuid.ToString(), PlanGuid = planGuid });
