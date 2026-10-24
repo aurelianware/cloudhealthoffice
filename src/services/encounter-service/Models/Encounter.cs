@@ -70,6 +70,21 @@ public class Encounter
     public string? SubscriberId { get; set; }
 
     /// <summary>
+    /// The subscriber's group number, for 837 SBR03 ("insured group or policy
+    /// number", loop 2000B). Supplied on the create request: the caller builds
+    /// an encounter from an adjudicated claim, which already resolved the
+    /// member's coverage, so this service does not resolve coverage again.
+    ///
+    /// Distinct from <see cref="SubscriberId"/>, which is the person's
+    /// identifier and belongs in NM1*IL — not in SBR03. Null where the caller
+    /// sends none, in which case SBR03 is written empty as it was before this
+    /// field existed; the element is situational, so an empty one is
+    /// conformant and only less informative.
+    /// </summary>
+    [StringLength(50)]
+    public string? GroupNumber { get; set; }
+
+    /// <summary>
     /// Subscriber first name (837: NM103 2010BA)
     /// </summary>
     [StringLength(100)]

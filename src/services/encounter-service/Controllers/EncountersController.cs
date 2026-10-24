@@ -392,6 +392,7 @@ public class EncountersController : ControllerBase
             ClaimNumber = original.ClaimNumber,
             MemberId = original.MemberId,
             SubscriberId = original.SubscriberId,
+            GroupNumber = original.GroupNumber,
             SubscriberFirstName = original.SubscriberFirstName,
             SubscriberLastName = original.SubscriberLastName,
             PatientFirstName = original.PatientFirstName,
@@ -436,6 +437,12 @@ public class EncountersController : ControllerBase
         replacement.CreatedBy = _actor.UserId;
         replacement.LastUpdatedBy = _actor.UserId;
         replacement.TotalChargeAmount = replacement.ServiceLines.Sum(l => l.ChargeAmount);
+        // A correction replaces the same encounter, so the group it falls under
+        // cannot have changed. A caller that omits it -- including any caller
+        // written before the field existed -- would otherwise send a
+        // replacement that says less about the member than the file it
+        // replaces. An explicitly supplied value still wins.
+        replacement.GroupNumber ??= original.GroupNumber;
         replacement.Notes = $"Correction for: {original.EncounterControlNumber}. Reason: {request.CorrectionReason}";
 
         // 3. Mark original as CorrectionSubmitted
@@ -487,6 +494,7 @@ public class EncountersController : ControllerBase
             ClaimNumber = original.ClaimNumber,
             MemberId = original.MemberId,
             SubscriberId = original.SubscriberId,
+            GroupNumber = original.GroupNumber,
             SubscriberFirstName = original.SubscriberFirstName,
             SubscriberLastName = original.SubscriberLastName,
             PatientFirstName = original.PatientFirstName,

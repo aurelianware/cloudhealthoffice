@@ -1,6 +1,6 @@
 # Plan configuration: settings that cascade, with overrides
 
-**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), steps 3a to 3c of step 3 (§§12.7–12.9) and three of 3d's consumers (§§12.10–12.13); claims eligibility and the 837's `SBR03` are the rest of 3d.
+**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), steps 3a to 3c of step 3 (§§12.7–12.9) and four of 3d's consumers (§§12.10–12.14), plus the `SBR09` defect that the fourth turned up (§12.15); claims eligibility is the rest of 3d.
 **Scope:** One way for every CHO service to define a business setting, set it at the right level of the plan's structure, override it further down, and explain where an effective value came from.
 
 **Related:**
@@ -244,7 +244,7 @@ Changes needing a reason or a second approver use the same pattern as two-person
    - **3a, the records:** sponsor policies with their classes, and contract terms with §9b's status flow. *Built 2026-10-23 (§12.7).*
    - **3b, terms versioned per contract year:** the tiers, rates, contribution, billing terms, eligibility, waiting period and life events of §9b's table, held per period so that a renewal adds a version rather than replacing a policy. *Built 2026-10-23 (§12.8), the policy's own sections and the contract term's.*
    - **3c, the levels:** `SponsorPolicy` and `Class` in `SettingScope` and in resolution, and the sponsor → policies narrowing of `GET overrides` that step 2b deferred here (§12.6). *Built 2026-10-23 (§12.9).*
-   - **3d, the consumers,** one at a time behind a fallback: billing terms replacing `Sponsor.BillingInfo` *(built 2026-10-23, §12.10)*, the 834's `REF*1L` resolving against policy numbers *(built 2026-10-23, §§12.11–12.12)*, ID cards *(built 2026-10-23, §12.13)* and the 837's `SBR03`, and claims eligibility.
+   - **3d, the consumers,** one at a time behind a fallback: billing terms replacing `Sponsor.BillingInfo` *(built 2026-10-23, §12.10)*, the 834's `REF*1L` resolving against policy numbers *(built 2026-10-23, §§12.11–12.12)*, ID cards *(built 2026-10-23, §12.13)* and the 837's `SBR03` *(built 2026-10-24, §12.14)*, and claims eligibility.
 4. **First consumers:**
    - enrollment retro limits, waiting periods, orphan grace and the full-replace guard;
    - the premium grace period, moved off the sponsor's billing info.
@@ -437,9 +437,54 @@ Built 2026-10-23. A provider keys eligibility off the card, so where a member ho
 
 6 tests.
 
-**The 837's `SBR03` is a separate gap, and a question rather than a build.** Reading it closely, `SBR03` is "insured group *or* policy number" and carries the **group** number where there is one, which CHO always has — so a member's policy number has no element of its own in loop 2000B, and putting it in `SBR03` would be wrong rather than more informative. What the reading did turn up is two real defects in `SBR03` itself, neither about policies: the live generator (`encounter-service`) leaves `SBR03` empty, and the unwired `EncounterEngine` transformer puts the **subscriber id** there, which is the identifier that already belongs in `NM1*IL`. Both want the group number, and neither service holds one today — `encounter-service` builds an encounter from its request body and never resolves coverage. Whether it gains a coverage-service client or the group number rides on the create request is a dependency decision, so it waits on an answer rather than a guess.
+**The 837's `SBR03` turned out not to be a policy field at all**, which §12.14 takes up.
 
-Still to come in 3d: claims eligibility, and `SBR03` once the question above is answered.
+### 12.14 Step 3d, fourth consumer: the group number in the 837's `SBR03`
+
+Built 2026-10-24. `SBR03` was slated as a consumer of the sponsor policy and is not one. It is "insured group **or** policy number" and carries the **group** number where there is one, which CHO coverage always has — so a member's sponsor policy number has no element of its own in loop 2000B, and putting it in `SBR03` would be wrong rather than more informative. Whether a particular receiver wants the policy number there is a per-receiver companion-guide question, not a CHO default.
+
+What the reading turned up instead were two real `SBR03` defects, neither about policies, and both now fixed:
+
+| where | was | is |
+|---|---|---|
+| `encounter-service` (the live generator) | `SBR03` written empty | the group number |
+| `CloudHealthOffice.EncounterEngine` (no production caller) | the **subscriber id** — a person identifier in an element that means a group, so the group number never went at all | the group number |
+
+- **The group number arrives on the create request, not from a coverage lookup.** The caller builds an encounter from an adjudicated claim that already resolved the member's coverage, so resolving it again here would add a second outbound dependency on the submission path for a fact the caller already holds. The encounter's create body *is* its record, so this is one nullable field rather than a new contract.
+- **An encounter with no group number writes the segment byte for byte as before.** Every encounter on file today has none, so that is the output that must not move, and it has a whole-segment test rather than an element one. The element is situational in the IG, so an empty one stays conformant and is only less informative.
+- **No other element shifts.** A receiver reads a segment positionally, so an element that moves is a silently wrong file rather than a rejected one. Both generators keep every other element where it was, and a group number carrying a stray `*` or `~` is stripped rather than allowed to split the segment in two.
+- **A correction inherits the group number when its body omits one.** The void half was already built from the original; the replacement half is the caller's own body, and a caller written before the field existed would otherwise send a replacement that says less about the member than the file it replaces. An explicitly supplied value still wins, so the inheritance fills a gap without overruling anyone.
+- **Taking the subscriber id out of the engine's `SBR03` loses nothing.** `SBR02` is `18`, meaning the patient *is* the subscriber, so the member id already in that loop's `NM1*IL` is the subscriber's identifier.
+
+12 tests across the two generators.
+
+Reading this segment also turned up a defect in the element next to it, taken up in §12.15.
+
+Still to come in 3d: claims eligibility.
+
+### 12.15 The claim filing indicator in the 837's `SBR09`
+
+Built 2026-10-24, from the defect §12.14 found and deliberately left out of that change. `SBR09` is the claim filing indicator code (X12 element 1032): the element that tells the receiver what kind of coverage a claim or encounter is under. No generator in the codebase was writing it.
+
+Three were found, not the two §12.14 recorded. The third is the one that matters most, because it is the only one of the three submitting to a live programme:
+
+| generator | was | is |
+|---|---|---|
+| `encounter-service` | `MC` at `SBR07`, two elements early; `SBR09` absent | the code for the encounter's line of business, at `SBR09` |
+| `CloudHealthOffice.EncounterEngine` | **two** codes, `HM` at `SBR06` and `MB` at `SBR08`; `SBR09` absent | one code at `SBR09` |
+| `claims-service` FMMIS transformer (Florida Medicaid, live) | `MC` at `SBR07`; `SBR09` absent | `MC` at `SBR09` |
+
+`SBR04` to `SBR08` are all "not used" in loop 2000B, so in each case the code sat in an element that does not mean what it held while the element that does mean it was empty. A receiver parsing positionally reads a well-formed segment that says nothing about the coverage — the failure mode is a silently wrong file, not a rejected one, which is why the tests here count elements instead of matching substrings. A `Contains("MC")` assertion would have passed throughout the defect's life.
+
+Corroboration that `SBR09` is the right element and these three were the outliers: every other `SBR` in the repository — the COB fixtures, the parser's own samples, the portal's benefit-plan validation file — already put the filing indicator at `SBR09`.
+
+- **`encounter-service` now derives the code instead of asserting it.** It wrote the constant `MC` for every encounter, so a Medicare or commercial encounter was filed as Medicaid. The encounter record already carries both the line of business and the 837 variant, so moving the element without using them would have put the wrong code in the right place. Commercial and Exchange map to `CI` (a qualified health plan *is* commercial insurance, and element 1032 has no exchange-specific code), Medicaid to `MC`, TRICARE to `CH`, VA to `VA`, and Medicare splits on the variant — `MA` for institutional, `MB` for professional, because those are Part A and Part B.
+- **An unrecognised line of business falls back to `MC`, the code written today.** `LineOfBusiness` has no member at `0`, so an encounter created without one lands there. Keeping today's value as the fallback means the only encounters whose `SBR09` content changes are the ones that say in so many words that they are not Medicaid.
+- **The engine's two codes could not both be right, and neither was defensible.** `HM` and `MB` are both from element 1032, so the segment handed a receiver contradictory codes in two elements that mean neither. The engine's input carries no line of business, so its single code is a constant matching `encounter-service`'s fallback, and a caller that gains one should supply it rather than rely on that.
+- **FMMIS needed only the position.** Florida Medicaid is always `MC`, which is why the code is a companion-guide constant there; nothing about the value was ever in question.
+- **Fixtures that claimed to be generator output were refreshed.** Several 837 samples in the claims tests carry a comment naming the transformer that produced them. Left alone they would have gone on describing a shape the generators no longer emit, which is the same trap in miniature: a stale fixture reads as current truth. One hand-authored sample mirroring a smoke script is left as it is, because it stands for a file a trading partner sends us rather than one we build, and the parser's tolerance of it is the point.
+
+15 tests across the three generators. The claims suite (1689 tests) passes unchanged apart from the refreshed fixtures.
 
 ## 13. Decisions (2026-10-22)
 
