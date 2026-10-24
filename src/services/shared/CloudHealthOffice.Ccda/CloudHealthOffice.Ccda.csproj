@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CloudHealthOffice.Ccda</RootNamespace>
+    <AssemblyName>CloudHealthOffice.Ccda</AssemblyName>
+  </PropertyGroup>
+
+  <!-- C-CDA R2.1 reading (docs/architecture/ccda.md). Pure: XML in, typed FHIR
+       resources out. No storage, no HTTP, no CHO service dependency, because
+       the parse has three prospective callers (CDex attachments, the 275/RFAI
+       path, and a future document gateway) and belongs to none of them. -->
+  <ItemGroup>
+    <PackageReference Include="Hl7.Fhir.R4" />
+  </ItemGroup>
+
+</Project>

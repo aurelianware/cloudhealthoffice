@@ -30,6 +30,18 @@ public sealed class DocumentUploadPolicy
             ["image/png"] = (".png", [ [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] ]),
             ["image/jpeg"] = (".jpg", [ [0xFF, 0xD8, 0xFF] ]),
             ["image/tiff"] = (".tif", [ [0x49, 0x49, 0x2A, 0x00], [0x4D, 0x4D, 0x00, 0x2A] ]),
+            // C-CDA (CDA R2) clinical documents, the structured form the
+            // Attachments IG and provider EHR exports carry. XML has no magic
+            // number, so what is checked is that the content is XML at all,
+            // with or without a UTF-8 byte-order mark; that is enough to stop a
+            // PDF or an image being filed as a clinical document. Content is
+            // only ever served as a download with X-Content-Type-Options:
+            // nosniff, so XML is not an execution vector here.
+            ["application/hl7-cda+xml"] = (".xml",
+            [
+                "<?xml"u8.ToArray(),
+                [0xEF, 0xBB, 0xBF, (byte)'<', (byte)'?', (byte)'x', (byte)'m', (byte)'l'],
+            ]),
         };
 
     public DocumentUploadPolicy(long maxUploadBytes, IEnumerable<string> allowedContentTypes)

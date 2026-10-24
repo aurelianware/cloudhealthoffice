@@ -42,6 +42,7 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddChoDocumentStore(builder.Environment.EnvironmentName);
 builder.Services.AddSingleton<IDocumentScanner, NoDocumentScanner>();
 builder.Services.AddSingleton<IRetentionPolicyService, RetentionPolicyService>();
+builder.Services.AddSingleton<ClinicalSummaryReader>();
 builder.Services.AddSingleton(sp => DocumentUploadPolicy.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
 builder.Services.Configure<DocumentServiceOptions>(builder.Configuration.GetSection(DocumentServiceOptions.SectionName));
 builder.Services.AddSingleton(TimeProvider.System);
