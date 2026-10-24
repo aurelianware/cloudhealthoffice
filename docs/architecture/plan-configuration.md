@@ -1,6 +1,6 @@
 # Plan configuration: settings that cascade, with overrides
 
-**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), steps 3a to 3c of step 3 (§§12.7–12.9) and four of 3d's consumers (§§12.10–12.14), plus the `SBR09` defect that the fourth turned up (§12.15); claims eligibility is the rest of 3d.
+**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), steps 3a to 3c of step 3 (§§12.7–12.9) and all of step 3d (§§12.10–12.16), plus the `SBR09` defect that 3d's fourth consumer turned up (§12.15).
 **Scope:** One way for every CHO service to define a business setting, set it at the right level of the plan's structure, override it further down, and explain where an effective value came from.
 
 **Related:**
@@ -244,7 +244,7 @@ Changes needing a reason or a second approver use the same pattern as two-person
    - **3a, the records:** sponsor policies with their classes, and contract terms with §9b's status flow. *Built 2026-10-23 (§12.7).*
    - **3b, terms versioned per contract year:** the tiers, rates, contribution, billing terms, eligibility, waiting period and life events of §9b's table, held per period so that a renewal adds a version rather than replacing a policy. *Built 2026-10-23 (§12.8), the policy's own sections and the contract term's.*
    - **3c, the levels:** `SponsorPolicy` and `Class` in `SettingScope` and in resolution, and the sponsor → policies narrowing of `GET overrides` that step 2b deferred here (§12.6). *Built 2026-10-23 (§12.9).*
-   - **3d, the consumers,** one at a time behind a fallback: billing terms replacing `Sponsor.BillingInfo` *(built 2026-10-23, §12.10)*, the 834's `REF*1L` resolving against policy numbers *(built 2026-10-23, §§12.11–12.12)*, ID cards *(built 2026-10-23, §12.13)* and the 837's `SBR03` *(built 2026-10-24, §12.14)*, and claims eligibility.
+   - **3d, the consumers,** one at a time behind a fallback: billing terms replacing `Sponsor.BillingInfo` *(built 2026-10-23, §12.10)*, the 834's `REF*1L` resolving against policy numbers *(built 2026-10-23, §§12.11–12.12)*, ID cards *(built 2026-10-23, §12.13)* the 837's `SBR03` *(built 2026-10-24, §12.14)* and claims eligibility *(built 2026-10-24, §12.16)*.
 4. **First consumers:**
    - enrollment retro limits, waiting periods, orphan grace and the full-replace guard;
    - the premium grace period, moved off the sponsor's billing info.
@@ -460,7 +460,7 @@ What the reading turned up instead were two real `SBR03` defects, neither about 
 
 Reading this segment also turned up a defect in the element next to it, taken up in §12.15.
 
-Still to come in 3d: claims eligibility.
+Still to come in 3d at the time: claims eligibility, which §12.16 takes up and which completes the step.
 
 ### 12.15 The claim filing indicator in the 837's `SBR09`
 
@@ -485,6 +485,32 @@ Corroboration that `SBR09` is the right element and these three were the outlier
 - **Fixtures that claimed to be generator output were refreshed.** Several 837 samples in the claims tests carry a comment naming the transformer that produced them. Left alone they would have gone on describing a shape the generators no longer emit, which is the same trap in miniature: a stale fixture reads as current truth. One hand-authored sample mirroring a smoke script is left as it is, because it stands for a file a trading partner sends us rather than one we build, and the parser's tolerance of it is the point.
 
 15 tests across the three generators. The claims suite (1689 tests) passes unchanged apart from the refreshed fixtures.
+
+### 12.16 Step 3d, last consumer: claims eligibility
+
+Built 2026-10-24. "Claims eligibility" in the build order turns out to name one specific, verifiable gap rather than an eligibility rewrite: **claims adjudication could not see a plan setting entered at any of the levels steps 3a to 3c had just built.**
+
+It resolved exactly one setting (`pricing.inpatient.groupDrg`, from #1517) and passed `new SettingScope { LineOfBusiness = ... }` — nothing else. So a value entered on a benefit plan, on a sponsor, or on one of that sponsor's policies resolved to the tenant default. Not refused, not logged: a fallback is a legitimate answer, so a payer who had deliberately turned DRG grouping on for one employer saw claims priced as though they never had.
+
+The fields were not missing. coverage-service's active-coverage response already carried the group number and the sponsor policy beside the plan id; `HttpCoverageResolver` deserialised **only** `planId` and threw the rest away. So the change is mostly a matter of stopping the discard:
+
+- **The resolver returns the coverage, not one field of it.** `ICoverageResolver.ResolveBenefitPlanIdAsync` became `ResolveCoverageAsync`, answering a `CoverageResolution` of plan id, group number and sponsor policy. Its non-throwing posture is unchanged, and the sponsor hierarchy is read off the *same* coverage the plan id came from — otherwise a claim could be priced on one coverage's plan and scoped by another's sponsor.
+- **The cache caches the whole thing.** `CachingCoverageResolver`'s key is unchanged, built from the same inputs, but its cached *value* widened. Had it kept caching the plan id alone, the first claim for a member would have resolved at the policy and every claim behind it, for the five-minute TTL, would have fallen back to the tenant default — intermittently and invisibly.
+- **One scope builder, on the context.** `ClaimAdjudicationContext.SettingScopeForClaim()` is where every stage reading a plan setting gets its scope, so stages cannot drift apart on which levels a claim is entitled to see.
+- **The benefit plan comes from the claim, not from the coverage.** The orchestrator writes the resolved plan back onto the claim, and the JSON `/import` and MCC on-ramps supply one directly; reading the coverage instead would have left those two on-ramps stuck at the line-of-business level.
+- **The catalog entry's deferral is over, and its comment rewritten.** `GroupInpatientDrg` carried a note that benefit plan "joins when plan-configuration step 2 lands — `SettingScope` carries no benefit-plan id yet, so declaring the level here would accept a value nothing could ever set." Step 2 landed as #1515 and the scope now carries all seven levels, so the entry gains BenefitPlan, Sponsor and SponsorPolicy. **Class is deliberately excluded:** an eligibility class divides a policy's members by who they are, and whether a stay is priced on the billed or the grouped DRG is a property of the contract, not of the member — a class-level value would let one employee's stay be priced by a different method from a colleague's.
+
+**The trap worth naming, because it would have shipped a change that did nothing.** A sponsor policy is not named in the hierarchy by its policy number. sponsor-service's `SponsorPolicy.IdFor` builds `{tenantId}|{groupNumber}|{policyNumber}`, with the policy number trimmed and upper-cased, and that composite is the node id a stored value is keyed by. A scope carrying the bare policy number matches nothing and resolves a level higher — silently, for the same reason the original gap was silent. claims-service is the first service that has to *build* that name rather than read one it was handed (tenant-service only parses them), so it now lives in `SponsorSettingNodes` in the shared `CloudHealthOffice.PlanConfiguration` package, with literal-string tests pinning both forms. sponsor-service publishes no contracts package, so nothing can call its builder directly; if a fourth consumer appears, the answer is that package rather than a fourth copy.
+
+A policy is **dropped** when no sponsor came with it. `SettingScope.Incoherent()` refuses such a scope — rightly, since answering it would skip the levels between the policy and the tenant — and tenant-service answers 422. Resolving one level shallower is the right failure: a claim should not stop adjudicating because the hierarchy above it was only partly known.
+
+**What this does not reach, and why it was left alone.** The two on-ramps that carry their own `BenefitPlanId` (JSON `/import` and MCC) make no coverage call at all, so they resolve at benefit plan and line of business without the sponsor levels. Resolving coverage for them as well would close that, and it is one line — but `Adjudicate_ClaimWithExistingBenefitPlanId_DoesNotCallCoverageResolver` holds in so many words that those claims "must not override **or even query**" coverage. That is a decision with a test behind it, so it stands until someone chooses to change it rather than being overturned to suit this change. The 837 on-ramp, where a claim arrives without a plan, is the one that matters in practice and is fully covered.
+
+Additive on merge: no values exist at the new levels yet, so every claim resolves exactly where it did before until a payer enters one.
+
+20 tests.
+
+With this, step 3d is complete.
 
 ## 13. Decisions (2026-10-22)
 

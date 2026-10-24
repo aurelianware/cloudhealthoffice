@@ -157,12 +157,18 @@ public sealed class InpatientGroupingStage : IClaimAdjudicationStage
             .ResolveAsync(
                 context.TenantId,
                 SettingKey,
-                // The claim's own line of business. Its enum names and numbers
-                // are the ones LinesOfBusiness.Normalize knows, so the setting
-                // resolves at the line-of-business level without a lookup;
-                // ResolvedBenefitPlan carries a plan type, which is a different
-                // thing and would silently never match a stored value.
-                new SettingScope { LineOfBusiness = claim.LineOfBusiness.ToString() },
+                // The claim's full scope: line of business, benefit plan,
+                // sponsor and sponsor policy. It was the line of business
+                // alone, so a value entered on this sponsor's policy -- the
+                // level a payer configuring one employer's stay pricing would
+                // actually use -- resolved to the tenant default instead.
+                //
+                // The line of business is still the claim's own: its enum
+                // names and numbers are the ones LinesOfBusiness.Normalize
+                // knows, whereas ResolvedBenefitPlan carries a plan type,
+                // which is a different thing and would silently never match a
+                // stored value.
+                context.SettingScopeForClaim(),
                 claim.Institutional?.DischargeDate ?? claim.ServiceDateFrom,
                 ct)
             .ConfigureAwait(false);

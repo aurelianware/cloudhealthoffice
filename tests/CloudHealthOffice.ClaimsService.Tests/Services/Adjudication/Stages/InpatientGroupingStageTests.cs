@@ -480,3 +480,206 @@ public class InpatientGroupingStageTests
         return context;
     }
 }
+
+/// <summary>
+/// The scope adjudication resolves plan settings in
+/// (plan-configuration.md §12.16).
+///
+/// <para>
+/// The stage passed only the claim's line of business, so a value entered on
+/// a benefit plan, a sponsor or one of that sponsor's policies was invisible
+/// to adjudication however deliberately it had been set — and invisible
+/// silently, because the resolver answers the tenant default rather than
+/// failing. These tests set a value at each level and check the claim is
+/// priced by it.
+/// </para>
+/// </summary>
+public class InpatientGroupingSettingScopeTests
+{
+    private const string Tenant = "tenant-1";
+    private const string Group = "GRP0001";
+    private const string Policy = "POL-9";
+    private const string PlanId = "plan-guid-1";
+
+    private readonly IMsDrgGrouper _grouper = Substitute.For<IMsDrgGrouper>();
+    private readonly InMemoryPlanSettings _settings = new();
+
+    private InpatientGroupingStage Stage() => new(
+        _grouper,
+        _settings,
+        NullLogger<InpatientGroupingStage>.Instance,
+        Substitute.For<IMsDrgReleaseProvider>());
+
+    private void Set(SettingLevel level, string scopeId, string value) =>
+        _settings.Set(Tenant, InpatientGroupingStage.SettingKey, level, scopeId, value);
+
+    private static ClaimAdjudicationContext Context(
+        string? groupNumber = Group,
+        string? policyNumber = Policy,
+        string? benefitPlanId = PlanId)
+    {
+        var admit = new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc);
+        var claim = new AdapterClaim
+        {
+            ClaimVersionId = "cv-1",
+            ClaimNumber = "CLM-1",
+            MemberId = "MEM-1",
+            BenefitPlanId = benefitPlanId,
+            LineOfBusiness = LineOfBusiness.Medicare,
+            ClaimType = ClaimType.Institutional,
+            ClaimFrequencyCode = "1",
+            ServiceDateFrom = admit,
+            ServiceDateTo = admit.AddDays(4),
+            DiagnosisCodes =
+            [
+                new AdapterDiagnosisCode { Code = "E1165", CodeQualifier = "ABK", PresentOnAdmission = "Y" },
+            ],
+            Institutional = new InstitutionalClaimDetails
+            {
+                FacilityTypeCode = "11",
+                AdmissionDate = admit,
+                DischargeDate = admit.AddDays(4),
+                StatementFromDate = admit,
+                StatementToDate = admit.AddDays(4),
+                DrgCode = "470",
+                PatientStatusCode = "01",
+            },
+            ClaimLines =
+            [
+                new()
+                {
+                    LineNumber = 1, ProcedureCode = "99213", ChargeAmount = 200m, Units = 1m,
+                    ServiceDateFrom = admit,
+                },
+            ],
+        };
+
+        return new ClaimAdjudicationContext
+        {
+            TenantId = Tenant,
+            ClaimVersionId = claim.ClaimVersionId,
+            Claim = claim,
+            ResolvedCoverage = groupNumber is null && policyNumber is null
+                ? null
+                : new CoverageResolution(PlanId, groupNumber, policyNumber),
+        };
+    }
+
+    private async Task<bool> Grouped(ClaimAdjudicationContext context)
+    {
+        _grouper.GroupAsync(Arg.Any<MsDrgGroupingRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new MsDrgGroupingResult
+            {
+                Status = GroupingStatus.Grouped,
+                Source = DrgSource.ChoGrouper,
+                Drg = "469",
+                GrouperVersion = "V44",
+                BilledDrg = "470",
+            });
+
+        await Stage().ExecuteAsync(context, CancellationToken.None);
+        return context.InpatientGrouping!.Grouped;
+    }
+
+    [Fact]
+    public async Task A_value_on_the_sponsors_policy_decides_the_claim()
+    {
+        // The level a payer configuring one employer's stay pricing reaches
+        // for, and the one that could not be seen at all before this change.
+        Set(SettingLevel.SponsorPolicy, $"{Tenant}|{Group}|{Policy}", "true");
+
+        Assert.True(await Grouped(Context()));
+    }
+
+    [Fact]
+    public async Task A_value_on_the_sponsor_decides_the_claim()
+    {
+        Set(SettingLevel.Sponsor, Group, "true");
+
+        Assert.True(await Grouped(Context()));
+    }
+
+    [Fact]
+    public async Task A_value_on_the_benefit_plan_decides_the_claim()
+    {
+        // The level this setting's catalog entry deferred until a scope could
+        // carry a plan id.
+        Set(SettingLevel.BenefitPlan, PlanId, "true");
+
+        Assert.True(await Grouped(Context()));
+    }
+
+    [Fact]
+    public async Task The_policy_beats_the_sponsor_and_the_sponsor_beats_the_line_of_business()
+    {
+        // Specific wins. Without it a sponsor-wide "on" would override the one
+        // policy a payer had deliberately turned off.
+        Set(SettingLevel.LineOfBusiness, "Medicare", "true");
+        Set(SettingLevel.Sponsor, Group, "true");
+        Set(SettingLevel.SponsorPolicy, $"{Tenant}|{Group}|{Policy}", "false");
+
+        Assert.False(await Grouped(Context()));
+    }
+
+    [Fact]
+    public async Task The_sponsor_beats_the_line_of_business()
+    {
+        Set(SettingLevel.LineOfBusiness, "Medicare", "true");
+        Set(SettingLevel.Sponsor, Group, "false");
+
+        Assert.False(await Grouped(Context()));
+    }
+
+    [Fact]
+    public async Task A_policy_value_is_named_the_way_sponsor_service_names_the_node()
+    {
+        // The bare policy number is NOT the node id. If the scope were built
+        // from it, this value would never be found and the claim would fall
+        // back to the tenant default -- with nothing logged, because a
+        // fallback is a legitimate answer.
+        Set(SettingLevel.SponsorPolicy, Policy, "true");
+
+        Assert.False(await Grouped(Context()));
+    }
+
+    [Fact]
+    public async Task A_claim_whose_coverage_named_no_sponsor_still_resolves_at_the_levels_it_has()
+    {
+        // The two on-ramps that carry their own benefit plan make no coverage
+        // call, so a stage must not depend on a sponsor being known.
+        Set(SettingLevel.BenefitPlan, PlanId, "true");
+
+        Assert.True(await Grouped(Context(groupNumber: null, policyNumber: null)));
+    }
+
+    [Fact]
+    public void A_policy_without_a_sponsor_is_dropped_rather_than_sent_incoherent()
+    {
+        // SettingScope.Incoherent refuses a policy with no sponsor and
+        // tenant-service answers 422, which would turn a settings read into a
+        // failed claim. Resolving a level shallower is the right failure.
+        var context = Context(groupNumber: null, policyNumber: Policy);
+
+        Assert.Null(context.SettingScopeForClaim().SponsorPolicy);
+        Assert.Empty(context.SettingScopeForClaim().Incoherent());
+    }
+
+    [Fact]
+    public void The_scope_is_coherent_for_every_shape_a_claim_can_arrive_in()
+    {
+        // Each of these would be answered 422 rather than resolved if the
+        // levels did not line up.
+        Assert.Empty(Context().SettingScopeForClaim().Incoherent());
+        Assert.Empty(Context(policyNumber: null).SettingScopeForClaim().Incoherent());
+        Assert.Empty(Context(groupNumber: null, policyNumber: null).SettingScopeForClaim().Incoherent());
+        Assert.Empty(Context(benefitPlanId: null).SettingScopeForClaim().Incoherent());
+    }
+
+    [Fact]
+    public void The_line_of_business_is_still_the_claims_own()
+    {
+        // Unchanged from before, and worth holding: the enum's own name is
+        // what LinesOfBusiness.Normalize knows.
+        Assert.Equal("Medicare", Context().SettingScopeForClaim().LineOfBusiness);
+    }
+}

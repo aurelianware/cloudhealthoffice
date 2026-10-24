@@ -1,6 +1,7 @@
 using ClaimsService.Models;
 using ClaimsService.Models.Adjudication;
 using ClaimsService.Services.Resolution;
+using CloudHealthOffice.PlanConfiguration;
 using BenefitEngineModels = CloudHealthOffice.BenefitEngine.Models;
 
 namespace ClaimsService.Services.Adjudication;
@@ -38,6 +39,25 @@ public class ClaimAdjudicationContext
     /// pends <c>PLANUNAVAIL</c> when they could put a line in scope.
     /// </summary>
     public bool PlanResolutionFailed { get; set; }
+
+    /// <summary>
+    /// The member's active coverage, resolved by <see cref="ICoverageResolver"/>
+    /// at orchestrator entry: the benefit plan and the sponsor hierarchy the
+    /// claim sits under (plan-configuration.md §12.16). What
+    /// <see cref="SettingScopeForClaim"/> is built from.
+    ///
+    /// <para>
+    /// Null when the claim already carried a <c>BenefitPlanId</c> — the JSON
+    /// <c>/import</c> and MCC on-ramps do, and
+    /// <c>Adjudicate_ClaimWithExistingBenefitPlanId_DoesNotCallCoverageResolver</c>
+    /// holds that those must not even query coverage — as well as when the
+    /// lookup found nothing. A stage therefore cannot read this as "the member
+    /// has no sponsor", only as "this context does not know one", and a claim
+    /// from those two on-ramps resolves settings at its benefit plan and line
+    /// of business without the sponsor levels.
+    /// </para>
+    /// </summary>
+    public CoverageResolution? ResolvedCoverage { get; set; }
 
     /// <summary>Member resolved by <see cref="IMemberResolver"/> at orchestrator entry.</summary>
     public ResolvedMember? ResolvedMember { get; set; }
@@ -255,6 +275,56 @@ public class ClaimAdjudicationContext
     /// recommendation itself.
     /// </summary>
     public AiExaminationOutcome? AiExaminationResult { get; set; }
+
+    /// <summary>
+    /// The plan-configuration scope this claim resolves settings in
+    /// (plan-configuration.md §12.16). Every stage reading a plan setting
+    /// builds it here rather than assembling one of its own, so they cannot
+    /// drift apart on which levels a claim is entitled to see.
+    /// </summary>
+    /// <remarks>
+    /// Adjudication passed only the line of business, so a value set on a
+    /// benefit plan, a sponsor or one of that sponsor's policies was invisible
+    /// here however deliberately it had been entered.
+    ///
+    /// <para>
+    /// The benefit plan comes from the claim rather than from
+    /// <see cref="ResolvedCoverage"/>, because the orchestrator writes the
+    /// resolved plan back onto the claim and the JSON <c>/import</c> and MCC
+    /// on-ramps supply it directly — reading the coverage instead would leave
+    /// those two on-ramps stuck at the line-of-business level.
+    /// </para>
+    ///
+    /// <para>
+    /// A policy is dropped when no sponsor came with it.
+    /// <see cref="SettingScope.Incoherent"/> refuses such a scope — rightly,
+    /// since answering it would skip the levels between the policy and the
+    /// tenant — and tenant-service answers 422. Resolving at a shallower level
+    /// is the right failure: a claim should not stop adjudicating because the
+    /// hierarchy above it was only partly known.
+    /// </para>
+    /// </remarks>
+    public SettingScope SettingScopeForClaim()
+    {
+        var sponsor = SponsorSettingNodes.ForSponsor(ResolvedCoverage?.GroupNumber);
+
+        // A policy node is named {tenant}|{group}|{POLICY}, not by the bare
+        // policy number -- see SponsorSettingNodes. ForPolicy answers null
+        // without the group, which is also what keeps the scope coherent.
+        var policy = sponsor is null
+            ? null
+            : SponsorSettingNodes.ForPolicy(TenantId, sponsor, ResolvedCoverage?.SponsorPolicyNumber);
+
+        return new SettingScope
+        {
+            LineOfBusiness = Claim.LineOfBusiness.ToString(),
+            BenefitPlan = Blank(Claim.BenefitPlanId) ? null : Claim.BenefitPlanId!.Trim(),
+            Sponsor = sponsor,
+            SponsorPolicy = policy,
+        };
+    }
+
+    private static bool Blank(string? value) => string.IsNullOrWhiteSpace(value);
 }
 
 /// <summary>What the member lookup at the start of adjudication found.</summary>

@@ -671,8 +671,8 @@ public class ClaimAdjudicationOrchestratorTests
         claim.BenefitPlanId = null;
         SetupAdapterReturning(claim);
         _coverageResolver
-            .ResolveBenefitPlanIdAsync("tenant-1", "MEM-1", claim.ServiceDateFrom, "HLT", Arg.Any<CancellationToken>())
-            .Returns("resolved-plan-guid");
+            .ResolveCoverageAsync("tenant-1", "MEM-1", claim.ServiceDateFrom, "HLT", Arg.Any<CancellationToken>())
+            .Returns(new CoverageResolution("resolved-plan-guid"));
 
         var orch = BuildOrchestrator(stages);
         await orch.AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
@@ -731,8 +731,8 @@ public class ClaimAdjudicationOrchestratorTests
         claim.BenefitPlanId = null;
         SetupAdapterReturning(claim);
         _coverageResolver
-            .ResolveBenefitPlanIdAsync("tenant-1", "MEM-1", claim.ServiceDateFrom, "HLT", Arg.Any<CancellationToken>())
-            .Returns((string?)null);
+            .ResolveCoverageAsync("tenant-1", "MEM-1", claim.ServiceDateFrom, "HLT", Arg.Any<CancellationToken>())
+            .Returns((CoverageResolution?)null);
 
         var orch = BuildOrchestrator(stages);
         await orch.AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
@@ -756,7 +756,7 @@ public class ClaimAdjudicationOrchestratorTests
         await orch.AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
 
         await _coverageResolver.DidNotReceiveWithAnyArgs()
-            .ResolveBenefitPlanIdAsync(default!, default!, default, default, default);
+            .ResolveCoverageAsync(default!, default!, default, default, default);
     }
 
     /// <summary>
