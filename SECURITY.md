@@ -65,6 +65,9 @@ plan, employer, provider contract, tenant, or claim.
   where relevant.
 - Prefer deterministic synthetic fixtures for benchmark and regression tests.
 - Document any security-sensitive default or deployment prerequisite.
+- Never waive a dependency advisory silently. An `.audit-ci.json` allowlist
+  entry needs a matching entry in `docs/security/DEPENDENCY-AUDIT-EXCEPTIONS.md`
+  saying why the vulnerable path is unreachable and what removes the waiver.
 
 ## Compliance Notes
 
