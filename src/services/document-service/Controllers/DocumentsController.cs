@@ -57,6 +57,7 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
     private readonly DocumentServiceOptions _options;
     private readonly ICurrentActor _actor;
     private readonly TimeProvider _clock;
+    private readonly ClinicalSummaryReader _clinicalSummary;
     private readonly ILogger<DocumentsController> _logger;
 
     public DocumentsController(
@@ -69,6 +70,7 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
         IOptions<DocumentServiceOptions> options,
         ICurrentActor actor,
         TimeProvider clock,
+        ClinicalSummaryReader clinicalSummary,
         ILogger<DocumentsController> logger)
     {
         _documents = documents;
@@ -80,6 +82,7 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
         _options = options.Value;
         _actor = actor;
         _clock = clock;
+        _clinicalSummary = clinicalSummary;
         _logger = logger;
     }
 
@@ -198,6 +201,79 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
 
         Response.Headers["X-Content-Type-Options"] = "nosniff";
         return File(stream, document.ContentType, $"{document.Id}{Path.GetExtension(document.StoragePath)}");
+    }
+
+    /// <summary>
+    /// A stored clinical document, read into structured content for a UM
+    /// reviewer (docs/architecture/ccda.md).
+    ///
+    /// Takes EXACTLY the path <see cref="Content"/> takes — same subject, same
+    /// access decision, same pending-upload and scan refusals, same audit
+    /// action — because it serves the same bytes in a different shape. A second
+    /// access path to the same content is a second place for the rules to drift.
+    ///
+    /// The clinical resources name the member from the document's own Member
+    /// LINK, never from the C-CDA's recordTarget: matching a sender's
+    /// identification of a person against CHO's is a decision about identity,
+    /// not a parse. Without that link the sections, their entry counts and
+    /// their narratives are still returned — a reviewer can read those — but no
+    /// resource is attributed to anyone.
+    /// </summary>
+    [HttpGet("{id}/clinical-summary")]
+    public async Task<IActionResult> ClinicalSummaryOf(
+        string id, [FromQuery] string? subjectKind, [FromQuery] string? subjectId, CancellationToken ct)
+    {
+        if (!SubjectAccess.TryCreate(subjectKind, subjectId, out var subject))
+            return BadRequest("subjectKind and subjectId name the subject the document is opened from.");
+
+        var (document, decision) = await LoadAsync(id, subject, ct);
+        if (decision.Allowed && document!.PendingUploadPath != null)
+            decision = AccessDecision.Deny("upload not finalized");
+        if (decision.Allowed && !ScanAllowsServing(document!.Scan.Status))
+            decision = AccessDecision.Deny($"scan status {document.Scan.Status}");
+
+        await AuditAsync(DocumentAccessAction.Download, id, subject, decision.Allowed, decision.Reason, ct);
+        if (!decision.Allowed)
+            return DeniedResult(document, subject);
+
+        if (!ClinicalSummaryReader.CanRead(document!.ContentType))
+        {
+            // A PDF is not a failure to parse; it is a document of a kind CHO
+            // reads no structure from. Saying so is more useful than an empty
+            // summary that looks like a C-CDA with nothing in it.
+            return UnprocessableEntity(
+                $"CHO reads structured clinical content from C-CDA documents; this one is {document.ContentType}.");
+        }
+
+        Stream stream;
+        try
+        {
+            stream = await _store.DownloadAsync(document.StorageContainer, document.StoragePath, ct);
+        }
+        catch (DocumentNotFoundException)
+        {
+            _logger.LogError("Catalog document {TenantId}/{DocumentId} has no stored content",
+                LogSanitizer.Sanitize(TenantId), LogSanitizer.Sanitize(id));
+            return NotFound();
+        }
+
+        using (stream)
+        {
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer, ct);
+            return Ok(_clinicalSummary.Read(buffer.GetBuffer().AsSpan(0, (int)buffer.Length), MemberOf(document)));
+        }
+    }
+
+    /// <summary>
+    /// The member this document is filed against, as a FHIR reference, or null
+    /// where it is linked to no member. Read from the catalog's own link rather
+    /// than from the document's content.
+    /// </summary>
+    private static Hl7.Fhir.Model.ResourceReference? MemberOf(CatalogDocument document)
+    {
+        var member = document.Links.FirstOrDefault(l => l.Kind == DocumentLinkKind.Member);
+        return member is null ? null : new Hl7.Fhir.Model.ResourceReference($"Patient/{member.Id}");
     }
 
     /// <summary>

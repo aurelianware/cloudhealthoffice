@@ -48,10 +48,60 @@ CcdaCodeSystems   CDA code-system OIDs as FHIR canonical URIs
 Ccda*Mapper       one section's entries as typed FHIR resources
 ```
 
+Mapped so far: **Problems** (`Condition`), **Allergies**
+(`AllergyIntolerance`), **Medications** (`MedicationRequest`). The remaining
+six — Immunizations, Results, Vital Signs, Procedures, Plan of Treatment and
+Care Team — are counted and preserved by the reader in the meantime.
+
 The library is pure: XML in, typed FHIR resources out. No storage, no HTTP, no
 CHO service dependency, because the parse has three prospective callers — CDex
 attachments, the 275/RFAI path, and a future document gateway — and belongs to
 none of them.
+
+## How a reviewer sees it
+
+The library parses; `document-service` is what puts the result on a screen.
+
+```
+GET /api/v1/documents/{id}/clinical-summary?subjectKind=&subjectId=
+```
+
+The endpoint passes exactly the gates `/content` passes — permission, tenant,
+sensitivity tag, scan status — and writes the same `Download` audit entry,
+allowed or refused. A summary is the document's contents under another name, so
+anything that would stop a reviewer opening the bytes stops them reading the
+summary. A document CHO reads no structure from (a PDF) answers 422 rather than
+an empty summary that would read as "a C-CDA with nothing in it".
+
+Parse-on-read. Nothing is cached or persisted, which is what keeps the three
+deferred problems above deferred.
+
+**The subject comes from CHO's own catalog link, never from the document.** A
+C-CDA's `recordTarget` is the *sender's* identification of a person; matching on
+it is a decision about identity, not a parse. A document filed against no member
+still returns its sections, entry counts and narratives — those are what a
+reviewer reads — but no resource, because a `Condition` attributed to nobody is
+a clinical fact about an unnamed person. The response says `memberLinked: false`
+so an empty list is legible as a filing problem rather than an empty document.
+
+Each section carries both the FHIR resources and `items`, three plain fields
+per entry (display, status, the one detail that changes a utilization decision)
+so the portal never parses FHIR JSON to draw a table. Both are derived from the
+coded entries; neither is derived from the narrative. The narrative travels
+separately and the portal renders it **as text**: it is another organisation's
+HTML arriving over an attachment channel.
+
+A section CHO recognises but does not map is not an error. It is named, counted
+and carries its narrative, and the panel marks it "Not read by CHO" — dropping
+it would make the document look smaller than it is to somebody deciding an
+authorization on it. The same applies to a mapped section whose entries carried
+nothing codeable, which says so rather than rendering as empty.
+
+`application/hl7-cda+xml` is on `DocumentUploadPolicy`'s allow list, signature-
+checked as XML (prolog, with or without a BOM). XML has no magic number, so that
+check only establishes the content is XML at all; content is served solely as a
+download with `X-Content-Type-Options: nosniff`, so it is not an execution
+vector.
 
 ## Rules the mappers follow
 
@@ -80,6 +130,27 @@ prevents.
    already established.
 7. **A document that is not a C-CDA is refused, not read as far as it goes.**
    Section templateIds only mean what C-CDA says they mean.
+8. **The target is FHIR R4.** R4 and R5 differ in ways that compile against the
+   same shared datatypes — `MedicationRequest.medication[x]` is a choice in R4
+   and a `CodeableReference` in R5 — so where a resource's shape differs
+   between versions it is asserted against the serialized JSON rather than the
+   object model.
+
+### Where each mapper's real trap is
+
+Worth knowing before writing the next one, because each section hides its
+clinical meaning somewhere a reasonable reader would not look:
+
+- **Problems.** Clinical status lives on the concern act, the diagnosis on the
+  observation inside it. The diagnosis is `value`; `code` is what KIND of
+  statement it is.
+- **Allergies.** The substance is the participant's playing-entity code, NOT
+  the observation's `value` (which is the kind of intolerance). Severity hangs
+  off each reaction, not off the allergy — the same allergy can cause a rash
+  once and anaphylaxis the next time.
+- **Medications.** The element saying when a drug is TAKEN and the one saying
+  when it was PRESCRIBED are both `effectiveTime`, told apart only by
+  `xsi:type` and `operator="A"`. Senders write them in either order.
 
 ## Security
 
