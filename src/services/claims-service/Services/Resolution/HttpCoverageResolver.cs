@@ -34,7 +34,7 @@ public class HttpCoverageResolver : ICoverageResolver
         _logger = logger;
     }
 
-    public async Task<string?> ResolveBenefitPlanIdAsync(
+    public async Task<CoverageResolution?> ResolveCoverageAsync(
         string tenantId,
         string memberId,
         DateTime serviceDate,
@@ -84,7 +84,18 @@ public class HttpCoverageResolver : ICoverageResolver
                 .ReadFromJsonAsync<List<CoverageSummaryDto>>(JsonOptions, ct)
                 .ConfigureAwait(false);
 
-            return coverages?.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.PlanId))?.PlanId;
+            // The first coverage carrying a plan id, as before -- the sponsor
+            // hierarchy is read off that SAME coverage rather than from the
+            // first entry that happens to have a group number, or a claim
+            // could be priced on one coverage's plan and scoped by another's
+            // sponsor.
+            var coverage = coverages?.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.PlanId));
+            if (coverage?.PlanId is not { } planId) return null;
+
+            return new CoverageResolution(
+                planId,
+                NullIfBlank(coverage.GroupNumber),
+                NullIfBlank(coverage.SponsorPolicyNumber));
         }
         catch (Exception ex) when (ex is HttpRequestException
                                     or TaskCanceledException
@@ -97,9 +108,21 @@ public class HttpCoverageResolver : ICoverageResolver
         }
     }
 
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value;
+
     private sealed class CoverageSummaryDto
     {
         [JsonPropertyName("planId")]
         public string? PlanId { get; set; }
+
+        /// <summary>The sponsor's group number. Coverage marks it required, but
+        /// this reads it as nullable: a downstream that stops sending it should
+        /// narrow the setting scope, not throw on a claim.</summary>
+        [JsonPropertyName("groupNumber")]
+        public string? GroupNumber { get; set; }
+
+        [JsonPropertyName("sponsorPolicyNumber")]
+        public string? SponsorPolicyNumber { get; set; }
     }
 }

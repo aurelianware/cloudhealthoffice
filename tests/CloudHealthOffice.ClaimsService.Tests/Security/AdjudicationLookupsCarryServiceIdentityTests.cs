@@ -81,7 +81,7 @@ public sealed class AdjudicationLookupsCarryServiceIdentityTests
             "cob" => await scope.ServiceProvider.GetRequiredService<HttpCoverageClient>()
                 .GetCobEntriesAsync(Tenant, "MEM-1", DateTime.UtcNow.Date) is not null,
             "active" => await scope.ServiceProvider.GetRequiredService<HttpCoverageResolver>()
-                .ResolveBenefitPlanIdAsync(Tenant, "MEM-1", DateTime.UtcNow.Date) == "PLAN-1",
+                .ResolveCoverageAsync(Tenant, "MEM-1", DateTime.UtcNow.Date) is { PlanId: "PLAN-1" },
             _ => await scope.ServiceProvider.GetRequiredService<HttpBenefitPlanResolver>()
                 .GetPlanAsync(Tenant, "PLAN-1") is { PriorAuthRequiredProcedureCodes: var codes } && codes.Contains("99213"),
         };

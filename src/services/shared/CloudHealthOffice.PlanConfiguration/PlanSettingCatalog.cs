@@ -86,12 +86,22 @@ public static class PlanSettings
     /// </para>
     ///
     /// <para>
-    /// Tenant and line of business are the levels that hold values today
-    /// (plan-configuration.md step 1). Benefit plan is the level a payer
-    /// piloting on one plan would actually want, and it joins when
-    /// plan-configuration step 2 lands — <see cref="SettingScope"/> carries no
-    /// benefit-plan id yet, so declaring the level here would accept a value
-    /// nothing could ever set.
+    /// Benefit plan, sponsor and sponsor policy joined tenant and line of
+    /// business in plan-configuration step 3d's last consumer (§12.16). The
+    /// level this entry deferred for — a payer piloting the grouper on one
+    /// plan — is now settable, and so is the one a payer is likelier to reach
+    /// for: a single employer's policy, where stay pricing is actually
+    /// negotiated. Declaring a level only once adjudication can see it is the
+    /// rule this entry was written to respect; what changed is that
+    /// adjudication now can.
+    /// </para>
+    ///
+    /// <para>
+    /// Class is deliberately not here. An eligibility class divides a
+    /// policy's members by who they are, and whether a stay is priced on the
+    /// billed or the grouped DRG is a property of the contract, not of the
+    /// member — a class-level value would let one employee's stay be priced by
+    /// a different method from a colleague's.
     /// </para>
     /// </summary>
     public static readonly SettingDefinition GroupInpatientDrg = new()
@@ -101,7 +111,14 @@ public static class PlanSettings
         Owner = "claims-service",
         Description = "Price an inpatient claim by the DRG CHO's grouper assigns instead of the DRG the facility billed.",
         Default = "false",
-        AllowedLevels = new HashSet<SettingLevel> { SettingLevel.Tenant, SettingLevel.LineOfBusiness },
+        AllowedLevels = new HashSet<SettingLevel>
+        {
+            SettingLevel.Tenant,
+            SettingLevel.LineOfBusiness,
+            SettingLevel.BenefitPlan,
+            SettingLevel.Sponsor,
+            SettingLevel.SponsorPolicy,
+        },
         ChangeControl = ChangeControl.ReasonRequired,
     };
 
