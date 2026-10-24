@@ -55,6 +55,10 @@ internal static class IdCardPdfRenderer
         Field("Member", b.MemberName, always: true);
         Field("Member ID", b.MemberNumber, always: true);
         Field("Group", b.GroupNumber);
+        // Conditional like the rest, so a card for a member enrolled by group
+        // number -- every card until a tenant enters policies -- is laid out
+        // exactly as it is today.
+        Field("Policy", b.SponsorPolicyNumber);
         Field("Plan", b.PlanId);
         Field("Network", b.NetworkName);
         Field("Copays", b.CopaySummary);

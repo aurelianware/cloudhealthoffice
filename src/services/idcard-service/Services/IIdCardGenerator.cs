@@ -70,6 +70,11 @@ public class IdCardGenerator : IIdCardGenerator
             ["DateOfBirth"] = b.DateOfBirth?.ToString("yyyy-MM-dd"),
             ["Gender"] = b.Gender,
             ["GroupNumber"] = b.GroupNumber,
+            // Available to a tenant's own template. The built-in layout does
+            // not place it: an SVG puts text at fixed coordinates, so a line
+            // that is empty for most members would leave a hole rather than
+            // close up the way the PDF's field list does.
+            ["SponsorPolicyNumber"] = b.SponsorPolicyNumber,
             ["SponsorName"] = b.SponsorName,
             ["SponsorSupportPhone"] = b.SponsorSupportPhone,
             ["IssuerName"] = b.IssuerName,
