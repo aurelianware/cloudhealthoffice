@@ -22,7 +22,8 @@ public enum EncounterSubmissionStatus
     Submitted,
 
     /// <summary>
-    /// FMMIS 999 received — encounter accepted.
+    /// Final encounter acceptance. Legacy records also used this for a 999;
+    /// reconcile those records before treating them as state acceptance.
     /// </summary>
     Accepted,
 
@@ -40,5 +41,11 @@ public enum EncounterSubmissionStatus
     /// Approaching the 60-day AHCA submission deadline.
     /// A warning event has been fired for operational escalation.
     /// </summary>
-    DeadlineWarning
+    DeadlineWarning,
+
+    /// <summary>999 syntax acceptance only; final encounter acceptance is not established.</summary>
+    SyntaxAccepted,
+
+    /// <summary>999 accepted with errors; final encounter acceptance is not established.</summary>
+    SyntaxAcceptedWithErrors
 }

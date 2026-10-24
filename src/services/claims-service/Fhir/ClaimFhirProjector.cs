@@ -239,17 +239,10 @@ public sealed class ClaimFhirProjector : IClaimFhirProjector
         var items = new JsonArray();
         foreach (var line in claim.ClaimLines.OrderBy(l => l.LineNumber))
         {
-            var product = new JsonObject
-            {
-                ["system"] = Cpt4System,
-                ["code"] = line.ProcedureCode,
-            };
-            if (!string.IsNullOrWhiteSpace(line.ProcedureDescription)) product["display"] = line.ProcedureDescription;
-
             var item = new JsonObject
             {
                 ["sequence"] = line.LineNumber,
-                ["productOrService"] = new JsonObject { ["coding"] = new JsonArray { product } },
+                ["productOrService"] = ClaimProcedureCoding.Concept(line),
                 ["servicedPeriod"] = new JsonObject
                 {
                     ["start"] = AsUtc(line.ServiceDateFrom).ToString("o"),

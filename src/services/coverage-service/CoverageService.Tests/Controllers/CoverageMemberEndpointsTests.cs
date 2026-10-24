@@ -14,6 +14,18 @@ public class CoverageMemberEndpointsTests
 {
     private const string Tenant = "t1";
 
+    [Fact]
+    public async Task AssignMemberPcp_UnavailablePanel_Returns503()
+    {
+        var (controller, _, service) = Build();
+        service.Setup(s => s.AssignAsync(Tenant, "M1", It.IsAny<AssignPcpCommand>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new PanelCountUnavailableException());
+
+        var result = await controller.AssignMemberPcp("M1", new AssignPcpBody { ProviderNpi = "1234567890" }, default);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(503);
+    }
+
     private static (CoverageController ctl, Mock<ICoverageRepository> repo, Mock<IPcpAssignmentService> pcp) Build()
     {
         var repo = new Mock<ICoverageRepository>();

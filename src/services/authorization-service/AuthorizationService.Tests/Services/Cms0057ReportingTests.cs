@@ -74,7 +74,7 @@ public class Cms0057ReportingTests
     }
 
     [Fact]
-    public void Metrics_SplitStandardAndExpedited_WithPercentagesOfDecidedRequests()
+    public void Metrics_SplitStandardAndExpedited_WithPercentagesOfAllRequests()
     {
         var auths = new[]
         {
@@ -95,8 +95,8 @@ public class Cms0057ReportingTests
         m.Standard.Requests.Should().Be(4);
         m.Standard.Decided.Should().Be(3);
         m.Standard.Approved.Should().Be(2, "Modified (approved with changes) counts as approved");
-        m.Standard.ApprovedPercent.Should().Be(66.7);
-        m.Standard.DeniedPercent.Should().Be(33.3);
+        m.Standard.ApprovedPercent.Should().Be(50);
+        m.Standard.DeniedPercent.Should().Be(25);
         m.Standard.AverageDecisionHours.Should().Be(90.7);
         m.Standard.MedianDecisionHours.Should().Be(48);
         m.Standard.DecidedWithinTimeframe.Should().Be(2, "200 hours is past the 7-day (168-hour) timeframe");
@@ -107,6 +107,50 @@ public class Cms0057ReportingTests
         m.Expedited.MedianDecisionHours.Should().Be(45, "the median of an even count is the mean of the middle two");
         m.Expedited.DecidedWithinTimeframe.Should().Be(1, "80 hours is past the 72-hour expedited timeframe");
         m.Expedited.TimeframeHours.Should().Be(72);
+    }
+
+    [Fact]
+    public void Metrics_UsePayerReceiptRatherThanSenderSubmission_ForPeriodAndElapsedTime()
+    {
+        var authorization = Auth("receipt", AuthorizationStatus.Approved,
+            submitted: Jan1.AddHours(-2), decidedAfterHours: 6);
+        authorization.DecisionReceivedAt = Jan1;
+
+        var metrics = Cms0057Reporting.ComputeMetrics(new[] { authorization }, Jan1, Dec31, null);
+
+        metrics.TotalRequests.Should().Be(1);
+        metrics.Standard.AverageDecisionHours.Should().Be(4);
+    }
+
+    [Fact]
+    public void Metrics_ExcludeDrugRequests_UsingTheExistingPaScopePolicy()
+    {
+        var drug = Auth("drug", AuthorizationStatus.Denied, decidedAfterHours: 24);
+        drug.ServiceTypeCode = "88";
+        var medical = Auth("medical", AuthorizationStatus.Approved, decidedAfterHours: 12);
+
+        var metrics = Cms0057Reporting.ComputeMetrics(new[] { drug, medical }, Jan1, Dec31, null);
+
+        metrics.TotalRequests.Should().Be(1);
+        metrics.Standard.ApprovedPercent.Should().Be(100);
+        Cms0057Reporting.RecentDecisions(new[] { drug, medical }, Jan1, 10)
+            .Should().ContainSingle(d => d.AuthorizationNumber == "medical");
+    }
+
+    [Theory]
+    [InlineData(-1.0)]
+    [InlineData(null)]
+    public void InvalidOrMissingDecisionTimes_AreUnknown_NotInstantOrTimely(double? hours)
+    {
+        var authorization = Auth("invalid", AuthorizationStatus.Approved, decidedAfterHours: hours);
+
+        Cms0057Reporting.DecisionHours(authorization).Should().BeNull();
+        Cms0057Reporting.DecidedWithinTimeframe(authorization).Should().BeFalse();
+        var metrics = Cms0057Reporting.ComputeMetrics(new[] { authorization }, Jan1, Dec31, null);
+        metrics.Standard.Decided.Should().Be(1);
+        metrics.Standard.AverageDecisionHours.Should().BeNull();
+        metrics.Standard.DecidedWithinTimeframe.Should().Be(0);
+        metrics.Standard.DecisionTimingUnavailable.Should().Be(1);
     }
 
     [Fact]
@@ -126,11 +170,11 @@ public class Cms0057ReportingTests
     }
 
     [Fact]
-    public void Metrics_WithNoDecisions_ReportNullRatherThanZeroPercent()
+    public void Metrics_WithReceivedRequestsButNoDecisions_ReportZeroApprovalsAndUnknownTiming()
     {
         var m = Cms0057Reporting.ComputeMetrics(new[] { Auth("P", AuthorizationStatus.Submitted) }, Jan1, Dec31, null);
 
-        m.Standard.ApprovedPercent.Should().BeNull();
+        m.Standard.ApprovedPercent.Should().Be(0, "there is one received request and no approval");
         m.Standard.AverageDecisionHours.Should().BeNull();
         m.Expedited.Requests.Should().Be(0);
     }

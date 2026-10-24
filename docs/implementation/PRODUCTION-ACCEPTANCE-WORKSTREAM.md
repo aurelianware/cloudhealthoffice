@@ -1,5 +1,12 @@
 # Production acceptance workstream
 
+Current California/CMS verification and prioritized acceptance contracts:
+[California Medicaid qualification](CALIFORNIA-MEDICAID-QUALIFICATION.md)
+(October 24, 2026). The original sequence below is a dated plan; native-only
+startup, explicit unavailable accumulation and bounded settlement GL now have
+scoped implementations. Use the current capability ledger before reopening
+a historical finding.
+
 Target: **CHO as the native payer core** (owner-selected October 22, 2026).
 Source planning baseline: October 22, 2026, main dc23d47e. This is a staged
 engineering/acceptance plan, not evidence that the work is already complete.

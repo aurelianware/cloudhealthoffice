@@ -622,6 +622,11 @@ public class CoverageController : ControllerBase
             _logger.LogError("PCP assignment: provider directory unavailable ({Status})", ex.StatusCode);
             return StatusCode(503, new { Message = "Provider directory is unavailable; the assignment was not made." });
         }
+        catch (PanelCountUnavailableException)
+        {
+            _logger.LogError("PCP assignment: panel capacity could not be verified");
+            return StatusCode(503, new { Message = "PCP panel capacity is unavailable; the assignment was not made." });
+        }
         if (!result.IsSuccess)
         {
             var err = result.Error!;

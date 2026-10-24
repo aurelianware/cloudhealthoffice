@@ -65,8 +65,8 @@ builder.Services.AddHttpClient<IPanelCounter, HttpPanelCounter>((sp, client) =>
     // Panel counter reads the capitation-style /by-pcp roster. Prefer the
     // capitation-service URL when set; fall back to the coverage-service URL
     // (since coverage itself exposes /by-pcp). If neither is configured, leave
-    // BaseAddress null — HttpPanelCounter short-circuits to 0 in that case so
-    // panel-limit checks degrade gracefully rather than gating every assignment.
+    // BaseAddress null — HttpPanelCounter reports unavailable in that case so
+    // a configured panel limit cannot be bypassed by assuming a zero count.
     var baseUrl = builder.Configuration["Downstream:CapitationService:BaseUrl"]
                  ?? builder.Configuration["Downstream:CoverageService:BaseUrl"];
     if (!string.IsNullOrWhiteSpace(baseUrl))

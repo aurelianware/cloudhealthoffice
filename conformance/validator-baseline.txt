@@ -22,13 +22,9 @@
 claim-as-billed: Claim.extension[0]: Error - The extension urn:cho:StructureDefinition:claim-place-of-service could not be found so is not allowed here
 encounter: Encounter.extension[0]: Error - The extension urn:cho:StructureDefinition:encounter-place-of-service could not be found so is not allowed here
 
-# ── denial reasons are not yet X12 CARCs (gap G-17) ───────────────────────────
-# PDex binds adjudication.denialreason.reason to the X12 Claim Adjustment Reason
-# Codes required. CHO's authorization store carries its own reason vocabulary
-# (urn:cho:pa-denial-reason), and no mapping to CARCs exists yet. This is the
-# same thing gap G-17 records in docs/epa-gap-matrix.md, and it is why the
-# Patient Access prior-authorization scenario stays PARTIAL.
-prior-authorization-eob: ExplanationOfBenefit.item[1].adjudication[1].reason: Error - None of the codings provided are in the value set 'X12 Claim Adjustment Reason Codes - Remittance Advice Remark Codes' (http://hl7.org/fhir/us/davinci-pdex/ValueSet/X12ClaimAdjustmentReasonCodesCMSRemittanceAdviceRemarkCodes|2.1.0), and a coding from this value set is required) (codes = urn:cho:pa-denial-reason#NOTMEDNEC)
+# PA NOTMEDNEC now carries an explicit CARC 50 crosswalk (ADR 029).
+# Its fixture has no residual denial-reason error. Other local reasons remain
+# unverified; no generic exception or fallback CARC is introduced.
 
 # ── Provider Access care team: resolve() has nothing to read in one file ──────
 # Every CARIN BB care-team role but "purchasedservice" carries an invariant that

@@ -265,6 +265,7 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         var filter = builder.And(
             builder.Eq(x => x.TenantId, tenantId),
             builder.Or(
+                builder.And(builder.Gte(x => x.DecisionReceivedAt, from), builder.Lte(x => x.DecisionReceivedAt, to)),
                 builder.And(builder.Gte(x => x.SubmittedDate, from), builder.Lte(x => x.SubmittedDate, to)),
                 builder.And(builder.Gte(x => x.ReviewedDate, from), builder.Lte(x => x.ReviewedDate, to))));
         return await _collection.Find(filter).ToListAsync();

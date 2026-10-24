@@ -78,6 +78,8 @@ public class EncounterStatusSummary
     public int Submitted { get; set; }
     public int Accepted { get; set; }
     public int PartialAccept { get; set; }
+    public int SyntaxAccepted { get; set; }
+    public int SyntaxAcceptedWithErrors { get; set; }
     public int Rejected { get; set; }
     public int DeadlineWarning { get; set; }
     public int Total { get; set; }

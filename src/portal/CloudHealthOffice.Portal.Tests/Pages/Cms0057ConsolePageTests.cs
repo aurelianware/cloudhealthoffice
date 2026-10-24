@@ -108,6 +108,7 @@ public class Cms0057ConsolePageTests : TestContext
         cut.WaitForAssertion(() => cut.Find("[data-testid=metrics]").TextContent.Should().Contain("66.7%"));
         var text = cut.Find("[data-testid=metrics]").TextContent;
         text.Should().Contain("80%").And.Contain("30.5 h").And.Contain("2 d 2 h");
+        cut.Markup.Should().Contain("of all received requests").And.Contain("incomplete annual public report");
         cut.Find("[data-testid=not-tracked]").TextContent.Should().Contain("Approved after appeal");
     }
 

@@ -221,7 +221,7 @@
       "productOrService": {
         "coding": [
           {
-            "system": "http://www.ama-assn.org/go/cpt",
+            "system": "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
             "code": "J1745"
           }
         ]

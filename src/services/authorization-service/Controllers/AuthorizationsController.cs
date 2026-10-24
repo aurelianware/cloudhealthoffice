@@ -804,10 +804,11 @@ public class AuthorizationsController : ControllerBase
     }
 
     /// <summary>
-    /// CMS-0057-F public-reporting metrics for requests submitted in the period
+    /// CMS-0057-F operational aggregates for non-drug requests received in the period
     /// (default: the current calendar year to date): approved and denied
     /// percentages and average and median decision time, for standard and
-    /// expedited requests, plus the metrics the data can't support yet.
+    /// expedited requests, plus the metrics the data can't support yet. This
+    /// receipt-cohort view is not a complete annual public report.
     /// </summary>
     [HttpGet("cms-0057/metrics")]
     [ProducesResponseType(typeof(Cms0057Metrics), StatusCodes.Status200OK)]

@@ -14,6 +14,33 @@ namespace AuthorizationService.Tests.Services;
 /// </summary>
 public class PriorAuthorizationEobProjectorTests
 {
+    [Fact]
+    public void ProcedureDescription_IsPreservedAsText_NotAssertedAsACanonicalDisplay()
+    {
+        var authorization = Decided();
+        authorization.RequestedServices[0].ProcedureDescription = "Plan supplied clinical description";
+        var concept = _projector.Project(authorization)["item"]!.AsArray()[0]!["productOrService"]!;
+        concept["text"]!.GetValue<string>().Should().Be("Plan supplied clinical description");
+        concept["coding"]!.AsArray()[0]!.AsObject().ContainsKey("display").Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("NOTMEDNEC", true)]
+    [InlineData("UNITSRED", false)]
+    [InlineData("UNRECOGNIZED", false)]
+    public void OnlyAnExplicitSemanticCrosswalk_AddsCarcWithoutLosingTheSource(string code, bool mapped)
+    {
+        var authorization = Decided();
+        authorization.RequestedServices[0].DenialReasonCode = code;
+        var denial = _projector.Project(authorization)["item"]!.AsArray()[0]!["adjudication"]!.AsArray()
+            .Single(a => Category(a!) == PriorAuthorizationEobProjector.DenialReasonCode)!;
+        var codings = denial["reason"]!["coding"]!.AsArray();
+        codings[0]!["system"]!.GetValue<string>().Should().Be("urn:cho:pa-denial-reason");
+        codings[0]!["code"]!.GetValue<string>().Should().Be(code);
+        codings.Any(c => c!["system"]!.GetValue<string>() == "https://x12.org/codes/claim-adjustment-reason-codes"
+            && c["code"]!.GetValue<string>() == "50").Should().Be(mapped);
+    }
+
     private readonly PriorAuthorizationEobProjector _projector = new();
 
     private static Authorization Decided() => new()

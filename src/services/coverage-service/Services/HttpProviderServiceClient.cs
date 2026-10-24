@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Options;
@@ -82,8 +83,8 @@ public sealed class HttpProviderServiceClient : IProviderServiceClient
 /// the same population panel limits gate against.
 ///
 /// Enabled/disabled via <see cref="HttpClient.BaseAddress"/>: when the endpoint
-/// URL is not configured in Program.cs we leave BaseAddress null and this
-/// counter short-circuits to 0. That is deliberately decoupled from
+/// URL is not configured, or the lookup fails, the count is unavailable,
+/// never a measured zero. The counter is deliberately decoupled from
 /// <see cref="ProviderServiceOptions"/>, which belongs to
 /// <see cref="HttpProviderServiceClient"/> only — the counter hits a different
 /// service (capitation / coverage) and must not inherit provider-service config.
@@ -99,7 +100,7 @@ public sealed class HttpPanelCounter : IPanelCounter
 
     public async Task<int> CurrentPanelCountAsync(string tenantId, string providerNpi, CancellationToken ct = default)
     {
-        if (_http.BaseAddress is null) return 0;
+        if (_http.BaseAddress is null) throw new PanelCountUnavailableException();
 
         try
         {
@@ -107,13 +108,23 @@ public sealed class HttpPanelCounter : IPanelCounter
                 $"/api/v1/coverage/by-pcp/{Uri.EscapeDataString(providerNpi)}?status=1");
             req.Headers.Add("X-Tenant-ID", tenantId);
             using var resp = await _http.SendAsync(req, ct);
-            if (!resp.IsSuccessStatusCode) return 0;
+            if (!resp.IsSuccessStatusCode) throw new PanelCountUnavailableException();
             var rows = await resp.Content.ReadFromJsonAsync<List<Models.Coverage>>(cancellationToken: ct);
-            return rows?.Count ?? 0;
+            return rows?.Count ?? throw new PanelCountUnavailableException();
         }
-        catch (HttpRequestException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            return 0;
+            throw;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException or NotSupportedException)
+        {
+            throw new PanelCountUnavailableException();
         }
     }
+}
+
+/// <summary>The provider's capacity could not be verified; no assignment may be made.</summary>
+public sealed class PanelCountUnavailableException : Exception
+{
+    public PanelCountUnavailableException() : base("PCP panel count is unavailable.") { }
 }

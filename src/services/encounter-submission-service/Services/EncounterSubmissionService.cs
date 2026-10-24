@@ -141,6 +141,19 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
         IEnumerable<EncounterSubmission> submissions, string tenantId)
     {
         var submissionList = submissions.ToList();
+        if (string.IsNullOrWhiteSpace(tenantId) || submissionList.Count == 0)
+            throw new ArgumentException("A tenant and at least one submission are required.");
+        if (submissionList.Any(s => s.TenantId != tenantId))
+            throw new InvalidOperationException("All submissions must belong to the requested tenant.");
+        if (submissionList.Any(s => !string.Equals(s.StateCode, "FL", StringComparison.OrdinalIgnoreCase)))
+            throw new NotSupportedException("The FMMIS batch builder supports Florida only; California requires a separately accepted DHCS EDI path.");
+        if (submissionList.Any(s => s.Status is not (EncounterSubmissionStatus.Pending
+                or EncounterSubmissionStatus.DeadlineWarning or EncounterSubmissionStatus.Rejected)))
+            throw new InvalidOperationException("Only pending, warning or rejected submissions can be batched.");
+        if (submissionList.Any(s => string.IsNullOrWhiteSpace(s.Id) || string.IsNullOrWhiteSpace(s.ClaimId))
+            || submissionList.Select(s => s.Id).Distinct(StringComparer.Ordinal).Count() != submissionList.Count
+            || submissionList.Select(s => s.ClaimId).Distinct(StringComparer.Ordinal).Count() != submissionList.Count)
+            throw new ArgumentException("Submission and claim identifiers must be present and unique within a batch.");
         var batchId = Guid.NewGuid().ToString();
 
         _logger.LogInformation(
@@ -154,21 +167,27 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
         var claimDataList = new List<JsonElement>();
         foreach (var claimId in claimIds)
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, $"/api/claims/{claimId}");
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/claims/{Uri.EscapeDataString(claimId)}");
             request.Headers.Add("X-Tenant-ID", tenantId);
 
-            var response = await claimsClient.SendAsync(request);
+            using var response = await claimsClient.SendAsync(request);
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorBody = await response.Content.ReadAsStringAsync();
                 _logger.LogWarning(
-                    "Claims service GET /api/claims/{ClaimId} failed: {StatusCode} — {Error}",
-                    claimId, response.StatusCode, errorBody);
-                continue;
+                    "Claims service read failed while building an encounter batch: {StatusCode}",
+                    response.StatusCode);
+                // Never mark missing claims as batched alongside the ones we
+                // happened to fetch. Leave every record retryable on failure.
+                throw new HttpRequestException("Claim data unavailable; no encounter records were batched.",
+                    null, response.StatusCode);
             }
 
             var claimData = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
+            if (claimData.ValueKind != JsonValueKind.Object
+                || !claimData.TryGetProperty("id", out var id)
+                || id.ValueKind != JsonValueKind.String || id.GetString() != claimId)
+                throw new JsonException("Claim response did not identify the requested claim; no encounter records were batched.");
             claimDataList.Add(claimData);
         }
 
@@ -238,10 +257,10 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
         switch (ackCode.ToUpperInvariant())
         {
             case "A":
-                newStatus = EncounterSubmissionStatus.Accepted;
+                newStatus = EncounterSubmissionStatus.SyntaxAccepted;
                 break;
             case "E":
-                newStatus = EncounterSubmissionStatus.PartialAccept;
+                newStatus = EncounterSubmissionStatus.SyntaxAcceptedWithErrors;
                 break;
             case "R":
             default:
@@ -347,6 +366,8 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
             Submitted = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.Submitted),
             Accepted = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.Accepted),
             PartialAccept = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.PartialAccept),
+            SyntaxAccepted = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.SyntaxAccepted),
+            SyntaxAcceptedWithErrors = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.SyntaxAcceptedWithErrors),
             Rejected = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.Rejected),
             DeadlineWarning = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.DeadlineWarning),
             Total = allForTenant.Count

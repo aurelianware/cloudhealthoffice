@@ -1,4 +1,5 @@
 using AuthorizationService.Models;
+using AuthorizationService.Services.Fhir;
 using AuthorizationService.Services.Retention;
 
 namespace AuthorizationService.Services.Cms0057;
@@ -39,10 +40,16 @@ public static class Cms0057Reporting
     public static double TimeframeHours(Authorization auth) =>
         IsExpedited(auth) ? ExpeditedTimeframeHours : StandardTimeframeHours;
 
-    public static double? DecisionHours(Authorization auth) =>
-        IsDecided(auth) && auth.ReviewedDate is { } reviewed
-            ? Math.Max(0, (reviewed - auth.SubmittedDate).TotalHours)
-            : null;
+    public static double? DecisionHours(Authorization auth)
+    {
+        var receipt = AuthorizationDeadlinePolicy.Receipt(auth);
+        // Missing/corrupt legacy timestamps are not instantaneous decisions.
+        // Keep their outcomes in the counts, but expose unavailable timing.
+        return IsDecided(auth) && receipt != default && auth.ReviewedDate is { } reviewed
+            && reviewed >= receipt
+                ? (reviewed - receipt).TotalHours
+                : null;
+    }
 
     /// <summary>
     /// The history entry that recorded the decision (the latest change to the
@@ -58,11 +65,13 @@ public static class Cms0057Reporting
     public static bool IsAutomated(Authorization auth) =>
         DecisionEntry(auth)?.Source?.StartsWith("automated", StringComparison.OrdinalIgnoreCase) == true;
 
-    /// <summary>The requests a period's metrics count: submitted in [from, to], in the line of business.</summary>
+    /// <summary>Non-drug requests received in [from, to], in the line of business.</summary>
     public static IEnumerable<Authorization> InPeriod(
         IEnumerable<Authorization> authorizations, DateTime from, DateTime to, LineOfBusiness? lineOfBusiness) =>
         authorizations
-            .Where(a => a.SubmittedDate >= from && a.SubmittedDate <= to)
+            .Where(PriorAuthorizationApiScope.IsInScope)
+            .Where(a => AuthorizationDeadlinePolicy.Receipt(a) >= from
+                && AuthorizationDeadlinePolicy.Receipt(a) <= to)
             .Where(a => lineOfBusiness is null || a.LineOfBusiness == lineOfBusiness);
 
     /// <summary>Decided within its request type's timeframe (72h expedited, 168h standard).</summary>
@@ -105,10 +114,13 @@ public static class Cms0057Reporting
             TimeframeHours = timeframeHours,
             Requests = requests.Count,
             Decided = decided.Count,
+            DecisionTimingUnavailable = decided.Count - hours.Count,
             Approved = decided.Count(a => IsApproved(a)),
             Denied = decided.Count(a => DecisionStatus(a) == AuthorizationStatus.Denied),
-            ApprovedPercent = Percent(decided.Count(a => IsApproved(a)), decided.Count),
-            DeniedPercent = Percent(decided.Count(a => DecisionStatus(a) == AuthorizationStatus.Denied), decided.Count),
+            // CMS's reporting template uses total requests, including requests
+            // not yet decided. Do not silently inflate rates by dropping pends.
+            ApprovedPercent = Percent(decided.Count(a => IsApproved(a)), requests.Count),
+            DeniedPercent = Percent(decided.Count(a => DecisionStatus(a) == AuthorizationStatus.Denied), requests.Count),
             AverageDecisionHours = hours.Count == 0 ? null : Math.Round(hours.Average(), 1),
             MedianDecisionHours = hours.Count == 0 ? null : Math.Round(Median(hours), 1),
             DecidedWithinTimeframe = hours.Count(h => h <= timeframeHours),
@@ -120,6 +132,7 @@ public static class Cms0057Reporting
         IEnumerable<Authorization> authorizations, DateTime since, int limit)
     {
         return authorizations
+            .Where(PriorAuthorizationApiScope.IsInScope)
             .Where(a => IsDecided(a) && a.ReviewedDate >= since)
             .OrderByDescending(a => a.ReviewedDate)
             .Take(limit)
@@ -137,7 +150,7 @@ public static class Cms0057Reporting
                     RequestType = IsExpedited(a) ? "Expedited" : "Standard",
                     Status = DecisionStatus(a),
                     LifecycleStatus = a.Status,
-                    SubmittedDate = a.SubmittedDate,
+                    SubmittedDate = AuthorizationDeadlinePolicy.Receipt(a),
                     DecidedDate = a.ReviewedDate!.Value,
                     DecisionHours = hours is null ? null : Math.Round(hours.Value, 1),
                     TimeframeHours = timeframe,
@@ -166,6 +179,8 @@ public static class Cms0057Reporting
 
 public sealed class Cms0057Metrics
 {
+    /// <summary>This is a receipt-cohort operational report, not a complete annual public report.</summary>
+    public string ReportingBasis { get; set; } = "non-drug-requests-received-in-period";
     public DateTime From { get; set; }
     public DateTime To { get; set; }
     public LineOfBusiness? LineOfBusiness { get; set; }
@@ -186,7 +201,9 @@ public sealed class Cms0057RequestTypeMetrics
     public int Decided { get; set; }
     public int Approved { get; set; }
     public int Denied { get; set; }
-    /// <summary>Of decided requests; null when none were decided.</summary>
+    /// <summary>Decided requests with missing or inconsistent receipt/decision timestamps.</summary>
+    public int DecisionTimingUnavailable { get; set; }
+    /// <summary>Of all requests of this type; null when there were no requests.</summary>
     public double? ApprovedPercent { get; set; }
     public double? DeniedPercent { get; set; }
     public double? AverageDecisionHours { get; set; }

@@ -82,10 +82,10 @@
         "coding": [
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "27447",
-            "display": "Total knee arthroplasty"
+            "code": "27447"
           }
-        ]
+        ],
+        "text": "Total knee arthroplasty"
       },
       "modifier": [
         {
@@ -122,10 +122,10 @@
         "coding": [
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "97110",
-            "display": "Therapeutic exercise"
+            "code": "97110"
           }
-        ]
+        ],
+        "text": "Therapeutic exercise"
       },
       "quantity": {
         "value": 24,
@@ -159,6 +159,10 @@
               {
                 "system": "urn:cho:pa-denial-reason",
                 "code": "NOTMEDNEC"
+              },
+              {
+                "system": "https://x12.org/codes/claim-adjustment-reason-codes",
+                "code": "50"
               }
             ],
             "text": "Twelve visits approved; the remainder is not medically necessary"

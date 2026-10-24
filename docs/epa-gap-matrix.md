@@ -1,5 +1,8 @@
 # Electronic Prior Authorization (ePA) — Gap Matrix
 
+> October 24 refresh: use [the canonical capability ledger](CAPABILITY_RECONCILIATION.md) and [California/CMS qualification](implementation/CALIFORNIA-MEDICAID-QUALIFICATION.md) for current scoped corrections and acceptance work. ADR 028 intentionally serves encounters through their source claim EOB. The new fixes do not silently rescore generator-owned scenarios or establish deployed conformance.
+
+
 **Status:** Historical Phase 2 audit with current-status reconciliation annotations (2026-10-19).
 **Baseline:** `main` @ `31a462ff`, audited 2026-10-10.
 **Original audit gate:** owner review before Phase 3; retained as historical process context.
