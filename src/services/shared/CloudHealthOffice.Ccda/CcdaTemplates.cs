@@ -17,6 +17,35 @@ public static class CcdaTemplates
     /// <summary>HL7 CDA R2's own root, present on any CDA whether or not it is a C-CDA.</summary>
     public const string ClinicalDocumentRoot = "2.16.840.1.113883.1.3";
 
+    /// <summary>
+    /// C-CDA's document-level templates, other than the header itself.
+    ///
+    /// Every one of them requires the US Realm Header, so a document asserting
+    /// any of them has claimed the header's conformance whether or not it also
+    /// states the header's templateId — which is why these are accepted as an
+    /// alternative to it (see <c>CcdaReader.Read</c>).
+    ///
+    /// Taken from HL7's published template list; the names are HL7's.
+    /// Deliberately NOT including the patient-generated header
+    /// (2.16.840.1.113883.10.20.29.1): it is a different realm header rather
+    /// than a document type, and no document CHO has seen carries it.
+    /// </summary>
+    public static readonly IReadOnlySet<string> DocumentTemplates =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "2.16.840.1.113883.10.20.22.1.2",   // Continuity of Care Document (CCD)
+            "2.16.840.1.113883.10.20.22.1.3",   // History and Physical
+            "2.16.840.1.113883.10.20.22.1.4",   // Consultation Note
+            "2.16.840.1.113883.10.20.22.1.6",   // Procedure Note
+            "2.16.840.1.113883.10.20.22.1.7",   // Operative Note
+            "2.16.840.1.113883.10.20.22.1.8",   // Discharge Summary
+            "2.16.840.1.113883.10.20.22.1.9",   // Progress Note
+            "2.16.840.1.113883.10.20.22.1.10",  // Unstructured Document
+            "2.16.840.1.113883.10.20.22.1.13",  // Transfer Summary
+            "2.16.840.1.113883.10.20.22.1.14",  // Referral Note
+            "2.16.840.1.113883.10.20.22.1.15",  // Care Plan
+        };
+
     /// <summary>The CDA namespace. A document outside it is not a CDA at all.</summary>
     public const string CdaNamespace = "urn:hl7-org:v3";
 

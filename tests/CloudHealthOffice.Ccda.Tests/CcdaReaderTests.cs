@@ -91,6 +91,64 @@ public class CcdaReaderTests
         CcdaReader.Read(plainCda).Refusal.Should().Contain("not a C-CDA");
     }
 
+    [Theory]
+    [InlineData("2.16.840.1.113883.10.20.22.1.2")]   // Continuity of Care Document
+    [InlineData("2.16.840.1.113883.10.20.22.1.14")]  // Referral Note
+    [InlineData("2.16.840.1.113883.10.20.22.1.15")]  // Care Plan
+    [InlineData("2.16.840.1.113883.10.20.22.1.8")]   // Discharge Summary
+    public void ADocumentTemplateWithoutTheHeader_IsStillRead(string documentTemplate)
+    {
+        // Conformance obliges every C-CDA to state the US Realm Header as well
+        // as its document type, and real senders do not always. In ONC's own
+        // 2015-Edition certification corpus, 43 of 382 documents from five
+        // vendors declare themselves Referral Notes or CCDs and omit the
+        // header. Refusing those loses an eighth of what certified software
+        // emits, and costs no guarantee: a document template REQUIRES the
+        // header, so asserting one claims the header's conformance.
+        var xml = $"""
+            <ClinicalDocument xmlns="{Ns}">
+              <templateId root="{documentTemplate}"/>
+              <id root="1.2.3" extension="DOC-9"/>
+              <title>Referral</title>
+              <component><structuredBody>
+                {Section("2.16.840.1.113883.10.20.22.2.5", "Problems", entries: 2)}
+              </structuredBody></component>
+            </ClinicalDocument>
+            """;
+
+        var result = CcdaReader.Read(xml);
+
+        result.Succeeded.Should().BeTrue(result.Refusal);
+        var section = result.Document!.Sections.Should().ContainSingle().Subject;
+        section.Kind.Should().Be(CcdaSectionKind.Problems);
+        section.EntryCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void ACdaCarryingSomeOtherTemplate_IsStillRefused()
+    {
+        // The rule loosened to document TYPES, not to "any templateId at all".
+        // A CDA asserting a template that is not C-CDA's has claimed nothing
+        // about what its sections mean.
+        var otherRealm = $"""
+            <ClinicalDocument xmlns="{Ns}">
+              <templateId root="1.3.6.1.4.1.19376.1.5.3.1.1.1"/>
+              <component><structuredBody>{Section("2.16.840.1.113883.10.20.22.2.5")}</structuredBody></component>
+            </ClinicalDocument>
+            """;
+
+        CcdaReader.Read(otherRealm).Refusal.Should().Contain("not a C-CDA");
+    }
+
+    [Fact]
+    public void TheRefusalNamesBothWaysADocumentCouldHaveQualified()
+    {
+        // Its audience is a reviewer who has to tell the sender what to fix.
+        var refusal = CcdaReader.Read($"<ClinicalDocument xmlns=\"{Ns}\"/>").Refusal;
+
+        refusal.Should().Contain(CcdaTemplates.UsRealmHeader).And.Contain("document template");
+    }
+
     [Fact]
     public void AnExternalEntityIsNotResolved()
     {

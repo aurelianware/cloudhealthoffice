@@ -129,7 +129,17 @@ prevents.
    about identity, not a parse. Callers pass the member reference they have
    already established.
 7. **A document that is not a C-CDA is refused, not read as far as it goes.**
-   Section templateIds only mean what C-CDA says they mean.
+   Section templateIds only mean what C-CDA says they mean. A document
+   qualifies by carrying the US Realm Header *or* any C-CDA document-level
+   template (CCD, Referral Note, Care Plan, Discharge Summary and the rest of
+   HL7's list, in `CcdaTemplates.DocumentTemplates`). Conformance requires both
+   — every document template obliges the sender to state the header too — and
+   real senders do not always: 43 of the 382 documents in ONC's own
+   2015-Edition certification corpus, from five vendors, declare themselves
+   Referral Notes or CCDs and omit the header. Accepting the document template
+   costs no guarantee, because asserting one claims the header's conformance.
+   A CDA claiming neither is still refused, which is the case the rule exists
+   for.
 8. **The target is FHIR R4.** R4 and R5 differ in ways that compile against the
    same shared datatypes — `MedicationRequest.medication[x]` is a choice in R4
    and a `CodeableReference` in R5 — so where a resource's shape differs
@@ -175,6 +185,30 @@ reader returns a refusal with a reason rather than throwing.
   `docs/epa-gap-matrix.md` by itself.
 
 ## Testing
+
+**Against a corpus, as well as against fixtures.** ONC's 2015-Edition
+certification samples ([jddamore/ccda-samples](https://github.com/jddamore/ccda-samples),
+public domain, fictional patients) are 382 documents from 50 EHR vendors. Run
+the reader over all of them before believing a change: on 24 October 2026 that
+run read 382 of 382 with no mapper throwing, and it is what established both
+the recognition rule above and the build order below. A sweep costs minutes and
+catches what a hand-written fixture cannot, because it is the vendors' output
+rather than ours.
+
+What the same run says about **what to map next**, which is not the order the
+specification lists sections in. The sections in the most documents are ones
+CHO does not recognise at all: Social History (381 documents, 678 coded
+entries — more documents than any section CHO maps), Health Concerns (329),
+Encounters (~310 across its templateId spellings), Goals. Care Team, by
+contrast, appears in **none** of the 382: it is a C-CDA 2.1 addition these
+samples predate, so it ranks last on evidence rather than first among the
+unmapped.
+
+And a shape worth designing for: **a section carrying narrative but no coded
+entries is the majority case for Results** — 230 of 380 — and common for
+Procedures (183 of 380) and Plan of Treatment (190 of 363). This is exactly
+where a reader that trusted the prose would invent data, which is why the
+entry count travels with every section.
 
 The mapping cannot be finished against specimens. Well-formed examples — the
 HL7 CDA Examples IG, ONC's SITE certification data — are correct by
