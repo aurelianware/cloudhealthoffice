@@ -99,6 +99,15 @@ public record EncounterInput
 
     public string MemberId { get; init; } = default!;
     public string SubscriberId { get; init; } = default!;
+
+    /// <summary>
+    /// The subscriber's group number, for 837 SBR03 ("insured group or policy
+    /// number"). Distinct from <see cref="SubscriberId"/>, which is the
+    /// person's identifier and belongs in NM1*IL; SBR03 held that identifier
+    /// by mistake until this field existed. Optional, and SBR03 is written
+    /// empty without it, which the IG allows for a situational element.
+    /// </summary>
+    public string? GroupNumber { get; init; }
     public string MemberFirstName { get; init; } = default!;
     public string MemberLastName { get; init; } = default!;
     public DateOnly MemberDateOfBirth { get; init; }

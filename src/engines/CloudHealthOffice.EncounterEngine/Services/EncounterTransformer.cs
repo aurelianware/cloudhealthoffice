@@ -61,7 +61,12 @@ public class EncounterTransformer : IEncounterTransformer
         // ── Loop 2000B — Subscriber (Member as subscriber) ───────────────────
         // SBR01: payer responsibility (P=primary for encounter, but encounter represents
         //        the plan's submission to the regulatory receiver, so always P here)
-        seg.Add($"SBR*P*18*{input.SubscriberId}***HM**MB");
+        // SBR03: the insured GROUP or policy number. It carried the subscriber
+        //        id -- a person identifier in an element that means a group --
+        //        so the group number never went at all. The subscriber's own
+        //        identifier belongs in the NM1*IL below, where SBR02=18 (the
+        //        patient IS the subscriber) makes the member id exactly that.
+        seg.Add($"SBR*P*18*{EscapeX12(input.GroupNumber)}***HM**MB");
         seg.Add($"NM1*IL*1*{EscapeX12(input.MemberLastName)}*{EscapeX12(input.MemberFirstName)}****MI*{input.MemberId}");
         seg.Add($"DMG*D8*{input.MemberDateOfBirth:yyyyMMdd}*{input.MemberGender}");
 
@@ -239,6 +244,13 @@ public class EncounterTransformer : IEncounterTransformer
         return string.Join(":", parts);
     }
 
-    private static string EscapeX12(string value) =>
-        value.Replace("*", "").Replace("~", "").Replace("\n", "").Replace("\r", "");
+    /// <summary>
+    /// Strips the delimiters that would otherwise split a segment. Accepts null
+    /// so that an optional element (SBR03 without a group number) is written
+    /// empty rather than throwing on the way to the receiver.
+    /// </summary>
+    private static string EscapeX12(string? value) =>
+        string.IsNullOrEmpty(value)
+            ? string.Empty
+            : value.Replace("*", "").Replace("~", "").Replace("\n", "").Replace("\r", "");
 }

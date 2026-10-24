@@ -109,7 +109,13 @@ public class Encounter837Service : IEncounter837Service
         // ── 2000B — Subscriber HL ──────────────────────────────────────
         int hlSubscriber = ++hlCount;
         sb.Append(Seg(ref segmentCount, true, $"HL*{hlSubscriber}*{hlBillingProvider}*22*0~"));
-        sb.Append(Seg(ref segmentCount, true, "SBR*P*18*****MC~"));
+        // SBR03 is the insured group or policy number. It was written empty,
+        // which the IG allows (the element is situational) but which tells the
+        // receiver nothing about which group the encounter is under. It is the
+        // GROUP number, not the subscriber's identifier -- that is already in
+        // the NM1*IL below -- and an encounter with no group number on it still
+        // writes the element empty exactly as before.
+        sb.Append(Seg(ref segmentCount, true, $"SBR*P*18*{Esc(encounter.GroupNumber)}****MC~"));
 
         // 2010BA — Subscriber Name
         var subLastName  = Esc(encounter.SubscriberLastName  ?? encounter.PatientLastName  ?? string.Empty);
