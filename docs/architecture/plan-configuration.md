@@ -1,6 +1,6 @@
 # Plan configuration: settings that cascade, with overrides
 
-**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), steps 3a to 3c of step 3 (§§12.7–12.9) and four of 3d's consumers (§§12.10–12.14); claims eligibility is the rest of 3d.
+**Status:** Agreed in review (2026-10-22); decisions in §13. Steps 1 and 2 of the build order are built (§§12.1, 12.2), all of step 2b (§§12.3–12.6), steps 3a to 3c of step 3 (§§12.7–12.9) and four of 3d's consumers (§§12.10–12.14), plus the `SBR09` defect that the fourth turned up (§12.15); claims eligibility is the rest of 3d.
 **Scope:** One way for every CHO service to define a business setting, set it at the right level of the plan's structure, override it further down, and explain where an effective value came from.
 
 **Related:**
@@ -458,9 +458,33 @@ What the reading turned up instead were two real `SBR03` defects, neither about 
 
 12 tests across the two generators.
 
-**One pre-existing defect in the same segment, deliberately not fixed here.** Both generators put the claim filing indicator in the wrong element: `encounter-service` writes `MC` at `SBR07` and the engine writes `MB` at `SBR08`, where the TR3 puts the claim filing indicator code at **`SBR09`**. That is a conformance error independent of this change, it alters the bytes of every outbound encounter, and it is not what this change was asked to do — so it is recorded here for its own small change rather than folded in.
+Reading this segment also turned up a defect in the element next to it, taken up in §12.15.
 
 Still to come in 3d: claims eligibility.
+
+### 12.15 The claim filing indicator in the 837's `SBR09`
+
+Built 2026-10-24, from the defect §12.14 found and deliberately left out of that change. `SBR09` is the claim filing indicator code (X12 element 1032): the element that tells the receiver what kind of coverage a claim or encounter is under. No generator in the codebase was writing it.
+
+Three were found, not the two §12.14 recorded. The third is the one that matters most, because it is the only one of the three submitting to a live programme:
+
+| generator | was | is |
+|---|---|---|
+| `encounter-service` | `MC` at `SBR07`, two elements early; `SBR09` absent | the code for the encounter's line of business, at `SBR09` |
+| `CloudHealthOffice.EncounterEngine` | **two** codes, `HM` at `SBR06` and `MB` at `SBR08`; `SBR09` absent | one code at `SBR09` |
+| `claims-service` FMMIS transformer (Florida Medicaid, live) | `MC` at `SBR07`; `SBR09` absent | `MC` at `SBR09` |
+
+`SBR04` to `SBR08` are all "not used" in loop 2000B, so in each case the code sat in an element that does not mean what it held while the element that does mean it was empty. A receiver parsing positionally reads a well-formed segment that says nothing about the coverage — the failure mode is a silently wrong file, not a rejected one, which is why the tests here count elements instead of matching substrings. A `Contains("MC")` assertion would have passed throughout the defect's life.
+
+Corroboration that `SBR09` is the right element and these three were the outliers: every other `SBR` in the repository — the COB fixtures, the parser's own samples, the portal's benefit-plan validation file — already put the filing indicator at `SBR09`.
+
+- **`encounter-service` now derives the code instead of asserting it.** It wrote the constant `MC` for every encounter, so a Medicare or commercial encounter was filed as Medicaid. The encounter record already carries both the line of business and the 837 variant, so moving the element without using them would have put the wrong code in the right place. Commercial and Exchange map to `CI` (a qualified health plan *is* commercial insurance, and element 1032 has no exchange-specific code), Medicaid to `MC`, TRICARE to `CH`, VA to `VA`, and Medicare splits on the variant — `MA` for institutional, `MB` for professional, because those are Part A and Part B.
+- **An unrecognised line of business falls back to `MC`, the code written today.** `LineOfBusiness` has no member at `0`, so an encounter created without one lands there. Keeping today's value as the fallback means the only encounters whose `SBR09` content changes are the ones that say in so many words that they are not Medicaid.
+- **The engine's two codes could not both be right, and neither was defensible.** `HM` and `MB` are both from element 1032, so the segment handed a receiver contradictory codes in two elements that mean neither. The engine's input carries no line of business, so its single code is a constant matching `encounter-service`'s fallback, and a caller that gains one should supply it rather than rely on that.
+- **FMMIS needed only the position.** Florida Medicaid is always `MC`, which is why the code is a companion-guide constant there; nothing about the value was ever in question.
+- **Fixtures that claimed to be generator output were refreshed.** Several 837 samples in the claims tests carry a comment naming the transformer that produced them. Left alone they would have gone on describing a shape the generators no longer emit, which is the same trap in miniature: a stale fixture reads as current truth. One hand-authored sample mirroring a smoke script is left as it is, because it stands for a file a trading partner sends us rather than one we build, and the parser's tolerance of it is the point.
+
+15 tests across the three generators. The claims suite (1689 tests) passes unchanged apart from the refreshed fixtures.
 
 ## 13. Decisions (2026-10-22)
 

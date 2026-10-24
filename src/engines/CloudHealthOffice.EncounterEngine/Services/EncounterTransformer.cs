@@ -66,7 +66,16 @@ public class EncounterTransformer : IEncounterTransformer
         //        so the group number never went at all. The subscriber's own
         //        identifier belongs in the NM1*IL below, where SBR02=18 (the
         //        patient IS the subscriber) makes the member id exactly that.
-        seg.Add($"SBR*P*18*{EscapeX12(input.GroupNumber)}***HM**MB");
+        // SBR09: the claim filing indicator code. This segment carried TWO of
+        //        them and neither in SBR09 -- "HM" at SBR06 and "MB" at
+        //        SBR08, both elements the TR3 marks "not used" -- so a
+        //        receiver was handed contradictory codes in elements that do
+        //        not mean what they held, and SBR09 itself was absent. One
+        //        code now, in SBR09. Unlike encounter-service, this engine's
+        //        input carries no line of business, so the code is a constant
+        //        matching that generator's fallback; a caller that gains a
+        //        line of business should supply it instead of relying on this.
+        seg.Add($"SBR*P*18*{EscapeX12(input.GroupNumber)}******MC");
         seg.Add($"NM1*IL*1*{EscapeX12(input.MemberLastName)}*{EscapeX12(input.MemberFirstName)}****MI*{input.MemberId}");
         seg.Add($"DMG*D8*{input.MemberDateOfBirth:yyyyMMdd}*{input.MemberGender}");
 

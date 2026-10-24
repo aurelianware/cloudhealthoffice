@@ -80,8 +80,10 @@ public class Encounter837Sbr03Tests
     public void An_encounter_with_no_group_number_writes_the_segment_exactly_as_before()
     {
         // The whole-segment assertion on purpose: every encounter on file today
-        // has no group number, so this is the output that must not move.
-        Assert.Equal("SBR*P*18*****MC", Sbr(null));
+        // has no group number, so this is the output that must not move -- bar
+        // the claim filing indicator moving to SBR09, where it belongs, which
+        // is the one deliberate change to this segment's shape.
+        Assert.Equal("SBR*P*18*******MC", Sbr(null));
     }
 
     [Fact]
@@ -225,5 +227,121 @@ public class EncounterGroupNumberCarriesForwardTests
         });
 
         Assert.Equal("GRP0002", _created.Single(e => e.SubmissionType == SubmissionType.Correction).GroupNumber);
+    }
+}
+
+/// <summary>
+/// SBR09, the claim filing indicator code in loop 2000B
+/// (plan-configuration.md §12.14).
+///
+/// <para>
+/// Two defects in one element. It was written at SBR07, two positions early,
+/// which puts it in an element the TR3 marks "not used" and leaves SBR09
+/// itself absent — a segment that looks well formed and tells the receiver
+/// nothing about what kind of coverage the encounter is under. And the code
+/// was the constant "MC" regardless of the encounter, so a Medicare or
+/// commercial encounter was filed as Medicaid.
+/// </para>
+/// </summary>
+public class Encounter837Sbr09Tests
+{
+    private const string Tenant = "t1";
+
+    private static readonly Encounter837Config Config = new();
+
+    private static Encounter Encounter(
+        LineOfBusiness lineOfBusiness,
+        EncounterType encounterType = EncounterType.Professional) => new()
+    {
+        Id = "enc-1",
+        TenantId = Tenant,
+        EncounterControlNumber = "ENC-1",
+        ClaimId = "CLM-1",
+        MemberId = "M1",
+        SubscriberId = "SUB001",
+        GroupNumber = "GRP0001",
+        SubscriberFirstName = "Jane",
+        SubscriberLastName = "Doe",
+        BillingProviderNPI = "1234567890",
+        PayerId = "PAYER1",
+        LineOfBusiness = lineOfBusiness,
+        EncounterType = encounterType,
+        Status = EncounterStatus.Pending,
+        PlaceOfServiceCode = "11",
+        ClaimFrequencyCode = "1",
+        ServiceDateFrom = new DateTime(2026, 1, 15),
+        ServiceDateTo = new DateTime(2026, 1, 15),
+        ServiceLines =
+        {
+            new EncounterServiceLine
+            {
+                LineNumber = 1, ProcedureCode = "99213", Units = 1, ChargeAmount = 200m,
+                ServiceDateFrom = new DateTime(2026, 1, 15),
+            },
+        },
+    };
+
+    private static string[] Sbr(
+        LineOfBusiness lineOfBusiness,
+        EncounterType encounterType = EncounterType.Professional) =>
+        new Encounter837Service(NullLogger<Encounter837Service>.Instance)
+            .Generate837(Encounter(lineOfBusiness, encounterType), Config)
+            .Split('~', StringSplitOptions.RemoveEmptyEntries)
+            .First(s => s.TrimStart().StartsWith("SBR*", StringComparison.Ordinal))
+            .TrimStart()
+            .Split('*');
+
+    [Fact]
+    public void The_claim_filing_indicator_is_at_SBR09()
+    {
+        // Counted, not eyeballed: the element's meaning is its position, and
+        // the old segment put this value two elements early.
+        var sbr = Sbr(LineOfBusiness.Medicaid);
+
+        Assert.Equal(10, sbr.Length);
+        Assert.Equal("MC", sbr[9]);
+    }
+
+    [Fact]
+    public void The_elements_the_TR3_does_not_use_are_left_empty()
+    {
+        // SBR04-SBR08 are "not used" in 2000B. The old segment had a code
+        // sitting in SBR07, so this is the regression that mattered.
+        var sbr = Sbr(LineOfBusiness.Medicaid);
+
+        Assert.All(new[] { 4, 5, 6, 7, 8 }, i => Assert.Equal(string.Empty, sbr[i]));
+    }
+
+    [Theory]
+    [InlineData(LineOfBusiness.Commercial, "CI")]
+    [InlineData(LineOfBusiness.Medicaid, "MC")]
+    [InlineData(LineOfBusiness.Exchange, "CI")]
+    [InlineData(LineOfBusiness.TRICARE, "CH")]
+    [InlineData(LineOfBusiness.VA, "VA")]
+    public void The_code_follows_the_line_of_business(LineOfBusiness lineOfBusiness, string expected)
+    {
+        Assert.Equal(expected, Sbr(lineOfBusiness)[9]);
+    }
+
+    [Theory]
+    [InlineData(EncounterType.Professional, "MB")]
+    [InlineData(EncounterType.Institutional, "MA")]
+    [InlineData(EncounterType.Dental, "MB")]
+    public void Medicare_splits_into_Part_A_and_Part_B_on_the_837_variant(
+        EncounterType encounterType, string expected)
+    {
+        // MA is the institutional benefit and MB the professional one, so the
+        // line of business alone cannot answer this.
+        Assert.Equal(expected, Sbr(LineOfBusiness.Medicare, encounterType)[9]);
+    }
+
+    [Fact]
+    public void An_encounter_with_no_line_of_business_keeps_the_code_written_today()
+    {
+        // LineOfBusiness has no default member at 0, so an encounter created
+        // without one lands here. Falling back to "MC" means the only
+        // encounters whose SBR09 content changes are those that say outright
+        // that they are not Medicaid.
+        Assert.Equal("MC", Sbr(default)[9]);
     }
 }

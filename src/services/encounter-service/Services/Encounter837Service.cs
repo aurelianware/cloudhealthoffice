@@ -115,7 +115,14 @@ public class Encounter837Service : IEncounter837Service
         // GROUP number, not the subscriber's identifier -- that is already in
         // the NM1*IL below -- and an encounter with no group number on it still
         // writes the element empty exactly as before.
-        sb.Append(Seg(ref segmentCount, true, $"SBR*P*18*{Esc(encounter.GroupNumber)}****MC~"));
+        //
+        // SBR09 is the claim filing indicator code. It was written at SBR07,
+        // two elements early, which lands it in an element the TR3 marks "not
+        // used" and leaves SBR09 absent: the receiver is told nothing about
+        // what kind of coverage this is, by a segment that looks well formed.
+        // SBR04-SBR08 stay empty, as they are today.
+        sb.Append(Seg(ref segmentCount, true,
+            $"SBR*P*18*{Esc(encounter.GroupNumber)}******{ClaimFilingIndicator(encounter)}~"));
 
         // 2010BA — Subscriber Name
         var subLastName  = Esc(encounter.SubscriberLastName  ?? encounter.PatientLastName  ?? string.Empty);
@@ -239,6 +246,40 @@ public class Encounter837Service : IEncounter837Service
         if (counted) count++;
         return segment;
     }
+
+    /// <summary>
+    /// X12 claim filing indicator code (element 1032) for SBR09.
+    /// </summary>
+    /// <remarks>
+    /// This was the constant "MC" for every encounter, so a Medicare or
+    /// commercial encounter was filed as Medicaid. The encounter record
+    /// already carries the line of business and the 837 variant, so the code
+    /// is derived rather than assumed.
+    ///
+    /// Medicare splits on the variant: Part A (MA) is the institutional
+    /// benefit, Part B (MB) the professional one. Exchange maps to CI because
+    /// a qualified health plan IS commercial insurance and element 1032 has no
+    /// exchange-specific code. TRICARE maps to CH, the list's name for it.
+    ///
+    /// An unrecognised value -- including the enum's default 0, which an
+    /// encounter created without a line of business carries -- falls back to
+    /// "MC", the code written today, so the only encounters whose SBR09
+    /// changes are the ones that say in so many words that they are not
+    /// Medicaid.
+    /// </remarks>
+    private static string ClaimFilingIndicator(Encounter encounter) =>
+        encounter.LineOfBusiness switch
+        {
+            LineOfBusiness.Commercial => "CI",
+            LineOfBusiness.Medicare => encounter.EncounterType == EncounterType.Institutional
+                ? "MA"
+                : "MB",
+            LineOfBusiness.Medicaid => "MC",
+            LineOfBusiness.Exchange => "CI",
+            LineOfBusiness.TRICARE => "CH",
+            LineOfBusiness.VA => "VA",
+            _ => "MC",
+        };
 
     private static string Esc(string? value)
     {

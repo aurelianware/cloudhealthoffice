@@ -229,10 +229,14 @@ public class FmmisClaimTransformer
         // HL04 = 0 — no children (no 2000C dependent loop for FMMIS)
         sb.Append(Seg(ref segCount, true, $"HL*{hlSubscriber}*{hlBillingProvider}*22*0~"));
 
-        // SBR — subscriber is always primary for FL Medicaid
+        // SBR — subscriber is always primary for FL Medicaid.
+        // The claim filing indicator belongs in SBR09; it was written at SBR07,
+        // two elements early, which lands it in an element the TR3 marks "not
+        // used" and leaves SBR09 absent. The code itself was never in doubt
+        // here -- FL Medicaid is always MC -- only its position.
         sb.Append(Seg(ref segCount, true,
             $"SBR*{FmmisCompanionGuide.PayerResponsibilityPrimary}" +
-            $"*18*****{FmmisCompanionGuide.ClaimFilingIndicatorMedicaid}~"));
+            $"*18*******{FmmisCompanionGuide.ClaimFilingIndicatorMedicaid}~"));
 
         // ── 2010BA Subscriber Name — NM109 = Medicaid ID ─────────────
         var subLastName = Esc(claim.PatientLastName ?? claim.SubscriberLastName ?? string.Empty);

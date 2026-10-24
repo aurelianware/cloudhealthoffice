@@ -108,15 +108,27 @@ public class EncounterSbr03Tests
     public void Every_other_element_of_the_segment_keeps_its_position(string? groupNumber)
     {
         // A receiver reads the segment by position, so an element that shifts is
-        // a silently wrong file rather than a rejected one. SBR01, SBR02 and
-        // the two codes after SBR03 must sit exactly where they sat before.
+        // a silently wrong file rather than a rejected one.
         var parts = Segment(groupNumber, "SBR").Split('*');
 
-        Assert.Equal(9, parts.Length);
+        Assert.Equal(10, parts.Length);
         Assert.Equal("P", parts[1]);
         Assert.Equal("18", parts[2]);
-        Assert.Equal("HM", parts[6]);
-        Assert.Equal("MB", parts[8]);
+        Assert.Equal("MC", parts[9]);
+    }
+
+    [Fact]
+    public void The_segment_no_longer_carries_two_claim_filing_indicators()
+    {
+        // It held "HM" at SBR06 and "MB" at SBR08 -- two codes from the same
+        // list, in two elements the TR3 marks "not used", with SBR09 itself
+        // absent. There is one code now and it is in SBR09.
+        var parts = Segment("GRP0001", "SBR").Split('*');
+
+        Assert.Equal("MC", parts[9]);
+        Assert.All(new[] { 4, 5, 6, 7, 8 }, i => Assert.Equal(string.Empty, parts[i]));
+        Assert.DoesNotContain("HM", parts);
+        Assert.DoesNotContain("MB", parts);
     }
 
     [Fact]
@@ -126,7 +138,7 @@ public class EncounterSbr03Tests
         // one segment into two, shifting every element after it.
         var sbr = Segment("GRP*0001~X", "SBR");
 
-        Assert.Equal(9, sbr.Split('*').Length);
+        Assert.Equal(10, sbr.Split('*').Length);
         Assert.Equal("GRP0001X", Element(sbr, 3));
     }
 }
