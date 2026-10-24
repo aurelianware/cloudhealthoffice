@@ -1,5 +1,32 @@
 # Capability Reconciliation
 
+## Texas STAR assessment after merged PR #1542 — October 24, 2026
+
+Source: main `9cea3b614ae006c96d0a9aafdad5937ad4f8510c`. PR #1542 is merged;
+CAP-39's evidence foundation is now main behavior, while complete reporting
+remains partial. [Texas qualification and backlog](implementation/TEXAS-MEDICAID-QUALIFICATION.md)
+contains requirement scope, reproductions, owners, acceptance and validation.
+This review executed 116 focused standard-VSTest cases (including five real-Mongo
+cases), all passing with zero skips; exact filters and unexecuted scope are in the
+Texas validation record. This section supersedes conflicting active summaries below; dated historical
+records retain their original evidence. No Texas launch readiness is asserted.
+
+| Finding | Classification | Reverified behavior / remaining limit |
+| --- | --- | --- |
+| TX-01 | Unverified | Generic durable 834/member/coverage lifecycle exists; Texas feed, crosswalk, scope and downstream reconciliation not accepted. |
+| TX-02 | Confirmed gap | Registered encounter consumer/builder remains FL-only/FMMIS JSON. Merged complete-batch/999 syntax fixes do not implement a Texas route. |
+| TX-03 | Partial | Texas source/gate registered; authorized interface, freshness, location/history and actual refresh/typed-client composition require acceptance/repair. |
+| TX-04 | Confirmed gap | Seeded Medicaid gold-card rule approves before clinical review despite the cited exemption's Medicaid exclusion. |
+| TX-05 | Confirmed gap | Native receipt deadline selector has only 72/168-hour targets; Texas-specific scenarios are not selected. |
+| TX-06 | Partial | Contract capitation child sync returns 501; FFS contract terms already supersede legacy ffs-service. |
+| TX-07 | Partial | Unavailable panel count now fails closed; read-then-insert race and absent reconciliation scheduler remain. |
+| TX-08 | Partial | Letter composition/rendering and claim appeals exist; fulfilled notices and native PA appeals/benefit-continuation acceptance remain incomplete. |
+| TX-09 | Partial | Whole credits-only bank-confirmed claims settlement reaches GL; remaining return/capitation/premium/open-item/close boundaries remain. |
+| TX-10 | Unverified | Native COB secondary/tertiary and grouping/pricing are implemented; Texas contract methodology/dollar correctness not accepted. |
+| TX-11 | Unverified | Scoped token tenancy, native FHIR/PAS/DTR and unavailable failure semantics exist; target-cloud security/recovery acceptance absent. |
+| TX-12 | Unverified | No approved workload/capacity/restore/state-readiness evidence for the proposed 250,000-member launch. |
+| TX-13 / CAP-39 | Partial | Merged native revision-fenced PA evidence and annual draft exist; accepted sources, approved semantics/freeze and publication remain open. |
+
 ## PA evidence follow-up after PR #1541 — October 24, 2026
 
 Baseline `401e3ca3064031ee2cabfd0e52ad520582d65c7b`.
@@ -35,7 +62,7 @@ Deployment and complete conformance remain unverified.
 | CAP-37 — bounded PA EOB terminology | **Implemented** | `PriorAuthorizationEobProjector` retains free-text descriptions in `CodeableConcept.text` and adds CARC 50 only for exact NOTMEDNEC, retaining the local reason. Golden regenerated from the actual projector; behavioral tests preserve unknown codes without inventing CARCs. [Proposed ADR 029](adr/029-pa-eob-terminology-projection.md). Other reason mappings (G-17), full references and deployed conformance remain partial. |
 | CAP-38 — claim procedure vocabulary | **Implemented** | Shared `ClaimProcedureCoding` corrects HCPCS/CDT procedures previously labelled CPT across billed Claim and both EOB projections, with behavioral tests and regenerated goldens. [ADR 029](adr/029-pa-eob-terminology-projection.md) records the bounded shape inference and missing explicit intake-qualifier limitation. This does not establish complete terminology or live reference conformance. |
 | CAP-22/27/30 — native FHIR composition | **Implemented** | Reverified `FhirDataBindings`, `RoutingFhirDataAdapter` and `FhirSyntheticSourceRegistration`: all five native bindings are available; only selected mocks trigger the synthetic guard. No unconditional synthetic-provider startup blocker remains. Deployment data/configuration acceptance is separate. |
-| CAP-06 — complete public PA reporting | **Partially Implemented** | Core calculator/console exist; `NotYetTracked` still names appeal and extension outcomes. CAP-33 repairs arithmetic/data handling, not authoritative missing events or annual public reporting. |
+| CAP-06 — complete public PA reporting | **Partially Implemented** | Core calculator/console exist; `NotYetTracked` still names appeal and extension outcomes. CAP-33 repairs arithmetic/data handling; merged CAP-39 adds sourced facts and annual drafts, while authoritative all-channel completeness and approved publication remain open. |
 | CAP-14 — durable bulk export | **Confirmed Gap** | `BulkExportService` refuses initiation and creates no files/jobs. Required scoped bulk behavior needs durable jobs, real NDJSON, secure downloads and lifecycle evidence. Do not equate this generic surface with every API's exact regulatory obligation. |
 | Eligibility source/failure behavior | **Partially Implemented** | `TemporalAccumulatorRegistration` defaults production to explicit unavailable; `CoverageLookup` distinguishes upstream failures from no coverage. Normal native eligibility reads real accumulation. Historical point-in-time accumulation remains absent. |
 | Financial settlement | **Partially Implemented** | `NachaSettlementMatcher`, settlement outbox and AR posting implement ADR 026's whole credits-only claims settlement. The previous proposed-only/no-settlement summary is stale. Returns, capitation/premium events and integrated close remain separate. |
