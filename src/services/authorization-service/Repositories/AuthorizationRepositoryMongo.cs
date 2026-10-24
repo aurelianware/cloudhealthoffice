@@ -3,6 +3,8 @@ using AuthorizationService.Models;
 using AuthorizationService.Services.Retention;
 using MongoDB.Driver;
 using MongoDB.Bson;
+using AuthorizationService.Services.Cms0057;
+using System.Runtime.CompilerServices;
 
 namespace AuthorizationService.Repositories;
 
@@ -311,6 +313,7 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         authorization.Id ??= Guid.NewGuid().ToString();
         authorization.Revision = 0;
         AuthorizationService.Services.AuthorizationDeadlinePolicy.Initialize(authorization);
+        PaReportingEvidence.Initialize(authorization, DateTime.UtcNow);
 
         await EnsureIndexesAsync(_httpContextAccessor.HttpContext?.RequestAborted ?? default);
         try
@@ -379,7 +382,10 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         // between (a reviewer decision, an SLA escalation, the RFAI consumer)
         // makes this one fail instead of being silently overwritten.
         var expected = authorization.Revision;
+        var previous = await _collection.Find(filter & RevisionIs(expected)).FirstOrDefaultAsync();
         authorization.Revision = expected + 1;
+        if (previous is not null)
+            PaReportingEvidence.PreserveAndCapture(authorization, previous, DateTime.UtcNow);
         ReplaceOneResult result;
         try
         {
@@ -405,6 +411,40 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         }
 
         return authorization;
+    }
+
+    public async Task<PaReportingFact?> RecordReportingFactAsync(string id, RecordPaReportingFact command,
+        string actor, CancellationToken ct = default)
+    {
+        var authorization = await GetByIdAsync(id);
+        if (authorization is null) return null;
+        var fact = PaReportingEvidence.Prepare(authorization, command, actor, DateTime.UtcNow);
+        if (authorization.ReportingLedger!.Facts.Contains(fact)) return fact; // exact retry
+        var b = Builders<Authorization>.Filter;
+        var filter = b.Eq(a => a.Id, id) & b.Eq(a => a.TenantId, GetTenantId()) & RevisionIs(authorization.Revision);
+        var update = Builders<Authorization>.Update.Push(a => a.ReportingLedger!.Facts, fact)
+            .Set(a => a.LastUpdatedDate, fact.RecordedAt).Set(a => a.LastUpdatedBy, actor);
+        var result = await _collection.UpdateOneAsync(filter, Bumped(update), cancellationToken: ct);
+        if (result.ModifiedCount != 1) throw new AuthorizationConcurrencyException(id, authorization.Revision);
+        return fact;
+    }
+
+    public async IAsyncEnumerable<Authorization> StreamReportingCohortAsync(DateTime from, DateTime toExclusive,
+        LineOfBusiness lineOfBusiness, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var b = Builders<Authorization>.Filter;
+        // New records use immutable receipt/scope. Legacy records are selected
+        // for diagnostics only; their mutable current outcomes are never replayed.
+        var captured = b.Gte(a => a.ReportingLedger!.ReceivedAt, from)
+            & b.Lt(a => a.ReportingLedger!.ReceivedAt, toExclusive)
+            & b.Eq(a => a.ReportingLedger!.LineOfBusiness, lineOfBusiness);
+        var legacy = b.Eq(a => a.ReportingLedger, null) & b.Eq(a => a.LineOfBusiness, lineOfBusiness)
+            & ((b.Gte(a => a.DecisionReceivedAt, from) & b.Lt(a => a.DecisionReceivedAt, toExclusive))
+                | (b.Eq(a => a.DecisionReceivedAt, null) & b.Gte(a => a.SubmittedDate, from) & b.Lt(a => a.SubmittedDate, toExclusive)));
+        using var cursor = await _collection.FindAsync(b.Eq(a => a.TenantId, GetTenantId()) & (captured | legacy),
+            new FindOptions<Authorization> { BatchSize = 250 }, ct);
+        while (await cursor.MoveNextAsync(ct))
+            foreach (var authorization in cursor.Current) yield return authorization;
     }
 
     private static FilterDefinition<Authorization> ExpiryFilter(string tenantId, DateTime cutoffDateUtc)

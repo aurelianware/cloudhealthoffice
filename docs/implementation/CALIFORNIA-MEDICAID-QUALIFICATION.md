@@ -1,5 +1,11 @@
 # California Medicaid qualification and CMS-0057-F workstream
 
+Follow-up after merged PR #1541: [PA reporting evidence foundation](../operations/PA-ANNUAL-REPORTING-EVIDENCE.md)
+adds native receipt/decision capture, sourced appeal/extension facts and an as-of
+annual draft. This advances the reporting row below without closing its source,
+plan-scope, required-services-list or publication acceptance requirements.
+The validation record at the end remains the original #1541 record.
+
 Source review: October 24, 2026, main
 `b9a00fb4eaca20757d02ae8b6bcea51fe6bacc58`, followed by the scoped fixes linked
 below. Target: a new 250,000-member California Medicaid managed care plan,
