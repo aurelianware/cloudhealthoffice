@@ -18,6 +18,10 @@ namespace AuthorizationService.Models;
 [BsonIgnoreExtraElements]
 public class Authorization
 {
+    /// <summary>Persisted by Mongo, excluded from full-model HTTP input and output.</summary>
+    [JsonIgnore]
+    public PaReportingLedger? ReportingLedger { get; set; }
+
     /// <summary>
     /// Owning tenant (every query is scoped by it). Always set
     /// server-side from the caller's token; a value in a request body is ignored,

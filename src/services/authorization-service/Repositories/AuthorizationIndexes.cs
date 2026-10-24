@@ -31,6 +31,9 @@ public sealed class AuthorizationIndexes
     {
         var keys = Builders<Authorization>.IndexKeys;
         await collection.Indexes.CreateManyAsync([
+            new CreateIndexModel<Authorization>(keys.Ascending(a => a.TenantId)
+                .Ascending(a => a.ReportingLedger!.LineOfBusiness).Ascending(a => a.ReportingLedger!.ReceivedAt),
+                new CreateIndexOptions { Name = "authorization_reporting_receipt" }),
             new CreateIndexModel<Authorization>(keys.Ascending(a => a.TenantId).Ascending(a => a.AuthorizationNumber),
                 new CreateIndexOptions { Name = "authorization_tenant_number_unique", Unique = true }),
             new CreateIndexModel<Authorization>(keys.Ascending(a => a.TenantId).Ascending(a => a.Status),

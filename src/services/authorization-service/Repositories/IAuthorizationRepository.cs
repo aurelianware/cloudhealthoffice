@@ -35,6 +35,12 @@ public interface IAuthorizationRepository
     Task<Authorization> UpdateAsync(Authorization authorization);
     Task DeleteAsync(string id);
 
+    Task<PaReportingFact?> RecordReportingFactAsync(string id, RecordPaReportingFact command, string actor,
+        CancellationToken ct = default) => throw new NotSupportedException("PA reporting evidence requires the native store.");
+    IAsyncEnumerable<Authorization> StreamReportingCohortAsync(DateTime from, DateTime toExclusive,
+        LineOfBusiness lineOfBusiness, CancellationToken ct = default)
+        => throw new NotSupportedException("Annual PA evidence requires the native store.");
+
     Task<IReadOnlyList<Authorization>> FindExpiryCandidatesAsync(string tenantId, DateTime cutoffDateUtc, int limit, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<Authorization>>(Array.Empty<Authorization>());
     Task<bool> ExpireIfStillEligibleAsync(string tenantId, Authorization authorization, DateTime cutoffDateUtc, DateTime changedAtUtc, CancellationToken ct = default)

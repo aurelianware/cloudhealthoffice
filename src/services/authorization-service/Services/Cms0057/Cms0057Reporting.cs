@@ -98,9 +98,9 @@ public static class Cms0057Reporting
             NotYetTracked =
             [
                 new("Approved after appeal",
-                    "Appeal outcomes are not yet linked back to the original authorization."),
+                    "This operational view does not consume sourced appeal evidence; use the annual-draft evidence view."),
                 new("Extended review timeframe, then approved",
-                    "Authorizations do not yet record a timeframe extension."),
+                    "This operational view does not consume sourced extension evidence; use the annual-draft evidence view."),
             ],
         };
     }

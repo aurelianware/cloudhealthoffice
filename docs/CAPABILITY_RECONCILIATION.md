@@ -1,5 +1,22 @@
 # Capability Reconciliation
 
+## PA evidence follow-up after PR #1541 — October 24, 2026
+
+Baseline `401e3ca3064031ee2cabfd0e52ad520582d65c7b`.
+**CAP-39 — implemented evidence foundation; complete annual reporting remains partial.**
+Native Mongo creates/writes now preserve a server-owned receipt header and append
+clinical decision evidence atomically. Restricted, idempotent PA-source fact
+recording supports attested appeal outcomes and extension evidence. The new
+annual draft streams the immutable receipt cohort, applies effective/knowledge
+cutoffs and diagnoses legacy/conflicting evidence. It always refuses to assert
+publication readiness. The existing claim appeals service is not a PA producer.
+Authoritative source adapters, legacy reconciliation, plan mapping, lawful
+extension workflow, approved timing/publication semantics, required-services
+inventory and immutable approved artifacts remain open under CAP-06.
+See [the runbook](operations/PA-ANNUAL-REPORTING-EVIDENCE.md) and proposed
+[ADR 030](adr/030-pa-reporting-evidence-and-annual-drafts.md). The historical
+validation record below belongs to #1541, not this follow-up.
+
 ## Current refresh — October 24, 2026
 
 Source inspected: main `b9a00fb4eaca20757d02ae8b6bcea51fe6bacc58`, followed
