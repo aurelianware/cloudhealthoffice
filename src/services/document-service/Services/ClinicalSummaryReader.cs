@@ -84,8 +84,10 @@ public sealed class ClinicalSummaryReader
     /// the empty list as "the document held nothing", which is the one wrong
     /// conclusion this screen must not invite.
     /// </summary>
-    private static bool Mapped(CcdaSectionKind kind)
-        => kind is CcdaSectionKind.Problems or CcdaSectionKind.Allergies or CcdaSectionKind.Medications;
+    // Asked of the library rather than restated here: a second copy of this
+    // list would drift the day a mapper is added, and the screen would then
+    // tell a reviewer a mapped section was unmapped.
+    private static bool Mapped(CcdaSectionKind kind) => CcdaTemplates.Mapped.Contains(kind);
 
     private static IReadOnlyList<Resource> ResourcesOf(CcdaSection section, ResourceReference? subject)
         => subject is null ? [] : section.Kind switch

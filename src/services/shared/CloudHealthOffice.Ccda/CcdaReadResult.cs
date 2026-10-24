@@ -51,17 +51,35 @@ public sealed record CcdaDocument(
     string? EffectiveTime,
     IReadOnlyList<CcdaSection> Sections)
 {
-    /// <summary>Sections CHO has a mapping for.</summary>
-    public IEnumerable<CcdaSection> Supported
+    /// <summary>
+    /// Sections CHO can name. Most of them have no mapper — see
+    /// <see cref="Mapped"/>, which is a different and much shorter list.
+    /// </summary>
+    public IEnumerable<CcdaSection> Recognised
         => Sections.Where(s => s.Kind != CcdaSectionKind.Unsupported);
 
     /// <summary>
-    /// Sections CHO does not read. Surfaced, not dropped: a reviewer deciding
-    /// an authorization needs to know a document had a section CHO skipped,
-    /// and its narrative is still readable.
+    /// Sections CHO cannot even name. Surfaced, not dropped: a reviewer
+    /// deciding an authorization needs to know a document had a section CHO
+    /// skipped, and its narrative is still readable.
     /// </summary>
-    public IEnumerable<CcdaSection> Unsupported
+    public IEnumerable<CcdaSection> Unrecognised
         => Sections.Where(s => s.Kind == CcdaSectionKind.Unsupported);
+
+    /// <summary>
+    /// Sections whose coded entries CHO turns into FHIR resources.
+    ///
+    /// Separate from <see cref="Recognised"/> on purpose. Treating the two as
+    /// one tells a reviewer that a section with no resources was a section
+    /// with nothing in it, which is the opposite of what a recognised but
+    /// unmapped section means.
+    /// </summary>
+    public IEnumerable<CcdaSection> Mapped
+        => Sections.Where(s => CcdaTemplates.Mapped.Contains(s.Kind));
+
+    /// <summary>Sections CHO carries but does not turn into resources.</summary>
+    public IEnumerable<CcdaSection> Unmapped
+        => Sections.Where(s => !CcdaTemplates.Mapped.Contains(s.Kind));
 }
 
 /// <param name="Title">
