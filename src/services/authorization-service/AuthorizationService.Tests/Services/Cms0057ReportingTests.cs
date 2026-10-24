@@ -138,7 +138,7 @@ public class Cms0057ReportingTests
     }
 
     [Theory]
-    [InlineData(-1)]
+    [InlineData(-1.0)]
     [InlineData(null)]
     public void InvalidOrMissingDecisionTimes_AreUnknown_NotInstantOrTimely(double? hours)
     {
