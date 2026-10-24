@@ -112,6 +112,10 @@ jobs:
           # A fixable High or Critical finding fails the build.
           exit-code: '1'
           ignore-unfixed: true
+          # Trivy does not read .audit-ci.json, so an advisory CHO has judged
+          # unreachable has to be waived here as well. Reasons live in
+          # docs/security/DEPENDENCY-AUDIT-EXCEPTIONS.md.
+          trivyignores: '.trivyignore.yaml'
 
       - name: Upload Trivy results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
@@ -128,6 +132,7 @@ jobs:
           format: 'table'
           severity: 'CRITICAL,HIGH,MEDIUM'
           ignore-unfixed: true
+          trivyignores: '.trivyignore.yaml'
 
   secret-scan:
     name: Secret Scanning

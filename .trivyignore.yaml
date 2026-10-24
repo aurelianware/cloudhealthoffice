@@ -1,0 +1,35 @@
+# Trivy's half of the dependency-scan exceptions.
+#
+# Two scanners read the same lockfile on every pull request and neither sees
+# the other's waivers: audit-ci is configured by .audit-ci.json, Trivy by this
+# file. An advisory CHO has judged unreachable has to be stated in both, or the
+# build stays red on the half that was not told.
+#
+# The reason for every entry here lives in
+# docs/security/DEPENDENCY-AUDIT-EXCEPTIONS.md, under the advisory's GHSA id,
+# the same as for audit-ci. An undocumented waiver is indistinguishable from an
+# overlooked one.
+#
+# expiredAt is deliberate. Trivy prints nothing when an entry stops matching —
+# there is no equivalent of audit-ci's "Consider not allowlisting advisory" —
+# so an entry left here would outlive what it was for in silence. The date is
+# when CHO has to look again, not an estimate of when upstream will fix it.
+vulnerabilities:
+  - id: CVE-2026-109461
+    # GHSA-xcx6-jx8p-x3h5. @azure/msal-node, reached only through
+    # @azure/identity. The flaw is in the authorization code flow; CHO's one
+    # consumer builds DefaultAzureCredential and never performs an
+    # authorization code exchange.
+    #
+    # Trivy matches on the file the dependency was found in, not on the
+    # dependency path, so this is broader than the audit-ci entry
+    # (GHSA-xcx6-jx8p-x3h5|@azure/identity>@azure/msal-node), which pins the
+    # package the flaw arrives through. The narrower of the two is the one to
+    # trust when reading these.
+    paths:
+      - "package-lock.json"
+    statement: >-
+      Not reachable as CHO uses the package; see
+      docs/security/DEPENDENCY-AUDIT-EXCEPTIONS.md. Remove when @azure/identity
+      publishes a release taking @azure/msal-node 7.1.0 or later.
+    expiredAt: 2027-04-24
