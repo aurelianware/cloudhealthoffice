@@ -94,6 +94,67 @@ public sealed class DocumentSubjectListing
     public static readonly DocumentSubjectListing Denied = new() { Forbidden = true };
 }
 
+/// <summary>
+/// A stored C-CDA read into what a UM reviewer needs: the sections the sender
+/// wrote, and the entries CHO understood from them.
+///
+/// Derived by document-service on every request and stored nowhere
+/// (docs/architecture/ccda.md). Internal to CHO's own reviewers; nothing here
+/// is served on a member-facing or provider-facing API.
+/// </summary>
+public sealed class ClinicalSummaryView
+{
+    public string? Title { get; init; }
+
+    /// <summary>The sender's effective time, verbatim in HL7's form.</summary>
+    public string? EffectiveTime { get; init; }
+
+    public IReadOnlyList<ClinicalSummarySectionView> Sections { get; init; } = [];
+
+    /// <summary>
+    /// Whether the document is filed against a member. False means the entries
+    /// were read but attributed to nobody, which is why a section can show a
+    /// count and no lines.
+    /// </summary>
+    public bool MemberLinked { get; init; }
+
+    /// <summary>Why CHO could not read it, where it could not.</summary>
+    public string? Refusal { get; init; }
+
+    /// <summary>The caller may not open this document; the panel says so rather than showing nothing.</summary>
+    public bool Forbidden { get; init; }
+
+    public static readonly ClinicalSummaryView Denied = new() { Forbidden = true };
+
+    public static ClinicalSummaryView Unreadable(string reason) => new() { Refusal = reason };
+}
+
+/// <summary>One section of the document. An unmapped section still appears, named and counted.</summary>
+public sealed class ClinicalSummarySectionView
+{
+    public string Kind { get; init; } = string.Empty;
+    public string? Title { get; init; }
+
+    /// <summary>Whether CHO turned this section's entries into clinical facts.</summary>
+    public bool Mapped { get; init; }
+
+    /// <summary>How many coded entries the sender wrote, mapped or not.</summary>
+    public int EntryCount { get; init; }
+
+    public IReadOnlyList<ClinicalSummaryItemView> Items { get; init; } = [];
+
+    /// <summary>The sender's own narrative, which is all there is for an unmapped section.</summary>
+    public string? NarrativeXml { get; init; }
+}
+
+/// <summary>One entry CHO understood.</summary>
+public sealed class ClinicalSummaryItemView
+{
+    public string Display { get; init; } = string.Empty;
+    public string? Status { get; init; }
+    public string? Detail { get; init; }
+}
+
 public interface IDocumentCatalogService
 {
     /// <summary>The documents linked to one subject that the signed-in user may see.</summary>
@@ -102,6 +163,14 @@ public interface IDocumentCatalogService
 
     /// <summary>The document's content, opened from the subject it is shown under.</summary>
     Task<HttpResponseMessage> DownloadAsync(
+        string documentId, DocumentSubjectKind kind, string subjectId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The document read as a clinical summary, opened from the subject it is
+    /// shown under. The catalog applies the same rules as opening the bytes:
+    /// a summary is the document's contents under another name.
+    /// </summary>
+    Task<ClinicalSummaryView> ClinicalSummaryAsync(
         string documentId, DocumentSubjectKind kind, string subjectId, CancellationToken ct = default);
 }
 
@@ -159,6 +228,34 @@ public sealed class DocumentCatalogService : IDocumentCatalogService
         try
         {
             return await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Document Service");
+            throw new ServiceUnavailableException("Document Service", ex);
+        }
+    }
+
+    public async Task<ClinicalSummaryView> ClinicalSummaryAsync(
+        string documentId, DocumentSubjectKind kind, string subjectId, CancellationToken ct = default)
+    {
+        var url = $"{BaseUrl()}/api/v1/documents/{Uri.EscapeDataString(documentId)}/clinical-summary" +
+                  $"?subjectKind={kind}&subjectId={Uri.EscapeDataString(subjectId)}";
+        try
+        {
+            using var response = await _httpClient.GetAsync(url, ct);
+
+            if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
+                return ClinicalSummaryView.Denied;
+
+            // The catalog read the document and found nothing structured in it
+            // — a PDF, say. That is an answer, not a failure.
+            if (response.StatusCode is HttpStatusCode.UnprocessableEntity)
+                return ClinicalSummaryView.Unreadable(await response.Content.ReadAsStringAsync(ct));
+
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<ClinicalSummaryView>(ct)
+                   ?? ClinicalSummaryView.Unreadable("The document service returned no summary.");
         }
         catch (HttpRequestException ex)
         {

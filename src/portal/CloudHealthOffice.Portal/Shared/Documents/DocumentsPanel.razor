@@ -104,6 +104,18 @@
                                        data-testid="@OpenTestId(context)">
                                 Open
                             </MudButton>
+                            @if (IsClinicalDocument(context.ContentType))
+                            {
+                                @* A C-CDA opens as a file like anything else;
+                                   this is the reviewer's shortcut to what is
+                                   inside it without leaving the record. *@
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Secondary"
+                                           StartIcon="@Icons.Material.Filled.MedicalInformation"
+                                           OnClick="@(() => ShowSummaryAsync(context))"
+                                           data-testid="@("document-summary-" + context.Id)">
+                                    Clinical summary
+                                </MudButton>
+                            }
                         }
                         else
                         {
@@ -117,6 +129,115 @@
                     </MudTd>
                 </RowTemplate>
             </MudTable>
+        }
+
+        @if (_summaryFor is not null)
+        {
+            <MudPaper Class="pa-4 mt-4" Outlined="true" data-testid="clinical-summary">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
+                    <MudText Typo="Typo.subtitle1">@SummaryHeading()</MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="CloseSummary"
+                               data-testid="clinical-summary-close">Close</MudButton>
+                </MudStack>
+
+                @if (_summaryLoading)
+                {
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-3" />
+                }
+                else if (_summaryUnavailable)
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true"
+                              data-testid="clinical-summary-unavailable">
+                        The document service could not be reached, so nothing here says anything about this document.
+                    </MudAlert>
+                }
+                else if (_summary!.Forbidden)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true"
+                              data-testid="clinical-summary-forbidden">
+                        You do not have access to this document's contents.
+                    </MudAlert>
+                }
+                else if (!string.IsNullOrWhiteSpace(_summary.Refusal))
+                {
+                    @* The sender's problem, and a reviewer has to be able to
+                       tell them what to send again. *@
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true"
+                              data-testid="clinical-summary-refused">
+                        CHO could not read this document: @_summary.Refusal
+                    </MudAlert>
+                }
+                else
+                {
+                    @if (!_summary.MemberLinked)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                                  data-testid="clinical-summary-unlinked">
+                            This document is not filed against a member, so its entries are counted but not listed.
+                            The sections below are still the sender's own.
+                        </MudAlert>
+                    }
+
+                    @if (_summary.Sections.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true"
+                                  data-testid="clinical-summary-empty">
+                            The document holds no sections CHO recognises.
+                        </MudAlert>
+                    }
+
+                    @foreach (var section in _summary.Sections)
+                    {
+                        <div class="mb-4" data-testid="@("clinical-section-" + section.Kind)">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudText Typo="Typo.subtitle2">@SectionHeading(section)</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default">@EntryCount(section)</MudChip>
+                                @if (!section.Mapped)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">Not read by CHO</MudChip>
+                                }
+                            </MudStack>
+
+                            @if (section.Items.Count > 0)
+                            {
+                                <MudSimpleTable Dense="true" Striped="true" Class="mt-2">
+                                    <tbody>
+                                        @foreach (var item in section.Items)
+                                        {
+                                            <tr>
+                                                <td>@item.Display</td>
+                                                <td>@(string.IsNullOrWhiteSpace(item.Status) ? "-" : item.Status)</td>
+                                                <td>@(string.IsNullOrWhiteSpace(item.Detail) ? "-" : item.Detail)</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            }
+                            else if (section.Mapped && section.EntryCount > 0 && _summary.MemberLinked)
+                            {
+                                @* The entries were there and carried nothing
+                                   codeable. Silence here would read as "the
+                                   section was empty", which it was not. *@
+                                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1"
+                                         data-testid="@("clinical-section-nothing-coded-" + section.Kind)">
+                                    CHO found nothing coded in this section's entries. Read the sender's own text below.
+                                </MudText>
+                            }
+
+                            @if (NarrativeText(section) is { Length: > 0 } narrative)
+                            {
+                                <MudExpansionPanels Class="mt-2" Elevation="0">
+                                    <MudExpansionPanel Text="What the sender wrote">
+                                        @* Rendered as text, never as markup: it
+                                           is another organisation's HTML. *@
+                                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@narrative</MudText>
+                                    </MudExpansionPanel>
+                                </MudExpansionPanels>
+                            }
+                        </div>
+                    }
+                }
+            </MudPaper>
         }
 
         @if (_listing.Withheld > 0)
@@ -144,6 +265,10 @@
     [Parameter] public string Title { get; set; } = "Documents";
 
     private DocumentSubjectListing _listing = DocumentSubjectListing.Empty;
+    private CatalogDocumentSummary? _summaryFor;
+    private ClinicalSummaryView? _summary;
+    private bool _summaryLoading;
+    private bool _summaryUnavailable;
     private bool _loading = true;
     private bool _unavailable;
     private string? _loadedFor;
@@ -236,4 +361,83 @@
         if (bytes < 1024 * 1024) return (bytes / 1024.0).ToString("0.#") + " KB";
         return (bytes / (1024.0 * 1024.0)).ToString("0.#") + " MB";
     }
+
+    // ── The clinical summary of a C-CDA ───────────────────────────────
+
+    /// <summary>
+    /// Content types CHO reads clinical structure from. The catalog decides
+    /// for itself; this only governs whether the button is worth offering.
+    /// </summary>
+    private static bool IsClinicalDocument(string? contentType)
+    {
+        if (string.IsNullOrWhiteSpace(contentType)) return false;
+        var separator = contentType.IndexOf(';');
+        var bare = (separator >= 0 ? contentType[..separator] : contentType).Trim().ToLowerInvariant();
+        return bare is "application/hl7-cda+xml" or "text/xml" or "application/xml";
+    }
+
+    private async Task ShowSummaryAsync(CatalogDocumentSummary document)
+    {
+        _summaryFor = document;
+        _summary = null;
+        _summaryLoading = true;
+        _summaryUnavailable = false;
+        try
+        {
+            _summary = await DocumentCatalog.ClinicalSummaryAsync(document.Id, SubjectKind, SubjectId);
+        }
+        catch (ServiceUnavailableException)
+        {
+            _summaryUnavailable = true;
+        }
+        finally
+        {
+            _summaryLoading = false;
+        }
+    }
+
+    private void CloseSummary()
+    {
+        _summaryFor = null;
+        _summary = null;
+        _summaryUnavailable = false;
+    }
+
+    private string SummaryHeading()
+    {
+        var title = _summary?.Title;
+        if (string.IsNullOrWhiteSpace(title)) title = _summaryFor?.Title;
+        return string.IsNullOrWhiteSpace(title) ? "Clinical summary" : "Clinical summary - " + title;
+    }
+
+    private static string SectionHeading(ClinicalSummarySectionView section) =>
+        string.IsNullOrWhiteSpace(section.Title) ? section.Kind : section.Title!;
+
+    /// <summary>
+    /// Counted even where nothing was mapped: a section whose entries CHO
+    /// skipped must not look like a section the sender left empty.
+    /// </summary>
+    private static string EntryCount(ClinicalSummarySectionView section) =>
+        section.EntryCount == 1 ? "1 entry" : section.EntryCount + " entries";
+
+    /// <summary>
+    /// The sender's narrative as plain text. Their markup is never rendered:
+    /// it is another organisation's HTML arriving over an attachment channel.
+    /// </summary>
+    private static string NarrativeText(ClinicalSummarySectionView section)
+    {
+        if (string.IsNullOrWhiteSpace(section.NarrativeXml)) return string.Empty;
+        try
+        {
+            var text = System.Xml.Linq.XElement.Parse(section.NarrativeXml).Value;
+            return System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
+        }
+        catch (System.Xml.XmlException)
+        {
+            // Unparseable narrative is the sender's problem, not a reason to
+            // hide the rest of the summary.
+            return string.Empty;
+        }
+    }
+
 }
