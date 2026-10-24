@@ -3,7 +3,7 @@
   "moderate": true,
   "skip-dev": true,
   "allowlist": [
-    "GHSA-w5hq-g745-h8pq"
+    "GHSA-xcx6-jx8p-x3h5|@azure/identity>@azure/msal-node"
   ],
   "report-type": "important",
   "summary": true
