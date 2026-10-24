@@ -91,6 +91,64 @@ public class CcdaReaderTests
         CcdaReader.Read(plainCda).Refusal.Should().Contain("not a C-CDA");
     }
 
+    [Theory]
+    [InlineData("2.16.840.1.113883.10.20.22.1.2")]   // Continuity of Care Document
+    [InlineData("2.16.840.1.113883.10.20.22.1.14")]  // Referral Note
+    [InlineData("2.16.840.1.113883.10.20.22.1.15")]  // Care Plan
+    [InlineData("2.16.840.1.113883.10.20.22.1.8")]   // Discharge Summary
+    public void ADocumentTemplateWithoutTheHeader_IsStillRead(string documentTemplate)
+    {
+        // Conformance obliges every C-CDA to state the US Realm Header as well
+        // as its document type, and real senders do not always. In ONC's own
+        // 2015-Edition certification corpus, 43 of 382 documents from five
+        // vendors declare themselves Referral Notes or CCDs and omit the
+        // header. Refusing those loses an eighth of what certified software
+        // emits, and costs no guarantee: a document template REQUIRES the
+        // header, so asserting one claims the header's conformance.
+        var xml = $"""
+            <ClinicalDocument xmlns="{Ns}">
+              <templateId root="{documentTemplate}"/>
+              <id root="1.2.3" extension="DOC-9"/>
+              <title>Referral</title>
+              <component><structuredBody>
+                {Section("2.16.840.1.113883.10.20.22.2.5", "Problems", entries: 2)}
+              </structuredBody></component>
+            </ClinicalDocument>
+            """;
+
+        var result = CcdaReader.Read(xml);
+
+        result.Succeeded.Should().BeTrue(result.Refusal);
+        var section = result.Document!.Sections.Should().ContainSingle().Subject;
+        section.Kind.Should().Be(CcdaSectionKind.Problems);
+        section.EntryCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void ACdaCarryingSomeOtherTemplate_IsStillRefused()
+    {
+        // The rule loosened to document TYPES, not to "any templateId at all".
+        // A CDA asserting a template that is not C-CDA's has claimed nothing
+        // about what its sections mean.
+        var otherRealm = $"""
+            <ClinicalDocument xmlns="{Ns}">
+              <templateId root="1.3.6.1.4.1.19376.1.5.3.1.1.1"/>
+              <component><structuredBody>{Section("2.16.840.1.113883.10.20.22.2.5")}</structuredBody></component>
+            </ClinicalDocument>
+            """;
+
+        CcdaReader.Read(otherRealm).Refusal.Should().Contain("not a C-CDA");
+    }
+
+    [Fact]
+    public void TheRefusalNamesBothWaysADocumentCouldHaveQualified()
+    {
+        // Its audience is a reviewer who has to tell the sender what to fix.
+        var refusal = CcdaReader.Read($"<ClinicalDocument xmlns=\"{Ns}\"/>").Refusal;
+
+        refusal.Should().Contain(CcdaTemplates.UsRealmHeader).And.Contain("document template");
+    }
+
     [Fact]
     public void AnExternalEntityIsNotResolved()
     {
@@ -165,14 +223,68 @@ public class CcdaReaderTests
         // than it is.
         var document = CcdaReader.Read(Document(
             Section("2.16.840.1.113883.10.20.22.2.5", title: "Problems")
-            + Section("2.16.840.1.113883.10.20.22.2.17", title: "Social History"))).Document!;
+            + Section("9.9.9.9.9.9", title: "Something CHO has never seen"))).Document!;
 
         document.Sections.Should().HaveCount(2);
-        document.Supported.Should().ContainSingle().Which.Kind.Should().Be(CcdaSectionKind.Problems);
+        document.Recognised.Should().ContainSingle().Which.Kind.Should().Be(CcdaSectionKind.Problems);
 
-        var skipped = document.Unsupported.Should().ContainSingle().Subject;
-        skipped.Title.Should().Be("Social History");
+        var skipped = document.Unrecognised.Should().ContainSingle().Subject;
+        skipped.Title.Should().Be("Something CHO has never seen");
         skipped.NarrativeXml.Should().Contain("narrative", "the prose is what a reviewer reads when CHO maps nothing");
+    }
+
+    [Fact]
+    public void ARecognisedSectionWithNoMapperIsRecognised_AndNotMapped()
+    {
+        // The distinction this whole enumeration turns on. Social History is a
+        // section CHO can name, count and show the prose of; it is not one CHO
+        // turns into resources. A caller that read "recognised" as "mapped"
+        // would tell a reviewer an empty resource list meant an empty section.
+        var document = CcdaReader.Read(Document(
+            Section("2.16.840.1.113883.10.20.22.2.5", title: "Problems", entries: 1)
+            + Section("2.16.840.1.113883.10.20.22.2.17", title: "Social History", entries: 4))).Document!;
+
+        document.Recognised.Should().HaveCount(2);
+        document.Unrecognised.Should().BeEmpty();
+
+        document.Mapped.Should().ContainSingle().Which.Kind.Should().Be(CcdaSectionKind.Problems);
+
+        var social = document.Unmapped.Should().ContainSingle().Subject;
+        social.Kind.Should().Be(CcdaSectionKind.SocialHistory);
+        social.EntryCount.Should().Be(4, "an unmapped section still says how much it carried");
+    }
+
+    [Theory]
+    // The sections the certification corpus shows senders actually send, in
+    // the order of how many documents carry them. Each is named rather than
+    // arriving as Unsupported; none is claimed to be mapped.
+    [InlineData("2.16.840.1.113883.10.20.22.2.17", CcdaSectionKind.SocialHistory)]
+    [InlineData("2.16.840.1.113883.10.20.22.2.58", CcdaSectionKind.HealthConcerns)]
+    [InlineData("2.16.840.1.113883.10.20.22.2.60", CcdaSectionKind.Goals)]
+    [InlineData("2.16.840.1.113883.10.20.22.2.22", CcdaSectionKind.Encounters)]
+    [InlineData("2.16.840.1.113883.10.20.22.2.22.1", CcdaSectionKind.Encounters)]
+    [InlineData("1.3.6.1.4.1.19376.1.5.3.1.3.5", CcdaSectionKind.HospitalCourse)]
+    [InlineData("2.16.840.1.113883.10.20.2.10", CcdaSectionKind.PhysicalExam)]
+    public void ASectionCanBeNamedWithoutBeingMapped(string templateId, CcdaSectionKind expected)
+    {
+        var section = CcdaReader.Read(Document(Section(templateId))).Document!.Sections.Single();
+
+        section.Kind.Should().Be(expected);
+        CcdaTemplates.Mapped.Should().NotContain(expected, "naming a section is not a claim to read its entries");
+    }
+
+    [Fact]
+    public void PlanOfTreatmentAndPhysicalExamAreNotConfused()
+    {
+        // Their OIDs differ by one arc — ...10.20.22.2.10 against
+        // ...10.20.2.10 — and reading a physical exam as a plan of treatment
+        // would put the clinician's findings where a reviewer looks for what
+        // was ordered.
+        CcdaReader.Read(Document(Section("2.16.840.1.113883.10.20.22.2.10"))).Document!
+            .Sections.Single().Kind.Should().Be(CcdaSectionKind.PlanOfTreatment);
+
+        CcdaReader.Read(Document(Section("2.16.840.1.113883.10.20.2.10"))).Document!
+            .Sections.Single().Kind.Should().Be(CcdaSectionKind.PhysicalExam);
     }
 
     [Fact]

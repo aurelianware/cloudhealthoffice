@@ -20,6 +20,22 @@ Review these whenever the scan is touched. `audit-ci` prints
 `Consider not allowlisting advisory: <id>` for an entry that no longer matches
 anything, which is the signal to delete it.
 
+## Two scanners read the same lockfile
+
+`Security Scan` runs `audit-ci` in `Dependency Security Scan` **and** Trivy in
+`Docker Image Security Scan`, and neither reads the other's configuration.
+Trivy keys on the CVE id where npm's advisory database keys on the GHSA id, it
+usually learns about an advisory some days later, and it scopes an ignore to
+the *file* the dependency was found in rather than to the dependency path. So
+waiving an advisory in `.audit-ci.json` leaves the build red on the other job
+until the same decision is written into `.trivyignore.yaml`.
+
+A waiver therefore has three parts, and is not finished without all three: the
+`.audit-ci.json` entry, the `.trivyignore.yaml` entry, and the section in this
+file that both point at. Trivy prints nothing when an entry stops matching, so
+its entries carry `expiredAt` — a date CHO has to look again, not a guess at
+when upstream will fix it.
+
 ---
 
 ## GHSA-xcx6-jx8p-x3h5 — `@azure/identity` > `@azure/msal-node`
@@ -47,10 +63,14 @@ entry would jump `@azure/identity`'s own dependency a full major past what it
 declares, untested against the payer-to-payer path.
 
 **Remove this entry when** `@azure/identity` publishes a release depending on
-`@azure/msal-node` 7.1.0 or later; bump to it and delete the allowlist line.
+`@azure/msal-node` 7.1.0 or later; bump to it and delete **both** the
+`.audit-ci.json` allowlist line and the `.trivyignore.yaml` entry.
 
 **Re-check this entry if** anything in CHO starts using an interactive or
 authorization-code Azure credential, at which point the advisory becomes live
 and the allowlist must go whatever upstream has done.
 
-Added 24 October 2026.
+Added 24 October 2026. Trivy reports the same advisory as **CVE-2026-109461**
+and began doing so later the same day, which is why the Docker Image Security
+Scan went red after the audit-ci waiver had already gone in; the
+`.trivyignore.yaml` entry expires 24 April 2027.

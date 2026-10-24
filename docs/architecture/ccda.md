@@ -49,9 +49,22 @@ Ccda*Mapper       one section's entries as typed FHIR resources
 ```
 
 Mapped so far: **Problems** (`Condition`), **Allergies**
-(`AllergyIntolerance`), **Medications** (`MedicationRequest`). The remaining
-six — Immunizations, Results, Vital Signs, Procedures, Plan of Treatment and
-Care Team — are counted and preserved by the reader in the meantime.
+(`AllergyIntolerance`), **Medications** (`MedicationRequest`). That list lives
+in one place, `CcdaTemplates.Mapped`, and `CcdaDocument` exposes
+`Mapped`/`Unmapped` beside `Recognised`/`Unrecognised` because the two are
+different claims.
+
+**Recognised is the much longer list.** The reader names every section
+templateId the certification corpus carries — 36 of them, Social History and
+Health Concerns and Hospital Course and the rest, including the IHE-arc OIDs
+C-CDA inherited and the CDA R2 ones senders never migrated off. None of them
+has a mapper. They are named because a reviewer reading a discharge summary is
+better served by "Hospital Course" than by "Unsupported", and because the
+mapping work cannot be ordered by what senders send until the sections have
+names. After this, the only things the corpus leaves unrecognised are a
+vendor-private OID, one malformed OID, and sections carrying no templateId at
+all — which cannot be named without matching on titles, and rule 4 says why
+that is not done.
 
 The library is pure: XML in, typed FHIR resources out. No storage, no HTTP, no
 CHO service dependency, because the parse has three prospective callers — CDex
@@ -123,13 +136,26 @@ prevents.
    keyed on the words drops the wordings it has not seen.
 5. **An unread section is named, counted and kept** — never dropped. A reviewer
    needs to know a document carried something CHO skipped, and its narrative is
-   still readable.
+   still readable. **Recognising a section is not a claim to have read it**:
+   `Recognised` says CHO can name it, `Mapped` says CHO turned its entries into
+   resources, and a caller that treats them as one tells a reviewer that a
+   section with no resources was a section with nothing in it.
 6. **The patient is never resolved from the document.** A C-CDA's `recordTarget`
    is the sender's identification of a person; matching on it is a decision
    about identity, not a parse. Callers pass the member reference they have
    already established.
 7. **A document that is not a C-CDA is refused, not read as far as it goes.**
-   Section templateIds only mean what C-CDA says they mean.
+   Section templateIds only mean what C-CDA says they mean. A document
+   qualifies by carrying the US Realm Header *or* any C-CDA document-level
+   template (CCD, Referral Note, Care Plan, Discharge Summary and the rest of
+   HL7's list, in `CcdaTemplates.DocumentTemplates`). Conformance requires both
+   — every document template obliges the sender to state the header too — and
+   real senders do not always: 43 of the 382 documents in ONC's own
+   2015-Edition certification corpus, from five vendors, declare themselves
+   Referral Notes or CCDs and omit the header. Accepting the document template
+   costs no guarantee, because asserting one claims the header's conformance.
+   A CDA claiming neither is still refused, which is the case the rule exists
+   for.
 8. **The target is FHIR R4.** R4 and R5 differ in ways that compile against the
    same shared datatypes — `MedicationRequest.medication[x]` is a choice in R4
    and a `CodeableReference` in R5 — so where a resource's shape differs
@@ -148,6 +174,20 @@ clinical meaning somewhere a reasonable reader would not look:
   the observation's `value` (which is the kind of intolerance). Severity hangs
   off each reaction, not off the allergy — the same allergy can cause a rash
   once and anaphylaxis the next time.
+
+  The section also yields visibly fewer resources than it has entries — 361
+  from 484 across the corpus — and that is correct. Handing each entry to the
+  mapper on its own shows all 123 shortfalls are a substance the sender
+  declared absent with a `nullFlavor`, 82 of them under `negationInd="true"`,
+  which is how C-CDA states **"no known allergies"**. None is a substance CHO
+  failed to read. What that leaves is a presentation question rather than a
+  parsing one: the panel currently tells the reviewer "CHO found nothing coded
+  in this section's entries", which for those 82 is true about CHO and
+  misleading about the document. "We could not read it" and "they told us there
+  are none" are opposite answers to the question a reviewer is asking. Open,
+  deliberately: closing it means either emitting SNOMED 716186003 (a published
+  C-CDA-on-FHIR mapping, but a code the document did not carry, against rule 2)
+  or saying it in `items` without a resource.
 - **Medications.** The element saying when a drug is TAKEN and the one saying
   when it was PRESCRIBED are both `effectiveTime`, told apart only by
   `xsi:type` and `operator="A"`. Senders write them in either order.
@@ -175,6 +215,35 @@ reader returns a refusal with a reason rather than throwing.
   `docs/epa-gap-matrix.md` by itself.
 
 ## Testing
+
+**Against a corpus, as well as against fixtures.** ONC's 2015-Edition
+certification samples ([jddamore/ccda-samples](https://github.com/jddamore/ccda-samples),
+public domain, fictional patients) are 382 documents from 50 EHR vendors. Run
+the reader over all of them before believing a change: on 24 October 2026 that
+run read 382 of 382 with no mapper throwing, and it is what established both
+the recognition rule above and the build order below. A sweep costs minutes and
+catches what a hand-written fixture cannot, because it is the vendors' output
+rather than ours.
+
+What the same run says about **what to map next**, which is not the order the
+specification lists sections in. The sections in the most documents were ones
+CHO did not recognise at all: Social History (381 documents, 678 coded
+entries — more documents than any section CHO maps), Health Concerns (329),
+Goals (319), Encounters (320 across its two templateId spellings). All of them
+are now named; the order to write mappers in is that one. Care Team, by
+contrast, appears in **none** of the 382: it is a C-CDA 2.1 addition these
+samples predate, so it ranks last on evidence rather than first among the
+unmapped.
+
+The corpus is also what decides which templateIds are worth naming at all. The
+rule is "every section templateId a certified EHR was observed to send", which
+is checkable and does not grow by preference.
+
+And a shape worth designing for: **a section carrying narrative but no coded
+entries is the majority case for Results** — 230 of 380 — and common for
+Procedures (183 of 380) and Plan of Treatment (190 of 363). This is exactly
+where a reader that trusted the prose would invent data, which is why the
+entry count travels with every section.
 
 The mapping cannot be finished against specimens. Well-formed examples — the
 HL7 CDA Examples IG, ONC's SITE certification data — are correct by

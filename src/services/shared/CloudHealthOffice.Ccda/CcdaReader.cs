@@ -67,15 +67,15 @@ public static class CcdaReader
         }
 
         var templateIds = TemplateIdsOf(root);
-        if (!templateIds.Contains(CcdaTemplates.UsRealmHeader))
+        if (!DeclaresItselfCcda(templateIds))
         {
             // A CDA that is not a C-CDA is refused rather than read as far as it
             // goes. Section templateIds only mean what C-CDA says they mean, so
-            // reading one out of a document that never claimed the header would
-            // be inventing a guarantee the sender did not give.
+            // reading one out of a document that never claimed to be a C-CDA
+            // would be inventing a guarantee the sender did not give.
             return CcdaReadResult.Refused(
-                "The document is a CDA but not a C-CDA: it does not carry the US Realm Header "
-                + $"template ({CcdaTemplates.UsRealmHeader}).");
+                "The document is a CDA but not a C-CDA: it carries neither the US Realm Header "
+                + $"template ({CcdaTemplates.UsRealmHeader}) nor any C-CDA document template.");
         }
 
         return CcdaReadResult.Read(new CcdaDocument(
@@ -84,6 +84,27 @@ public static class CcdaReader
             EffectiveTime: root.CdaElement("effectiveTime")?.Attribute("value")?.Value,
             Sections: SectionsOf(root)));
     }
+
+    /// <summary>
+    /// Whether the document claims to be a C-CDA — by the US Realm Header, or
+    /// by any C-CDA document-level template.
+    ///
+    /// The header alone would be the strict reading, and it is what conformance
+    /// requires: every C-CDA document template also obliges the sender to state
+    /// the header. Real senders do not always. Of 382 documents in ONC's own
+    /// 2015-Edition certification corpus, 43 — Referral Notes and CCDs from
+    /// five vendors — omit the header while plainly declaring their document
+    /// type, and refusing those loses an eighth of what certified software
+    /// emits.
+    ///
+    /// Accepting the document template instead costs nothing in guarantees: a
+    /// document template REQUIRES the header, so asserting one claims the
+    /// header's conformance. What is still refused is a CDA that claims neither
+    /// — which is the case the rule was written for.
+    /// </summary>
+    private static bool DeclaresItselfCcda(IReadOnlyCollection<string> templateIds)
+        => templateIds.Contains(CcdaTemplates.UsRealmHeader)
+           || templateIds.Any(CcdaTemplates.DocumentTemplates.Contains);
 
     private static IReadOnlyList<CcdaSection> SectionsOf(XElement root)
     {
