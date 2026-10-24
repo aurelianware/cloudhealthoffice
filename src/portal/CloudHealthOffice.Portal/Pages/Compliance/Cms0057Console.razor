@@ -77,7 +77,7 @@
                 <MudText Typo="Typo.body2" Color="Color.Secondary">Decided on time</MudText>
                 <MudText Typo="Typo.h4">@Pct(OnTimePercent)</MudText>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    @(_metrics?.DecidedRequests ?? 0) decided in the period · @Pct(AutomatedPercent) automated
+                    @(_metrics?.DecidedRequests ?? 0) decided in the received-request cohort · @Pct(AutomatedPercent) automated
                 </MudText>
             </MudPaper>
         </MudItem>
@@ -181,20 +181,22 @@
             @if (_metrics != null)
             {
                 <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-                    The metrics CMS-0057-F requires payers to publish each year by March 31, for requests submitted
+                    Operational aggregates for non-drug requests received
                     @_metrics.From.ToLocalTime().ToString("MMM d, yyyy") – @_metrics.To.ToLocalTime().ToString("MMM d, yyyy").
-                    Percentages are of decided requests; approved with changes counts as approved.
+                    Approval and denial percentages are of all received requests; approved with changes counts as approved.
+                    This is an incomplete annual public report: appeal outcomes, extensions and publication still require completion.
                 </MudText>
                 <MudSimpleTable Dense="true" Elevation="0" Bordered="true" data-testid="metrics">
                     <thead>
                         <tr><th>Metric</th><th>Standard (7 days)</th><th>Expedited (72 hours)</th></tr>
                     </thead>
                     <tbody>
-                        <tr><td>Requests submitted</td><td>@_metrics.Standard.Requests</td><td>@_metrics.Expedited.Requests</td></tr>
+                        <tr><td>Requests received</td><td>@_metrics.Standard.Requests</td><td>@_metrics.Expedited.Requests</td></tr>
                         <tr><td>Approved</td><td>@Pct(_metrics.Standard.ApprovedPercent)</td><td>@Pct(_metrics.Expedited.ApprovedPercent)</td></tr>
                         <tr><td>Denied</td><td>@Pct(_metrics.Standard.DeniedPercent)</td><td>@Pct(_metrics.Expedited.DeniedPercent)</td></tr>
                         <tr><td>Average time to decision</td><td>@Duration(_metrics.Standard.AverageDecisionHours)</td><td>@Duration(_metrics.Expedited.AverageDecisionHours)</td></tr>
                         <tr><td>Median time to decision</td><td>@Duration(_metrics.Standard.MedianDecisionHours)</td><td>@Duration(_metrics.Expedited.MedianDecisionHours)</td></tr>
+                        <tr><td>Decisions with unavailable timing</td><td>@_metrics.Standard.DecisionTimingUnavailable</td><td>@_metrics.Expedited.DecisionTimingUnavailable</td></tr>
                         <tr><td>Decided within the timeframe</td><td>@Pct(_metrics.Standard.DecidedWithinTimeframePercent)</td><td>@Pct(_metrics.Expedited.DecidedWithinTimeframePercent)</td></tr>
                     </tbody>
                 </MudSimpleTable>

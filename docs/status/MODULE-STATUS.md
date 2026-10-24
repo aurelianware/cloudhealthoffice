@@ -1,5 +1,7 @@
 # Cloud Health Office — Module Status
 
+> This is a dated module snapshot. The [October 24 capability refresh](../CAPABILITY_RECONCILIATION.md) supersedes older no-grouper, mock-only FHIR and settlement descriptions. Use its scoped evidence and the [California acceptance workstream](../implementation/CALIFORNIA-MEDICAID-QUALIFICATION.md) for current decisions.
+
 **Last updated:** 2026-10-20 (October snapshot added; phase rows unchanged since 2026-05)
 **Maintainer:** Module owners per row
 **Format owner:** Established with Claims Phase 1 closer (5.13);

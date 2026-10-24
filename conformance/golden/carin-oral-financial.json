@@ -129,7 +129,7 @@
       "productOrService": {
         "coding": [
           {
-            "system": "http://www.ama-assn.org/go/cpt",
+            "system": "http://www.ada.org/cdt",
             "code": "D2740"
           }
         ]

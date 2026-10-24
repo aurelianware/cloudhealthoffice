@@ -43,10 +43,9 @@ namespace AuthorizationService.Services.Fhir;
 ///   same limitation.</item>
 ///   <item>The <c>denialreason</c> adjudication slice binds <c>reason</c>
 ///   (required) to X12 Claim Adjustment Reason Codes. CHO's record carries its
-///   own 278 review codes (<c>NOTMEDNEC</c>), not CARCs, so the slice is
-///   emitted with the right category and CHO's code under its own system plus
-///   the reason in words. The binding is unmet — that is G-17, the open X12
-///   reason-code gap, not a separate one.</item>
+///   own review codes. The explicit NOTMEDNEC crosswalk adds CARC 50 while
+///   preserving the source code. Other codes remain unmapped and do not claim
+///   to satisfy the required binding (G-17).</item>
 ///   <item>No PDex item-level extensions (item trace number, item
 ///   pre-auth issue date, authorized provider), and no <c>careTeam</c> or
 ///   <c>supportingInfo</c>.</item>
@@ -135,10 +134,9 @@ public sealed class PriorAuthorizationEobProjector : IPriorAuthorizationEobProje
     /// <summary>
     /// CHO-private system for the authorization's own denial reason codes. These
     /// are CHO/278 review codes (e.g. <c>NOTMEDNEC</c>), not X12 CARCs, so they
-    /// do not go under the CARC system URI the claim projection uses, and the
-    /// profile's required CARC binding on <c>reason</c> is therefore unmet
-    /// (G-17). The code is still carried, under the system it belongs to,
-    /// rather than mapped to a CARC the record does not hold.
+    /// remain under their own system. A separately named, explicit semantic
+    /// crosswalk can add a CARC without relabelling the original code. Unknown
+    /// codes never acquire a generic CARC merely to satisfy a validator.
     /// </summary>
     private const string DenialReasonSystem = "urn:cho:pa-denial-reason";
 
@@ -400,10 +398,13 @@ public sealed class PriorAuthorizationEobProjector : IPriorAuthorizationEobProje
             ["system"] = ProcedureSystem(service.ProductOrServiceSystem, service.ProcedureCode),
             ["code"] = service.ProcedureCode,
         };
+        var concept = new JsonObject { ["coding"] = new JsonArray { coding } };
+        // A submitter's description is free text, not necessarily a canonical
+        // terminology display. Keep it without asserting an AMA/CMS display.
         if (!string.IsNullOrWhiteSpace(service.ProcedureDescription))
-            coding["display"] = service.ProcedureDescription;
+            concept["text"] = service.ProcedureDescription;
 
-        return new JsonObject { ["coding"] = new JsonArray { coding } };
+        return concept;
     }
 
     /// <summary>
@@ -532,6 +533,16 @@ public sealed class PriorAuthorizationEobProjector : IPriorAuthorizationEobProje
                         },
                     },
                 };
+                // A bounded projection crosswalk, not a financial decision:
+                // NOTMEDNEC explicitly means medical necessity was not met;
+                // X12 CARC 50 expresses that same reason. Preserve both codes.
+                // See ADR 029; UNITSRED and all unknown codes stay unmapped.
+                if (string.Equals(service.DenialReasonCode, "NOTMEDNEC", StringComparison.Ordinal))
+                    reason["coding"]!.AsArray().Add(new JsonObject
+                    {
+                        ["system"] = "https://x12.org/codes/claim-adjustment-reason-codes",
+                        ["code"] = "50",
+                    });
                 if (!string.IsNullOrWhiteSpace(service.DenialReason))
                     reason["text"] = service.DenialReason;
                 denial["reason"] = reason;

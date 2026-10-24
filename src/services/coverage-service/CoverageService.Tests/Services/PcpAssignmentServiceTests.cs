@@ -13,6 +13,22 @@ namespace CoverageService.Tests.Services;
 /// </summary>
 public class PcpAssignmentServiceTests
 {
+    [Fact]
+    public async Task UnavailableCapacity_DoesNotEndOrCreateAssignments()
+    {
+        var (service, _, assignments, providers, panel) = Build();
+        providers.Setup(p => p.GetByNpiAsync(Tenant, Npi, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(HappyProvider(panelLimit: 100));
+        panel.Setup(p => p.CurrentPanelCountAsync(Tenant, Npi, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new PanelCountUnavailableException());
+
+        var act = () => service.AssignAsync(Tenant, Member, Cmd());
+
+        await act.Should().ThrowAsync<PanelCountUnavailableException>();
+        assignments.Verify(a => a.EndOpenAssignmentsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
+        assignments.Verify(a => a.AddAsync(It.IsAny<PcpAssignment>()), Times.Never);
+    }
+
     private const string Tenant = "t1";
     private const string Member = "M1";
     private const string Npi = "1234567890";

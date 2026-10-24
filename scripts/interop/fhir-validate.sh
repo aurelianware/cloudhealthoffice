@@ -5,6 +5,8 @@
 #
 #   ./scripts/interop/fhir-validate.sh                 # every golden
 #   ./scripts/interop/fhir-validate.sh prior-authorization-eob
+#   FHIR_VALIDATION_STRICT=1 FHIR_TERMINOLOGY_SERVER=https://tx.fhir.org/r4 \
+#     ./scripts/interop/fhir-validate.sh
 #
 # Why out of process: the Firely SDK this repository pins (Hl7.Fhir.R4 5.10.2)
 # ships no validator, and the current Firely.Fhir.Validation needs SDK 6. The
@@ -15,8 +17,8 @@
 # profile each instance DECLARES in meta.profile.
 #
 # What it does NOT prove, and why:
-#   * Value-set bindings. Terminology checking is off (-tx n/a) so the run needs
-#     no terminology server. CARC codes on a denial, for one, go unchecked.
+#   * Value-set bindings in the default regression mode. Strict mode requires
+#     a terminology server and accepts no baselined error.
 #   * Reference targets. insurer/provider carry US Core targetProfiles, and a
 #     single instance resolves to nothing, so the target profile is never read.
 # Closing those two is Inferno's job, not this script's.
@@ -35,6 +37,16 @@ MANIFEST="$REPO_ROOT/conformance/validator-manifest.json"
 BASELINE="$REPO_ROOT/conformance/validator-baseline.txt"
 CACHE_DIR="${FHIR_VALIDATOR_CACHE:-$REPO_ROOT/interop/.external/hl7-validator}"
 OUT_DIR="${FHIR_VALIDATE_OUT:-$REPO_ROOT/interop/.external/hl7-validator/out}"
+STRICT="${FHIR_VALIDATION_STRICT:-0}"
+TERMINOLOGY="${FHIR_TERMINOLOGY_SERVER:-n/a}"
+if [[ "$STRICT" != 0 && "$STRICT" != 1 ]]; then
+  echo "FHIR_VALIDATION_STRICT must be 0 or 1" >&2
+  exit 2
+fi
+if [[ "$STRICT" == 1 && ! "$TERMINOLOGY" =~ ^https?:// ]]; then
+  echo "Strict validation requires FHIR_TERMINOLOGY_SERVER=http(s)://...; terminology cannot be disabled" >&2
+  exit 2
+fi
 
 read -r TAG ASSET SHA256 URL < <(python3 - "$VERSIONS" <<'PY'
 import json, sys
@@ -101,7 +113,7 @@ if entry is None:
     sys.exit("golden " + sys.argv[2] + " is not in conformance/validator-manifest.json")
 print("\n".join(entry["igs"]))' "$MANIFEST" "$name")
 
-  args=(-jar "$JAR" "$file" -version 4.0.1 -tx n/a -output-style compact)
+  args=(-jar "$JAR" "$file" -version 4.0.1 -tx "$TERMINOLOGY" -output-style compact)
   for ig in "${IGS[@]}"; do args+=(-ig "$ig"); done
   for profile in "${PROFILES[@]}"; do args+=(-profile "$profile"); done
 
@@ -113,7 +125,12 @@ print("\n".join(entry["igs"]))' "$MANIFEST" "$name")
 
   set +e
   java "${args[@]}" >"$log" 2>&1
+  validator_status=$?
   set -e
+  if [[ "$STRICT" == 1 && "$validator_status" -ne 0 ]]; then
+    echo "   strict validator returned $validator_status for $name — see $log" >&2
+    FAILED=1
+  fi
 
   # The exit code reports errors found, so it cannot distinguish a validated
   # instance from a crashed run. The summary line can: no summary, no verdict.
@@ -132,11 +149,35 @@ print("\n".join(entry["igs"]))' "$MANIFEST" "$name")
   echo "   $(grep -cE ': Error - ' "$log" || true) error(s), $(grep -cE ': Warning - ' "$log" || true) warning(s)"
 done
 
+# Qualification mode: no error is excused by the regression baseline. This
+# still checks fixtures, not deployed auth, data completeness or references.
+if [[ "$STRICT" == 1 ]]; then
+  if [[ -s "$OBSERVED" ]]; then
+    echo "Strict validation failed; every validator error must be resolved:"
+    cat "$OBSERVED"
+    FAILED=1
+  fi
+  [[ $FAILED -eq 0 ]] && echo "Strict fixture validation passed with terminology enabled. Deployment acceptance is separate."
+  exit "$FAILED"
+fi
+
 # ── baseline comparison ───────────────────────────────────────────────────────
 sort -u "$OBSERVED" -o "$OBSERVED"
 touch "$BASELINE"
 EXPECTED="$OUT_DIR/expected.txt"
-grep -vE '^\s*(#|$)' "$BASELINE" | sort -u > "$EXPECTED" || true
+if [[ $# -gt 0 ]]; then
+  # A focused run must not claim the other goldens' known errors disappeared.
+  python3 - "$BASELINE" "${FILES[@]}" <<'PY' | sort -u > "$EXPECTED"
+from pathlib import Path
+import sys
+selected = {Path(name).stem for name in sys.argv[2:]}
+for line in Path(sys.argv[1]).read_text().splitlines():
+    if line.strip() and not line.lstrip().startswith("#") and line.split(":", 1)[0] in selected:
+        print(line)
+PY
+else
+  grep -vE '^\s*(#|$)' "$BASELINE" | sort -u > "$EXPECTED" || true
+fi
 
 NEW="$(comm -23 "$OBSERVED" "$EXPECTED" || true)"
 GONE="$(comm -13 "$OBSERVED" "$EXPECTED" || true)"

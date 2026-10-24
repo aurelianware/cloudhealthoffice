@@ -448,8 +448,7 @@ internal static class CarinEobBasis
             var item = new JsonObject
             {
                 ["sequence"] = line.LineNumber,
-                ["productOrService"] =
-                    Concept(Cpt4System, line.ProcedureCode, line.ProcedureDescription),
+                ["productOrService"] = ClaimProcedureCoding.Concept(line),
             };
 
             if (line.Modifiers.Count > 0)

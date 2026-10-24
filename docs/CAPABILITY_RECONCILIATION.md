@@ -1,6 +1,42 @@
 # Capability Reconciliation
 
-## Current refresh — October 22, 2026
+## Current refresh — October 24, 2026
+
+Source inspected: main `b9a00fb4eaca20757d02ae8b6bcea51fe6bacc58`, followed
+by the scoped changes in this branch. This section supersedes conflicting
+October 22 summaries below. Earlier test counts remain tied to their original
+commits. New validation and residual work are recorded in the
+[California/CMS acceptance workstream](implementation/CALIFORNIA-MEDICAID-QUALIFICATION.md).
+Deployment and complete conformance remain unverified.
+
+| ID / scope | Status | Executing evidence and remaining boundary |
+| --- | --- | --- |
+| CAP-33 — PA reporting integrity | **Implemented** | `Cms0057Reporting` now uses payer receipt, excludes drug authorizations under the existing scope policy, divides approvals/denials by all received requests and exposes unavailable timing. Repository activity reads include receipt. Supporting behavioral tests are in `Cms0057ReportingTests`; portal explanations/DTOs are aligned. [Reporting runbook](operations/CMS0057-REPORTING-DATA-QUALITY.md). This is a receipt-cohort operational report; appeal/extension capture, annual final-outcome/as-of semantics and public publication remain incomplete (CAP-06). |
+| CAP-34 — encounter batch and syntax acknowledgment integrity | **Implemented** | `EncounterSubmissionServiceImpl` refuses missing/wrong-claim reads before batching, checks tenant/state/identifiers and writes distinct syntax-only statuses for 999 A/E. `BatchIntegrityTests` exercises the behavior. [Rollout and historical reconciliation](operations/ENCOUNTER-BATCH-INTEGRITY.md). The FL-only consumer and JSON builder are not a California pipeline; durable staging/reservation, response correlation and final state acceptance remain separate. |
+| CAP-35 — unavailable PCP panel count | **Implemented** | `HttpPanelCounter` throws unavailable instead of returning zero for absent configuration, failed/refused/timed-out or unreadable responses. Controller answers 503; tests prove no assignment writes. [Runbook](operations/PCP-PANEL-UNAVAILABLE.md). Read-before-insert race, authoritative count scope and reconciliation scheduling remain open. |
+| CAP-36 — strict fixture validation | **Implemented** | `scripts/interop/fhir-validate.sh` has a separate strict mode: terminology required, no baseline exemptions, failed validator/no verdict cannot pass. Seven synthetic-runner tests exercise its gates. Focused regression runs compare only selected goldens. [Validation modes](compliance/FHIR-VALIDATION-MODES.md). A script gate is not proof every fixture or a deployment conforms. |
+| CAP-37 — bounded PA EOB terminology | **Implemented** | `PriorAuthorizationEobProjector` retains free-text descriptions in `CodeableConcept.text` and adds CARC 50 only for exact NOTMEDNEC, retaining the local reason. Golden regenerated from the actual projector; behavioral tests preserve unknown codes without inventing CARCs. [Proposed ADR 029](adr/029-pa-eob-terminology-projection.md). Other reason mappings (G-17), full references and deployed conformance remain partial. |
+| CAP-38 — claim procedure vocabulary | **Implemented** | Shared `ClaimProcedureCoding` corrects HCPCS/CDT procedures previously labelled CPT across billed Claim and both EOB projections, with behavioral tests and regenerated goldens. [ADR 029](adr/029-pa-eob-terminology-projection.md) records the bounded shape inference and missing explicit intake-qualifier limitation. This does not establish complete terminology or live reference conformance. |
+| CAP-22/27/30 — native FHIR composition | **Implemented** | Reverified `FhirDataBindings`, `RoutingFhirDataAdapter` and `FhirSyntheticSourceRegistration`: all five native bindings are available; only selected mocks trigger the synthetic guard. No unconditional synthetic-provider startup blocker remains. Deployment data/configuration acceptance is separate. |
+| CAP-06 — complete public PA reporting | **Partially Implemented** | Core calculator/console exist; `NotYetTracked` still names appeal and extension outcomes. CAP-33 repairs arithmetic/data handling, not authoritative missing events or annual public reporting. |
+| CAP-14 — durable bulk export | **Confirmed Gap** | `BulkExportService` refuses initiation and creates no files/jobs. Required scoped bulk behavior needs durable jobs, real NDJSON, secure downloads and lifecycle evidence. Do not equate this generic surface with every API's exact regulatory obligation. |
+| Eligibility source/failure behavior | **Partially Implemented** | `TemporalAccumulatorRegistration` defaults production to explicit unavailable; `CoverageLookup` distinguishes upstream failures from no coverage. Normal native eligibility reads real accumulation. Historical point-in-time accumulation remains absent. |
+| Financial settlement | **Partially Implemented** | `NachaSettlementMatcher`, settlement outbox and AR posting implement ADR 026's whole credits-only claims settlement. The previous proposed-only/no-settlement summary is stale. Returns, capitation/premium events and integrated close remain separate. |
+| Provider Access encounter payload | **Implemented** | ADR 028 and the originating claim's nonfinancial EOB supersede the old demand for a second encounter projector. Full profile validation, attribution/source and deployment acceptance remain separate. |
+| California encounters/provider state feed | **Confirmed Gap** | Inspected `AdjudicationCompletedConsumer` admits FL Medicaid only; builder emits JSON; `DhcsPaveSource` remains a stub. This does not erase native 837 generation, enrollment, provider or contract functionality elsewhere. See the California workstream's CA-01/CA-06 acceptance contracts. |
+| Correspondence and financial close | **Partially Implemented** | Rendering/template controls and scoped payment/accounting are real. Correspondence triggers/delivery and the remaining GL/return/AR boundaries need separate work, per existing architecture and ADRs. |
+| Deployment / California contract acceptance | **Unverified** | No plan credentials, live state/bank test access, accepted benefit/contract corpus or production environment were supplied. Source/test inspection cannot establish these outcomes. |
+
+### Verification record
+
+See [California qualification](implementation/CALIFORNIA-MEDICAID-QUALIFICATION.md)
+for requirement applicability, primary sources, prioritized remaining work and
+the final validation record. All current changes are reviewable implementation,
+not evidence of deployment or full CMS-0057-F certification. Proposed ADR 029 is
+not silently marked accepted.
+
+## October 22 source record — superseded where noted above
+
 
 **Source baseline:** merged main [`dc23d47e`](https://github.com/aurelianware/cloudhealthoffice/tree/dc23d47e), including PRs #1480 and #1484. This scoped source refresh supersedes conflicting gap claims in earlier sections; older test results remain attached to their recorded commits and are not rerun results for this baseline. Deployment, performance and full conformance remain unverified.
 

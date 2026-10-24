@@ -113,6 +113,7 @@ public sealed class PriorAuthDecision
 
 public sealed class PriorAuthMetrics
 {
+    public string ReportingBasis { get; set; } = string.Empty;
     public DateTime From { get; set; }
     public DateTime To { get; set; }
     public int TotalRequests { get; set; }
@@ -131,6 +132,7 @@ public sealed class PriorAuthRequestTypeMetrics
     public int Decided { get; set; }
     public int Approved { get; set; }
     public int Denied { get; set; }
+    public int DecisionTimingUnavailable { get; set; }
     public double? ApprovedPercent { get; set; }
     public double? DeniedPercent { get; set; }
     public double? AverageDecisionHours { get; set; }

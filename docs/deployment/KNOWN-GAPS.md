@@ -13,3 +13,11 @@ Models/) but does not yet have a `Dockerfile`. Excluded from
 `.github/workflows/deploy-azure-aks.yml` and
 `.github/workflows/docker-build.yml` matrices. Will be added once
 the service is containerized.
+
+## Scope correction — October 24, 2026
+
+The missing Dockerfile describes the legacy `ffs-service` shell, not absent
+fee-for-service pricing. Its `FfsRateConfig` model is superseded by provider
+contract reimbursement terms under [ADR 016](../adr/016-unified-contract-pricing.md).
+Do not containerize a dead API/model as a California launch prerequisite.
+See the current [capability ledger](../CAPABILITY_RECONCILIATION.md).

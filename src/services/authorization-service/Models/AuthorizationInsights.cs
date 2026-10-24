@@ -13,9 +13,9 @@ public sealed class AuthorizationInsights
     public LineOfBusiness? LineOfBusiness { get; init; }
 
     /// <summary>
-    /// Requests submitted in the period: volume, approval and denial rates and
-    /// decision timeliness (standard vs expedited). The CMS-0057 public
-    /// reporting figures, computed by the same code as the regulator report.
+    /// Non-drug requests received in the period: volume, approval and denial
+    /// rates and decision timeliness (standard vs expedited). Uses the same
+    /// operational aggregates as the CMS console, not a complete public report.
     /// </summary>
     public Cms0057Metrics Reporting { get; init; } = new();
 
