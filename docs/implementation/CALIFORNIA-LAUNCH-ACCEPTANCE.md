@@ -13,6 +13,12 @@ refresh, not a launch approval or a complete legal/contract crosswalk. The
 acceptance cases with no populated results. Those are not executed tests or a
 regulatory certification service.
 
+Current implementation follow-up: [coverage-writer controls](../operations/PCP-COVERAGE-WRITER-CONTROLS.md)
+and proposed [ADR 032](../adr/032-pcp-coverage-writer-boundary.md) extend the production
+fence to lifecycle writes and stored future coverage reservations. New executable
+validation is separate from the historical records below; PCP scheduling remains
+refused. A proposed PCP-card replacement scenario is now included with empty results.
+
 ## What the merged fixes actually close
 
 - #1541 repaired scoped reporting, encounter batching/999 semantics, missing
@@ -91,7 +97,7 @@ meaning; CA-11 onward separate newly expanded gates.
 | CA-05 — financial close partial; P0 | ADR 026's bounded bank-confirmed credits-only claims settlement reaches accounting. `GlSourceEvents` still identifies return/premium/capitation seams; AR aging does not establish a reconciled close. | CFO/payments: opening balances, bank/ERP boundaries, expected-dollar corpus, returns/reversals/reissues, premium and capitation lineage, open-item aging, control totals and two agreed representative close simulations. The two-cycle criterion is a proposed plan acceptance gate. |
 | CA-06 — state provider integration partial; P0 | Registered `DhcsPaveSource` returns null and an unimplemented bulk result. Comments naming a Web Services API or monthly FTP are not a verified interface agreement. Native provider/network/credentialing functionality exists. | Provider operations/EDI: authorized enrollment verification source, actual schema/access, service-location/program/effective dates, freshness/history, exclusions and fail/unavailable policy. Separately accept 274, directory content and source-to-published freshness; no universal public PAVE API assumed. |
 | CA-07 — contract propagation partial; P1 | `ProviderContractsController.SyncChildren` still returns 501 for capitation children. FFS pricing is already on unified contracts (ADR 016). | Contracting/CFO: effective-dated delegated responsibility and capitation amendments; demonstrate propagation, retries, retroactive adjustments and reconciliation to parent terms without duplicating ERP responsibilities. |
-| CA-08 — current-day API concurrency fixed; wider acceptance partial; P0 | `TransactionalPcpAssignmentService` is registered in production. Scope is medical/legacy distinct current members, tenant/NPI; unsupported Mongo/date modes refuse. Direct/import/status writers and future interval reservations are outside the fence protocol. | Provider/enrollment/engineering: actual plan/location panel policy, state-directed assignment/exception policy, every writer, scheduling/retroactivity, continuity/member choice, and cloud transaction topology. Do not equate current-day race tests with California PCP acceptance. |
+| CA-08 — current-day API concurrency fixed; wider acceptance partial; P0 | `TransactionalPcpAssignmentService` is registered in production. Scope is medical/legacy distinct current members, tenant/NPI; unsupported Mongo/date modes refuse. Production lifecycle writers now join the fence and validate stored future coverage spans. Scheduled/retroactive PCP changes and old/direct DB writers remain outside that supported scope. | Provider/enrollment/engineering: actual plan/location panel policy, state-directed assignment/exception policy, every writer, scheduling/retroactivity, continuity/member choice, and cloud transaction topology. Do not equate current-day race tests with California PCP acceptance. |
 | CA-09 — benefit/clinical content unverified; P0 | Native benefit, pricing, COB and PA engines are real. `ClinicalCriteria` ships interfaces/local rules, not a verified complete California content corpus. CRD uses resolved context and distinguishes unknown from no-PA-required; an engine approval alone is not a requirements catalog. | Medical director/benefits: effective-dated coverage, PA-required and clinical criteria catalogs with authority, exceptions and representative cases. Scope EPSDT, LTSS, medical drugs, ECM/CS, behavioral boundaries, continuity and TPL separately. Never import Texas seed thresholds as California policy. |
 | CA-10 — deployment readiness unverified; P0 | Tenancy/recovery primitives exist; no actual cloud volume, migration, restore or staffed runbook acceptance was provided. #1547 requires a transaction-capable Mongo deployment. | CTO/SRE/security/operations: real peak workload, on-call and incident ownership, replica/transaction/failover behavior, backups/restores, tenant isolation, monitoring and SLO/RTO/RPO. Membership alone is not a load forecast. |
 | CA-11 — annual reporting partial; P0 | `PaReportingEvidence` and `AnnualPaReporting` execute; output remains a draft. Legacy/source coverage, plan mapping, corrections and approved freezes are not supplied. | Compliance/data/UM: intake-to-report reconciliation across channels and appeal levels, lawful-extension provenance, dual cutoffs and restatements, listed services and an approved immutable report. Accept DHCS oversight/template/QIC deliverables separately from a public annual webpage. |
@@ -136,7 +142,7 @@ silence or an empty evidence list is not an exclusion or a pass.
 ## Verification record for this refresh
 
 Source inspection rechecked the paths and boundaries above on the pinned main.
-One additional California consumer characterization demonstrates that a CA Medicaid
+The original refresh added one California consumer characterization demonstrating that a CA Medicaid
 paid-claim message creates no record through the FL-only consumer. It is a gap
 demonstration, not a runtime fix; existing CA batch refusal coverage is retained.
 No fresh executable test count is claimed until CI runs that addition.

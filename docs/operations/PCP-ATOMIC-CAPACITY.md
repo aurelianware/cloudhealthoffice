@@ -1,5 +1,10 @@
 # PCP assignment transaction rollout
 
+Follow-up: [coverage-writer controls](PCP-COVERAGE-WRITER-CONTROLS.md) extend
+production fences to coverage lifecycle writes and check stored future coverage
+reservations. The original #1547 boundaries and CI record below are historical;
+scheduled/retroactive PCP assignment support and cloud acceptance remain open.
+
 Baseline: merged #1546, main `f36a3e016a0447f6313930a35489dbfaf37f1ba5`.
 Proposed architecture: [ADR 031](../adr/031-pcp-assignment-transactions.md).
 

@@ -25,14 +25,14 @@ public interface IProviderServiceClient
 }
 
 /// <summary>
-/// In-process panel counter. Production binding hits capitation-service
-/// <c>GET /api/coverage/by-pcp/{npi}</c> count; tests bind a fake.
+/// In-process panel counter. Production reads the native current roster inside
+/// the PCP write transaction; the repository guard also checks coverage intervals.
 /// </summary>
 public interface IPanelCounter
 {
     /// <summary>
-    /// Current count of members assigned to this NPI. Inherently racy; see
-    /// <c>docs/architecture/pcp-assignment.md</c> "Panel race" section.
+    /// Current distinct-member count for this NPI. The production caller holds
+    /// member/panel fences; an unprotected implementation is not a hard limit.
     /// </summary>
     Task<int> CurrentPanelCountAsync(string tenantId, string providerNpi, CancellationToken ct = default);
 }

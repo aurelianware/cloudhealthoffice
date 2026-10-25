@@ -1,5 +1,22 @@
 # Capability Reconciliation
 
+## PCP coverage-writer controls follow-up
+
+Production coverage creates, replacements, status changes and deletions now join
+the assignment API member/panel fence protocol. Future stored coverage spans
+reserve capacity; direct PCP/date edits require the assignment API. Explicit
+409/503 responses replace silent roster bypasses. See [the runbook](operations/PCP-COVERAGE-WRITER-CONTROLS.md)
+and proposed [ADR 032](adr/032-pcp-coverage-writer-boundary.md). Source is merged
+#1547. Focused CI run 40217632511 at `e36185df` passed 48 standard VSTest
+cases, including real replica-set writer races and rollback. Broader CI and
+operational acceptance remain separate. Ordinary coverage writes
+now also require Mongo transactions. Scheduled/retroactive PCP changes remain
+refused; provider snapshots, old/direct DB writers, plan/location policy, workload
+and managed-cloud acceptance remain open. CA-08 remains partial. Automatic
+replacement-card ordering from PCP changes is also absent; card rendering and a
+member event alone do not implement fulfillment. Older dated findings below
+retain their original evidence, with this section governing the new writer scope.
+
 ## Illinois Chicago-area 2027 prospective business — October 24, 2026
 
 Baseline main `e7d633930222050184e98ddb851bf09fb3ef9495`, branch
@@ -55,7 +72,7 @@ closed merely by defining tests.
 | CA-05 | Partial: bounded claims settlement GL exists; returns, premium/capitation lineage and integrated close remain. |
 | CA-06 | Partial: PAVE adapter is unimplemented; authorized enrollment source, 274 and directory acceptance remain. |
 | CA-07 | Partial: FFS unified contracts exist; capitation child propagation still returns 501. |
-| CA-08 | Partial: #1547 fixes current-day assignment API concurrency/history/coverage; temporal/all-writer controls, scope and cloud acceptance remain. |
+| CA-08 | Partial: #1547 fixes current-day assignment API concurrency/history/coverage; supported coverage lifecycle writers now share fences and check future coverage reservations; PCP scheduling, legacy/direct DB writers, scope and cloud acceptance remain. |
 | CA-09 | Unverified: native engines exist; clinically approved California benefit/PA/clock corpus absent from accepted evidence. |
 | CA-10 | Unverified: deployed cloud workload, recovery, migration and staffed operations need acceptance. |
 | CA-11 / CAP-39 | Partial: #1542 evidence/annual draft implemented; complete sources, plan mapping, freeze/publication and DHCS/QIC outputs remain. |

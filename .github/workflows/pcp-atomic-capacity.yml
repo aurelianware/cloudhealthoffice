@@ -18,5 +18,5 @@ jobs:
       - name: Replica-set capacity races and service regressions
         run: >-
           dotnet test src/services/coverage-service/CoverageService.Tests/CoverageService.Tests.csproj
-          --filter 'FullyQualifiedName~AtomicPcpCapacityTests|FullyQualifiedName~PcpAssignmentServiceTests|FullyQualifiedName~PcpTransactionPolicyTests'
+          --filter 'FullyQualifiedName~AtomicPcpCapacityTests|FullyQualifiedName~PcpAssignmentServiceTests|FullyQualifiedName~PcpTransactionPolicyTests|FullyQualifiedName~PcpRosterWriterTests|FullyQualifiedName~PcpCoverageIntervalsTests|FullyQualifiedName~PcpRosterWriteMiddlewareTests'
           --verbosity normal

@@ -19,10 +19,12 @@ public class CoverageRepositoryMongo : ICoverageRepository
     public const string CollectionName = "Coverage";
 
     private readonly PcpMongoSession? _pcpSession;
+    private readonly PcpRosterWriteGuard? _rosterGuard;
 
-    public CoverageRepositoryMongo(IMongoDatabase database, PcpMongoSession? pcpSession = null)
+    public CoverageRepositoryMongo(IMongoDatabase database, PcpMongoSession? pcpSession = null, PcpRosterWriteGuard? rosterGuard = null)
     {
         _pcpSession = pcpSession;
+        _rosterGuard = rosterGuard;
         _collection = database.GetCollection<Coverage>(CollectionName);
         
         // Ensure indexes exist (best effort on startup)
@@ -47,7 +49,7 @@ public class CoverageRepositoryMongo : ICoverageRepository
             Builders<Coverage>.Filter.Eq(c => c.Id, id)
         );
 
-        return await _collection.Find(filter).FirstOrDefaultAsync();
+        return await (_pcpSession?.Current is { } session ? _collection.Find(session, filter) : _collection.Find(filter)).FirstOrDefaultAsync();
     }
 
     public async Task<List<Coverage>> GetActiveCoverageByMemberIdAsync(
@@ -252,6 +254,13 @@ public class CoverageRepositoryMongo : ICoverageRepository
 
     public async Task<bool> SetStatusAsync(Coverage observed, CoverageStatus newStatus, string updatedBy)
     {
+        if (_rosterGuard is null) return await SetStatusCoreAsync(observed, newStatus, updatedBy);
+        try { return await _rosterGuard.ExecuteAsync(observed, () => SetStatusCoreAsync(observed, newStatus, updatedBy), newStatus: newStatus); }
+        catch (CoverageConcurrencyException) { return false; }
+    }
+
+    private async Task<bool> SetStatusCoreAsync(Coverage observed, CoverageStatus newStatus, string updatedBy)
+    {
         // Only the status/audit fields, and only while the status and the
         // dates the transition was decided from are still the ones the sweep
         // read, so a concurrent edit (PCP change, reinstatement - which clears
@@ -263,7 +272,8 @@ public class CoverageRepositoryMongo : ICoverageRepository
             builder.Eq(c => c.Id, observed.Id),
             builder.Eq(c => c.Status, observed.Status),
             builder.Eq(c => c.EffectiveDate, observed.EffectiveDate),
-            builder.Eq(c => c.TerminationDate, observed.TerminationDate));
+            builder.Eq(c => c.TerminationDate, observed.TerminationDate),
+            RevisionIs(observed.Revision));
         var update = Builders<Coverage>.Update
             .Set(c => c.Status, newStatus)
             .Set(c => c.LastUpdatedDate, DateTime.UtcNow)
@@ -272,7 +282,9 @@ public class CoverageRepositoryMongo : ICoverageRepository
             // conflicts instead of turning the coverage back.
             .Inc(c => c.Revision, 1L);
 
-        var result = await _collection.UpdateOneAsync(filter, update);
+        var result = _pcpSession?.Current is { } session
+            ? await _collection.UpdateOneAsync(session, filter, update)
+            : await _collection.UpdateOneAsync(filter, update);
         return result.ModifiedCount > 0;
     }
 
@@ -285,7 +297,10 @@ public class CoverageRepositoryMongo : ICoverageRepository
             : b.Eq(c => c.Revision, expected);
     }
 
-    public async Task<Coverage> CreateAsync(Coverage coverage)
+    public Task<Coverage> CreateAsync(Coverage coverage) => _rosterGuard is null
+        ? CreateCoreAsync(coverage) : _rosterGuard.ExecuteAsync(coverage, () => CreateCoreAsync(coverage), creating: true);
+
+    private async Task<Coverage> CreateCoreAsync(Coverage coverage)
     {
         coverage.CreatedDate = DateTime.UtcNow;
         coverage.LastUpdatedDate = DateTime.UtcNow;
@@ -296,11 +311,15 @@ public class CoverageRepositoryMongo : ICoverageRepository
         }
         coverage.Revision = 0;
 
-        await _collection.InsertOneAsync(coverage);
+        if (_pcpSession?.Current is { } session) await _collection.InsertOneAsync(session, coverage);
+        else await _collection.InsertOneAsync(coverage);
         return coverage;
     }
 
-    public async Task<Coverage> UpdateAsync(Coverage coverage)
+    public Task<Coverage> UpdateAsync(Coverage coverage) => _rosterGuard is null
+        ? UpdateCoreAsync(coverage) : _rosterGuard.ExecuteAsync(coverage, () => UpdateCoreAsync(coverage));
+
+    private async Task<Coverage> UpdateCoreAsync(Coverage coverage)
     {
         coverage.LastUpdatedDate = DateTime.UtcNow;
 
@@ -330,7 +349,7 @@ public class CoverageRepositoryMongo : ICoverageRepository
         if (result.MatchedCount == 0)
         {
             coverage.Revision = expected;
-            if (await _collection.Find(filter).AnyAsync())
+            if (await (_pcpSession?.Current is { } active ? _collection.Find(active, filter) : _collection.Find(filter)).AnyAsync())
                 throw new CoverageConcurrencyException(coverage.Id, expected);
 
             throw new Exception($"Coverage with ID {coverage.Id} not found for update.");
@@ -341,12 +360,21 @@ public class CoverageRepositoryMongo : ICoverageRepository
 
     public async Task DeleteAsync(string tenantId, string id)
     {
+        if (_rosterGuard is null) { await DeleteCoreAsync(tenantId, id); return; }
+        var observed = await GetByIdAsync(tenantId, id);
+        if (observed is null) return;
+        await _rosterGuard.ExecuteAsync(observed, async () => { await DeleteCoreAsync(tenantId, id); return true; }, deleting: true);
+    }
+
+    private async Task DeleteCoreAsync(string tenantId, string id)
+    {
         var filter = Builders<Coverage>.Filter.And(
             Builders<Coverage>.Filter.Eq(c => c.TenantId, tenantId),
             Builders<Coverage>.Filter.Eq(c => c.Id, id)
         );
 
-        await _collection.DeleteOneAsync(filter);
+        if (_pcpSession?.Current is { } session) await _collection.DeleteOneAsync(session, filter);
+        else await _collection.DeleteOneAsync(filter);
     }
 
     // Termination date not yet reached (or none).
