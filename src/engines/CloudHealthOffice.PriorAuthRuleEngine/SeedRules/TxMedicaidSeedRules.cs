@@ -13,7 +13,7 @@ namespace CloudHealthOffice.PriorAuthRuleEngine.SeedRules;
 ///   STAR:     HHSC Uniform Managed Care Manual (UMCM) Chapter 4 — PA Requirements
 ///   STARPlus: UMCM Chapter 5 — LTSS PA Requirements
 ///   STARKids: UMCM Chapter 6 — Medically Dependent Children PA Requirements
-///   Gold Card: Texas Insurance Code §4201.653 (HB 3229, eff. 09/01/2022)
+///   Gold Card: excluded from Medicaid by Texas Insurance Code §4201.652.
 ///
 /// Seed loaded by PriorAuthRuleEngineSeeder on first deployment per environment.
 /// Subsequent updates are admin operations — rules are not re-seeded on restart.
@@ -27,13 +27,12 @@ public static class TxMedicaidSeedRules
 
     private static IEnumerable<PaRuleDocument> Star() =>
     [
-        // Gold card exemption — applies across all TX STAR procedures
+        // Retired statutory exemption — Medicaid excluded; stable ID retained.
         new PaRuleDocument
         {
             RuleId       = "TX-STAR-REG-001",
-            RuleName     = "TX Gold Card Exemption (HB 3229) — STAR",
-            Description  = "Providers with ≥90% PA approval rate over 180 days are exempt " +
-                           "from PA requirements per Texas Insurance Code §4201.653.",
+            RuleName     = "TX Gold Card Exemption (HB 3459) — STAR",
+            Description  = "Retired: the Texas statutory gold-card exemption excludes Medicaid managed care.",
             StateCode    = "TX",
             Lob          = PaLineOfBusiness.Medicaid,
             Program      = "STAR",
@@ -42,6 +41,7 @@ public static class TxMedicaidSeedRules
             Scope        = RuleScope.Platform,
             Priority     = 1,
             RuleType     = "TxGoldCardExemption",
+            IsEnabled    = false, // Retired Medicaid seed; retain IDs for audit/history.
             GoldCardApprovalRateThreshold = 0.90m,
             GoldCardMinimumDecisions      = 20
         },
@@ -128,11 +128,11 @@ public static class TxMedicaidSeedRules
 
     private static IEnumerable<PaRuleDocument> StarPlus() =>
     [
-        // Gold card — STARPlus
+        // Retired gold-card seed — STARPlus
         new PaRuleDocument
         {
             RuleId       = "TX-STARPLUS-REG-001",
-            RuleName     = "TX Gold Card Exemption (HB 3229) — STARPlus",
+            RuleName     = "TX Gold Card Exemption (HB 3459) — STARPlus",
             StateCode    = "TX",
             Lob          = PaLineOfBusiness.Medicaid,
             Program      = "STARPlus",
@@ -141,6 +141,7 @@ public static class TxMedicaidSeedRules
             Scope        = RuleScope.Platform,
             Priority     = 1,
             RuleType     = "TxGoldCardExemption",
+            IsEnabled    = false, // Retired Medicaid seed; retain IDs for audit/history.
             GoldCardApprovalRateThreshold = 0.90m,
             GoldCardMinimumDecisions      = 20
         },
@@ -205,11 +206,11 @@ public static class TxMedicaidSeedRules
 
     private static IEnumerable<PaRuleDocument> StarKids() =>
     [
-        // Gold card — STARKids
+        // Retired gold-card seed — STARKids
         new PaRuleDocument
         {
             RuleId       = "TX-STARKIDS-REG-001",
-            RuleName     = "TX Gold Card Exemption (HB 3229) — STARKids",
+            RuleName     = "TX Gold Card Exemption (HB 3459) — STARKids",
             StateCode    = "TX",
             Lob          = PaLineOfBusiness.Medicaid,
             Program      = "STARKids",
@@ -218,6 +219,7 @@ public static class TxMedicaidSeedRules
             Scope        = RuleScope.Platform,
             Priority     = 1,
             RuleType     = "TxGoldCardExemption",
+            IsEnabled    = false, // Retired Medicaid seed; retain IDs for audit/history.
             GoldCardApprovalRateThreshold = 0.90m,
             GoldCardMinimumDecisions      = 20
         },

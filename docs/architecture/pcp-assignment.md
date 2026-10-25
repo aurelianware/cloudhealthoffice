@@ -1,5 +1,11 @@
 # PCP Assignment
 
+Current follow-up: [transaction boundary](../operations/PCP-ATOMIC-CAPACITY.md) and
+proposed [ADR 031](../adr/031-pcp-assignment-transactions.md). The production
+assignment path now uses a shared Mongo transaction and native roster count; the
+Phase 1 race/Redis proposal below is historical. All-writer, temporal-policy,
+managed-cloud and reconciliation acceptance remain open.
+
 Roadmap reference: 5.7 Phase 1.
 
 ## Service choice

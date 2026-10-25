@@ -1,0 +1,22 @@
+name: Atomic PCP Capacity
+on:
+  pull_request:
+    paths:
+      - 'src/services/coverage-service/**'
+      - '.github/workflows/pcp-atomic-capacity.yml'
+permissions:
+  contents: read
+jobs:
+  atomic-capacity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+      - name: Replica-set capacity races and service regressions
+        run: >-
+          dotnet test src/services/coverage-service/CoverageService.Tests/CoverageService.Tests.csproj
+          --filter 'FullyQualifiedName~AtomicPcpCapacityTests|FullyQualifiedName~PcpAssignmentServiceTests|FullyQualifiedName~PcpTransactionPolicyTests'
+          --verbosity normal
