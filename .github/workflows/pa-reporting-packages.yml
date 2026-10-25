@@ -1,0 +1,28 @@
+name: PA Reporting Packages
+on:
+  pull_request:
+    paths:
+      - 'src/services/authorization-service/**'
+      - 'tests/CloudHealthOffice.AuthorizationService.Tests/**'
+      - '.github/workflows/pa-reporting-packages.yml'
+permissions:
+  contents: read
+jobs:
+  reporting-packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+      - name: Reporting evidence and replica-set package integrity
+        run: >-
+          dotnet test src/services/authorization-service/AuthorizationService.Tests/AuthorizationService.Tests.csproj
+          --filter 'FullyQualifiedName~PaReporting|FullyQualifiedName~AnnualPaReporting|FullyQualifiedName~Cms0057Reporting'
+          --verbosity normal
+      - name: Reporting HTTP permissions and tenant boundary
+        run: >-
+          dotnet test tests/CloudHealthOffice.AuthorizationService.Tests/CloudHealthOffice.AuthorizationService.Tests.csproj
+          --filter 'FullyQualifiedName~PaReporting'
+          --verbosity normal

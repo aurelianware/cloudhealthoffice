@@ -1,5 +1,16 @@
 # Capability Reconciliation
 
+## PA reporting frozen-package follow-up
+
+Private snapshot packages now retain minimal reporting inputs, results and hashes
+in one Mongo snapshot transaction; exact retries reuse the committed package.
+Protected header/input retrieval and explicit limits/integrity failures support
+reproducible review. See [runbook](operations/PA-REPORTING-FROZEN-PACKAGES.md) and
+proposed [ADR 033](adr/033-pa-reporting-frozen-packages.md). New executable validation
+awaits CI. CAP-39/CA-11 remain partial: plan mapping is declared/unverified; source
+completeness, services list, approved semantics, DHCS reporting and public approval/
+publication remain open. No report becomes publication-ready by freezing it.
+
 ## PCP coverage-writer controls follow-up
 
 Production coverage creates, replacements, status changes and deletions now join

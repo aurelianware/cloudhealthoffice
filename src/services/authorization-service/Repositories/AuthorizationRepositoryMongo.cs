@@ -432,19 +432,23 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
     public async IAsyncEnumerable<Authorization> StreamReportingCohortAsync(DateTime from, DateTime toExclusive,
         LineOfBusiness lineOfBusiness, [EnumeratorCancellation] CancellationToken ct = default)
     {
+        using var cursor = await _collection.FindAsync(ReportingCohortFilter(GetTenantId(), from, toExclusive, lineOfBusiness),
+            new FindOptions<Authorization> { BatchSize = 250 }, ct);
+        while (await cursor.MoveNextAsync(ct))
+            foreach (var authorization in cursor.Current) yield return authorization;
+    }
+
+    internal static FilterDefinition<Authorization> ReportingCohortFilter(string tenant, DateTime from,
+        DateTime toExclusive, LineOfBusiness lineOfBusiness)
+    {
         var b = Builders<Authorization>.Filter;
-        // New records use immutable receipt/scope. Legacy records are selected
-        // for diagnostics only; their mutable current outcomes are never replayed.
         var captured = b.Gte(a => a.ReportingLedger!.ReceivedAt, from)
             & b.Lt(a => a.ReportingLedger!.ReceivedAt, toExclusive)
             & b.Eq(a => a.ReportingLedger!.LineOfBusiness, lineOfBusiness);
         var legacy = b.Eq(a => a.ReportingLedger, null) & b.Eq(a => a.LineOfBusiness, lineOfBusiness)
             & ((b.Gte(a => a.DecisionReceivedAt, from) & b.Lt(a => a.DecisionReceivedAt, toExclusive))
                 | (b.Eq(a => a.DecisionReceivedAt, null) & b.Gte(a => a.SubmittedDate, from) & b.Lt(a => a.SubmittedDate, toExclusive)));
-        using var cursor = await _collection.FindAsync(b.Eq(a => a.TenantId, GetTenantId()) & (captured | legacy),
-            new FindOptions<Authorization> { BatchSize = 250 }, ct);
-        while (await cursor.MoveNextAsync(ct))
-            foreach (var authorization in cursor.Current) yield return authorization;
+        return b.Eq(a => a.TenantId, tenant) & (captured | legacy);
     }
 
     private static FilterDefinition<Authorization> ExpiryFilter(string tenantId, DateTime cutoffDateUtc)

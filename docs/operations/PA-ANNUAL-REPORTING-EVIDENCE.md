@@ -1,5 +1,10 @@
 # PA annual reporting evidence
 
+Follow-up: [private frozen packages](PA-REPORTING-FROZEN-PACKAGES.md) now provide
+a persisted snapshot mechanism with retained inputs and hashes. The live annual
+draft cursor and original validation below retain their historical boundaries;
+source reconciliation, approved mapping/semantics and public publication remain open.
+
 Baseline: main `401e3ca3064031ee2cabfd0e52ad520582d65c7b` after PR #1541.
 Architecture: proposed [ADR 030](../adr/030-pa-reporting-evidence-and-annual-drafts.md).
 

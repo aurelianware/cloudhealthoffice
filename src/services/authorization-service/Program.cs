@@ -81,6 +81,8 @@ if (builder.Services.AddChoDatabase(builder.Configuration) is null)
 }
 builder.Services.AddSingleton<AuthorizationIndexes>();
 builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepositoryMongo>();
+builder.Services.Configure<PaReportingPackageOptions>(builder.Configuration.GetSection("PaReportingPackages"));
+builder.Services.AddScoped<IPaReportingPackageRepository, PaReportingPackageRepositoryMongo>();
 builder.Services.AddHostedService<AuthorizationIndexStartup>();
 
 // ── Authorization backend seam (Replace / Augment) ──────────────────────────

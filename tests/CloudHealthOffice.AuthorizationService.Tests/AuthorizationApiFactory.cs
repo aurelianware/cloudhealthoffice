@@ -24,6 +24,7 @@ public class AuthorizationApiFactory : WebApplicationFactory<Program>
         "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=100&connectTimeoutMS=100";
 
     public IAuthorizationRepository AuthorizationRepository { get; } = Substitute.For<IAuthorizationRepository>();
+    public IPaReportingPackageRepository ReportingPackages { get; } = Substitute.For<IPaReportingPackageRepository>();
 
     /// <summary>Concurrent review reads stays through this; nothing here exercises Mongo.</summary>
     public IInpatientStayRepository InpatientStayRepository { get; } = Substitute.For<IInpatientStayRepository>();
@@ -70,6 +71,7 @@ public class AuthorizationApiFactory : WebApplicationFactory<Program>
             });
 
             services.AddSingleton(AuthorizationRepository);
+            services.AddSingleton(ReportingPackages);
             services.AddSingleton(InpatientStayRepository);
             services.AddSingleton(Substitute.For<IPaRuleRepository>());
         });
