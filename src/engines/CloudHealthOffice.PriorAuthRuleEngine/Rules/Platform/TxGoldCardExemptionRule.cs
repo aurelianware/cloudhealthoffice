@@ -5,14 +5,14 @@ using CloudHealthOffice.PriorAuthRuleEngine.Rules;
 namespace CloudHealthOffice.PriorAuthRuleEngine.Rules.Platform;
 
 /// <summary>
-/// Texas Gold Card Law — HB 3229 (2021), effective 09/01/2022.
+/// Texas Gold Card Law — HB 3459 (2021), effective 09/01/2022.
 ///
 /// A provider who has maintained a 90%+ approval rate over the lookback
 /// period (minimum decision threshold must also be met) is exempt from
 /// prior authorization requirements for the services covered by the rule.
 ///
 /// Statutory reference: Texas Insurance Code §4201.653
-/// HHSC applicability: applies to STAR, STARPlus, STARKids Medicaid managed care.
+/// Medicaid managed care is excluded by §4201.652, including STAR families.
 ///
 /// RuleType:  "TxGoldCardExemption"
 /// Category:  RegulatoryExemption (band 0 — runs before all clinical rules)
@@ -34,6 +34,12 @@ public sealed class TxGoldCardExemptionRule : PaRuleBase
         PaRuleContext context,
         CancellationToken ct = default)
     {
+        // Enforce applicability in executable code as well as seed configuration:
+        // previously persisted/tenant-enabled Medicaid rules must also be inert.
+        // Returning null continues ordinary review; it is not an adverse decision.
+        if (context.Lob == PaLineOfBusiness.Medicaid || config.Lob == PaLineOfBusiness.Medicaid)
+            return Task.FromResult<PaRuleDecision?>(null);
+
         // ── Scope check ───────────────────────────────────────────
         if (!AppliesToProcedures(config, context.ProcedureCodes))
             return Task.FromResult<PaRuleDecision?>(null);

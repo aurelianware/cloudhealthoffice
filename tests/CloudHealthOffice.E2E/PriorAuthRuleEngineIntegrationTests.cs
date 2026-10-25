@@ -81,7 +81,7 @@ public class PriorAuthRuleEngineIntegrationTests : IAsyncLifetime
     // ── 2. Gold card exemption ───────────────────────────────────
 
     [Fact]
-    public async Task EvaluateAsync_TxStar_GoldCardProvider_ReturnsApprove()
+    public async Task EvaluateAsync_TxStar_GoldCardHistory_DoesNotGrantStatutoryExemption()
     {
         var context = MakeStarContext() with
         {
@@ -96,9 +96,7 @@ public class PriorAuthRuleEngineIntegrationTests : IAsyncLifetime
 
         var result = await _engine.EvaluateAsync(context);
 
-        Assert.Equal(PaDecisionOutcome.Approve, result.Outcome);
-        Assert.Equal("TX-STAR-REG-001", result.FiringRuleId);
-        Assert.Contains("Gold Card", result.FiringRuleName);
+        Assert.NotEqual("TX-STAR-REG-001", result.FiringRuleId);
     }
 
     // ── 3. Chiropractic under visit limit ────────────────────────

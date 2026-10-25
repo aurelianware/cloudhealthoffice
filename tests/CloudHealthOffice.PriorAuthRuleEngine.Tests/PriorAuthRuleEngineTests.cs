@@ -135,12 +135,53 @@ public class TxGoldCardExemptionRuleTests
 {
     private readonly TxGoldCardExemptionRule _rule = new();
 
+    [Theory]
+    [InlineData("STAR")]
+    [InlineData("STARPlus")]
+    [InlineData("STARKids")]
+    [InlineData(null)]
+    public async Task MedicaidRequest_WithEnabledOrMisconfiguredRule_NeverGrantsGoldCard(string? program)
+    {
+        var context = Helpers.MakeContext(providerHistory: Helpers.MakeProviderHistory(total: 100, approved: 100))
+            with { Program = program };
+        var config = Helpers.MakeGoldCardConfig();
+        config.IsEnabled = true; // models pre-upgrade persisted configuration
+        (await _rule.EvaluateAsync(config, context)).Should().BeNull();
+        config.Lob = PaLineOfBusiness.Commercial;
+        (await _rule.EvaluateAsync(config, context)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PersistedMedicaidRule_CannotGrantExemptionForMismatchedCommercialContext()
+    {
+        var context = Helpers.MakeContext(providerHistory: Helpers.MakeProviderHistory(total: 100, approved: 100))
+            with { Lob = PaLineOfBusiness.Commercial };
+        (await _rule.EvaluateAsync(Helpers.MakeGoldCardConfig(), context)).Should().BeNull();
+    }
+
+    [Fact]
+    public void MedicaidGoldCardSeeds_AreRetiredWithoutRemovingAuditIds()
+    {
+        var seeds = CloudHealthOffice.PriorAuthRuleEngine.SeedRules.TxMedicaidSeedRules.GetAll()
+            .Where(r => r.RuleType == "TxGoldCardExemption").ToList();
+        seeds.Should().HaveCount(3);
+        seeds.Should().OnlyContain(r => !r.IsEnabled && r.Lob == PaLineOfBusiness.Medicaid);
+    }
+
+    private static PaRuleDocument Config(decimal? approvalThreshold = null, int? minDecisions = null,
+        IReadOnlyList<string>? procedureCodes = null)
+    {
+        var config = Helpers.MakeGoldCardConfig(procedureCodes, approvalThreshold, minDecisions);
+        config.Lob = PaLineOfBusiness.Commercial;
+        return config;
+    }
+
     [Fact]
     public async Task Evaluate_NoProviderHistory_ReturnsNull()
     {
         var result = await _rule.EvaluateAsync(
-            Helpers.MakeGoldCardConfig(),
-            Helpers.MakeContext(providerHistory: null));
+            Config(),
+            Helpers.MakeContext(providerHistory: null) with { Lob = PaLineOfBusiness.Commercial });
 
         result.Should().BeNull();
     }
@@ -149,8 +190,8 @@ public class TxGoldCardExemptionRuleTests
     public async Task Evaluate_InsufficientDecisions_BelowMinimum_ReturnsNull()
     {
         var result = await _rule.EvaluateAsync(
-            Helpers.MakeGoldCardConfig(minDecisions: 20),
-            Helpers.MakeContext(providerHistory: Helpers.MakeProviderHistory(total: 15, approved: 14)));
+            Config(minDecisions: 20),
+            Helpers.MakeContext(providerHistory: Helpers.MakeProviderHistory(total: 15, approved: 14)) with { Lob = PaLineOfBusiness.Commercial });
 
         result.Should().BeNull();
     }
@@ -160,8 +201,8 @@ public class TxGoldCardExemptionRuleTests
     {
         // 85% < 90% threshold
         var result = await _rule.EvaluateAsync(
-            Helpers.MakeGoldCardConfig(approvalThreshold: 0.90m),
-            Helpers.MakeContext(providerHistory: Helpers.MakeProviderHistory(total: 100, approved: 85)));
+            Config(approvalThreshold: 0.90m),
+            Helpers.MakeContext(providerHistory: Helpers.MakeProviderHistory(total: 100, approved: 85)) with { Lob = PaLineOfBusiness.Commercial });
 
         result.Should().BeNull();
     }
@@ -171,8 +212,8 @@ public class TxGoldCardExemptionRuleTests
     {
         // 92% ≥ 90%, 25 ≥ 20
         var result = await _rule.EvaluateAsync(
-            Helpers.MakeGoldCardConfig(approvalThreshold: 0.90m, minDecisions: 20),
-            Helpers.MakeContext(providerHistory: Helpers.MakeProviderHistory(total: 25, approved: 23)));
+            Config(approvalThreshold: 0.90m, minDecisions: 20),
+            Helpers.MakeContext(providerHistory: Helpers.MakeProviderHistory(total: 25, approved: 23)) with { Lob = PaLineOfBusiness.Commercial });
 
         result.Should().NotBeNull();
         result!.Outcome.Should().Be(PaDecisionOutcome.Approve);
@@ -181,12 +222,12 @@ public class TxGoldCardExemptionRuleTests
     [Fact]
     public async Task Evaluate_ProcedureNotInScope_ReturnsNull()
     {
-        var config = Helpers.MakeGoldCardConfig(procedureCodes: ["99213"]);
+        var config = Config(procedureCodes: ["99213"]);
         var context = Helpers.MakeContext(
             procedures: ["27447"],
             providerHistory: Helpers.MakeProviderHistory(total: 25, approved: 23));
 
-        var result = await _rule.EvaluateAsync(config, context);
+        var result = await _rule.EvaluateAsync(config, context with { Lob = PaLineOfBusiness.Commercial });
 
         result.Should().BeNull();
     }
@@ -440,6 +481,20 @@ public class PriorAuthRuleEngineServiceTests
         result.FiringRuleId.Should().Be("TX-STAR-REG-001");
         await clinicalRule.DidNotReceive()
             .EvaluateAsync(Arg.Any<PaRuleDocument>(), Arg.Any<PaRuleContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PersistedEnabledMedicaidGoldCard_ThroughRealEvaluator_DoesNotAutoApprove()
+    {
+        var legacy = Helpers.MakeGoldCardConfig();
+        legacy.IsEnabled = true;
+        var repo = Substitute.For<IPaRuleRepository>();
+        repo.GetRulesAsync(Arg.Any<RuleSetKey>(), Arg.Any<CancellationToken>()).Returns(new[] { legacy });
+        var engine = BuildEngine(repo, [new TxGoldCardExemptionRule()]);
+        var context = Helpers.MakeContext(providerHistory: Helpers.MakeProviderHistory(total: 100, approved: 100));
+        var result = await engine.EvaluateAsync(context);
+        result.Outcome.Should().Be(PaDecisionOutcome.Pend);
+        result.FiringRuleId.Should().NotBe(legacy.RuleId);
     }
 
     [Fact]
