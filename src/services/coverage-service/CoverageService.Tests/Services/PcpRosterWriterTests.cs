@@ -82,7 +82,7 @@ public sealed class PcpRosterWriterTests : IDisposable
         var assignment = Scope().Service.AssignAsync("tenant", "new", new AssignPcpCommand { ProviderNpi = Npi });
         var restored = Reinstate();
         await Task.WhenAll(assignment, restored);
-        ((assignment.Result.IsSuccess ? 1 : 0) + (restored.Result ? 1 : 0)).Should().Be(1);
+        (((await assignment).IsSuccess ? 1 : 0) + (await restored ? 1 : 0)).Should().Be(1);
         var rows = await Scope().Repo.GetByPcpNpiAsync("tenant", Npi, CoverageStatus.Active);
         rows.Select(c => c.MemberId).Distinct().Should().ContainSingle();
     }
@@ -185,6 +185,16 @@ public sealed class PcpRosterWriterTests : IDisposable
         var other = await Seed("one", CoverageStatus.Suspended, tenant: "other");
         other.Status = CoverageStatus.Active;
         await Scope().Repo.UpdateAsync(other);
+    }
+
+    [Fact]
+    public async Task PlanChangeRequiresParticipation_EvenWhenMemberAlreadyOccupiesTheSlot()
+    {
+        var row = await Seed("one");
+        row.PlanId = "unmatched-plan";
+        await ((Func<Task>)(() => Scope().Repo.UpdateAsync(row))).Should().ThrowAsync<PcpRosterWriteException>()
+            .Where(e => e.Code == PcpValidationCodes.NoNetworkParticipation);
+        (await Scope().Repo.GetByIdAsync("tenant", row.Id))!.PlanId.Should().Be("plan");
     }
 
     [Fact]

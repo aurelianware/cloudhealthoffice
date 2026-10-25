@@ -1,5 +1,6 @@
 using CoverageService.Exceptions;
 using CoverageService.Middleware;
+using CoverageService.Models;
 using CoverageService.Services;
 using Microsoft.AspNetCore.Http;
 
