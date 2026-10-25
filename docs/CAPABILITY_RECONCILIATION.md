@@ -1,5 +1,14 @@
 # Capability Reconciliation
 
+## Texas gold-card remediation follow-up
+
+The scoped runtime correction blocks `TxGoldCardExemption` whenever the request
+or rule is Medicaid, including old enabled documents. Three seeds are disabled
+while their IDs remain for history. This repairs TX-04 applicability in the new
+binary; fleet rollout, configuration cleanup and historical-decision review are
+still required. See [the runbook](operations/TEXAS-MEDICAID-GOLD-CARD.md).
+Non-Medicaid exemption compliance and program-specific deadlines are not closed.
+
 ## Oregon OHP assessment after merged PRs #1542/#1543 — October 24, 2026
 
 Source: main `e7d633930222050184e98ddb851bf09fb3ef9495`. CHO is the assessed
