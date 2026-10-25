@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Data;
 using CoverageService.Exceptions;
 using CoverageService.Models;
+using CoverageService.Services;
 using MongoDB.Driver;
 using System;
 using System.Collections.Generic;
@@ -17,8 +18,11 @@ public class CoverageRepositoryMongo : ICoverageRepository
     private readonly IMongoCollection<Coverage> _collection;
     public const string CollectionName = "Coverage";
 
-    public CoverageRepositoryMongo(IMongoDatabase database)
+    private readonly PcpMongoSession? _pcpSession;
+
+    public CoverageRepositoryMongo(IMongoDatabase database, PcpMongoSession? pcpSession = null)
     {
+        _pcpSession = pcpSession;
         _collection = database.GetCollection<Coverage>(CollectionName);
         
         // Ensure indexes exist (best effort on startup)
@@ -81,7 +85,8 @@ public class CoverageRepositoryMongo : ICoverageRepository
             filter = builder.And(filter, builder.Eq(c => c.InsuranceLineCode, insuranceLineCode));
         }
 
-        return await _collection.Find(filter).ToListAsync();
+        return await (_pcpSession?.Current is { } session
+            ? _collection.Find(session, filter) : _collection.Find(filter)).ToListAsync();
     }
 
     public async Task<List<Coverage>> GetCoverageHistoryAsync(
@@ -204,7 +209,8 @@ public class CoverageRepositoryMongo : ICoverageRepository
             filter = builder.And(filter, builder.Eq(c => c.LineOfBusiness, lineOfBusiness.Value));
         }
 
-        return await _collection.Find(filter).ToListAsync();
+        return await (_pcpSession?.Current is { } session
+            ? _collection.Find(session, filter) : _collection.Find(filter)).ToListAsync();
     }
 
     public async Task<int> GetCountByGroupAsync(string tenantId, string groupNumber, CoverageStatus? status = null)
@@ -311,7 +317,9 @@ public class CoverageRepositoryMongo : ICoverageRepository
         ReplaceOneResult result;
         try
         {
-            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), coverage);
+            result = _pcpSession?.Current is { } session
+                ? await _collection.ReplaceOneAsync(session, filter & RevisionIs(expected), coverage)
+                : await _collection.ReplaceOneAsync(filter & RevisionIs(expected), coverage);
         }
         catch
         {

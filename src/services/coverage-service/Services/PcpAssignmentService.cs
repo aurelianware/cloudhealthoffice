@@ -86,6 +86,8 @@ public sealed class PcpAssignmentService : IPcpAssignmentService
         // active coverage there's nothing to attach the assignment to.
         var effective = cmd.EffectiveDate == default ? DateTime.UtcNow.Date : cmd.EffectiveDate.Date;
         var coverages = await _coverage.GetActiveCoverageByMemberIdAsync(tenantId, memberId, effective);
+        coverages = coverages.Where(c => c.InsuranceLineCode == InsuranceLineCodes.Health
+            || string.IsNullOrEmpty(c.InsuranceLineCode)).ToList();
         if (coverages.Count == 0)
         {
             return PcpAssignmentResult.Fail(new PcpValidationError(
@@ -174,14 +176,11 @@ public sealed class PcpAssignmentService : IPcpAssignmentService
 
         if (participation.PanelLimit.HasValue)
         {
-            // Inherently racy — between this read and the AddAsync below, another
-            // assignment can land. Documented in docs/architecture/pcp-assignment.md
-            // "Panel race" — Phase 1 accepts the slack, nightly reconciliation
-            // (PcpPanelReconciliationJob) flags over-limit panels. Phase 2 will move
-            // to a Redis lock per (tenantId, npi) — see Addendum A.7.2.
-            // TODO(addendum-a): replace with TryAcquireAsync(npi) -> ITransientLock.
+            // Production wraps this whole operation in the Mongo transaction
+            // boundary; count and roster writes share its session.
             var current = await _panel.CurrentPanelCountAsync(tenantId, cmd.ProviderNpi, ct);
-            if (current >= participation.PanelLimit.Value)
+            var alreadyOnPanel = coverages.Any(c => c.PcpNpi == cmd.ProviderNpi);
+            if (!alreadyOnPanel && current >= participation.PanelLimit.Value)
             {
                 return Fail(PcpValidationCodes.PanelFull, "providerNpi",
                     $"Provider panel is full ({current} / {participation.PanelLimit.Value}).");
@@ -193,6 +192,14 @@ public sealed class PcpAssignmentService : IPcpAssignmentService
         var networkStatus = string.IsNullOrEmpty(participation.NetworkTier)
             ? "InNetwork"
             : participation.NetworkTier;
+
+        // A retry of an unchanged same-day assignment does not consume another
+        // slot or create another history row. Check only after ordinary validation.
+        var previous = await _assignments.GetCurrentAsync(tenantId, memberId);
+        if (previous is not null && previous.ProviderNpi == cmd.ProviderNpi
+            && previous.EffectiveDate == effective && previous.CoverageId == primary.Id
+            && previous.AssignmentSource == cmd.Source && previous.AssignmentReason == cmd.Reason)
+            return PcpAssignmentResult.Ok(previous);
 
         // Close any open prior row(s). EndDate = effective so the audit trail
         // shows continuity (no gap between assignments).
@@ -252,7 +259,7 @@ public sealed class PcpAssignmentService : IPcpAssignmentService
         }
 
         _logger.LogInformation(
-            "PCP assigned tenant={TenantId} member={MemberId} npi={Npi} source={Source}",
+            "PCP assignment prepared tenant={TenantId} member={MemberId} npi={Npi} source={Source}",
             LogSanitizer.Sanitize(tenantId), LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(cmd.ProviderNpi), cmd.Source);
 
         return PcpAssignmentResult.Ok(assignment);
