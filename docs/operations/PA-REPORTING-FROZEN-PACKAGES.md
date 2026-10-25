@@ -106,9 +106,22 @@ cohorts and standalone refusal. Scope/hash cases and real-host permission/record
 error cases accompany existing reporting regressions in `pa-reporting-packages.yml`.
 
 Local SDK 8.0.426 again fails before build on sandbox process metadata. No successful
-local executable test run is claimed. CI must compile and execute these cases.
+local executable test run is claimed. The focused CI result below supplies executable evidence for its pinned source.
 Diff/link checks are separate from runtime proof; no regulator, DHCS, bank or public
 website submission occurs in this change.
+
+### Focused CI evidence
+
+[PA Reporting Packages run 40220718946](https://github.com/aurelianware/cloudhealthoffice/actions/runs/40220718946)
+on source commit `17880d3452545c930fa306d0c239dfb12121c1ee` built successfully and
+passed **78 standard VSTest cases**: 63 calculation/persistence cases and 15 real-host
+HTTP cases, zero failures. The selection includes real replica-set freeze/replay,
+concurrent-key and rollback/tenant/tamper/standalone cases, exact retained output,
+existing reporting regressions, both permissions, token recorder, no-store and
+private-read audit behavior. Earlier retry-context and HTTP fixture issues were
+corrected before this run. Documentation-only follow-ups do not constitute a new
+execution. Broader CI and managed-cloud/annual-volume/source acceptance remain
+separate; no production or public regulatory acceptance is claimed.
 
 Interpretation: [CMS reporting/process FAQ](https://www.cms.gov/initiatives/burden-reduction/overview/interoperability/frequently-asked-questions/improving-prior-authorization-processes),
 reviewed October 25, 2026. It distinguishes individual requests, plan-level reporting

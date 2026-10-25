@@ -6,8 +6,9 @@ Private snapshot packages now retain minimal reporting inputs, results and hashe
 in one Mongo snapshot transaction; exact retries reuse the committed package.
 Protected header/input retrieval and explicit limits/integrity failures support
 reproducible review. See [runbook](operations/PA-REPORTING-FROZEN-PACKAGES.md) and
-proposed [ADR 033](adr/033-pa-reporting-frozen-packages.md). New executable validation
-awaits CI. CAP-39/CA-11 remain partial: plan mapping is declared/unverified; source
+proposed [ADR 033](adr/033-pa-reporting-frozen-packages.md). Focused CI run 40220718946 at `17880d34` passed 78 standard VSTest
+cases (63 calculation/persistence, 15 HTTP), including real replica-set and audit
+checks. Broader CI/deployment acceptance remains separate. CAP-39/CA-11 remain partial: plan mapping is declared/unverified; source
 completeness, services list, approved semantics, DHCS reporting and public approval/
 publication remain open. No report becomes publication-ready by freezing it.
 
