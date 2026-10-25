@@ -58,6 +58,18 @@ public class AdjudicationConsumerTenantTests
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
     }
 
+    // California acceptance characterization: a pass demonstrates the route gap.
+    [Fact]
+    public async Task CaliforniaMedicaid_CurrentlyCreatesNoEncounterRecord()
+    {
+        var (consumer, service) = Create();
+        var message = FlMedicaid("tenant-1");
+        message.StateCode = "CA";
+        await consumer.ProcessMessageAsync(message);
+        service.Verify(s => s.CreateSubmissionRecordAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
+    }
+
     [Fact]
     public async Task MessageWithTenant_CreatesRecordInThatTenant()
     {

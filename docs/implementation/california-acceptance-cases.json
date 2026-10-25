@@ -1,0 +1,394 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "1b9319c17bf1ab376a0155d0c7dbf6100090ee77",
+  "purpose": "Proposed acceptance scenario definitions; no execution or certification is implied.",
+  "target": {
+    "state": "CA",
+    "lineOfBusiness": "Medicaid",
+    "members": 250000,
+    "cloud": "Plan-operated Azure or GCP",
+    "legalEntity": null,
+    "launchDate": null
+  },
+  "sourceRegister": "CALIFORNIA-LAUNCH-ACCEPTANCE.md#source-register-and-version-limits",
+  "evidenceContract": "CALIFORNIA-LAUNCH-ACCEPTANCE.md#acceptance-evidence-contract",
+  "cases": [
+    {
+      "id": "CA-00-SCOPE",
+      "finding": "CA-00",
+      "priority": "P0",
+      "owner": "Executive/legal/compliance",
+      "scenario": "Approve actual entity, executed authority, county/model, launch and benefit/delegation scope.",
+      "expectedEvidence": [
+        "Versioned signed scope and authority inventory",
+        "Named accountable owners and accepted exclusions"
+      ],
+      "sourceRefs": [
+        "A1",
+        "A4",
+        "A7"
+      ]
+    },
+    {
+      "id": "CA-01-HANDOFF",
+      "finding": "CA-01",
+      "priority": "P0",
+      "owner": "EDI/engineering",
+      "scenario": "Route a CA paid claim through the contracted encounter partner and final receiver.",
+      "expectedEvidence": [
+        "Approved interface and guide versions",
+        "Tenant/claim/control IDs and final disposition",
+        "Delegated encounter completeness"
+      ],
+      "sourceRefs": [
+        "A1",
+        "A3"
+      ]
+    },
+    {
+      "id": "CA-02-RECOVERY",
+      "finding": "CA-02",
+      "priority": "P0",
+      "owner": "EDI/operations",
+      "scenario": "Replay duplicates, partial reads, final rejections, corrections, voids and replacements.",
+      "expectedEvidence": [
+        "No lost or double-counted records",
+        "Original/replacement lineage and exceptions ledger",
+        "Syntax and final acceptance distinguished"
+      ],
+      "sourceRefs": [
+        "A3"
+      ]
+    },
+    {
+      "id": "CA-02-QMED",
+      "finding": "CA-02",
+      "priority": "P0",
+      "owner": "EDI/data quality",
+      "scenario": "Reconcile source records to final accepted encounters and applicable QMED 2.0 measures.",
+      "expectedEvidence": [
+        "Approved population and measure versions",
+        "Source-to-receiver totals and remediation ownership"
+      ],
+      "sourceRefs": [
+        "A3"
+      ]
+    },
+    {
+      "id": "CA-03-ENROLLMENT",
+      "finding": "CA-03",
+      "priority": "P0",
+      "owner": "Enrollment",
+      "scenario": "Import actual medical MEDS/834/HCO layouts and schedules with duplicate/out-of-order records.",
+      "expectedEvidence": [
+        "Approved partner layouts and control totals",
+        "CIN/dependent/newborn identity expectations",
+        "File and record replay outcomes"
+      ],
+      "sourceRefs": [
+        "A1",
+        "A2"
+      ]
+    },
+    {
+      "id": "CA-03-RETRO",
+      "finding": "CA-03",
+      "priority": "P0",
+      "owner": "Enrollment/finance",
+      "scenario": "Apply retroactive enrollment, county/aid changes, reinstatement and termination.",
+      "expectedEvidence": [
+        "Expected coverage intervals and member-months",
+        "Reconciled PCP, claims and capitation effects"
+      ],
+      "sourceRefs": [
+        "A1",
+        "A2"
+      ]
+    },
+    {
+      "id": "CA-04-NOTICES",
+      "finding": "CA-04",
+      "priority": "P0",
+      "owner": "UM/member services/legal",
+      "scenario": "Fulfill actual plan-type notices with language/format, retry and returned-mail cases.",
+      "expectedEvidence": [
+        "Approved forms and rights attachments",
+        "Receipt/decision/send/postmark evidence",
+        "Deadline and unresolved exception review"
+      ],
+      "sourceRefs": [
+        "A1",
+        "A4",
+        "A5"
+      ]
+    },
+    {
+      "id": "CA-04-APPEALS",
+      "finding": "CA-04",
+      "priority": "P0",
+      "owner": "UM/member services/legal",
+      "scenario": "Process PA appeal/hearing, representation, continued benefits and reversals.",
+      "expectedEvidence": [
+        "Authoritative intake and linked decisions",
+        "Approved clock/rights crosswalk",
+        "External handoff and reversal implementation evidence"
+      ],
+      "sourceRefs": [
+        "A1",
+        "A5"
+      ]
+    },
+    {
+      "id": "CA-05-PAYMENTS",
+      "finding": "CA-05",
+      "priority": "P0",
+      "owner": "CFO/payments",
+      "scenario": "Replay settlement, return, reversal and reissue with expected dollar results.",
+      "expectedEvidence": [
+        "Approved bank/ERP boundaries",
+        "Bank-to-ledger lineage and exceptions",
+        "Open-item control totals"
+      ],
+      "sourceRefs": [
+        "A1"
+      ]
+    },
+    {
+      "id": "CA-05-CLOSE",
+      "finding": "CA-05",
+      "priority": "P0",
+      "owner": "CFO",
+      "scenario": "Run two agreed representative close simulations; proposed plan gate, not a prescribed statutory count.",
+      "expectedEvidence": [
+        "Opening balances and expected premium/capitation/claims entries",
+        "Reconciled trial balance and aging",
+        "Owner-approved differences"
+      ],
+      "sourceRefs": [
+        "A1"
+      ]
+    },
+    {
+      "id": "CA-06-PROVIDERS",
+      "finding": "CA-06",
+      "priority": "P0",
+      "owner": "Provider operations",
+      "scenario": "Verify authorized enrollment sources by service location, program and effective date, including unavailable/stale inputs.",
+      "expectedEvidence": [
+        "Actual access/schema agreement",
+        "Historical status and freshness controls",
+        "Approved exclusion/unavailable handling"
+      ],
+      "sourceRefs": [
+        "A1",
+        "A6"
+      ]
+    },
+    {
+      "id": "CA-06-NETWORK",
+      "finding": "CA-06",
+      "priority": "P0",
+      "owner": "Provider operations/EDI",
+      "scenario": "Accept network 274 and published directory independently of enrollment verification.",
+      "expectedEvidence": [
+        "Source-to-submitted-to-published reconciliation",
+        "Required content and freshness evidence",
+        "Receiver acceptance and correction outcomes"
+      ],
+      "sourceRefs": [
+        "A1",
+        "A4",
+        "A6"
+      ]
+    },
+    {
+      "id": "CA-07-CAPITATION",
+      "finding": "CA-07",
+      "priority": "P1",
+      "owner": "Contracting/CFO",
+      "scenario": "Propagate effective-dated capitation amendments with retry and retroactive adjustments.",
+      "expectedEvidence": [
+        "Parent/child term reconciliation",
+        "Expected adjustments and delegated responsibility",
+        "No duplicate financial ownership"
+      ],
+      "sourceRefs": [
+        "A1"
+      ]
+    },
+    {
+      "id": "CA-08-CURRENT",
+      "finding": "CA-08",
+      "priority": "P0",
+      "owner": "Provider/enrollment/engineering",
+      "scenario": "Validate current-day competing assignments on the selected cloud transaction topology.",
+      "expectedEvidence": [
+        "One-slot race, same-member retry and rollback outcomes",
+        "Atomic history/coverage state",
+        "No silent fallback on unsupported Mongo"
+      ],
+      "sourceRefs": [
+        "A1"
+      ]
+    },
+    {
+      "id": "CA-08-TEMPORAL",
+      "finding": "CA-08",
+      "priority": "P0",
+      "owner": "Provider/enrollment/engineering",
+      "scenario": "Accept future and retroactive PCP assignment workflows or an explicitly approved operating handoff.",
+      "expectedEvidence": [
+        "Effective-dated capacity and continuity policy",
+        "Expected interval/member-choice outcomes",
+        "Current date guard retained until replacement is accepted"
+      ],
+      "sourceRefs": [
+        "A1"
+      ]
+    },
+    {
+      "id": "CA-08-WRITERS",
+      "finding": "CA-08",
+      "priority": "P0",
+      "owner": "Provider/enrollment/engineering",
+      "scenario": "Exercise imports, direct coverage changes, reactivations and reconciliation against panel policy.",
+      "expectedEvidence": [
+        "Inventory of all roster writers and fences",
+        "Approved plan/location/member counting and exceptions",
+        "No unexplained oversubscription; durable reconciliation ownership"
+      ],
+      "sourceRefs": [
+        "A1"
+      ]
+    },
+    {
+      "id": "CA-09-CATALOG",
+      "finding": "CA-09",
+      "priority": "P0",
+      "owner": "Medical director/benefits",
+      "scenario": "Resolve coverage, PA requirements and clinical criteria using an approved California catalog.",
+      "expectedEvidence": [
+        "Effective-dated section-level authority and exceptions",
+        "EPSDT/LTSS/medical-drug/ECM/CS/behavioral/TPL scoped corpus",
+        "Unknown distinguished from no authorization required"
+      ],
+      "sourceRefs": [
+        "A1",
+        "A7"
+      ]
+    },
+    {
+      "id": "CA-09-CLOCKS",
+      "finding": "CA-09",
+      "priority": "P0",
+      "owner": "Medical director/compliance",
+      "scenario": "Validate all-channel receipt, urgency, tighter rules and lawful extensions.",
+      "expectedEvidence": [
+        "Approved current federal/state/clinical clock crosswalk",
+        "RFAI does not reset receipt",
+        "Expected decision and delivered-notice deadlines"
+      ],
+      "sourceRefs": [
+        "A1",
+        "A4",
+        "A5",
+        "A8"
+      ]
+    },
+    {
+      "id": "CA-10-CLOUD",
+      "finding": "CA-10",
+      "priority": "P0",
+      "owner": "CTO/SRE/security",
+      "scenario": "Replay agreed peak workload, tenant isolation, failover and restore on selected Azure/GCP deployment.",
+      "expectedEvidence": [
+        "Actual workload and approved SLO/RTO/RPO",
+        "Transaction/failover and backup-restore evidence",
+        "Staffed incident and exception ownership"
+      ],
+      "sourceRefs": [
+        "A1"
+      ]
+    },
+    {
+      "id": "CA-11-REPORTING",
+      "finding": "CA-11",
+      "priority": "P0",
+      "owner": "Compliance/data/UM",
+      "scenario": "Reconcile PA channels/appeal levels to annual draft, correction and immutable approved freeze.",
+      "expectedEvidence": [
+        "Source completeness, plan mapping and legitimate extension provenance",
+        "Cutoffs/restatements and listed services",
+        "Approved public output; draft is not approval"
+      ],
+      "sourceRefs": [
+        "A4",
+        "A8"
+      ]
+    },
+    {
+      "id": "CA-11-DHCS",
+      "finding": "CA-11",
+      "priority": "P0",
+      "owner": "Compliance/data/UM",
+      "scenario": "Accept applicable DHCS quarterly/annual template and QIC review deliverables.",
+      "expectedEvidence": [
+        "Actual template and submission agreement",
+        "Reconciled metrics and quality review/action evidence",
+        "Separate acceptance from public annual webpage"
+      ],
+      "sourceRefs": [
+        "A4"
+      ]
+    },
+    {
+      "id": "CA-12-STANDARDS",
+      "finding": "CA-12",
+      "priority": "P0",
+      "owner": "Interoperability/security",
+      "scenario": "Validate applicable 2026 US Core 6.1.0/SMART 2.0 or permitted newer specifications against the live server.",
+      "expectedEvidence": [
+        "Approved version/applicability map and USCDI scope",
+        "Version-specific server/security results with exceptions",
+        "Historical 3.1.1 regression alone is insufficient"
+      ],
+      "sourceRefs": [
+        "A4",
+        "A8"
+      ]
+    },
+    {
+      "id": "CA-12-DATA",
+      "finding": "CA-12",
+      "priority": "P0",
+      "owner": "Interoperability/security",
+      "scenario": "Accept required Patient/Provider/P2P data, clinical documents and bulk where applicable.",
+      "expectedEvidence": [
+        "Source completeness and freshness reconciliation",
+        "Attribution/opt-out versus payer-bound opt-in/revocation tests",
+        "Scoped jobs, authorized files and recovery where required"
+      ],
+      "sourceRefs": [
+        "A4",
+        "A8"
+      ]
+    },
+    {
+      "id": "CA-13-USAGE",
+      "finding": "CA-13",
+      "priority": "P0",
+      "owner": "Interoperability/member services",
+      "scenario": "Produce annual distinct-member and repeat-use Patient Access counts.",
+      "expectedEvidence": [
+        "Successful app disclosure provenance",
+        "Member deduplication and expected annual counts",
+        "Accepted reporting and accessible education/consent-rights materials"
+      ],
+      "sourceRefs": [
+        "A4",
+        "A8"
+      ]
+    }
+  ],
+  "results": []
+}
