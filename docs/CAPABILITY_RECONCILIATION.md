@@ -16,7 +16,7 @@ platform work; these IL references add jurisdiction/engagement applicability.
 | IL-ENROLL | Partial | Durable generic 834/member/coverage lifecycle implemented; Illinois crosswalk, roster/820/downstream and launch-transition acceptance unverified. |
 | IL-ENC / CAP-34 | Confirmed gap | Registered automatic consumer skips IL; FL-only builder refuses IL/emits JSON. Generic 837 and fixed complete-batch/syntax-only 999 behavior do not establish HFS acceptance. |
 | IL-PROVIDER | Confirmed gap | No IL/IMPACT source in inspected registered provider-enrollment package; native provider administration credited, current authorized source/network reporting unverified. |
-| IL-PCP / CAP-35 | Partial | Unavailable capacity fails closed; shared read-before-insert capacity race and unscheduled reconciliation remain. Pending #1544 test is not merged Illinois evidence. |
+| IL-PCP / CAP-35 | Partial | Unavailable capacity fails closed; shared read-before-insert capacity race and unscheduled reconciliation remain. Merged #1544 supplies a shared concurrency characterization; Illinois policy acceptance remains separate. |
 | IL-CONTRACT | Partial | Native contracts/provider capitation exist; child sync returns 501. Assigned capitation scope remains a dependency, distinct from HFS premium. |
 | IL-NOTICE | Partial | Template rendering, durable claim appeals and loaded Illinois rule pack exist; delivered notices/full PA/grievance/hearing/continuation acceptance remains incomplete. |
 | IL-UM | Unverified | Receipt-based 72/168-hour targets exist; Illinois service/program/continuity/extension and 2027 policy acceptance unresolved. |
@@ -31,9 +31,43 @@ platform work; these IL references add jurisdiction/engagement applicability.
 691 focused tests passed, zero failed/skipped, including real-Mongo PAS/DTR and
 native enrollment coverage; exact projects/filters/environment limits are in the
 workstream. Two added IL encounter cases characterize missing behavior, with no
-runtime remediation or finding closure. Related #1544 is an open draft Oregon
-assessment on the same base; no historical 487-test total is imported. No merge,
+runtime remediation or finding closure. Related #1544 is merged as `ab204567`; its Oregon assessment and shared tests
+are preserved without importing its historical 487-test total. No PR merge,
 deployment, state submission, readiness or regulatory-conformance claim is made.
+
+## Oregon OHP assessment after merged PRs #1542/#1543 — October 24, 2026
+
+Source: main `e7d633930222050184e98ddb851bf09fb3ef9495`. CHO is the assessed
+platform; the prospective operator, contract, counties, benefits and launch are
+unresolved. [Oregon qualification and prioritized backlog](implementation/OREGON-MEDICAID-QUALIFICATION.md)
+records current source paths, authoritative requirements, owners, reproductions,
+acceptance and the validation limits. This section owns Oregon status; Texas and
+California sections retain their own program-specific scope and dated evidence.
+No source inspection or passing test establishes Oregon launch readiness.
+
+| Finding | Classification | Executing behavior / acceptance boundary |
+| --- | --- | --- |
+| OR-00 | Unverified | CCO versus delegated operator, executed authority and launch/population/benefit scope not supplied. |
+| OR-01 | Unverified | Generic durable 834/member/coverage lifecycle implemented; Oregon identifiers, assignments, feeds, CE transitions and downstream/premium reconciliation not accepted. |
+| OR-02 | Confirmed gap | Registered FL-only consumer and FMMIS JSON builder omit/refuse Oregon. New OR consumer and batch characterization cases execute; generic 837 export is not a state-accepted route. |
+| OR-03 | Confirmed gap | No Oregon source in registered provider-enrollment package. State gate/current NPI-state cache do not establish source/history/location/freshness acceptance or DSN reporting. |
+| OR-04 | Unverified | Oregon coverage/EPSDT/date-of-service policy and 2027 transition corpus absent from accepted evidence. Texas state-scoped seeds are not Oregon content. |
+| OR-05 | Partial | Ordinary 7-day/72-hour receipt arithmetic exists; service-specific CRT/drug/HRSN clocks, lawful extensions and delivered notice deadlines need acceptance/repair. |
+| OR-06 | Partial | Native contract terms exist; capitation child synchronization still returns 501. OHA premium, delegate funding and provider capitation remain distinct acceptance boundaries. |
+| OR-07 | Partial | Unavailable capacity fails closed; new barrier test reproduces two members taking one slot. Panel reconciliation has no host scheduler. |
+| OR-08 | Partial | Letter composition/rendering and durable claim appeals exist; Oregon fulfilled notices, native PA appeal/hearing and benefit-continuation workflows not established. |
+| OR-09 | Unverified | Native COB secondary/tertiary and grouping/pricing implemented; Oregon benefit/contract-specific expected-dollar corpus not accepted. |
+| OR-10 | Partial | Bank-confirmed whole credits-only claims settlement reaches GL; return/capitation/premium event seams, open-item aging and integrated close/report acceptance remain. |
+| OR-11 | Unverified | Assigned cross-benefit/delegated/waiver workflows require explicit scope and acceptance. HRSN can require MMIS encounters and separate reports; HRS/SHARE are distinct. |
+| OR-12 | Unverified | Scoped token tenancy, native FHIR/PAS/DTR and unavailable failure semantics credited; deployed identity, confinement, restore and source completeness not accepted. |
+| OR-13 | Unverified | No approved workload/scale/recovery or OHA/partner launch-readiness evidence for 250k members. |
+| OR-14 / CAP-39 | Partial | #1542 native PA evidence/annual drafts implemented; authoritative sources, plan mapping, reconciled freeze, approved publication and wider CMS acceptance remain. |
+
+487 focused standard-VSTest cases passed, zero failed/skipped, including real-Mongo
+PA/DTR cases and three new characterization cases/rows. Exact filters, initial
+socket/restore failures and unexecuted scope are in the Oregon validation record.
+This does not reuse #1543's historical 116-test count. No application repair,
+state/bank submission, merge, deployment or public publication is implied.
 
 ## Texas STAR assessment after merged PR #1542 — October 24, 2026
 

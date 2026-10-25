@@ -29,6 +29,41 @@ public class PcpAssignmentServiceTests
         assignments.Verify(a => a.AddAsync(It.IsAny<PcpAssignment>()), Times.Never);
     }
 
+    // Characterizes the current defect, not the desired capacity guarantee.
+    [Fact]
+    public async Task ConcurrentMembers_CurrentlyBothTakeTheLastPanelSlot()
+    {
+        var (service, coverage, assignments, providers, panel) = Build();
+        coverage.Setup(c => c.GetActiveCoverageByMemberIdAsync(Tenant, It.IsAny<string>(), It.IsAny<DateTime>(), null))
+            .ReturnsAsync((string tenant, string member, DateTime date, LineOfBusiness? lob) => new List<Coverage>
+            {
+                new() { TenantId = tenant, Id = "cov-" + member, MemberId = member,
+                    GroupNumber = "G", PlanId = "Plan-A", LineOfBusiness = LineOfBusiness.Commercial,
+                    EffectiveDate = date.AddMonths(-1), Status = CoverageStatus.Active }
+            });
+        providers.Setup(p => p.GetByNpiAsync(Tenant, Npi, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(HappyProvider(panelLimit: 1));
+        var bothRead = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reads = 0;
+        panel.Setup(p => p.CurrentPanelCountAsync(Tenant, Npi, It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                if (Interlocked.Increment(ref reads) == 2) bothRead.TrySetResult(true);
+                await bothRead.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                return 0;
+            });
+        var persisted = new System.Collections.Concurrent.ConcurrentBag<PcpAssignment>();
+        assignments.Setup(a => a.AddAsync(It.IsAny<PcpAssignment>()))
+            .ReturnsAsync((PcpAssignment a) => { persisted.Add(a); return a; });
+
+        var results = await Task.WhenAll(service.AssignAsync(Tenant, "M1", Cmd()),
+            service.AssignAsync(Tenant, "M2", Cmd()));
+
+        results.Should().OnlyContain(r => r.IsSuccess);
+        persisted.Select(a => a.MemberId).Distinct().Should().HaveCount(2);
+        persisted.Count.Should().BeGreaterThan(1, "the configured panel has only one slot");
+    }
+
     private const string Tenant = "t1";
     private const string Member = "M1";
     private const string Npi = "1234567890";

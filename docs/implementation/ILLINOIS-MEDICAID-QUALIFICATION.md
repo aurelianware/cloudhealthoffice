@@ -39,11 +39,12 @@ baseline except the two explicitly added encounter test cases.
 PA evidence and annual drafts; [#1543](https://github.com/aurelianware/cloudhealthoffice/pull/1543)
 merged the Texas documentation assessment. Both are in this baseline.
 User-supplied [#1544](https://github.com/aurelianware/cloudhealthoffice/pull/1544)
-is an **open draft Oregon assessment**, head `d314ac01`, on the same base. It adds
-Oregon encounter and deterministic PCP concurrency characterizations, with no
-runtime repair. Its findings and 487 historical test results are not Illinois
-acceptance or merged functionality. Its pending PCP test is referenced rather
-than duplicated here; the Illinois limitation is independently source-inspected.
+was an open draft at the original assessment baseline and is now merged into main
+as `ab204567`. This branch integrates that commit, preserving its Oregon encounter
+and deterministic PCP concurrency characterizations without duplicating them.
+It makes no runtime repair. Its findings and 487 historical test results are not
+Illinois acceptance; the original Illinois validation totals below retain their
+original baseline.
 
 ### Applicability matrix — IL-00
 
@@ -200,9 +201,9 @@ and absent scheduled reconciliation. High confidence for assigned PCP model,
 exact Illinois rules conditional (A1). P0 before unattended capacity-sensitive
 assignment. `PcpAssignmentService.cs:190–210` reads count before later ending old
 assignments/inserting history; no shared panel reservation closes the race.
-Program registers scoped `PcpPanelReconciliationJob`, no scheduler. The pending
-#1544 deterministic last-slot test is supporting, unmerged evidence; it was not
-executed or copied here. Current 27 focused tests credit validation and unavailable
+Program registers scoped `PcpPanelReconciliationJob`, no scheduler. The merged
+#1544 deterministic last-slot test is shared supporting evidence and is retained
+without duplication. Current 27 focused tests credit validation and unavailable
 capacity failure closure (CAP-35), not concurrency correctness. Impact: panel
 overfill and diverging provider/member histories.
 
@@ -423,7 +424,7 @@ external gates. Larger changes require scoped ADR/issue under CONTRIBUTING.
 | --- | --- | --- |
 | 1. IL-00/ENROLL/SECURITY scope and configuration contract | Approve 2027 role/counties/benefits, authority/version matrix, source/receiver inventory, native identity and member/plan mappings | Approved matrix; synthetic replay/control totals and downstream convergence; selected-cloud trust/native-only deployment acceptance |
 | 2. IL-PROVIDER + IL-PRICING evidence and dated verification | Authorized source contract and actual reimbursement/benefit corpus after scope; separate source adapter from network report mapping | Dated location/revalidation/outage scenarios; expected-dollar corpus and required enrollment/network attributes; source rights and legal/plan approval |
-| 3a. IL-PCP shared capacity ADR/reservation | Authoritative dated slot/member persistence contract; coordinate pending #1544 test without depending on its merge | One winner for last slot, rollback/restart/idempotence/retro convergence; scheduled source reconciliation and panel operational acceptance |
+| 3a. IL-PCP shared capacity ADR/reservation | Authoritative dated slot/member persistence contract; reuse merged #1544 concurrency characterization | One winner for last slot, rollback/restart/idempotence/retro convergence; scheduled source reconciliation and panel operational acceptance |
 | 3b. IL-CONTRACT capitation propagation | Inspect child API; approve effective contract/version and finance rules | Per-child idempotent results/retry; amend/terminate/retro replay and PMPM totals; provider-finance approval |
 | 4a. IL-ENC shared durable staging | Reusable reservation/outbox/object/lineage design before state routing | Crash/duplicate recovery across reservation/staging/send with exact source membership; no state acceptance claim yet |
 | 4b. IL-ENC Illinois profile/partner + acceptance reconciliation | Approved current HFS guides/benefit paths/tradelinks and 4a; use generic 837 where accepted | Layered transport/999/state result lineage, corrections/void/rejection recovery and accepted totals incl assigned delegates; state/partner certification |
@@ -491,6 +492,18 @@ restore/migration or operational/state readiness campaign ran. No credentials,
 real member/claim data, state submissions, regulatory publication, merge or deployment
 were used/performed. Changed local Markdown destinations and `git diff --check`
 were validated before delivery.
+
+### Main integration validation — October 24, 2026
+
+Integrated main `ab204567` (merged #1544), preserving both state assessments,
+both IL/OR encounter cases and the shared PCP race characterization. Rebuilt
+current sources on SDK 8.0.426: the full encounter suite passed **35 tests** and
+the selected `ConcurrentMembers_CurrentlyBothTakeTheLastPanelSlot` test passed
+**1 test**, zero failures/skips. These are separate integration checks, not a
+rerun or expansion of the original 691-test assessment. Initial sandbox runs
+aborted on the VSTest control socket; authorized `--no-build --no-restore`
+reruns completed. All 51 relative documentation targets exist and diff checks
+pass. No runtime behavior changed or open finding was closed.
 
 ### Older findings explicitly reconciled
 
