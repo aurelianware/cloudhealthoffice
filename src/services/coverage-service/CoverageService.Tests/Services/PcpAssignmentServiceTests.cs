@@ -29,13 +29,13 @@ public class PcpAssignmentServiceTests
         assignments.Verify(a => a.AddAsync(It.IsAny<PcpAssignment>()), Times.Never);
     }
 
-    // Characterizes the current defect, not the desired capacity guarantee.
+    // The unwrapped core remains unsafe; production must use the transaction boundary.
     [Fact]
-    public async Task ConcurrentMembers_CurrentlyBothTakeTheLastPanelSlot()
+    public async Task WithoutTransactionalBoundary_ConcurrentMembersCanOverfillPanel()
     {
         var (service, coverage, assignments, providers, panel) = Build();
         coverage.Setup(c => c.GetActiveCoverageByMemberIdAsync(Tenant, It.IsAny<string>(), It.IsAny<DateTime>(), null))
-            .ReturnsAsync((string tenant, string member, DateTime date, LineOfBusiness? lob) => new List<Coverage>
+            .ReturnsAsync((string tenant, string member, DateTime date, string? line) => new List<Coverage>
             {
                 new() { TenantId = tenant, Id = "cov-" + member, MemberId = member,
                     GroupNumber = "G", PlanId = "Plan-A", LineOfBusiness = LineOfBusiness.Commercial,

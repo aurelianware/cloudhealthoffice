@@ -1,5 +1,15 @@
 # Capability Reconciliation
 
+## PCP assignment transaction follow-up
+
+The new production assignment decorator serializes member/panel contenders in
+Mongo transactions with native roster reads and atomic history/coverage changes.
+This addresses the current-day assignment API race, with 27 focused standard-VSTest CI cases passing, including replica-set races
+and rollback. Broader CI and managed-cloud validation remain open. Direct/import writers, future/retroactive intervals,
+provider-limit scope and reconciliation scheduling remain open; do not treat this
+as complete platform-wide panel enforcement. See [runbook](operations/PCP-ATOMIC-CAPACITY.md)
+and proposed [ADR 031](adr/031-pcp-assignment-transactions.md).
+
 ## Texas gold-card remediation follow-up
 
 The scoped runtime correction blocks `TxGoldCardExemption` whenever the request

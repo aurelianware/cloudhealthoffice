@@ -1,4 +1,5 @@
 using CoverageService.Models;
+using CoverageService.Services;
 using MongoDB.Driver;
 using System;
 using System.Collections.Generic;
@@ -43,8 +44,11 @@ public sealed class PcpAssignmentRepositoryMongo : IPcpAssignmentRepository
     private readonly IMongoCollection<PcpAssignment> _collection;
     private const string CollectionName = "PcpAssignments";
 
-    public PcpAssignmentRepositoryMongo(IMongoDatabase database)
+    private readonly PcpMongoSession? _pcpSession;
+
+    public PcpAssignmentRepositoryMongo(IMongoDatabase database, PcpMongoSession? pcpSession = null)
     {
+        _pcpSession = pcpSession;
         _collection = database.GetCollection<PcpAssignment>(CollectionName);
 
         var keys = Builders<PcpAssignment>.IndexKeys;
@@ -61,7 +65,8 @@ public sealed class PcpAssignmentRepositoryMongo : IPcpAssignmentRepository
         assignment.CreatedDate = DateTime.UtcNow;
         if (string.IsNullOrEmpty(assignment.Id))
             assignment.Id = Guid.NewGuid().ToString();
-        await _collection.InsertOneAsync(assignment);
+        if (_pcpSession?.Current is { } session) await _collection.InsertOneAsync(session, assignment);
+        else await _collection.InsertOneAsync(assignment);
         return assignment;
     }
 
@@ -74,7 +79,9 @@ public sealed class PcpAssignmentRepositoryMongo : IPcpAssignmentRepository
             b.Eq(x => x.EndDate, null));
 
         var update = Builders<PcpAssignment>.Update.Set(x => x.EndDate, endDate);
-        var result = await _collection.UpdateManyAsync(filter, update);
+        var result = _pcpSession?.Current is { } session
+            ? await _collection.UpdateManyAsync(session, filter, update)
+            : await _collection.UpdateManyAsync(filter, update);
         return (int)result.ModifiedCount;
     }
 
@@ -86,7 +93,8 @@ public sealed class PcpAssignmentRepositoryMongo : IPcpAssignmentRepository
             b.Eq(x => x.MemberId, memberId),
             b.Eq(x => x.EndDate, null));
 
-        return await _collection.Find(filter)
+        return await (_pcpSession?.Current is { } session
+            ? _collection.Find(session, filter) : _collection.Find(filter))
             .SortByDescending(x => x.EffectiveDate)
             .FirstOrDefaultAsync();
     }
@@ -98,7 +106,8 @@ public sealed class PcpAssignmentRepositoryMongo : IPcpAssignmentRepository
             b.Eq(x => x.TenantId, tenantId),
             b.Eq(x => x.MemberId, memberId));
 
-        return await _collection.Find(filter)
+        return await (_pcpSession?.Current is { } session
+            ? _collection.Find(session, filter) : _collection.Find(filter))
             .SortByDescending(x => x.EffectiveDate)
             .ToListAsync();
     }

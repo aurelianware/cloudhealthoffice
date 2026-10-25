@@ -60,21 +60,12 @@ builder.Services.AddHttpClient<IProviderServiceClient, HttpProviderServiceClient
     var baseUrl = builder.Configuration["Downstream:ProviderService:BaseUrl"];
     if (!string.IsNullOrWhiteSpace(baseUrl)) client.BaseAddress = new Uri(baseUrl);
 });
-builder.Services.AddHttpClient<IPanelCounter, HttpPanelCounter>((sp, client) =>
-{
-    // Panel counter reads the capitation-style /by-pcp roster. Prefer the
-    // capitation-service URL when set; fall back to the coverage-service URL
-    // (since coverage itself exposes /by-pcp). If neither is configured, leave
-    // BaseAddress null — HttpPanelCounter reports unavailable in that case so
-    // a configured panel limit cannot be bypassed by assuming a zero count.
-    var baseUrl = builder.Configuration["Downstream:CapitationService:BaseUrl"]
-                 ?? builder.Configuration["Downstream:CoverageService:BaseUrl"];
-    if (!string.IsNullOrWhiteSpace(baseUrl))
-    {
-        client.BaseAddress = new Uri(baseUrl);
-    }
-});
-builder.Services.AddScoped<IPcpAssignmentService, PcpAssignmentService>();
+// One shared request-scoped context makes assignment history and roster writes
+// participate in the same Mongo transaction as the capacity read.
+builder.Services.AddScoped<PcpMongoSession>();
+builder.Services.AddScoped<IPanelCounter, MongoPcpPanelCounter>();
+builder.Services.AddScoped<PcpAssignmentService>();
+builder.Services.AddScoped<IPcpAssignmentService, TransactionalPcpAssignmentService>();
 builder.Services.AddSingleton<ICareTeamProjector, CareTeamProjector>();
 // FHIR Coverage projection (ADR 018): the payor named on each Coverage comes
 // from Fhir:Coverage:PayorDisplay / PayorReference, else the tenant id.
