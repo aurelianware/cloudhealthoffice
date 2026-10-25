@@ -34,6 +34,16 @@ public class PaReportingPackagesAuthenticationTests : IClassFixture<Authorizatio
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _factory.IssueTokenWithPermissions("tenant", "actor", permission));
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/authorizations/cms-0057/packages", Command())).StatusCode);
     }
+    [Theory]
+    [InlineData("frozen")]
+    [InlineData("frozen/inputs")]
+    public async Task PrivateReadsRequireFreezePermission(string suffix)
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _factory.IssueTokenWithPermissions("tenant", "reader", "authorizations:read"));
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/authorizations/cms-0057/packages/" + suffix)).StatusCode);
+    }
+
     [Fact]
     public async Task RecorderComesFromToken_AndResponseCannotAuthorizePublication()
     {

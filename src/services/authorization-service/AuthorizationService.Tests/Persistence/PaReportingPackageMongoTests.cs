@@ -70,6 +70,17 @@ public sealed class PaReportingPackageMongoTests : IDisposable
     }
 
     [Fact]
+    public async Task PrivateInputPagesHaveStableOrdinals_AndInvalidOffsetsAreRejected()
+    {
+        await Seed(Row("a"), Row("b"));
+        var package = await Repo().FreezeAsync(Command(), "actor");
+        (await Repo().ReadInputsAsync(package.Id, -1, 1))!.Single().Ordinal.Should().Be(0);
+        (await Repo().ReadInputsAsync(package.Id, 0, 1))!.Single().Ordinal.Should().Be(1);
+        (await Repo().ReadInputsAsync(package.Id, 1, 1))!.Should().BeEmpty();
+        await ((Func<Task>)(() => Repo().ReadInputsAsync(package.Id, 2, 1))).Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
     public async Task LaterAppealAndSourceDeletion_CannotRewriteFrozenPackage_AndRestatementGetsNewIdentity()
     {
         await Seed(Row("a"));

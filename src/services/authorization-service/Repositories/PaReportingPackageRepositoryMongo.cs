@@ -80,7 +80,7 @@ public sealed class PaReportingPackageRepositoryMongo : IPaReportingPackageRepos
         var scope = Validate(command, DateTime.UtcNow);
         var id = PaReportingPackageHash.Identity(tenant, command.RequestKey);
         var requestHash = PaReportingPackageHash.Of(scope);
-        var existing = await GetAsync(id, ct);
+        var existing = await GetForTenantAsync(tenant, id, ct);
         if (existing is not null) return Replay(existing, requestHash);
         try
         {
@@ -138,12 +138,12 @@ public sealed class PaReportingPackageRepositoryMongo : IPaReportingPackageRepos
         catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
         {
             // Another same-key freeze may have won; only its committed package can be returned.
-            var winner = await GetAsync(id, ct) ?? throw new PaReportingPackageUnavailableException();
+            var winner = await GetForTenantAsync(tenant, id, ct) ?? throw new PaReportingPackageUnavailableException();
             return Replay(winner, requestHash);
         }
         catch (MongoBulkWriteException<PaReportingPackageInput> ex) when (ex.WriteErrors.Count > 0 && ex.WriteErrors.All(e => e.Category == ServerErrorCategory.DuplicateKey))
         {
-            var winner = await GetAsync(id, ct) ?? throw new PaReportingPackageUnavailableException();
+            var winner = await GetForTenantAsync(tenant, id, ct) ?? throw new PaReportingPackageUnavailableException();
             return Replay(winner, requestHash);
         }
         catch (MongoException) { throw new PaReportingPackageUnavailableException(); }
@@ -152,9 +152,11 @@ public sealed class PaReportingPackageRepositoryMongo : IPaReportingPackageRepos
     private static PaReportingPackage Replay(PaReportingPackage package, string hash) => package.RequestHash == hash
         ? package : throw new ConcurrencyConflictException("Reporting request key already identifies different scope/cutoffs.");
 
-    public async Task<PaReportingPackage?> GetAsync(string id, CancellationToken ct = default)
+    public Task<PaReportingPackage?> GetAsync(string id, CancellationToken ct = default)
+        => GetForTenantAsync(Tenant, id, ct);
+
+    private async Task<PaReportingPackage?> GetForTenantAsync(string tenant, string id, CancellationToken ct)
     {
-        var tenant = Tenant;
         var package = await _packages.Find(p => p.TenantId == tenant && p.Id == id).FirstOrDefaultAsync(ct);
         if (package is not null && (package.Version != PaReportingPackage.FormatVersion || package.PackageHash != PaReportingPackageHash.Header(package)))
             throw new PaReportingPackageIntegrityException();
@@ -163,11 +165,11 @@ public sealed class PaReportingPackageRepositoryMongo : IPaReportingPackageRepos
     public async Task<IReadOnlyList<PaReportingPackageInput>?> ReadInputsAsync(string id, int afterOrdinal, int pageSize, CancellationToken ct = default)
     {
         if (afterOrdinal < -1 || pageSize is < 1 or > 250) throw new ArgumentException("Use an ordinal >= -1 and page size 1–250.");
-        var package = await GetAsync(id, ct);
+        var tenant = Tenant;
+        var package = await GetForTenantAsync(tenant, id, ct);
         if (package is null) return null;
         if (afterOrdinal >= package.InputCount && !(afterOrdinal == -1 && package.InputCount == 0))
             throw new ArgumentException("Ordinal exceeds the frozen input count.");
-        var tenant = Tenant;
         var rows = await _inputs.Find(i => i.TenantId == tenant && i.PackageId == id && i.Ordinal > afterOrdinal)
             .SortBy(i => i.Ordinal).Limit(pageSize).ToListAsync(ct);
         if (rows.Count != Math.Min(pageSize, package.InputCount - afterOrdinal - 1)) throw new PaReportingPackageIntegrityException();
