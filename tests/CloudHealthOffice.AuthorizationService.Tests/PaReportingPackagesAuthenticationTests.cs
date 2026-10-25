@@ -6,6 +6,9 @@ using System.Text.Json.Serialization;
 using AuthorizationService.Controllers;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
+using CloudHealthOffice.Infrastructure.Audit;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using NSubstitute;
 using Xunit;
 
@@ -62,6 +65,30 @@ public class PaReportingPackagesAuthenticationTests : IClassFixture<Authorizatio
         Assert.Equal("freeze-actor", package.CreatedBy);
         Assert.True(response.Headers.CacheControl?.NoStore);
     }
+    [Fact]
+    public async Task AuthorizedPrivateHeaderAndInputs_AreAuditedAndNotCached()
+    {
+        _factory.ReportingPackages.GetAsync("audited", Arg.Any<CancellationToken>()).Returns(new PaReportingPackage { Id = "audited" });
+        _factory.ReportingPackages.ReadInputsAsync("audited", Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<PaReportingPackageInput>());
+        var log = new RecordAccessStoreInMemory();
+        using var host = _factory.WithWebHostBuilder(b => b.ConfigureServices(services =>
+        {
+            services.RemoveAll<IRecordAccessStore>();
+            services.AddSingleton<IRecordAccessStore>(log);
+        }));
+        using var client = host.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _factory.IssueTokenWithPermissions("tenant", "audit-reader", "authorizations:read", PaReportingPackagesController.FreezePermission));
+        foreach (var path in new[] { "audited", "audited/inputs" })
+        {
+            var response = await client.GetAsync("/api/authorizations/cms-0057/packages/" + path);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.True(response.Headers.CacheControl?.NoStore);
+        }
+        Assert.Contains(log.All, e => e.ActorId == "audit-reader" && e.RecordId == "audited" && e.RecordType == "AuthorizationReportingPackage" && e.Action == "Read");
+        Assert.Contains(log.All, e => e.ActorId == "audit-reader" && e.RecordId == "audited" && e.Action == "Inputs");
+    }
+
     [Fact]
     public async Task InfrastructureFailureIsExplicit503()
     {
