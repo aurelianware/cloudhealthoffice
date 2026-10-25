@@ -67,3 +67,14 @@ while reading process metadata (`DebugUtils` / `ProcessName`). No successful loc
 build or test execution is claimed. New tests require a real single-node replica
 set; mocks are not used to assert transaction correctness. CI must compile and
 execute them. `git diff --check` and source/session-path inspection were performed.
+
+## Focused CI validation
+
+[Atomic PCP Capacity run 40171200454](https://github.com/aurelianware/cloudhealthoffice/actions/runs/40171200454)
+on source commit `38af12bfc0a7984c06bdc7d7ad07dd20a6dba267` completed with a
+successful build and **27 standard VSTest cases passed**. The selection includes
+real replica-set last-slot contention, same-member retries, reassignment, tenant
+isolation and rollback, standalone refusal, date restrictions, session/count
+policy and the unwrapped service regressions. This supersedes the lack of local
+execution for that focused scope; broader CI, all-writer and cloud acceptance
+remain separate. No test body was substituted with a mock transaction.
