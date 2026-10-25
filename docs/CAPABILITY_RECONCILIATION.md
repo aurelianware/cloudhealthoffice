@@ -1,5 +1,40 @@
 # Capability Reconciliation
 
+## Illinois Chicago-area 2027 prospective business — October 24, 2026
+
+Baseline main `e7d633930222050184e98ddb851bf09fb3ef9495`, branch
+`assessment/illinois-medicaid`. User confirmed Chicago-area Medicaid plan business
+and 2027 start year; exact day, counties, legal role, contract and benefit allocation
+remain unresolved. [Illinois qualification and backlog](implementation/ILLINOIS-MEDICAID-QUALIFICATION.md)
+supplies applicability confidence, authoritative sources, executing paths,
+mitigations, owners and acceptance contracts. Shared CAP findings remain reusable
+platform work; these IL references add jurisdiction/engagement applicability.
+
+| Finding | Classification | Executing behavior / acceptance boundary |
+| --- | --- | --- |
+| IL-00 | Unverified | 2027 year/Chicago area confirmed; role, exact date/counties, agreement, benefits and delegated owners unresolved. |
+| IL-ENROLL | Partial | Durable generic 834/member/coverage lifecycle implemented; Illinois crosswalk, roster/820/downstream and launch-transition acceptance unverified. |
+| IL-ENC / CAP-34 | Confirmed gap | Registered automatic consumer skips IL; FL-only builder refuses IL/emits JSON. Generic 837 and fixed complete-batch/syntax-only 999 behavior do not establish HFS acceptance. |
+| IL-PROVIDER | Confirmed gap | No IL/IMPACT source in inspected registered provider-enrollment package; native provider administration credited, current authorized source/network reporting unverified. |
+| IL-PCP / CAP-35 | Partial | Unavailable capacity fails closed; shared read-before-insert capacity race and unscheduled reconciliation remain. Merged #1544 supplies a shared concurrency characterization; Illinois policy acceptance remains separate. |
+| IL-CONTRACT | Partial | Native contracts/provider capitation exist; child sync returns 501. Assigned capitation scope remains a dependency, distinct from HFS premium. |
+| IL-NOTICE | Partial | Template rendering, durable claim appeals and loaded Illinois rule pack exist; delivered notices/full PA/grievance/hearing/continuation acceptance remains incomplete. |
+| IL-UM | Unverified | Receipt-based 72/168-hour targets exist; Illinois service/program/continuity/extension and 2027 policy acceptance unresolved. |
+| IL-PRICING | Unverified | Native later-payer COB and grouped pricing implemented/tested; actual Illinois methods, rates, benefits and expected-dollar corpus not accepted. |
+| IL-FINANCE | Partial | Bounded bank-confirmed whole credits-only claims settlement reaches GL; returns, capitation/premium, open-item and integrated close boundaries remain. |
+| IL-ADT | Unverified | Native care cases/plans implemented; no executing Illinois ADT/panel route found or accepted event-to-action evidence supplied. |
+| IL-REPORT | Unverified | Current HFS financial/quality/utilization/network deliverable definitions and reconciled accepted package unavailable. |
+| IL-SECURITY | Unverified | Token tenancy/service identity/native FHIR/PAS/DTR/unavailable behavior credited; selected-cloud confinement, native-only and recovery acceptance outstanding. |
+| IL-SCALE | Unverified | Membership does not define workload; no accepted 250k-plan load/replay/restore/migration or HFS/partner readiness evidence. |
+| IL-CMS / CAP-06/14/39 | Partial | PA evidence/annual drafts implemented; real bulk and complete source/freeze/publication/conformance remain. Applicable first rating period on/after January 1, 2027 makes APIs launch dependencies. |
+
+691 focused tests passed, zero failed/skipped, including real-Mongo PAS/DTR and
+native enrollment coverage; exact projects/filters/environment limits are in the
+workstream. Two added IL encounter cases characterize missing behavior, with no
+runtime remediation or finding closure. Related #1544 is merged as `ab204567`; its Oregon assessment and shared tests
+are preserved without importing its historical 487-test total. No PR merge,
+deployment, state submission, readiness or regulatory-conformance claim is made.
+
 ## California acceptance refresh after merged #1547 — October 25, 2026
 
 Source: main `1b9319c17bf1ab376a0155d0c7dbf6100090ee77`, native CHO,

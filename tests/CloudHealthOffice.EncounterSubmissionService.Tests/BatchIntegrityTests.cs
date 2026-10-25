@@ -58,6 +58,7 @@ public class BatchIntegrityTests
     [Theory]
     [InlineData("tenant-2", "FL")]
     [InlineData("tenant-1", "CA")]
+    [InlineData("tenant-1", "IL")]
     [InlineData("tenant-1", "OR")]
     public async Task WrongTenantOrState_IsRefusedBeforeFetchingOrWriting(string tenant, string state)
     {
