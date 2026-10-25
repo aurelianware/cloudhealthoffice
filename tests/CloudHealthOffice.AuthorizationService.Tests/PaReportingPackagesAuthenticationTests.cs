@@ -27,7 +27,7 @@ public class PaReportingPackagesAuthenticationTests : IClassFixture<Authorizatio
     public async Task AnonymousFreezeIsUnauthorized()
     {
         using var client = _factory.CreateClient();
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/authorizations/cms-0057/packages", Command(), Json))).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/authorizations/cms-0057/packages", Command(), Json)).StatusCode);
     }
     [Theory]
     [InlineData("authorizations:read")]
@@ -36,7 +36,7 @@ public class PaReportingPackagesAuthenticationTests : IClassFixture<Authorizatio
     {
         using var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _factory.IssueTokenWithPermissions("tenant", "actor", permission));
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/authorizations/cms-0057/packages", Command(), Json))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/authorizations/cms-0057/packages", Command(), Json)).StatusCode);
     }
     [Theory]
     [InlineData("frozen")]
@@ -55,7 +55,7 @@ public class PaReportingPackagesAuthenticationTests : IClassFixture<Authorizatio
             .Returns(new PaReportingPackage { Id = "frozen", CreatedBy = "freeze-actor" });
         using var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _factory.IssueTokenWithPermissions("tenant", "freeze-actor", "authorizations:read", PaReportingPackagesController.FreezePermission));
-        var response = await client.PostAsJsonAsync("/api/authorizations/cms-0057/packages", Command(), Json));
+        var response = await client.PostAsJsonAsync("/api/authorizations/cms-0057/packages", Command(), Json);
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
         var package = await response.Content.ReadFromJsonAsync<PaReportingPackage>(Json);
         Assert.False(package!.PublicationReady); Assert.False(package.PlanMappingVerified);
@@ -69,6 +69,6 @@ public class PaReportingPackagesAuthenticationTests : IClassFixture<Authorizatio
             .Returns<PaReportingPackage>(_ => throw new PaReportingPackageUnavailableException());
         using var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _factory.IssueTokenWithPermissions("tenant", "failure-actor", "authorizations:read", PaReportingPackagesController.FreezePermission));
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await client.PostAsJsonAsync("/api/authorizations/cms-0057/packages", Command(), Json))).StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await client.PostAsJsonAsync("/api/authorizations/cms-0057/packages", Command(), Json)).StatusCode);
     }
 }
