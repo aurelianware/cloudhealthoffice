@@ -45,12 +45,23 @@ public class PaReportingPackageTests
         ((Action)(() => PaReportingPackageRepositoryMongo.Validate(command, Now))).Should().Throw<ValidationException>();
     }
     [Fact]
+    public void FrozenOutputPreservesUnknownHistoricalLabels_InsteadOfRecreatingThemFromCurrentDto()
+    {
+        var package = new PaReportingPackage { ReportJson = "{\"HistoricalLabel\":\"original\",\"PublicationReady\":false}" };
+        package.FrozenReport.GetProperty("HistoricalLabel").GetString().Should().Be("original");
+        var original = PaReportingPackageHash.Header(package);
+        package.ReportJson = package.ReportJson.Replace("original", "changed");
+        PaReportingPackageHash.Header(package).Should().NotBe(original);
+    }
+
+    [Fact]
     public void InputDigestIsOrdinalOrdered_AndHeaderHashChangesWithScopeOrResults()
     {
         var rows = new[] { new PaReportingPackageInput { Ordinal = 1, InputHash = "BBBB" }, new PaReportingPackageInput { Ordinal = 0, InputHash = "AAAA" } };
         PaReportingPackageHash.Inputs(rows).Should().Be(PaReportingPackageHash.Inputs(rows.Reverse()));
         var package = new PaReportingPackage(); var original = PaReportingPackageHash.Header(package);
-        package.Report.Standard.Requests = 1;
+        var changed = package.Report; changed.Standard.Requests = 1;
+        package.ReportJson = System.Text.Encoding.UTF8.GetString(PaReportingPackageHash.Bytes(changed));
         PaReportingPackageHash.Header(package).Should().NotBe(original);
         PaReportingPackageHash.Identity("a", "bc").Should().NotBe(PaReportingPackageHash.Identity("ab", "c"));
     }

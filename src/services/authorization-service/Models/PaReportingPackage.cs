@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using MongoDB.Bson.Serialization.Attributes;
 using System.Security.Cryptography;
 using System.Text;
 using AuthorizationService.Services.Cms0057;
@@ -69,7 +71,16 @@ public sealed class PaReportingPackage
     public DateTime CreatedAt { get; set; }
     public string CreatedBy { get; set; } = string.Empty;
     public PaReportingPackageScope Scope { get; set; } = new();
-    public AnnualPaDraft Report { get; set; } = new();
+    // Preserve the exact output, including computed version-1 labels/gaps. A
+    // future DTO/default change must not rewrite historical evidence on read.
+    public string ReportJson { get; set; } = Encoding.UTF8.GetString(PaReportingPackageHash.Bytes(new AnnualPaDraft()));
+    [BsonIgnore, JsonIgnore]
+    public AnnualPaDraft Report => JsonSerializer.Deserialize<AnnualPaDraft>(ReportJson)!;
+    [BsonIgnore]
+    public JsonElement FrozenReport
+    {
+        get { using var document = JsonDocument.Parse(ReportJson); return document.RootElement.Clone(); }
+    }
     public bool PublicationReady => false;
     public bool PlanMappingVerified => false;
     public string ApprovalStatus => "Unapproved";
@@ -86,7 +97,7 @@ public static class PaReportingPackageHash
     {
         package.Id, package.TenantId, package.Version, package.BuildVersion, package.RequestHash,
         package.InputsHash, package.InputCount, package.InputBytes, package.CreatedAt, package.CreatedBy,
-        package.Scope, package.Report,
+        package.Scope, package.ReportJson,
     });
     public static string Inputs(IEnumerable<PaReportingPackageInput> inputs)
     {

@@ -128,7 +128,7 @@ public sealed class PaReportingPackageRepositoryMongo : IPaReportingPackageRepos
                     if (batch.Count > 0) await _inputs.InsertManyAsync(active, batch, cancellationToken: token);
                 }
                 package.InputsHash = Convert.ToHexString(digest.GetHashAndReset());
-                package.Report = report.Finish();
+                package.ReportJson = Encoding.UTF8.GetString(PaReportingPackageHash.Bytes(report.Finish()));
                 package.PackageHash = PaReportingPackageHash.Header(package);
                 await _packages.InsertOneAsync(active, package, cancellationToken: token);
                 return package;

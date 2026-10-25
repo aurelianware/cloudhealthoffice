@@ -51,9 +51,12 @@ publishes anything or follows the submitted evidence reference as a URL.
 ## Verification and failure behavior
 
 - Header hash covers identity/scope, build/format, recorder/time, input count/bytes,
-  input aggregate hash and calculated report. Input row hashes cover the retained
+  input aggregate hash and exact canonical report JSON. Input row hashes cover the retained
   projection. Aggregate input hash is SHA-256 over concatenated uppercase ASCII
   row-hash strings in ordinal order; the empty stream has its normal SHA-256 hash.
+  `ReportJson` retains the exact versioned output, including computed labels/gaps;
+  `FrozenReport` exposes that original JSON document. The internal typed `Report`
+  helper is not persisted or exposed as the evidentiary output.
 - `PaReportingPackageHash` defines version-1 compact System.Text.Json byte encoding
   and field order. Reproduce with the matching build/version or preserve exact
   canonical bytes in the controlled evidence export. A later serializer/model

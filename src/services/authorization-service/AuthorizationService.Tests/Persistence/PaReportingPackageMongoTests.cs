@@ -57,6 +57,8 @@ public sealed class PaReportingPackageMongoTests : IDisposable
         var package = await Repo().FreezeAsync(Command(), "reviewer");
         var persisted = (await Repo().GetAsync(package.Id))!;
         persisted.PackageHash.Should().Be(package.PackageHash);
+        persisted.ReportJson.Should().Be(package.ReportJson);
+        persisted.FrozenReport.GetProperty("AcceptanceGaps").GetArrayLength().Should().BeGreaterThan(0);
         persisted.PublicationReady.Should().BeFalse(); persisted.PlanMappingVerified.Should().BeFalse();
         persisted.Report.Standard.Denied.Should().Be(2);
         var inputs = (await Repo().ReadInputsAsync(package.Id, -1, 100))!;
