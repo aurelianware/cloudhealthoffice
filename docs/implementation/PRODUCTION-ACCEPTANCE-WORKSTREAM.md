@@ -5,8 +5,9 @@ Current Oregon OHP evidence and prioritized acceptance contracts: [Oregon Medica
 Current Texas STAR requirement and remediation contracts: [Texas Medicaid qualification](TEXAS-MEDICAID-QUALIFICATION.md), based on main after merged #1542. Actual program scope, service areas and launch date remain dependencies. The canonical ledger owns status.
 
 Current California/CMS verification and prioritized acceptance contracts:
-[California Medicaid qualification](CALIFORNIA-MEDICAID-QUALIFICATION.md)
-(October 24, 2026). The original sequence below is a dated plan; native-only
+[California launch acceptance](CALIFORNIA-LAUNCH-ACCEPTANCE.md)
+and [scenario register](california-acceptance-cases.json), October 25, 2026, after merged #1547.
+The [original qualification](CALIFORNIA-MEDICAID-QUALIFICATION.md) retains historical validation. The original sequence below is a dated plan; native-only
 startup, explicit unavailable accumulation and bounded settlement GL now have
 scoped implementations. Use the current capability ledger before reopening
 a historical finding.

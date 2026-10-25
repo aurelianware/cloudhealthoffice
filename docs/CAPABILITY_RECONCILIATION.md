@@ -15,6 +15,38 @@ replacement-card ordering from PCP changes is also absent; card rendering and a
 member event alone do not implement fulfillment. Older dated findings below
 retain their original evidence, with this section governing the new writer scope.
 
+## California acceptance refresh after merged #1547 — October 25, 2026
+
+Source: main `1b9319c17bf1ab376a0155d0c7dbf6100090ee77`, native CHO,
+250,000 members, plan-operated Azure/GCP. [Current acceptance contracts](implementation/CALIFORNIA-LAUNCH-ACCEPTANCE.md)
+and [unexecuted scenario definitions](implementation/california-acceptance-cases.json)
+supersede conflicting older California summaries; dated validation counts remain
+historical. No plan launch approval, actual partner acceptance or complete legal
+crosswalk is asserted. Prior fixes receive scoped credit; requirements are not
+closed merely by defining tests.
+
+| Finding | Current status / acceptance boundary |
+| --- | --- |
+| CA-00 | Unverified: actual entity, contract/model/counties, launch, benefits and delegation need approval. |
+| CA-01 | Confirmed gap: paid-claim encounter consumer is FL-only; CA characterization demonstrates no record, not a repair. |
+| CA-02 | Partial: batch integrity/999 semantics repaired; CA partner final acceptance, corrections and QMED 2.0 reconciliation remain. |
+| CA-03 | Unverified: medical MEDS/834/HCO controls, CIN/retroactivity and downstream reconciliation need actual feed acceptance. |
+| CA-04 | Partial: composition/rendering and scoped California appeals pack exist; PA appeal/hearing and delivered notices remain unaccepted. |
+| CA-05 | Partial: bounded claims settlement GL exists; returns, premium/capitation lineage and integrated close remain. |
+| CA-06 | Partial: PAVE adapter is unimplemented; authorized enrollment source, 274 and directory acceptance remain. |
+| CA-07 | Partial: FFS unified contracts exist; capitation child propagation still returns 501. |
+| CA-08 | Partial: #1547 fixes current-day assignment API concurrency/history/coverage; supported coverage lifecycle writers now share fences and check future coverage reservations; PCP scheduling, legacy/direct DB writers, scope and cloud acceptance remain. |
+| CA-09 | Unverified: native engines exist; clinically approved California benefit/PA/clock corpus absent from accepted evidence. |
+| CA-10 | Unverified: deployed cloud workload, recovery, migration and staffed operations need acceptance. |
+| CA-11 / CAP-39 | Partial: #1542 evidence/annual draft implemented; complete sources, plan mapping, freeze/publication and DHCS/QIC outputs remain. |
+| CA-12 | Partial: native API surfaces exist; clinical/document/P2P/bulk completeness and applicable 2026 US Core 6.1.0/SMART 2.0 qualification remain open. Historical 3.1.1 testing is insufficient evidence. |
+| CA-13 | Unverified: complete distinct-member/repeat-use metrics, directory and member/provider education evidence not established. |
+
+Current source register distinguishes medical APL 25-017 from dental guidance,
+QMED 2.0/APL 26-003 from superseded encounter references and medical APL 26-008
+from county behavioral-health BHIN 26-008. Proposed scenario results are empty.
+This assessment changes no runtime routes, standards pins or acceptance status.
+
 ## PCP assignment transaction follow-up
 
 The new production assignment decorator serializes member/panel contenders in

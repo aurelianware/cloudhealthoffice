@@ -210,7 +210,7 @@
           "us_core_client_v700", "us_core_client_v800"
         ],
         "suitesProvenance": "Read from the Inferno::TestSuite ids in the kit's own lib/ at the pinned tag, not from documentation.",
-        "choSuite": "us_core_v311 — CHO's CapabilityStatement and Cms0057ComplianceChecker target US Core 3.1.1+, the floor CMS-0057-F sets. us_core_v610 is the natural second run.",
+        "choSuite": "us_core_v311 is the historical CHO regression suite, not proof of current California conformance. DHCS APL 26-008 specifies the applicable 2026 US Core 6.1.0/SMART 2.0.0 transition (or permitted updated versions). Run us_core_v610 and the applicable SMART/security checks against the actual server; see docs/implementation/CALIFORNIA-LAUNCH-ACCEPTANCE.md CA-12. No pins or execution results change with this qualification note.",
         "runner": "docker compose build && docker compose up (upstream run.sh) from a checkout at the pinned tag"
       },
       "implementationGuides": {
