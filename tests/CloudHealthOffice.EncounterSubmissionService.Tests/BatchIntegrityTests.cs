@@ -58,6 +58,7 @@ public class BatchIntegrityTests
     [Theory]
     [InlineData("tenant-2", "FL")]
     [InlineData("tenant-1", "CA")]
+    [InlineData("tenant-1", "IL")]
     public async Task WrongTenantOrState_IsRefusedBeforeFetchingOrWriting(string tenant, string state)
     {
         var handler = new Handler(_ => new(HttpStatusCode.OK));

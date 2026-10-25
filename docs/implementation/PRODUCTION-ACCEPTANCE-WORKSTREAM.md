@@ -1,5 +1,7 @@
 # Production acceptance workstream
 
+Current prospective Chicago-area Illinois Medicaid qualification for a 2027 plan start: [Illinois evidence and prioritized backlog](ILLINOIS-MEDICAID-QUALIFICATION.md). Exact launch/rating period, counties, operator/contract and benefit allocation remain dependencies. Current official model/interface versions need 2027 confirmation; applicable CMS APIs remain launch dependencies. The canonical capability ledger owns status; shared product work is reused across states.
+
 Current Texas STAR requirement and remediation contracts: [Texas Medicaid qualification](TEXAS-MEDICAID-QUALIFICATION.md), based on main after merged #1542. Actual program scope, service areas and launch date remain dependencies. The canonical ledger owns status.
 
 Current California/CMS verification and prioritized acceptance contracts:

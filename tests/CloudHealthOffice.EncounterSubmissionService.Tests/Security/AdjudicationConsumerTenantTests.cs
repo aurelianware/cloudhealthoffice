@@ -45,6 +45,21 @@ public class AdjudicationConsumerTenantTests
     }
 
     [Fact]
+    public async Task IllinoisMedicaidMessage_DoesNotCreateFloridaSubmissionRecord()
+    {
+        var (consumer, service) = Create();
+        var message = FlMedicaid("tenant-1");
+        message.StateCode = "IL";
+
+        await consumer.ProcessMessageAsync(message);
+
+        // Characterizes the current routing boundary; an Illinois submission
+        // and acceptance pipeline remains a separate implementation requirement.
+        service.Verify(s => s.CreateSubmissionRecordAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
+    }
+
+    [Fact]
     public async Task MessageWithTenant_CreatesRecordInThatTenant()
     {
         var (consumer, service) = Create();
