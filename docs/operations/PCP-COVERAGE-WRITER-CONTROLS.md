@@ -67,11 +67,24 @@ scope and member exceptions; test peak contention, long panels, driver retries,
 managed topology/failover and recoverability. The interval scan reads the provider's
 roster and is not yet qualified for the plan's 250k-member workload.
 
+## Focused CI result
+
+[Atomic PCP Capacity run 40217632511](https://github.com/aurelianware/cloudhealthoffice/actions/runs/40217632511)
+on source commit `e36185df49fce9d8106311cebb9910d2b30cff06` built successfully
+with zero warnings/errors and passed **48 standard VSTest cases**, zero failed.
+This includes the real replica-set admission races, future-reservation/history
+rollback, standalone refusal and interval/error-mapping cases described above.
+The initial test-build namespace/async-analyzer issues were corrected before this
+successful run. Later documentation changes do not reuse this as a new execution.
+Broader CI, legacy-writer retirement, exception operations and managed-cloud/
+250k-member workload acceptance remain separate.
+
 ## Other PCP-change acceptance gaps
 
 Member-service publishes `PcpChanged` after a successful proxied assignment;
 coverage-service itself does not provide a durable event/outbox for direct calls.
-ID-card service accepts explicit orders and can render PCP bindings, but no
+ID-card service accepts explicit orders and exposes PCP template bindings, but its
+native PDF renderer currently omits those fields. No
 consumer connects PCP changes to replacement-card orders. Automatic reissue,
 assignment-based deduplication, effective-date-aware digital content and print/mail
 fulfillment reconciliation remain a separate acceptance requirement. Do not infer

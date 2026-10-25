@@ -7,7 +7,9 @@ the assignment API member/panel fence protocol. Future stored coverage spans
 reserve capacity; direct PCP/date edits require the assignment API. Explicit
 409/503 responses replace silent roster bypasses. See [the runbook](operations/PCP-COVERAGE-WRITER-CONTROLS.md)
 and proposed [ADR 032](adr/032-pcp-coverage-writer-boundary.md). Source is merged
-#1547; executable validation of this new scope awaits CI. Ordinary coverage writes
+#1547. Focused CI run 40217632511 at `e36185df` passed 48 standard VSTest
+cases, including real replica-set writer races and rollback. Broader CI and
+operational acceptance remain separate. Ordinary coverage writes
 now also require Mongo transactions. Scheduled/retroactive PCP changes remain
 refused; provider snapshots, old/direct DB writers, plan/location policy, workload
 and managed-cloud acceptance remain open. CA-08 remains partial. Automatic

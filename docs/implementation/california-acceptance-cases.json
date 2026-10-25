@@ -397,6 +397,7 @@
       "scenario": "Accept the plan-approved replacement-card rule when a committed PCP change alters printed card content.",
       "expectedEvidence": [
         "Durable post-commit trigger covering every supported assignment entry point",
+        "Approved PCP content verified in actual PDF and digital/template outputs; bindings alone are insufficient",
         "Assignment-based duplicate suppression and effective-date-aware card bindings",
         "Separate digital issuance and print/mail acceptance, failure and reconciliation evidence",
         "No replacement for a rejected assignment; retry does not order duplicates"
