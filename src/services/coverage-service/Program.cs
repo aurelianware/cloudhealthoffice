@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CoverageService.Repositories;
 using CoverageService.Services;
+using MongoDB.Driver;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
@@ -47,7 +48,11 @@ if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvide
         "Coverage Service supports only MongoDB. Remove Database:Provider or set it to MongoDb.");
 }
 
-builder.Services.AddScoped<ICoverageRepository, CoverageRepositoryMongo>();
+// Explicit factory: production cannot silently omit the write guard through an
+// optional constructor argument retained for raw repository/legacy test fixtures.
+builder.Services.AddScoped<ICoverageRepository>(sp => new CoverageRepositoryMongo(
+    sp.GetRequiredService<IMongoDatabase>(), sp.GetRequiredService<PcpMongoSession>(),
+    sp.GetRequiredService<PcpRosterWriteGuard>()));
 builder.Services.AddScoped<IPcpAssignmentRepository, PcpAssignmentRepositoryMongo>();
 
 // PCP assignment + provider client + care team projector
@@ -63,6 +68,8 @@ builder.Services.AddHttpClient<IProviderServiceClient, HttpProviderServiceClient
 // One shared request-scoped context makes assignment history and roster writes
 // participate in the same Mongo transaction as the capacity read.
 builder.Services.AddScoped<PcpMongoSession>();
+builder.Services.AddScoped<PcpWriteTransaction>();
+builder.Services.AddScoped<PcpRosterWriteGuard>();
 builder.Services.AddScoped<IPanelCounter, MongoPcpPanelCounter>();
 builder.Services.AddScoped<PcpAssignmentService>();
 builder.Services.AddScoped<IPcpAssignmentService, TransactionalPcpAssignmentService>();
@@ -102,6 +109,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseMiddleware<CoverageService.Middleware.PcpRosterWriteMiddleware>();
 app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();

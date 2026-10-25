@@ -1,5 +1,20 @@
 # Capability Reconciliation
 
+## PCP coverage-writer controls follow-up
+
+Production coverage creates, replacements, status changes and deletions now join
+the assignment API member/panel fence protocol. Future stored coverage spans
+reserve capacity; direct PCP/date edits require the assignment API. Explicit
+409/503 responses replace silent roster bypasses. See [the runbook](operations/PCP-COVERAGE-WRITER-CONTROLS.md)
+and proposed [ADR 032](adr/032-pcp-coverage-writer-boundary.md). Source is merged
+#1547; executable validation of this new scope awaits CI. Ordinary coverage writes
+now also require Mongo transactions. Scheduled/retroactive PCP changes remain
+refused; provider snapshots, old/direct DB writers, plan/location policy, workload
+and managed-cloud acceptance remain open. CA-08 remains partial. Automatic
+replacement-card ordering from PCP changes is also absent; card rendering and a
+member event alone do not implement fulfillment. Older dated findings below
+retain their original evidence, with this section governing the new writer scope.
+
 ## PCP assignment transaction follow-up
 
 The new production assignment decorator serializes member/panel contenders in
