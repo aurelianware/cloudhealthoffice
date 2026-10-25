@@ -44,6 +44,20 @@ public class AdjudicationConsumerTenantTests
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
     }
 
+    // Characterizes the missing Oregon route; this is not desired launch behavior.
+    [Fact]
+    public async Task OregonMedicaid_CurrentlyCreatesNoEncounterRecord()
+    {
+        var (consumer, service) = Create();
+        var message = FlMedicaid("tenant-1");
+        message.StateCode = "OR";
+
+        await consumer.ProcessMessageAsync(message);
+
+        service.Verify(s => s.CreateSubmissionRecordAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
+    }
+
     [Fact]
     public async Task MessageWithTenant_CreatesRecordInThatTenant()
     {

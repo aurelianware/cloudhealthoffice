@@ -1,5 +1,7 @@
 # Production acceptance workstream
 
+Current Oregon OHP evidence and prioritized acceptance contracts: [Oregon Medicaid qualification](OREGON-MEDICAID-QUALIFICATION.md), pinned after merged #1542 and #1543. CHO is the platform; operator/contract/county/benefit/launch scope remains unresolved. Reuse shared fixes without importing Texas policy. The canonical capability ledger owns status.
+
 Current Texas STAR requirement and remediation contracts: [Texas Medicaid qualification](TEXAS-MEDICAID-QUALIFICATION.md), based on main after merged #1542. Actual program scope, service areas and launch date remain dependencies. The canonical ledger owns status.
 
 Current California/CMS verification and prioritized acceptance contracts:
