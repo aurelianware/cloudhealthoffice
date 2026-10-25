@@ -1,5 +1,39 @@
 # Capability Reconciliation
 
+## Oregon OHP assessment after merged PRs #1542/#1543 — October 24, 2026
+
+Source: main `e7d633930222050184e98ddb851bf09fb3ef9495`. CHO is the assessed
+platform; the prospective operator, contract, counties, benefits and launch are
+unresolved. [Oregon qualification and prioritized backlog](implementation/OREGON-MEDICAID-QUALIFICATION.md)
+records current source paths, authoritative requirements, owners, reproductions,
+acceptance and the validation limits. This section owns Oregon status; Texas and
+California sections retain their own program-specific scope and dated evidence.
+No source inspection or passing test establishes Oregon launch readiness.
+
+| Finding | Classification | Executing behavior / acceptance boundary |
+| --- | --- | --- |
+| OR-00 | Unverified | CCO versus delegated operator, executed authority and launch/population/benefit scope not supplied. |
+| OR-01 | Unverified | Generic durable 834/member/coverage lifecycle implemented; Oregon identifiers, assignments, feeds, CE transitions and downstream/premium reconciliation not accepted. |
+| OR-02 | Confirmed gap | Registered FL-only consumer and FMMIS JSON builder omit/refuse Oregon. New OR consumer and batch characterization cases execute; generic 837 export is not a state-accepted route. |
+| OR-03 | Confirmed gap | No Oregon source in registered provider-enrollment package. State gate/current NPI-state cache do not establish source/history/location/freshness acceptance or DSN reporting. |
+| OR-04 | Unverified | Oregon coverage/EPSDT/date-of-service policy and 2027 transition corpus absent from accepted evidence. Texas state-scoped seeds are not Oregon content. |
+| OR-05 | Partial | Ordinary 7-day/72-hour receipt arithmetic exists; service-specific CRT/drug/HRSN clocks, lawful extensions and delivered notice deadlines need acceptance/repair. |
+| OR-06 | Partial | Native contract terms exist; capitation child synchronization still returns 501. OHA premium, delegate funding and provider capitation remain distinct acceptance boundaries. |
+| OR-07 | Partial | Unavailable capacity fails closed; new barrier test reproduces two members taking one slot. Panel reconciliation has no host scheduler. |
+| OR-08 | Partial | Letter composition/rendering and durable claim appeals exist; Oregon fulfilled notices, native PA appeal/hearing and benefit-continuation workflows not established. |
+| OR-09 | Unverified | Native COB secondary/tertiary and grouping/pricing implemented; Oregon benefit/contract-specific expected-dollar corpus not accepted. |
+| OR-10 | Partial | Bank-confirmed whole credits-only claims settlement reaches GL; return/capitation/premium event seams, open-item aging and integrated close/report acceptance remain. |
+| OR-11 | Unverified | Assigned cross-benefit/delegated/waiver workflows require explicit scope and acceptance. HRSN can require MMIS encounters and separate reports; HRS/SHARE are distinct. |
+| OR-12 | Unverified | Scoped token tenancy, native FHIR/PAS/DTR and unavailable failure semantics credited; deployed identity, confinement, restore and source completeness not accepted. |
+| OR-13 | Unverified | No approved workload/scale/recovery or OHA/partner launch-readiness evidence for 250k members. |
+| OR-14 / CAP-39 | Partial | #1542 native PA evidence/annual drafts implemented; authoritative sources, plan mapping, reconciled freeze, approved publication and wider CMS acceptance remain. |
+
+487 focused standard-VSTest cases passed, zero failed/skipped, including real-Mongo
+PA/DTR cases and three new characterization cases/rows. Exact filters, initial
+socket/restore failures and unexecuted scope are in the Oregon validation record.
+This does not reuse #1543's historical 116-test count. No application repair,
+state/bank submission, merge, deployment or public publication is implied.
+
 ## Texas STAR assessment after merged PR #1542 — October 24, 2026
 
 Source: main `9cea3b614ae006c96d0a9aafdad5937ad4f8510c`. PR #1542 is merged;
