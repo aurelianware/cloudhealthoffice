@@ -16,6 +16,11 @@ public class StandardRolesTests
     [InlineData("TenantAdmin", "clinical:read", true)]
     [InlineData("ComplianceOfficer", "clinical:read", true)]
     [InlineData("MemberServices", "clinical:read", false)]
+    [InlineData("MemberServices", "service:read", true)]
+    [InlineData("MemberServices", "service:contact", true)]
+    [InlineData("MemberServices", "workqueue:read", true)]
+    [InlineData("MemberServices", "workqueue:work", true)]
+    [InlineData("MemberServices", "claims:work", false)]
     [InlineData("ClaimsExaminer", "clinical:read", false)]
     [InlineData("EnrollmentSpecialist", "clinical:read", false)]
     [InlineData("MemberServices", "payer-to-payer:initiate", true)]
@@ -78,6 +83,7 @@ public class StandardRolesTests
     }
 
     [Theory]
+    [InlineData("MemberServices")]
     [InlineData("AccountManager")]
     [InlineData("Underwriter")]
     [InlineData("ConfigurationAnalyst")]

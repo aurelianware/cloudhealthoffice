@@ -23,7 +23,7 @@ if kubectl --context "$context" get namespace "$namespace" >/dev/null 2>&1; then
   owner=$(kubectl --context "$context" get namespace "$namespace" -o jsonpath='{.metadata.labels.app\.kubernetes\.io/part-of}')
   [ "$owner" = cho-contact-local ] || { echo "Refusing to adopt existing namespace $namespace" >&2; exit 1; }
 fi
-services='contact-service document-service appeals-service authorization-service work-management-service portal'
+services='claims-service tenant-service contact-service document-service appeals-service authorization-service work-management-service portal'
 for service in $services; do
   image="cho-contact-local/$service:local"
   if [ "$skip_build" = false ]; then
@@ -63,11 +63,12 @@ kubectl --context "$context" apply -k deploy/local/contact-workflow
 kubectl --context "$context" -n "$namespace" rollout status deployment/local-vault --timeout=180s
 kubectl --context "$context" -n "$namespace" rollout status deployment/mongo --timeout=180s
 kubectl --context "$context" -n "$namespace" rollout status deployment/redis --timeout=120s
+kubectl --context "$context" -n "$namespace" exec -i deployment/mongo -- mongosh --quiet < scripts/setup/seed-contact-workflow-local.js
 for dependency in gcs-emulator clamav; do
   kubectl --context "$context" -n "$namespace" rollout status "deployment/$dependency" --timeout=1200s
 done
 # Local tags are rebuilt/imported above; restart only this isolated workload.
-kubectl --context "$context" -n "$namespace" rollout restart deployment/contact-service deployment/document-service deployment/appeals-service deployment/authorization-service deployment/work-management-service deployment/portal
+kubectl --context "$context" -n "$namespace" rollout restart deployment/claims-service deployment/tenant-service deployment/contact-service deployment/document-service deployment/appeals-service deployment/authorization-service deployment/work-management-service deployment/portal
 for service in $services; do
   kubectl --context "$context" -n "$namespace" rollout status "deployment/$service" --timeout=240s
 done

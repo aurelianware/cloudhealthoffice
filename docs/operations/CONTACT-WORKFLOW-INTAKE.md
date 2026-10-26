@@ -108,7 +108,7 @@ kubectl --context docker-desktop -n cho-contact-local port-forward svc/portal 50
 ```
 
 Open `http://localhost:5090/service`. Keep the port-forward terminal running.
-This builds six images and deploys the portal, five workflow services, Mongo,
+This builds eight images and deploys the portal, seven backend services, Mongo,
 Redis, the local GCS emulator, ClamAV and a private synthetic-only Vault dev server in `cho-contact-local`.
 All Kubernetes commands explicitly select Docker Desktop. Existing namespaces
 are not modified. Docker Desktop kind nodes must be visible to `docker inspect`;
@@ -196,3 +196,36 @@ These checks establish the observed local paths only. They do not establish
 real GCP IAM, cloud bucket policy, signed URL support, backups, disaster recovery,
 scanner outage recovery, or comprehensive malware detection. The old Pending
 in-memory document was not migrated or rescanned.
+
+## Claim-link and follow-up acceptance - October 25, 2026
+
+The local setup now includes claims-service and tenant-service. Its idempotent
+seed creates only the synthetic local-demo directory entry (MemberServices) and
+claim `synthetic-contact-link-20261025`; it never replaces existing records.
+
+For follow-up membership, open `/admin/work-management`, select Memberships,
+and add user `local-demo-admin` to `Follow-up: Other`. The directory validates
+`service:contact` before accepting membership. Open `/my-work`, click Get Next,
+and enter a resolution on the contact before clicking Complete follow-up.
+
+Observed results:
+- Contact `b81e96b6-be5f-441a-a48d-0064812a6d90` linked the synthetic claim.
+  Claims-service persisted note `4eb945dc-d058-4a2b-b255-7161860a2441`, authored
+  by `local-demo-admin`, referencing contact `C-20261026-598DC864`.
+- The existing follow-up on contact `6fee1dea-6db9-4eb4-8a75-cb90b60df613`
+  was leased through Get Next and completed through the portal, displaying Done.
+- The tenant directory originally refused membership because its MemberServices
+  catalogue lacked the contact/work permissions already present in the shared
+  policy. The catalogue now uses that shared role policy; 65 focused role cases
+  passed, including role equivalence and denial of claims adjudication access.
+
+GCP: the existing document-service Workload Identity wrote and read a unique
+78-byte synthetic object in `cloud-health-office-demo-cho-documents` with matching
+SHA-256 `3b5c0670a8cecc2f25782c53abf8ae78dd338d6dd7968c048020891d1be48a14`.
+The test object was removed with a generation precondition. Bucket metadata showed
+uniform bucket-level access and enforced public access prevention. This validates
+that observed identity/storage path, not all IAM policy or full cloud workflow.
+The inspected GKE workload still ran pre-merge images; contact-service referenced
+an Azure registry image and had zero available replicas. No cloud deployment or
+IAM changes were made. The cloud demo also permits unscanned content and needs a
+separate scanner deployment review before scanner acceptance there.
