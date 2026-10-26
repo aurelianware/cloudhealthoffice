@@ -232,3 +232,37 @@ then opts only appeals-service into Google Secret Manager and uses encryption-ke
 readiness. If either setting is supplied without the other, deployment is refused.
 Keep the contact callback routing fix from PR #1560. After rollout, reconcile any
 saved Unknown intake through contact-service before attempting a correction.
+
+### Case documents and Finish validation (2026-10-26)
+
+Member service case review shows the original contact's document catalog under
+**Case documents**. It uses the `Call` subject and contact ID for listing,
+scanning, linking, upload and download; it does not copy files or create case
+links. `appeals:read` alone does not grant this section: `service:read` and the
+normal document-service permissions and tenant checks still apply. The website
+[Contacts & Documents guide](../../src/site/docs/contact-documents-guide.html#case-documents)
+includes a screenshot of a local portal preview reading the synthetic GCP case
+and its existing clean file.
+
+The preview used case `contact-b116087c0c7bc6a834b25dadcfd5eee1` and original
+contact `75bc818e-672b-4594-b2c8-2063a2753dba`. The same 141-byte clean document
+was visible without copying it. Portal regression validation passed 1,322 tests,
+including case switching and refusal of contact documents to an appeals-only
+reader.
+
+Live Finish acceptance is **not complete**. A separate insert-only synthetic
+fixture, `synthetic-finish-20261026` / `SYNTHETIC-FINISH-20261026`, was based on
+seeded MCC inputs with a distinct service date. No original claim was changed.
+After staging a CO-50 line denial and upholding the MUE in the GCP portal,
+**Confirm and finish** reached the real re-adjudication pipeline. The pipeline
+raised a new `MEDREVIEW` pend because the synthetic billing provider had no
+current OIG LEIE / SAM exclusion-screening result; no examiner resolution was
+saved. The returned pend also includes a current dated MUE edit snapshot.
+
+Do not count this as a saved-decision/totals/history success or bypass the
+provider gate to obtain one. Complete normal provider verification for a
+suitable synthetic fixture, refresh the claim to review its current pends and
+fingerprint, then repeat Finish. Verify the saved examiner resolution, line
+adjustments, recalculated totals and decision note after reloading the claim.
+The fixture must not be overwritten or reset blindly after an interrupted
+request; inspect persisted state first.
