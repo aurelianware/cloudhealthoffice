@@ -30,6 +30,46 @@ public class DocumentCatalogServiceTests
     }
 
     [Fact]
+    public async Task Retry_timeout_is_reported_as_service_unavailable()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string, string?> { ["Services:DocumentService"] = BaseUrl }).Build();
+        var service = new DocumentCatalogService(new HttpClient(new FakeHandler(_ => throw new TaskCanceledException())),
+            configuration, NullLogger<DocumentCatalogService>.Instance);
+        var act = () => service.RetryScanAsync("doc-1", DocumentSubjectKind.Claim, "CLM-1");
+        await act.Should().ThrowAsync<ServiceUnavailableException>();
+    }
+
+    [Theory]
+    [InlineData("Clean", "can now be opened")]
+    [InlineData("Failed", "remains blocked")]
+    [InlineData("Infected", "quarantined")]
+    public async Task Retry_scan_preserves_subject_context_and_reports_the_verdict(string status, string message)
+    {
+        var (service, handler) = Build(HttpStatusCode.OK, "{\"scanStatus\":\"" + status + "\"}");
+        var result = await service.RetryScanAsync("doc/1", DocumentSubjectKind.Call, "contact & 7");
+        handler.CapturedUrls.Should().ContainSingle().Which.Should().Be(
+            BaseUrl + "/api/v1/documents/doc%2F1/scan-retry?subjectKind=Call&subjectId=contact%20%26%207");
+        handler.CapturedRequests.Single().Method.Should().Be(HttpMethod.Post);
+        result.Confirmed.Should().BeTrue();
+        result.Message.Should().Contain(message);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.Conflict)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public async Task Retry_refusals_do_not_claim_a_clean_result(HttpStatusCode status)
+    {
+        var (service, _) = Build(status, "private failure details");
+        var result = await service.RetryScanAsync("doc-1", DocumentSubjectKind.Claim, "CLM-1");
+        result.Confirmed.Should().BeFalse();
+        result.Status.Should().BeNull();
+        result.Message.Should().NotContain("private failure details");
+    }
+
+    [Fact]
     public async Task Adding_a_link_posts_target_and_escaped_source_context()
     {
         string? body = null;

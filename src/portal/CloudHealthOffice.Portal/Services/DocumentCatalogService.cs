@@ -155,10 +155,15 @@ public sealed class ClinicalSummaryItemView
     public string? Detail { get; init; }
 }
 
+public sealed record DocumentScanRetryResult(bool Confirmed, DocumentScanStatus? Status, string Message);
+
 public interface IDocumentCatalogService
 {
     Task<string?> UploadAsync(DocumentSubjectKind kind, string subjectId, string title, string type,
         Stream content, string fileName, string contentType, CancellationToken ct = default);
+
+    Task<DocumentScanRetryResult> RetryScanAsync(string documentId, DocumentSubjectKind kind, string subjectId,
+        CancellationToken ct = default);
 
     /// <summary>Add an additional subject link, using an existing authorized subject context.</summary>
     Task<string?> AddLinkAsync(string documentId, DocumentSubjectKind sourceKind, string sourceId,
@@ -297,6 +302,38 @@ public sealed class DocumentCatalogService : IDocumentCatalogService
             };
         }
         catch (HttpRequestException) { throw new ServiceUnavailableException("Document Service", new HttpRequestException("Upload unavailable.")); }
+    }
+
+    public async Task<DocumentScanRetryResult> RetryScanAsync(string documentId, DocumentSubjectKind kind,
+        string subjectId, CancellationToken ct = default)
+    {
+        var url = $"{BaseUrl()}/api/v1/documents/{Uri.EscapeDataString(documentId)}/scan-retry" +
+                  $"?subjectKind={kind}&subjectId={Uri.EscapeDataString(subjectId)}";
+        try
+        {
+            using var response = await _httpClient.PostAsync(url, null, ct);
+            if (!response.IsSuccessStatusCode)
+                return new(false, null, response.StatusCode switch
+                {
+                    HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound =>
+                        "Scan retry was refused. Check your access to this record and refresh.",
+                    HttpStatusCode.Conflict => "The document changed, is on legal hold, or no longer has a failed scan. Refresh before retrying.",
+                    _ => "The document service did not confirm the retry. Refresh before retrying."
+                });
+            var document = await response.Content.ReadFromJsonAsync<CatalogDocumentSummary>(ct);
+            return document?.ScanStatus switch
+            {
+                DocumentScanStatus.Clean => new(true, document.ScanStatus, "Scan completed: Clean. The document can now be opened."),
+                DocumentScanStatus.Infected => new(true, document.ScanStatus, "Scan completed: Infected. The document is quarantined and cannot be opened."),
+                DocumentScanStatus.Failed => new(true, document.ScanStatus, "The scan failed again. The document remains blocked. Ask an administrator to check scanner availability."),
+                _ => new(false, null, "No completed scan result was returned. Refresh to check the document status.")
+            };
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new ServiceUnavailableException("Document Service", new HttpRequestException("Scan retry timed out.", ex));
+        }
+        catch (HttpRequestException ex) { throw new ServiceUnavailableException("Document Service", ex); }
     }
 
     public async Task<string?> AddLinkAsync(string documentId, DocumentSubjectKind sourceKind, string sourceId,

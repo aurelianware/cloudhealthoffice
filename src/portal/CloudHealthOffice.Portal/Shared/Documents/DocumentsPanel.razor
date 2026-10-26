@@ -49,6 +49,10 @@
     {
         <MudAlert Severity="@(_linkFailed ? Severity.Warning : Severity.Success)" data-testid="document-link-message">@_linkMessage</MudAlert>
     }
+    @if (_retryMessage is not null)
+    {
+        <MudAlert Severity="@(_retryClean ? Severity.Success : Severity.Warning)" data-testid="document-retry-message">@_retryMessage</MudAlert>
+    }
     @if (_preview is not null)
     {
         <MudButton OnClick="@(() => _preview = null)">Close preview</MudButton>
@@ -145,6 +149,13 @@
                                        data-testid="@("document-link-" + context.Id)">Link to record</MudButton>
                         }
 
+                        @if (_canLink && !context.LegalHold && !context.UploadPending && context.ScanStatus == DocumentScanStatus.Failed)
+                        {
+                            <MudButton Size="Size.Small" OnClick="@(() => RetryScanAsync(context))" Disabled="@(_retryId is not null)"
+                                       data-testid="@("document-retry-" + context.Id)">
+                                @(_retryId == context.Id ? "Scanning…" : "Retry scan")
+                            </MudButton>
+                        }
                         @if (context.CanOpen)
                         {
                             <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
@@ -306,6 +317,37 @@
 </div>
 
 @code {
+    private string? _retryId;
+    private string? _retryMessage;
+    private bool _retryClean;
+
+    private async Task RetryScanAsync(CatalogDocumentSummary document)
+    {
+        if (!_canLink || _retryId is not null || document.LegalHold || document.UploadPending
+            || document.ScanStatus != DocumentScanStatus.Failed) return;
+        var sourceKind = SubjectKind;
+        var sourceId = SubjectId;
+        _retryId = document.Id;
+        _retryMessage = null;
+        try
+        {
+            var result = await DocumentCatalog.RetryScanAsync(document.Id, sourceKind, sourceId);
+            if (sourceKind != SubjectKind || sourceId != SubjectId) return;
+            _retryMessage = result.Message;
+            _retryClean = result.Confirmed && result.Status == DocumentScanStatus.Clean;
+            await LoadAsync();
+        }
+        catch (ServiceUnavailableException)
+        {
+            if (sourceKind == SubjectKind && sourceId == SubjectId)
+            {
+                _retryClean = false;
+                _retryMessage = "Document service is unavailable. Refresh to check the scan result before retrying.";
+            }
+        }
+        finally { _retryId = null; }
+    }
+
     private MudTextField<string>? _linkIdInput;
     private bool _focusLinkId;
 
@@ -428,6 +470,7 @@
         var key = SubjectKind + ":" + SubjectId;
         if (key == _loadedFor) return;
         _loadedFor = key;
+        _retryMessage = null;
         _linkDocument = null;
         _linkMessage = null;
         await LoadAsync();

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using CloudHealthOffice.DocumentStore;
 using DocumentService.Models;
+using DocumentService.Services;
 using DocumentService.Repositories;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -20,6 +21,7 @@ public sealed class DocumentServiceFactory : WebApplicationFactory<Program>
     public InMemoryDocumentRepository Documents { get; } = new();
     public InMemoryAccessAudit Audit { get; } = new();
     public LinkSigningStore Storage { get; } = new();
+    public RetryTestScanner Scanner { get; } = new();
 
     /// <summary>Documents:AllowUnscannedContent, per test.</summary>
     public bool AllowUnscanned { get; set; }
@@ -40,6 +42,8 @@ public sealed class DocumentServiceFactory : WebApplicationFactory<Program>
             services.AddSingleton<IDocumentRepository>(Documents);
             services.AddSingleton<IDocumentAccessAudit>(Audit);
             services.AddSingleton<IDocumentStore>(Storage);
+            services.RemoveAll<IDocumentScanner>();
+            services.AddSingleton<IDocumentScanner>(Scanner);
             // Read per request, so a test can flip it.
             services.RemoveAll<Microsoft.Extensions.Options.IOptions<global::DocumentService.Services.DocumentServiceOptions>>();
             services.AddSingleton<Microsoft.Extensions.Options.IOptions<global::DocumentService.Services.DocumentServiceOptions>>(new LiveOptions(this));
@@ -52,6 +56,7 @@ public sealed class DocumentServiceFactory : WebApplicationFactory<Program>
         Audit.Clear();
         Storage.Clear();
         AllowUnscanned = false;
+        Scanner.Scan = null;
     }
 }
 
@@ -192,4 +197,11 @@ public sealed class LinkSigningStore : IDocumentStore
             : null);
 
     public Uri GetUri(string container, string blobName) => _inner.GetUri(container, blobName);
+}
+
+public sealed class RetryTestScanner : IDocumentScanner
+{
+    public Func<Stream, CancellationToken, Task<DocumentScan>>? Scan { get; set; }
+    public Task<DocumentScan> ScanAsync(Stream content, string contentType, CancellationToken ct) =>
+        Scan?.Invoke(content, ct) ?? Task.FromResult(new DocumentScan { Status = ScanStatus.Pending, Engine = "none" });
 }

@@ -543,6 +543,53 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
         return Ok(SubjectAccess.Project(_actor, document));
     }
 
+    /// <summary>Retry a failed scan of the stored file without replacing bytes or changing its links.</summary>
+    [HttpPost("{id}/scan-retry")]
+    public async Task<IActionResult> RetryScan(string id, [FromQuery] string? subjectKind,
+        [FromQuery] string? subjectId, CancellationToken ct)
+    {
+        if (!SubjectAccess.TryCreate(subjectKind, subjectId, out var subject))
+            return BadRequest("subjectKind and subjectId name the subject the document is opened from.");
+
+        var (document, decision) = await LoadAsync(id, subject, ct);
+        IActionResult? refusal = null;
+        if (!_actor.HasPermission(ChoRolePermissions.DocumentsRead))
+            (decision, refusal) = (AccessDecision.Deny("needs documents:read"), Forbidden("needs documents:read"));
+        else if (!decision.Allowed)
+            refusal = DeniedResult(document, subject);
+        else if (document!.Retention.LegalHold.Set)
+            (decision, refusal) = (AccessDecision.Deny("legal hold"), LegalHoldConflict());
+        else if (document.PendingUploadPath != null || document.Scan.Status != ScanStatus.Failed)
+            (decision, refusal) = (AccessDecision.Deny("only finalized Failed documents can be retried"),
+                Conflict("Only finalized documents with a Failed scan can be retried."));
+
+        await AuditAsync(DocumentAccessAction.ScanRetry, id, subject, decision.Allowed,
+            decision.Allowed ? "scan retry requested" : decision.Reason, ct);
+        if (refusal != null) return refusal;
+
+        // Keep Failed persisted throughout the scan: even deployments allowing
+        // unscanned Pending content must not open a file while retrying it.
+        DocumentScan scan;
+        try
+        {
+            await using var content = await _store.DownloadAsync(Container, document!.StoragePath, ct);
+            scan = await _scanner.ScanAsync(content, document.ContentType, ct);
+        }
+        catch (Exception ex) when (ex is IOException or HttpRequestException)
+        {
+            _logger.LogWarning(ex, "Document scan retry could not complete");
+            scan = new DocumentScan { Status = ScanStatus.Failed, Engine = "unavailable", At = Now };
+        }
+        if (scan.Status is not (ScanStatus.Clean or ScanStatus.Infected))
+            scan.Status = ScanStatus.Failed;
+        await AuditAsync(DocumentAccessAction.ScanRetry, id, subject, allowed: true,
+            $"scan retry verdict {scan.Status}; catalog save attempted", ct);
+        document!.Scan = scan;
+        // Revision checking prevents concurrent retries or record changes from
+        // being overwritten by an older result. A losing attempt returns 409.
+        return await SaveAsync(document, ct);
+    }
+
     // ── Links ────────────────────────────────────────────────────────────
 
     /// <summary>Links the document to another subject. The caller works from a subject it is already linked to, and must be able to read the new one.</summary>

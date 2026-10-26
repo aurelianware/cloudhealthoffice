@@ -287,7 +287,8 @@ public enum DocumentAccessAction
     Link,
     Unlink,
     LegalHold,
-    AccessLog
+    AccessLog,
+    ScanRetry
 }
 
 // ── API shapes ────────────────────────────────────────────────────────────
