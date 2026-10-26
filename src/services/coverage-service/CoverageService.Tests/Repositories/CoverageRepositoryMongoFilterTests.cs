@@ -90,7 +90,7 @@ public sealed class CoverageRepositoryMongoFilterTests(MongoRunnerFixture mongo)
     }
 
     [Fact]
-    public async Task SetStatus_AfterAConcurrentEditOfOtherFields_KeepsThatEdit()
+    public async Task SetStatus_AfterAConcurrentEdit_ConflictsThenRereadsAndKeepsThatEdit()
     {
         await SeedAsync("c1", termination: D(2025, 6, 30));
         var observed = (await Repo().GetByIdAsync(Tenant, "c1"))!;
@@ -100,7 +100,15 @@ public sealed class CoverageRepositoryMongoFilterTests(MongoRunnerFixture mongo)
         edited.PcpNpi = "1234567893";
         await Repo().UpdateAsync(edited);
 
-        (await Repo().SetStatusAsync(observed, CoverageStatus.Terminated, "sweep")).Should().BeTrue();
+        (await Repo().SetStatusAsync(observed, CoverageStatus.Terminated, "sweep"))
+            .Should().BeFalse("the sweep must not apply a transition from a stale revision");
+
+        var refreshed = (await Repo().GetByIdAsync(Tenant, "c1"))!;
+        refreshed.Status.Should().Be(CoverageStatus.Active);
+        refreshed.PcpNpi.Should().Be("1234567893");
+        refreshed.Revision.Should().Be(edited.Revision);
+
+        (await Repo().SetStatusAsync(refreshed, CoverageStatus.Terminated, "sweep")).Should().BeTrue();
 
         var stored = (await Repo().GetByIdAsync(Tenant, "c1"))!;
         stored.Status.Should().Be(CoverageStatus.Terminated);

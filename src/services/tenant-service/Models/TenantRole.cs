@@ -104,16 +104,9 @@ public static class StandardRoles
         RoleName = "MemberServices",
         Description = "Handle member inquiries, verify eligibility and benefits",
         IsBuiltIn = true,
-        Permissions = new List<string>
-        {
-            "workspace:use",
-            "members:read", "members:search", "accumulators:read",
-            "eligibility:check", "claims:read", "claims:note", "coverage:read",
-            "authorizations:read", "providers:read",
-            "documents:read", "documents:write",
-            "payer-to-payer:initiate",
-            "config:read"
-        }
+        // Keep the directory entitlement checks aligned with CHO token enforcement.
+        Permissions = CloudHealthOffice.Infrastructure.Security.ChoRolePermissions
+            .ForRole("MemberServices").ToList()
     };
 
     public static readonly TenantRole EnrollmentSpecialist = new()
