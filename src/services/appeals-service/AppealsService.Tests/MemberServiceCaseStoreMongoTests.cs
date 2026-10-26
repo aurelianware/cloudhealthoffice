@@ -39,7 +39,7 @@ public sealed class MemberServiceCaseStoreMongoTests(MongoRunnerFixture mongo) :
         var original = await store.CreateOrReadAsync(Case(), default);
         var writes = await Task.WhenAll(Enumerable.Range(0, 12).Select(i => store.RecordDecisionAsync(
             "tenant-1", original.Id, 0, "synthetic-encrypted-resolution", "reviewer-" + i, DateTime.UtcNow, default)));
-        Assert.Single(writes.Where(w => w));
+        Assert.Single(writes, w => w);
         var stored = (await store.GetAsync("tenant-1", original.Id, default))!;
         Assert.Equal(1, stored.Revision);
         Assert.Equal("DecisionRecorded", stored.Status);
