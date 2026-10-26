@@ -1,0 +1,50 @@
+name: Contact workflow evidence
+on:
+  pull_request:
+    paths:
+      - 'src/services/contact-service/**'
+      - 'src/services/appeals-service/**'
+      - 'src/services/authorization-service/**'
+      - 'src/services/document-service/**'
+      - 'src/services/work-management-service/**'
+      - 'src/services/shared/CloudHealthOffice.Infrastructure/Contacts/**'
+      - 'src/portal/**'
+      - '.github/workflows/contact-workflow-evidence.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: contacts
+            project: src/services/contact-service/ContactService.Tests/ContactService.Tests.csproj
+          - name: cases
+            project: src/services/appeals-service/AppealsService.Tests/AppealsService.Tests.csproj
+          - name: authorizations
+            project: src/services/authorization-service/AuthorizationService.Tests/AuthorizationService.Tests.csproj
+          - name: documents
+            project: src/services/document-service/DocumentService.Tests/DocumentService.Tests.csproj
+          - name: work
+            project: src/services/work-management-service/WorkManagementService.Tests/WorkManagementService.Tests.csproj
+          - name: portal
+            project: src/portal/CloudHealthOffice.Portal.Tests/CloudHealthOffice.Portal.Tests.csproj
+    name: Contact workflow (${{ matrix.name }})
+    env:
+      TZ: America/Phoenix
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet test "${{ matrix.project }}" -m:1 --configuration Release --logger "trx;LogFileName=${{ matrix.name }}.trx" --results-directory TestResults/contact-workflow
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: contact-workflow-${{ matrix.name }}
+          path: TestResults/contact-workflow/*.trx
+          if-no-files-found: warn

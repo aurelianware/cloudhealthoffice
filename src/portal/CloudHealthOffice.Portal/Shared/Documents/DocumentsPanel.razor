@@ -1,3 +1,4 @@
+@using Microsoft.AspNetCore.Components.Forms
 @using CloudHealthOffice.Portal.Infrastructure
 @using CloudHealthOffice.Portal.Services
 @inject IDocumentCatalogService DocumentCatalog
@@ -11,6 +12,28 @@
             Refresh
         </MudButton>
     </MudStack>
+
+    <PermissionGate Permission="documents:write">
+        <div class="mb-3">
+            <MudTextField @bind-Value="_uploadTitle" Label="Document title" MaxLength="200" />
+            <MudSelect T="string" @bind-Value="_uploadType" Label="Document type">
+                <MudSelectItem T="string" Value='@("Other")'>Other</MudSelectItem>
+                <MudSelectItem T="string" Value='@("Correspondence")'>Correspondence</MudSelectItem>
+                <MudSelectItem T="string" Value='@("ClinicalRecord")'>Clinical record</MudSelectItem>
+                <MudSelectItem T="string" Value='@("CallTranscript")'>Call transcript</MudSelectItem>
+            </MudSelect>
+            <label>Upload document (up to 64 MiB; available after scanning)</label>
+            <InputFile OnChange="UploadAsync" disabled="@_uploading" data-testid="document-upload" />
+            @if (_uploading) { <MudProgressLinear Indeterminate="true" /> }
+            @if (_uploadMessage is not null) { <MudAlert Severity="Severity.Info">@_uploadMessage</MudAlert> }
+        </div>
+    </PermissionGate>
+    @if (_preview is not null)
+    {
+        <MudButton OnClick="@(() => _preview = null)">Close preview</MudButton>
+        <iframe src="@PreviewPath(_preview)" title="Document preview" sandbox="" referrerpolicy="no-referrer"
+                style="width:100%;height:600px;border:0" data-testid="document-preview"></iframe>
+    }
 
     @if (_loading)
     {
@@ -104,6 +127,11 @@
                                        data-testid="@OpenTestId(context)">
                                 Open
                             </MudButton>
+                                @if (CanPreview(context))
+                                {
+                                    <MudButton Size="Size.Small" OnClick="@(() => _preview = context)">Preview</MudButton>
+                                }
+
                             @if (IsClinicalDocument(context.ContentType))
                             {
                                 @* A C-CDA opens as a file like anything else;
@@ -251,6 +279,30 @@
 </div>
 
 @code {
+    private string _uploadTitle = string.Empty;
+    private string _uploadType = "Other";
+    private bool _uploading;
+    private string? _uploadMessage;
+    private CatalogDocumentSummary? _preview;
+    private static bool CanPreview(CatalogDocumentSummary d) => d.CanOpen && d.ContentType is "application/pdf" or "image/png" or "image/jpeg";
+    private string PreviewPath(CatalogDocumentSummary d) => DocumentDownloadEndpoint.PathFor(d.Id, SubjectKind, SubjectId).Replace("/download?", "/preview?");
+    private async Task UploadAsync(InputFileChangeEventArgs args)
+    {
+        _uploading = true;
+        try
+        {
+            if (args.File.Size > 64L * 1024 * 1024) { _uploadMessage = "The document exceeds 64 MiB."; return; }
+            await using var content = args.File.OpenReadStream(64L * 1024 * 1024);
+            _uploadMessage = await DocumentCatalog.UploadAsync(SubjectKind, SubjectId,
+                _uploadTitle, _uploadType, content, args.File.Name, args.File.ContentType)
+                ?? "Document filed. It can be opened once its scan is clean.";
+            await LoadAsync();
+        }
+        catch (ServiceUnavailableException) { _uploadMessage = "Document service is unavailable. Refresh before retrying."; }
+        catch (IOException) { _uploadMessage = "The file could not be read. Select it again to retry."; }
+        finally { _uploading = false; }
+    }
+
     // The one Documents panel (docs/architecture/document-store.md §7), shown
     // on the claim, authorization, appeal and provider records. It asks the
     // catalog for "documents for <subject>" and shows what comes back; it

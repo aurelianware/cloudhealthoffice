@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Contacts;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.HealthChecks;
@@ -125,6 +126,8 @@ builder.Services.AddChoHealthChecks(options =>
 // No CORS: called server-to-server only (the portal is Blazor Server).
 
 builder.Services.AddChoObservability(builder.Configuration);
+
+builder.Services.AddContactIntakeReader(builder.Configuration);
 
 var app = builder.Build();
 

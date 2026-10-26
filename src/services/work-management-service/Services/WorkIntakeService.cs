@@ -472,7 +472,7 @@ public sealed class WorkIntakeService
         string TenantId, WorkType WorkType, string SourceNumber, string Title, string? OpenUrl,
         IReadOnlyList<string> ReasonCodes, IReadOnlyDictionary<string, List<string>> Facets,
         string? MemberId, string? ProviderNpi, string? LineOfBusiness, bool Expedited,
-        DateTime? Deadline, string Actor);
+        DateTime? Deadline, string Actor, string? RequestKey = null, DateTime? ReceivedAt = null);
 
     /// <summary>
     /// Creates one item of work a person asked for, with no source service
@@ -494,7 +494,16 @@ public sealed class WorkIntakeService
 
         await _config.EnsureSeededAsync(request.TenantId, ct);
         var now = Now;
-        var sourceId = Guid.NewGuid().ToString("N");
+        var sourceId = request.RequestKey ?? Guid.NewGuid().ToString("N");
+        var fingerprint = request.RequestKey is null ? null : Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
+                System.Text.Json.JsonSerializer.Serialize(request))));
+        var stableId = WorkItem.IdFor(request.TenantId, request.WorkType, sourceId);
+        if (request.RequestKey is not null && await _store.GetItemAsync(request.TenantId, stableId, ct) is { } existing)
+        {
+            if (existing.IntakeFingerprint != fingerprint) throw new InvalidOperationException("Intake key has conflicting content.");
+            return existing;
+        }
         var reasons = request.ReasonCodes
             .Where(r => !string.IsNullOrWhiteSpace(r))
             .Select(r => r.Trim().ToUpperInvariant())
@@ -513,7 +522,7 @@ public sealed class WorkIntakeService
             ProviderNpi = request.ProviderNpi,
             Expedited = request.Expedited,
             Deadline = request.Deadline,
-            ReceivedDate = now,
+            ReceivedDate = request.ReceivedAt ?? now,
             Facets = request.Facets
                 .Select(f => (Key: WorkFacets.Key(f.Key), Values: f.Value
                     .Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList()))
@@ -523,7 +532,8 @@ public sealed class WorkIntakeService
 
         var item = new WorkItem
         {
-            Id = WorkItem.IdFor(request.TenantId, request.WorkType, sourceId),
+            Id = stableId,
+            IntakeFingerprint = fingerprint,
             TenantId = request.TenantId,
             WorkType = request.WorkType,
             SourceRef = WorkItem.SourceRefFor(request.WorkType, sourceId),
@@ -540,7 +550,11 @@ public sealed class WorkIntakeService
         Place(item, WorkRouter.Route(request.WorkType, attributes, await _store.ListQueuesAsync(request.TenantId, ct)), now);
 
         if (!await _store.TryCreateItemAsync(item, ct))
-            throw new InvalidOperationException($"Work item {item.Id} already exists.");
+        {
+            var winner = await _store.GetItemAsync(request.TenantId, item.Id, ct);
+            if (fingerprint is not null && winner?.IntakeFingerprint == fingerprint) return winner;
+            throw new InvalidOperationException("Conflicting work intake identity.");
+        }
         await AuditAsync(item, WorkAuditActions.Created, request.Actor, queueId: item.QueueId, detail: request.Title);
         return item;
     }

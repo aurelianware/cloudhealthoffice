@@ -19,6 +19,9 @@ public class ServiceContactRecordTests : TestContext
     {
         Services.AddMudServices();
         Services.AddSingleton(_contacts.Object);
+        Services.AddSingleton(Mock.Of<IWorkManagementService>());
+        Services.AddSingleton(Mock.Of<IDocumentCatalogService>(d => d.GetForSubjectAsync(
+            It.IsAny<DocumentSubjectKind>(), It.IsAny<string>(), It.IsAny<CancellationToken>()) == Task.FromResult(DocumentSubjectListing.Empty)));
         Services.AddSingleton(_user.Object);
         JSInterop.Mode = JSRuntimeMode.Loose;
 
@@ -90,7 +93,7 @@ public class ServiceContactRecordTests : TestContext
     }
 
     [Fact]
-    public void A_grievance_says_the_case_is_not_opened_from_the_contact_yet()
+    public void A_grievance_offers_explicit_case_intake_without_claiming_it_is_already_open()
     {
         // Step 1 records the classification but opens no case and starts no
         // clock, so the screen must not imply one is running.
@@ -98,8 +101,8 @@ public class ServiceContactRecordTests : TestContext
 
         var page = Render();
 
-        page.Markup.Should().Contain("Opens a grievance, received today");
-        page.Markup.Should().Contain("Cases are not opened from a contact yet");
+        page.Markup.Should().Contain("Starts member grievance intake");
+        page.Find("[data-testid=open-case]").Should().NotBeNull();
     }
 
     [Fact]

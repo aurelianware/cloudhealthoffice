@@ -36,7 +36,7 @@ public static class SubjectAccess
             [DocumentLinkKind.Authorization] = "authorizations:read",
             [DocumentLinkKind.Appeal] = "appeals:read",
             [DocumentLinkKind.Grievance] = "appeals:read",
-            [DocumentLinkKind.Call] = "calls:read",
+            [DocumentLinkKind.Call] = "service:read",
             [DocumentLinkKind.Provider] = "providers:read",
             [DocumentLinkKind.RfaiRequest] = "rfai:read",
             [DocumentLinkKind.PaymentRun] = "payments:read",

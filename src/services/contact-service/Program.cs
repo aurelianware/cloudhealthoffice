@@ -83,6 +83,17 @@ else
     builder.Services.AddSingleton<IContactNoteGateway, NullContactNoteGateway>();
 }
 
+// Each downstream request carries the acting user's token through the shared handler.
+foreach (var (name, setting, fallback) in new[] {
+    ("ContactAppeals", "Services:AppealsServiceUrl", "http://appeals-service.cloudhealthoffice/"),
+    ("ContactAuthorization", "Services:AuthorizationServiceUrl", "http://authorization-service.cloudhealthoffice/"),
+    ("ContactWork", "Services:WorkManagementServiceUrl", "http://work-management-service.cloudhealthoffice/") })
+    builder.Services.AddHttpClient(name, client => {
+        client.BaseAddress = new Uri((builder.Configuration[setting] ?? fallback).TrimEnd('/') + "/");
+        client.Timeout = TimeSpan.FromSeconds(20);
+    });
+builder.Services.AddScoped<ContactService.Services.IContactWorkflowGateway, ContactService.Services.HttpContactWorkflowGateway>();
+
 // No CORS: this service is called server-to-server only (the portal is
 // Blazor Server), so browsers on other origins get no CORS grant.
 

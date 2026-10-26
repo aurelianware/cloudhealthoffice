@@ -40,7 +40,7 @@ builder.Services.AddSwaggerGen(options =>
 // Document bytes go to the configured store (Azure Blob, Google Cloud Storage
 // or S3); the catalog lives in MongoDB.
 builder.Services.AddChoDocumentStore(builder.Environment.EnvironmentName);
-builder.Services.AddSingleton<IDocumentScanner, NoDocumentScanner>();
+builder.Services.AddDocumentScanner(builder.Configuration);
 builder.Services.AddSingleton<IRetentionPolicyService, RetentionPolicyService>();
 builder.Services.AddSingleton<ClinicalSummaryReader>();
 builder.Services.AddSingleton(sp => DocumentUploadPolicy.FromConfiguration(sp.GetRequiredService<IConfiguration>()));

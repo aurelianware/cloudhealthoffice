@@ -157,6 +157,9 @@ public sealed class ClinicalSummaryItemView
 
 public interface IDocumentCatalogService
 {
+    Task<string?> UploadAsync(DocumentSubjectKind kind, string subjectId, string title, string type,
+        Stream content, string fileName, string contentType, CancellationToken ct = default);
+
     /// <summary>The documents linked to one subject that the signed-in user may see.</summary>
     Task<DocumentSubjectListing> GetForSubjectAsync(
         DocumentSubjectKind kind, string subjectId, CancellationToken ct = default);
@@ -262,6 +265,34 @@ public sealed class DocumentCatalogService : IDocumentCatalogService
             _logger.LogError(ex, "Service unavailable: {ServiceName}", "Document Service");
             throw new ServiceUnavailableException("Document Service", ex);
         }
+    }
+
+    public async Task<string?> UploadAsync(DocumentSubjectKind kind, string subjectId, string title, string type,
+        Stream content, string fileName, string contentType, CancellationToken ct = default)
+    {
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent(type), "Type");
+        form.Add(new StringContent(title), "Title");
+        form.Add(new StringContent(kind + ":" + subjectId), "Links");
+        form.Add(new StringContent("Upload"), "SourceChannel");
+        var bytes = new StreamContent(content);
+        if (!System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(contentType, out var media))
+            return "The selected file has no valid content type.";
+        bytes.Headers.ContentType = media;
+        form.Add(bytes, "file", Path.GetFileName(fileName));
+        try
+        {
+            using var response = await _httpClient.PostAsync($"{BaseUrl()}/api/v1/documents", form, ct);
+            if (response.IsSuccessStatusCode) return null;
+            return response.StatusCode switch {
+                HttpStatusCode.Forbidden => "You may not upload documents on this record.",
+                HttpStatusCode.RequestEntityTooLarge => "The document exceeds the configured upload limit.",
+                HttpStatusCode.UnsupportedMediaType => "The document type or file signature is not supported.",
+                HttpStatusCode.BadRequest => "The document metadata or file was refused.",
+                _ => "The document service did not accept the upload. Refresh before retrying."
+            };
+        }
+        catch (HttpRequestException) { throw new ServiceUnavailableException("Document Service", new HttpRequestException("Upload unavailable.")); }
     }
 
     private string ListUrl(DocumentSubjectKind kind, string subjectId) =>

@@ -18,6 +18,10 @@ namespace AuthorizationService.Models;
 [BsonIgnoreExtraElements]
 public class Authorization
 {
+    /// <summary>Server-owned contact lineage for native coverage intake.</summary>
+    [JsonIgnore]
+    public string? SourceContactId { get; set; }
+
     /// <summary>Persisted by Mongo, excluded from full-model HTTP input and output.</summary>
     [JsonIgnore]
     public PaReportingLedger? ReportingLedger { get; set; }

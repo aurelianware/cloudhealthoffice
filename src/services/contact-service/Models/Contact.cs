@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using CloudHealthOffice.Infrastructure.Contacts;
 using System.Text.Json.Serialization;
 using MongoDB.Bson.Serialization.Attributes;
 
@@ -31,6 +32,10 @@ public class Contact
     /// other.
     /// </summary>
     public long Revision { get; set; }
+
+    public ContactCaseIntent? CaseIntent { get; set; }
+    public ContactCaseResult? OpenedCase { get; set; }
+    public List<ContactFollowUpIntent> FollowUps { get; set; } = new();
 
     /// <summary>Human-facing contact number, unique within the tenant.</summary>
     [Required]

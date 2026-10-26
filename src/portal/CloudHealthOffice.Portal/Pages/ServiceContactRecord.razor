@@ -1,9 +1,12 @@
+@using CloudHealthOffice.Infrastructure.Contacts
+@using CloudHealthOffice.Portal.Shared.Documents
 @page "/calls/{ContactId}"
 @page "/service/contacts/{ContactId}"
 @using Microsoft.AspNetCore.Authorization
 @using CloudHealthOffice.Portal.Services
 @attribute [Authorize]
 @inject IContactTrackingService Contacts
+@inject IWorkManagementService WorkManagement
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 
@@ -246,6 +249,45 @@
                 </MudPaper>
 
                 <MudPaper Class="pa-4 mb-4" Elevation="2">
+                    <DocumentsPanel SubjectKind="DocumentSubjectKind.Call" SubjectId="@ContactId" Title="Contact documents" />
+                </MudPaper>
+                <MudPaper Class="pa-4 mb-4" Elevation="2">
+                    <MudText Typo="Typo.h6">Follow-ups</MudText>
+                    @foreach (var follow in _contact.FollowUps)
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-2">@follow.Title — due @follow.DueAt?.ToUniversalTime().ToString("u")</MudText>
+                        @if (follow.WorkItemId is not null)
+                        {
+                            @if (_followStatuses.TryGetValue(follow.WorkItemId, out var work))
+                            {
+                                <MudText Typo="Typo.caption">@work.Status · @(work.QueueName ?? "Unrouted") · @(work.AssignedTo ?? "Unassigned")</MudText>
+                                @if (work.Status == "Leased" && work.LeaseActive)
+                                {
+                                    <MudTextField @bind-Value="_followResolution" Label="Follow-up resolution" MaxLength="1000" />
+                                    <MudButton Disabled="@(_busy || string.IsNullOrWhiteSpace(_followResolution))"
+                                               OnClick="@(() => CompleteFollowUpAsync(follow.WorkItemId))">Complete follow-up</MudButton>
+                                }
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption">Created; current work status is unavailable or access was refused.</MudText>
+                            }
+                        }
+                        else if (!IsClosed)
+                        {
+                            <MudButton OnClick="@(() => RetryFollowUpAsync(follow))" Disabled="_busy">Retry pending follow-up</MudButton>
+                        }
+                    }
+                    @if (!IsClosed)
+                    {
+                        <MudTextField @bind-Value="_followTitle" Label="What needs doing" MaxLength="500" />
+                        <MudDatePicker @bind-Date="_followDue" Label="Due date" />
+                        <MudButton OnClick="CreateFollowUpAsync" Disabled="@(_busy || string.IsNullOrWhiteSpace(_followTitle))"
+                                   data-testid="create-follow-up">Create follow-up</MudButton>
+                    }
+                </MudPaper>
+
+                <MudPaper Class="pa-4 mb-4" Elevation="2">
                     <MudText Typo="Typo.h6" Class="mb-3">Wrap-up</MudText>
                     <MudTextField @bind-Value="_summary" Label="Summary" Lines="4" Variant="Variant.Outlined"
                                   Disabled="@IsClosed" data-testid="summary"
@@ -276,9 +318,56 @@
                     @if (_classification is { } chosen && ContactDisplay.Consequence(chosen) is { } consequence)
                     {
                         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-3">
-                            @consequence. Cases are not opened from a contact yet, so open it in
-                            Appeals &amp; Grievances and date it from this call.
+                            @consequence. Save the classification and summary, then open the case below.
+                            The case uses the original contact start time.
                         </MudAlert>
+                    }
+
+                    @if (_contact.OpenedCase is { } opened)
+                    {
+                        <MudAlert Severity="Severity.Success" Class="mt-3" data-testid="case-receipt">
+                            @opened.Kind intake accepted. Received @opened.ReceivedAt.ToUniversalTime().ToString("u").
+                            Due @(opened.DueAt?.ToUniversalTime().ToString("u") ?? "not established").
+                            Reference: @opened.Id
+                        </MudAlert>
+                        <MudLink Href="@(opened.Kind == "Authorization" ? $"/authorizations/{Uri.EscapeDataString(opened.Id)}" : $"/service/cases/{Uri.EscapeDataString(opened.Id)}")">Open case record</MudLink>
+                        <MudText Typo="Typo.caption">Intake does not complete review, notices or delivery.</MudText>
+                    }
+                    else if (!IsClosed && _classification is not null and not ContactClassification.Inquiry)
+                    {
+                        @if (_contact.CaseIntent is null)
+                        {
+                            <MudSelect T="string" @bind-Value="_caseIntent.LineOfBusiness" Label="Line of business" Class="mt-3">
+                                <MudSelectItem T="string" Value='@("Medicaid")'>Medicaid</MudSelectItem>
+                                <MudSelectItem T="string" Value='@("Medicare")'>Medicare Advantage</MudSelectItem>
+                            </MudSelect>
+                            <MudTextField @bind-Value="_caseIntent.State" Label="State (two-letter code)" MaxLength="2" />
+                            @if (_classification is ContactClassification.Appeal or ContactClassification.ExpeditedAppeal)
+                            {
+                                <MudTextField @bind-Value="_caseIntent.AuthorizationId" Label="Denied medical authorization ID" />
+                                <MudText Typo="Typo.caption">Pre-service medical appeals only. Payment and drug appeals use separate intake.</MudText>
+                            }
+                            @if (_classification == ContactClassification.CoverageRequest)
+                            {
+                                <MudTextField @bind-Value="_coverage.FirstName" Label="Patient first name" />
+                                <MudTextField @bind-Value="_coverage.LastName" Label="Patient last name" />
+                                <MudDatePicker @bind-Date="_dateOfBirth" Label="Date of birth" />
+                                <MudTextField @bind-Value="_coverage.ProviderNpi" Label="Requesting provider NPI" />
+                                <MudTextField @bind-Value="_coverage.ServiceTypeCode" Label="Service type code" />
+                                <MudTextField @bind-Value="_coverage.ProcedureCode" Label="Procedure code" />
+                                <MudNumericField T="decimal" @bind-Value="_coverage.Units" Label="Requested units" Min="0.01m" />
+                                <MudDatePicker @bind-Date="_serviceDate" Label="Requested service date" />
+                                <MudCheckBox T="bool" @bind-Value="_coverage.Expedited" Label="Expedited coverage request" />
+                            }
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Warning" Class="mt-3">Case delivery is pending. Retry the saved request.</MudAlert>
+                        }
+                        <MudButton OnClick="OpenCaseAsync" Disabled="_busy" Variant="Variant.Filled" Color="Color.Primary"
+                                   Class="mt-3" data-testid="open-case">
+                            @(_contact.CaseIntent is null ? "Open case" : "Retry case intake")
+                        </MudButton>
                     }
 
                     @if (_contact.ClassifiedAt is { } classifiedAt)
@@ -379,6 +468,25 @@
     private string _subjectId = string.Empty;
     private string? _subjectNote;
 
+    private Dictionary<string, WorkItemView> _followStatuses = new();
+    private string _followResolution = string.Empty;
+    private async Task CompleteFollowUpAsync(string id)
+    {
+        _busy = true;
+        try { _followStatuses[id] = await WorkManagement.CompleteAsync(id, _followResolution); _followResolution = string.Empty; }
+        catch (WorkManagementRefusedException ex) { _error = ex.Message; }
+        catch (ServiceUnavailableException ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private ContactCaseIntent _caseIntent = new();
+    private ContactCoverageDetails _coverage = new();
+    private DateTime? _dateOfBirth;
+    private DateTime? _serviceDate;
+    private string _followKey = Guid.NewGuid().ToString("N");
+    private string _followTitle = string.Empty;
+    private DateTime? _followDue;
+
     private bool _loading = true;
     private bool _busy;
     private string? _error;
@@ -394,6 +502,13 @@
         {
             _reasons = await Contacts.GetReasonsAsync();
             Adopt(await Contacts.GetAsync(ContactId));
+            _followStatuses.Clear();
+            foreach (var id in _contact?.FollowUpWorkItemIds ?? [])
+            {
+                try { _followStatuses[id] = await WorkManagement.GetItemAsync(id); }
+                catch (ServiceUnavailableException) { }
+                catch (WorkManagementRefusedException) { }
+            }
         }
         catch (ServiceUnavailableException ex)
         {
@@ -449,6 +564,46 @@
         Summary = _summary,
         Classification = _classification,
     };
+
+    private async Task OpenCaseAsync()
+    {
+        if (_contact!.CaseIntent is null)
+        {
+            if (!await WriteAsync(() => Contacts.UpdateAsync(ContactId, Edits()), null)) return;
+            _caseIntent.State = _caseIntent.State.Trim().ToUpperInvariant();
+            if (_classification == ContactClassification.CoverageRequest)
+            {
+                _coverage.DateOfBirth = _dateOfBirth ?? default;
+                _coverage.ServiceDate = _serviceDate ?? default;
+                _caseIntent.Coverage = _coverage;
+            }
+        }
+        await WriteAsync(() => Contacts.OpenCaseAsync(ContactId, new OpenContactCaseRequest {
+            Revision = _contact!.Revision, Intent = _contact.CaseIntent ?? _caseIntent
+        }), "Case intake accepted.");
+        await LoadAsync(); // Failed delivery may still have saved an intent and advanced its revision.
+    }
+
+    private async Task CreateFollowUpAsync()
+    {
+        if (await WriteAsync(() => Contacts.CreateFollowUpAsync(ContactId, new CreateContactFollowUpRequest {
+            Revision = _contact!.Revision, Key = _followKey, Title = _followTitle,
+            DueAt = _followDue is { } date ? DateTime.SpecifyKind(date.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc) : null
+        }), "Follow-up created."))
+        {
+            _followKey = Guid.NewGuid().ToString("N");
+            _followTitle = string.Empty;
+        }
+        await LoadAsync();
+    }
+
+    private async Task RetryFollowUpAsync(ContactFollowUpIntent follow)
+    {
+        await WriteAsync(() => Contacts.CreateFollowUpAsync(ContactId, new CreateContactFollowUpRequest {
+            Revision = _contact!.Revision, Key = follow.Key, Title = follow.Title, DueAt = follow.DueAt
+        }), "Follow-up created.");
+        await LoadAsync();
+    }
 
     private async Task SaveAsync() =>
         await WriteAsync(() => Contacts.UpdateAsync(ContactId, Edits()), "Contact saved.");

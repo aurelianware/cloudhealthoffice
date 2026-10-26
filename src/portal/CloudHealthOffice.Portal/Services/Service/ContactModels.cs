@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Contacts;
 using System.Text.Json.Serialization;
 
 namespace CloudHealthOffice.Portal.Services;
@@ -15,6 +16,9 @@ public class ContactRecord
     public string Id { get; set; } = string.Empty;
     public string ContactNumber { get; set; } = string.Empty;
     public long Revision { get; set; }
+    public ContactCaseIntent? CaseIntent { get; set; }
+    public ContactCaseResult? OpenedCase { get; set; }
+    public List<ContactFollowUpIntent> FollowUps { get; set; } = new();
 
     public ContactChannel Channel { get; set; }
     public ContactDirection Direction { get; set; }
@@ -255,10 +259,10 @@ public static class ContactDisplay
     public static string? Consequence(ContactClassification classification) => classification switch
     {
         ContactClassification.Inquiry            => null,
-        ContactClassification.Grievance          => "Opens a grievance, received today",
-        ContactClassification.ExpeditedGrievance => "Opens a grievance on a 24-hour clock",
+        ContactClassification.Grievance          => "Starts member grievance intake",
+        ContactClassification.ExpeditedGrievance => "Starts expedited grievance intake; the applicable rule pack sets its deadline",
         ContactClassification.CoverageRequest    => "Opens an organization determination",
-        ContactClassification.Appeal             => "Opens an appeal, received today",
+        ContactClassification.Appeal             => "Starts pre-service medical appeal intake",
         ContactClassification.ExpeditedAppeal    => "Opens an expedited appeal",
         _                                        => null,
     };
@@ -270,4 +274,17 @@ public static class ContactDisplay
         < 60      => $"{seconds}s",
         _         => $"{seconds / 60}m {seconds % 60:00}s",
     };
+}
+
+public sealed class OpenContactCaseRequest
+{
+    public long Revision { get; set; }
+    public ContactCaseIntent Intent { get; set; } = new();
+}
+public sealed class CreateContactFollowUpRequest
+{
+    public long Revision { get; set; }
+    public string Key { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public DateTime? DueAt { get; set; }
 }

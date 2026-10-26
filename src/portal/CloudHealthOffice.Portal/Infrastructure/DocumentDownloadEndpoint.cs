@@ -62,9 +62,13 @@ public static class DocumentDownloadEndpoint
         => !string.IsNullOrEmpty(subjectId) && SubjectIdFormat.IsMatch(subjectId);
 
     public static RouteHandlerBuilder MapDocumentDownload(this IEndpointRouteBuilder endpoints)
-        => endpoints.MapGet(Route, HandleAsync)
-            .RequireAuthorization()
-            .WithName("DocumentDownload");
+    {
+        endpoints.MapGet(RoutePrefix + "/{id}/preview", (string id, string? subjectKind, string? subjectId,
+            HttpContext http, IDocumentCatalogService documents, ILoggerFactory loggerFactory, CancellationToken ct) =>
+                HandleCoreAsync(id, subjectKind, subjectId, http, documents, loggerFactory, ct, true))
+            .RequireAuthorization().WithName("DocumentPreview");
+        return endpoints.MapGet(Route, HandleAsync).RequireAuthorization().WithName("DocumentDownload");
+    }
 
     internal static async Task<IResult> HandleAsync(
         string id,
@@ -73,7 +77,12 @@ public static class DocumentDownloadEndpoint
         HttpContext http,
         IDocumentCatalogService documents,
         ILoggerFactory loggerFactory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        await HandleCoreAsync(id, subjectKind, subjectId, http, documents, loggerFactory, cancellationToken, false);
+
+    internal static async Task<IResult> HandleCoreAsync(string id, string? subjectKind, string? subjectId,
+        HttpContext http, IDocumentCatalogService documents, ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken, bool preview)
     {
         var logger = loggerFactory.CreateLogger(typeof(DocumentDownloadEndpoint).FullName!);
         var response = http.Response;
@@ -148,6 +157,16 @@ public static class DocumentDownloadEndpoint
         var fileName = suggested is { } name && SafeFileName.IsMatch(name)
             ? name
             : id + (Extensions.TryGetValue(contentType, out var ext) ? ext : string.Empty);
+
+        if (preview)
+        {
+            if (contentType is not ("application/pdf" or "image/png" or "image/jpeg"))
+                return Results.StatusCode(StatusCodes.Status415UnsupportedMediaType);
+            response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'; frame-ancestors 'self'";
+            response.Headers["Referrer-Policy"] = "no-referrer";
+            response.Headers.ContentDisposition = "inline";
+            return Results.Stream(await content.Content.ReadAsStreamAsync(cancellationToken), contentType);
+        }
 
         logger.LogInformation("Document {DocumentId} downloaded from {SubjectKind} ({ContentType})", id, kind, contentType);
         return Results.Stream(await content.Content.ReadAsStreamAsync(cancellationToken), contentType, fileDownloadName: fileName);

@@ -549,6 +549,8 @@ public sealed class AppealsWebApplicationFactory : WebApplicationFactory<Program
 
             // Swap in the in-memory fakes.
             services.RemoveAll<IAppealRepository>();
+            services.RemoveAll<IMemberServiceCaseStore>();
+            services.AddSingleton(Moq.Mock.Of<IMemberServiceCaseStore>());
             services.RemoveAll<IAppealEventRepository>();
             services.RemoveAll<IAppealEventSink>();
             services.RemoveAll<IAppealFieldEncryptor>();

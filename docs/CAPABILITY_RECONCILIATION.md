@@ -1,5 +1,15 @@
 # Capability Reconciliation
 
+## Contact workflow and document follow-up — proposed
+
+The current branch adds explicit member-self case/coverage intake from contacts,
+original-receipt clocks, persisted retry intents, Inquiry follow-ups/status/completion,
+contact documents, upload/preview and a configurable ClamAV adapter.
+[Operating scope and acceptance](operations/CONTACT-WORKFLOW-INTAKE.md) and
+[proposed ADR 034](adr/034-contact-workflow-intake.md) govern this increment.
+This is not a main/deployment claim. Complete case notices/effectuation, rejected-intent
+amendments, representative/provider tracks and real-scanner acceptance remain open.
+
 ## PA reporting frozen-package follow-up
 
 Private snapshot packages now retain minimal reporting inputs, results and hashes

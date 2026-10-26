@@ -1,5 +1,7 @@
 # Document store: one home for every document plan operations touch
 
+**Contact workflow follow-up (proposed):** [intake, follow-ups and contact documents](../operations/CONTACT-WORKFLOW-INTAKE.md) records the current branch's changes and explicit acceptance limits. Earlier dated steps below remain historical.
+
 **Status:** Draft for review (2026-10-15). Steps 1 (storage providers) and 2 (the catalog, document-service) are built (2026-10-20); see §11 for what step 2 includes and leaves for later. Decided: the catalog is its own service (§10, question 1).
 **Scope:** Where documents live, how they get in, how they link to the work they support, and who may see them:
 - claim attachments and claim RFAI responses;

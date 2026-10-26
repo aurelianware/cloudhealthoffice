@@ -12,6 +12,8 @@ public interface IWorkManagementService
     /// <summary>Get Next: the caller's own lease, or the next item leased to them; null when there is nothing to work (204).</summary>
     Task<WorkNextResult?> GetNextAsync(string? workType = null);
     Task<List<WorkItemView>> GetMineAsync();
+    Task<WorkItemView> GetItemAsync(string workItemId);
+    Task<WorkItemView> CompleteAsync(string workItemId, string resolution);
     Task<WorkItemView> ReleaseAsync(string workItemId);
     Task<WorkItemView> RenewAsync(string workItemId);
 
