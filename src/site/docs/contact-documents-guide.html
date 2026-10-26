@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contacts, Follow-ups &amp; Documents | Cloud Health Office</title>
+  <meta name="description" content="Record service contacts, link claims, manage follow-ups, and safely open shared documents in Cloud Health Office." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/contact-documents-guide" />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/contact-documents-guide" />
+  <meta property="og:title" content="Contacts, Follow-ups &amp; Documents | Cloud Health Office" />
+  <meta property="og:description" content="A screenshot guide to contacts, follow-ups, claim linkage, and document scan states." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/user-guides/contact-documents/contact-overview.png" />
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"TechArticle","headline":"Contacts, Follow-ups & Documents","description":"Record contacts, link claims, manage follow-ups, and understand document scan states.","url":"https://cloudhealthoffice.com/docs/contact-documents-guide","author":{"@type":"Organization","name":"Aurelianware, Inc."},"datePublished":"2026-10-26","dateModified":"2026-10-26"}
+  </script>
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs" aria-current="page">Documentation</a>
+<a href="/blueprints/google-cloud">Reference architecture</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="/api-explorer">API explorer</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="/docs/configure-tenant-security">Tenant Security</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/submit-837-follow-claim">Submit &amp; Follow an 837</a></li>
+              <li><a href="/docs/837-intake-adjudication-operations">837 Operations Runbook</a></li>
+              <li><a href="/docs/review-resolve-pended-claim">Pended Claims Operations</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/contact-documents-guide" class="active">Contacts &amp; Documents</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#before-you-start">Before You Start</a></li>
+              <li><a href="#contacts">Record a Contact</a></li>
+              <li><a href="#claims">Link a Claim</a></li>
+              <li><a href="#documents">Upload and Open Documents</a></li>
+              <li><a href="#scan-states">Understand Scan States</a></li>
+              <li><a href="#shared-documents">Share a Document Context</a></li>
+              <li><a href="#follow-ups">Track Follow-ups</a></li>
+              <li><a href="#wrap-up">Wrap Up and Close</a></li>
+              <li><a href="#troubleshooting">Troubleshooting</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <div class="docs-content">
+        <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">Contacts &amp; Documents</span></div>
+        <h1>Contacts, Follow-ups &amp; Documents</h1>
+        <p class="docs-subtitle">Keep the conversation, the claim reference, the supporting file, and the next action connected.</p>
+        <div class="callout callout-info"><div class="callout-title">About these screenshots</div><p>Captured from the GCP demo on October 26, 2026 using synthetic records. The scan examples include deliberate scanner-outage and harmless EICAR test fixtures. No member health information is shown.</p></div>
+
+        <h2 id="before-you-start">Before you start</h2>
+        <p>Sign in to the correct tenant with permission to use contacts and read the records you intend to link. Document access also checks the subject context and tenant. Follow-up work requires the appropriate work permissions and queue membership.</p>
+        <p>Administrators configure contact reasons for the tenant. Queue memberships are managed under <strong>Admin &rarr; Work Management</strong>. A plan with no configured reasons displays a message in the contact form.</p>
+
+        <h2 id="contacts">1. Record a contact</h2>
+        <ol><li>Open <strong>Service &rarr; Contacts</strong> and start a contact using the available intake action.</li><li>Record the channel, caller identity, and verification details. Select the applicable contact reasons when configured.</li><li>Use the contact record to capture the discussion, related records, documents, and follow-ups. Choose <strong>Save</strong> to retain an open contact.</li></ol>
+        <figure class="guide-screenshot"><img src="/graphics/user-guides/contact-documents/contact-overview.png" alt="Synthetic contact showing caller verification fields, contact reasons, classification, and save controls" loading="lazy" /><figcaption>The contact workspace separates caller details, discussion, classification, and closure. This demo tenant has no contact reasons configured.</figcaption></figure>
+
+        <h2 id="claims">2. Link the claim discussed</h2>
+        <ol><li>In <strong>What was discussed</strong>, choose <strong>Claim</strong>, enter its record ID, and describe what the caller asked.</li><li>Select <strong>Link</strong>. Check the reference and the <strong>Note written</strong> indicator.</li><li>Open the claim reference to review the claim and its notes.</li></ol>
+        <p>Claim linking also attempts to write a contact note to the claim. The operator needs claim-note permission for that step. A saved contact reference alone does not prove that the claim note was written; review the indicator and any error.</p>
+
+        <h2 id="documents">3. Upload and open supporting documents</h2>
+        <ol><li>In <strong>Contact documents</strong>, enter a descriptive document title and select the document type.</li><li>Choose the file. The demo upload control allows up to <strong>64 MiB</strong>; supported formats include PDF, PNG, JPEG, TIFF, and CDA XML.</li><li>Select <strong>Refresh</strong> to check the scan result. Only a <strong>Clean</strong> document exposes <strong>Open</strong> and <strong>Preview</strong>.</li></ol>
+        <p>Files are opened through the authenticated portal in the context of the contact or claim. A storage object path is not a public download link.</p>
+
+        <h2 id="scan-states">Understand the scan states</h2>
+        <table><thead><tr><th scope="col">Status</th><th scope="col">Meaning</th><th scope="col">Operator action</th></tr></thead><tbody>
+        <tr><td>Pending</td><td>The scan has not produced a verdict.</td><td>Refresh later; downloading remains blocked.</td></tr>
+        <tr><td>Clean</td><td>The scanner accepted the file.</td><td>Use Open or Preview if authorized for the record.</td></tr>
+        <tr><td>Failed</td><td>The scan could not complete.</td><td>Ask an administrator to investigate scanner availability. Do not assume automatic retry.</td></tr>
+        <tr><td>Infected</td><td>The scan found a threat; the file is quarantined.</td><td>Do not use the attachment. Follow your organization's security process.</td></tr>
+        </tbody></table>
+        <figure class="guide-screenshot"><img src="/graphics/user-guides/contact-documents/contact-scan-states.png" alt="Synthetic document list with separate Failed, Clean, and Infected scan results" loading="lazy" /><figcaption>Actual demo results. The two similarly named outage fixtures are separate uploads: one completed before the scanner stopped, while the later one failed. The EICAR fixture is a harmless antivirus test.</figcaption></figure>
+
+        <h2 id="shared-documents">4. Make the same document available from a claim</h2>
+        <p>A contact-to-claim reference and a document-to-claim link are separate relationships. Linking a claim under <strong>What was discussed</strong> does not automatically attach every contact document to that claim.</p>
+        <p>The document service supports an explicit additional subject link. The current document panel displays existing links in <strong>Also linked to</strong>; it does not provide an add-link button. An authorized integration can add the link using the document API:</p>
+        <pre><code>POST /api/v1/documents/{documentId}/links?subjectKind=Call&amp;subjectId={contactId}
+Content-Type: application/json
+
+{"link":"Claim:{claimId}"}</code></pre>
+        <p>Use the existing document ID and the actual contact and claim record IDs. The request must be authenticated in the correct tenant and authorized for both subject kinds; legal hold can prevent a link change.</p>
+        <ol><li>Open the claim and select <strong>Documents</strong>.</li><li>Locate the shared document by its title and size. Check <strong>Also linked to</strong> for the contact reference, labeled <strong>Call</strong> in this view.</li><li>Open the clean document from either record. Each request still checks access using that record's context.</li></ol>
+        <figure class="guide-screenshot"><img src="/graphics/user-guides/contact-documents/claim-shared-document.png" alt="Synthetic claim Documents page showing a clean 141-byte document and its linked contact reference" loading="lazy" /><figcaption>The 141-byte clean document appears on the claim with a Call backlink to the original contact. The second row is a separate synthetic validation upload.</figcaption></figure>
+
+        <h2 id="follow-ups">5. Track the next action</h2>
+        <ol><li>In <strong>Follow-ups</strong>, enter a specific action under <strong>What needs doing</strong> and choose a due date.</li><li>Select <strong>Create follow-up</strong>. Confirm the follow-up appears with its work status. If work-item creation is pending, use <strong>Retry pending follow-up</strong> when offered.</li><li>An eligible queue member uses <strong>My Work &rarr; Get Next</strong> to acquire the work. Queue membership and role permissions both apply.</li><li>Once the work is owned by the operator, return to the contact, enter a <strong>Follow-up resolution</strong>, and select <strong>Complete follow-up</strong>.</li></ol>
+        <figure class="guide-screenshot"><img src="/graphics/user-guides/contact-documents/contact-followups.png" alt="Follow-up action and due-date fields above the contact wrap-up summary" loading="lazy" /><figcaption>Capture the next action and due date separately from the conversation summary.</figcaption></figure>
+        <p>Creating a follow-up does not complete it. Closing the contact and completing its follow-up work are separate actions.</p>
+
+        <h2 id="wrap-up">6. Wrap up and close</h2>
+        <p>Write what the caller wanted and what you did in <strong>Summary</strong>. Select a <strong>Classification</strong> and the appropriate <strong>Outcome</strong>, then choose <strong>Save and close</strong> when the conversation is complete. Classification is required for closure. Check the saved status and history; use the follow-up workflow for outstanding work.</p>
+
+        <h2 id="troubleshooting">Troubleshooting</h2>
+        <table><thead><tr><th scope="col">Symptom</th><th scope="col">What to check</th></tr></thead><tbody>
+        <tr><td>Document has no Open control</td><td>Check scan status. Pending, Failed, and Infected files cannot be downloaded.</td></tr>
+        <tr><td>Claim has no contact attachment</td><td>Verify the document itself has a Claim link. A contact's claim reference is not sufficient.</td></tr>
+        <tr><td>Forbidden or missing document</td><td>Check the active tenant, subject reference, and record permissions. Do not work around these checks with storage URLs.</td></tr>
+        <tr><td>Follow-up cannot be completed</td><td>Check queue membership, work permissions, current ownership, and resolution text.</td></tr>
+        <tr><td>Contact will not close</td><td>Choose a classification and review the validation message before retrying.</td></tr>
+        </tbody></table>
+        <div class="docs-pager"><a href="/docs/claims-guide"><div class="pager-label">Related guide</div><div class="pager-title">Claims Adjudication</div></a><a href="/docs" class="next"><div class="pager-label">Browse documentation &rarr;</div><div class="pager-title">All guides</div></a></div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
