@@ -146,7 +146,7 @@
         <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">Contacts &amp; Documents</span></div>
         <h1>Contacts, Follow-ups &amp; Documents</h1>
         <p class="docs-subtitle">Keep the conversation, the claim reference, the supporting file, and the next action connected.</p>
-        <div class="callout callout-info"><div class="callout-title">About these screenshots</div><p>Captured from the GCP demo on October 26, 2026 using synthetic records. The scan examples include deliberate scanner-outage and harmless EICAR test fixtures. No member health information is shown.</p></div>
+        <div class="callout callout-info"><div class="callout-title">About these screenshots</div><p>Captured on October 26, 2026 using synthetic records in the GCP demo and labeled local UI previews. The scan examples include deliberate scanner-outage and harmless EICAR test fixtures. No member health information is shown.</p></div>
 
         <h2 id="before-you-start">Before you start</h2>
         <p>Sign in to the correct tenant with permission to use contacts and read the records you intend to link. Document access also checks the subject context and tenant. Follow-up work requires the appropriate work permissions and queue membership.</p>
@@ -168,10 +168,16 @@
         <table><thead><tr><th scope="col">Status</th><th scope="col">Meaning</th><th scope="col">Operator action</th></tr></thead><tbody>
         <tr><td>Pending</td><td>The scan has not produced a verdict.</td><td>Refresh later; downloading remains blocked.</td></tr>
         <tr><td>Clean</td><td>The scanner accepted the file.</td><td>Use Open or Preview if authorized for the record.</td></tr>
-        <tr><td>Failed</td><td>The scan could not complete.</td><td>Ask an administrator to investigate scanner availability. Do not assume automatic retry.</td></tr>
+        <tr><td>Failed</td><td>The scan could not complete.</td><td>After scanner service is restored, select Retry scan if authorized. The file stays blocked until Clean.</td></tr>
         <tr><td>Infected</td><td>The scan found a threat; the file is quarantined.</td><td>Do not use the attachment. Follow your organization's security process.</td></tr>
         </tbody></table>
         <figure class="guide-screenshot"><img src="/graphics/user-guides/contact-documents/contact-scan-states.png" alt="Synthetic document list with separate Failed, Clean, and Infected scan results" loading="lazy" /><figcaption>Actual demo results. The two similarly named outage fixtures are separate uploads: one completed before the scanner stopped, while the later one failed. The EICAR fixture is a harmless antivirus test.</figcaption></figure>
+
+        <h3>Retry a failed scan</h3>
+        <figure class="guide-screenshot"><img src="/graphics/user-guides/contact-documents/scan-retry-before.png" alt="Synthetic failed document showing Retry scan and blocked download controls" loading="lazy" /><figcaption>Retry scan on a failed document. This local UI test uses an isolated in-memory catalog and a deterministic test scanner.</figcaption></figure>
+        <ol><li>After scanner availability is restored, find the finalized document with a <strong>Failed</strong> status.</li><li>Select <strong>Retry scan</strong>. This action requires document read/write and subject access and is unavailable for documents on legal hold.</li><li>Wait for the result. <strong>Clean</strong> enables opening the document, <strong>Infected</strong> keeps it quarantined, and another <strong>Failed</strong> result keeps downloads blocked.</li><li>If the request is interrupted or reports a conflict, select <strong>Refresh</strong> before retrying to check the saved status.</li></ol>
+        <figure class="guide-screenshot"><img src="/graphics/user-guides/contact-documents/scan-retry-after.png" alt="The same synthetic document after a clean retry with an Open control and success message" loading="lazy" /><figcaption>The test scanner returned Clean, the panel refreshed, and Open became available. Real deployments use the configured scanner's verdict.</figcaption></figure>
+        <p>Retries scan the existing stored file without uploading it again. Attempts are audited. Pending uploads, clean documents, and infected documents cannot use this action. Retrying does not bypass quarantine or legal hold.</p>
 
         <h2 id="shared-documents">4. Make the same document available from a claim</h2>
         <p>A contact-to-claim reference and a document-to-claim link are separate relationships. Linking a claim under <strong>What was discussed</strong> does not automatically attach every contact document to that claim.</p>

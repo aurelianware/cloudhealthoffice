@@ -28,6 +28,15 @@ public class DocumentsPanelTests : TestContext
 
     private sealed class StubCatalog : IDocumentCatalogService
     {
+        public List<string> RetryCalls { get; } = new();
+        public DocumentScanRetryResult RetryResult { get; set; } = new(true, DocumentScanStatus.Clean, "Scan completed: Clean.");
+        public Task<DocumentScanRetryResult> RetryScanAsync(string documentId, DocumentSubjectKind kind, string subjectId,
+            CancellationToken ct = default)
+        {
+            RetryCalls.Add(documentId);
+            return Task.FromResult(RetryResult);
+        }
+
         public List<(string Document, DocumentSubjectKind SourceKind, string SourceId, DocumentSubjectKind TargetKind, string TargetId)> LinkCalls { get; } = new();
         public string? LinkRefusal { get; set; }
         public Task<string?> AddLinkAsync(string documentId, DocumentSubjectKind sourceKind, string sourceId,
@@ -97,6 +106,54 @@ public class DocumentsPanelTests : TestContext
         RenderComponent<DocumentsPanel>(p => p
             .Add(x => x.SubjectKind, kind)
             .Add(x => x.SubjectId, subjectId));
+
+    [Theory]
+    [InlineData(DocumentScanStatus.Failed, "The scan failed again.")]
+    [InlineData(DocumentScanStatus.Infected, "The document is quarantined.")]
+    public void Nonclean_retries_show_the_result_without_a_success_message(DocumentScanStatus status, string message)
+    {
+        _user.Setup(x => x.HasPermission("documents:write")).Returns(true);
+        _catalog.Listing = new() { Documents = [Document(scan: DocumentScanStatus.Failed)] };
+        _catalog.RetryResult = new(true, status, message);
+        var cut = Render();
+        cut.Find("[data-testid='document-retry-doc-1']").Click();
+        cut.WaitForAssertion(() => cut.Find("[data-testid='document-retry-message']").TextContent.Should().Contain(message));
+        cut.FindAll("[data-testid='document-open-doc-1']").Should().BeEmpty();
+        _catalog.Calls.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Read_only_users_cannot_retry_failed_scans()
+    {
+        _catalog.Listing = new() { Documents = [Document(scan: DocumentScanStatus.Failed)] };
+        Render().FindAll("[data-testid='document-retry-doc-1']").Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(DocumentScanStatus.Clean, false, false, false)]
+    [InlineData(DocumentScanStatus.Infected, false, false, false)]
+    [InlineData(DocumentScanStatus.Pending, false, false, false)]
+    [InlineData(DocumentScanStatus.Failed, true, false, false)]
+    [InlineData(DocumentScanStatus.Failed, false, true, false)]
+    [InlineData(DocumentScanStatus.Failed, false, false, true)]
+    public void Retry_is_only_offered_for_finalized_failed_documents(DocumentScanStatus status, bool hold, bool pending, bool offered)
+    {
+        _user.Setup(x => x.HasPermission("documents:write")).Returns(true);
+        _catalog.Listing = new() { Documents = [Document(scan: status, legalHold: hold, uploadPending: pending)] };
+        Render().FindAll("[data-testid='document-retry-doc-1']").Count.Should().Be(offered ? 1 : 0);
+    }
+
+    [Fact]
+    public void Retry_shows_the_result_and_refreshes_the_document_list()
+    {
+        _user.Setup(x => x.HasPermission("documents:write")).Returns(true);
+        _catalog.Listing = new() { Documents = [Document(scan: DocumentScanStatus.Failed)] };
+        var cut = Render();
+        cut.Find("[data-testid='document-retry-doc-1']").Click();
+        cut.WaitForAssertion(() => cut.Find("[data-testid='document-retry-message']").TextContent.Should().Contain("Clean"));
+        _catalog.RetryCalls.Should().Equal("doc-1");
+        _catalog.Calls.Should().HaveCount(2);
+    }
 
     [Fact]
     public void Read_only_users_have_no_link_action()
