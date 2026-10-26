@@ -1,0 +1,81 @@
+# Synthetic-only Vault dev server; never expose outside the local namespace.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: local-vault
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: local-vault
+  template:
+    metadata:
+      labels:
+        app: local-vault
+        cho-data-class: synthetic
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - name: vault
+        image: hashicorp/vault:1.21
+        command:
+        - /bin/sh
+        - -ec
+        args:
+        - 'vault server -dev -dev-root-token-id=cho-synthetic-local -dev-listen-address=0.0.0.0:8200
+          &
+
+          server=$!
+
+          trap ''kill "$server"'' TERM INT EXIT
+
+          until vault status >/dev/null 2>&1; do kill -0 "$server"; sleep 1; done
+
+          vault kv put secret/appeal-body-encryption-key-v1 value="$LOCAL_APPEAL_KEY"
+          >/dev/null
+
+          wait "$server"
+
+          '
+        env:
+        - name: VAULT_ADDR
+          value: http://127.0.0.1:8200
+        - name: VAULT_TOKEN
+          value: cho-synthetic-local
+        - name: VAULT_DEV_ROOT_TOKEN_ID
+          value: cho-synthetic-local
+        - name: SKIP_SETCAP
+          value: 'true'
+        - name: LOCAL_APPEAL_KEY
+          valueFrom:
+            secretKeyRef:
+              name: local-appeal-key
+              key: key
+        ports:
+        - containerPort: 8200
+          name: http
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -ec
+            - vault kv get secret/appeal-body-encryption-key-v1 >/dev/null
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 384Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: local-vault
+spec:
+  selector:
+    app: local-vault
+  ports:
+  - port: 8200
+    targetPort: http

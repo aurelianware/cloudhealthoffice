@@ -97,6 +97,37 @@ This is not complete contact-center integration, regulatory case management or
 production acceptance. Telephony, recording ingestion, reporting, representative
 tracks, amendments, notices and fulfillment retain their existing separate scope.
 
+## Docker Desktop Kubernetes check
+
+With the `docker-desktop` node Ready, from `feat/contact-workflow-documents`:
+
+```bash
+git pull --ff-only
+bash scripts/deploy-contact-workflow-local.sh
+kubectl --context docker-desktop -n cho-contact-local port-forward svc/portal 5090:8080
+```
+
+Open `http://localhost:5090/service`. Keep the port-forward terminal running.
+This builds six images and deploys the portal, five workflow services, Mongo,
+Redis and a private synthetic-only Vault dev server in `cho-contact-local`.
+All Kubernetes commands explicitly select Docker Desktop. Existing namespaces
+are not modified. Docker Desktop kind nodes must be visible to `docker inspect`;
+enable **Show system containers** if the script requests it. Built images are
+imported into each visible node's containerd store; no registry push is required.
+Use `--skip-build` only when these same local images already exist.
+
+The appeal encryption key is generated once into a Kubernetes Secret and loaded
+into Vault on every start. Keep that Secret with the Mongo data: deleting it
+makes old case bodies unreadable. Vault's fixed development token is synthetic
+and must never be used outside this isolated local setup. No service is exposed
+outside the cluster until port-forwarding. Use synthetic data only.
+
+Mongo metadata survives pod restarts through its PVC. Document bytes use the
+in-memory store and are lost on document-service restart. Scanning is disabled;
+uploads remain quarantined and cannot be previewed. This setup verifies contact,
+case and follow-up wiring; it does not establish durable document or scanner
+acceptance. Other platform backends are outside this focused environment.
+
 ## Local Mac check
 
 Use synthetic data only. From this branch, with Docker Desktop running:
