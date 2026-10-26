@@ -152,6 +152,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=AuthorizationDB
+      - Services__ContactServiceUrl=http://contact-service:8080
     depends_on:
       mongo:
         condition: service_healthy
@@ -385,6 +386,8 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=AppealsDB
+      - Services__ContactServiceUrl=http://contact-service:8080
+      - Services__AuthorizationServiceUrl=http://authorization-service:8080
     depends_on:
       mongo:
         condition: service_healthy
@@ -446,6 +449,25 @@ services:
         condition: service_healthy
       document-service:
         condition: service_started
+    profiles: [core]
+
+  contact-service:
+    build:
+      context: .
+      dockerfile: src/services/contact-service/Dockerfile
+    ports:
+      - "5034:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=cloudhealthoffice
+      - Services__ClaimsServiceUrl=http://claims-service:8080
+      - Services__AppealsServiceUrl=http://appeals-service:8080
+      - Services__AuthorizationServiceUrl=http://authorization-service:8080
+      - Services__WorkManagementServiceUrl=http://work-management-service:8080
+    depends_on:
+      mongo:
+        condition: service_healthy
     profiles: [core]
 
   document-service:
@@ -527,6 +549,7 @@ services:
       - Kafka__ClientId=work-management-service
       - Services__ClaimsService=http://claims-service:8080
       - Services__EnrollmentImportService=http://enrollment-import-service:8080
+      - Services__ContactServiceUrl=http://contact-service:8080
     depends_on:
       mongo:
         condition: service_healthy

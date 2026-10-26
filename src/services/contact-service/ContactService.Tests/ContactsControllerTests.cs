@@ -521,6 +521,7 @@ public class ContactsControllerTests
     public async Task Close_stamps_the_duration_and_the_resolution()
     {
         var contact = Stored();
+        contact.Classification = ContactClassification.Inquiry;
         Exists(contact);
         SavesSuccessfully();
 
@@ -548,7 +549,7 @@ public class ContactsControllerTests
         {
             Revision = 1,
             Resolution = ContactResolution.ResolvedOnCall,
-            EndedAt = Now.AddHours(-2),
+            EndedAt = Now.AddHours(-2), Classification = ContactClassification.Inquiry,
         }, default);
 
         result.Result.Should().BeOfType<BadRequestObjectResult>();
@@ -562,7 +563,7 @@ public class ContactsControllerTests
 
         var result = await Controller().Close("contact-1", new CloseContactRequest
         {
-            Revision = 1, Resolution = ContactResolution.ResolvedOnCall,
+            Revision = 1, Resolution = ContactResolution.ResolvedOnCall, Classification = ContactClassification.Inquiry,
         }, default);
 
         result.Result.Should().BeOfType<BadRequestObjectResult>();

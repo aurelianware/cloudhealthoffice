@@ -1,5 +1,7 @@
 # CHO Service: payer-native call tracking and member/provider service
 
+**Contact workflow follow-up (proposed):** [intake, follow-ups and contact documents](../operations/CONTACT-WORKFLOW-INTAKE.md) records the current branch's changes and explicit acceptance limits. Earlier dated steps below remain historical.
+
 **Status:** Draft for review (2026-10-15). Step 1 of the build order below shipped 2026-10-22 (`contact-service`, and Service in the portal).
 **Scope:** A customer-service module for health plan call centers:
 - call tracking;

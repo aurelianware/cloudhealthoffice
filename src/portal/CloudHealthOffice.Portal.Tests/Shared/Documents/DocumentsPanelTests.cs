@@ -20,12 +20,16 @@ public class DocumentsPanelTests : TestContext
     public DocumentsPanelTests()
     {
         Services.AddMudServices();
+        Services.AddSingleton(Mock.Of<IUserContextService>());
         Services.AddSingleton<IDocumentCatalogService>(_catalog);
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
     private sealed class StubCatalog : IDocumentCatalogService
     {
+        public Task<string?> UploadAsync(DocumentSubjectKind kind, string subjectId, string title, string type,
+            Stream content, string fileName, string contentType, CancellationToken ct = default) => Task.FromResult<string?>(null);
+
         public DocumentSubjectListing Listing { get; set; } = DocumentSubjectListing.Empty;
         public bool Unavailable { get; set; }
         public List<(DocumentSubjectKind Kind, string Id)> Calls { get; } = new();

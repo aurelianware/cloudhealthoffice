@@ -93,6 +93,12 @@ public sealed class WorkManagementService : IWorkManagementService
 
     public Task<List<WorkItemView>> GetMineAsync() => ReadAsync<List<WorkItemView>>(HttpMethod.Get, "work/mine");
 
+    public async Task<WorkItemView> GetItemAsync(string workItemId) =>
+        (await ReadAsync<WorkItemDetailResponse>(HttpMethod.Get, $"work/{E(workItemId)}")).Item;
+    public Task<WorkItemView> CompleteAsync(string workItemId, string resolution) =>
+        ReadAsync<WorkItemView>(HttpMethod.Post, $"work/{E(workItemId)}/complete", new { resolution });
+    public sealed class WorkItemDetailResponse { public WorkItemView Item { get; set; } = new(); }
+
     public Task<WorkItemView> ReleaseAsync(string workItemId) => ReadAsync<WorkItemView>(HttpMethod.Post, $"work/{E(workItemId)}/release");
 
     public Task<WorkItemView> RenewAsync(string workItemId) => ReadAsync<WorkItemView>(HttpMethod.Post, $"work/{E(workItemId)}/renew");

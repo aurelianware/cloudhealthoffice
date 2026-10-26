@@ -28,6 +28,18 @@ public class PersonCreatedWorkTests
         new(T, type, "C-20261023-AAAA1111", title, openUrl, reasons ?? ["CLAIM_DENIAL"], facets ?? new(),
             "M1", null, "Medicare", expedited, deadline, "rep-1");
 
+    [Fact]
+    public async Task Stable_contact_request_key_reuses_work_without_overwriting_it()
+    {
+        var request = Follow() with { RequestKey = "contact-follow-1", ReceivedAt = DateTime.UtcNow };
+        var first = await _kit.Intake().CreateAdHocAsync(request);
+        var second = await _kit.Intake().CreateAdHocAsync(request);
+        second.Id.Should().Be(first.Id);
+        second.Version.Should().Be(first.Version);
+        var act = async () => await _kit.Intake().CreateAdHocAsync(request with { Title = "Different work" });
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
     // ── What it creates ───────────────────────────────────────────
 
     [Fact]

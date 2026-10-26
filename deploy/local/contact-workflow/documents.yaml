@@ -1,0 +1,150 @@
+# Synthetic-only local dependencies. Neither service is exposed outside the cluster.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: document-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gcs-emulator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: gcs-emulator
+  template:
+    metadata:
+      labels:
+        app: gcs-emulator
+        cho-data-class: synthetic
+    spec:
+      automountServiceAccountToken: false
+      initContainers:
+      - name: seed-bucket
+        image: busybox:1.37.0
+        command: [sh, -c, 'mkdir -p /data/contact-documents']
+        volumeMounts:
+        - name: seed
+          mountPath: /data
+      containers:
+      - name: gcs-emulator
+        image: fsouza/fake-gcs-server:1.54.0@sha256:3730da0e31f7e5186a90ec4899dc2c336104e7599df400411392ef17e684c31f
+        args: [-scheme, http, -port, '4443', -backend, filesystem, -filesystem-root, /storage, -external-url, 'http://gcs-emulator:4443', -public-host, 'gcs-emulator:4443']
+        ports:
+        - containerPort: 4443
+          name: blob
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        readinessProbe:
+          tcpSocket:
+            port: blob
+          periodSeconds: 5
+        volumeMounts:
+        - name: data
+          mountPath: /storage
+        - name: seed
+          mountPath: /data
+      volumes:
+      - name: seed
+        emptyDir: {}
+      - name: data
+        persistentVolumeClaim:
+          claimName: document-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gcs-emulator
+spec:
+  selector:
+    app: gcs-emulator
+  ports:
+  - port: 4443
+    targetPort: blob
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: clamav-signatures
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clamav
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: clamav
+  template:
+    metadata:
+      labels:
+        app: clamav
+        cho-data-class: synthetic
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - name: clamav
+        image: clamav/clamav-debian:stable_base@sha256:dfe9a0c9ea8d7f14034f742010c0f91e0d3f7a719a526c426c60d2e1f5c490eb
+        ports:
+        - containerPort: 3310
+          name: scan
+        resources:
+          requests:
+            cpu: 250m
+            memory: 2Gi
+          limits:
+            cpu: '2'
+            memory: 4Gi
+        startupProbe:
+          tcpSocket:
+            port: scan
+          periodSeconds: 10
+          failureThreshold: 120
+        readinessProbe:
+          tcpSocket:
+            port: scan
+          periodSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: scan
+          periodSeconds: 20
+          failureThreshold: 6
+        volumeMounts:
+        - name: signatures
+          mountPath: /var/lib/clamav
+      volumes:
+      - name: signatures
+        persistentVolumeClaim:
+          claimName: clamav-signatures
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clamav
+spec:
+  selector:
+    app: clamav
+  ports:
+  - port: 3310
+    targetPort: scan

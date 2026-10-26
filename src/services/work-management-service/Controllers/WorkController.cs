@@ -137,6 +137,27 @@ public sealed class WorkController : ControllerBase
         return CreatedAtAction(nameof(Get), new { id = item.Id }, view);
     }
 
+    [HttpPost("from-contact/{contactId}/{key}")]
+    [RequirePermission(ChoRolePermissions.WorkQueueWork)]
+    public async Task<ActionResult<WorkItemView>> FromContact(string contactId, string key,
+        [FromServices] CloudHealthOffice.Infrastructure.Contacts.IContactIntakeReader contacts, CancellationToken ct)
+    {
+        if (!WorkEntitlements.Permits(_actor, WorkType.Inquiry)) return Forbid();
+        CloudHealthOffice.Infrastructure.Contacts.ContactIntakeReceipt? contact;
+        try { contact = await contacts.GetAsync(contactId, ct); }
+        catch (HttpRequestException) { return StatusCode(503, "Contact receipt is unavailable."); }
+        if (contact is null || contact.Id != contactId || contact.TenantId != _actor.TenantId) return NotFound();
+        var f = contact.FollowUps.SingleOrDefault(f => f.Key == key);
+        if (f is null) return BadRequest("No saved follow-up intent has this key.");
+        var source = CloudHealthOffice.Infrastructure.Contacts.ContactIntakeIdentity.For(_actor.TenantId, contactId + ":" + key);
+        var item = await _intake.CreateAdHocAsync(new WorkIntakeService.AdHocWork(
+            _actor.TenantId, WorkType.Inquiry, contact.Id, f.Title, "/calls/" + Uri.EscapeDataString(contact.Id),
+            [], new Dictionary<string, List<string>> { ["channel"] = [f.Channel],
+                ["caller"] = [f.CallerType], ["classification"] = [f.Classification] },
+            f.MemberId, null, null, false, f.DueAt, f.RequestedBy, source, f.RequestedAt), ct);
+        return Ok(await ViewAsync(item, ct));
+    }
+
     /// <summary>
     /// The holder marks person-created work done. Source-owned work (a claim,
     /// an enrollment exception) is completed by its source, and this refuses

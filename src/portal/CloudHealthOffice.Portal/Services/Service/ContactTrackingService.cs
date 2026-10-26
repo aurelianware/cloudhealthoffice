@@ -67,6 +67,11 @@ public class ContactTrackingService(
     public Task<ContactRecord?> ReopenAsync(string id, ReopenContactRequest request, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Post, $"contacts/{Uri.EscapeDataString(id)}/reopen", request, ct);
 
+    public Task<ContactRecord?> OpenCaseAsync(string id, OpenContactCaseRequest request, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Post, $"contacts/{Uri.EscapeDataString(id)}/case", request, ct);
+    public Task<ContactRecord?> CreateFollowUpAsync(string id, CreateContactFollowUpRequest request, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Post, $"contacts/{Uri.EscapeDataString(id)}/follow-ups", request, ct);
+
     // ── Plumbing ──────────────────────────────────────────────────
 
     private async Task<T?> GetAsync<T>(string path, CancellationToken ct)
@@ -102,7 +107,7 @@ public class ContactTrackingService(
             // A refusal carries a sentence written for the person reading it
             // ("This contact is closed", "it has changed since you read it"),
             // so it is shown rather than swallowed into a generic failure.
-            if (response.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.BadRequest)
+            if (response.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.BadRequest or HttpStatusCode.Forbidden or HttpStatusCode.UnprocessableEntity)
             {
                 var reason = (await response.Content.ReadAsStringAsync(ct)).Trim().Trim('"');
                 throw new ContactWriteRefusedException(

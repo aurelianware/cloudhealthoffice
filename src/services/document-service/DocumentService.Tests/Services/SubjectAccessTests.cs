@@ -60,11 +60,11 @@ public class SubjectAccessTests
     }
 
     [Fact]
-    public void CallDocuments_AreClosedToEveryRole_UntilCallsDefineAccess()
+    public void CallDocuments_UseTheSameReadPermissionAsContacts()
     {
-        // calls:read is exact-only: *:read and *:* don't reach it.
-        foreach (var role in ChoRolePermissions.BuiltInRoles)
-            Assert.False(SubjectAccess.CanReadSubject(new Actor(role), DocumentLinkKind.Call), role);
+        Assert.True(SubjectAccess.CanReadSubject(new Actor(ChoRolePermissions.MemberServices), DocumentLinkKind.Call));
+        Assert.True(SubjectAccess.CanReadSubject(new Actor(ChoRolePermissions.ProviderRelations), DocumentLinkKind.Call));
+        Assert.False(SubjectAccess.CanReadSubject(new Actor(ChoRolePermissions.ClaimsExaminer), DocumentLinkKind.Call));
     }
 
     [Theory]

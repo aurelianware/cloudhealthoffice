@@ -1,0 +1,115 @@
+@page "/service/cases"
+@page "/service/cases/{CaseId}"
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Infrastructure.Contacts
+@attribute [Authorize]
+@inject HttpClient Http
+@inject IConfiguration Config
+
+<PageTitle>Member service cases - Cloud Health Office</PageTitle>
+<PermissionGate Permission="appeals:read">
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4">Member service cases</MudText>
+    <MudText Typo="Typo.body2">Contact-originated member grievances and pre-service medical appeals.</MudText>
+    @if (_error is not null) { <MudAlert Severity="Severity.Error">@_error</MudAlert> }
+    @if (_loading) { <MudProgressLinear Indeterminate="true" /> }
+    else if (_review is not null)
+    {
+        <MudLink Href="/service/cases">Back to cases</MudLink>
+        <MudPaper Class="pa-4 my-4">
+            <MudText Typo="Typo.h6">@_review.Classification · @_review.Status</MudText>
+            <MudText>Member: @_review.MemberId</MudText>
+            <MudLink Href="@($"/calls/{Uri.EscapeDataString(_review.ContactId)}")">Original contact</MudLink>
+            <MudText>Received @_review.ReceivedAt.ToUniversalTime().ToString("u")</MudText>
+            <MudText>Due @_review.DueAt?.ToUniversalTime().ToString("u")</MudText>
+            <MudText>Rule pack: @_review.RulePackVersion</MudText>
+            <MudText Class="my-3">@_review.Summary</MudText>
+            @if (_review.Status == "Received")
+            {
+                <PermissionGate Permission="appeals:write">
+                    <MudTextField @bind-Value="_resolution" Label="Review outcome and rationale" Lines="5" MaxLength="4000" />
+                    <MudButton OnClick="RecordAsync" Disabled="@(_busy || string.IsNullOrWhiteSpace(_resolution))"
+                               Variant="Variant.Filled" Color="Color.Primary">Record decision</MudButton>
+                </PermissionGate>
+            }
+            else
+            {
+                <MudText Class="mt-3">@_review.Resolution</MudText>
+                <MudText Typo="Typo.caption">Recorded by @_review.DecisionRecordedBy at @_review.DecisionRecordedAt?.ToUniversalTime().ToString("u")</MudText>
+            }
+            <MudAlert Severity="Severity.Info" Class="mt-4">
+                Recording a decision does not send notices, effectuate benefits or close the regulatory case.
+                Those steps require the plan's approved downstream workflow.
+            </MudAlert>
+        </MudPaper>
+    }
+    else if (_error is null)
+    {
+        <MudTable T="ContactCaseResult" Items="_cases" Dense="true">
+            <HeaderContent><MudTh>Reference</MudTh><MudTh>Type</MudTh><MudTh>Received</MudTh><MudTh>Due</MudTh><MudTh>Status</MudTh></HeaderContent>
+            <RowTemplate>
+                <MudTd><MudLink Href="@($"/service/cases/{Uri.EscapeDataString(context.Id)}")">@context.Id</MudLink></MudTd>
+                <MudTd>@context.Kind</MudTd><MudTd>@context.ReceivedAt.ToUniversalTime().ToString("u")</MudTd>
+                <MudTd>@context.DueAt?.ToUniversalTime().ToString("u")</MudTd><MudTd>@context.Status</MudTd>
+            </RowTemplate>
+            <NoRecordsContent>No member service cases on file.</NoRecordsContent>
+        </MudTable>
+        <MudText Typo="Typo.caption">Showing the latest 100 received cases.</MudText>
+    }
+</MudContainer>
+</PermissionGate>
+
+@code {
+    [Parameter] public string? CaseId { get; set; }
+    private List<ContactCaseResult> _cases = [];
+    private CaseReview? _review;
+    private string _resolution = string.Empty;
+    private string? _error;
+    private bool _loading;
+    private bool _busy;
+    private string BaseUrl => (Config["Services:AppealsService"] ?? "http://appeals-service.cloudhealthoffice/api").TrimEnd('/') + "/service-cases";
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+    private async Task LoadAsync()
+    {
+        _loading = true; _error = null; _review = null;
+        try
+        {
+            using var response = await Http.GetAsync(CaseId is null ? BaseUrl : $"{BaseUrl}/{Uri.EscapeDataString(CaseId)}/review");
+            if (!response.IsSuccessStatusCode) { _error = "Case records could not be opened. Access may be refused or the service unavailable."; return; }
+            if (CaseId is null) _cases = await response.Content.ReadFromJsonAsync<List<ContactCaseResult>>() ?? [];
+            else _review = await response.Content.ReadFromJsonAsync<CaseReview>();
+        }
+        catch (HttpRequestException) { _error = "The case service is unavailable."; }
+        finally { _loading = false; }
+    }
+    private async Task RecordAsync()
+    {
+        _busy = true;
+        try
+        {
+            using var response = await Http.PostAsJsonAsync($"{BaseUrl}/{Uri.EscapeDataString(CaseId!)}/decision",
+                new { _review!.Revision, Resolution = _resolution });
+            if (!response.IsSuccessStatusCode) { _error = "The decision was refused. Refresh the case and check your permissions before retrying."; return; }
+            await LoadAsync();
+        }
+        catch (HttpRequestException) { _error = "The response was unavailable. Refresh before retrying; the decision may have been recorded."; }
+        finally { _busy = false; }
+    }
+    private sealed class CaseReview
+    {
+        public string MemberId { get; set; } = string.Empty;
+        public string ContactId { get; set; } = string.Empty;
+        public string Classification { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public long Revision { get; set; }
+        public DateTime ReceivedAt { get; set; }
+        public DateTime? DueAt { get; set; }
+        public string? RulePackVersion { get; set; }
+        public string? Summary { get; set; }
+        public string? Resolution { get; set; }
+        public string? DecisionRecordedBy { get; set; }
+        public DateTime? DecisionRecordedAt { get; set; }
+    }
+}

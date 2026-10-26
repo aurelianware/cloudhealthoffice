@@ -298,6 +298,8 @@ public class WorkItemAttributes
 /// </summary>
 public class WorkItem
 {
+    public string? IntakeFingerprint { get; set; }
+
     public string Id { get; set; } = string.Empty;
     public string TenantId { get; set; } = string.Empty;
 

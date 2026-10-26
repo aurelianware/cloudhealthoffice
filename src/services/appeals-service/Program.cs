@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Contacts;
 using AppealsService.HostedServices;
 using CloudHealthOffice.Infrastructure.Extensions;
 using AppealsService.Middleware;
@@ -173,6 +174,15 @@ builder.Services.AddChoObservability(builder.Configuration);
 // Who read which appeal, its notes and its documents (HIPAA access
 // accounting): GET api/appeals/{id}/access-log.
 CloudHealthOffice.Infrastructure.Audit.RecordAccessAuditExtensions.AddRecordAccessAudit(builder.Services);
+
+builder.Services.AddContactIntakeReader(builder.Configuration);
+builder.Services.AddSingleton<IMemberServiceCaseStore, MemberServiceCaseStore>();
+builder.Services.AddHttpClient("ContactAppealAuthorization", client => {
+    client.BaseAddress = new Uri((builder.Configuration["Services:AuthorizationServiceUrl"]
+        ?? "http://authorization-service.cloudhealthoffice/").TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
+builder.Services.AddScoped<IMemberCaseSubjectValidator, HttpMemberCaseSubjectValidator>();
 
 var app = builder.Build();
 

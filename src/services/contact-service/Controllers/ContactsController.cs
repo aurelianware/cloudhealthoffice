@@ -162,6 +162,13 @@ public sealed class ContactsController(
         if (ContactLifecycle.WhyNotEditable(contact) is { } why) return BadRequest(why);
         if (contact.Revision != request.Revision) return StaleRead(contact);
 
+        if (contact.CaseIntent is not null &&
+            ((request.MemberId is not null && request.MemberId != contact.MemberId)
+             || (request.Classification.HasValue && request.Classification != contact.Classification)
+             || (request.Caller is not null && !SameCaller(contact.Caller, request.Caller))
+             || (request.Summary is not null && request.Summary != contact.Summary)))
+            return Conflict("Case intake has started. Member, caller, classification and intake summary are fixed; record corrections on the case.");
+
         var now = Now;
         var changed = new List<string>();
 
@@ -224,6 +231,8 @@ public sealed class ContactsController(
             changed.Add("transcript");
         }
 
+        if (request.Classification is { } invalidClassification && !Enum.IsDefined(invalidClassification))
+            return BadRequest("Unknown classification.");
         if (request.Classification is { } classification)
         {
             ApplyClassification(contact, classification, now);
@@ -299,6 +308,17 @@ public sealed class ContactsController(
     {
         if (await contacts.GetByIdAsync(id, ct) is not { } contact) return NotFound();
         if (contact.Revision != request.Revision) return StaleRead(contact);
+        if ((request.Classification ?? contact.Classification) is not { } selected || !Enum.IsDefined(selected))
+            return BadRequest("Classify the contact before closing it.");
+        if (contact.CaseIntent is not null && selected != contact.Classification)
+            return Conflict("Case intake has already started; its classification cannot be changed.");
+        if (selected != ContactClassification.Inquiry && contact.OpenedCase is null)
+            return Conflict("Open the classified case before closing the contact. Retry pending intake if necessary.");
+        if (contact.FollowUps.Any(f => f.WorkItemId is null))
+            return Conflict("Deliver or retry pending follow-ups before closing the contact.");
+        if (request.Resolution is ContactResolution.FollowUpCreated or ContactResolution.CallbackScheduled
+            && !contact.FollowUps.Any(f => f.WorkItemId is not null))
+            return BadRequest("This outcome requires a created follow-up.");
 
         var now = Now;
         var endedAt = request.EndedAt ?? now;

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Contacts;
 using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
@@ -227,6 +228,8 @@ builder.Services.AddHttpClient(AuthorizationService.Services.Insights.HttpClaims
 });
 builder.Services.AddScoped<AuthorizationService.Services.Insights.IClaimsUsageClient, AuthorizationService.Services.Insights.HttpClaimsUsageClient>();
 builder.Services.AddScoped<AuthorizationService.Services.Insights.UnusedAuthorizations>();
+
+builder.Services.AddContactIntakeReader(builder.Configuration);
 
 var app = builder.Build();
 
