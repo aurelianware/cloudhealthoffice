@@ -42,6 +42,12 @@ public record SecretProviderOptions
     /// </summary>
     public string? HashiCorpVaultToken { get; init; }
 
+    /// <summary>Project containing the explicitly allowed Google Secret Manager secrets.</summary>
+    public string? GoogleSecretManagerProjectId { get; init; }
+
+    /// <summary>Exact secret names this workload may read. No project-wide secret discovery.</summary>
+    public IReadOnlyList<string> GoogleSecretManagerSecretNames { get; init; } = Array.Empty<string>();
+
     /// <summary>Interval in seconds at which secrets are reloaded from the provider. Defaults to 300 (5 minutes).</summary>
     public int ReloadIntervalSeconds { get; init; } = 300;
 

@@ -42,6 +42,16 @@ public static class SecretProviderServiceCollectionExtensions
                         sp.GetRequiredService<ILogger<HashiCorpVaultSecretProvider>>()));
                 break;
 
+            case SecretProviderType.GoogleSecretManager:
+                services.AddHttpClient(GoogleSecretManagerSecretProvider.ClientName, client =>
+                {
+                    client.Timeout = TimeSpan.FromSeconds(30);
+                }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+                services.AddSingleton<ISecretProvider>(sp => new GoogleSecretManagerSecretProvider(
+                    options, sp.GetRequiredService<IHttpClientFactory>(),
+                    sp.GetRequiredService<ILogger<GoogleSecretManagerSecretProvider>>()));
+                break;
+
             case SecretProviderType.None:
             default:
                 services.AddSingleton<ISecretProvider, NullSecretProvider>();

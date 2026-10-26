@@ -461,6 +461,39 @@ def test_documents_require_the_private_scanner():
     assert settings["Documents__Scanner__ClamAv__Host"] == "document-scanner"
 
 
+def test_appeals_secret_provider_is_opt_in_and_scoped_to_one_key():
+    assert env(deployments(render())["appeals-service"])["SecretProvider__Provider"] == "None"
+    rendered = render("--appeals-secrets-project", "demo-project", "--appeals-secrets-service-account", "cho-appeals@demo-project.iam.gserviceaccount.com")
+    dep = deployments(rendered)["appeals-service"]
+    settings = env(dep)
+    assert settings["SecretProvider__Provider"] == "GoogleSecretManager"
+    assert settings["SecretProvider__GoogleSecretManagerProjectId"] == "demo-project"
+    assert settings["SecretProvider__GoogleSecretManagerSecretNames__0"] == "appeal-body-encryption-key-v1"
+    assert dep["spec"]["template"]["spec"]["serviceAccountName"] == "appeals-service"
+    assert dep["spec"]["template"]["spec"]["containers"][0]["readinessProbe"]["httpGet"]["path"] == "/health/ready"
+    sa = next(d for d in rendered if d["kind"] == "ServiceAccount" and d["metadata"]["name"] == "appeals-service")
+    assert sa["metadata"]["annotations"]["iam.gke.io/gcp-service-account"] == "cho-appeals@demo-project.iam.gserviceaccount.com"
+    assert env(deployments(rendered)["contact-service"])["SecretProvider__Provider"] == "None"
+
+
+def test_appeals_secret_provider_requires_both_project_and_identity():
+    for flag, value in (("--appeals-secrets-project", "demo-project"), ("--appeals-secrets-service-account", "cho-appeals@demo-project.iam.gserviceaccount.com")):
+        result = subprocess.run([sys.executable, str(SCRIPT), "--registry", REGISTRY, "--tag", "abc123", flag, value], capture_output=True, text=True)
+        assert result.returncode != 0
+        assert "go together" in result.stderr
+
+
+def test_production_appeals_identity_preserves_secret_binding_and_token_registration(tmp_path):
+    docs = render(*production_args(tmp_path, "--appeals-secrets-project", "demo-project", "--appeals-secrets-service-account", "cho-appeals@demo-project.iam.gserviceaccount.com"))
+    dep = deployments(docs)["appeals-service"]
+    assert dep["spec"]["template"]["spec"]["serviceAccountName"] == "appeals-service"
+    assert env(dep)["SecretProvider__Provider"] == "GoogleSecretManager"
+    clients = json.loads(config_map(docs, "token-service-service-clients")["service-clients.json"])
+    owner = next(c for c in clients if c["clientId"] == "appeals-service")
+    assert owner["serviceAccount"] == "appeals-service"
+    assert owner["namespace"] == "cloudhealthoffice"
+
+
 def test_contact_intake_owners_read_the_in_cluster_contact_service():
     rendered = deployments(render())
     for name in ("appeals-service", "authorization-service", "work-management-service"):

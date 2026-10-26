@@ -456,6 +456,13 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             spec["serviceAccountName"] = name
             set_env(container, "DocumentStore__Provider", "Gcs")
             set_env(container, "DocumentStore__Gcs__Bucket", args.documents_bucket)
+        if name == "appeals-service" and args.appeals_secrets_project:
+            spec["serviceAccountName"] = "appeals-service"
+            set_env(container, "SecretProvider__Provider", "GoogleSecretManager")
+            set_env(container, "SecretProvider__GoogleSecretManagerProjectId", args.appeals_secrets_project)
+            set_env(container, "SecretProvider__GoogleSecretManagerSecretNames__0", "appeal-body-encryption-key-v1")
+            if container.get("readinessProbe", {}).get("httpGet"):
+                container["readinessProbe"]["httpGet"]["path"] = "/health/ready"
         if name == MANAGED_FHIR_STORE_SERVICE and args.managed_fhir_store:
             spec["serviceAccountName"] = MANAGED_FHIR_STORE_ACCOUNT
             for key, value in managed_fhir_store_env(args).items():
@@ -694,6 +701,8 @@ def main() -> int:
                         help="Google service account fhir-service publishes as (terraform output managed_fhir_store_service_account)")
     parser.add_argument("--managed-fhir-store-tenant", default="demo",
                         help="The one CHO tenant whose claims are published (default: %(default)s)")
+    parser.add_argument("--appeals-secrets-project", default="", help="Project containing appeal-body-encryption-key-v1")
+    parser.add_argument("--appeals-secrets-service-account", default="", help="Secret-reading Google service account for appeals-service")
     parser.add_argument("--list-images", action="store_true", help="Print 'name dockerfile' for each image to build, then exit")
     parser.add_argument("--security", choices=("demo", "production"), default="demo",
                         help="demo: development keys and LocalDemo sign-in; production: Cloud KMS, Kubernetes identity, Cloudflare Access")
@@ -721,6 +730,8 @@ def main() -> int:
         return 0
     if not args.registry:
         parser.error("--registry is required")
+    if bool(args.appeals_secrets_project) != bool(args.appeals_secrets_service_account):
+        parser.error("--appeals-secrets-project and --appeals-secrets-service-account go together")
     if bool(args.documents_bucket) != bool(args.documents_service_account):
         parser.error("--documents-bucket and --documents-service-account go together")
     if bool(args.managed_fhir_store) != bool(args.managed_fhir_store_service_account):
@@ -733,6 +744,10 @@ def main() -> int:
         validate_production_args(parser, args)
 
     rendered = document_service_accounts(args) if args.documents_bucket else []
+    if args.appeals_secrets_project:
+        rendered.append({"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {
+            "name": "appeals-service", "namespace": NAMESPACE,
+            "annotations": {WORKLOAD_IDENTITY_ANNOTATION: args.appeals_secrets_service_account}}})
     for path in manifest_paths():
         if not path.exists():
             print(f"warning: manifest not found: {path.relative_to(REPO_ROOT)}", file=sys.stderr)

@@ -117,6 +117,9 @@ useDefault = true
     '''^whsec_test_0123456789abcdef$''',
     # A .NET type name the generic-api-key rule picks up after a "key" parameter
     '''^X509Certificate2$''',
+    # Public Secret Manager resource ID, not the encrypted key payload.
+    # Exact value only: key material and both source files remain scanned.
+    '''^appeal-body-encryption-key-v1$''',
     # FHIR route literals. generic-api-key fires on a string assigned next to an
     # identifier containing "access" — e.g. ProviderAccessEobPath — and a FHIR
     # resource path has enough entropy to clear the threshold. Both values are

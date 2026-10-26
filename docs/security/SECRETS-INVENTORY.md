@@ -291,5 +291,14 @@ PROD: cloud-health-office-prod-deploy-kv
 
 ---
 
+## Secret Manager resource-name false positive
+
+`appeal-body-encryption-key-v1` is the public resource identifier used in the
+Terraform secret declaration and its one-time initializer. It is not the key
+payload. Gitleaks excludes this exact captured value only; neither file is
+excluded. The detector regression script checks that the identifier is allowed
+and that secret-shaped canaries in both file locations are still detected.
+Actual key material remains in Secret Manager and must never be committed.
+
 **Maintained by:** Cloud Health Office DevOps Team  
 **Review Frequency:** Quarterly or after major deployment changes
