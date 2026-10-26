@@ -86,6 +86,10 @@ public class ContactTrackingService(
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadFromJsonAsync<T>(Wire, ct);
         }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new ServiceUnavailableException(ServiceName, ex);
+        }
         catch (HttpRequestException ex)
         {
             logger.LogError(ex, "Service unavailable: {ServiceName}", ServiceName);
@@ -119,6 +123,10 @@ public class ContactTrackingService(
 
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadFromJsonAsync<ContactRecord>(Wire, ct);
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new ServiceUnavailableException(ServiceName, ex);
         }
         catch (HttpRequestException ex)
         {

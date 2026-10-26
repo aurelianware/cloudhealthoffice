@@ -136,6 +136,7 @@ public sealed class ContactWorkflowController(
 public sealed class OpenContactCaseRequest
 {
     public long Revision { get; set; }
+    [System.ComponentModel.DataAnnotations.Required]
     public ContactCaseIntent Intent { get; set; } = new();
 }
 public sealed class CreateContactFollowUpRequest
@@ -150,5 +151,6 @@ public sealed class AmendContactCaseRequest
 {
     public long Revision { get; set; }
     public string Reason { get; set; } = string.Empty;
+    [System.ComponentModel.DataAnnotations.Required]
     public ContactCaseIntent Intent { get; set; } = new();
 }
