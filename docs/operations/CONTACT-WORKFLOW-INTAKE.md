@@ -96,3 +96,41 @@ real-Mongo cases. Before pilot acceptance also verify:
 This is not complete contact-center integration, regulatory case management or
 production acceptance. Telephony, recording ingestion, reporting, representative
 tracks, amendments, notices and fulfillment retain their existing separate scope.
+
+## Local Mac check
+
+Use synthetic data only. From this branch, with Docker Desktop running:
+
+```bash
+git pull --ff-only
+docker compose --profile core up -d --build contact-service document-service appeals-service authorization-service work-management-service
+```
+
+Run the portal in a second terminal. Compose exposes document-service on 5032;
+the portal's standalone development default is 5027, so override that address:
+
+```bash
+ASPNETCORE_ENVIRONMENT=Development Services__DocumentService=http://localhost:5032 dotnet run --project src/portal/CloudHealthOffice.Portal/CloudHealthOffice.Portal.csproj --no-launch-profile --urls http://localhost:5090
+```
+
+Open `http://localhost:5090/service` using the existing LocalDemo sign-in. Create
+a synthetic contact, save classification/summary, open a grievance, reload it,
+then create a follow-up. Queue membership is configured at
+`/admin/work-management`; pull work through `/my-work` before completing it from
+the contact. Review member cases at `/service/cases` with reviewer permissions.
+Default scanning is None: uploaded documents stay Pending in the panel and do not
+preview. Scanner-enabled acceptance requires a private ClamAV deployment and the
+configuration above; do not bypass quarantine to claim that acceptance.
+
+Contact-service's development settings now explicitly trust the same development
+issuers as the existing services. Localhost forwarding is allowed only in the
+Development settings of the relevant callers. Production settings are unchanged.
+
+## Dated test evidence
+
+At commit `e064ae61`, GitHub Actions run `40260055343` passed all six full projects:
+contacts 98, cases 473, authorization 271, documents 120, work 255 and portal 1,282;
+2,499 passed, zero failed/skipped, including the projects' real-Mongo tests.
+The user's Mac independently passed all 98 contact tests at that head.
+Later startup/pipeline and reviewer-concurrency additions require their own head
+results; this historical count must not be attributed to a later commit.

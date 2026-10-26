@@ -85,4 +85,17 @@ public class MemberServiceCasesTests
         (await Controller().Create("contact-1", default)).Result.Should().BeOfType<UnprocessableEntityObjectResult>();
         _store.Verify(s => s.CreateOrReadAsync(It.IsAny<MemberServiceCase>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+    [Fact]
+    public async Task Recording_a_review_outcome_requires_a_matching_revision_and_does_not_close_case()
+    {
+        _store.Setup(s => s.RecordDecisionAsync("t1", "case-1", 4, "encrypted-synthetic", "rep-1",
+            It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var result = await Controller().RecordDecision("case-1", new MemberCaseDecisionRequest {
+            Revision = 4, Resolution = "Synthetic review outcome" }, default);
+        result.Should().BeOfType<NoContentResult>();
+        var stale = await Controller().RecordDecision("case-1", new MemberCaseDecisionRequest {
+            Revision = 3, Resolution = "Stale outcome" }, default);
+        stale.Should().BeOfType<ConflictObjectResult>();
+    }
+
 }
