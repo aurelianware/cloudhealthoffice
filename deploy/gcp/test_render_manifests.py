@@ -499,3 +499,18 @@ def test_contact_intake_owners_read_the_in_cluster_contact_service():
     for name in ("appeals-service", "authorization-service", "work-management-service"):
         # HttpContactIntakeReader appends api/contacts/{id} to this base URL.
         assert env(rendered[name])["Services__ContactServiceUrl"] == "http://contact-service"
+
+
+def test_leie_screening_is_opt_in_and_scoped_to_verification():
+    setting = "ProviderVerification__ExclusionScreening__Leie__Enabled"
+    before = deployments(render())
+    after = deployments(render("--leie-screening"))
+    assert env(after["provider-verification-service"])[setting] == "true"
+    assert env(before["provider-verification-service"]).get(setting) != "true"
+    for name, dep in after.items():
+        if name != "provider-verification-service":
+            assert dep == before[name], name
+    # No implicit SAM source, API credential, custom publisher URL or stale-data exemption.
+    original = env(before["provider-verification-service"])
+    changed = env(after["provider-verification-service"])
+    assert {k: v for k, v in changed.items() if k != setting} == {k: v for k, v in original.items() if k != setting}

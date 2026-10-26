@@ -325,6 +325,11 @@ render_args=(--registry "$GAR_REPOSITORY" --tag "$IMAGE_TAG"
   --storage-class "$STORAGE_CLASS" --resource-profile "$RESOURCE_PROFILE")
 [[ -n "$KAFKA_VALUE" ]] && render_args+=(--kafka-bootstrap "$KAFKA_VALUE")
 [[ "$AI_EXAMINER" == true ]] && render_args+=(--ai-examiner)
+case "${LEIE_SCREENING_ENABLED:-false}" in
+  true) render_args+=(--leie-screening) ;;
+  false) ;;
+  *) err "LEIE_SCREENING_ENABLED must be true or false" ;;
+esac
 if [[ "$SECURITY" == production ]]; then
   render_args+=(--security production
     --token-signing-key-version "$TOKEN_SIGNING_KEY_VERSION"

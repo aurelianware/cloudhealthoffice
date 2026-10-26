@@ -429,6 +429,8 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             if "cpu" not in requests or cpu_millicores(requests["cpu"]) > target:
                 requests["cpu"] = f"{target}m"
 
+        if name == "provider-verification-service" and args.leie_screening:
+            set_env(container, "ProviderVerification__ExclusionScreening__Leie__Enabled", "true")
         if name == "claims-service":
             set_env(container, "Adjudication__Enforcement__AiMode", "BestEffort" if args.ai_examiner else "Disabled")
         if name == "work-management-service":
@@ -684,6 +686,8 @@ def main() -> int:
     parser.add_argument("--registry", help="Artifact Registry prefix, e.g. us-west1-docker.pkg.dev/PROJECT/cho")
     parser.add_argument("--tag", default="latest")
     parser.add_argument("--kafka-bootstrap", default="")
+    parser.add_argument("--leie-screening", action="store_true",
+                        help="Enable real OIG LEIE dataset sync and screening (SAM remains separately configured)")
     parser.add_argument("--ai-examiner", action="store_true", help="Run the AI claims examiner (needs ANTHROPIC_API_KEY)")
     parser.add_argument("--claims-replicas", type=int, default=2)
     parser.add_argument("--benefit-plan-replicas", type=int, default=2)

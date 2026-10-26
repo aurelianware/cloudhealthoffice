@@ -185,6 +185,7 @@ jobs:
           DOCUMENTS_BUCKET: ${{ vars.DOCUMENTS_BUCKET }}
           DOCUMENTS_SERVICE_ACCOUNT: ${{ vars.DOCUMENTS_SERVICE_ACCOUNT }}
           # Optional versioned appeal encryption key (infrastructure/gcp/appeals-secrets/).
+          LEIE_SCREENING_ENABLED: ${{ vars.LEIE_SCREENING_ENABLED }}
           APPEALS_SECRETS_PROJECT: ${{ vars.APPEALS_SECRETS_PROJECT }}
           APPEALS_SECRETS_SERVICE_ACCOUNT: ${{ vars.APPEALS_SECRETS_SERVICE_ACCOUNT }}
           # Managed FHIR store -> BigQuery (terraform outputs in infrastructure/gcp/fhir-store.tf); optional.

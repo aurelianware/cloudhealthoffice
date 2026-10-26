@@ -266,3 +266,31 @@ fingerprint, then repeat Finish. Verify the saved examiner resolution, line
 adjustments, recalculated totals and decision note after reloading the claim.
 The fixture must not be overwritten or reset blindly after an interrupted
 request; inspect persisted state first.
+
+### Optional real OIG LEIE screening
+
+Set repository Actions variable `LEIE_SCREENING_ENABLED=true` to enable the
+existing OIG LEIE sync/screener on the GCP deployment. The deploy script passes
+`--leie-screening` to the renderer, which opts in only
+`provider-verification-service`. An unset variable preserves the disabled
+baseline. The variable accepts only `true` or `false`.
+
+This uses the public OIG full-database download and the existing Mongo-backed
+exclusion store. No SAM.gov account or API key is needed for LEIE. SAM remains
+separately configured and disabled; LEIE success is not evidence of SAM
+coverage. No freshness, minimum-record-count, provider-verification or claim
+review guard is relaxed.
+
+After rollout, call authenticated `GET /api/v1/exclusions/status` and require
+`leieEnabled=true`, `samEnabled=false` and a non-stale `OigLeie` dataset with a
+successful sync and no error. In the October 26 live check, the real OIG file
+loaded 84,093 records. The runtime opt-in was validated before this deployment
+option was merged; a deployment of older code may remove that temporary opt-in.
+
+The synthetic Finish fixture's NPI `9262123927` subsequently returned
+`NPI_NOT_FOUND` from live NPPES verification. Enabling exclusion screening does
+not make a fabricated NPI valid. The positive saved-decision/totals/history
+acceptance remains blocked on suitable synthetic provider fixtures; do not
+label the failed NPPES result verified or disable the provider gate to complete
+it. Any future test using simulated registry responses must identify those
+responses as test inputs, rather than claim live provider verification.
