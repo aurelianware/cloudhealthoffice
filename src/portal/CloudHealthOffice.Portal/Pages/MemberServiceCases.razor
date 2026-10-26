@@ -1,6 +1,8 @@
 @page "/service/cases"
 @page "/service/cases/{CaseId}"
 @using System.Net.Http.Json
+@using CloudHealthOffice.Portal.Services
+@using CloudHealthOffice.Portal.Shared.Documents
 @using Microsoft.AspNetCore.Authorization
 @using CloudHealthOffice.Infrastructure.Contacts
 @attribute [Authorize]
@@ -43,6 +45,18 @@
                 Those steps require the plan's approved downstream workflow.
             </MudAlert>
         </MudPaper>
+        @if (!string.IsNullOrWhiteSpace(_review.ContactId))
+        {
+            <PermissionGate Permission="service:read" RoleName="MemberServices">
+                <MudPaper Class="pa-4 my-4" data-testid="case-contact-documents">
+                    <MudText Typo="Typo.body2" Class="mb-3">
+                        Documents linked to the original contact. Files and scan results are shared with that contact.
+                    </MudText>
+                    <DocumentsPanel @key="_review.ContactId" SubjectKind="DocumentSubjectKind.Call"
+                                    SubjectId="@_review.ContactId" Title="Case documents" />
+                </MudPaper>
+            </PermissionGate>
+        }
     }
     else if (_error is null)
     {

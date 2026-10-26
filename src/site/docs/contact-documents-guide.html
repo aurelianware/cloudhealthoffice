@@ -134,6 +134,7 @@
               <li><a href="#documents">Upload and Open Documents</a></li>
               <li><a href="#scan-states">Understand Scan States</a></li>
               <li><a href="#shared-documents">Share a Document Context</a></li>
+              <li><a href="#case-documents">Case Documents</a></li>
               <li><a href="#follow-ups">Track Follow-ups</a></li>
               <li><a href="#wrap-up">Wrap Up and Close</a></li>
               <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -191,6 +192,11 @@ Content-Type: application/json
         <p>Use the existing document ID and the actual contact and claim record IDs. The request must be authenticated in the correct tenant and authorized for both subject kinds; legal hold can prevent a link change.</p>
         <ol><li>Open the claim and select <strong>Documents</strong>.</li><li>Locate the shared document by its title and size. Check <strong>Also linked to</strong> for the contact reference, labeled <strong>Call</strong> in this view.</li><li>Open the clean document from either record. Each request still checks access using that record's context.</li></ol>
         <figure class="guide-screenshot"><img src="/graphics/user-guides/contact-documents/claim-shared-document.png" alt="Synthetic claim Documents page showing a clean 141-byte document and its linked contact reference" loading="lazy" /><figcaption>The 141-byte clean document appears on the claim with a Call backlink to the original contact. The second row is a separate synthetic validation upload.</figcaption></figure>
+
+        <h2 id="case-documents">Documents while reviewing a case</h2>
+        <p>Open the member service case from its contact. The <strong>Case documents</strong> section shows files linked to the original contact, including their scan status, other visible record links, and permitted Open and Preview actions. The same stored file and scan result are used on both pages; opening a case does not copy attachments or add a separate case link.</p>
+        <p>This section requires contact-read permission in addition to case-read permission. Document read, upload, linking, and scan retry continue to use the original contact's authorization context. Case access alone does not grant document access. Pending, Failed, and Infected files remain blocked.</p>
+        <figure class="guide-screenshot"><img src="/graphics/user-guides/contact-documents/case-contact-documents.png" alt="Synthetic grievance review with its original contact, deadline, and shared clean document" loading="lazy" /><figcaption>Local portal preview connected to the synthetic GCP demo case and document catalog. The file remains linked to the original contact.</figcaption></figure>
 
         <h2 id="follow-ups">5. Track the next action</h2>
         <ol><li>In <strong>Follow-ups</strong>, enter a specific action under <strong>What needs doing</strong> and choose a due date.</li><li>Select <strong>Create follow-up</strong>. Confirm the follow-up appears with its work status. If work-item creation is pending, use <strong>Retry pending follow-up</strong> when offered.</li><li>An eligible queue member uses <strong>My Work &rarr; Get Next</strong> to acquire the work. Queue membership and role permissions both apply.</li><li>Once the work is owned by the operator, return to the contact, enter a <strong>Follow-up resolution</strong>, and select <strong>Complete follow-up</strong>.</li></ol>
