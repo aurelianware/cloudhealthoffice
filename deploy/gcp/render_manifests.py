@@ -439,6 +439,7 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
         if name == "portal":
             set_env(container, "XDG_DATA_HOME", "/tmp")
             set_env(container, "Services__ContactService", "http://contact-service/api")
+            set_env(container, "Services__DocumentService", "http://document-service")
         if name == "contact-service":
             for downstream, setting in (("claims", "Claims"), ("appeals", "Appeals"),
                                         ("authorization", "Authorization"), ("work-management", "WorkManagement")):
