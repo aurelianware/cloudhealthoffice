@@ -48,6 +48,7 @@ public class MemberServiceCasesTests
         saved.MemberId.Should().Be(_contact.MemberId);
         saved.EncryptedSummary.Should().Be("encrypted-synthetic");
         saved.Receipt.RulePackVersion.Should().NotBeNullOrEmpty();
+        saved.Receipt.IntakeHash.Should().Be(ContactIntakeIdentity.Hash(_contact.CaseIntent!));
         saved.Receipt.DueAt.Should().BeAfter(_contact.StartedAt);
     }
 
