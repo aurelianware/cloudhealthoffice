@@ -48,6 +48,9 @@ public class ContactAuthorizationTests
         Assert.Equal(ContactIntakeIdentity.For("tenant-1", _contact.Id), saved.Id);
         Assert.Equal(2, saved.RequestedServices.Single().RequestedUnits);
         Assert.Null(saved.ReviewDecision);
+        Assert.Equal(ContactIntakeIdentity.Hash(_contact.CaseIntent!), saved.SourceContactIntakeHash);
+        var receipt = Assert.IsType<ContactCaseResult>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(saved.SourceContactIntakeHash, receipt.IntakeHash);
     }
 
     [Fact]
@@ -70,9 +73,11 @@ public class ContactAuthorizationTests
     public async Task Existing_authorization_is_not_recreated()
     {
         _repo.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync(new Authorization {
-            Id = "saved", SubmittedDate = _contact.StartedAt
+            Id = "saved", SubmittedDate = _contact.StartedAt, SourceContactIntakeHash = "original-intent"
         });
-        Assert.IsType<OkObjectResult>((await Controller().Create(_contact.Id, default)).Result);
+        var receipt = Assert.IsType<ContactCaseResult>(Assert.IsType<OkObjectResult>(
+            (await Controller().Create(_contact.Id, default)).Result).Value);
+        Assert.Equal("original-intent", receipt.IntakeHash);
         _repo.Verify(r => r.CreateAsync(It.IsAny<Authorization>()), Times.Never);
     }
 }

@@ -237,4 +237,32 @@ public sealed class ContactRepositoryMongoTests(MongoRunnerFixture mongo) : IAsy
         (await Repo().GetByContactNumberAsync("C-20261022-AAAA1111"))!
             .ContactNumber.Should().Be("C-20261022-AAAA1111");
     }
+    [Fact]
+    public async Task Recovery_history_survives_reload_and_concurrent_retry_fences_amendment()
+    {
+        var repo = Repo();
+        var c = await repo.CreateAsync(New("C-RECOVERY"));
+        c.CaseIntent = new() { State = "CA", LineOfBusiness = "Medicaid" };
+        c.CaseDeliveryStatus = "Rejected";
+        await repo.UpdateAsync(c);
+        var correction = (await repo.GetByIdAsync(c.Id))!;
+        var retry = (await repo.GetByIdAsync(c.Id))!;
+        retry.CaseDeliveryStatus = "Unknown";
+        await repo.UpdateAsync(retry);
+        correction.CaseAmendments.Add(new() { PreviousIntent = correction.CaseIntent!,
+            By = "rep-1", Reason = "Correct jurisdiction", At = DateTime.UtcNow });
+        correction.CaseIntent = new() { State = "TX" };
+        await repo.Invoking(r => r.UpdateAsync(correction)).Should().ThrowAsync<ContactConcurrencyException>();
+        var saved = (await Repo().GetByIdAsync(c.Id))!;
+        saved.CaseIntent!.State.Should().Be("CA");
+        saved.CaseDeliveryStatus.Should().Be("Unknown");
+        saved.CaseAmendments.Should().BeEmpty();
+        saved.CaseAmendments.Add(new() { PreviousIntent = saved.CaseIntent,
+            By = "rep-1", Reason = "Retained history fixture", At = DateTime.UtcNow });
+        await repo.UpdateAsync(saved);
+        (await Repo().GetByIdAsync(c.Id))!.CaseAmendments.Should().ContainSingle()
+            .Which.PreviousIntent.State.Should().Be("CA");
+        (await Repo(OtherTenant).GetByIdAsync(c.Id)).Should().BeNull();
+    }
+
 }

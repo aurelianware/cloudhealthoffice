@@ -67,6 +67,9 @@ public class ContactTrackingService(
     public Task<ContactRecord?> ReopenAsync(string id, ReopenContactRequest request, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Post, $"contacts/{Uri.EscapeDataString(id)}/reopen", request, ct);
 
+    public Task<ContactRecord?> AmendCaseAsync(string id, AmendContactCaseRequest request, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Post, $"contacts/{Uri.EscapeDataString(id)}/case/amend", request, ct);
+
     public Task<ContactRecord?> OpenCaseAsync(string id, OpenContactCaseRequest request, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Post, $"contacts/{Uri.EscapeDataString(id)}/case", request, ct);
     public Task<ContactRecord?> CreateFollowUpAsync(string id, CreateContactFollowUpRequest request, CancellationToken ct = default) =>
@@ -82,6 +85,10 @@ public class ContactTrackingService(
             if (response.StatusCode == HttpStatusCode.NotFound) return default;
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadFromJsonAsync<T>(Wire, ct);
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new ServiceUnavailableException(ServiceName, ex);
         }
         catch (HttpRequestException ex)
         {
@@ -116,6 +123,10 @@ public class ContactTrackingService(
 
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadFromJsonAsync<ContactRecord>(Wire, ct);
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new ServiceUnavailableException(ServiceName, ex);
         }
         catch (HttpRequestException ex)
         {

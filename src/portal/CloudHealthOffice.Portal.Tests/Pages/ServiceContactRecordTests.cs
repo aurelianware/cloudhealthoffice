@@ -186,4 +186,31 @@ public class ServiceContactRecordTests : TestContext
 
         Render().Markup.Should().Contain("Contact Service");
     }
+    [Fact]
+    public void Rejected_intake_offers_a_correction_form_with_a_reason()
+    {
+        var c = Contact(classification: ContactClassification.Grievance);
+        c.CaseIntent = new() { State = "CA", LineOfBusiness = "Medicaid" };
+        c.CaseDeliveryStatus = "Rejected";
+        Loads(c);
+        var page = Render();
+        page.Find("[data-testid=amend-case]").Click();
+        page.Find("[data-testid=save-case-amendment]").Should().NotBeNull();
+        page.Markup.Should().Contain("Reason for correcting intake");
+        _contacts.Verify(x => x.AmendCaseAsync(It.IsAny<string>(), It.IsAny<AmendContactCaseRequest>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public void Unknown_outcome_offers_reconciliation_without_amendment()
+    {
+        var c = Contact(classification: ContactClassification.Grievance);
+        c.CaseIntent = new() { State = "CA" }; c.CaseDeliveryStatus = "Unknown";
+        Loads(c);
+        var page = Render();
+        page.FindAll("[data-testid=amend-case]").Should().BeEmpty();
+        page.Find("[data-testid=open-case]").TextContent.Should().Contain("Retry");
+        page.Markup.Should().Contain("does not mean no case was created");
+    }
+
 }

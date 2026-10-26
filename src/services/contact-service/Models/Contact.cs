@@ -34,6 +34,8 @@ public class Contact
     public long Revision { get; set; }
 
     public ContactCaseIntent? CaseIntent { get; set; }
+    public string CaseDeliveryStatus { get; set; } = "Pending";
+    public List<ContactCaseAmendment> CaseAmendments { get; set; } = new();
     public ContactCaseResult? OpenedCase { get; set; }
     public List<ContactFollowUpIntent> FollowUps { get; set; } = new();
 
@@ -386,4 +388,12 @@ public enum ContactStatus
     Open,
 
     Closed,
+}
+
+public sealed class ContactCaseAmendment
+{
+    public ContactCaseIntent PreviousIntent { get; set; } = new();
+    public string Reason { get; set; } = string.Empty;
+    public string By { get; set; } = string.Empty;
+    public DateTime At { get; set; }
 }

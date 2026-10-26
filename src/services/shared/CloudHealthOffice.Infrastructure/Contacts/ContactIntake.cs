@@ -52,6 +52,7 @@ public sealed class ContactIntakeCaller
 
 public sealed class ContactCaseResult
 {
+    public string? IntakeHash { get; set; }
     public string Id { get; set; } = string.Empty;
     public string Kind { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
@@ -62,6 +63,9 @@ public sealed class ContactCaseResult
 
 public static class ContactIntakeIdentity
 {
+    public static string Hash(ContactCaseIntent intent) => Convert.ToHexString(
+        SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(intent))).ToLowerInvariant();
+
     public static string For(string tenant, string contact) =>
         "contact-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             JsonSerializer.Serialize(new[] { tenant, contact })))).ToLowerInvariant()[..32];

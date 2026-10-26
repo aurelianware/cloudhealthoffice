@@ -33,10 +33,28 @@ The original contact start anchors the clock, even for intake recorded later.
 
 Case/follow-up delivery failures leave visible pending intents. Reload and retry:
 no token is persisted, and retries execute under current user permissions. Do not
-edit the database to unlock a request. Case intents are immutable; a permanently
-rejected or incorrectly configured case request needs owner-led reconciliation
-before correction. This increment does not implement an amendment/cancellation
-protocol. It must be accepted before enabling unrestricted live intake.
+edit the database to unlock a request. Case-intake recovery now distinguishes saved, unknown and explicitly rejected
+requests. A delivery attempt saves `Unknown` before calling its owner. Retry the
+saved request to reconcile a lost response; do not infer absence from a timeout.
+Only owner HTTP 400/422 rejections enable **Correct rejected intake** in the portal.
+Supply a reason, save the correction, then retry delivery. The prior intent,
+reason, actor and time are retained; stale revisions refuse the correction.
+
+Corrections may change jurisdiction/LOB, clinical details and the denied
+authorization reference. Member, caller, classification, summary, original
+receipt time, owning service and case identity stay fixed. There is no cancellation
+or cross-owner rerouting. A created case is corrected through its owner.
+Owners return an intake fingerprint. If an older concurrent request already
+created the case, or a legacy owner cannot confirm the fingerprint, the contact
+attaches the existing receipt and warns that correction application is not
+confirmed. Review that case with its owner; do not open a replacement contact to
+work around the warning. Existing pinned case rules are not rewritten.
+
+Roll out contact-service, appeals-service, authorization-service and portal
+together. Older owners can return receipts without fingerprints, which require
+manual review. No history backfill or automatic retry job is added. The bounded
+recovery protocol and managed-cloud race/restart behavior still require acceptance
+before unrestricted live intake.
 
 Closure requires classification, a receipt for a case classification, no pending
 follow-up delivery, and a created follow-up for callback/follow-up outcomes.
@@ -91,7 +109,8 @@ real-Mongo cases. Before pilot acceptance also verify:
 4. Case reviewers can find and work intake; downstream legal workflows have owners.
 5. Follow-up queue membership, lease ownership and completed-work visibility.
 6. Deployed scanner, quarantine behavior, upload/download/preview and access denial.
-7. Recovery/reconciliation of permanently rejected immutable case intents.
+7. Recovery of rejected intake, unknown-outcome reconciliation, stale/concurrent
+   retries, amendment history reload and existing-case fingerprint warnings.
 
 This is not complete contact-center integration, regulatory case management or
 production acceptance. Telephony, recording ingestion, reporting, representative
@@ -229,3 +248,12 @@ The inspected GKE workload still ran pre-merge images; contact-service reference
 an Azure registry image and had zero available replicas. No cloud deployment or
 IAM changes were made. The cloud demo also permits unscanned content and needs a
 separate scanner deployment review before scanner acceptance there.
+
+## Intake recovery validation boundary — October 26, 2026
+
+Regression cases cover rejected-request corrections, unknown outcomes, stable
+identity/receipt, legacy receipts, stale writes, late responses, Mongo reload and
+revision races, tenant isolation and portal controls. Local .NET SDK 8.0.426 and
+direct MSBuild abort on unavailable sandbox process metadata before compilation.
+No executable local pass, deployed GCP recovery run or production acceptance is
+claimed. The contact-workflow CI matrix remains the executable validation gate.
