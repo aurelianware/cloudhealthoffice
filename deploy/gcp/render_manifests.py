@@ -444,6 +444,10 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             for downstream, setting in (("claims", "Claims"), ("appeals", "Appeals"),
                                         ("authorization", "Authorization"), ("work-management", "WorkManagement")):
                 set_env(container, f"Services__{setting}ServiceUrl", f"http://{downstream}-service")
+        if name in {"appeals-service", "authorization-service", "work-management-service"}:
+            # Owners read the persisted intake from contact-service. Override
+            # Development's localhost callback inside the GKE containers.
+            set_env(container, "Services__ContactServiceUrl", "http://contact-service")
         if name == "document-service":
             set_env(container, "Documents__AllowUnscannedContent", "false")
             set_env(container, "Documents__Scanner__Provider", "ClamAv")

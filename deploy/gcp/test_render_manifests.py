@@ -492,3 +492,10 @@ def test_production_appeals_identity_preserves_secret_binding_and_token_registra
     owner = next(c for c in clients if c["clientId"] == "appeals-service")
     assert owner["serviceAccount"] == "appeals-service"
     assert owner["namespace"] == "cloudhealthoffice"
+
+
+def test_contact_intake_owners_read_the_in_cluster_contact_service():
+    rendered = deployments(render())
+    for name in ("appeals-service", "authorization-service", "work-management-service"):
+        # HttpContactIntakeReader appends api/contacts/{id} to this base URL.
+        assert env(rendered[name])["Services__ContactServiceUrl"] == "http://contact-service"

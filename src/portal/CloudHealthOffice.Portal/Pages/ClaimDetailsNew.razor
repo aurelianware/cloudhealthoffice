@@ -91,6 +91,7 @@
                                           FullWidth="true"
                                           StartIcon="@Icons.Material.Filled.CheckCircle"
                                           OnClick="@(() => _confirmingFinish = true)"
+                                          Disabled="_finishing"
                                           data-testid="finish">
                                     Finish
                                 </MudButton>
@@ -143,6 +144,31 @@
                 </MudItem>
             </MudGrid>
         </MudPaper>
+
+        @if (_confirmingFinish && _review is { } finishReview)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4" data-testid="finish-summary">
+                <MudText Typo="Typo.subtitle2">@finishReview.Summary</MudText>
+                <ul class="mt-1 mb-2">
+                    @foreach (var effect in finishReview.Effects())
+                    {
+                        <li><MudText Typo="Typo.body2">@effect</MudText></li>
+                    }
+                </ul>
+                @foreach (var problem in finishReview.Problems)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Error" data-testid="finish-problem">@problem</MudText>
+                }
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Upheld edits are recorded as upheld by you. The claim is re-adjudicated once with these decisions.
+                </MudText>
+                <MudStack Row="true" Spacing="2" Class="mt-2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" Disabled="@(finishReview.Problems.Count > 0 || _finishing)"
+                               OnClick="FinishAsync" data-testid="finish-confirm">Confirm and finish</MudButton>
+                    <MudButton Variant="Variant.Text" OnClick="@(() => _confirmingFinish = false)">Keep reviewing</MudButton>
+                </MudStack>
+            </MudAlert>
+        }
 
         @if (_claim.Status == "Pended")
         {
@@ -695,30 +721,7 @@
                         }
                     }
 
-                    @if (_confirmingFinish)
-                    {
-                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4" data-testid="finish-summary">
-                            <MudText Typo="Typo.subtitle2">@review.Summary</MudText>
-                            <ul class="mt-1 mb-2">
-                                @foreach (var effect in review.Effects())
-                                {
-                                    <li><MudText Typo="Typo.body2">@effect</MudText></li>
-                                }
-                            </ul>
-                            @foreach (var problem in review.Problems)
-                            {
-                                <MudText Typo="Typo.body2" Color="Color.Error" data-testid="finish-problem">@problem</MudText>
-                            }
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                Upheld edits are recorded as upheld by you. The claim is re-adjudicated once with these decisions.
-                            </MudText>
-                            <MudStack Row="true" Spacing="2" Class="mt-2">
-                                <MudButton Variant="Variant.Filled" Color="Color.Success" Disabled="@(review.Problems.Count > 0 || _finishing)"
-                                           OnClick="FinishAsync" data-testid="finish-confirm">Confirm and finish</MudButton>
-                                <MudButton Variant="Variant.Text" OnClick="@(() => _confirmingFinish = false)">Keep reviewing</MudButton>
-                            </MudStack>
-                        </MudAlert>
-                    }
+
                 </MudPaper>
             }
             </div>
