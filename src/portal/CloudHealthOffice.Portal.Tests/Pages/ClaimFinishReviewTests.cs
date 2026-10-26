@@ -84,6 +84,25 @@ public class ClaimFinishReviewTests : TestContext
         SuggestedCarc = "B20",
     };
 
+    [Theory]
+    [InlineData("summary")]
+    [InlineData("edits")]
+    [InlineData("history")]
+    public void Header_Finish_shows_confirmation_above_the_record_tabs_without_submitting(string tab)
+    {
+        EditsAre(Mue(canOverride: false), Pair());
+        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "C1").Add(x => x.Tab, tab));
+        cut.WaitForElement("[data-testid=finish]").Click();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=finish-summary]").TextContent.Should().Contain("Confirm and finish"));
+        var summary = cut.Find("[data-testid=finish-summary]");
+        summary.Closest("[data-testid=edits-panel]").Should().BeNull();
+        cut.Markup.IndexOf("data-testid=\"finish-summary\"", StringComparison.Ordinal)
+            .Should().BeLessThan(cut.Markup.IndexOf("Manual Review Required", StringComparison.Ordinal));
+        _workQueue.Verify(w => w.ResolvePendedClaimAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
+            It.IsAny<IReadOnlyList<EditDecisionInput>?>(), It.IsAny<IReadOnlyList<LineDenialInput>?>()), Times.Never);
+    }
+
     [Fact]
     public void Edits_show_their_policy_and_Pay_becomes_Finish()
     {
