@@ -7,3 +7,4 @@ resources:
   - infrastructure.yaml
   - workloads.yaml
   - vault.yaml
+  - documents.yaml

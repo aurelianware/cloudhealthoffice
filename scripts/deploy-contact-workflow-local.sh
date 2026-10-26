@@ -63,14 +63,17 @@ kubectl --context "$context" apply -k deploy/local/contact-workflow
 kubectl --context "$context" -n "$namespace" rollout status deployment/local-vault --timeout=180s
 kubectl --context "$context" -n "$namespace" rollout status deployment/mongo --timeout=180s
 kubectl --context "$context" -n "$namespace" rollout status deployment/redis --timeout=120s
+for dependency in gcs-emulator clamav; do
+  kubectl --context "$context" -n "$namespace" rollout status "deployment/$dependency" --timeout=1200s
+done
 # Local tags are rebuilt/imported above; restart only this isolated workload.
 kubectl --context "$context" -n "$namespace" rollout restart deployment/contact-service deployment/document-service deployment/appeals-service deployment/authorization-service deployment/work-management-service deployment/portal
 for service in $services; do
   kubectl --context "$context" -n "$namespace" rollout status "deployment/$service" --timeout=240s
 done
 printf '\nContact workflow is running with synthetic development authentication.\n'
-printf 'Document bytes use an in-memory store and are lost when document-service restarts. Mongo metadata persists.\n'
-printf 'Scanning is not enabled; document previews remain quarantined.\n\n'
+printf 'Document bytes persist in the local GCS emulator; catalog metadata persists in MongoDB.\n'
+printf 'ClamAV scans new uploads; only clean files can be opened. Old in-memory uploads are not migrated.\n\n'
 printf 'Open the portal in another terminal:\n'
 printf 'kubectl --context docker-desktop -n cho-contact-local port-forward svc/portal 5090:8080\n'
 printf 'Then visit http://localhost:5090/service\n'

@@ -109,7 +109,7 @@ kubectl --context docker-desktop -n cho-contact-local port-forward svc/portal 50
 
 Open `http://localhost:5090/service`. Keep the port-forward terminal running.
 This builds six images and deploys the portal, five workflow services, Mongo,
-Redis and a private synthetic-only Vault dev server in `cho-contact-local`.
+Redis, the local GCS emulator, ClamAV and a private synthetic-only Vault dev server in `cho-contact-local`.
 All Kubernetes commands explicitly select Docker Desktop. Existing namespaces
 are not modified. Docker Desktop kind nodes must be visible to `docker inspect`;
 enable **Show system containers** if the script requests it. Built images are
@@ -122,11 +122,18 @@ makes old case bodies unreadable. Vault's fixed development token is synthetic
 and must never be used outside this isolated local setup. No service is exposed
 outside the cluster until port-forwarding. Use synthetic data only.
 
-Mongo metadata survives pod restarts through its PVC. Document bytes use the
-in-memory store and are lost on document-service restart. Scanning is disabled;
-uploads remain quarantined and cannot be previewed. This setup verifies contact,
-case and follow-up wiring; it does not establish durable document or scanner
-acceptance. Other platform backends are outside this focused environment.
+Mongo metadata and the local GCS emulator document bytes survive pod restarts through their PVCs.
+ClamAV scans new uploads; only clean verdicts permit downloads. Its signature
+database also uses a PVC. The first start downloads signatures and can take up
+to 20 minutes; reserve at least 4 GiB for the scanner. Storage and scanner
+services stay private inside the cluster. The emulator requires no cloud
+credentials and exercises the existing GCS provider. It does not validate real
+GCP IAM, Workload Identity, signed URLs or bucket policy. Existing in-memory
+uploads are not migrated;
+create fresh synthetic documents after switching. Deleting the PVCs or resetting
+Docker Desktop destroys local data. This is local workflow evidence, not
+production storage, disaster recovery, or malware-detection certification. Other
+platform backends are outside this focused environment.
 
 ## Local Mac check
 
@@ -165,3 +172,27 @@ contacts 98, cases 473, authorization 271, documents 120, work 255 and portal 1,
 The user's Mac independently passed all 98 contact tests at that head.
 Later startup/pipeline and reviewer-concurrency additions require their own head
 results; this historical count must not be attributed to a later commit.
+
+## Local GCS and scanner acceptance - October 25, 2026
+
+Synthetic contact `6fee1dea-6db9-4eb4-8a75-cb90b60df613` was used on Docker
+Desktop Kubernetes with the existing GCS provider and real ClamAV INSTREAM engine.
+
+- Clean PNG `ae76be2a510647e185bee01c2d250173` received a Clean verdict and
+  downloaded through the authenticated portal with HTTP 200.
+- Replaced both document-service and GCS emulator pods. The same download still
+  returned HTTP 200 with SHA-256
+  `a3f53368195a4ef1ccc3b86d64ae13bc2918284ef8a5da4b6699214e8854a850`,
+  matching the original upload byte for byte.
+- A valid PDF containing an embedded harmless EICAR test attachment received an
+  Infected verdict (`c39f75d30e5e448691374d816d305455`). The UI withheld Open
+  and Preview, and a direct authenticated portal download returned HTTP 409.
+- An exploratory PNG with an appended EICAR string received Clean; this was not
+  used as evidence of blocking. The embedded-file PDF is the positive test.
+- The existing 14 document-store registration tests passed with no failures or
+  skips. Kustomize rendering, Bash syntax, and whitespace checks passed.
+
+These checks establish the observed local paths only. They do not establish
+real GCP IAM, cloud bucket policy, signed URL support, backups, disaster recovery,
+scanner outage recovery, or comprehensive malware detection. The old Pending
+in-memory document was not migrated or rescanned.

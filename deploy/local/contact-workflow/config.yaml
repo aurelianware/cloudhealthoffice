@@ -22,9 +22,14 @@ data:
   Services__ClaimsServiceUrl: ''
   WorkManagement__Reconcile__Enabled: 'false'
   Kafka__BootstrapServers: ''
-  DocumentStore__Provider: InMemory
+  DocumentStore__Provider: Gcs
+  DocumentStore__Gcs__Bucket: contact-documents
+  DocumentStore__Gcs__Endpoint: http://gcs-emulator:4443
   Documents__AllowUnscannedContent: 'false'
-  Documents__Scanner__Provider: None
+  Documents__Scanner__Provider: ClamAv
+  Documents__Scanner__ClamAv__Host: clamav
+  Documents__Scanner__ClamAv__Port: '3310'
+  Documents__Scanner__ClamAv__TimeoutSeconds: '60'
   Observability__OtlpEndpoint: ''
   Observability__EnableConsole: 'false'
   ChoAuth__ServiceToken__Source: LocalKey
