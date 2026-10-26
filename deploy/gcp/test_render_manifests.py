@@ -450,6 +450,7 @@ def test_contact_and_care_images_are_built_and_rewritten():
         assert f"{name} src/services/{name}/Dockerfile" in listed
         assert deps[name]["spec"]["template"]["spec"]["containers"][0]["image"] == f"{REGISTRY}/cloudhealthoffice-{name}:abc123"
     assert env(deps["portal"])["Services__ContactService"] == "http://contact-service/api"
+    assert env(deps["portal"])["Services__DocumentService"] == "http://document-service"
     assert env(deps["contact-service"])["Services__WorkManagementServiceUrl"] == "http://work-management-service"
 
 
