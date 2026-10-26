@@ -99,7 +99,8 @@ done
 # A public Secret Manager resource ID is not key material. Exempt only that
 # exact value, and prove actual secrets at the same locations remain detected.
 RESOURCE_ID="appeal-body-encryption-key-v1"
-GENERIC_CANARY="NotAReal""CredentialAbcdefghijkLmno""0123456789ZyxWVutsrq"
+# Avoid sample words (for example real/credential) ignored by the generic rule.
+GENERIC_CANARY="n8Q4v7J2""x6B9m3R5s1C8""k2P7d4F6h9L3z5T1"
 for spec in "infrastructure/gcp/appeals-secrets/main.tf:secret_id" "scripts/demo/gcp/initialize_appeals_key.py:SECRET"; do
   SOURCE_PATH="${spec%:*}"
   FIELD_NAME="${spec##*:}"
