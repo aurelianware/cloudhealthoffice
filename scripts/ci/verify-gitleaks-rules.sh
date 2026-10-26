@@ -55,7 +55,7 @@ gitleaks detect \
 RC=$?
 set -e
 
-if [ "$RC" -eq 0 ]; then
+if [ "$RC" -ne 1 ]; then
   cat >&2 <<'MSG'
 
 FAIL: gitleaks did not detect the canary secret.
@@ -88,9 +88,49 @@ for config_file in appsettings.json appsettings.Development.json; do
   gitleaks detect --no-git --source "$CASE_DIR" --config "$CONFIG" --redact --no-banner --exit-code 1 >/dev/null 2>&1
   RC=$?
   set -e
-  if [ "$RC" -eq 0 ]; then
+  if [ "$RC" -ne 1 ]; then
     echo "FAIL: a secret in src/services/<service>/$config_file is not detected; .gitleaks.toml exempts that path." >&2
     exit 1
   fi
   echo "OK: secrets in src/services/<service>/$config_file are detected."
+done
+
+
+# A public Secret Manager resource ID is not key material. Exempt only that
+# exact value, and prove actual secrets at the same locations remain detected.
+RESOURCE_ID="appeal-body-encryption-key-v1"
+GENERIC_CANARY="NotAReal""CredentialAbcdefghijkLmno""0123456789ZyxWVutsrq"
+for spec in "infrastructure/gcp/appeals-secrets/main.tf:secret_id" "scripts/demo/gcp/initialize_appeals_key.py:SECRET"; do
+  SOURCE_PATH="${spec%:*}"
+  FIELD_NAME="${spec##*:}"
+  CASE_DIR="$WORKDIR/resource-${FIELD_NAME}"
+  mkdir -p "$CASE_DIR/$(dirname "$SOURCE_PATH")"
+  printf '%s = "%s"\n' "$FIELD_NAME" "$RESOURCE_ID" > "$CASE_DIR/$SOURCE_PATH"
+  set +e
+  gitleaks detect --no-git --source "$CASE_DIR" --config "$CONFIG" --redact --no-banner --exit-code 1 >/dev/null 2>&1
+  RC=$?
+  set -e
+  if [ "$RC" -ne 0 ]; then
+    echo "FAIL: the public resource identifier still triggers scanning in $SOURCE_PATH." >&2
+    exit 1
+  fi
+  printf '%s = "%s"\n' "$FIELD_NAME" "$STRIPE_CANARY" > "$CASE_DIR/$SOURCE_PATH"
+  set +e
+  gitleaks detect --no-git --source "$CASE_DIR" --config "$CONFIG" --redact --no-banner --exit-code 1 >/dev/null 2>&1
+  RC=$?
+  set -e
+  if [ "$RC" -ne 1 ]; then
+    echo "FAIL: secret-shaped values in $SOURCE_PATH are not detected (exit $RC)." >&2
+    exit 1
+  fi
+  printf '%s = "%s"\n' "$FIELD_NAME" "$GENERIC_CANARY" > "$CASE_DIR/$SOURCE_PATH"
+  set +e
+  gitleaks detect --no-git --source "$CASE_DIR" --config "$CONFIG" --redact --no-banner --exit-code 1 >/dev/null 2>&1
+  RC=$?
+  set -e
+  if [ "$RC" -ne 1 ]; then
+    echo "FAIL: generic credential values in $SOURCE_PATH are not detected (exit $RC)." >&2
+    exit 1
+  fi
+  echo "OK: public identifier allowed; secrets still detected in $SOURCE_PATH."
 done
