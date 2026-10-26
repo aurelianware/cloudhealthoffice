@@ -30,6 +30,7 @@ public interface IContactTrackingService
 
     Task<ContactRecord?> ReopenAsync(string id, ReopenContactRequest request, CancellationToken ct = default);
 
+    Task<ContactRecord?> AmendCaseAsync(string id, AmendContactCaseRequest request, CancellationToken ct = default);
     Task<ContactRecord?> OpenCaseAsync(string id, OpenContactCaseRequest request, CancellationToken ct = default);
     Task<ContactRecord?> CreateFollowUpAsync(string id, CreateContactFollowUpRequest request, CancellationToken ct = default);
 

@@ -323,6 +323,10 @@
                         </MudAlert>
                     }
 
+                    @if (_contact.CaseDeliveryStatus == "ReconciledPriorIntent")
+                    {
+                        <MudAlert Severity="Severity.Warning">An existing case was reconciled. The corrected request is not confirmed as applied. Review the case with its owner before making further corrections.</MudAlert>
+                    }
                     @if (_contact.OpenedCase is { } opened)
                     {
                         <MudAlert Severity="Severity.Success" Class="mt-3" data-testid="case-receipt">
@@ -335,7 +339,7 @@
                     }
                     else if (!IsClosed && _classification is not null and not ContactClassification.Inquiry)
                     {
-                        @if (_contact.CaseIntent is null)
+                        @if (_contact.CaseIntent is null || _amending)
                         {
                             <MudSelect T="string" @bind-Value="_caseIntent.LineOfBusiness" Label="Line of business" Class="mt-3">
                                 <MudSelectItem T="string" Value='@("Medicaid")'>Medicaid</MudSelectItem>
@@ -362,10 +366,23 @@
                         }
                         else
                         {
-                            <MudAlert Severity="Severity.Warning" Class="mt-3">Case delivery is pending. Retry the saved request.</MudAlert>
+                            <MudAlert Severity="Severity.Warning" Class="mt-3">Delivery status: @_contact.CaseDeliveryStatus. Retry to reconcile the saved request. An unknown outcome does not mean no case was created.</MudAlert>
+                        }
+                        @if (_contact.CaseDeliveryStatus == "Rejected")
+                        {
+                            @if (_amending)
+                            {
+                                <MudTextField @bind-Value="_amendReason" Label="Reason for correcting intake" MaxLength="1000" />
+                                <MudButton OnClick="AmendCaseAsync" Disabled="_busy" data-testid="save-case-amendment">Save corrected intake</MudButton>
+                                <MudButton OnClick="@(() => _amending = false)" Disabled="_busy">Cancel correction</MudButton>
+                            }
+                            else
+                            {
+                                <MudButton OnClick="BeginAmendment" Disabled="_busy" data-testid="amend-case">Correct rejected intake</MudButton>
+                            }
                         }
                         <MudButton OnClick="OpenCaseAsync" Disabled="_busy" Variant="Variant.Filled" Color="Color.Primary"
-                                   Class="mt-3" data-testid="open-case">
+                                   Class="mt-3" data-testid="open-case" Style="@(_amending ? "display:none" : null)">
                             @(_contact.CaseIntent is null ? "Open case" : "Retry case intake")
                         </MudButton>
                     }
@@ -480,6 +497,35 @@
     }
 
     private ContactCaseIntent _caseIntent = new();
+    private bool _amending;
+    private string _amendReason = string.Empty;
+
+    private void BeginAmendment()
+    {
+        _caseIntent = System.Text.Json.JsonSerializer.Deserialize<ContactCaseIntent>(
+            System.Text.Json.JsonSerializer.Serialize(_contact!.CaseIntent))!;
+        _coverage = _caseIntent.Coverage ?? new();
+        _dateOfBirth = _coverage.DateOfBirth == default ? null : _coverage.DateOfBirth;
+        _serviceDate = _coverage.ServiceDate == default ? null : _coverage.ServiceDate;
+        _amendReason = string.Empty;
+        _amending = true;
+    }
+
+    private async Task AmendCaseAsync()
+    {
+        _caseIntent.State = _caseIntent.State.Trim().ToUpperInvariant();
+        if (_classification == ContactClassification.CoverageRequest)
+        {
+            _coverage.DateOfBirth = _dateOfBirth ?? default;
+            _coverage.ServiceDate = _serviceDate ?? default;
+            _caseIntent.Coverage = _coverage;
+        }
+        if (await WriteAsync(() => Contacts.AmendCaseAsync(ContactId, new AmendContactCaseRequest {
+            Revision = _contact!.Revision, Reason = _amendReason, Intent = _caseIntent
+        }), "Correction saved. Retry intake to deliver the corrected request.")) _amending = false;
+        await LoadAsync();
+    }
+
     private ContactCoverageDetails _coverage = new();
     private DateTime? _dateOfBirth;
     private DateTime? _serviceDate;
@@ -580,7 +626,7 @@
         }
         await WriteAsync(() => Contacts.OpenCaseAsync(ContactId, new OpenContactCaseRequest {
             Revision = _contact!.Revision, Intent = _contact.CaseIntent ?? _caseIntent
-        }), "Case intake accepted.");
+        }), "Case intake reconciled. Review the saved receipt and delivery status.");
         await LoadAsync(); // Failed delivery may still have saved an intent and advanced its revision.
     }
 

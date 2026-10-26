@@ -115,4 +115,89 @@ public class ContactWorkflowTests
         (await Controller().OpenCase(_contact.Id, Request(), default)).Result.Should().BeOfType<ConflictObjectResult>();
         _gateway.VerifyNoOtherCalls();
     }
+    [Theory]
+    [InlineData(400)]
+    [InlineData(422)]
+    public async Task Rejected_intake_can_be_amended_without_changing_identity_or_clock(int status)
+    {
+        _gateway.Setup(g => g.OpenCaseAsync(It.IsAny<Contact>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ContactWorkflowUnavailableException(status));
+        await Controller().OpenCase(_contact.Id, Request(), default);
+        _contact.CaseDeliveryStatus.Should().Be("Rejected");
+        var started = _contact.StartedAt;
+        var amendment = new AmendContactCaseRequest { Revision = _contact.Revision,
+            Reason = "Correct jurisdiction", Intent = new() { State = "TX", LineOfBusiness = "Medicaid" } };
+        (await Controller().AmendCase(_contact.Id, amendment, default)).Result.Should().BeOfType<OkObjectResult>();
+        _contact.CaseAmendments.Should().ContainSingle().Which.PreviousIntent.State.Should().Be("CA");
+        _contact.CaseAmendments[0].By.Should().Be("rep-1");
+        _contact.CaseDeliveryStatus.Should().Be("Pending");
+        _contact.StartedAt.Should().Be(started);
+        var receipt = Receipt(); receipt.IntakeHash = ContactIntakeIdentity.Hash(_contact.CaseIntent!);
+        _gateway.Setup(g => g.OpenCaseAsync(It.IsAny<Contact>(), It.IsAny<CancellationToken>())).ReturnsAsync(receipt);
+        await Controller().OpenCase(_contact.Id, Request(), default);
+        _contact.CaseDeliveryStatus.Should().Be("Accepted");
+        _contact.OpenedCase!.Id.Should().Be(ContactIntakeIdentity.For("tenant-1", _contact.Id));
+    }
+
+    [Theory]
+    [InlineData(403)]
+    [InlineData(409)]
+    [InlineData(503)]
+    public async Task Non_rejections_cannot_authorize_correction(int status)
+    {
+        _gateway.Setup(g => g.OpenCaseAsync(It.IsAny<Contact>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ContactWorkflowUnavailableException(status));
+        await Controller().OpenCase(_contact.Id, Request(), default);
+        (await Controller().AmendCase(_contact.Id, new() { Revision = _contact.Revision,
+            Reason = "Correction", Intent = new() { State = "TX" } }, default)).Result.Should().BeOfType<ConflictObjectResult>();
+        _contact.CaseAmendments.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Lost_response_is_unknown_and_cannot_be_amended()
+    {
+        _gateway.Setup(g => g.OpenCaseAsync(It.IsAny<Contact>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException());
+        await Controller().OpenCase(_contact.Id, Request(), default);
+        _contact.CaseDeliveryStatus.Should().Be("Unknown");
+        (await Controller().AmendCase(_contact.Id, new() { Revision = _contact.Revision, Reason = "Correction" }, default))
+            .Result.Should().BeOfType<ConflictObjectResult>();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Existing_older_or_legacy_receipt_is_reconciled_without_claiming_correction_applied(bool legacy)
+    {
+        _contact.CaseIntent = new() { State = "TX" };
+        var receipt = Receipt();
+        receipt.IntakeHash = legacy ? null : ContactIntakeIdentity.Hash(new() { State = "CA" });
+        _gateway.Setup(g => g.OpenCaseAsync(It.IsAny<Contact>(), It.IsAny<CancellationToken>())).ReturnsAsync(receipt);
+        await Controller().OpenCase(_contact.Id, Request(), default);
+        _contact.CaseDeliveryStatus.Should().Be("ReconciledPriorIntent");
+        _contact.OpenedCase.Should().NotBeNull();
+        (await Controller().AmendCase(_contact.Id, new() { Revision = _contact.Revision, Reason = "Correction" }, default))
+            .Result.Should().BeOfType<ConflictObjectResult>();
+    }
+
+    [Fact]
+    public async Task Amendment_requires_reason_and_current_revision_and_cannot_dispatch()
+    {
+        _contact.CaseIntent = new() { State = "CA" }; _contact.CaseDeliveryStatus = "Rejected";
+        (await Controller().AmendCase(_contact.Id, new() { Revision = 0, Reason = "Correction" }, default))
+            .Result.Should().BeOfType<ConflictObjectResult>();
+        (await Controller().AmendCase(_contact.Id, new() { Revision = 1, Reason = " " }, default))
+            .Result.Should().BeOfType<BadRequestObjectResult>();
+        _gateway.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_late_receipt_cannot_overwrite_a_newer_attempt()
+    {
+        _gateway.Setup(g => g.OpenCaseAsync(It.IsAny<Contact>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => { _contact.Revision++; return Receipt(); });
+        (await Controller().OpenCase(_contact.Id, Request(), default)).Result.Should().BeOfType<ConflictObjectResult>();
+        _contact.OpenedCase.Should().BeNull();
+    }
+
 }

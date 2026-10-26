@@ -67,6 +67,9 @@ public class ContactTrackingService(
     public Task<ContactRecord?> ReopenAsync(string id, ReopenContactRequest request, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Post, $"contacts/{Uri.EscapeDataString(id)}/reopen", request, ct);
 
+    public Task<ContactRecord?> AmendCaseAsync(string id, AmendContactCaseRequest request, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Post, $"contacts/{Uri.EscapeDataString(id)}/case/amend", request, ct);
+
     public Task<ContactRecord?> OpenCaseAsync(string id, OpenContactCaseRequest request, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Post, $"contacts/{Uri.EscapeDataString(id)}/case", request, ct);
     public Task<ContactRecord?> CreateFollowUpAsync(string id, CreateContactFollowUpRequest request, CancellationToken ct = default) =>

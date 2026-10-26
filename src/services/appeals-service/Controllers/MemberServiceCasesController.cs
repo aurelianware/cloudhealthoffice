@@ -97,7 +97,7 @@ public sealed class MemberServiceCasesController(
             CaseType = grievance ? RulePackCaseType.MemberGrievance : RulePackCaseType.MemberAppeal
         }, holidays.ForTenant(actor.TenantId));
         var receipt = new ContactCaseResult { Id = id, Kind = grievance ? "Grievance" : "Appeal",
-            Status = "Received", ReceivedAt = c.StartedAt,
+            Status = "Received", ReceivedAt = c.StartedAt, IntakeHash = ContactIntakeIdentity.Hash(intent),
             DueAt = evaluation.Deadlines.FirstOrDefault(d => d.Name == "resolution")?.DueAt,
             RulePackVersion = evaluation.PackId + ":" + evaluation.Version };
         var record = new MemberServiceCase { Id = id, TenantId = actor.TenantId, ContactId = c.Id,

@@ -40,7 +40,7 @@ public sealed class ContactAuthorizationController(
         var id = ContactIntakeIdentity.For(actor.TenantId, c.Id);
         if (await repository.GetByIdAsync(id) is { } existing) return Ok(Receipt(existing));
         var authorization = new Authorization {
-            Id = id, SourceContactId = c.Id, TenantId = actor.TenantId, AuthorizationNumber = "CT-" + id[8..],
+            Id = id, SourceContactId = c.Id, SourceContactIntakeHash = ContactIntakeIdentity.Hash(c.CaseIntent), TenantId = actor.TenantId, AuthorizationNumber = "CT-" + id[8..],
             AuthorizationType = AuthorizationType.PreAuthorization,
             MemberId = c.MemberId, PatientFirstName = clinical.FirstName, PatientLastName = clinical.LastName,
             PatientDateOfBirth = clinical.DateOfBirth, LineOfBusiness = lob,
@@ -64,7 +64,7 @@ public sealed class ContactAuthorizationController(
     }
 
     private static ContactCaseResult Receipt(Authorization a) => new() {
-        Id = a.Id, Kind = "Authorization", Status = a.Status.ToString(), ReceivedAt = a.SubmittedDate,
+        IntakeHash = a.SourceContactIntakeHash, Id = a.Id, Kind = "Authorization", Status = a.Status.ToString(), ReceivedAt = a.SubmittedDate,
         DueAt = a.DecisionDueAt, RulePackVersion = a.DecisionDeadlinePolicy
     };
 }

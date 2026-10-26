@@ -21,6 +21,8 @@ public class Authorization
     /// <summary>Server-owned contact lineage for native coverage intake.</summary>
     [JsonIgnore]
     public string? SourceContactId { get; set; }
+    [JsonIgnore]
+    public string? SourceContactIntakeHash { get; set; }
 
     /// <summary>Persisted by Mongo, excluded from full-model HTTP input and output.</summary>
     [JsonIgnore]

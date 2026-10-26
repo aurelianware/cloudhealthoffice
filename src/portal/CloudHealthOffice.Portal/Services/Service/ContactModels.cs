@@ -17,6 +17,7 @@ public class ContactRecord
     public string ContactNumber { get; set; } = string.Empty;
     public long Revision { get; set; }
     public ContactCaseIntent? CaseIntent { get; set; }
+    public string CaseDeliveryStatus { get; set; } = "Pending";
     public ContactCaseResult? OpenedCase { get; set; }
     public List<ContactFollowUpIntent> FollowUps { get; set; } = new();
 
@@ -287,4 +288,11 @@ public sealed class CreateContactFollowUpRequest
     public string Key { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public DateTime? DueAt { get; set; }
+}
+
+public sealed class AmendContactCaseRequest
+{
+    public long Revision { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public ContactCaseIntent Intent { get; set; } = new();
 }
