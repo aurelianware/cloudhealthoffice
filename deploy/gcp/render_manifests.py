@@ -100,6 +100,8 @@ EXTRA_MANIFESTS = [
 # Images the GKE workflow builds, keyed by the image name used in manifests
 # (cloudhealthoffice-<name>) and mapped to the Dockerfile that builds it.
 BUILT_IMAGES = {
+    "care-management-service": "src/services/care-management-service/Dockerfile",
+    "contact-service": "src/services/contact-service/Dockerfile",
     "accumulator-service": "src/services/accumulator-service/Dockerfile",
     "appeals-service": "src/services/appeals-service/Dockerfile",
     "ar-service": "src/services/ar-service/Dockerfile",
@@ -436,9 +438,15 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
                     set_env(container, key, value)
         if name == "portal":
             set_env(container, "XDG_DATA_HOME", "/tmp")
+            set_env(container, "Services__ContactService", "http://contact-service/api")
+        if name == "contact-service":
+            for downstream, setting in (("claims", "Claims"), ("appeals", "Appeals"),
+                                        ("authorization", "Authorization"), ("work-management", "WorkManagement")):
+                set_env(container, f"Services__{setting}ServiceUrl", f"http://{downstream}-service")
         if name == "document-service":
-            # Synthetic data only and no malware scanner wired yet: let the demo open documents.
-            set_env(container, "Documents__AllowUnscannedContent", "true")
+            set_env(container, "Documents__AllowUnscannedContent", "false")
+            set_env(container, "Documents__Scanner__Provider", "ClamAv")
+            set_env(container, "Documents__Scanner__ClamAv__Host", "document-scanner")
         if name in DOCUMENT_SERVICES and args.documents_bucket:
             spec["serviceAccountName"] = name
             set_env(container, "DocumentStore__Provider", "Gcs")

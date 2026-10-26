@@ -196,3 +196,21 @@ The walkthrough, sample SQL and the Vertex AI remote model are in [Managed FHIR 
 | Kafka not ready | `kubectl get kafka,kafkanodepool,pods -n kafka`. On Autopilot, capacity can take a few minutes to arrive. On the Standard cluster, `kubectl describe pod` showing `Insufficient cpu` or `memory` means the node is full: deploy with the `small` profile or add a node. |
 | `401` from every API | The token's tenant must match the `X-Tenant-ID` header (`TENANT_ID`, default `demo`). Tokens expire after 12 hours. |
 | Port-forward drops | `port-forward.sh` restarts forwards automatically; rerun it if the terminal closed. |
+
+## Contact workflow and document scanner
+
+The GKE build matrix must include contact-service and care-management-service:
+otherwise their source manifests retain Azure registry image references and the
+rollout cannot finish. The renderer routes the portal's contact client to the
+in-cluster contact-service and supplies its workflow downstream URLs.
+
+The deploy script applies `deploy/gcp/document-scanner.yaml`, a cluster-private
+ClamAV INSTREAM service, and waits for readiness (up to 20 minutes on the first
+signature download). Signatures persist on a standard-disk PVC. Reserve 4 GiB
+for the scanner. The document service uses that scanner and refuses unscanned,
+failed or infected content; existing unscanned documents are not automatically
+rescanned. No public scanner endpoint or CHO service identity is created.
+
+This provides the cloud deployment wiring. Accept it with clean-download,
+harmless EICAR quarantine, scanner failure and storage persistence checks before
+claiming end-to-end cloud scanner readiness.
