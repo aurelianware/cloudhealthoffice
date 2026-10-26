@@ -395,6 +395,10 @@ else
 fi
 
 # ── Wait ─────────────────────────────────────────────────────────────────────
+log "Starting the private document scanner"
+kubectl apply -n "$NAMESPACE" -f deploy/gcp/document-scanner.yaml >/dev/null
+kubectl rollout status -n "$NAMESPACE" deployment/document-scanner --timeout=1200s
+
 log "Waiting for rollouts in parallel (timeout $ROLLOUT_TIMEOUT)"
 # Image pulls (and on Autopilot, new nodes) make the first rollout slow.
 # Waiting in parallel keeps the total close to the slowest service.

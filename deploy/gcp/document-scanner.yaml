@@ -1,0 +1,76 @@
+# Real ClamAV INSTREAM scanner. Cluster-private; no CHO service identity.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: clamav-signatures
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: cho-pd-standard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: document-scanner
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: clamav
+  template:
+    metadata:
+      labels:
+        app: clamav
+        cho-data-class: synthetic
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - name: clamav
+        image: clamav/clamav-debian:stable_base@sha256:dfe9a0c9ea8d7f14034f742010c0f91e0d3f7a719a526c426c60d2e1f5c490eb
+        ports:
+        - containerPort: 3310
+          name: scan
+        resources:
+          requests:
+            cpu: 250m
+            memory: 2Gi
+          limits:
+            cpu: '2'
+            memory: 4Gi
+        startupProbe:
+          tcpSocket:
+            port: scan
+          periodSeconds: 10
+          failureThreshold: 120
+        readinessProbe:
+          tcpSocket:
+            port: scan
+          periodSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: scan
+          periodSeconds: 20
+          failureThreshold: 6
+        volumeMounts:
+        - name: signatures
+          mountPath: /var/lib/clamav
+      volumes:
+      - name: signatures
+        persistentVolumeClaim:
+          claimName: clamav-signatures
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: document-scanner
+spec:
+  selector:
+    app: clamav
+  ports:
+  - port: 3310
+    targetPort: scan

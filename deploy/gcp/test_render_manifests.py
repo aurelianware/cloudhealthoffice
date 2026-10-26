@@ -441,3 +441,20 @@ def test_demo_mode_is_unchanged_by_default():
     assert deps["token-service"]["spec"]["replicas"] == 0
     assert env(deps["claims-service"])["CHO_ALLOW_DEV_ON_DEPLOYED_HOST"] == "true"
     assert not any(d["kind"] == "ConfigMap" and d["metadata"]["name"] == "cho-service-tokens" for d in render())
+
+
+def test_contact_and_care_images_are_built_and_rewritten():
+    listed = subprocess.check_output([sys.executable, str(SCRIPT), "--list-images"], text=True)
+    deps = deployments(render())
+    for name in ("contact-service", "care-management-service"):
+        assert f"{name} src/services/{name}/Dockerfile" in listed
+        assert deps[name]["spec"]["template"]["spec"]["containers"][0]["image"] == f"{REGISTRY}/cloudhealthoffice-{name}:abc123"
+    assert env(deps["portal"])["Services__ContactService"] == "http://contact-service/api"
+    assert env(deps["contact-service"])["Services__WorkManagementServiceUrl"] == "http://work-management-service"
+
+
+def test_documents_require_the_private_scanner():
+    settings = env(deployments(render())["document-service"])
+    assert settings["Documents__AllowUnscannedContent"] == "false"
+    assert settings["Documents__Scanner__Provider"] == "ClamAv"
+    assert settings["Documents__Scanner__ClamAv__Host"] == "document-scanner"
