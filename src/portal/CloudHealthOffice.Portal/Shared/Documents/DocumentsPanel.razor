@@ -2,6 +2,7 @@
 @using CloudHealthOffice.Portal.Infrastructure
 @using CloudHealthOffice.Portal.Services
 @inject IDocumentCatalogService DocumentCatalog
+@inject IUserContextService UserContext
 
 <div data-testid="documents-panel">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
@@ -28,6 +29,26 @@
             @if (_uploadMessage is not null) { <MudAlert Severity="Severity.Info">@_uploadMessage</MudAlert> }
         </div>
     </PermissionGate>
+    @if (_linkDocument is not null)
+    {
+        <MudPaper Outlined="true" Class="pa-4 mb-3" data-testid="document-link-form">
+            <MudText Typo="Typo.subtitle1">Link @(_linkDocument.Title ?? "document") to another record</MudText>
+            <MudText Typo="Typo.body2">Use the record ID from the target record. This adds a reference to the same file.</MudText>
+            <MudSelect T="DocumentSubjectKind" @bind-Value="_linkKind" Label="Record type" Disabled="_linking">
+                <MudSelectItem T="DocumentSubjectKind" Value="DocumentSubjectKind.Claim">Claim</MudSelectItem>
+                <MudSelectItem T="DocumentSubjectKind" Value="DocumentSubjectKind.Call">Contact</MudSelectItem>
+            </MudSelect>
+            <MudTextField T="string" @ref="_linkIdInput" @bind-Value="_linkId" Label="Record ID" MaxLength="200" Immediate="true"
+                          Disabled="_linking" data-testid="document-link-id" />
+            <MudButton OnClick="AddLinkAsync" Disabled="@(_linking || string.IsNullOrWhiteSpace(_linkId))"
+                       Color="Color.Primary" data-testid="document-link-save">Add link</MudButton>
+            <MudButton OnClick="CancelLink" Disabled="_linking" data-testid="document-link-cancel">Cancel</MudButton>
+        </MudPaper>
+    }
+    @if (_linkMessage is not null)
+    {
+        <MudAlert Severity="@(_linkFailed ? Severity.Warning : Severity.Success)" data-testid="document-link-message">@_linkMessage</MudAlert>
+    }
     @if (_preview is not null)
     {
         <MudButton OnClick="@(() => _preview = null)">Close preview</MudButton>
@@ -118,6 +139,12 @@
                         <MudText Typo="Typo.body2">@AlsoLinkedTo(context)</MudText>
                     </MudTd>
                     <MudTd Style="text-align: right;">
+                        @if (_canLink && !context.LegalHold)
+                        {
+                            <MudButton Size="Size.Small" OnClick="@(() => BeginLink(context))" Disabled="_linking"
+                                       data-testid="@("document-link-" + context.Id)">Link to record</MudButton>
+                        }
+
                         @if (context.CanOpen)
                         {
                             <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
@@ -279,6 +306,74 @@
 </div>
 
 @code {
+    private MudTextField<string>? _linkIdInput;
+    private bool _focusLinkId;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusLinkId && _linkIdInput is not null)
+        {
+            _focusLinkId = false;
+            await _linkIdInput.FocusAsync();
+        }
+    }
+
+    private bool _canLink;
+    private CatalogDocumentSummary? _linkDocument;
+    private DocumentSubjectKind _linkKind = DocumentSubjectKind.Claim;
+    private string _linkId = string.Empty;
+    private bool _linking;
+    private bool _linkFailed;
+    private string? _linkMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UserContext.GetCurrentUserAsync();
+        _canLink = UserContext.HasPermission("documents:write");
+    }
+
+    private void BeginLink(CatalogDocumentSummary document)
+    {
+        _linkDocument = document;
+        _focusLinkId = true;
+        _linkKind = SubjectKind == DocumentSubjectKind.Claim ? DocumentSubjectKind.Call : DocumentSubjectKind.Claim;
+        _linkId = string.Empty;
+        _linkMessage = null;
+    }
+
+    private void CancelLink() => _linkDocument = null;
+
+    private async Task AddLinkAsync()
+    {
+        if (!_canLink || _linkDocument is null || _linking || string.IsNullOrWhiteSpace(_linkId)) return;
+        var targetId = _linkId.Trim();
+        if (_linkDocument.Links.Any(l => l.Kind == _linkKind && l.Id == targetId))
+        {
+            _linkFailed = true;
+            _linkMessage = "This document is already linked to that record.";
+            return;
+        }
+        _linking = true;
+        _linkMessage = null;
+        try
+        {
+            var refusal = await DocumentCatalog.AddLinkAsync(_linkDocument.Id, SubjectKind, SubjectId, _linkKind, targetId);
+            _linkFailed = refusal is not null;
+            _linkMessage = refusal ?? "Document linked. The file's scan status has not changed.";
+            if (refusal is null)
+            {
+                _linkDocument = null;
+                await LoadAsync();
+            }
+        }
+        catch (ServiceUnavailableException)
+        {
+            _linkFailed = true;
+            _linkMessage = "Document service is unavailable. Refresh before retrying; the link may already have been saved.";
+        }
+        finally { _linking = false; }
+    }
+
     private string _uploadTitle = string.Empty;
     private string _uploadType = "Other";
     private bool _uploading;
@@ -333,6 +428,8 @@
         var key = SubjectKind + ":" + SubjectId;
         if (key == _loadedFor) return;
         _loadedFor = key;
+        _linkDocument = null;
+        _linkMessage = null;
         await LoadAsync();
     }
 

@@ -30,6 +30,46 @@ public class DocumentCatalogServiceTests
     }
 
     [Fact]
+    public async Task Adding_a_link_posts_target_and_escaped_source_context()
+    {
+        string? body = null;
+        HttpMethod? method = null;
+        var handler = new FakeHandler(request =>
+        {
+            body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            method = request.Method;
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string, string?> { ["Services:DocumentService"] = BaseUrl }).Build();
+        var service = new DocumentCatalogService(new HttpClient(handler), configuration,
+            NullLogger<DocumentCatalogService>.Instance);
+
+        var refusal = await service.AddLinkAsync("doc/1", DocumentSubjectKind.Call, "contact & 7",
+            DocumentSubjectKind.Claim, " CLM-2 ");
+
+        refusal.Should().BeNull();
+        method.Should().Be(HttpMethod.Post);
+        handler.CapturedUrls.Should().ContainSingle().Which.Should().Be(
+            BaseUrl + "/api/v1/documents/doc%2F1/links?subjectKind=Call&subjectId=contact%20%26%207");
+        System.Text.Json.JsonDocument.Parse(body!).RootElement.GetProperty("link").GetString().Should().Be("Claim:CLM-2");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden, "refused")]
+    [InlineData(HttpStatusCode.NotFound, "refused")]
+    [InlineData(HttpStatusCode.Conflict, "legal hold")]
+    [InlineData(HttpStatusCode.BadRequest, "record reference")]
+    [InlineData(HttpStatusCode.InternalServerError, "did not confirm")]
+    public async Task Link_failures_are_not_reported_as_success(HttpStatusCode status, string message)
+    {
+        var (service, _) = Build(status, "sensitive backend detail");
+        var refusal = await service.AddLinkAsync("doc-1", DocumentSubjectKind.Claim, "CLM-1",
+            DocumentSubjectKind.Call, "CONTACT-7");
+        refusal.Should().Contain(message).And.NotContain("sensitive backend detail");
+    }
+
+    [Fact]
     public async Task It_asks_for_the_subject_and_reads_the_listing()
     {
         var (service, handler) = Build(HttpStatusCode.OK, """

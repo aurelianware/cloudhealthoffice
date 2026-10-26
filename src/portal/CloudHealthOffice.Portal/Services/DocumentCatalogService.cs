@@ -160,6 +160,10 @@ public interface IDocumentCatalogService
     Task<string?> UploadAsync(DocumentSubjectKind kind, string subjectId, string title, string type,
         Stream content, string fileName, string contentType, CancellationToken ct = default);
 
+    /// <summary>Add an additional subject link, using an existing authorized subject context.</summary>
+    Task<string?> AddLinkAsync(string documentId, DocumentSubjectKind sourceKind, string sourceId,
+        DocumentSubjectKind targetKind, string targetId, CancellationToken ct = default);
+
     /// <summary>The documents linked to one subject that the signed-in user may see.</summary>
     Task<DocumentSubjectListing> GetForSubjectAsync(
         DocumentSubjectKind kind, string subjectId, CancellationToken ct = default);
@@ -293,6 +297,28 @@ public sealed class DocumentCatalogService : IDocumentCatalogService
             };
         }
         catch (HttpRequestException) { throw new ServiceUnavailableException("Document Service", new HttpRequestException("Upload unavailable.")); }
+    }
+
+    public async Task<string?> AddLinkAsync(string documentId, DocumentSubjectKind sourceKind, string sourceId,
+        DocumentSubjectKind targetKind, string targetId, CancellationToken ct = default)
+    {
+        var url = $"{BaseUrl()}/api/v1/documents/{Uri.EscapeDataString(documentId)}/links" +
+                  $"?subjectKind={sourceKind}&subjectId={Uri.EscapeDataString(sourceId)}";
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync(url,
+                new { link = targetKind + ":" + targetId.Trim() }, ct);
+            if (response.IsSuccessStatusCode) return null;
+            return response.StatusCode switch
+            {
+                HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound =>
+                    "The document link was refused. Check your access to both records and refresh before retrying.",
+                HttpStatusCode.Conflict => "The document cannot be linked while it is on legal hold or has a conflicting change. Refresh before retrying.",
+                HttpStatusCode.BadRequest => "The record reference was refused. Check its type and ID.",
+                _ => "The document service did not confirm the link. Refresh before retrying."
+            };
+        }
+        catch (HttpRequestException ex) { throw new ServiceUnavailableException("Document Service", ex); }
     }
 
     private string ListUrl(DocumentSubjectKind kind, string subjectId) =>
