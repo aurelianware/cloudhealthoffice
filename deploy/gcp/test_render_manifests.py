@@ -459,3 +459,10 @@ def test_documents_require_the_private_scanner():
     assert settings["Documents__AllowUnscannedContent"] == "false"
     assert settings["Documents__Scanner__Provider"] == "ClamAv"
     assert settings["Documents__Scanner__ClamAv__Host"] == "document-scanner"
+
+
+def test_contact_intake_owners_read_the_in_cluster_contact_service():
+    rendered = deployments(render())
+    for name in ("appeals-service", "authorization-service", "work-management-service"):
+        # HttpContactIntakeReader appends api/contacts/{id} to this base URL.
+        assert env(rendered[name])["Services__ContactServiceUrl"] == "http://contact-service"

@@ -1,7 +1,7 @@
 # Contact workflow intake and documents
 
 Date: October 25, 2026. Source baseline: main `7685fd3d`.
-Status: proposed implementation; deployed acceptance remains outstanding.
+Status: implemented; deployed acceptance is partial. See the October 26 GCP recovery results below.
 Design: [ADR 034](../adr/034-contact-workflow-intake.md).
 
 ## Operating behavior
@@ -257,3 +257,54 @@ revision races, tenant isolation and portal controls. Local .NET SDK 8.0.426 and
 direct MSBuild abort on unavailable sandbox process metadata before compilation.
 No executable local pass, deployed GCP recovery run or production acceptance is
 claimed. The contact-workflow CI matrix remains the executable validation gate.
+
+## GCP recovery acceptance — October 26, 2026 (partial)
+
+[Deployment run 40355961985](https://github.com/aurelianware/cloudhealthoffice/actions/runs/40355961985)
+succeeded on attempt 2 with images from `c8e009a234326a9cc3d95045d056786f827d09ee`.
+Three initial image pushes failed on transient identity-token refresh timeouts;
+rerunning failed jobs recovered them. Checks verified updated, ready replicas,
+not just deployment image templates. All records in this run were synthetic.
+
+Live intake found that appeals-service, authorization-service and
+work-management-service still read contacts from Development's `localhost:5034`.
+The GCP renderer now explicitly sets `Services__ContactServiceUrl` to
+`http://contact-service` for these three owners. The same correction was applied
+to the demo deployments and their rollouts completed before resuming validation.
+All 36 GCP manifest tests passed, including a regression for the callback URLs.
+
+Observed results (33 individual checks passed; overall acceptance remains partial):
+
+- Document `fcdfc7619f3e4e92ad070c21b68ef49d` from the earlier scanner-outage test
+  remained Failed and blocked before retry. Real ClamAV returned Clean on retry;
+  the download matched the original catalog SHA-256, with unchanged identity,
+  links, size, content version and retention policy. Anonymous, cross-tenant and
+  missing-subject-permission retries were denied. Clean and Infected documents
+  could not use retry; the EICAR fixture remained blocked. ScanRetry audit events
+  recorded the acting user. No scanner outage was introduced in this run.
+- Contact `75bc818e-672b-4594-b2c8-2063a2753dba` preserved its Unknown intent while the
+  callback was unavailable and refused amendment in that state. After the route
+  correction, retrying the saved request through contact-service produced an
+  explicit rejection for synthetic state ZZ. Amendment required a reason,
+  retained the previous intent/author/time, preserved contact identity and
+  receipt details, and refused a stale revision.
+- The corrected TX request reached appeals-service but failed before creating
+  an owner receipt: `AppealsService StaleEncryptionKeyException` reported missing
+  `appeal-body-encryption-key-v1`. The demo uses `SecretProvider:Provider=None`.
+  The contact correctly remains Unknown with its saved corrected intent; the
+  deterministic owner receipt returned 404. Acceptance of corrected intake and
+  duplicate-case verification remain outstanding. Encryption was not bypassed.
+- Follow-up `demo.inquiry-contact-ccad22e1a958274fa76dfdca7e72a1e6` was created once across a repeated
+  request. With the user's explicit approval, `local-demo-admin` was added to
+  the demo's Follow-up: Complaints queue and only this synthetic item was
+  assigned to that operator. Completion through the deployed portal persisted
+  Done, completion time and resolution. The Completed audit event retained the
+  actor and resolution; another tenant could not read the item. General Get
+  Next was not used. Contact history retained rejection, amendment and follow-up
+  creation events.
+
+Next prerequisite: configure a persistent versioned appeal encryption key through
+an actual secret-provider integration. Preserve the current corrected intent and
+reconcile it through contact-service once that prerequisite is available. This
+run does not establish full case acceptance, regulatory closure, notice delivery,
+effectuation, disaster recovery or production readiness.
