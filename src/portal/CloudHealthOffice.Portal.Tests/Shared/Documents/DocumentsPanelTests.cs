@@ -16,17 +16,27 @@ namespace CloudHealthOffice.Portal.Tests.Shared.Documents;
 public class DocumentsPanelTests : TestContext
 {
     private readonly StubCatalog _catalog = new();
+    private readonly Mock<IUserContextService> _user = new();
 
     public DocumentsPanelTests()
     {
         Services.AddMudServices();
-        Services.AddSingleton(Mock.Of<IUserContextService>());
+        Services.AddSingleton(_user.Object);
         Services.AddSingleton<IDocumentCatalogService>(_catalog);
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
     private sealed class StubCatalog : IDocumentCatalogService
     {
+        public List<(string Document, DocumentSubjectKind SourceKind, string SourceId, DocumentSubjectKind TargetKind, string TargetId)> LinkCalls { get; } = new();
+        public string? LinkRefusal { get; set; }
+        public Task<string?> AddLinkAsync(string documentId, DocumentSubjectKind sourceKind, string sourceId,
+            DocumentSubjectKind targetKind, string targetId, CancellationToken ct = default)
+        {
+            LinkCalls.Add((documentId, sourceKind, sourceId, targetKind, targetId));
+            return Task.FromResult(LinkRefusal);
+        }
+
         public Task<string?> UploadAsync(DocumentSubjectKind kind, string subjectId, string title, string type,
             Stream content, string fileName, string contentType, CancellationToken ct = default) => Task.FromResult<string?>(null);
 
@@ -65,7 +75,7 @@ public class DocumentsPanelTests : TestContext
         bool uploadPending = false,
         IReadOnlyList<DocumentLinkSummary>? links = null,
         int otherLinks = 0,
-        string contentType = "application/pdf") => new()
+        string contentType = "application/pdf", bool legalHold = false) => new()
     {
         Id = id,
         Type = "Medical record",
@@ -78,6 +88,7 @@ public class DocumentsPanelTests : TestContext
         OtherLinks = otherLinks,
         ScanStatus = scan,
         UploadPending = uploadPending,
+        LegalHold = legalHold,
         ReceivedAt = new DateTime(2026, 10, 20, 15, 0, 0, DateTimeKind.Utc),
     };
 
@@ -86,6 +97,94 @@ public class DocumentsPanelTests : TestContext
         RenderComponent<DocumentsPanel>(p => p
             .Add(x => x.SubjectKind, kind)
             .Add(x => x.SubjectId, subjectId));
+
+    [Fact]
+    public void Read_only_users_have_no_link_action()
+    {
+        _catalog.Listing = new() { Documents = [Document()] };
+        Render().FindAll("[data-testid='document-link-doc-1']").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Linking_preserves_source_context_and_refreshes_after_success()
+    {
+        _user.Setup(x => x.HasPermission("documents:write")).Returns(true);
+        _catalog.Listing = new() { Documents = [Document()] };
+        var cut = Render(DocumentSubjectKind.Call, "CONTACT-7");
+        cut.Find("[data-testid='document-link-doc-1']").Click();
+        cut.Find("[data-testid='document-link-save']").HasAttribute("disabled").Should().BeTrue();
+        cut.Find("[data-testid='document-link-id']").Input(" CLM-2 ");
+        cut.Find("[data-testid='document-link-save']").Click();
+        cut.WaitForAssertion(() => _catalog.LinkCalls.Should().ContainSingle()
+            .Which.Should().Be(("doc-1", DocumentSubjectKind.Call, "CONTACT-7", DocumentSubjectKind.Claim, "CLM-2")));
+        cut.WaitForAssertion(() => cut.Find("[data-testid='document-link-message']").TextContent.Should().Contain("Document linked"));
+        _catalog.Calls.Should().HaveCount(2);
+        cut.FindAll("[data-testid='document-link-form']").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Refused_link_keeps_the_form_and_does_not_report_success()
+    {
+        _user.Setup(x => x.HasPermission("documents:write")).Returns(true);
+        _catalog.Listing = new() { Documents = [Document()] };
+        _catalog.LinkRefusal = "The document link was refused.";
+        var cut = Render(DocumentSubjectKind.Call, "CONTACT-7");
+        cut.Find("[data-testid='document-link-doc-1']").Click();
+        cut.Find("[data-testid='document-link-id']").Input("CLM-2");
+        cut.Find("[data-testid='document-link-save']").Click();
+        cut.WaitForAssertion(() => cut.Find("[data-testid='document-link-message']").TextContent.Should().Contain("refused"));
+        cut.FindAll("[data-testid='document-link-form']").Should().ContainSingle();
+        _catalog.Calls.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void A_document_on_legal_hold_has_no_link_action()
+    {
+        _user.Setup(x => x.HasPermission("documents:write")).Returns(true);
+        _catalog.Listing = new() { Documents = [Document(legalHold: true)] };
+        Render().FindAll("[data-testid='document-link-doc-1']").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void A_claim_document_can_be_linked_to_a_contact()
+    {
+        _user.Setup(x => x.HasPermission("documents:write")).Returns(true);
+        _catalog.Listing = new() { Documents = [Document()] };
+        var cut = Render();
+        cut.Find("[data-testid='document-link-doc-1']").Click();
+        cut.Find("[data-testid='document-link-id']").Input("CONTACT-7");
+        cut.Find("[data-testid='document-link-save']").Click();
+        cut.WaitForAssertion(() => _catalog.LinkCalls.Should().ContainSingle().Which.Should().Be(
+            ("doc-1", DocumentSubjectKind.Claim, "CLM-1", DocumentSubjectKind.Call, "CONTACT-7")));
+    }
+
+    [Fact]
+    public void Existing_link_is_not_submitted_again()
+    {
+        _user.Setup(x => x.HasPermission("documents:write")).Returns(true);
+        _catalog.Listing = new() { Documents = [Document()] };
+        var cut = Render(DocumentSubjectKind.Call, "CONTACT-7");
+        cut.Find("[data-testid='document-link-doc-1']").Click();
+        cut.Find("[data-testid='document-link-id']").Input("CLM-1");
+        cut.Find("[data-testid='document-link-save']").Click();
+        cut.Find("[data-testid='document-link-message']").TextContent.Should().Contain("already linked");
+        _catalog.LinkCalls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Cancel_and_record_navigation_discard_the_link_form()
+    {
+        _user.Setup(x => x.HasPermission("documents:write")).Returns(true);
+        _catalog.Listing = new() { Documents = [Document()] };
+        var cut = Render();
+        cut.Find("[data-testid='document-link-doc-1']").Click();
+        cut.Find("[data-testid='document-link-cancel']").Click();
+        cut.FindAll("[data-testid='document-link-form']").Should().BeEmpty();
+        cut.Find("[data-testid='document-link-doc-1']").Click();
+        cut.SetParametersAndRender(p => p.Add(x => x.SubjectId, "CLM-2"));
+        cut.FindAll("[data-testid='document-link-form']").Should().BeEmpty();
+        _catalog.LinkCalls.Should().BeEmpty();
+    }
 
     [Fact]
     public void It_asks_the_catalog_for_the_subject_it_was_given()

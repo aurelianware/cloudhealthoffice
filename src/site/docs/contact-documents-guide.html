@@ -175,7 +175,9 @@
 
         <h2 id="shared-documents">4. Make the same document available from a claim</h2>
         <p>A contact-to-claim reference and a document-to-claim link are separate relationships. Linking a claim under <strong>What was discussed</strong> does not automatically attach every contact document to that claim.</p>
-        <p>The document service supports an explicit additional subject link. The current document panel displays existing links in <strong>Also linked to</strong>; it does not provide an add-link button. An authorized integration can add the link using the document API:</p>
+        <p>On the existing document row, select <strong>Link to record</strong>. Choose <strong>Claim</strong> or <strong>Contact</strong>, enter the target record ID, and select <strong>Add link</strong>. The action requires document-write permission and is unavailable for documents on legal hold. After success, check <strong>Also linked to</strong>. Adding a link does not change scan status or make a blocked file downloadable.</p>
+        <figure class="guide-screenshot"><img src="/graphics/user-guides/contact-documents/document-link-form.png" alt="Document link form with Claim record type, target record ID, Add link, and Cancel controls" loading="lazy" /><figcaption>The linking form in a local portal preview connected to synthetic GCP demo records. The target is an existing claim record ID.</figcaption></figure>
+        <p>Integrations can also add the link using the document API:</p>
         <pre><code>POST /api/v1/documents/{documentId}/links?subjectKind=Call&amp;subjectId={contactId}
 Content-Type: application/json
 
