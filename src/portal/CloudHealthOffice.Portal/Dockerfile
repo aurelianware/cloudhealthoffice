@@ -32,8 +32,8 @@ RUN apt-get update \
 
 # Development Data Protection uses LocalApplicationData. The non-root user must
 # have an existing writable XDG directory; otherwise .NET falls back to /app.
-RUN groupadd -r appuser && useradd -r -g appuser appuser \\
-    && install -d -o appuser -g appuser -m 0700 \\
+RUN groupadd -r appuser && useradd -r -g appuser appuser \
+    && install -d -o appuser -g appuser -m 0700 \
        /home/appuser/.local/share/CloudHealthOffice/DataProtection-Keys
 ENV XDG_DATA_HOME=/home/appuser/.local/share
 USER appuser
