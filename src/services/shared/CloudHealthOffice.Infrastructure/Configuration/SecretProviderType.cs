@@ -17,5 +17,8 @@ public enum SecretProviderType
 
     /// <summary>HashiCorp Vault with Kubernetes auth.</summary>
     [Description("HashiCorp Vault with Kubernetes auth")]
-    HashiCorpVault = 2
+    HashiCorpVault = 2,
+
+    /// <summary>Google Secret Manager using Application Default Credentials / GKE Workload Identity.</summary>
+    GoogleSecretManager = 3
 }

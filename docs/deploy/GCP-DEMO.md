@@ -214,3 +214,21 @@ rescanned. No public scanner endpoint or CHO service identity is created.
 This provides the cloud deployment wiring. Accept it with clean-download,
 harmless EICAR quarantine, scanner failure and storage persistence checks before
 claiming end-to-end cloud scanner readiness.
+
+### Appeals field encryption (optional Secret Manager integration)
+
+Member-service case intake encrypts its summary before saving the owner record.
+A deployment with `SecretProvider:Provider=None` cannot complete that intake.
+The [isolated appeals-secret setup](../../infrastructure/gcp/appeals-secrets/README.md)
+provisions one versioned key and a read-only identity bound only to the
+`cloudhealthoffice/appeals-service` Kubernetes service account. Its Terraform
+plan contains five additions and no cluster changes; obtain approval for the
+new secret-access binding before applying it. Key material is initialized once
+outside Terraform state and never belongs in GitHub variables or manifests.
+
+After application support is merged, set `APPEALS_SECRETS_PROJECT` and
+`APPEALS_SECRETS_SERVICE_ACCOUNT` from that module's outputs. The GKE renderer
+then opts only appeals-service into Google Secret Manager and uses encryption-key
+readiness. If either setting is supplied without the other, deployment is refused.
+Keep the contact callback routing fix from PR #1560. After rollout, reconcile any
+saved Unknown intake through contact-service before attempting a correction.

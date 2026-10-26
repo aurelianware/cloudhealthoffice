@@ -341,6 +341,12 @@ if [[ -n "${DOCUMENTS_BUCKET:-}" && -n "${DOCUMENTS_SERVICE_ACCOUNT:-}" ]]; then
 else
   warn "DOCUMENTS_BUCKET / DOCUMENTS_SERVICE_ACCOUNT not set: attachment and member document uploads will fail (no storage). Set them from the infrastructure/gcp outputs."
 fi
+if [[ -n "${APPEALS_SECRETS_PROJECT:-}" && -n "${APPEALS_SECRETS_SERVICE_ACCOUNT:-}" ]]; then
+  render_args+=(--appeals-secrets-project "$APPEALS_SECRETS_PROJECT"
+    --appeals-secrets-service-account "$APPEALS_SECRETS_SERVICE_ACCOUNT")
+elif [[ -n "${APPEALS_SECRETS_PROJECT:-}${APPEALS_SECRETS_SERVICE_ACCOUNT:-}" ]]; then
+  err "APPEALS_SECRETS_PROJECT and APPEALS_SECRETS_SERVICE_ACCOUNT must both be set"
+fi
 if [[ -n "${MANAGED_FHIR_STORE:-}" && -n "${MANAGED_FHIR_STORE_SERVICE_ACCOUNT:-}" ]]; then
   render_args+=(--managed-fhir-store "$MANAGED_FHIR_STORE"
     --managed-fhir-store-service-account "$MANAGED_FHIR_STORE_SERVICE_ACCOUNT"

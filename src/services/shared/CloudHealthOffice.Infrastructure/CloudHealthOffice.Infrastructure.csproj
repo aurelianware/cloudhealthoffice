@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="CloudHealthOffice.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="AppealsService.Tests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -41,6 +42,9 @@
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
     <PackageReference Include="OpenTelemetry.Exporter.Console" />
     <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" />
+
+    <!-- Google authentication is shared with the existing GCP engines. -->
+    <PackageReference Include="Google.Apis.Auth" />
 
     <!-- Azure Key Vault secret provider -->
     <PackageReference Include="Azure.Identity" />
