@@ -313,6 +313,7 @@ public sealed class AuthorizationRepositoryMongoConcurrencyTests(MongoRunnerFixt
         }, "reviewer-1", read.SubmittedDate.AddDays(6));
         var fact = AuthorizationService.Services.Cms0057.PaReportingEvidence.NativeExtension(read, extension, read.Revision + 1);
 
+        var revisionRead = read.Revision;
         await Repo().ExtendDecisionDeadlineAsync(read, extension, fact);
 
         var stored = await ReadAsync("X1");
@@ -320,7 +321,8 @@ public sealed class AuthorizationRepositoryMongoConcurrencyTests(MongoRunnerFixt
         stored.DecisionExtension!.Basis.Should().Be(DecisionExtensionBasis.ProviderRequested);
         stored.SlaEscalation.Should().Be(SlaEscalationLevel.None, "the watchdog re-raises against the new deadline");
         stored.ReportingLedger!.Facts.Should().ContainSingle(f => f.Kind == PaReportingFactKind.ReviewExtension);
-        stored.Revision.Should().Be(read.Revision + 1);
+        stored.Revision.Should().Be(revisionRead + 1);
+        read.Revision.Should().Be(stored.Revision, "the caller's copy tracks the write");
 
         var again = () => Repo().ExtendDecisionDeadlineAsync(stale, extension, fact);
         await again.Should().ThrowAsync<AuthorizationConcurrencyException>("a second extension from a stale read is refused");
