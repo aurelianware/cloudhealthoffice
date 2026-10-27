@@ -22,7 +22,10 @@ public sealed class AuthorizationInsights
     /// <summary>The review queue now: every open request, whenever submitted.</summary>
     public AuthorizationQueueInsight Queue { get; init; } = new();
 
-    /// <summary>Requests submitted in the period and denied, by reason code (top 10).</summary>
+    /// <summary>
+    /// Requests submitted in the period and denied or reduced, by reason code (top 10).
+    /// A request counts once under each distinct code on its denied or reduced lines.
+    /// </summary>
     public List<AuthorizationDenialReasonInsight> DenialReasons { get; init; } = new();
 
     /// <summary>Approved authorizations whose service period ended in the period with no claim yet.</summary>
@@ -104,8 +107,12 @@ public static class AuthorizationInsightSets
     {
         var activityList = activity.ToList();
         var queue = open.Where(a => lineOfBusiness is null || a.LineOfBusiness == lineOfBusiness).ToList();
-        var denied = Cms0057Reporting.InPeriod(activityList, from, to, lineOfBusiness)
-            .Where(a => Cms0057Reporting.DecisionStatus(a) == AuthorizationStatus.Denied);
+        // Every adverse outcome's specific reasons: a request's denied or reduced
+        // lines each count under their own code, not only the first line's.
+        var adverse = Cms0057Reporting.InPeriod(activityList, from, to, lineOfBusiness)
+            .SelectMany(a => Cms0057Reporting.AdverseReasons(a)
+                .GroupBy(r => ReasonCode(r.Code))
+                .Select(g => (Code: g.Key, Reason: g.Select(r => r.Reason).FirstOrDefault(r => r is not null))));
 
         return new AuthorizationInsights
         {
@@ -121,12 +128,12 @@ public static class AuthorizationInsightSets
                     .Select(level => new AuthorizationCountInsight { Key = level.ToString(), Count = queue.Count(a => SlaLevel(a) == level) })
                     .ToList(),
             },
-            DenialReasons = denied
-                .GroupBy(a => string.IsNullOrWhiteSpace(a.DenialReasonCode) ? UnspecifiedDenialCode : a.DenialReasonCode.Trim())
+            DenialReasons = adverse
+                .GroupBy(r => r.Code)
                 .Select(g => new AuthorizationDenialReasonInsight
                 {
                     Code = g.Key, Count = g.Count(),
-                    Description = g.Select(a => a.DenialReason).FirstOrDefault(r => !string.IsNullOrWhiteSpace(r)),
+                    Description = g.Select(r => r.Reason).FirstOrDefault(r => r is not null),
                 })
                 .OrderByDescending(r => r.Count).ThenBy(r => r.Code)
                 .Take(10)
@@ -170,14 +177,14 @@ public static class AuthorizationInsightSets
             return false;
         if (!string.IsNullOrWhiteSpace(c.DenialReasonCode))
         {
-            if (Cms0057Reporting.DecisionStatus(a) != AuthorizationStatus.Denied) return false;
-            var code = string.IsNullOrWhiteSpace(a.DenialReasonCode) ? UnspecifiedDenialCode : a.DenialReasonCode.Trim();
-            if (code != c.DenialReasonCode) return false;
+            if (!Cms0057Reporting.AdverseReasons(a).Any(r => ReasonCode(r.Code) == c.DenialReasonCode)) return false;
         }
         if (c.Status is { } status && a.Status != status) return false;
         if (c.Sla is { } level && SlaLevel(a) != level) return false;
         return true;
     }
+
+    private static string ReasonCode(string? code) => code ?? UnspecifiedDenialCode;
 
     private static SlaEscalationLevel SlaLevel(Authorization a) => SlaWatchdogService.ComputeSlaStatus(a).EscalationLevel;
 }

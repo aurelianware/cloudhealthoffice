@@ -115,12 +115,19 @@ public class AuthorizationInsightsTests
     [Fact]
     public void Denial_reasons_match_their_drill_down()
     {
-        var top = Assert.Single(Insights().DenialReasons);
+        var reasons = Insights().DenialReasons;
+        var top = reasons[0];
 
         Assert.Equal("A1", top.Code);
         Assert.Equal(2, top.Count);
         Assert.Equal("Not medically necessary", top.Description);
         Assert.Equal(2, Count(new() { DenialReasonCode = "A1" }));
+
+        // A reduction (s3, Modified) recorded without a reason is shown, not hidden.
+        var unspecified = Assert.Single(reasons, r => r.Code == AuthorizationInsightSets.UnspecifiedDenialCode);
+        Assert.Equal(1, unspecified.Count);
+        Assert.Equal(1, Count(new() { DenialReasonCode = AuthorizationInsightSets.UnspecifiedDenialCode }));
+        Assert.Equal(2, reasons.Count);
     }
 }
 

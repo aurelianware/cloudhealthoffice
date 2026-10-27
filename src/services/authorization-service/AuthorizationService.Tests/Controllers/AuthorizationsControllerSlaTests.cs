@@ -143,6 +143,45 @@ public class AuthorizationsControllerSlaTests
         _repositoryMock.Verify(r => r.GetOpenAuthorizationsAsync("tenant-a"), Times.Once);
     }
 
+    [Fact]
+    public async Task ExtendDecisionDeadline_PersistsTheLawfulExtension()
+    {
+        var auth = CreateAuth("AUTH-EXT", "E", hoursAgo: 24);
+        auth.LineOfBusiness = LineOfBusiness.Medicare;
+        AuthorizationService.Services.AuthorizationDeadlinePolicy.Initialize(auth);
+        _repositoryMock.Setup(r => r.GetByIdAsync(auth.Id)).ReturnsAsync(auth);
+        AuthorizationDecisionExtension? written = null;
+        _repositoryMock
+            .Setup(r => r.ExtendDecisionDeadlineAsync(auth, It.IsAny<AuthorizationDecisionExtension>(), It.IsAny<PaReportingFact?>(), It.IsAny<CancellationToken>()))
+            .Callback<Authorization, AuthorizationDecisionExtension, PaReportingFact?, CancellationToken>((_, e, _, _) => written = e)
+            .Returns(Task.CompletedTask);
+
+        var result = await _controller.ExtendDecisionDeadline(auth.Id, new ExtendDecisionDeadline
+        {
+            Basis = DecisionExtensionBasis.EnrolleeRequested, Reason = "Member asked for time to send records",
+        });
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        written!.GrantedBy.Should().Be("reviewer-1", "the actor comes from the token");
+        written.ExtendedDueAt.Should().Be(written.OriginalDueAt.AddDays(14));
+    }
+
+    [Fact]
+    public async Task ExtendDecisionDeadline_OnACommercialRequest_ConflictsAndWritesNothing()
+    {
+        var auth = CreateAuth("AUTH-COM", "E", hoursAgo: 24);
+        _repositoryMock.Setup(r => r.GetByIdAsync(auth.Id)).ReturnsAsync(auth);
+
+        var result = await _controller.ExtendDecisionDeadline(auth.Id, new ExtendDecisionDeadline
+        {
+            Basis = DecisionExtensionBasis.EnrolleeRequested, Reason = "Member asked",
+        });
+
+        result.Result.Should().BeOfType<ConflictObjectResult>();
+        _repositoryMock.Verify(r => r.ExtendDecisionDeadlineAsync(It.IsAny<Authorization>(),
+            It.IsAny<AuthorizationDecisionExtension>(), It.IsAny<PaReportingFact?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     private static Authorization CreateAuth(
         string authNumber, string levelOfService, double hoursAgo, string tenantId = "tenant-1") => new()
     {

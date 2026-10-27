@@ -56,6 +56,25 @@ public static class PaReportingEvidence
         });
     }
 
+    /// <summary>
+    /// The reporting fact for an extension CHO itself granted (the native
+    /// decision-extension endpoint), or null for a legacy record without evidence.
+    /// Sourced extension evidence from another system still goes through <see cref="Prepare"/>.
+    /// </summary>
+    public static PaReportingFact? NativeExtension(Authorization authorization,
+        AuthorizationDecisionExtension extension, long revision)
+    {
+        var ledger = authorization.ReportingLedger;
+        if (ledger is null || ledger.Version != 1) return null;
+        return new PaReportingFact
+        {
+            EventId = $"native-extension:{revision}", Kind = PaReportingFactKind.ReviewExtension,
+            EffectiveAt = Milliseconds(extension.GrantedAt), RecordedAt = Milliseconds(extension.GrantedAt),
+            OriginalDueAt = Milliseconds(extension.OriginalDueAt), ExtendedDueAt = Milliseconds(extension.ExtendedDueAt),
+            SourceSystem = "cho-native", EvidenceReference = $"revision:{revision}", RecordedBy = extension.GrantedBy,
+        };
+    }
+
     /// <summary>Returns an existing exact replay; reused keys with different facts conflict.</summary>
     public static PaReportingFact Prepare(Authorization authorization, RecordPaReportingFact command,
         string actor, DateTime now)

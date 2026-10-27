@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CMS-0057-F prior authorization: lawful extensions, every denial reason,
+  and the extension and appeal metrics.** A reviewer can take the one lawful
+  extension of an open Medicare Advantage or Medicaid request's decision
+  timeframe (`POST api/authorizations/{id}/decision-extension`, up to 14
+  calendar days, before the deadline, with a stated ground and reason). The
+  SLA watchdog, the console and "decided within timeframe" use the extended
+  deadline, and the extension is written to the reporting ledger so the
+  annual draft can report "extended, then approved". Denial-reason insights
+  and the recent-decision list now carry every denied or reduced line's
+  reason, not only the first, and line reason codes accept the same 50
+  characters as the request-level code. The operational CMS-0057-F metrics
+  add extended-then-approved and approved-after-appeal from ledger evidence.
+
 - **Plan configuration: settings that cascade, with overrides (step 1).**
   tenant-service gains a configuration module: a setting catalog defined in
   code, values by level (tenant, line of business, sponsor) with effective

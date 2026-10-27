@@ -429,6 +429,34 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         return fact;
     }
 
+    public async Task ExtendDecisionDeadlineAsync(Authorization authorization, AuthorizationDecisionExtension extension,
+        PaReportingFact? fact, CancellationToken ct = default)
+    {
+        var b = Builders<Authorization>.Filter;
+        var filter = b.Eq(a => a.Id, authorization.Id) & b.Eq(a => a.TenantId, GetTenantId())
+            & RevisionIs(authorization.Revision)
+            & b.In(a => a.Status, new[] { AuthorizationStatus.Submitted, AuthorizationStatus.InReview, AuthorizationStatus.Pended })
+            & b.Eq(a => a.DecisionExtension, null);
+        var update = Builders<Authorization>.Update
+            .Set(a => a.DecisionDueAt, extension.ExtendedDueAt)
+            .Set(a => a.DecisionExtension, extension)
+            .Set(a => a.SlaEscalation, SlaEscalationLevel.None)
+            .Set(a => a.SlaEscalatedAt, null)
+            .Set(a => a.LastUpdatedDate, extension.GrantedAt)
+            .Set(a => a.LastUpdatedBy, extension.GrantedBy);
+        if (fact is not null) update = update.Push(a => a.ReportingLedger!.Facts, fact);
+        var result = await _collection.UpdateOneAsync(filter, Bumped(update), cancellationToken: ct);
+        if (result.ModifiedCount != 1) throw new AuthorizationConcurrencyException(authorization.Id, authorization.Revision);
+        authorization.DecisionDueAt = extension.ExtendedDueAt;
+        authorization.DecisionExtension = extension;
+        authorization.SlaEscalation = SlaEscalationLevel.None;
+        authorization.SlaEscalatedAt = null;
+        authorization.LastUpdatedDate = extension.GrantedAt;
+        authorization.LastUpdatedBy = extension.GrantedBy;
+        if (fact is not null) authorization.ReportingLedger!.Facts.Add(fact);
+        authorization.Revision++;
+    }
+
     public async IAsyncEnumerable<Authorization> StreamReportingCohortAsync(DateTime from, DateTime toExclusive,
         LineOfBusiness lineOfBusiness, [EnumeratorCancellation] CancellationToken ct = default)
     {

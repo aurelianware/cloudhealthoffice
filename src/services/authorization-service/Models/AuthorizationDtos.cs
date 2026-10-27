@@ -134,7 +134,7 @@ public class AuthorizationsSummary
 public class AuthorizationDecisionDetails
 {
     public decimal? ApprovedUnits { get; set; }
-    [StringLength(10)] public string? DenialReasonCode { get; set; }
+    [StringLength(50)] public string? DenialReasonCode { get; set; }
     [StringLength(500)] public string? DenialReason { get; set; }
     [StringLength(500)] public string? PendReason { get; set; }
     public List<AuthorizationLineDecision> LineDecisions { get; set; } = new();
@@ -145,7 +145,18 @@ public class AuthorizationLineDecision
     [Range(1, int.MaxValue)] public int LineNumber { get; set; }
     [Required, RegularExpression("A[1-4]")] public string ReviewDecision { get; set; } = string.Empty;
     public decimal? ApprovedUnits { get; set; }
-    [StringLength(10)] public string? DenialReasonCode { get; set; }
+    [StringLength(50)] public string? DenialReasonCode { get; set; }
     [StringLength(500)] public string? DenialReason { get; set; }
     [StringLength(500)] public string? PendReason { get; set; }
+}
+
+/// <summary>Takes the one lawful extension of an open request's decision timeframe.</summary>
+public class ExtendDecisionDeadline
+{
+    /// <summary>The new deadline; omitted means the latest allowed (14 calendar days after the current one).</summary>
+    public DateTimeOffset? ExtendedDueAt { get; set; }
+    public DecisionExtensionBasis Basis { get; set; }
+    /// <summary>The reason given to the member in the extension notice.</summary>
+    [Required, StringLength(500)]
+    public string Reason { get; set; } = string.Empty;
 }

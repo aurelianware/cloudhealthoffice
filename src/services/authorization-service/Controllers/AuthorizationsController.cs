@@ -650,6 +650,44 @@ public class AuthorizationsController : ControllerBase
     }
 
     /// <summary>
+    /// Takes the one lawful extension of an open request's decision timeframe
+    /// (CMS-0057-F: up to 14 calendar days, Medicare Advantage and Medicaid only),
+    /// so the deadline the SLA watchdog, the console and the reporting ledger use
+    /// is the extended one rather than a false breach. Not a decision.
+    /// </summary>
+    [RequirePermission(DecidePermission)]
+    [HttpPost("{id}/decision-extension")]
+    [ProducesResponseType(typeof(Authorization), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<Authorization>> ExtendDecisionDeadline(
+        string id, [FromBody] ExtendDecisionDeadline command)
+    {
+        if (!_backends.Resolve().IsAuthoritative)
+            return Conflict(new { error = "Decision-timeframe extensions require the native authoritative backend." });
+
+        var authorization = await _authorizationRepository.GetByIdAsync(id);
+        if (authorization == null)
+        {
+            return NotFound($"Authorization {id} not found");
+        }
+
+        AuthorizationDecisionExtension extension;
+        try { extension = AuthorizationDeadlinePolicy.Extend(authorization, command, Actor, DateTime.UtcNow); }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
+
+        var fact = PaReportingEvidence.NativeExtension(authorization, extension, authorization.Revision + 1);
+        await _authorizationRepository.ExtendDecisionDeadlineAsync(authorization, extension, fact, HttpContext.RequestAborted);
+
+        _logger.LogInformation(
+            "Decision timeframe for authorization {AuthNumber} extended to {DueAt:o} ({Basis})",
+            LogSanitizer.Sanitize(authorization.AuthorizationNumber), extension.ExtendedDueAt, extension.Basis);
+        return Ok(authorization);
+    }
+
+    /// <summary>
     /// Raises the CDex additional-information request an A4 decision implies, and
     /// persists the handle on the authorization.
     ///
