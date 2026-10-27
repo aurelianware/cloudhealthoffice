@@ -266,3 +266,67 @@ fingerprint, then repeat Finish. Verify the saved examiner resolution, line
 adjustments, recalculated totals and decision note after reloading the claim.
 The fixture must not be overwritten or reset blindly after an interrupted
 request; inspect persisted state first.
+
+### Optional real OIG LEIE screening
+
+Set repository Actions variable `LEIE_SCREENING_ENABLED=true` to enable the
+existing OIG LEIE sync/screener on the GCP deployment. The deploy script passes
+`--leie-screening` to the renderer, which opts in only
+`provider-verification-service`. An unset variable preserves the disabled
+baseline. The variable accepts only `true` or `false`.
+
+This uses the public OIG full-database download and the existing Mongo-backed
+exclusion store. No SAM.gov account or API key is needed for LEIE. SAM remains
+separately configured and disabled; LEIE success is not evidence of SAM
+coverage. No freshness, minimum-record-count, provider-verification or claim
+review guard is relaxed.
+
+After rollout, call authenticated `GET /api/v1/exclusions/status` and require
+`leieEnabled=true`, `samEnabled=false` and a non-stale `OigLeie` dataset with a
+successful sync and no error. In the October 26 live check, the real OIG file
+loaded 84,093 records. The runtime opt-in was validated before this deployment
+option was merged; a deployment of older code may remove that temporary opt-in.
+
+The synthetic Finish fixture's NPI `9262123927` subsequently returned
+`NPI_NOT_FOUND` from live NPPES verification. Enabling exclusion screening does
+not make a fabricated NPI valid. The positive saved-decision/totals/history
+acceptance remains blocked on suitable synthetic provider fixtures; do not
+label the failed NPPES result verified or disable the provider gate to complete
+it. Any future test using simulated registry responses must identify those
+responses as test inputs, rather than claim live provider verification.
+
+
+### SAM.gov key from GitHub Actions
+
+Store the SAM personal or system account key as repository Actions secret
+`SAM_API_KEY`. The GCP workflow passes it only to the deployment job. A supplied
+key enables SAM screening by default; set repository variable
+`SAM_SCREENING_ENABLED=false` to keep the source disabled. Explicitly enabling
+it without a replacement or already-installed key fails deployment.
+
+The deployment feeds the key over stdin into
+`provider-verification-service-secrets`, under
+`ProviderVerification__SamGovApiKey`. It retains the existing key during manual
+runs without a replacement and never writes a placeholder over it. Neither the
+key nor its encoded payload is printed, added to rendered manifests, or passed
+as a command-line argument.
+
+`--sam-screening` opts the verification workload into Extract mode with the
+public daily V2 exclusions file. This uses the existing scheduled Mongo-backed
+sync and preserves freshness, minimum-record-count, atomic replacement and
+fail-closed screening. SAM success requires a successful non-stale `SamGov`
+dataset from `GET /api/v1/exclusions/status`; a configured key alone is not proof
+of authentication or completed screening. A 403 may require the account's public
+extract permission; 429 must respect its rate limit. Never print the API URL
+with the key or retry aggressively. See the
+[GSA public extracts contract](https://open.gsa.gov/api/sam-entity-extracts-api/).
+
+
+Live validation on October 26 (America/Phoenix), configuration deployment
+[40442728419](https://github.com/aurelianware/cloudhealthoffice/actions/runs/40442728419):
+SAM authenticated using the GitHub secret and loaded 169,027 records. The
+status endpoint reported `samEnabled=true`, Extract mode, a non-stale `SamGov`
+dataset and no sync error. LEIE retained 84,093 records, also non-stale with no
+error. The secret value was never retrieved locally or included in evidence.
+This verifies key transport and dataset sync, not the independent fabricated-NPI
+or final claim-decision acceptance.

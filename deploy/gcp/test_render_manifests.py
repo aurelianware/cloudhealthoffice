@@ -499,3 +499,49 @@ def test_contact_intake_owners_read_the_in_cluster_contact_service():
     for name in ("appeals-service", "authorization-service", "work-management-service"):
         # HttpContactIntakeReader appends api/contacts/{id} to this base URL.
         assert env(rendered[name])["Services__ContactServiceUrl"] == "http://contact-service"
+
+
+def test_leie_screening_is_opt_in_and_scoped_to_verification():
+    setting = "ProviderVerification__ExclusionScreening__Leie__Enabled"
+    before = deployments(render())
+    after = deployments(render("--leie-screening"))
+    assert env(after["provider-verification-service"])[setting] == "true"
+    assert env(before["provider-verification-service"]).get(setting) != "true"
+    for name, dep in after.items():
+        if name != "provider-verification-service":
+            assert dep == before[name], name
+    # No implicit SAM source, API credential, custom publisher URL or stale-data exemption.
+    original = env(before["provider-verification-service"])
+    changed = env(after["provider-verification-service"])
+    assert {k: v for k, v in changed.items() if k != setting} == {k: v for k, v in original.items() if k != setting}
+
+
+def test_sam_screening_uses_daily_public_extract_and_secret_reference():
+    deps = deployments(render("--sam-screening", "--leie-screening"))
+    configured = env(deps["provider-verification-service"])
+    assert configured["ProviderVerification__ExclusionScreening__Sam__Enabled"] == "true"
+    assert configured["ProviderVerification__ExclusionScreening__Sam__Mode"] == "Extract"
+    url = configured["ProviderVerification__ExclusionScreening__Sam__ExtractDownloadUrl"]
+    assert url == "https://api.sam.gov/data-services/v1/extracts?fileType=EXCLUSION&sensitivity=PUBLIC&frequency=DAILY&version=V2"
+    container = deps["provider-verification-service"]["spec"]["template"]["spec"]["containers"][0]
+    key = next(e for e in container["env"] if e["name"] == "ProviderVerification__SamGovApiKey")
+    assert key["valueFrom"]["secretKeyRef"] == {"name": "provider-verification-service-secrets", "key": "ProviderVerification__SamGovApiKey"}
+    baseline = deployments(render())
+    for name, dep in deps.items():
+        if name != "provider-verification-service":
+            assert dep == baseline[name], name
+
+
+def test_sam_secret_payload_keeps_key_out_of_renderer_and_cli_arguments():
+    import base64
+    import os
+    script = (SCRIPT.parents[2] / "scripts/deploy-gke.sh").read_text()
+    start = script.index("python3 -c '\nimport base64,json,os") + len("python3 -c '")
+    end = script.index("\n' | kubectl apply -f - >/dev/null", start)
+    result = subprocess.run([sys.executable, "-c", script[start:end]], check=True, capture_output=True, text=True,
+                            env={**os.environ, "SAM_KEY_VALUE": "test-only-value", "SAM_MONGO_CONN": "test-only-connection", "SAM_NAMESPACE": "cloudhealthoffice"})
+    secret = json.loads(result.stdout)
+    assert secret["metadata"] == {"name": "provider-verification-service-secrets", "namespace": "cloudhealthoffice"}
+    assert base64.b64decode(secret["data"]["ProviderVerification__SamGovApiKey"]) == b"test-only-value"
+    assert "test-only-value" not in result.stdout
+    assert not result.stderr
