@@ -12,6 +12,7 @@
        definitions, the resolution rules, and the client services use to read
        settings from tenant-service. -->
   <ItemGroup>
+    <PackageReference Include="MongoDB.Driver" />
     <ProjectReference Include="..\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <PackageReference Include="Confluent.Kafka" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
