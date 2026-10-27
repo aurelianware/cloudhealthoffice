@@ -429,6 +429,11 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             if "cpu" not in requests or cpu_millicores(requests["cpu"]) > target:
                 requests["cpu"] = f"{target}m"
 
+        if name == "provider-verification-service" and args.sam_screening:
+            set_env(container, "ProviderVerification__ExclusionScreening__Sam__Enabled", "true")
+            set_env(container, "ProviderVerification__ExclusionScreening__Sam__Mode", "Extract")
+            set_env(container, "ProviderVerification__ExclusionScreening__Sam__ExtractDownloadUrl",
+                    "https://api.sam.gov/data-services/v1/extracts?fileType=EXCLUSION&sensitivity=PUBLIC&frequency=DAILY&version=V2")
         if name == "provider-verification-service" and args.leie_screening:
             set_env(container, "ProviderVerification__ExclusionScreening__Leie__Enabled", "true")
         if name == "claims-service":
@@ -686,6 +691,7 @@ def main() -> int:
     parser.add_argument("--registry", help="Artifact Registry prefix, e.g. us-west1-docker.pkg.dev/PROJECT/cho")
     parser.add_argument("--tag", default="latest")
     parser.add_argument("--kafka-bootstrap", default="")
+    parser.add_argument("--sam-screening", action="store_true", help="Enable real SAM daily public extract screening; requires the separately provisioned SAM key")
     parser.add_argument("--leie-screening", action="store_true",
                         help="Enable real OIG LEIE dataset sync and screening (SAM remains separately configured)")
     parser.add_argument("--ai-examiner", action="store_true", help="Run the AI claims examiner (needs ANTHROPIC_API_KEY)")

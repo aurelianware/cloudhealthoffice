@@ -185,6 +185,8 @@ jobs:
           DOCUMENTS_BUCKET: ${{ vars.DOCUMENTS_BUCKET }}
           DOCUMENTS_SERVICE_ACCOUNT: ${{ vars.DOCUMENTS_SERVICE_ACCOUNT }}
           # Optional versioned appeal encryption key (infrastructure/gcp/appeals-secrets/).
+          SAM_API_KEY: ${{ secrets.SAM_API_KEY }}
+          SAM_SCREENING_ENABLED: ${{ vars.SAM_SCREENING_ENABLED || (secrets.SAM_API_KEY != '' && 'true') || 'false' }}
           LEIE_SCREENING_ENABLED: ${{ vars.LEIE_SCREENING_ENABLED }}
           APPEALS_SECRETS_PROJECT: ${{ vars.APPEALS_SECRETS_PROJECT }}
           APPEALS_SECRETS_SERVICE_ACCOUNT: ${{ vars.APPEALS_SECRETS_SERVICE_ACCOUNT }}

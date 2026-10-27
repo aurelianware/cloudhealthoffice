@@ -294,3 +294,29 @@ acceptance remains blocked on suitable synthetic provider fixtures; do not
 label the failed NPPES result verified or disable the provider gate to complete
 it. Any future test using simulated registry responses must identify those
 responses as test inputs, rather than claim live provider verification.
+
+
+### SAM.gov key from GitHub Actions
+
+Store the SAM personal or system account key as repository Actions secret
+`SAM_API_KEY`. The GCP workflow passes it only to the deployment job. A supplied
+key enables SAM screening by default; set repository variable
+`SAM_SCREENING_ENABLED=false` to keep the source disabled. Explicitly enabling
+it without a replacement or already-installed key fails deployment.
+
+The deployment feeds the key over stdin into
+`provider-verification-service-secrets`, under
+`ProviderVerification__SamGovApiKey`. It retains the existing key during manual
+runs without a replacement and never writes a placeholder over it. Neither the
+key nor its encoded payload is printed, added to rendered manifests, or passed
+as a command-line argument.
+
+`--sam-screening` opts the verification workload into Extract mode with the
+public daily V2 exclusions file. This uses the existing scheduled Mongo-backed
+sync and preserves freshness, minimum-record-count, atomic replacement and
+fail-closed screening. SAM success requires a successful non-stale `SamGov`
+dataset from `GET /api/v1/exclusions/status`; a configured key alone is not proof
+of authentication or completed screening. A 403 may require the account's public
+extract permission; 429 must respect its rate limit. Never print the API URL
+with the key or retry aggressively. See the
+[GSA public extracts contract](https://open.gsa.gov/api/sam-entity-extracts-api/).

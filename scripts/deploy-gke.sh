@@ -203,8 +203,21 @@ upsert_secret correspondence-service-secret MongoDb__ConnectionString="$MONGO_CO
 upsert_secret sponsor-service-secrets MongoDb__ConnectionString="$MONGO_CONN"
 upsert_secret smart-auth-service-secrets MongoDb__ConnectionString="$MONGO_CONN" \
   MongoDb__DatabaseName=CloudHealthOffice
-upsert_secret provider-verification-service-secrets MongoDb__ConnectionString="$MONGO_CONN" \
-  ProviderVerification__SamGovApiKey=not-configured
+# Retain the installed key on manual runs that do not provide a replacement.
+SAM_KEY_VALUE="${SAM_API_KEY:-$(existing_secret_value provider-verification-service-secrets ProviderVerification__SamGovApiKey)}"
+case "${SAM_SCREENING_ENABLED:-false}" in
+  true) [[ -n "$SAM_KEY_VALUE" && "$SAM_KEY_VALUE" != not-configured ]] || err "SAM screening requires SAM_API_KEY" ;;
+  false) ;;
+  *) err "SAM_SCREENING_ENABLED must be true or false" ;;
+esac
+# Feed the payload over stdin: the API key is never a command-line argument.
+SAM_KEY_VALUE="$SAM_KEY_VALUE" SAM_MONGO_CONN="$MONGO_CONN" SAM_NAMESPACE="$NAMESPACE" python3 -c '
+import base64,json,os
+encode=lambda value:base64.b64encode(value.encode()).decode()
+print(json.dumps({"apiVersion":"v1","kind":"Secret","metadata":{"name":"provider-verification-service-secrets","namespace":os.environ["SAM_NAMESPACE"]},"type":"Opaque","data":{"MongoDb__ConnectionString":encode(os.environ["SAM_MONGO_CONN"]),"ProviderVerification__SamGovApiKey":encode(os.environ["SAM_KEY_VALUE"])}}))
+' | kubectl apply -f - >/dev/null
+unset SAM_KEY_VALUE
+ok "provider-verification-service-secrets"
 
 if [[ "$SECURITY" == production ]]; then
   # Every service trusts exactly this key; render_manifests.py writes it into
@@ -325,6 +338,7 @@ render_args=(--registry "$GAR_REPOSITORY" --tag "$IMAGE_TAG"
   --storage-class "$STORAGE_CLASS" --resource-profile "$RESOURCE_PROFILE")
 [[ -n "$KAFKA_VALUE" ]] && render_args+=(--kafka-bootstrap "$KAFKA_VALUE")
 [[ "$AI_EXAMINER" == true ]] && render_args+=(--ai-examiner)
+[[ "${SAM_SCREENING_ENABLED:-false}" == true ]] && render_args+=(--sam-screening)
 case "${LEIE_SCREENING_ENABLED:-false}" in
   true) render_args+=(--leie-screening) ;;
   false) ;;
