@@ -320,3 +320,13 @@ of authentication or completed screening. A 403 may require the account's public
 extract permission; 429 must respect its rate limit. Never print the API URL
 with the key or retry aggressively. See the
 [GSA public extracts contract](https://open.gsa.gov/api/sam-entity-extracts-api/).
+
+
+Live validation on October 26 (America/Phoenix), configuration deployment
+[40442728419](https://github.com/aurelianware/cloudhealthoffice/actions/runs/40442728419):
+SAM authenticated using the GitHub secret and loaded 169,027 records. The
+status endpoint reported `samEnabled=true`, Extract mode, a non-stale `SamGov`
+dataset and no sync error. LEIE retained 84,093 records, also non-stale with no
+error. The secret value was never retrieved locally or included in evidence.
+This verifies key transport and dataset sync, not the independent fabricated-NPI
+or final claim-decision acceptance.
