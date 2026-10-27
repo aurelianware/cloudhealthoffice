@@ -174,12 +174,52 @@ function renderArticle(source) {
   return { title, body: body.join('\n') };
 }
 
-const pageShell = ({ title, description, canonical, content, type = 'article' }) => `<!DOCTYPE html>
+// The article titles repeat the series name ("Running a Healthcare Claims
+// Platform Locally in Kubernetes, Part 15: ...") before the part that tells a
+// searcher what the article is about, and search results cut titles at about
+// 60 characters. The <title> leads with the article's own subtitle instead.
+const searchTitle = (title, part) => {
+  const subtitle = title.match(/, Part \w+: (.+)$/)?.[1];
+  return subtitle ? `${subtitle} | Million Claim Challenge, ${part}` : `${title} | Cloud Health Office`;
+};
+
+const SITE = 'https://cloudhealthoffice.com';
+const PUBLISHER = {
+  '@type': 'Organization',
+  name: 'Cloud Health Office',
+  url: `${SITE}/`,
+  logo: { '@type': 'ImageObject', url: `${SITE}/graphics/logo-cloudhealthoffice-sentinel-primary.svg` }
+};
+const SERIES = { '@type': 'CollectionPage', name: 'Million Claim Challenge Engineering Series', url: `${SITE}/insights/million-claim-challenge/` };
+
+const structuredData = ({ title, description, canonical, type, crumbs }) => {
+  const page = type === 'article'
+    ? {
+        '@type': 'BlogPosting',
+        headline: title.slice(0, 110),
+        description,
+        url: canonical,
+        mainEntityOfPage: canonical,
+        image: `${SITE}/graphics/og-million-claim-challenge.png`,
+        author: { '@type': 'Person', name: 'Mark Phillips', url: `${SITE}/founder` },
+        publisher: PUBLISHER,
+        isPartOf: SERIES
+      }
+    : { '@type': 'CollectionPage', name: title, description, url: canonical, publisher: PUBLISHER };
+  const breadcrumb = {
+    '@type': 'BreadcrumbList',
+    itemListElement: [['Home', `${SITE}/`], ...crumbs, [title, canonical]].map(([name, item], i) => ({ '@type': 'ListItem', position: i + 1, name, item }))
+  };
+  // Escape "<" so article text can never close the script element.
+  return JSON.stringify({ '@context': 'https://schema.org', '@graph': [page, breadcrumb] }).replace(/</g, '\\u003c');
+};
+
+const pageShell = ({ title, htmlTitle = `${title} | Cloud Health Office`, description, canonical, content, type = 'article', crumbs = [['Insights', `${SITE}/insights`], ['Million Claim Challenge', `${SITE}/insights/million-claim-challenge/`]] }) => `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(title)} | Cloud Health Office</title>
+  <title>${escapeHtml(htmlTitle)}</title>
   <meta name="description" content="${escapeHtml(description)}">
   <link rel="canonical" href="${canonical}">
   <meta property="og:type" content="${type}">
@@ -189,6 +229,7 @@ const pageShell = ({ title, description, canonical, content, type = 'article' })
   <meta property="og:url" content="${canonical}">
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/og-million-claim-challenge.png">
   <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">${structuredData({ title, description, canonical, type, crumbs })}</script>
   <link rel="stylesheet" href="/css/sentinel.css">
   <script src="/js/mobile-nav.js"></script>
   <style>
@@ -242,7 +283,7 @@ for (const publication of publications) {
     </div>
     ${rendered.body}
     <div class="article-links"><a href="/insights/million-claim-challenge/">All MCC articles</a><a href="/docs/million-claim-challenge/evidence">Evidence archive</a></div>`;
-  writeFileSync(join(outputDir, `${publication.slug}.html`), pageShell({ title: rendered.title, description: publication.summary, canonical, content }));
+  writeFileSync(join(outputDir, `${publication.slug}.html`), pageShell({ title: rendered.title, htmlTitle: searchTitle(rendered.title, publication.part), description: publication.summary, canonical, content }));
 }
 
 const cards = publications.map((publication) => {
@@ -255,6 +296,7 @@ writeFileSync(join(outputDir, 'index.html'), pageShell({
   description: 'Engineering field notes documenting how the Million Claim Challenge became a repeatable, inspectable claims-adjudication benchmark.',
   canonical: 'https://cloudhealthoffice.com/insights/million-claim-challenge/',
   type: 'website',
+  crumbs: [['Insights', `${SITE}/insights`]],
   content: `<div class="eyebrow">Engineering series</div><h1>Million Claim Challenge Field Notes</h1><p>How the benchmark moved from local Kubernetes runs to repeatable measurement, honest workflow scoring, and operator-facing evidence.</p><div class="disclosure"><strong>Current verified scope:</strong> the latest asynchronous local Kubernetes run reached the full 1,000,000-claim corpus at 155.89 claims/sec, with all claims eventually terminal. A separate 100,000-claim raw X12 837 run reached 199.42 claims/sec end-to-end. These are local validation results, not production-cloud capacity claims.</div>${cards}`
 }));
 
@@ -274,6 +316,7 @@ writeFileSync(join(evidenceOutputDir, 'evidence.html'), pageShell({
   description: 'Dated benchmark summaries, environment details, limitations, and raw artifacts for published Million Claim Challenge engineering results.',
   canonical: 'https://cloudhealthoffice.com/docs/million-claim-challenge/evidence',
   type: 'website',
+  crumbs: [['Documentation', `${SITE}/docs`], ['Million Claim Challenge', `${SITE}/docs/million-claim-challenge`]],
   content: `<div class="eyebrow">Reproducibility archive</div><h1>Million Claim Challenge Evidence</h1><p>This archive keeps the evidence behind the engineering series visible and reviewable. Results are historical records, not generalized production capacity claims.</p><div class="disclosure"><strong>Interpretation rules:</strong> distinguish platform failures from business dispositions; do not count unsupported scenarios as passes; preserve allocated compute, corpus size, latency, and validator limitations with every result.</div>${evidenceSections}`
 }));
 
