@@ -227,7 +227,7 @@ GET    /health                                    # Health check
   // Document details
   "documentType": "Medical Records",
   "documentFormat": "PDF",
-  "blobUrl": "https://chostorage97884.blob.core.windows.net/attachments/...",
+  "blobUrl": "https://your-storage-account.blob.core.windows.net/attachments/...",
   "fileSizeBytes": 2457600,
   "fileHash": "sha256-hash",
   

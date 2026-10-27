@@ -257,7 +257,7 @@ az deployment group create \
   --parameters \
     sftpHost="sftp.cloudhealthoffice.com" \
     sftpUsername="logicapp" \
-    sftpPassword="@Microsoft.KeyVault(SecretUri=https://cho-secrets.vault.azure.net/secrets/sftp-logicapp-password/)"
+    sftpPassword="@Microsoft.KeyVault(SecretUri=https://your-key-vault.vault.azure.net/secrets/sftp-logicapp-password/)"
 ```
 
 ---

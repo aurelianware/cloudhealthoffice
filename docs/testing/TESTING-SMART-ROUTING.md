@@ -54,7 +54,7 @@ kubectl logs -n cloudhealthoffice -l app=portal --tail=100 | grep -i "cosmos\|su
 1. **Open Cosmos DB Data Explorer:**
    ```bash
    # Get direct link
-   echo "https://portal.azure.com/#@32177734-051b-4fdc-9568-cc35530191b1/resource/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/prod-cloudhealthoffice-rg/providers/Microsoft.DocumentDB/databaseAccounts/cloudhealthoffice-cosmos/dataExplorer"
+   echo "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/your-resource-group/providers/Microsoft.DocumentDB/databaseAccounts/your-cosmos-account/dataExplorer"
    ```
 
 2. **Navigate:** CloudHealthOffice → Tenants → New Item
@@ -64,7 +64,7 @@ kubectl logs -n cloudhealthoffice -l app=portal --tail=100 | grep -i "cosmos\|su
    {
      "id": "test-org-001",
      "tenantId": "test-org-001",
-     "azureTenantId": "32177734-051b-4fdc-9568-cc35530191b1",
+     "azureTenantId": "00000000-0000-0000-0000-000000000000",
      "organizationName": "My Test Organization",
      "subscriptionStatus": "Active",
      "tier": "professional",
@@ -100,12 +100,12 @@ kubectl logs -n cloudhealthoffice -l app=portal --tail=100 | grep -i "cosmos\|su
 **Query existing tenants:**
 ```bash
 # Check Cosmos DB connection
-az cosmosdb show -n cloudhealthoffice-cosmos -g prod-cloudhealthoffice-rg --query "documentEndpoint"
+az cosmosdb show -n your-cosmos-account -g your-resource-group --query "documentEndpoint"
 
 # List containers
 az cosmosdb sql container list \
-  --account-name cloudhealthoffice-cosmos \
-  --resource-group prod-cloudhealthoffice-rg \
+  --account-name your-cosmos-account \
+  --resource-group your-resource-group \
   --database-name CloudHealthOffice \
   --query "[].{Name:name, PartitionKey:resource.partitionKey.paths[0]}" -o table
 ```

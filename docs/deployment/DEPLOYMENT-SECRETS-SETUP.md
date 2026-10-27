@@ -797,7 +797,7 @@ For production PHI workloads, migrate from GitHub Secrets to Azure Key Vault for
 az deployment group create \
   --resource-group "payer-attachments-prod-rg" \
   --template-file infra/modules/keyvault.bicep \
-  --parameters keyVaultName="cloud-health-office-prod-kv" \
+  --parameters keyVaultName="your-key-vault" \
                 location="eastus" \
                 skuName="premium" \
                 enableRbacAuthorization=true \
@@ -811,7 +811,7 @@ az deployment group create \
 
 ```bash
 # Set variables
-KV_NAME="cloud-health-office-prod-kv"
+KV_NAME="your-key-vault"
 
 # Add SFTP credentials
 az keyvault secret set \
@@ -895,10 +895,10 @@ Update workflow JSON files to reference Key Vault secrets using `@keyvault()` ex
 {
   "type": "Http",
   "inputs": {
-    "uri": "@keyvault('https://cloud-health-office-prod-kv.vault.azure.net/secrets/claims-backend-api-base-url')/api/claims",
+    "uri": "@keyvault('https://your-key-vault.vault.azure.net/secrets/claims-backend-api-base-url')/api/claims",
     "authentication": {
       "type": "ClientCredentials",
-      "secret": "@keyvault('https://cloud-health-office-prod-kv.vault.azure.net/secrets/claims-backend-api-client-secret')"
+      "secret": "@keyvault('https://your-key-vault.vault.azure.net/secrets/claims-backend-api-client-secret')"
     }
   }
 }
@@ -945,7 +945,7 @@ cat > rotate-secrets.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
 
-KV_NAME="cloud-health-office-prod-kv"
+KV_NAME="your-key-vault"
 
 # Rotate SFTP password
 NEW_SFTP_PASSWORD=$(openssl rand -base64 32)

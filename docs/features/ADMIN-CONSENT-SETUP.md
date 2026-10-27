@@ -24,12 +24,12 @@ The app is trying to access a service 'cfada1ac-f251-48ea-9330-39212aa4c862'
    ```
 
 2. **Replace placeholders**:
-   - `{TENANT_ID}`: Your Azure AD tenant ID (e.g., `32177734-051b-4fdc-9568-cc35530191b1`)
+   - `{TENANT_ID}`: Your Azure AD tenant ID (a GUID, for example `00000000-0000-0000-0000-000000000000`)
    - `{API_CLIENT_ID}`: API app client ID (e.g., `cfada1ac-f251-48ea-9330-39212aa4c862`)
 
 3. **Example URL**:
    ```
-   https://login.microsoftonline.com/32177734-051b-4fdc-9568-cc35530191b1/adminconsent?client_id=cfada1ac-f251-48ea-9330-39212aa4c862
+   https://login.microsoftonline.com/{TENANT_ID}/adminconsent?client_id=cfada1ac-f251-48ea-9330-39212aa4c862
    ```
 
 4. **Have an Azure AD admin**:
@@ -135,7 +135,7 @@ Disconnect-MgGraph
 **Run the script**:
 ```powershell
 .\Grant-CloudHealthOfficeAdminConsent.ps1 `
-    -TenantId "32177734-051b-4fdc-9568-cc35530191b1" `
+    -TenantId "{TENANT_ID}" `
     -ApiClientId "cfada1ac-f251-48ea-9330-39212aa4c862" `
     -PortalClientId "YOUR_PORTAL_CLIENT_ID"
 ```
@@ -144,7 +144,7 @@ Disconnect-MgGraph
 
 ```bash
 # Login as admin
-az login --tenant 32177734-051b-4fdc-9568-cc35530191b1
+az login --tenant {TENANT_ID}
 
 # Create service principal for API
 az ad sp create --id cfada1ac-f251-48ea-9330-39212aa4c862

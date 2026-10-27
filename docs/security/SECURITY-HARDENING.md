@@ -161,7 +161,7 @@ Store these secrets in Key Vault:
 ```bash
 # Set variables
 RG_NAME="payer-attachments-prod-rg"
-KV_NAME="hipaa-attachments-prod-kv"
+KV_NAME="your-key-vault"
 
 # Add SFTP credentials
 az keyvault secret set \
@@ -205,12 +205,12 @@ Argo Workflow steps can reference Key Vault secrets via Kubernetes secrets synce
   "type": "Http",
   "inputs": {
     "method": "POST",
-    "uri": "@keyvault('https://hipaa-attachments-prod-kv.vault.azure.net/secrets/claims-backend-api-base-url')/claims/attach",
+    "uri": "@keyvault('https://your-key-vault.vault.azure.net/secrets/claims-backend-api-base-url')/claims/attach",
     "authentication": {
       "type": "ClientCredentials",
       "tenant": "@parameters('$authentication').tenant",
-      "audience": "@keyvault('https://hipaa-attachments-prod-kv.vault.azure.net/secrets/claims-backend-api-client-id')",
-      "secret": "@keyvault('https://hipaa-attachments-prod-kv.vault.azure.net/secrets/claims-backend-api-client-secret')"
+      "audience": "@keyvault('https://your-key-vault.vault.azure.net/secrets/claims-backend-api-client-id')",
+      "secret": "@keyvault('https://your-key-vault.vault.azure.net/secrets/claims-backend-api-client-secret')"
     }
   }
 }
@@ -263,7 +263,7 @@ cat > rotate-secrets.sh <<'EOF'
 set -euo pipefail
 
 RG_NAME="payer-attachments-prod-rg"
-KV_NAME="hipaa-attachments-prod-kv"
+KV_NAME="your-key-vault"
 
 # Rotate SFTP password
 NEW_SFTP_PASSWORD=$(openssl rand -base64 32)

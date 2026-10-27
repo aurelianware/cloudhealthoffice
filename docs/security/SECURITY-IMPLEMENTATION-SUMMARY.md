@@ -346,7 +346,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 az deployment group create \
   --resource-group "payer-attachments-prod-rg" \
   --template-file infra/modules/keyvault.bicep \
-  --parameters keyVaultName="hipaa-attachments-prod-kv" \
+  --parameters keyVaultName="your-key-vault" \
                 location="eastus" \
                 skuName="premium"
 

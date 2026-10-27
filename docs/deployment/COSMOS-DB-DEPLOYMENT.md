@@ -14,7 +14,7 @@ Cloud Health Office now uses **Azure Cosmos DB** for persistent storage of enrol
 ## Infrastructure Status
 
 ### Cosmos DB Account
-- **Name**: `cloudhealthoffice-cosmos`
+- **Name**: `your-cosmos-account`
 - **Region**: West US 2
 - **Consistency Level**: Session
 - **Type**: GlobalDocumentDB
@@ -43,7 +43,7 @@ Cloud Health Office now uses **Azure Cosmos DB** for persistent storage of enrol
 
 **Configuration**:
 ```yaml
-CosmosDb__Endpoint: https://cloudhealthoffice-cosmos.documents.azure.com:443/
+CosmosDb__Endpoint: https://your-cosmos-account.documents.azure.com:443/
 CosmosDb__DatabaseName: CloudHealthOffice
 CosmosDb__MembersContainer: Members
 CosmosDb__CoverageContainer: Coverage
@@ -64,7 +64,7 @@ CosmosDb__CoverageContainer: Coverage
 
 **Configuration**:
 ```yaml
-CosmosDb__Endpoint: https://cloudhealthoffice-cosmos.documents.azure.com:443/
+CosmosDb__Endpoint: https://your-cosmos-account.documents.azure.com:443/
 CosmosDb__DatabaseName: CloudHealthOffice
 CosmosDb__ContainerName: Claims
 ```
@@ -127,7 +127,7 @@ The Cosmos DB credentials are stored in Kubernetes secret `database-secret` in t
 
 ```bash
 kubectl create secret generic database-secret \
-  --from-literal=endpoint='https://cloudhealthoffice-cosmos.documents.azure.com:443/' \
+  --from-literal=endpoint='https://your-cosmos-account.documents.azure.com:443/' \
   --from-literal=key='<primary-key>' \
   -n cloudhealthoffice
 ```

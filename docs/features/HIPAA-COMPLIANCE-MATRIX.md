@@ -97,14 +97,14 @@ az webapp identity show \
    
    # Access Key Vault to retrieve credentials
    az keyvault secret show \
-     --vault-name "cloud-health-office-prod-kv" \
+     --vault-name "your-key-vault" \
      --name "emergency-access-token"
    ```
 
 2. **Recover deleted resources:**
    ```bash
    # Recover deleted Key Vault
-   az keyvault recover --name "cloud-health-office-prod-kv"
+   az keyvault recover --name "your-key-vault"
    
    # Recover deleted blob
    az storage blob undelete \
@@ -641,7 +641,7 @@ az network private-endpoint list \
 # -------------------------------------   ------------------   -----------
 # hipaa-storage-prod-blob-pe             Succeeded            10.0.2.4
 # cloud-health-office-prod-svc-pe          Succeeded            10.0.2.5
-# cloud-health-office-prod-kv-pe           Succeeded            10.0.2.6
+# your-key-vault-pe           Succeeded            10.0.2.6
 ```
 
 **Compliance Evidence:**

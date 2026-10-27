@@ -59,7 +59,7 @@ ISecretProvider  ──►  IConfiguration overlay
 ```bash
 ./scripts/setup-azure-keyvault.sh \
   --resource-group rg-cloudhealthoffice-prod \
-  --vault-name cho-app-kv \
+  --vault-name your-key-vault \
   --aks-cluster cho-aks \
   --location eastus \
   --log-analytics cho-logs
@@ -76,21 +76,21 @@ cp scripts/secrets-manifest.example.env scripts/secrets-manifest.env
 # ⚠  Edit scripts/secrets-manifest.env with real values — NEVER commit this file
 
 ./scripts/populate-keyvault-secrets.sh \
-  --vault-name cho-app-kv \
+  --vault-name your-key-vault \
   --file scripts/secrets-manifest.env
 ```
 
 ### Step 3: Validate Access
 
 ```bash
-./scripts/validate-keyvault-access.sh --vault-name cho-app-kv --verbose
+./scripts/validate-keyvault-access.sh --vault-name your-key-vault --verbose
 ```
 
 ### Step 4: Enable in GitHub Actions
 
 ```bash
 # Set the variable that activates Key Vault fetching in the workflow
-gh variable set KEY_VAULT_NAME -b 'cho-app-kv'
+gh variable set KEY_VAULT_NAME -b 'your-key-vault'
 
 # These should already be set for OIDC login:
 # gh secret set AZURE_CLIENT_ID -b '...'
@@ -160,7 +160,7 @@ Run for **each service** in the table below:
 ```bash
 SERVICE_NAME="claims-service"   # ← change per service
 RESOURCE_GROUP="rg-cloudhealthoffice-prod"
-KEY_VAULT_NAME="cho-app-kv"
+KEY_VAULT_NAME="your-key-vault"
 NAMESPACE="cloudhealthoffice"
 
 # 1. Create managed identity
@@ -227,7 +227,7 @@ EOF
 Edit `infrastructure/k8s/secret-provider-class.yaml` to replace placeholders:
 
 ```bash
-KEY_VAULT_NAME="cho-app-kv"
+KEY_VAULT_NAME="your-key-vault"
 TENANT_ID="<your-azure-ad-tenant-id>"
 CLIENT_ID="<workload-identity-client-id>"
 
@@ -257,7 +257,7 @@ spec:
         - name: SecretProvider__Provider
           value: "AzureKeyVault"
         - name: SecretProvider__AzureKeyVaultUri
-          value: "https://cho-app-kv.vault.azure.net/"
+          value: "https://your-key-vault.vault.azure.net/"
   volumes:
     - name: secrets-store
       csi:
@@ -342,10 +342,10 @@ workflow from Key Vault). They do NOT use ISecretProvider.
 
 ```bash
 # Table output (interactive)
-./scripts/rotate-keyvault-secrets.sh --vault-name cho-app-kv --days 14
+./scripts/rotate-keyvault-secrets.sh --vault-name your-key-vault --days 14
 
 # JSON output (for CI/CD alerting)
-./scripts/rotate-keyvault-secrets.sh --vault-name cho-app-kv --days 30 --format json
+./scripts/rotate-keyvault-secrets.sh --vault-name your-key-vault --days 30 --format json
 ```
 
 ### Rotate a secret
@@ -354,7 +354,7 @@ workflow from Key Vault). They do NOT use ISecretProvider.
 # 1. Generate new value externally (Stripe dashboard, Azure portal, etc.)
 # 2. Update in Key Vault
 az keyvault secret set \
-  --vault-name cho-app-kv \
+  --vault-name your-key-vault \
   --name "Stripe--SecretKey" \
   --value "sk_live_new_value_here" \
   --expires "$(date -u -d '+90 days' +%Y-%m-%dT%H:%M:%SZ)"

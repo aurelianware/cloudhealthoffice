@@ -245,7 +245,7 @@ See [DEPLOYMENT-SECRETS-SETUP.md](../../DEPLOYMENT-SECRETS-SETUP.md) for full de
 ```bash
 # 1. Create Key Vault
 az keyvault create \
-  --name prod-cho-kv \
+  --name your-key-vault \
   --resource-group prod-rg \
   --location eastus \
   --enable-rbac-authorization true
@@ -255,17 +255,17 @@ PRINCIPAL_ID=$(az containerapp show --name eligibility-service --resource-group 
 az role assignment create \
   --role "Key Vault Secrets User" \
   --assignee $PRINCIPAL_ID \
-  --scope /subscriptions/<sub-id>/resourceGroups/prod-rg/providers/Microsoft.KeyVault/vaults/prod-cho-kv
+  --scope /subscriptions/<sub-id>/resourceGroups/prod-rg/providers/Microsoft.KeyVault/vaults/your-key-vault
 
 # 3. Store secrets
-az keyvault secret set --vault-name prod-cho-kv --name cosmos-endpoint --value "https://prod-cosmos.documents.azure.com:443/"
-az keyvault secret set --vault-name prod-cho-kv --name backend-api-token --value "prod-token-xyz"
+az keyvault secret set --vault-name your-key-vault --name cosmos-endpoint --value "https://prod-cosmos.documents.azure.com:443/"
+az keyvault secret set --vault-name your-key-vault --name backend-api-token --value "prod-token-xyz"
 
 # 4. Configure service
 az containerapp update \
   --name eligibility-service \
   --resource-group prod-rg \
-  --set-env-vars KEY_VAULT_URI=https://prod-cho-kv.vault.azure.net/
+  --set-env-vars KEY_VAULT_URI=https://your-key-vault.vault.azure.net/
 
 # 5. Service auto-loads secrets on next restart
 az containerapp restart --name eligibility-service --resource-group prod-rg

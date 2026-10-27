@@ -165,7 +165,7 @@ Create Cosmos DB account and containers for multi-tenant data:
 ```bash
 # Set variables
 RESOURCE_GROUP="cloudhealthoffice-prod"
-COSMOS_ACCOUNT="cloudhealthoffice-cosmos"
+COSMOS_ACCOUNT="your-cosmos-account"
 DATABASE_NAME="CloudHealthOffice"
 LOCATION="eastus"
 
