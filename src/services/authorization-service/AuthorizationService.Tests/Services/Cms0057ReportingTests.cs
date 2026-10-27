@@ -1,3 +1,4 @@
+using AuthorizationService.Services;
 using AuthorizationService.Backends;
 using AuthorizationService.Controllers;
 using AuthorizationService.Models;
@@ -184,8 +185,137 @@ public class Cms0057ReportingTests
     {
         var m = Cms0057Reporting.ComputeMetrics(Array.Empty<Authorization>(), Jan1, Dec31, null);
 
-        m.NotYetTracked.Select(g => g.Metric).Should().BeEquivalentTo(
-            "Approved after appeal", "Extended review timeframe, then approved");
+        m.NotYetTracked.Select(g => g.Metric).Should().BeEquivalentTo("Approved after appeal");
+    }
+
+    private static Authorization Extended(Authorization auth, double extendedDays = 14)
+    {
+        AuthorizationDeadlinePolicy.Initialize(auth);
+        var original = auth.DecisionDueAt!.Value;
+        auth.DecisionExtension = new AuthorizationDecisionExtension
+        {
+            GrantedAt = auth.SubmittedDate.AddDays(1), GrantedBy = "reviewer-1", OriginalDueAt = original,
+            ExtendedDueAt = original.AddDays(extendedDays), Basis = DecisionExtensionBasis.EnrolleeRequested, Reason = "Member asked",
+        };
+        auth.DecisionDueAt = auth.DecisionExtension.ExtendedDueAt;
+        return auth;
+    }
+
+    [Fact]
+    public void Metrics_JudgeAnExtendedRequestAgainstItsExtendedDeadline()
+    {
+        var auths = new[]
+        {
+            Extended(Auth("EXT-ON-TIME", AuthorizationStatus.Approved, decidedAfterHours: 240)),
+            Auth("LATE", AuthorizationStatus.Approved, decidedAfterHours: 240),
+            Extended(Auth("EXT-DENIED", AuthorizationStatus.Denied, decidedAfterHours: 200)),
+            Auth("OPEN", AuthorizationStatus.Submitted),
+        };
+
+        var m = Cms0057Reporting.ComputeMetrics(auths, Jan1, Dec31, null);
+
+        m.Standard.DecidedWithinTimeframe.Should().Be(2, "both extended requests were decided inside their extension");
+        m.Standard.Extended.Should().Be(2);
+        m.Standard.ExtendedThenApproved.Should().Be(1);
+        m.ExtendedThenApprovedPercent.Should().Be(25, "CMS's denominator is all requests");
+        Cms0057Reporting.DecidedWithinTimeframe(auths[1]).Should().BeFalse("an unextended request is still late after 7 days");
+
+        var decision = Cms0057Reporting.RecentDecisions(auths, Jan1, 10).Single(d => d.Id == "EXT-ON-TIME");
+        decision.Extended.Should().BeTrue();
+        decision.TimeframeHours.Should().Be(168 + 14 * 24);
+        decision.WithinTimeframe.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Metrics_CountSourcedExtensionEvidence_AsExtended()
+    {
+        var auth = Auth("SOURCED", AuthorizationStatus.Approved, decidedAfterHours: 100);
+        PaReportingEvidence.Initialize(auth, auth.SubmittedDate);
+        auth.ReportingLedger!.Facts.Add(new PaReportingFact
+        {
+            EventId = "ext", Kind = PaReportingFactKind.ReviewExtension, EffectiveAt = auth.SubmittedDate.AddDays(1),
+            SourceSystem = "um-core", EvidenceReference = "ext:1",
+        });
+        Cms0057Reporting.ComputeMetrics(new[] { auth }, Jan1, Dec31, null).Standard.ExtendedThenApproved.Should().Be(1);
+    }
+
+    [Fact]
+    public void Metrics_CountApprovalsAfterAppeal_FromReportingEvidence()
+    {
+        var overturned = Auth("OVERTURNED", AuthorizationStatus.Denied, decidedAfterHours: 24);
+        PaReportingEvidence.Initialize(overturned, overturned.SubmittedDate);
+        overturned.ReportingLedger!.Facts.Add(new PaReportingFact
+        {
+            EventId = "appeal-1", Kind = PaReportingFactKind.AppealDecision, EffectiveAt = overturned.SubmittedDate.AddDays(20),
+            Outcome = AuthorizationStatus.Approved, SourceSystem = "appeals", EvidenceReference = "appeal:1",
+        });
+        var upheld = Auth("UPHELD", AuthorizationStatus.Denied, decidedAfterHours: 24);
+        PaReportingEvidence.Initialize(upheld, upheld.SubmittedDate);
+        upheld.ReportingLedger!.Facts.Add(new PaReportingFact
+        {
+            EventId = "appeal-2", Kind = PaReportingFactKind.AppealDecision, EffectiveAt = upheld.SubmittedDate.AddDays(20),
+            Outcome = AuthorizationStatus.Denied, SourceSystem = "appeals", EvidenceReference = "appeal:2",
+        });
+
+        var m = Cms0057Reporting.ComputeMetrics(new[] { overturned, upheld }, Jan1, Dec31, null);
+        m.Standard.ApprovedAfterAppeal.Should().Be(1);
+        m.Standard.ApprovedAfterAppealPercent.Should().Be(50);
+    }
+
+    private static Authorization MultiLineModified()
+    {
+        var auth = Auth("MOD", AuthorizationStatus.Modified, decidedAfterHours: 30);
+        auth.DenialReasonCode = "NOTMEDNEC"; auth.DenialReason = "Not medically necessary";
+        auth.RequestedServices = new()
+        {
+            new() { LineNumber = 1, ProcedureCode = "97110", ServiceStatus = "A1" },
+            new() { LineNumber = 2, ProcedureCode = "97112", ServiceStatus = "A2", DenialReasonCode = "NOTMEDNEC", DenialReason = "Not medically necessary" },
+            new() { LineNumber = 3, ProcedureCode = "E0601", ServiceStatus = "A3", DenialReasonCode = "BENEFIT_EXCLUDED", DenialReason = "Not a covered benefit" },
+        };
+        return auth;
+    }
+
+    [Fact]
+    public void AdverseReasons_KeepEveryDeniedOrReducedLine_NotOnlyTheFirst()
+    {
+        var reasons = Cms0057Reporting.AdverseReasons(MultiLineModified());
+
+        reasons.Should().BeEquivalentTo(new[]
+        {
+            new Cms0057AdverseReason(2, "A2", "NOTMEDNEC", "Not medically necessary"),
+            new Cms0057AdverseReason(3, "A3", "BENEFIT_EXCLUDED", "Not a covered benefit"),
+        });
+        Cms0057Reporting.RecentDecisions(new[] { MultiLineModified() }, Jan1, 10).Single()
+            .AdverseReasons.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void AdverseReasons_FallBackToTheRequestLevelReason_AndAreEmptyForApprovals()
+    {
+        var denied = Auth("D", AuthorizationStatus.Denied, decidedAfterHours: 2);
+        denied.DenialReasonCode = "PROVIDER_EXCLUDED"; denied.DenialReason = "Provider is excluded";
+        Cms0057Reporting.AdverseReasons(denied).Should().ContainSingle()
+            .Which.Should().Be(new Cms0057AdverseReason(null, "A3", "PROVIDER_EXCLUDED", "Provider is excluded"));
+        Cms0057Reporting.AdverseReasons(Auth("A", AuthorizationStatus.Approved, decidedAfterHours: 2)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Insights_DenialReasons_IncludeReductionsAndEveryLineCode_AndTheDrillDownAgrees()
+    {
+        var denied = Auth("D", AuthorizationStatus.Denied, decidedAfterHours: 2);
+        denied.DenialReasonCode = "NOTMEDNEC"; denied.DenialReason = "Not medically necessary";
+        var activity = new[] { MultiLineModified(), denied };
+
+        var insights = AuthorizationInsightSets.Build(activity, Array.Empty<Authorization>(), Jan1, Dec31, null, Dec31);
+
+        insights.DenialReasons.Select(r => (r.Code, r.Count)).Should().BeEquivalentTo(new[]
+        {
+            ("NOTMEDNEC", 2), ("BENEFIT_EXCLUDED", 1),
+        });
+        foreach (var reason in insights.DenialReasons)
+            AuthorizationInsightSets.List(new AuthorizationInsightCriteria { DenialReasonCode = reason.Code },
+                    activity, Array.Empty<Authorization>(), Jan1, Dec31, null, 100)
+                .Should().HaveCount(reason.Count, $"the {reason.Code} figure and its drill-down use one predicate");
     }
 
     [Fact]

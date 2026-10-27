@@ -188,8 +188,10 @@ public class SecurityConsentMetricsTests
         metrics.Expedited.Requests.Should().Be(2);
         metrics.Expedited.MedianDecisionHours.Should().Be(60);
         metrics.Expedited.DecidedWithinTimeframe.Should().Be(1);
-        metrics.NotYetTracked.Should().HaveCount(2,
-            "approved-after-appeal and extended-then-approved remain gaps; this is partial capability");
+        metrics.ExtendedThenApprovedPercent.Should().Be(0, "no request in this cohort was extended");
+        metrics.NotYetTracked.Should().ContainSingle(
+            "approved-after-appeal still depends on appeal outcomes being linked as reporting evidence; this is partial capability")
+            .Which.Metric.Should().Be("Approved after appeal");
     }
 
     // ── SEC-01 read/write scope separation ──────────────────────────────────────

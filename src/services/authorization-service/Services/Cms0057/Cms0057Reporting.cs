@@ -14,6 +14,8 @@ namespace AuthorizationService.Services.Cms0057;
 /// everything else is a standard request with 7 calendar days (168 hours).
 /// Elapsed time is measured from submission to decision, as the rule's
 /// public-reporting metric defines it (not the RFAI-resumed SLA clock).
+/// "Within timeframe" is judged against the request's own deadline, so a
+/// lawfully extended request decided inside its extension is not counted late.
 /// </summary>
 public static class Cms0057Reporting
 {
@@ -39,6 +41,50 @@ public static class Cms0057Reporting
 
     public static double TimeframeHours(Authorization auth) =>
         IsExpedited(auth) ? ExpeditedTimeframeHours : StandardTimeframeHours;
+
+    /// <summary>Hours from receipt to this request's deadline, including a lawful extension.</summary>
+    public static double DeadlineHours(Authorization auth) =>
+        (AuthorizationDeadlinePolicy.Deadline(auth) - AuthorizationDeadlinePolicy.Receipt(auth)).TotalHours;
+
+    /// <summary>True when the decision timeframe was extended, natively or by sourced evidence.</summary>
+    public static bool WasExtended(Authorization auth) =>
+        auth.DecisionExtension is not null
+        || auth.ReportingLedger?.Facts.Any(f => f.Kind == PaReportingFactKind.ReviewExtension) == true;
+
+    /// <summary>
+    /// True when the request's latest recorded decision is an approving PA appeal
+    /// decision (reporting-ledger evidence; appeals not recorded there are not seen).
+    /// </summary>
+    public static bool ApprovedAfterAppeal(Authorization auth)
+    {
+        var latest = (auth.ReportingLedger?.Facts ?? new())
+            .Where(f => f.Kind is PaReportingFactKind.Determination or PaReportingFactKind.AppealDecision)
+            .OrderBy(f => f.EffectiveAt).ThenBy(f => f.Kind).LastOrDefault();
+        return latest is { Kind: PaReportingFactKind.AppealDecision, Outcome: { } outcome } && IsApproved(outcome);
+    }
+
+    /// <summary>
+    /// Every specific reason given for an adverse outcome: one per denied or
+    /// reduced service line, or the request-level reason when the denial has no
+    /// line detail. Empty for a request that was not denied or modified.
+    /// </summary>
+    public static IReadOnlyList<Cms0057AdverseReason> AdverseReasons(Authorization auth)
+    {
+        var decision = DecisionStatus(auth);
+        if (decision is not (AuthorizationStatus.Denied or AuthorizationStatus.Modified)) return [];
+        var services = auth.RequestedServices ?? new();
+        var lines = services
+            .Select((s, i) => (Service: s, Number: s.LineNumber ?? i + 1))
+            .Where(l => l.Service.ServiceStatus is "A2" or "A3")
+            .Select(l => new Cms0057AdverseReason(l.Number, l.Service.ServiceStatus!,
+                Blank(l.Service.DenialReasonCode), Blank(l.Service.DenialReason)))
+            .ToList();
+        if (lines.Count > 0) return lines;
+        return [new Cms0057AdverseReason(null, decision == AuthorizationStatus.Denied ? "A3" : "A2",
+            Blank(auth.DenialReasonCode), Blank(auth.DenialReason))];
+    }
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     public static double? DecisionHours(Authorization auth)
     {
@@ -74,9 +120,9 @@ public static class Cms0057Reporting
                 && AuthorizationDeadlinePolicy.Receipt(a) <= to)
             .Where(a => lineOfBusiness is null || a.LineOfBusiness == lineOfBusiness);
 
-    /// <summary>Decided within its request type's timeframe (72h expedited, 168h standard).</summary>
+    /// <summary>Decided by its deadline (72h expedited, 168h standard, or the lawful extension).</summary>
     public static bool DecidedWithinTimeframe(Authorization auth) =>
-        DecisionHours(auth) is { } hours && hours <= TimeframeHours(auth);
+        DecisionHours(auth) is { } hours && hours <= DeadlineHours(auth);
 
     public static Cms0057Metrics ComputeMetrics(
         IEnumerable<Authorization> authorizations, DateTime from, DateTime to, LineOfBusiness? lineOfBusiness)
@@ -95,12 +141,11 @@ public static class Cms0057Reporting
             Expedited = Group(inPeriod.Where(IsExpedited).ToList(), ExpeditedTimeframeHours),
             AutomatedDecisions = decided.Count(IsAutomated),
             DecidedRequests = decided.Count,
+            ExtendedThenApprovedPercent = Percent(inPeriod.Count(a => WasExtended(a) && IsApproved(a)), inPeriod.Count),
             NotYetTracked =
             [
                 new("Approved after appeal",
-                    "This operational view does not consume sourced appeal evidence; use the annual-draft evidence view."),
-                new("Extended review timeframe, then approved",
-                    "This operational view does not consume sourced extension evidence; use the annual-draft evidence view."),
+                    "Counts only PA appeal decisions recorded as reporting evidence; appeals-service outcomes are not linked automatically yet."),
             ],
         };
     }
@@ -109,6 +154,7 @@ public static class Cms0057Reporting
     {
         var decided = requests.Where(a => IsDecided(a)).ToList();
         var hours = decided.Select(DecisionHours).OfType<double>().OrderBy(h => h).ToList();
+        var withinDeadline = decided.Count(DecidedWithinTimeframe);
         return new Cms0057RequestTypeMetrics
         {
             TimeframeHours = timeframeHours,
@@ -123,8 +169,12 @@ public static class Cms0057Reporting
             DeniedPercent = Percent(decided.Count(a => DecisionStatus(a) == AuthorizationStatus.Denied), requests.Count),
             AverageDecisionHours = hours.Count == 0 ? null : Math.Round(hours.Average(), 1),
             MedianDecisionHours = hours.Count == 0 ? null : Math.Round(Median(hours), 1),
-            DecidedWithinTimeframe = hours.Count(h => h <= timeframeHours),
-            DecidedWithinTimeframePercent = Percent(hours.Count(h => h <= timeframeHours), hours.Count),
+            DecidedWithinTimeframe = withinDeadline,
+            DecidedWithinTimeframePercent = Percent(withinDeadline, hours.Count),
+            Extended = requests.Count(WasExtended),
+            ExtendedThenApproved = requests.Count(a => WasExtended(a) && IsApproved(a)),
+            ApprovedAfterAppeal = requests.Count(ApprovedAfterAppeal),
+            ApprovedAfterAppealPercent = Percent(requests.Count(ApprovedAfterAppeal), requests.Count),
         };
     }
 
@@ -140,7 +190,7 @@ public static class Cms0057Reporting
             {
                 var entry = DecisionEntry(a);
                 var hours = DecisionHours(a);
-                var timeframe = TimeframeHours(a);
+                var timeframe = DeadlineHours(a);
                 return new Cms0057Decision
                 {
                     Id = a.Id,
@@ -155,6 +205,7 @@ public static class Cms0057Reporting
                     DecisionHours = hours is null ? null : Math.Round(hours.Value, 1),
                     TimeframeHours = timeframe,
                     WithinTimeframe = hours is not null && hours.Value <= timeframe,
+                    Extended = WasExtended(a),
                     Automated = IsAutomated(a),
                     DecidedBy = IsAutomated(a)
                         ? entry?.Source
@@ -163,6 +214,7 @@ public static class Cms0057Reporting
                         ? a.DenialReason ?? entry?.Reason
                         : entry?.Reason ?? a.ReviewDecision,
                     DenialReasonCode = a.DenialReasonCode,
+                    AdverseReasons = AdverseReasons(a).ToList(),
                 };
             })
             .ToList();
@@ -190,6 +242,8 @@ public sealed class Cms0057Metrics
     public int AutomatedDecisions { get; set; }
     public Cms0057RequestTypeMetrics Standard { get; set; } = new();
     public Cms0057RequestTypeMetrics Expedited { get; set; } = new();
+    /// <summary>Of all requests: timeframe extended, then approved (CMS-0057-F's combined metric).</summary>
+    public double? ExtendedThenApprovedPercent { get; set; }
     /// <summary>Required metrics the data can't support yet, and why.</summary>
     public List<Cms0057MetricGap> NotYetTracked { get; set; } = new();
 }
@@ -210,9 +264,17 @@ public sealed class Cms0057RequestTypeMetrics
     public double? MedianDecisionHours { get; set; }
     public int DecidedWithinTimeframe { get; set; }
     public double? DecidedWithinTimeframePercent { get; set; }
+    /// <summary>Requests whose decision timeframe was extended.</summary>
+    public int Extended { get; set; }
+    public int ExtendedThenApproved { get; set; }
+    public int ApprovedAfterAppeal { get; set; }
+    public double? ApprovedAfterAppealPercent { get; set; }
 }
 
 public sealed record Cms0057MetricGap(string Metric, string Reason);
+
+/// <summary>One specific reason for a denied or reduced request or service line. LineNumber is null for a request-level reason.</summary>
+public sealed record Cms0057AdverseReason(int? LineNumber, string ReviewDecision, string? Code, string? Reason);
 
 public sealed class Cms0057Decision
 {
@@ -232,4 +294,8 @@ public sealed class Cms0057Decision
     public string? DecidedBy { get; set; }
     public string? Reason { get; set; }
     public string? DenialReasonCode { get; set; }
+    /// <summary>The deadline was lawfully extended; <see cref="TimeframeHours"/> is the extended window.</summary>
+    public bool Extended { get; set; }
+    /// <summary>Every denial or reduction reason, per service line, not only the first.</summary>
+    public List<Cms0057AdverseReason> AdverseReasons { get; set; } = new();
 }

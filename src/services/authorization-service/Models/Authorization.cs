@@ -327,6 +327,11 @@ public class Authorization
     /// <summary>Persisted decision target in UTC, independent of document-arrival timestamps.</summary>
     public DateTime? DecisionDueAt { get; set; }
     public string? DecisionDeadlinePolicy { get; set; }
+    /// <summary>
+    /// The one lawful extension of the decision deadline, when taken. Server-owned:
+    /// set only by the decision-extension endpoint, cleared on create.
+    /// </summary>
+    public AuthorizationDecisionExtension? DecisionExtension { get; set; }
 
 
     /// <summary>
@@ -485,7 +490,8 @@ public class RequestedService
     [Range(1, int.MaxValue)]
     public int? LineNumber { get; set; }
 
-    [StringLength(10)]
+    /// <summary>Same width as the header code, so every coded reason fits on the line it applies to.</summary>
+    [StringLength(50)]
     public string? DenialReasonCode { get; set; }
 
     [StringLength(500)]
@@ -706,6 +712,30 @@ public enum AuthorizationStatus
     /// Cancelled (withdrawn by provider/member)
     /// </summary>
     Cancelled = 8
+}
+
+/// <summary>Why a decision timeframe was extended (the CMS-0057-F extension grounds).</summary>
+public enum DecisionExtensionBasis
+{
+    Unspecified = 0,
+    /// <summary>The member asked for more time.</summary>
+    EnrolleeRequested = 1,
+    /// <summary>The requesting provider asked for more time.</summary>
+    ProviderRequested = 2,
+    /// <summary>The plan needs additional information and the delay is in the member's interest.</summary>
+    PlanNeedsAdditionalInformation = 3,
+}
+
+/// <summary>An extension of a request's decision deadline, as granted.</summary>
+public sealed class AuthorizationDecisionExtension
+{
+    public DateTime GrantedAt { get; set; }
+    public string GrantedBy { get; set; } = string.Empty;
+    public DateTime OriginalDueAt { get; set; }
+    public DateTime ExtendedDueAt { get; set; }
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public DecisionExtensionBasis Basis { get; set; }
+    public string Reason { get; set; } = string.Empty;
 }
 
 /// <summary>

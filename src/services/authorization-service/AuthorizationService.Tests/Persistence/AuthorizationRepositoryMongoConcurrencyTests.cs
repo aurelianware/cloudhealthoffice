@@ -299,6 +299,41 @@ public sealed class AuthorizationRepositoryMongoConcurrencyTests(MongoRunnerFixt
     }
 
     [Fact]
+    public async Task ADecisionExtension_MovesTheDeadline_RecordsEvidence_AndSurvivesLaterWrites()
+    {
+        var seeded = await SeedAsync("X1");
+        await _db.GetCollection<BsonDocument>(Collection).UpdateOneAsync(new BsonDocument("_id", "X1"),
+            new BsonDocument("$set", new BsonDocument { { "LineOfBusiness", (int)LineOfBusiness.Medicaid } }));
+        (await Repo().RaiseSlaEscalationAsync(Tenant, "X1", SlaEscalationLevel.Critical, seeded.SubmittedDate.AddDays(6))).Should().BeTrue();
+        var read = await ReadAsync("X1");
+        var stale = await ReadAsync("X1");
+        var extension = AuthorizationDeadlinePolicy.Extend(read, new ExtendDecisionDeadline
+        {
+            Basis = DecisionExtensionBasis.ProviderRequested, Reason = "Provider is sending imaging",
+        }, "reviewer-1", read.SubmittedDate.AddDays(6));
+        var fact = AuthorizationService.Services.Cms0057.PaReportingEvidence.NativeExtension(read, extension, read.Revision + 1);
+
+        await Repo().ExtendDecisionDeadlineAsync(read, extension, fact);
+
+        var stored = await ReadAsync("X1");
+        stored.DecisionDueAt.Should().Be(seeded.SubmittedDate.AddDays(21));
+        stored.DecisionExtension!.Basis.Should().Be(DecisionExtensionBasis.ProviderRequested);
+        stored.SlaEscalation.Should().Be(SlaEscalationLevel.None, "the watchdog re-raises against the new deadline");
+        stored.ReportingLedger!.Facts.Should().ContainSingle(f => f.Kind == PaReportingFactKind.ReviewExtension);
+        stored.Revision.Should().Be(read.Revision + 1);
+
+        var again = () => Repo().ExtendDecisionDeadlineAsync(stale, extension, fact);
+        await again.Should().ThrowAsync<AuthorizationConcurrencyException>("a second extension from a stale read is refused");
+
+        stored.ReviewerName = "reviewer-1";
+        await Repo().UpdateAsync(stored);
+        var after = await ReadAsync("X1");
+        after.DecisionExtension.Should().NotBeNull();
+        after.DecisionDueAt.Should().Be(seeded.SubmittedDate.AddDays(21));
+        after.ReportingLedger!.Facts.Should().ContainSingle(f => f.Kind == PaReportingFactKind.ReviewExtension);
+    }
+
+    [Fact]
     public async Task AnAuthorizationWrittenBeforeTheRevisionExisted_UpdatesOnce_ThenCarriesARevision()
     {
         await SeedAsync("A1");

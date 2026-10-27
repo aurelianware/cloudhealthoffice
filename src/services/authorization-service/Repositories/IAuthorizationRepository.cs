@@ -37,6 +37,16 @@ public interface IAuthorizationRepository
 
     Task<PaReportingFact?> RecordReportingFactAsync(string id, RecordPaReportingFact command, string actor,
         CancellationToken ct = default) => throw new NotSupportedException("PA reporting evidence requires the native store.");
+    /// <summary>
+    /// Moves an open request's decision deadline to the granted extension, ONLY IF
+    /// it still has the revision it was read at, is still open and was never
+    /// extended. Appends <paramref name="fact"/> to the reporting ledger and resets
+    /// the SLA escalation (the watchdog re-raises it against the new deadline).
+    /// Throws <see cref="Exceptions.AuthorizationConcurrencyException"/> when the record moved on.
+    /// </summary>
+    Task ExtendDecisionDeadlineAsync(Authorization authorization, AuthorizationDecisionExtension extension,
+        PaReportingFact? fact, CancellationToken ct = default)
+        => throw new NotSupportedException("Decision-timeframe extensions require the native store.");
     IAsyncEnumerable<Authorization> StreamReportingCohortAsync(DateTime from, DateTime toExclusive,
         LineOfBusiness lineOfBusiness, CancellationToken ct = default)
         => throw new NotSupportedException("Annual PA evidence requires the native store.");
