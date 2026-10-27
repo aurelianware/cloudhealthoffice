@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Load CMS NCCI PTP and MUE Edits Each Quarter | Cloud Health Office Docs</title>
+  <meta name="description" content="How to load the CMS NCCI procedure-to-procedure (PTP) and medically unlikely edit (MUE) quarterly files into Cloud Health Office, and how the loader versions, reconciles and audits each load." />
+  <meta name="keywords" content="NCCI edits, CMS NCCI quarterly update, PTP edits, MUE table, medically unlikely edits, claims editing, 837P 837I edits" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/ncci-cms-quarterly-load" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/ncci-cms-quarterly-load" />
+  <meta property="og:title" content="NCCI Quarterly Load — Cloud Health Office" />
+  <meta property="og:description" content="Load the public CMS PTP and MUE tables each quarter, with a ledger that makes every load repeatable." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Load CMS NCCI PTP and MUE Edits Each Quarter",
+  "description": "How to load the CMS NCCI procedure-to-procedure (PTP) and medically unlikely edit (MUE) quarterly files into Cloud Health Office, and how the loader versions, reconciles and audits each load.",
+  "url": "https://cloudhealthoffice.com/docs/ncci-cms-quarterly-load",
+  "author": {
+    "@type": "Organization",
+    "name": "Aurelianware, Inc."
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Cloud Health Office",
+    "url": "https://cloudhealthoffice.com"
+  },
+  "datePublished": "2026-10-27",
+  "proficiencyLevel": "Advanced",
+  "about": [
+    "NCCI procedure-to-procedure edits",
+    "Medically unlikely edits",
+    "Claims editing",
+    "CMS quarterly NCCI files"
+  ],
+  "breadcrumb": {
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://cloudhealthoffice.com"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Docs",
+        "item": "https://cloudhealthoffice.com/docs"
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": "NCCI Quarterly Load",
+        "item": "https://cloudhealthoffice.com/docs/ncci-cms-quarterly-load"
+      }
+    ]
+  }
+}
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs" aria-current="page">Documentation</a>
+<a href="/blueprints/google-cloud">Reference architecture</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="/api-explorer">API explorer</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li>
+              <li><a href="/docs/accumulator-engine">Accumulator Engine</a></li>
+              <li><a href="/docs/premium-rating-engine">Premium Rating Engine</a></li>
+              <li><a href="/docs/ncci-cms-quarterly-load" class="active">NCCI Quarterly Load</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/claims-api">Claims API</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+              <li><a href="/docs/configure-tenant-security">Tenant Security</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+              <li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">State Compliance</div>
+            <ul>
+              <li><a href="/docs/texas-compliance">Texas (STAR / STAR+PLUS)</a></li>
+              <li><a href="/docs/florida-compliance">Florida AHCA (SMMC 3.0)</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#where-to-get-the-files">Where to get the files</a></li>
+              <li><a href="#file-layouts">File layouts the parser reads</a></li>
+              <li><a href="#triggering-a-load">Triggering a load</a></li>
+              <li><a href="#what-the-loader-does">What the loader does</a></li>
+              <li><a href="#operational-notes">Operational notes</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="/api-explorer?spec=patient-access" target="_blank" rel="noopener noreferrer">API explorer</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">NCCI Quarterly Load</span>
+        </div>
+
+        <h1>Loading CMS NCCI Edits Each Quarter</h1>
+        <p class="docs-subtitle">Load the public CMS PTP and MUE tables, quarter by quarter, with a ledger that makes every load repeatable.</p>
+
+        <p>The NCCI engine runs first in claims adjudication: procedure-to-procedure (PTP) bundling edits and medically unlikely edits (MUE) are checked before any line is priced. Cloud Health Office ships with a small built-in seed (Q1 2025, about 30 PTP pairs and 25 MUEs) for development. For real adjudication, load the CMS quarterly tables every quarter. This page covers where to get them, how to load them, and what the loader does with them.</p>
+
+        <h2 id="where-to-get-the-files">Where to get the files</h2>
+        <p>CMS publishes the Medicare NCCI tables free of charge each quarter (January, April, July and October) on its <a href="https://www.cms.gov/medicare/coding-billing/national-correct-coding-initiative-ncci-edits" target="_blank" rel="noopener noreferrer">National Correct Coding Initiative edits page</a>. Downloading requires accepting the AMA CPT license on the CMS page; the files contain CPT codes and are licensed for that use only.</p>
+        <table>
+          <thead><tr><th>Table</th><th>Files in the download</th><th><code>kind</code></th><th><code>setting</code></th></tr></thead>
+          <tbody>
+            <tr><td>PTP edits, practitioner</td><td>Four tab-delimited <code>.txt</code> parts (<code>&hellip;-f1.txt</code> to <code>&hellip;-f4.txt</code>), plus <code>.xlsx</code></td><td><code>ptp</code></td><td><code>practitioner</code></td></tr>
+            <tr><td>PTP edits, outpatient hospital</td><td>Tab-delimited <code>.txt</code> part(s), plus <code>.xlsx</code></td><td><code>ptp</code></td><td><code>outpatient-hospital</code></td></tr>
+            <tr><td>MUE, practitioner services</td><td><code>.csv</code> (and <code>.xlsx</code>)</td><td><code>mue</code></td><td><code>practitioner</code></td></tr>
+            <tr><td>MUE, outpatient hospital services</td><td><code>.csv</code> (and <code>.xlsx</code>)</td><td><code>mue</code></td><td><code>outpatient-hospital</code></td></tr>
+          </tbody>
+        </table>
+        <p>The DME supplier MUE table and the Medicaid NCCI tables are not loaded by this loader. Unzip the download and load the <code>.txt</code> (PTP) or <code>.csv</code> (MUE) files. If you only have the <code>.xlsx</code>, save each sheet as CSV; the parser accepts comma-separated input with the same columns.</p>
+
+        <h2 id="file-layouts">File layouts the parser reads</h2>
+        <p><strong>PTP</strong> files have seven columns per data row: column 1 code, column 2 code, the pre-1996 indicator, effective date (<code>YYYYMMDD</code>), deletion date (<code>YYYYMMDD</code>, or <code>*</code> when still active), modifier indicator (<code>0</code> not allowed, <code>1</code> allowed, <code>9</code> not applicable) and the PTP edit rationale.</p>
+        <p><strong>MUE</strong> files carry the HCPCS/CPT code, the MUE value, the MUE adjudication indicator (<code>1</code> line edit, <code>2</code> date-of-service edit: policy, <code>3</code> date-of-service edit: clinical) and the rationale. When the header row is present, columns are found by name.</p>
+        <p>Both files open with a copyright and disclaimer preamble, which is skipped. After the first data row, any line that does not parse (bad code, date, modifier indicator, MUE value or adjudication indicator) is counted and reported back with its line number, and is not loaded.</p>
+
+        <h2 id="triggering-a-load">Triggering a load</h2>
+        <p>The benefit plan service hosts the load endpoint next to the other NCCI endpoints. It requires the service&rsquo;s settings-management permission and always loads into the tenant in the caller&rsquo;s token.</p>
+        <pre><code>curl -X POST "$BENEFIT_PLAN_URL/api/v1/ncci/cms-load" \
+          -H "Authorization: Bearer $TOKEN" \
+          -F file=@ccipra-v324r0-f1.txt \
+          -F quarter=2026Q4 \
+          -F kind=ptp \
+          -F setting=practitioner \
+          -F part=f1</code></pre>
+        <p>Repeat for parts <code>f2</code> to <code>f4</code>, the outpatient hospital PTP file and the two MUE files.</p>
+        <table>
+          <thead><tr><th>Field</th><th>Values</th></tr></thead>
+          <tbody>
+            <tr><td><code>file</code></td><td>The CMS file, up to 95 MB per upload</td></tr>
+            <tr><td><code>quarter</code></td><td><code>YYYYQn</code>, for example <code>2026Q4</code></td></tr>
+            <tr><td><code>kind</code></td><td><code>ptp</code> or <code>mue</code></td></tr>
+            <tr><td><code>setting</code></td><td><code>practitioner</code> or <code>outpatient-hospital</code> (<code>oph</code> is also accepted)</td></tr>
+            <tr><td><code>part</code></td><td>Optional; use it for a table CMS splits over several files</td></tr>
+            <tr><td><code>force</code></td><td>Optional; <code>true</code> reloads a file that was already loaded</td></tr>
+          </tbody>
+        </table>
+        <p>The response reports rows loaded, rows rejected with the first rejections, MUE codes the new table dropped, the file&rsquo;s SHA-256 and whether it was already loaded.</p>
+
+        <h2 id="what-the-loader-does">What the loader does</h2>
+        <ul>
+          <li><strong>Streaming.</strong> The upload is written once to a temporary file while its SHA-256 is computed, then parsed from disk and written in batches, so a full table is never held in memory. A full practitioner PTP table holds over a million rows.</li>
+          <li><strong>Stable ids.</strong> PTP rows are keyed by tenant, setting, both codes and the CMS effective date; MUE rows by tenant, setting, code and quarter start. Loading the same file again replaces rows rather than duplicating them.</li>
+          <li><strong>Load ledger.</strong> Each load is recorded per tenant, quarter, kind, setting and part with the file&rsquo;s SHA-256 and row counts, written last. An identical re-run is a no-op, a corrected CMS re-publication (a different hash) reloads, and a load that failed part-way is retried in full.</li>
+          <li><strong>PTP snapshots.</strong> Each PTP file is a full snapshot of its setting and part. Rows keep the CMS effective and deletion dates, and the deletion date is exclusive. Rows a new file omits are deleted when they came from the same quarter (a correction), or end at the quarter start when they came from an earlier quarter. Because PTP files carry full history, loading a quarter older than one already loaded for that setting is refused.</li>
+          <li><strong>MUE snapshots.</strong> MUE rows carry no dates in the CMS file, so they take the quarter&rsquo;s first day and end at the next loaded quarter&rsquo;s start. Loading Q4 after Q1 never leaves a Q4-only code active in Q1. A load with <code>part</code> is not treated as a full table and reconciles nothing.</li>
+          <li><strong>Settings.</strong> Practitioner rows apply to 837P claims and outpatient hospital rows to 837I claims. Seed rows apply to a setting only until a CMS table of that kind is loaded for it; after that the CMS table is authoritative. Claim types CMS publishes no table for, such as 837D, see seed rows only.</li>
+          <li><strong>Version and caches.</strong> <code>GET /api/v1/ncci/version</code> reports the newest quarter loaded with its pair and MUE counts. Every load stamps the version, and edit lookups in every service replica re-read it at most every 60 seconds, so all claims processing uses the new tables within a minute of a load.</li>
+        </ul>
+
+        <h2 id="operational-notes">Operational notes</h2>
+        <ul>
+          <li>Load all of a quarter&rsquo;s files before its effective date. Claims are edited against whatever is loaded when they adjudicate.</li>
+          <li>Uploads are limited to 95 MB. CMS ships the large practitioner PTP table as several part files; load each with its <code>part</code>.</li>
+          <li>A claim that fails an NCCI edit is pended for review; examiners work it as described in the <a href="/docs/review-resolve-pended-claim">pended claim guide</a>.</li>
+        </ul>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/premium-rating-engine">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Premium Rating Engine</div>
+          </a>
+          <a href="/docs/claims-api" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">Claims API</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>

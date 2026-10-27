@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Accumulator Engine: Deductibles and OOP Tracking | Cloud Health Office Docs</title>
+  <meta name="description" content="How Cloud Health Office tracks deductibles, out-of-pocket maximums and visit, day and dollar limits per member and family, derived from finalized claims with an audited Redis cache." />
+  <meta name="keywords" content="health plan accumulators, deductible tracking, out-of-pocket maximum, family deductible, benefit limits, claims adjudication accumulators, QNXT AccumBalance" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/accumulator-engine" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/accumulator-engine" />
+  <meta property="og:title" content="Accumulator Engine — Cloud Health Office" />
+  <meta property="og:description" content="Deductibles, out-of-pocket maximums and benefit limits derived from finalized claims, with atomic updates and a durable audit trail." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Accumulator Engine: Deductibles and OOP Tracking",
+  "description": "How Cloud Health Office tracks deductibles, out-of-pocket maximums and visit, day and dollar limits per member and family, derived from finalized claims with an audited Redis cache.",
+  "url": "https://cloudhealthoffice.com/docs/accumulator-engine",
+  "author": {
+    "@type": "Organization",
+    "name": "Aurelianware, Inc."
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Cloud Health Office",
+    "url": "https://cloudhealthoffice.com"
+  },
+  "datePublished": "2026-10-27",
+  "proficiencyLevel": "Advanced",
+  "about": [
+    "Benefit accumulators",
+    "Deductible and out-of-pocket tracking",
+    "Claims adjudication",
+    "QNXT AccumBalance equivalence"
+  ],
+  "breadcrumb": {
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://cloudhealthoffice.com"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Docs",
+        "item": "https://cloudhealthoffice.com/docs"
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": "Accumulator Engine",
+        "item": "https://cloudhealthoffice.com/docs/accumulator-engine"
+      }
+    ]
+  }
+}
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs" aria-current="page">Documentation</a>
+<a href="/blueprints/google-cloud">Reference architecture</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="/api-explorer">API explorer</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li>
+              <li><a href="/docs/accumulator-engine" class="active">Accumulator Engine</a></li>
+              <li><a href="/docs/premium-rating-engine">Premium Rating Engine</a></li>
+              <li><a href="/docs/ncci-cms-quarterly-load">NCCI Quarterly Load</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/claims-api">Claims API</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+              <li><a href="/docs/configure-tenant-security">Tenant Security</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+              <li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">State Compliance</div>
+            <ul>
+              <li><a href="/docs/texas-compliance">Texas (STAR / STAR+PLUS)</a></li>
+              <li><a href="/docs/florida-compliance">Florida AHCA (SMMC 3.0)</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#design">Design: balances are derived, not stored</a></li>
+              <li><a href="#accumulator-types">Accumulator types and network tiers</a></li>
+              <li><a href="#lifecycle">Claim lifecycle</a></li>
+              <li><a href="#audit-trail">Audit trail</a></li>
+              <li><a href="#qnxt-equivalence">QNXT equivalence</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="/api-explorer?spec=patient-access" target="_blank" rel="noopener noreferrer">API explorer</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Accumulator Engine</span>
+        </div>
+
+        <h1>Accumulator Engine</h1>
+        <p class="docs-subtitle">Deductibles, out-of-pocket maximums and benefit limits, derived from finalized claims.</p>
+
+        <p>The accumulator engine tracks what each member and family has used of a benefit plan year: deductibles, out-of-pocket maximums, visit counts, day counts and dollar limits. The benefit calculation step of claims adjudication reads these balances to compute cost sharing, and writes them back once a claim is adjudicated.</p>
+
+        <h2 id="design">Design: balances are derived, not stored</h2>
+        <p>The source of truth for an accumulator is the finalized claim history, not a balance table. Cloud Health Office calculates balances from approved, partially paid and paid claim lines and keeps the result in a Redis hot cache so adjudication stays inside its latency budget. This mirrors how QNXT derives AccumBalance from claim lines, without an update-and-retry loop on a balance row.</p>
+        <ul>
+          <li><strong>No double counting under concurrency.</strong> Writes are atomic on the cache server, so two claims for the same member adjudicating at once cannot both read a stale balance.</li>
+          <li><strong>Exact money.</strong> Amounts are stored as integer cents. A limit reached exactly reads as met, and an amount with precision below one cent is rejected rather than rounded, because it means pricing upstream is wrong.</li>
+          <li><strong>Self-healing cache.</strong> If a balance is missing or the cache is flushed, the next read rebuilds it from claim history. No data is lost.</li>
+          <li><strong>Plan-year reset without a batch job.</strong> Cached balances expire 14 months after they are written, which covers the plan year plus a run-out period for late claims.</li>
+        </ul>
+
+        <h2 id="accumulator-types">Accumulator types and network tiers</h2>
+        <p>Balances are kept for the individual member and for the family (subscriber plus all dependents), per plan and plan year, and split by network tier.</p>
+        <table>
+          <thead><tr><th>Type</th><th>What it tracks</th></tr></thead>
+          <tbody>
+            <tr><td>Individual deductible</td><td>Per-member deductible applied year to date</td></tr>
+            <tr><td>Individual out-of-pocket maximum</td><td>Per-member out-of-pocket spend year to date</td></tr>
+            <tr><td>Family deductible</td><td>Aggregate deductible across all enrolled family members</td></tr>
+            <tr><td>Family out-of-pocket maximum</td><td>Aggregate family out-of-pocket spend</td></tr>
+            <tr><td>Visit count</td><td>Visits counted per service type code (for example, service type 98 for office visits)</td></tr>
+            <tr><td>Day count</td><td>Inpatient or facility days, such as skilled nursing facility days</td></tr>
+            <tr><td>Dollar limit</td><td>Dollar-based benefit maximums, such as an annual chiropractic limit</td></tr>
+          </tbody>
+        </table>
+        <p>Network tiers are in-network, out-of-network, tier 1 and tier 2.</p>
+
+        <h2 id="lifecycle">Claim lifecycle</h2>
+        <h3>Adjudication</h3>
+        <p>After cost sharing is calculated, the adjudication workflow applies the claim&rsquo;s accumulator updates for the individual and family scopes in one atomic operation per scope. The claims pipeline journals each claim&rsquo;s contribution, so a re-commit of the same claim or a replacement claim can undo exactly what was applied before.</p>
+        <h3>Cache miss and rebuild</h3>
+        <p>When a balance is not in the cache, the engine asks the claims service for accumulator totals for that member or family, plan and plan year, and writes the answer back. If the claims service cannot answer, nothing is cached and the next read tries again. A rebuild that races a concurrent claim is retried, so a stale answer is never cached.</p>
+        <h3>Voids and reversals</h3>
+        <p>When a claim is voided or reversed, both the individual and family balances are invalidated. The next read rebuilds them from claim history, which no longer includes the reversed claim. This is correct whether or not the balance was cached.</p>
+
+        <h2 id="audit-trail">Audit trail</h2>
+        <p>When the audit writer is enabled, every accumulator change is recorded durably <em>before</em> the operation returns. If the audit write fails, the operation fails and the caller retries it; a lost audit row is never silently accepted. Audited operations are safe to repeat, and the writer is idempotent per claim. The audit trail backs member-facing displays (&ldquo;you&rsquo;ve met $750 of your $1,500 deductible&rdquo;), compliance reporting and investigation, and it is not touched when the cache is rebuilt.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Current limit</div>
+          <p>The engine keeps plan-year balances. Point-in-time historical accumulation (what a balance was on a past date) is not implemented. See the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/CAPABILITY_RECONCILIATION.md" target="_blank" rel="noopener noreferrer">capability ledger</a> for current status.</p>
+        </div>
+
+        <h2 id="qnxt-equivalence">QNXT equivalence</h2>
+        <p>For configuration teams moving from QNXT, the concepts map as follows.</p>
+        <table>
+          <thead><tr><th>Cloud Health Office</th><th>QNXT equivalent</th></tr></thead>
+          <tbody>
+            <tr><td>Accumulator audit record</td><td>AccumBalance table</td></tr>
+            <tr><td>Individual deductible</td><td>ACCUM_TYPE = 'DED', SCOPE = 'IND'</td></tr>
+            <tr><td>Individual out-of-pocket maximum</td><td>ACCUM_TYPE = 'OOP', SCOPE = 'IND'</td></tr>
+            <tr><td>Family deductible</td><td>ACCUM_TYPE = 'DED', SCOPE = 'FAM'</td></tr>
+            <tr><td>Visit count</td><td>ACCUM_TYPE = 'VISIT' plus service type code</td></tr>
+            <tr><td>Rebuild from claim history</td><td>Runtime AccumBalance calculation from CLAIM_LINE</td></tr>
+            <tr><td>Plan-year expiry</td><td>Annual AccumBalance reset batch job</td></tr>
+          </tbody>
+        </table>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/fee-schedule-engine">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Fee Schedule Engine</div>
+          </a>
+          <a href="/docs/premium-rating-engine" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">Premium Rating Engine</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
