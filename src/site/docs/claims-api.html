@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claims API: Submission, Adjudication and 835 Remittance | Cloud Health Office Docs</title>
+  <meta name="description" content="Orientation to the Cloud Health Office claims API: claim submission and 837 intake, adjudication detail, the pended-claim work queue, adjustments, payment runs and 835 remittance." />
+  <meta name="keywords" content="claims API, claims adjudication API, 837 claim submission API, pended claims work queue, 835 remittance API, payment run, health plan claims platform" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/claims-api" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/claims-api" />
+  <meta property="og:title" content="Claims API — Cloud Health Office" />
+  <meta property="og:description" content="Submit claims, follow them through adjudication, work pended claims and generate 835 remittance." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Claims API: Submission, Adjudication and 835 Remittance",
+  "description": "Orientation to the Cloud Health Office claims API: claim submission and 837 intake, adjudication detail, the pended-claim work queue, adjustments, payment runs and 835 remittance.",
+  "url": "https://cloudhealthoffice.com/docs/claims-api",
+  "author": {
+    "@type": "Organization",
+    "name": "Aurelianware, Inc."
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Cloud Health Office",
+    "url": "https://cloudhealthoffice.com"
+  },
+  "datePublished": "2026-10-27",
+  "proficiencyLevel": "Advanced",
+  "about": [
+    "Claims API",
+    "Claim submission",
+    "Pended claims work queue",
+    "835 remittance"
+  ],
+  "breadcrumb": {
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://cloudhealthoffice.com"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Docs",
+        "item": "https://cloudhealthoffice.com/docs"
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": "Claims API",
+        "item": "https://cloudhealthoffice.com/docs/claims-api"
+      }
+    ]
+  }
+}
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs" aria-current="page">Documentation</a>
+<a href="/blueprints/google-cloud">Reference architecture</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="/api-explorer">API explorer</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li>
+              <li><a href="/docs/accumulator-engine">Accumulator Engine</a></li>
+              <li><a href="/docs/premium-rating-engine">Premium Rating Engine</a></li>
+              <li><a href="/docs/ncci-cms-quarterly-load">NCCI Quarterly Load</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/claims-api" class="active">Claims API</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+              <li><a href="/docs/configure-tenant-security">Tenant Security</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+              <li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">State Compliance</div>
+            <ul>
+              <li><a href="/docs/texas-compliance">Texas (STAR / STAR+PLUS)</a></li>
+              <li><a href="/docs/florida-compliance">Florida AHCA (SMMC 3.0)</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#conventions">Conventions</a></li>
+              <li><a href="#submission">Submission and intake</a></li>
+              <li><a href="#reading-claims">Reading claims and adjudication detail</a></li>
+              <li><a href="#work-queue">Pended claims work queue</a></li>
+              <li><a href="#adjustments-voids">Adjustments and voids</a></li>
+              <li><a href="#payments-remittance">Payment runs and 835 remittance</a></li>
+              <li><a href="#fhir-eob">FHIR ExplanationOfBenefit</a></li>
+              <li><a href="#stability">Stability</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="/api-explorer?spec=patient-access" target="_blank" rel="noopener noreferrer">API explorer</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Claims API</span>
+        </div>
+
+        <h1>Claims API</h1>
+        <p class="docs-subtitle">Submit claims, follow them through adjudication, work pended claims, and generate 835 remittance.</p>
+
+        <p>The claims API is the HTTP surface for the claim lifecycle in Cloud Health Office. It is served by two services: the claims service (submission, search, adjudication outcomes, the pended-claim work queue, adjustments and FHIR ExplanationOfBenefit) and the payment service (payment runs, reversal runs and 835 envelopes). This page is an orientation to that surface. Each service also serves its full OpenAPI description through Swagger in development environments.</p>
+
+        <h2 id="conventions">Conventions</h2>
+        <h3>Authentication and tenant isolation</h3>
+        <p>Every endpoint requires a bearer token and is permission-gated. The tenant comes only from a tenant claim inside the validated token: a token without one is rejected with <code>401</code>, and an <code>X-Tenant-ID</code> header is accepted only when it matches the token&rsquo;s tenant. A header naming a different tenant is rejected with <code>403</code>. Every query is filtered by tenant. See <a href="/docs/configure-tenant-security">Tenant Security</a>.</p>
+        <h3>Adjudication outcomes come from the pipeline</h3>
+        <p>No endpoint writes an adjudicated outcome directly onto a claim. Submitting a claim hands it to the adjudication pipeline (NCCI edits, pricing, benefits and accumulators), which sets <code>Approved</code>, <code>Denied</code> or <code>Pended</code>. A pended claim is changed through the work queue, which re-runs the pipeline; payment status comes from remittance; and voids go through the void endpoint. The status endpoint returns <code>422</code> if it is asked to set an outcome status.</p>
+        <h3>Status codes</h3>
+        <table>
+          <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>200</code> / <code>201</code> / <code>204</code></td><td>Successful read, create, or mutation without a body</td></tr>
+            <tr><td><code>202</code></td><td>Accepted for asynchronous processing</td></tr>
+            <tr><td><code>400</code></td><td>Validation failure</td></tr>
+            <tr><td><code>401</code> / <code>403</code></td><td>Missing or invalid token; tenant or permission mismatch</td></tr>
+            <tr><td><code>404</code></td><td>Not found within the caller&rsquo;s tenant</td></tr>
+            <tr><td><code>409</code></td><td>State-transition or idempotency conflict</td></tr>
+            <tr><td><code>422</code></td><td>Well-formed request rejected by a business rule</td></tr>
+          </tbody>
+        </table>
+        <h3>Idempotency</h3>
+        <p>Finalizing and voiding a claim are idempotent: the first call performs the transition and emits its event, and repeats are no-ops. Payment and reversal runs can be re-executed; partial failures are recorded as per-run warnings instead of failing the run. A claim can have only one adjustment per version, enforced by the data store.</p>
+
+        <h2 id="submission">Submission and intake</h2>
+        <table>
+          <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>POST</td><td><code>/api/v1/claims</code></td><td>Submit a claim (canonical). Accepts a vendor-neutral claim document whose shape stays stable as the internal model evolves; returns <code>201</code> with the created claim version.</td></tr>
+            <tr><td>POST</td><td><code>/api/v1/claims/import/raw837</code></td><td>Upload a raw X12 837 file; each claim in it is submitted through the same path</td></tr>
+            <tr><td>POST</td><td><code>/api/v1/claims/import/raw837/validate</code></td><td>Run WEDI SNIP levels 1&ndash;5 on an 837 file without submitting anything; returns the findings and the 999 acknowledgment</td></tr>
+            <tr><td>GET</td><td><code>/api/v1/claims/import-transactions</code></td><td>History of 837 imports, with SNIP warnings at <code>/import-transactions/snip-warnings</code></td></tr>
+            <tr><td>POST</td><td><code>/api/claims</code></td><td>Legacy submission. Deprecated: responses carry <code>Deprecation</code> and <code>Link: rel="successor-version"</code> headers pointing at <code>/api/v1/claims</code>, and it uses the same submission service so the audit chain stays continuous.</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="reading-claims">Reading claims and adjudication detail</h2>
+        <table>
+          <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>GET</td><td><code>/api/claims/{id}</code></td><td>Claim by id, including status and adjudication result</td></tr>
+            <tr><td>GET</td><td><code>/api/claims/number/{claimNumber}</code></td><td>Claim by claim number</td></tr>
+            <tr><td>GET / POST</td><td><code>/api/claims/search</code></td><td>Search by query string or by request body</td></tr>
+            <tr><td>GET</td><td><code>/api/claims/{id}/adjudication-detail</code></td><td>Persisted adjudication detail for the claim, for examiner and audit transparency</td></tr>
+            <tr><td>GET</td><td><code>/api/claims/{id}/audit-timeline</code></td><td>Lifecycle events for the claim</td></tr>
+            <tr><td>GET</td><td><code>/api/claims/{id}/duplicate-matches</code></td><td>Possible duplicate claims</td></tr>
+            <tr><td>GET</td><td><code>/api/claims/{id}/277ca</code></td><td>277CA claim acknowledgment</td></tr>
+            <tr><td>GET</td><td><code>/api/v1/claims</code></td><td>Member-scoped search returning FHIR R4 ExplanationOfBenefit-shaped results</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="work-queue">Pended claims work queue</h2>
+        <p>Pended claims are worked by examiners through the work queue. Resolving or overriding a claim re-runs the adjudication pipeline and records the examiner&rsquo;s action. The <a href="/docs/review-resolve-pended-claim">pended claim guide</a> walks through the same flow in the portal.</p>
+        <table>
+          <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>GET</td><td><code>/api/claims/work-queue/summary</code></td><td>Pended claims grouped by reason</td></tr>
+            <tr><td>GET</td><td><code>/api/claims/work-queue/items</code></td><td>Work-queue items</td></tr>
+            <tr><td>POST</td><td><code>/api/claims/work-queue/{claimId}/assign</code></td><td>Assign to an examiner</td></tr>
+            <tr><td>POST</td><td><code>/api/claims/work-queue/{claimId}/resolve</code></td><td>Resolve a pend and re-adjudicate</td></tr>
+            <tr><td>POST</td><td><code>/api/claims/work-queue/{claimId}/override</code></td><td>Examiner override, with audit</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="adjustments-voids">Adjustments and voids</h2>
+        <table>
+          <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>POST / GET</td><td><code>/api/v1/claims/{predecessorClaimId}/adjustments</code></td><td>Create or list adjustments of a claim</td></tr>
+            <tr><td>GET</td><td><code>/api/v1/adjustments</code>, <code>/api/v1/adjustments/{id}</code></td><td>Search adjustments, or read one</td></tr>
+            <tr><td>POST</td><td><code>/api/claims/{id}/void</code></td><td>Void a claim (idempotent)</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="payments-remittance">Payment runs and 835 remittance</h2>
+        <p>Payment runs pick up adjudicated claims, finalize them and generate X12 835 remittance. Reversal runs do the same for voids. Generated 835 envelopes are stored and retrieved over the API.</p>
+        <table>
+          <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>POST</td><td><code>/api/PaymentRuns</code>, <code>/api/PaymentRuns/{id}/execute</code></td><td>Create a payment run, then execute it</td></tr>
+            <tr><td>POST</td><td><code>/api/PaymentRuns/execute</code></td><td>Create and execute in one call</td></tr>
+            <tr><td>GET</td><td><code>/api/PaymentRuns</code>, <code>/api/PaymentRuns/{id}</code></td><td>List runs, or read one</td></tr>
+            <tr><td>POST</td><td><code>/api/PaymentRuns/{id}/cancel</code></td><td>Cancel a run before it executes</td></tr>
+            <tr><td>POST</td><td><code>/api/PaymentRuns/{id}/eft-file</code></td><td>Generate the run&rsquo;s EFT file</td></tr>
+            <tr><td>POST / GET</td><td><code>/api/ReversalRuns</code> and the same sub-paths</td><td>Reversal runs for voided claims</td></tr>
+            <tr><td>GET</td><td><code>/api/v1/era-envelopes</code>, <code>/{id}</code>, <code>/{id}/edi</code></td><td>List 835 envelopes, read one, or download the raw X12 835</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="fhir-eob">FHIR ExplanationOfBenefit</h2>
+        <p>The claims service serves FHIR R4 ExplanationOfBenefit reads and searches at <code>/fhir/ExplanationOfBenefit</code> and <code>/fhir/ExplanationOfBenefit/{id}</code>, authenticated and tenant-scoped, with a Provider Access variant under <code>/fhir/ProviderAccess/</code>. For the CMS-0057-F Patient Access, Provider Access, Payer-to-Payer and Prior Authorization APIs, see the <a href="/docs/api">FHIR API reference</a> and the <a href="/api-explorer">API explorer</a>.</p>
+
+        <h2 id="stability">Stability</h2>
+        <ul>
+          <li><strong><code>/api/v1/*</code></strong> paths carry the V1 stability commitment: a breaking change gets a parallel <code>/api/v2/*</code> path before V1 is deprecated.</li>
+          <li><strong><code>/api/claims/*</code></strong> is the versionless surface the Cloud Health Office portal uses. Changes are coordinated with portal releases and it is not committed to external consumers. The deprecated <code>POST /api/claims</code> will be removed after trading-partner integrations have moved to V1.</li>
+          <li><strong><code>/fhir/*</code></strong> follows FHIR R4; new search parameters are additive.</li>
+          <li><strong>Payment and reversal runs</strong> are operator-facing; changes are coordinated with the portal.</li>
+        </ul>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/ncci-cms-quarterly-load">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">NCCI Quarterly Load</div>
+          </a>
+          <a href="/docs/api" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">FHIR API Reference</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>

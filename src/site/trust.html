@@ -740,7 +740,90 @@
       </div>
     </section>
 
-    <section class="trust-section trust-section--soft" aria-labelledby="reporting-heading">
+    <section class="trust-section trust-section--soft" aria-labelledby="controls-heading">
+      <div class="trust-container">
+        <div class="trust-section__header">
+          <div class="trust-section__label">Controls in the code today</div>
+          <h2 id="controls-heading">What a security architecture review can test in the repository.</h2>
+          <p class="trust-section__intro">
+            These controls are implemented in the public source as of October 2026. They are a current-state
+            architecture note for a payer security review, not a SOC 2 Type II report, a HITRUST certification or a
+            penetration-test letter.
+          </p>
+        </div>
+
+        <div class="trust-table-wrap">
+          <table class="trust-table">
+            <thead>
+              <tr>
+                <th scope="col">Control</th>
+                <th scope="col">How it is implemented</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Tenant isolation</td>
+                <td>The tenant comes only from a validated token. A token without a tenant is rejected, a tenant header that disagrees with the token is refused, and there is no default tenant. Every repository query is filtered by tenant.</td>
+              </tr>
+              <tr>
+                <td>Authentication and authorization</td>
+                <td>Every service requires a Cloud Health Office token and every endpoint is permission-gated; an endpoint without a stated permission falls back to the service&rsquo;s default read or write permission, and is refused if there is none. Service-to-service calls carry the calling service&rsquo;s own identity. External FHIR clients use SMART on FHIR with scope enforcement and patient binding.</td>
+              </tr>
+              <tr>
+                <td>Secrets</td>
+                <td>Secrets are read from a key vault configuration provider. No production secrets are kept in source control, and secret scanning runs in CI.</td>
+              </tr>
+              <tr>
+                <td>Encryption</td>
+                <td>TLS on ingress; mesh or cluster-level encryption is a deployment choice. At rest, store and key-vault managed keys on Azure deployments, plus field-level encryption for appeals PHI. A customer-managed key module exists but is not wired into the default deployment.</td>
+              </tr>
+              <tr>
+                <td>PHI in telemetry</td>
+                <td>OpenTelemetry traces pass through a PHI-scrubbing span processor.</td>
+              </tr>
+              <tr>
+                <td>Record-access audit</td>
+                <td>Member, authorization, provider and payment services log who read which record, whether allowed or denied. Reading the access log requires its own audit permission.</td>
+              </tr>
+              <tr>
+                <td>Dependency and code scanning</td>
+                <td>Dependabot, Trivy and gitleaks run on the repository, and CodeQL static analysis runs weekly and on every pull request.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="control-grid" style="margin-top: 28px;">
+          <article class="control-card">
+            <h3>Data classes</h3>
+            <ul>
+              <li><strong>Synthetic</strong> is the default for every evaluation and pilot. No PHI.</li>
+              <li><strong>Limited PHI</strong> only after a BAA, for a named extract in a named environment with named operators.</li>
+              <li><strong>Production PHI</strong> only after a BAA, a security review, live adapters for the resources in scope, and a commercial license.</li>
+            </ul>
+          </article>
+          <article class="control-card">
+            <h3>Not on file today</h3>
+            <ul>
+              <li>An independent penetration-test letter. It is scoped as a pilot deliverable or a customer-funded exercise.</li>
+              <li>A completed customer disaster-recovery test against a named RTO and RPO. Backup and recovery are designed, not yet tested with a customer.</li>
+              <li>A &ldquo;zero vulnerabilities&rdquo; claim. Dependencies are scanned and residual findings are tracked.</li>
+            </ul>
+          </article>
+          <article class="control-card">
+            <h3>Questions to settle in a pilot</h3>
+            <ul>
+              <li>Penetration test or vulnerability assessment schedule, and who pays for it.</li>
+              <li>Log retention period, confirmed with counsel.</li>
+              <li>Incident contacts and the after-hours path.</li>
+              <li>Subprocessors for the chosen cloud, and whether Aurelianware staff will ever see PHI (the default is no).</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="trust-section" aria-labelledby="reporting-heading">
       <div class="trust-container">
         <div class="trust-section__header">
           <div class="trust-section__label">Vulnerability reporting</div>
@@ -771,7 +854,7 @@
       </div>
     </section>
 
-    <section class="trust-section" aria-labelledby="review-heading">
+    <section class="trust-section trust-section--soft" aria-labelledby="review-heading">
       <div class="trust-container">
         <div class="trust-section__header">
           <div class="trust-section__label">Production review path</div>

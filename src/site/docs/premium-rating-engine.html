@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Premium Rating Engine: Tier, Age-Band and Composite Rating | Cloud Health Office Docs</title>
+  <meta name="description" content="Premium rating in Cloud Health Office: tier, ACA age-band and composite rating under 45 CFR 147.102, tobacco surcharges, proration and retro adjustments, with a hand-checked invoice example." />
+  <meta name="keywords" content="premium rating engine, ACA age rating, 45 CFR 147.102, composite rating, tobacco surcharge, premium billing proration, retro adjustments, group premium invoice" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/premium-rating-engine" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/premium-rating-engine" />
+  <meta property="og:title" content="Premium Rating Engine — Cloud Health Office" />
+  <meta property="og:description" content="Tier, ACA age-band and composite premium rating with proration and retro adjustments you can check by hand." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Premium Rating Engine: Tier, Age-Band and Composite Rating",
+  "description": "Premium rating in Cloud Health Office: tier, ACA age-band and composite rating under 45 CFR 147.102, tobacco surcharges, proration and retro adjustments, with a hand-checked invoice example.",
+  "url": "https://cloudhealthoffice.com/docs/premium-rating-engine",
+  "author": {
+    "@type": "Organization",
+    "name": "Aurelianware, Inc."
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Cloud Health Office",
+    "url": "https://cloudhealthoffice.com"
+  },
+  "datePublished": "2026-10-27",
+  "proficiencyLevel": "Advanced",
+  "about": [
+    "Premium rating",
+    "ACA age-band rating",
+    "Composite rating",
+    "Premium billing"
+  ],
+  "breadcrumb": {
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://cloudhealthoffice.com"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Docs",
+        "item": "https://cloudhealthoffice.com/docs"
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": "Premium Rating Engine",
+        "item": "https://cloudhealthoffice.com/docs/premium-rating-engine"
+      }
+    ]
+  }
+}
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs" aria-current="page">Documentation</a>
+<a href="/blueprints/google-cloud">Reference architecture</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="/api-explorer">API explorer</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li>
+              <li><a href="/docs/accumulator-engine">Accumulator Engine</a></li>
+              <li><a href="/docs/premium-rating-engine" class="active">Premium Rating Engine</a></li>
+              <li><a href="/docs/ncci-cms-quarterly-load">NCCI Quarterly Load</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/claims-api">Claims API</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+              <li><a href="/docs/configure-tenant-security">Tenant Security</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li>
+              <li><a href="/docs/claims-guide">Claims Adjudication</a></li>
+              <li><a href="/docs/prior-auth-guide">Prior Authorization</a></li>
+              <li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li>
+              <li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide">Provider Verification</a></li>
+              <li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">State Compliance</div>
+            <ul>
+              <li><a href="/docs/texas-compliance">Texas (STAR / STAR+PLUS)</a></li>
+              <li><a href="/docs/florida-compliance">Florida AHCA (SMMC 3.0)</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#rate-tables">Rate tables</a></li>
+              <li><a href="#rating-methods">Rating methods</a></li>
+              <li><a href="#tobacco-surcharge">Tobacco surcharge</a></li>
+              <li><a href="#invoice-calculation">Invoice calculation</a></li>
+              <li><a href="#rounding">Rounding</a></li>
+              <li><a href="#status">Status</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="/api-explorer?spec=patient-access" target="_blank" rel="noopener noreferrer">API explorer</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Premium Rating Engine</span>
+        </div>
+
+        <h1>Premium Rating Engine</h1>
+        <p class="docs-subtitle">Tier, ACA age-band and composite rating, with proration and retro adjustments you can check by hand.</p>
+
+        <p>The premium rating engine prices a subscriber&rsquo;s coverage from a plan&rsquo;s rate table and turns a group&rsquo;s coverage into an invoice: the charge for the billed month plus proration and retroactive adjustment lines. It is pure calculation with no I/O and no clock, so every amount on an invoice can be reproduced and checked by hand.</p>
+
+        <h2 id="rate-tables">Rate tables</h2>
+        <p>A rate table holds the rates of one plan for one effective period (inclusive start and end dates; an empty end date means open-ended). Rate tables are stored as immutable versions. When a tenant&rsquo;s tables are loaded, each one is validated, two tables for the same plan that cover the same day are rejected, and a plan and date resolve to exactly one table.</p>
+        <table>
+          <thead><tr><th>Setting</th><th>Used by</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>Method</td><td>All</td><td>Tier, age band or composite</td></tr>
+            <tr><td>Tier rates</td><td>Tier</td><td>Monthly rate for EE, EE+Spouse, EE+Child(ren) and Family</td></tr>
+            <tr><td>Age-band base rate</td><td>Age band</td><td>Monthly rate of a 21-year-old (factor 1.000)</td></tr>
+            <tr><td>Age curve</td><td>Age band</td><td>Age factors; when unset, the federal default curve</td></tr>
+            <tr><td>Age determination date</td><td>Age band, composite</td><td>The day ages are measured on; defaults to the plan-year start</td></tr>
+            <tr><td>Child cap</td><td>Age band, composite</td><td>The three-oldest-children-under-21 rule</td></tr>
+            <tr><td>Composite rate and basis</td><td>Composite</td><td>Per-member or tier-factor composite rate</td></tr>
+            <tr><td>Tobacco</td><td>All</td><td>Optional tobacco surcharge</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="rating-methods">Rating methods</h2>
+        <p>Each household (one subscriber, their dependents, a plan and coverage dates) is rated as a whole or for the members covered on a given date. Each member can carry their own effective and termination dates, so a dependent added or dropped mid-year is handled. When no tier is set, it is derived from who is covered: subscriber only is EE; with a spouse or domestic partner, EE+Spouse; with children, EE+Child(ren); with both, Family.</p>
+
+        <h3>Tier</h3>
+        <p>The household pays the tier rate.</p>
+
+        <h3>ACA age band (45 CFR 147.102)</h3>
+        <p>Each member pays the base rate times the factor for their age, rounded to the cent, and the household pays the sum.</p>
+        <ul>
+          <li>Only the <strong>three oldest children under 21</strong> are rated. Younger children under 21 are listed as not rated, with a zero premium.</li>
+          <li>Children aged 21 and over are always rated and do not take one of the three places.</li>
+          <li>Ages are fixed at issue or renewal: the age on the plan-year start, or on the member&rsquo;s own coverage start for someone who joins mid-year.</li>
+        </ul>
+        <p>The age curve is data. The CMS federal default curve for plan years 2018 onward (ages 0&ndash;14 at 0.765, 21 at 1.000, 64 and older at 3.000) ships with the engine, and a state curve can be set on the rate table. Curves are validated: bands must start at age 0, be contiguous, end in one open-ended band and have positive factors, and factors for ages 21 and over may range at most 3:1, per 45 CFR 147.102(a)(1)(iii).</p>
+
+        <h3>Composite (45 CFR 147.102(c)(3))</h3>
+        <p>A composite rate is derived once per plan year from the group&rsquo;s census and then stays fixed for the year.</p>
+        <ul>
+          <li><strong>Per member:</strong> total age-rated premium divided by the number of rated members. A household pays the rate times its rated members, with the three-child cap applied.</li>
+          <li><strong>Tier factors:</strong> total age-rated premium divided by the sum of the households&rsquo; tier factors. A household pays the rate times its tier factor.</li>
+        </ul>
+
+        <h2 id="tobacco-surcharge">Tobacco surcharge</h2>
+        <p>The tobacco factor is between 1.0 and 1.5, the ACA maximum, and applies only to members at or above a minimum age that defaults to 21.</p>
+        <ul>
+          <li><strong>Age band:</strong> the member&rsquo;s premium times (factor &minus; 1).</li>
+          <li><strong>Composite:</strong> the tobacco user&rsquo;s individual age-rated premium times (factor &minus; 1), added to the composite premium, because the tobacco factor applies to the individual&rsquo;s rate (147.102(a)(1)(iv)).</li>
+          <li><strong>Tier:</strong> a flat monthly amount per tobacco user, at most half the EE rate (the 1.5:1 limit, checked when the table is validated and again at rating time), or (factor &minus; 1) times the EE rate. Flat amounts are refused on the ACA methods.</li>
+        </ul>
+        <div class="callout callout-info">
+          <div class="callout-title">Small-group wellness programs</div>
+          <p>In the small-group market a tobacco surcharge is allowed only when the employer offers a wellness program that lets tobacco users avoid it (45 CFR 147.102(a)(1)(iv) and 45 CFR 146.121). The engine does not model that program or its waivers. Turn the surcharge on only where the program exists, and handle a waiver by marking the member as not rated for tobacco.</p>
+        </div>
+
+        <h2 id="invoice-calculation">Invoice calculation</h2>
+        <p>An invoice is calculated from the billing month, the billing date, the group&rsquo;s coverage as recorded on that date (including coverage terminated since the last invoice) and a ledger of what earlier invoices billed. Voided invoices count for nothing.</p>
+        <ol>
+          <li><strong>Current month.</strong> Each coverage charged for the month gets one line per rate-table version used. The month is divided by the table&rsquo;s proration rule (daily, half month or full month). Under daily proration the month is split wherever the household or the rate table changes, and each piece is rated with only the members covered then. Lines record the rate table id, version and hash.</li>
+          <li><strong>Retro.</strong> Each earlier invoiced month within the retro window (three months by default) is reconciled one coverage at a time. If the correct charge differs from what was billed, the difference becomes an adjustment: a retro add when nothing was billed, a retro term when nothing is due or coverage ended inside the month, and otherwise a rate change. A later invoice does not bill the same difference again, and manual adjustments are never folded in or reversed.</li>
+          <li><strong>Missing rate table.</strong> A coverage month with no rate table in force, an invalid plan or unusable member data is left off the invoice and listed as an issue with a code. The rest of the group&rsquo;s invoice is still computed, and rated billing keeps that invoice in draft. A line is never $0.00.</li>
+        </ol>
+
+        <h3 id="worked-example">Worked example</h3>
+        <p>Tier plan: EE $500, EE+Spouse $1,000, Family $1,400. January and February were invoiced for A (EE, $500) and B (Family, $1,400). The March invoice is computed on February 20, 2026. This example is the engine&rsquo;s own hand-checked unit test.</p>
+        <table>
+          <thead><tr><th>Item</th><th>Calculation</th><th style="text-align:right; white-space:nowrap">Amount</th></tr></thead>
+          <tbody>
+            <tr><td>A, March, EE</td><td>Full month</td><td style="text-align:right; white-space:nowrap">500.00</td></tr>
+            <tr><td>C, March, EE+Spouse</td><td>Full month</td><td style="text-align:right; white-space:nowrap">1,000.00</td></tr>
+            <tr><td>D, March, EE from 3/10</td><td>500 &times; 22/31</td><td style="text-align:right; white-space:nowrap">354.84</td></tr>
+            <tr><td><strong>Subtotal</strong></td><td></td><td style="text-align:right; white-space:nowrap"><strong>1,854.84</strong></td></tr>
+            <tr><td>C, January retro add (from 1/16)</td><td>1,000 &times; 16/31 &minus; 0</td><td style="text-align:right; white-space:nowrap">+516.13</td></tr>
+            <tr><td>B, February retro term (ended 2/14)</td><td>1,400 &times; 14/28 &minus; 1,400</td><td style="text-align:right; white-space:nowrap">&minus;700.00</td></tr>
+            <tr><td>C, February retro add</td><td>1,000 &minus; 0</td><td style="text-align:right; white-space:nowrap">+1,000.00</td></tr>
+            <tr><td><strong>Adjustments</strong></td><td></td><td style="text-align:right; white-space:nowrap"><strong>+816.13</strong></td></tr>
+            <tr><td><strong>Invoice total</strong></td><td></td><td style="text-align:right; white-space:nowrap"><strong>2,670.97</strong></td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="rounding">Rounding</h2>
+        <p>Money is rounded to the cent, half away from zero. Age-band premiums are rounded per member, and the household premium is the sum of those rounded amounts. Prorated amounts are rounded once per segment, after adjacent pieces at the same rate version and premium are merged. A line is the sum of its segments and the invoice total is the sum of its lines.</p>
+
+        <h2 id="status">Status</h2>
+        <p>The rating engine, the federal age curve, rate-table validation and the invoice calculator are wired into the premium billing run behind a per-tenant rated-billing setting, with rate tables stored as immutable versions. Premium and capitation events into the general ledger and integrated financial close are tracked separately in the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/CAPABILITY_RECONCILIATION.md" target="_blank" rel="noopener noreferrer">capability ledger</a>.</p>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/accumulator-engine">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Accumulator Engine</div>
+          </a>
+          <a href="/docs/ncci-cms-quarterly-load" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">NCCI Quarterly Load</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
