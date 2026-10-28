@@ -75,6 +75,30 @@ public class BulkExportController : FhirControllerBase
         CancellationToken ct)
         => KickOffAsync(BulkExportLevel.Group, groupId, type, since, outputFormat, ct);
 
+    /// <summary>
+    /// GET or POST /fhir/r4/PayerToPayer/$export — the Payer-to-Payer bulk
+    /// transfer (G-35): every member whose consent naming the requesting payer
+    /// is in force (recorded by <c>$member-match</c> or
+    /// <c>$member-data-export</c>, ADR 022), each exported as
+    /// <c>$member-data-export</c> would. Backend payer clients only, bound to
+    /// the payer they are registered to, exactly as the single-member export.
+    /// </summary>
+    [HttpGet("PayerToPayer/$export")]
+    [HttpPost("PayerToPayer/$export")]
+    public Task<IActionResult> PayerToPayerExport(
+        [FromQuery(Name = "_type")] string? type,
+        [FromQuery(Name = "_since")] string? since,
+        [FromQuery(Name = "_outputFormat")] string? outputFormat,
+        CancellationToken ct)
+    {
+        if (!IsBackendSystemCaller)
+            return Task.FromResult(FhirForbidden(PayerToPayerController.BackendOnlyMessage));
+        if (!TryBindReceivingPayer(null, _logger, "bulk export", out var receivingPayerId))
+            return Task.FromResult(FhirForbidden(PayerToPayerController.PayerBindingMessage));
+
+        return KickOffAsync(BulkExportLevel.PayerToPayer, groupId: null, type, since, outputFormat, ct, receivingPayerId);
+    }
+
     /// <summary>GET /fhir/r4/$export-status/{jobId} — poll export job status</summary>
     [HttpGet("$export-status/{jobId}")]
     public async Task<IActionResult> ExportStatus(string jobId, CancellationToken ct)
@@ -146,7 +170,8 @@ public class BulkExportController : FhirControllerBase
     /// parameters on the query string. Answers 202 with the status URL.
     /// </summary>
     private async Task<IActionResult> KickOffAsync(
-        BulkExportLevel level, string? groupId, string? type, string? since, string? outputFormat, CancellationToken ct)
+        BulkExportLevel level, string? groupId, string? type, string? since, string? outputFormat, CancellationToken ct,
+        string? receivingPayerId = null)
     {
         if (!HasRespondAsyncHeader())
             return FhirBadRequest("Bulk Data export requires 'Prefer: respond-async' header");
@@ -155,6 +180,7 @@ public class BulkExportController : FhirControllerBase
         {
             BulkExportLevel.Group => $"Group/{Uri.EscapeDataString(groupId!)}/$export",
             BulkExportLevel.Patient => "Patient/$export",
+            BulkExportLevel.PayerToPayer => "PayerToPayer/$export",
             _ => "$export",
         };
 
@@ -165,6 +191,7 @@ public class BulkExportController : FhirControllerBase
             Since = since,
             OutputFormat = outputFormat ?? "application/fhir+ndjson",
             GroupId = groupId,
+            ReceivingPayerId = receivingPayerId,
             RequestUrl = $"{FhirBaseUrl}/{path}{RawQueryString}",
             RequestedBy = CallerId,
         };
@@ -198,16 +225,26 @@ public class BulkExportController : FhirControllerBase
     /// <summary>The validated caller, as Provider Access identifies it.</summary>
     private string? CallerId => ProviderAccessAuthorizationFilter.ResolveCallerId(HttpContext);
 
-    /// <summary>The job, only when this caller started it.</summary>
+    /// <summary>
+    /// The job, only when this caller started it. A Payer-to-Payer export is
+    /// also the requesting payer's: the caller must still be registered to
+    /// that payer.
+    /// </summary>
     private async Task<BulkExportJob?> OwnJobAsync(string jobId, CancellationToken ct)
     {
         var job = await _exportService.GetJobStatusAsync(jobId, TenantId, ct);
         var caller = CallerId;
-        return job is not null
-               && !string.IsNullOrEmpty(caller)
-               && string.Equals(job.RequestedBy, caller, StringComparison.Ordinal)
-            ? job
-            : null;
+        if (job is null
+            || string.IsNullOrEmpty(caller)
+            || !string.Equals(job.RequestedBy, caller, StringComparison.Ordinal))
+            return null;
+
+        if (job.Level == BulkExportLevel.PayerToPayer
+            && (job.ReceivingPayerId is null
+                || !string.Equals(RegisteredPayerId, job.ReceivingPayerId, StringComparison.Ordinal)))
+            return null;
+
+        return job;
     }
 
     private BulkExportManifest BuildManifest(BulkExportJob job) => new()

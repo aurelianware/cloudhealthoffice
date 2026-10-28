@@ -178,6 +178,9 @@ public class MetadataClinicalCapabilityTests : IClassFixture<FhirTestWebAppFacto
             // Bulk Data `Group/{id}/$export`: an operation on the caller's own
             // panel, with no Group resource read or search behind it.
             "Group",
+            // CHO's Payer-to-Payer operations ($member-data-export, $export):
+            // operations only, governed by system/PayerToPayer.read.
+            "PayerToPayer",
         ], StringComparer.OrdinalIgnoreCase);
 
     /// <summary>

@@ -46,6 +46,12 @@ builder.Services.AddSmartTrust(builder.Configuration, builder.Environment);
 builder.Services.AddTransient<SmartCallerOutboundHandler>();
 builder.Services.ConfigureHttpClientDefaults(client =>
     client.AddHttpMessageHandler<SmartCallerOutboundHandler>());
+// Background work (bulk export) runs in a context naming its tenant and no
+// user; its calls to CHO services carry fhir-service's own service token for
+// that tenant. Also before AddChoAuthentication, so the token handler sees it.
+builder.Services.AddTransient<FhirService.Services.BackgroundTenantOutboundHandler>();
+builder.Services.ConfigureHttpClientDefaults(client =>
+    client.AddHttpMessageHandler<FhirService.Services.BackgroundTenantOutboundHandler>());
 
 // Conformance discovery is read before a client has a tenant binding, so these
 // paths skip tenant resolution like the probes do. They serve no tenant data.
@@ -709,9 +715,10 @@ builder.Services.Configure<DtrConfig>(builder.Configuration.GetSection("Cms0057:
 builder.Services.AddSingleton<IDtrResourceStore, MongoDtrResourceStore>();
 builder.Services.AddSingleton<IDtrService, DtrService>();
 // Bulk Data $export (G-34, Q-18). Off by default, and then kick-off answers
-// 501 exactly as before. When on, a provider exports its own attributed panel
-// into the export store (BulkExport:DocumentStore:*, its own bucket) and
-// downloads it back through this service.
+// 501 exactly as before. When on, a provider exports its own attributed panel,
+// and a requesting payer the members whose consent for it is in force, into
+// the export store (BulkExport:DocumentStore:*, its own bucket) and downloads
+// it back through this service.
 var bulkExportOptions = builder.Configuration
     .GetSection(FhirService.Services.BulkExport.BulkExportOptions.SectionName)
     .Get<FhirService.Services.BulkExport.BulkExportOptions>() ?? new();
@@ -730,6 +737,9 @@ if (bulkExportOptions.Enabled)
             sp.GetRequiredService<ILoggerFactory>()));
     builder.Services.AddScoped<FhirService.Services.BulkExport.IBulkExportResourceSource,
         FhirService.Services.BulkExport.BulkExportResourceSource>();
+    // Payer-to-Payer bulk (G-35): each member through the single-member exchange.
+    builder.Services.AddScoped<FhirService.Services.BulkExport.IPayerToPayerBulkSource,
+        FhirService.Services.BulkExport.PayerToPayerBulkSource>();
     builder.Services.AddSingleton<IBulkExportService, FhirService.Services.BulkExport.DurableBulkExportService>();
     builder.Services.AddHostedService<FhirService.Services.BulkExport.BulkExportWorker>();
 }

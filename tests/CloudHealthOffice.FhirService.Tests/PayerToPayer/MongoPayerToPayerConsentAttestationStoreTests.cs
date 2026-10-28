@@ -69,4 +69,17 @@ public sealed class MongoPayerToPayerConsentAttestationStoreTests : IAsyncLifeti
         (await _store.FindInForceAsync("t", "m-1", "NEW-PLAN", Now.AddHours(1))).Should().BeNull();
         (await _store.FindInForceAsync("t", "m-1", "NEW-PLAN", Now.AddDays(-2))).Should().BeNull();
     }
+
+    [Fact]
+    public async Task A_payers_bulk_listing_holds_its_members_in_force_only()
+    {
+        await _store.RecordAsync(Attestation(member: "m-2"));
+        await _store.RecordAsync(Attestation(member: "m-1", end: Now.AddDays(1)));
+        await _store.RecordAsync(Attestation(member: "m-ended", end: Now.AddHours(-1)));
+        await _store.RecordAsync(Attestation(member: "m-other-payer", payer: "OTHER-PLAN"));
+        await _store.RecordAsync(Attestation(member: "m-other-tenant", tenant: "t2"));
+
+        (await _store.ListMembersInForceAsync("t", "NEW-PLAN", Now)).Should().Equal("m-1", "m-2");
+        (await _store.ListMembersInForceAsync("t", "NEW-PLAN", Now.AddDays(-2))).Should().BeEmpty("none had started");
+    }
 }

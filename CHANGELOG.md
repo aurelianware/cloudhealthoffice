@@ -66,6 +66,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only; if claims history cannot be read, the export fails instead of writing a
   short panel. Each member is still checked for attribution and opt-out before
   anything is written.
+- **Payer-to-Payer bulk transfer (G-35).** With `BulkExport:Enabled`, a
+  requesting payer's registered backend client can export, in one Bulk Data
+  job at `PayerToPayer/$export`, every member whose consent naming that payer is
+  in force. Each member gets what `$member-data-export` would send it: consent
+  checked again, the five-year claims window, prior authorizations and the
+  same redaction. The job needs `system/PayerToPayer.read`, the same grant as
+  the single-member export. Only the client that started the job, while still
+  registered to that payer, can poll or download it.
 - **`Patient/$export` (G-34).** With `BulkExport:Enabled`, a provider can
   start a bulk export at `Patient/$export`. It exports the same attributed panel
   as `Group/{providerId}/$export`. It needs `system/Patient.read` (or a
@@ -85,6 +93,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`.well-known/smart-configuration`** now advertises RS384/ES384 (and the
   256/512 variants) for `private_key_jwt`, the `client-confidential-asymmetric`
   capability, and the `refresh_token` grant (D-25).
+
+### Fixed
+
+- **Bulk exports read CHO's own services in the export's tenant.** The bulk
+  worker had no request to take a tenant from, so with the `ChoNative` binding
+  its reads of member, coverage and claims data carried no tenant and no
+  service token. Each job now runs in a context that names only its tenant.
 
 ## [6.0.0] - 2026-10-28
 

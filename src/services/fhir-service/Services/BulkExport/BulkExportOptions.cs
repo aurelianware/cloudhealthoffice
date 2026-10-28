@@ -42,6 +42,19 @@ public sealed class BulkExportOptions
     public static readonly IReadOnlyList<string> SupportedTypes =
         ["Patient", "Coverage", "ExplanationOfBenefit", "Encounter", "Claim"];
 
+    /// <summary>
+    /// The resource types a Payer-to-Payer export can contain: what the
+    /// single-member <c>$member-data-export</c> sends (the member, coverage,
+    /// claims within five years and prior authorizations, as
+    /// ExplanationOfBenefit), in the order they are written.
+    /// </summary>
+    public static readonly IReadOnlyList<string> PayerToPayerTypes =
+        ["Patient", "Coverage", "ExplanationOfBenefit"];
+
+    /// <summary>The types an export at <paramref name="level"/> can contain.</summary>
+    public static IReadOnlyList<string> TypesFor(Models.BulkExportLevel level)
+        => level == Models.BulkExportLevel.PayerToPayer ? PayerToPayerTypes : SupportedTypes;
+
     public void Validate()
     {
         if (FileLifetime <= TimeSpan.Zero || PurgeAfter < FileLifetime)

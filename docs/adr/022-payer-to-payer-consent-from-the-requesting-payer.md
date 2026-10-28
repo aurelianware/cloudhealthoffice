@@ -134,7 +134,7 @@ Tradeoffs:
 
 - Per-issuer scope allowlists (G-39) are unchanged.
 - PA data in the export (G-35) is still missing.
-- Bulk Payer-to-Payer transfer is unchanged.
+- Bulk Payer-to-Payer transfer was added later (2026-10-28, `PayerToPayer/$export`) on this same rule: a bulk export holds the members whose consent naming the requesting payer is in force, and each is checked again as it is exported.
 
 ## References
 

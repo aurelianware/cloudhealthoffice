@@ -24,6 +24,12 @@ public sealed record BulkExportJobRecord
 
     /// <summary>The Group a Group export named; null for a Patient export.</summary>
     public string? GroupId { get; init; }
+
+    /// <summary>
+    /// For a Payer-to-Payer export, the requesting payer the client was
+    /// registered to when it started the export. Null otherwise.
+    /// </summary>
+    public string? ReceivingPayerId { get; init; }
     public required IReadOnlyList<string> Types { get; init; }
     public DateTimeOffset? Since { get; init; }
     public required string RequestUrl { get; init; }
@@ -52,6 +58,7 @@ public sealed record BulkExportJobRecord
         Request = RequestUrl,
         Level = Level,
         GroupId = GroupId,
+        ReceivingPayerId = ReceivingPayerId,
         ResourceTypes = Types.ToList(),
         Since = Since?.ToString("o"),
         ErrorMessage = Error,
@@ -238,6 +245,7 @@ public sealed class MongoBulkExportJobStore : IBulkExportJobStore
         ["requestedBy"] = j.RequestedBy,
         ["level"] = j.Level.ToString(),
         ["groupId"] = j.GroupId is null ? BsonNull.Value : j.GroupId,
+        ["receivingPayerId"] = j.ReceivingPayerId is null ? BsonNull.Value : j.ReceivingPayerId,
         ["types"] = new BsonArray(j.Types),
         ["since"] = Date(j.Since),
         ["requestUrl"] = j.RequestUrl,
@@ -264,6 +272,7 @@ public sealed class MongoBulkExportJobStore : IBulkExportJobStore
             ? parsed
             : BulkExportLevel.Group,
         GroupId = d.TryGetValue("groupId", out var group) && group.IsString ? group.AsString : null,
+        ReceivingPayerId = d.TryGetValue("receivingPayerId", out var payer) && payer.IsString ? payer.AsString : null,
         Types = d["types"].AsBsonArray.Select(t => t.AsString).ToList(),
         Since = Date(d, "since"),
         RequestUrl = d["requestUrl"].AsString,
