@@ -371,12 +371,21 @@ builder.Services.Configure<FhirService.Services.PayerToPayer.Outbound.PayerToPay
         FhirService.Services.PayerToPayer.Outbound.PayerToPayerTransportOptions.SectionName));
 builder.Services.AddSingleton<FhirService.Services.PayerToPayer.Outbound.IPayerToPayerEndpointResolver,
     FhirService.Services.PayerToPayer.Outbound.ConfiguredPayerToPayerEndpointResolver>();
-// Payer-to-Payer transport credentials (SMART Backend Services / UDAP client
-// registration, mTLS) are negotiated per trading partner and are deployment
-// integration work; the default provider supplies none rather than fabricating
-// one, so an unonboarded peer answers Unauthorized.
+// Payer-to-Payer transport credentials: CHO as a SMART Backend Services client
+// (private_key_jwt, G-42). A directory entry's CredentialKey names a
+// registration under SmartBackendClients:Clients; with none, no token is sent
+// and an unonboarded peer answers Unauthorized. Keys are checked at startup.
+builder.Services.AddOptions<FhirService.Services.SmartBackend.SmartBackendClientOptions>()
+    .Bind(builder.Configuration.GetSection(FhirService.Services.SmartBackend.SmartBackendClientOptions.SectionName));
+builder.Services.AddSingleton<FhirService.Services.SmartBackend.SmartBackendKeyRing>();
+builder.Services.AddSingleton<FhirService.Services.SmartBackend.ISmartBackendTokenClient,
+    FhirService.Services.SmartBackend.SmartBackendTokenClient>();
+builder.Services.AddHttpClient(
+        FhirService.Services.SmartBackend.SmartBackendTokenClient.HttpClientName,
+        client => client.Timeout = TimeSpan.FromSeconds(15))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<FhirService.Services.PayerToPayer.Outbound.IPayerToPayerCredentialProvider,
-    FhirService.Services.PayerToPayer.Outbound.UnconfiguredPayerToPayerCredentialProvider>();
+    FhirService.Services.PayerToPayer.Outbound.SmartBackendPayerToPayerCredentialProvider>();
 builder.Services.AddSingleton<
     FhirService.Services.PayerToPayer.Outbound.IPayerToPayerOutboundExchangeStore,
     FhirService.Services.PayerToPayer.Outbound.InMemoryPayerToPayerOutboundExchangeStore>();
@@ -798,6 +807,19 @@ builder.Services.AddChoBrowserCors(builder.Configuration, builder.Environment);
 builder.Services.AddChoObservability(builder.Configuration);
 
 var app = builder.Build();
+
+// Load CHO's client-assertion keys now, so a bad key stops startup instead of
+// the first Payer-to-Payer call, and a registration with nothing to sign with
+// is refused before it can look configured.
+{
+    var smartBackendKeys = app.Services.GetRequiredService<FhirService.Services.SmartBackend.SmartBackendKeyRing>();
+    var smartBackendClients = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<
+        FhirService.Services.SmartBackend.SmartBackendClientOptions>>().Value.Clients;
+    if (smartBackendClients.Count > 0 && smartBackendKeys.Active is null)
+        throw new InvalidOperationException(
+            "SmartBackendClients:Clients has registrations but SmartBackendClients:SigningKeys has no key to sign with. "
+            + "See docs/security/smart-auth-tenancy.md (Outbound: CHO as a SMART Backend Services client).");
+}
 
 app.UseChoObservability();
 

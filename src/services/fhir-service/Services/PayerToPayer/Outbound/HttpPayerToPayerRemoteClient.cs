@@ -82,35 +82,23 @@ public sealed class HttpPayerToPayerRemoteClient : IPayerToPayerRemoteClient
         PayerToPayerEndpoint endpoint, Uri uri, string operation, object body, CancellationToken ct)
     {
         var client = _clientFactory.CreateClient(HttpClientName);
-
-        using var message = new HttpRequestMessage(HttpMethod.Post, uri)
-        {
-            Content = new StringContent(
-                JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/fhir+json"),
-        };
-        message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/fhir+json"));
+        var json = JsonSerializer.Serialize(body, JsonOptions);
 
         var token = await _credentials.GetAccessTokenAsync(endpoint, ct);
-        if (!string.IsNullOrWhiteSpace(token))
-            message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var response = await SendAsync(client, uri, json, token, endpoint, operation, ct);
+        if (response is null) return RemoteCallResponse.Failure(RemoteCallOutcome.Unavailable);
 
-        HttpResponseMessage response;
-        try
+        // A 401 to a token CHO presented usually means the peer revoked or
+        // expired it early. Drop it and try once with a new one; a second 401
+        // is the peer's answer.
+        if (response.StatusCode == HttpStatusCode.Unauthorized && !string.IsNullOrWhiteSpace(token))
         {
-            response = await client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, ct);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            throw; // the caller gave up; not a peer failure
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-        {
-            // Transport fault or client-side timeout. The exception message can
-            // carry peer detail, so it is not logged as text — the category is.
-            _logger.LogWarning(
-                "Payer-to-Payer {Operation} to peer {EndpointKey} was unreachable ({Fault}).",
-                operation, LogSanitizer.Sanitize(endpoint.EndpointKey), ex.GetType().Name);
-            return RemoteCallResponse.Failure(RemoteCallOutcome.Unavailable);
+            response.Dispose();
+            _credentials.Invalidate(endpoint);
+            token = await _credentials.GetAccessTokenAsync(endpoint, ct);
+            if (string.IsNullOrWhiteSpace(token)) return RemoteCallResponse.Failure(RemoteCallOutcome.Unauthorized);
+            response = await SendAsync(client, uri, json, token, endpoint, operation, ct);
+            if (response is null) return RemoteCallResponse.Failure(RemoteCallOutcome.Unavailable);
         }
 
         using (response)
@@ -134,6 +122,38 @@ public sealed class HttpPayerToPayerRemoteClient : IPayerToPayerRemoteClient
             }
 
             return RemoteCallResponse.Success(payload);
+        }
+    }
+
+    /// <summary>One POST; null when the peer could not be reached.</summary>
+    private async Task<HttpResponseMessage?> SendAsync(
+        HttpClient client, Uri uri, string json, string? token,
+        PayerToPayerEndpoint endpoint, string operation, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, uri)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/fhir+json"),
+        };
+        message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/fhir+json"));
+        if (!string.IsNullOrWhiteSpace(token))
+            message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        try
+        {
+            return await client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw; // the caller gave up; not a peer failure
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            // Transport fault or client-side timeout. The exception message can
+            // carry peer detail, so it is not logged as text — the category is.
+            _logger.LogWarning(
+                "Payer-to-Payer {Operation} to peer {EndpointKey} was unreachable ({Fault}).",
+                operation, LogSanitizer.Sanitize(endpoint.EndpointKey), ex.GetType().Name);
+            return null;
         }
     }
 

@@ -276,6 +276,80 @@ Keys:
   removed key fail from then on; tokens already issued run to expiry. A secret
   client is not converted; register a new client.
 
+## Outbound: CHO as a SMART Backend Services client (G-42)
+
+When Cloud Health Office calls another payer (Payer-to-Payer `$member-match`
+and `$member-data-export` as the new payer), fhir-service is the backend
+client: it gets a `client_credentials` token from the other payer's token
+endpoint with a `private_key_jwt` assertion it signs itself. Code:
+`FS/Services/SmartBackend/` (`SmartBackendTokenClient`, `SmartBackendKeyRing`);
+Payer-to-Payer uses it through `SmartBackendPayerToPayerCredentialProvider`.
+
+Configuration (`SmartBackendClients`):
+
+```jsonc
+"SmartBackendClients": {
+  "SigningKeys": [
+    // From the secret store: SmartBackendClients__SigningKeys__0__PrivateKeyPem,
+    // or a mounted file via Path. Never in appsettings.
+    { "PrivateKeyPem": "-----BEGIN PRIVATE KEY-----…", "Algorithm": "RS384" },
+    { "Path": "/var/run/secrets/cho/p2p-next.pem", "Standby": true }
+  ],
+  "Clients": {
+    // The key is what a Payer-to-Payer directory entry names as CredentialKey.
+    "acme-health": {
+      "ClientId": "the client id acme-health assigned CHO",
+      "TokenEndpoint": "https://auth.acme-health.example/oauth2/token",
+      "Scope": "system/*.read"
+    }
+  }
+}
+```
+
+and in `Cms0057:PayerToPayerOutbound:PayersByTenant:<tenant>[n]`, set
+`CredentialKey` to `acme-health` on that payer's entry.
+
+What CHO sends, matching the rules CHO itself enforces inbound (above): header
+`alg` RS384 (RSA keys; RS256/RS512 if configured) or the ES that fits the
+curve (P-256 → ES256, P-384 → ES384, P-521 → ES512), `typ` `JWT`, `kid` of
+the active key; `iss` = `sub` = `ClientId`; `aud` = `TokenEndpoint`; a new
+`jti` per assertion; `exp` 4 minutes out (`AssertionLifetimeSeconds`, at most
+300). No `client_id` or secret form field.
+
+- **Keys.** RSA of at least 2048 bits, or EC on P-256/P-384/P-521, in PEM
+  (PKCS#8, PKCS#1 or SEC1). The first key not in `Standby` signs. `kid`
+  defaults to the key's RFC 7638 thumbprint. fhir-service does not start with
+  an unreadable or weak key, an algorithm that does not fit the key, a
+  duplicate `kid`, every key in standby, or `Clients` configured with no key.
+- **Publishing.** `GET /fhir/r4/.well-known/smart-backend-jwks.json` (no token)
+  serves the public half of every configured key, active and standby
+  (`Cache-Control: max-age=300`), or 404 when there is none. Give the other
+  payer this URL as CHO's `jwks_uri`, or a copy of the document if it only
+  takes a static JWK Set.
+- **Rotation.** Add the new key with `Standby: true` and deploy; wait until
+  peers have refetched the JWKS (at least 5 minutes, longer for a peer that
+  caches more); swap which key is in standby; deploy; remove the old key
+  after a further 5 minutes. A peer holding a static JWK Set must be sent the
+  new key before the swap.
+- **Token cache.** Tokens are cached in memory per registration and replaced
+  `RefreshSkewSeconds` (60) before `expires_in` (half-life for tokens shorter
+  than twice that; five minutes when the server sends no `expires_in`).
+  Concurrent callers share one token request. Failures are not cached. When a
+  peer answers 401 to a token, Payer-to-Payer drops it and retries once with a
+  new one; 403 is not retried.
+- **Endpoints.** `TokenEndpoint` must be absolute HTTPS with no user info,
+  query or fragment (`AllowInsecureTransport: true` allows `http://` for a
+  local development peer). The token client never follows redirects, reads at
+  most 64 KB, and is the only host it calls.
+- **Logging.** Registration key, HTTP status and the OAuth `error` code only:
+  never the assertion, the token, or the peer's `error_description`.
+- **Reuse.** Any outbound client can call `ISmartBackendTokenClient
+  .GetTokenAsync(registrationKey)` and `Invalidate(registrationKey)` (bulk
+  `$export` against another payer, for one).
+- **Not done:** UDAP (G-58), mTLS client certificates, and discovering a
+  peer's token endpoint from its `.well-known/smart-configuration` (it is
+  configured).
+
 ## Payer-to-Payer clients (deploy and operations)
 
 The inbound Payer-to-Payer operations (`PayerToPayer/$member-data-export`,

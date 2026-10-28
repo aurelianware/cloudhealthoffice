@@ -161,6 +161,90 @@ public class HttpPayerToPayerRemoteClientTests
         handler.Requests.Should().ContainSingle().Which.Headers.Authorization.Should().BeNull();
     }
 
+    private sealed class CountingCredentials : IPayerToPayerCredentialProvider
+    {
+        public int Issued { get; private set; }
+        public int Invalidated { get; private set; }
+        public bool RefuseAfterInvalidate { get; init; }
+
+        public Task<string?> GetAccessTokenAsync(PayerToPayerEndpoint endpoint, CancellationToken ct = default)
+        {
+            if (RefuseAfterInvalidate && Invalidated > 0) return Task.FromResult<string?>(null);
+            return Task.FromResult<string?>($"token-{++Issued}");
+        }
+
+        public void Invalidate(PayerToPayerEndpoint endpoint) => Invalidated++;
+    }
+
+    [Fact]
+    public async Task Credential_IsPresentedAsABearerToken()
+    {
+        var (client, handler) = Build(credentials: new CountingCredentials());
+
+        await client.MatchMemberAsync(Endpoint, MatchRequest());
+
+        var auth = handler.Requests.Should().ContainSingle().Which.Headers.Authorization!;
+        auth.Scheme.Should().Be("Bearer");
+        auth.Parameter.Should().Be("token-1");
+    }
+
+    [Fact]
+    public async Task Unauthorized_DropsTheTokenAndRetriesOnceWithANewOne()
+    {
+        var credentials = new CountingCredentials();
+        var (client, handler) = Build(
+            r => r.Headers.Authorization!.Parameter == "token-1"
+                ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"resourceType\":\"Bundle\"}") },
+            credentials);
+
+        var response = await client.MatchMemberAsync(Endpoint, MatchRequest());
+
+        response.Outcome.Should().Be(RemoteCallOutcome.Success);
+        credentials.Invalidated.Should().Be(1);
+        handler.Requests.Select(r => r.Headers.Authorization!.Parameter).Should().Equal("token-1", "token-2");
+    }
+
+    [Fact]
+    public async Task SecondUnauthorized_IsThePeersAnswer()
+    {
+        var credentials = new CountingCredentials();
+        var (client, handler) = Build(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized), credentials);
+
+        (await client.MatchMemberAsync(Endpoint, MatchRequest())).Outcome.Should().Be(RemoteCallOutcome.Unauthorized);
+        handler.Requests.Should().HaveCount(2, "one retry, not a loop");
+    }
+
+    [Fact]
+    public async Task Unauthorized_WithNoNewToken_IsNotRetried()
+    {
+        var credentials = new CountingCredentials { RefuseAfterInvalidate = true };
+        var (client, handler) = Build(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized), credentials);
+
+        (await client.MatchMemberAsync(Endpoint, MatchRequest())).Outcome.Should().Be(RemoteCallOutcome.Unauthorized);
+        handler.Requests.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Forbidden_IsNotRetried()
+    {
+        var credentials = new CountingCredentials();
+        var (client, handler) = Build(_ => new HttpResponseMessage(HttpStatusCode.Forbidden), credentials);
+
+        (await client.MatchMemberAsync(Endpoint, MatchRequest())).Outcome.Should().Be(RemoteCallOutcome.Unauthorized);
+        handler.Requests.Should().ContainSingle();
+        credentials.Invalidated.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Unauthorized_WithoutAToken_IsNotRetried()
+    {
+        var (client, handler) = Build(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized));
+
+        (await client.MatchMemberAsync(Endpoint, MatchRequest())).Outcome.Should().Be(RemoteCallOutcome.Unauthorized);
+        handler.Requests.Should().ContainSingle();
+    }
+
     [Fact]
     public async Task OversizedPayload_IsRefusedRatherThanBuffered()
     {

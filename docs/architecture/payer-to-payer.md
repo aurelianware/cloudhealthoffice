@@ -243,9 +243,13 @@ invent links the source payer never asserted.
   repository; surfacing it alongside CHO's own claims history is follow-up work.
 * Types outside the clinical and member-history inventories are archived, not
   ingested. They are named and counted rather than dropped.
-* Transport credentials for a specific payer (SMART Backend Services / UDAP
-  client registration, mTLS) remain deployment integration behind
-  `IPayerToPayerCredentialProvider`, which supplies none by default.
+* Transport credentials: CHO authenticates to another payer with SMART
+  Backend Services (`private_key_jwt`, G-42) when that payer's directory entry
+  names a `CredentialKey` registered under `SmartBackendClients:Clients`
+  (`SmartBackendPayerToPayerCredentialProvider`; see
+  `docs/security/smart-auth-tenancy.md`, "Outbound"). A 401 to CHO's token is
+  retried once with a new token. A payer with no credential key gets no token
+  and its exchange records Unauthorized. UDAP and mTLS are not built.
 * No external-core (QNXT/Facets/HealthEdge) Payer-to-Payer integration exists.
 
 ## Prior authorization decision filtering

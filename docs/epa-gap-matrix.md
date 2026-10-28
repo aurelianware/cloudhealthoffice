@@ -351,7 +351,7 @@ CAP-05/11 in the canonical ledger define the current verified launch, approval-w
 | CDS Hooks JWT verification | M | D-21 / G-43. | G-43 |
 | Multi-issuer trust (customer IdP) | I+T | `FS/Services/Identity/*`. Claims are read under their JWT names (D-32), so Entra/Okta `scp`-only grants and issuer claim mappings that name `tid`, `oid`, `upn` or `email` now take effect (the contract's Entra example now maps a CHO tenant claim, not `tid`). | — |
 | UDAP (optional, for payer-to-payer scale) | M | Comments only. | G-58 (deferred) |
-| Payer-to-Payer outbound credentials | S | `UnconfiguredPayerToPayerCredentialProvider`, by design. | G-42 |
+| Payer-to-Payer outbound credentials | I+T | Built 2026-10-28 (G-42). CHO signs its own SMART Backend Services assertions (RS384/ES384, `aud` = the peer's token endpoint, fresh `jti`, `exp` 4 min) with keys from `SmartBackendClients:SigningKeys`, checked at startup; public keys at `/fhir/r4/.well-known/smart-backend-jwks.json` for the peer's `jwks_uri`, with standby keys for rotation. Tokens cached per registration until 60 s before expiry; a peer's 401 drops the token and retries once. A directory entry's `CredentialKey` names the registration. `FS/Services/SmartBackend/*`; `SmartBackendTokenClientTests`, `HttpPayerToPayerRemoteClientTests`, `SmartBackendJwksControllerTests`. Not run against another payer's server or a test kit (G-60). | — |
 
 ### 4.7 CMS-0062-P forward compatibility (design only; nothing is built)
 
@@ -655,7 +655,7 @@ The wave order, effort and dependencies below preserve the original planning rec
 |---|---|---|---|---|---|
 | 33 | G-40 | Launch context in the token response (`patient`, `encounter`, `fhirContext`, `need_patient_banner`). External EHR launch handshake. | High | M | — |
 | 34 | G-41 | SMART v2 scopes (alongside v1). `aud` validation at the authorization server, with negative tests at the resource server. Revocation. Introspection permissions. | High | M | — |
-| 35 | G-42 | Asymmetric client auth (`private_key_jwt`, JWKS / jwks_uri) for backend services. P2P outbound credentials. **Inbound built 2026-10-28:** backend clients registered with a JWK Set or `jwks_uri` authenticate with SMART Backend Services assertions (§4.6). Provider binding for backend clients built 2026-10-28 (`providerId` → `provider_id`, §4.5). Remaining: P2P outbound credentials (CHO signing its own assertions to other payers). | High | M | — |
+| 35 | G-42 | Asymmetric client auth (`private_key_jwt`, JWKS / jwks_uri) for backend services. P2P outbound credentials. **Inbound built 2026-10-28:** backend clients registered with a JWK Set or `jwks_uri` authenticate with SMART Backend Services assertions (§4.6). Provider binding for backend clients built 2026-10-28 (`providerId` → `provider_id`, §4.5). Outbound built 2026-10-28: CHO signs its own assertions to other payers' token endpoints (`SmartBackendClients`, §4.6), used by Payer-to-Payer. Remaining: an external Backend Services test kit run (G-60). | High | M | — |
 
 ### Wave 6 — CRD
 
