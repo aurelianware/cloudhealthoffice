@@ -254,6 +254,7 @@ public class SmartScopeEnforcementMiddleware
         || path.StartsWithSegments("/fhir/r4/OperationDefinition")
         || path.StartsWithSegments("/fhir/r4/CodeSystem")
         || path.StartsWithSegments("/fhir/r4/ValueSet")
+        || path.StartsWithSegments("/fhir/r4/directory")
         || path.StartsWithSegments("/health")
         || path.StartsWithSegments("/swagger");
 
