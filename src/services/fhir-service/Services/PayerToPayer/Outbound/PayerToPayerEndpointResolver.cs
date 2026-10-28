@@ -40,6 +40,21 @@ public sealed record PayerToPayerEndpoint
     /// secret value — no token or client secret is stored in the directory.
     /// </summary>
     public string? CredentialKey { get; init; }
+
+    /// <summary>
+    /// The payer's FHIR base URL (with a trailing slash), which the PDex bulk
+    /// operations (<c>Group/$bulk-member-match</c>,
+    /// <c>Group/{id}/$davinci-data-export</c>) are called on, and the origin a
+    /// bulk status or file URL the payer hands back must share.
+    /// </summary>
+    public Uri? FhirBaseUri { get; init; }
+
+    /// <summary>
+    /// Other hosts the payer serves bulk export files from (a storage account
+    /// or CDN), over https. CHO downloads from them but never sends them its
+    /// token. Empty: files come from the payer's own origin only.
+    /// </summary>
+    public IReadOnlyList<string> BulkFileHosts { get; init; } = [];
 }
 
 /// <summary>
@@ -78,6 +93,12 @@ public sealed class PayerToPayerEndpointEntry
 
     /// <summary>Key of the credential to present; resolved by the credential provider.</summary>
     public string? CredentialKey { get; set; }
+
+    /// <summary>
+    /// Host names (not URLs) other than the base URL's that the payer serves
+    /// bulk export files from. A file anywhere else is refused.
+    /// </summary>
+    public List<string> BulkFileHosts { get; set; } = [];
 }
 
 /// <summary>
@@ -172,6 +193,13 @@ public sealed class ConfiguredPayerToPayerEndpointResolver : IPayerToPayerEndpoi
             MemberDataExportUri = new Uri(baseUri, MemberDataExportPath),
             RequiresMemberMatch = entry.RequiresMemberMatch,
             CredentialKey = string.IsNullOrWhiteSpace(entry.CredentialKey) ? null : entry.CredentialKey.Trim(),
+            FhirBaseUri = baseUri,
+            BulkFileHosts = (entry.BulkFileHosts ?? [])
+                .Select(h => h?.Trim().ToLowerInvariant())
+                .Where(h => !string.IsNullOrEmpty(h) && Uri.CheckHostName(h) != UriHostNameType.Unknown)
+                .Select(h => h!)
+                .Distinct(StringComparer.Ordinal)
+                .ToList(),
         };
     }
 

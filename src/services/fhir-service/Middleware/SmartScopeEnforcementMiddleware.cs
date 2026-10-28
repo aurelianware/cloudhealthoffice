@@ -348,6 +348,7 @@ public class SmartScopeEnforcementMiddleware
             ["PayerToPayer/$member-data-export"] = ReadAccess,
             ["PayerToPayer/$export"] = ReadAccess,
             ["PayerToPayer/$initiate"] = WriteAccess,
+            ["PayerToPayer/$bulk-initiate"] = WriteAccess,
             // PDex bulk: matching many members is a read as matching one is,
             // and the export of the matched Group is the bulk kick-off again.
             ["Group/$bulk-member-match"] = ReadAccess,

@@ -90,6 +90,15 @@ public static class FhirServiceTestDatabase
                     global::FhirService.Services.BulkExport.InMemoryBulkExportJobStore>();
             }
 
+            // Outbound bulk Payer-to-Payer jobs, registered only when enabled.
+            if (services.Any(d => d.ServiceType
+                    == typeof(global::FhirService.Services.PayerToPayer.Outbound.Bulk.IPayerToPayerBulkOutboundJobStore)))
+            {
+                services.RemoveAll<global::FhirService.Services.PayerToPayer.Outbound.Bulk.IPayerToPayerBulkOutboundJobStore>();
+                services.AddSingleton<global::FhirService.Services.PayerToPayer.Outbound.Bulk.IPayerToPayerBulkOutboundJobStore,
+                    global::FhirService.Services.PayerToPayer.Outbound.Bulk.InMemoryPayerToPayerBulkOutboundJobStore>();
+            }
+
             // PDex $bulk-member-match Groups (G-35), registered with bulk export.
             if (services.Any(d => d.ServiceType == typeof(global::FhirService.Services.PayerToPayer.BulkMemberMatch.IPayerToPayerMatchGroupStore)))
             {

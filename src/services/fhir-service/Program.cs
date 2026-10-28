@@ -393,6 +393,28 @@ builder.Services.AddScoped<FhirService.Services.PayerToPayer.Outbound.IPayerToPa
     FhirService.Services.PayerToPayer.Outbound.HttpPayerToPayerRemoteClient>();
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.Outbound.IPayerToPayerOutboundService,
     FhirService.Services.PayerToPayer.Outbound.PayerToPayerOutboundService>();
+// Outbound bulk Payer-to-Payer (G-35): many members from one prior payer over
+// the PDex bulk operations ($bulk-member-match, then $davinci-data-export on
+// the matched Group), on the same directory, SMART backend credentials and
+// consent gate. Off unless Cms0057:PayerToPayerOutbound:Bulk:Enabled; when on,
+// jobs are kept in MongoDB and advanced by a background worker.
+builder.Services.Configure<FhirService.Services.PayerToPayer.Outbound.Bulk.PayerToPayerBulkOutboundOptions>(
+    builder.Configuration.GetSection(
+        FhirService.Services.PayerToPayer.Outbound.Bulk.PayerToPayerBulkOutboundOptions.SectionName));
+if (builder.Configuration.GetValue<bool>(
+        $"{FhirService.Services.PayerToPayer.Outbound.Bulk.PayerToPayerBulkOutboundOptions.SectionName}:Enabled"))
+{
+    builder.Services.AddSingleton<
+        FhirService.Services.PayerToPayer.Outbound.Bulk.IPayerToPayerBulkOutboundJobStore,
+        FhirService.Services.PayerToPayer.Outbound.Bulk.MongoPayerToPayerBulkOutboundJobStore>();
+    builder.Services.AddScoped<
+        FhirService.Services.PayerToPayer.Outbound.Bulk.IPayerToPayerBulkRemoteClient,
+        FhirService.Services.PayerToPayer.Outbound.Bulk.HttpPayerToPayerBulkRemoteClient>();
+    builder.Services.AddScoped<
+        FhirService.Services.PayerToPayer.Outbound.Bulk.IPayerToPayerBulkOutboundService,
+        FhirService.Services.PayerToPayer.Outbound.Bulk.PayerToPayerBulkOutboundService>();
+    builder.Services.AddHostedService<FhirService.Services.PayerToPayer.Outbound.Bulk.PayerToPayerBulkOutboundWorker>();
+}
 // Durable ingestion of a validated Payer-to-Payer package into CHO's imported
 // member record. The import store is deliberately separate from CHO's
 // authoritative member/enrollment/claim stores, so a prior payer's data can

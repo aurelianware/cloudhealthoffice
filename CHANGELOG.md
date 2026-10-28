@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Outbound bulk Payer-to-Payer (G-35).** CHO, as the new payer, can ask a
+  prior payer for many members at once over the PDex 2.1 bulk operations:
+  `POST /fhir/r4/PayerToPayer/$bulk-initiate` records a job, and a background
+  worker runs `Group/$bulk-member-match`, then `Group/{id}/$davinci-data-export`
+  on the matched Group, downloads the NDJSON, sorts it by member and ingests
+  each member's package as a single exchange does. Each member is checked as
+  `$initiate` checks one, and their opt-in is asked again before the export and
+  before ingestion. Calls carry CHO's SMART backend token for the payer (G-42).
+  Status and file URLs from the payer are followed only on its directory origin
+  (or a listed file host, without the token). Off by default
+  (`Cms0057:PayerToPayerOutbound:Bulk:Enabled`); jobs are kept in MongoDB
+  (`p2p_outbound_bulk_jobs`). See `docs/architecture/payer-to-payer.md`.
 - **The public Provider Directory is Da Vinci PDex Plan-Net 1.2.0 (G-36).**
   `/fhir/r4/directory/{directory}/` now serves all nine Plan-Net profiles:
   networks, organizations (including the plan's own payer Organization),
