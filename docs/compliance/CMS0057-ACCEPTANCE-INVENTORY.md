@@ -163,7 +163,7 @@ Mode column: current operating mode of that surface in the default build.
 | `Services/PayerToPayer/PayerToPayerMemberMatchService.cs` | `Patient/$member-match`: deterministic identity + coverage selection | Demo | P2P-04 |
 | `Services/PayerToPayer/Outbound/PayerToPayerOutboundService.cs` | outbound initiation: member/coverage context → directory → opt-in gate → remote `$member-match` → export → validation → exchange state + audit | Demo | P2P-02 |
 | `Services/PayerToPayer/Outbound/PayerToPayerEndpointResolver.cs` | `IPayerToPayerEndpointResolver` + config directory (`Cms0057:PayerToPayerOutbound`); tenant-scoped, HTTPS-only, fail-closed (SSRF boundary) | config | P2P-02 |
-| `Services/PayerToPayer/Outbound/IPayerToPayerRemoteClient.cs` | transport seam + `IPayerToPayerCredentialProvider` (default: no credential) | seam | P2P-02 |
+| `Services/PayerToPayer/Outbound/IPayerToPayerRemoteClient.cs` | transport seam + `IPayerToPayerCredentialProvider` (SMART Backend Services via `SmartBackendPayerToPayerCredentialProvider`; no `CredentialKey`, no token) | seam | P2P-02 |
 | `Services/PayerToPayer/Outbound/HttpPayerToPayerRemoteClient.cs` | named `HttpClient` (`AllowAutoRedirect=false`, response cap, no payload/credential logging) | Demo (no payer onboarded by default) | P2P-02 |
 | `Services/PayerToPayer/Outbound/PayerToPayerResponseReader.cs` | peer-response parsing + member-consistency validation + source `Provenance` stamp | Demo | P2P-02 |
 | `Services/PayerToPayer/Outbound/PayerToPayerOutboundExchangeStore.cs` | exchange state + idempotency key; **in-process store** (durable persistence is follow-up) | Demo (in-memory) | P2P-02 |
@@ -605,9 +605,11 @@ no dedicated Payer-to-Payer `ConsentType`); the received package is retrieved,
 validated, provenance-stamped, and audited but **not written into the CHO member
 record** (durable ingestion is follow-up); exchange state lives in an in-process
 store; and connecting to any *named* payer requires that payer's onboarding —
-endpoint directory entry plus transport credentials (SMART Backend Services /
-UDAP client registration, mTLS) behind `IPayerToPayerCredentialProvider`, which
-supplies nothing by default rather than fabricating a credential.
+endpoint directory entry plus CHO's registration with that payer's token
+endpoint (`SmartBackendClients:Clients`, named by the entry's `CredentialKey`;
+SMART Backend Services `private_key_jwt`, G-42, built 2026-10-28). An entry with
+no credential key gets no token rather than a fabricated one. UDAP and mTLS are
+not built.
 
 ---
 

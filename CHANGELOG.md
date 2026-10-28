@@ -44,6 +44,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Group/{providerId}/$export`. fhir-service believes `provider_id` only from
   the issuer marked `IssuesChoClientRegistrations` and only on a system-scope
   token. The token's `sub` is still the client id.
+- **CHO authenticates to other payers with SMART Backend Services (G-42).**
+  For Payer-to-Payer as the new payer, fhir-service now gets an access token
+  from the other payer's token endpoint with a `private_key_jwt` assertion it
+  signs itself (RS384 or ES384), caches it until a minute before it expires,
+  and retries once with a new token when the peer answers 401. Configure CHO's
+  keys under `SmartBackendClients:SigningKeys` (from the secret store; a bad
+  key stops startup) and one registration per payer under
+  `SmartBackendClients:Clients:<key>` (`ClientId`, `TokenEndpoint`, `Scope`),
+  then set that key as `CredentialKey` on the payer's Payer-to-Payer directory
+  entry. `GET /fhir/r4/.well-known/smart-backend-jwks.json` publishes the
+  public keys for the peer's `jwks_uri`; standby keys allow rotation. Payers
+  with no `CredentialKey` behave as before (no token). Other outbound clients
+  can use the same `ISmartBackendTokenClient`. See
+  `docs/security/smart-auth-tenancy.md`.
 
 ### Changed
 

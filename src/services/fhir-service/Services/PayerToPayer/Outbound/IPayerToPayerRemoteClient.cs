@@ -107,15 +107,21 @@ public interface IPayerToPayerRemoteClient
 /// Supplies the bearer credential to present to a remote payer, looked up by the
 /// endpoint's <see cref="PayerToPayerEndpoint.CredentialKey"/>.
 ///
-/// Payer-to-Payer transport security (SMART Backend Services / UDAP client
-/// registration, mTLS) is negotiated per trading-partner and is deployment
-/// integration work, not product code — this abstraction is the seam it lands
-/// on. The default implementation supplies nothing, so an unonboarded payer's
-/// endpoint answers Unauthorized rather than CHO pretending to hold a credential.
+/// The production implementation is <see cref="SmartBackendPayerToPayerCredentialProvider"/>
+/// (SMART Backend Services, G-42): the key names a registration CHO holds with
+/// that payer. A payer with no credential key, or a key with no registration,
+/// gets no token, so its endpoint answers Unauthorized rather than CHO
+/// pretending to hold a credential.
 /// </summary>
 public interface IPayerToPayerCredentialProvider
 {
     Task<string?> GetAccessTokenAsync(PayerToPayerEndpoint endpoint, CancellationToken ct = default);
+
+    /// <summary>
+    /// The peer refused the token last returned for <paramref name="endpoint"/>
+    /// (401); forget it so the next call gets a new one.
+    /// </summary>
+    void Invalidate(PayerToPayerEndpoint endpoint) { }
 }
 
 /// <summary>
