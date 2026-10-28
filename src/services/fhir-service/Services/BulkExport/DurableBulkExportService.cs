@@ -18,6 +18,12 @@ namespace FhirService.Services.BulkExport;
 /// <c>$export</c> (every member in the tenant) is still refused as not
 /// implemented: it has no approved caller.
 /// </para>
+///
+/// <para>
+/// <c>PayerToPayer/$export</c> is the Payer-to-Payer bulk transfer (G-35): the
+/// requesting payer's members, those whose consent naming that payer is in
+/// force, each exported as the single-member <c>$member-data-export</c> would.
+/// </para>
 /// </summary>
 public sealed partial class DurableBulkExportService : IBulkExportService
 {
@@ -59,6 +65,14 @@ public sealed partial class DurableBulkExportService : IBulkExportService
                     throw new BulkExportRequestException("The caller could not be identified.");
                 break;
 
+            // Every member whose consent for the requesting payer is in force,
+            // decided member by member when the export runs. The controller
+            // has already bound the payer to the client's registration.
+            case BulkExportLevel.PayerToPayer:
+                if (string.IsNullOrWhiteSpace(request.RequestedBy) || string.IsNullOrWhiteSpace(request.ReceivingPayerId))
+                    throw new BulkExportRequestException("The requesting payer could not be identified.");
+                break;
+
             default:
                 throw new BulkExportNotImplementedException();
         }
@@ -73,7 +87,8 @@ public sealed partial class DurableBulkExportService : IBulkExportService
             RequestedBy = request.RequestedBy!,
             Level = request.Level,
             GroupId = request.Level == BulkExportLevel.Group ? request.GroupId : null,
-            Types = ParseTypes(request.Type),
+            ReceivingPayerId = request.Level == BulkExportLevel.PayerToPayer ? request.ReceivingPayerId : null,
+            Types = ParseTypes(request.Type, BulkExportOptions.TypesFor(request.Level)),
             Since = ParseSince(request.Since),
             RequestUrl = request.RequestUrl ?? string.Empty,
             CreatedAt = _time.GetUtcNow(),
@@ -121,18 +136,20 @@ public sealed partial class DurableBulkExportService : IBulkExportService
     /// client never mistakes a missing type for "no data".
     /// </summary>
     internal static IReadOnlyList<string> ParseTypes(string? type)
+        => ParseTypes(type, BulkExportOptions.SupportedTypes);
+
+    internal static IReadOnlyList<string> ParseTypes(string? type, IReadOnlyList<string> supported)
     {
         if (string.IsNullOrWhiteSpace(type))
-            return BulkExportOptions.SupportedTypes;
+            return supported;
 
         var requested = type.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var unsupported = requested.Where(t => !BulkExportOptions.SupportedTypes.Contains(t, StringComparer.Ordinal)).ToList();
+        var unsupported = requested.Where(t => !supported.Contains(t, StringComparer.Ordinal)).ToList();
         if (unsupported.Count > 0)
-            throw new BulkExportRequestException(
-                "_type may only name " + string.Join(", ", BulkExportOptions.SupportedTypes) + ".");
+            throw new BulkExportRequestException("_type may only name " + string.Join(", ", supported) + ".");
 
         // Written in the supported order, whatever order they were asked in.
-        return BulkExportOptions.SupportedTypes.Where(requested.Contains).ToList();
+        return supported.Where(requested.Contains).ToList();
     }
 
     /// <summary><c>_since</c> as a FHIR instant: a date and time with a time zone.</summary>

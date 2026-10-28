@@ -149,7 +149,8 @@ public class SmartScopeEnforcementMiddleware
 
         // ── 1. Scope check ────────────────────────────────────────────────────
         if (!HasRequiredScope(scopes, resourceType, interaction.Access, interaction.Contexts,
-                interaction.ExplicitScopeOnly))
+                interaction.ExplicitScopeOnly)
+            && !FollowsPayerToPayerExport(context.Request, scopes))
         {
             _logger.LogWarning(
                 "SMART scope denied — resource: {Resource}, access: {Access}, scopes: {Scopes}",
@@ -345,6 +346,7 @@ public class SmartScopeEnforcementMiddleware
             // outbound exchange is an action.
             ["Patient/$member-match"] = ReadAccess,
             ["PayerToPayer/$member-data-export"] = ReadAccess,
+            ["PayerToPayer/$export"] = ReadAccess,
             ["PayerToPayer/$initiate"] = WriteAccess,
 
             // DTR: a questionnaire package is assembled and returned, not stored.
@@ -383,7 +385,25 @@ public class SmartScopeEnforcementMiddleware
         {
             ["Patient/$member-match"] = (PayerToPayerScopeResource, SystemContexts),
             ["PayerToPayer/$member-data-export"] = (PayerToPayerScopeResource, SystemContexts),
+            // The bulk form of the same export (G-35), under the same grant.
+            ["PayerToPayer/$export"] = (PayerToPayerScopeResource, SystemContexts),
         };
+
+    /// <summary>
+    /// Polling, cancelling and downloading an export are governed by the scope
+    /// that starts one. A Payer-to-Payer bulk export is started under the
+    /// explicit <c>system/PayerToPayer.read</c> grant (G-35), so that grant
+    /// also opens <c>$export-status</c> and <c>$export-file</c>; the
+    /// controller still answers only the client that started the job.
+    /// </summary>
+    private static bool FollowsPayerToPayerExport(HttpRequest request, HashSet<string> scopes)
+    {
+        var segments = request.Path.Value?.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return segments is { Length: >= 3 }
+               && (string.Equals(segments[2], "$export-status", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(segments[2], "$export-file", StringComparison.OrdinalIgnoreCase))
+               && scopes.Contains($"system/{PayerToPayerScopeResource}.{ReadAccess}");
+    }
 
     /// <summary>The resource name in the payer-to-payer scope, <c>system/PayerToPayer.read</c>.</summary>
     internal const string PayerToPayerScopeResource = "PayerToPayer";

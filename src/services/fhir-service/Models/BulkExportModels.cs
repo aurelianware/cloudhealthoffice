@@ -13,6 +13,12 @@ public enum BulkExportLevel
 
     /// <summary><c>/Group/{id}/$export</c>: the members of one Group.</summary>
     Group,
+
+    /// <summary>
+    /// <c>/PayerToPayer/$export</c>: every member whose Payer-to-Payer consent
+    /// for the requesting payer is in force (G-35).
+    /// </summary>
+    PayerToPayer,
 }
 
 public class BulkExportRequest
@@ -23,6 +29,12 @@ public class BulkExportRequest
     public string? Since { get; set; }
     public string? OutputFormat { get; set; }
     public string? GroupId { get; set; }
+
+    /// <summary>
+    /// For a Payer-to-Payer export, the requesting payer: the payer the
+    /// authenticated client is registered to, never a value the client sent.
+    /// </summary>
+    public string? ReceivingPayerId { get; set; }
 
     /// <summary>The kick-off URL as the client sent it (the manifest's <c>request</c>).</summary>
     public string? RequestUrl { get; set; }
@@ -54,6 +66,9 @@ public class BulkExportJob
     public string Request { get; set; } = string.Empty;
     public BulkExportLevel Level { get; set; } = BulkExportLevel.Group;
     public string? GroupId { get; set; }
+
+    /// <summary>For a Payer-to-Payer export, the requesting payer it is for.</summary>
+    public string? ReceivingPayerId { get; set; }
     public List<string> ResourceTypes { get; set; } = new();
     public string? Since { get; set; }
     public BulkExportManifest? Manifest { get; set; }

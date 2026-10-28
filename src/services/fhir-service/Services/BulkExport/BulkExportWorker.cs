@@ -1,6 +1,7 @@
 using System.Text;
 using CloudHealthOffice.Infrastructure.Logging;
 using FhirService.Models;
+using FhirService.Services.PayerToPayer;
 using FhirService.Services.ProviderAccess;
 using Microsoft.Extensions.Options;
 
@@ -16,10 +17,17 @@ namespace FhirService.Services.BulkExport;
 /// </para>
 ///
 /// <para>
-/// The export's members are the provider's attributed panel at the time the
-/// export runs, and every one of them is asked through the same Provider
-/// Access decision a single read is: attribution again, then the member's
-/// opt-out. A member who opted out is left out of the file, not reported.
+/// A Provider Access export's members are the provider's attributed panel at
+/// the time the export runs, and every one of them is asked through the same
+/// Provider Access decision a single read is: attribution again, then the
+/// member's opt-out. A member who opted out is left out of the file, not
+/// reported.
+/// </para>
+///
+/// <para>
+/// A Payer-to-Payer export's members are those whose consent naming the
+/// requesting payer is in force when it runs, and each is exported through the
+/// single-member Payer-to-Payer exchange, which checks that consent again.
 /// </para>
 /// </summary>
 public sealed class BulkExportWorker : BackgroundService
@@ -135,26 +143,67 @@ public sealed class BulkExportWorker : BackgroundService
     private async Task RunAsync(BulkExportJobRecord job, string work, List<string> uploaded, CancellationToken ct)
     {
         await using var scope = _scopes.CreateAsyncScope();
-        var attribution = scope.ServiceProvider.GetRequiredService<IProviderAttributionSource>();
-        var authorization = scope.ServiceProvider.GetRequiredService<IProviderAccessAuthorizationService>();
-        var source = scope.ServiceProvider.GetRequiredService<IBulkExportResourceSource>();
 
+        // The upstream reads (the FHIR data adapter, the Payer-to-Payer member
+        // directory) take their tenant from the request. An export has none,
+        // so it runs in a context naming only its tenant, with no user:
+        // nothing here acts for a person, and calls to CHO services carry
+        // fhir-service's own service token for that tenant.
+        var accessor = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+        accessor.HttpContext = BackgroundTenantContext.Create(scope.ServiceProvider, job.TenantId);
+        try
+        {
+            await RunInTenantAsync(job, scope.ServiceProvider, work, uploaded, ct);
+        }
+        finally
+        {
+            accessor.HttpContext = null;
+        }
+    }
+
+    private async Task RunInTenantAsync(
+        BulkExportJobRecord job, IServiceProvider services, string work, List<string> uploaded, CancellationToken ct)
+    {
         // The data is read from here on; the manifest says it is current as of now.
         var transactionTime = _time.GetUtcNow();
-        var members = await AuthorizedMembersAsync(job, attribution, authorization, ct);
+        var payerToPayer = job.Level == BulkExportLevel.PayerToPayer;
+        var members = payerToPayer
+            ? await services.GetRequiredService<IPayerToPayerConsentAttestationStore>()
+                .ListMembersInForceAsync(job.TenantId, job.ReceivingPayerId!, transactionTime.UtcDateTime, ct)
+            : await AuthorizedMembersAsync(
+                job,
+                services.GetRequiredService<IProviderAttributionSource>(),
+                services.GetRequiredService<IProviderAccessAuthorizationService>(),
+                ct);
 
         var progress = new ProgressReporter(this, job);
+        var writers = job.Types.ToDictionary(
+            t => t, t => new RotatingNdjsonWriter(work, t, _options.MaxResourcesPerFile), StringComparer.Ordinal);
         var written = new List<(string Type, string Name, int Count, string Path)>();
-        var steps = Math.Max(1, members.Count * job.Types.Count);
-        var step = 0;
-
-        foreach (var type in job.Types)
+        try
         {
-            await using var writer = new RotatingNdjsonWriter(work, type, _options.MaxResourcesPerFile);
+            var steps = Math.Max(1, members.Count);
+            var step = 0;
             foreach (var member in members)
             {
-                await foreach (var line in source.ReadAsync(job.TenantId, member, type, job.Since, ct))
-                    await writer.WriteAsync(line, ct);
+                if (payerToPayer)
+                {
+                    // Each member is exported as the single-member export
+                    // would answer the payer now, consent checked again.
+                    var source = services.GetRequiredService<IPayerToPayerBulkSource>();
+                    await foreach (var (type, line) in source.ReadAsync(
+                                       job.TenantId, job.ReceivingPayerId!, job.RequestedBy, member, job.Types, job.Since, ct))
+                        await writers[type].WriteAsync(line, ct);
+                }
+                else
+                {
+                    var source = services.GetRequiredService<IBulkExportResourceSource>();
+                    foreach (var type in job.Types)
+                    {
+                        await foreach (var line in source.ReadAsync(job.TenantId, member, type, job.Since, ct))
+                            await writers[type].WriteAsync(line, ct);
+                    }
+                }
 
                 step++;
                 if (!await progress.ReportAsync(step * 99 / steps, ct))
@@ -163,8 +212,18 @@ public sealed class BulkExportWorker : BackgroundService
                     return;
                 }
             }
-            await writer.CloseAsync(ct);
-            written.AddRange(writer.Files.Select(f => (type, f.Name, f.Count, f.Path)));
+
+            // Files listed in the supported type order.
+            foreach (var type in job.Types)
+            {
+                await writers[type].CloseAsync(ct);
+                written.AddRange(writers[type].Files.Select(f => (type, f.Name, f.Count, f.Path)));
+            }
+        }
+        finally
+        {
+            foreach (var writer in writers.Values)
+                await writer.DisposeAsync();
         }
 
         var stored = new List<BulkExportStoredFile>();

@@ -3,6 +3,8 @@ using CloudHealthOffice.DocumentStore;
 using FhirService.Models;
 using FhirService.Services;
 using FhirService.Services.BulkExport;
+using FhirService.Services.PayerToPayer;
+using Microsoft.AspNetCore.Http;
 using FhirService.Services.ProviderAccess;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +26,8 @@ public class BulkExportWorkerTests
     private readonly BulkExportOptions _options = new();
     private readonly HashSet<string> _panel = ["m1", "m2", "m3"];
     private readonly HashSet<string> _denied = [];
+    private readonly InMemoryPayerToPayerConsentAttestationStore _attestations = new();
+    private readonly FakePayerToPayerSource _p2p = new();
 
     private DocumentStoreBulkExportFileStore Files => new(_documents);
 
@@ -49,9 +53,12 @@ public class BulkExportWorkerTests
             });
 
         var services = new ServiceCollection()
+            .AddHttpContextAccessor()
             .AddSingleton(attribution.Object)
             .AddSingleton(authorization.Object)
             .AddSingleton<IBulkExportResourceSource>(_source)
+            .AddSingleton<IPayerToPayerConsentAttestationStore>(_attestations)
+            .AddSingleton<IPayerToPayerBulkSource>(_p2p)
             .BuildServiceProvider();
 
         return new BulkExportWorker(
@@ -265,6 +272,103 @@ public class BulkExportWorkerTests
         await using var stream = await Service().OpenFileAsync(jobId, name, Tenant);
         using var reader = new StreamReader(stream!);
         return (await reader.ReadToEndAsync()).Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
+    }
+
+    [Fact]
+    public async Task TheUpstreamReadsRunInTheJobsTenant_AndTheContextIsClearedAfter()
+    {
+        // The data adapter and its outbound clients take the tenant from the
+        // request; an export has none, so the worker supplies one naming only
+        // the job's tenant, with no user.
+        var accessor = new HttpContextAccessor();
+        string? seen = null;
+        bool? authenticated = null;
+        _source.OnRead = () =>
+        {
+            seen = accessor.HttpContext?.Items["TenantId"] as string;
+            authenticated = accessor.HttpContext?.User.Identity?.IsAuthenticated;
+            return Task.CompletedTask;
+        };
+        await StartAsync("Patient");
+
+        await Worker().RunNextAsync();
+
+        seen.Should().Be(Tenant);
+        authenticated.Should().BeFalse();
+        accessor.HttpContext.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PayerToPayerExport_HoldsTheMembersWhoseConsentForThatPayerIsInForce()
+    {
+        var now = _time.GetUtcNow().UtcDateTime;
+        await _attestations.RecordAsync(Attestation("m1", "NEW-PLAN", now.AddDays(-1), null));
+        await _attestations.RecordAsync(Attestation("m2", "NEW-PLAN", now.AddDays(-10), now.AddDays(-1)));
+        await _attestations.RecordAsync(Attestation("m3", "OTHER-PLAN", now.AddDays(-1), null));
+        await _attestations.RecordAsync(Attestation("m4", "NEW-PLAN", now.AddDays(1), null));
+
+        var job = await Service().InitiateExportAsync(new BulkExportRequest
+        {
+            Level = BulkExportLevel.PayerToPayer,
+            ReceivingPayerId = "NEW-PLAN",
+            RequestedBy = "new-plan-backend",
+            RequestUrl = "https://fhir.test/fhir/r4/PayerToPayer/$export",
+        }, Tenant);
+        job.ResourceTypes.Should().Equal("Patient", "Coverage", "ExplanationOfBenefit");
+
+        await Worker().RunNextAsync();
+
+        _p2p.Reads.Should().Equal(("NEW-PLAN", "new-plan-backend", "m1"));
+        _source.Reads.Should().BeEmpty("a Payer-to-Payer export never reads through Provider Access");
+        var record = await _jobs.GetAsync(Tenant, job.JobId);
+        record!.Status.Should().Be(BulkExportStatus.Complete);
+        record.Files.Select(f => (f.Type, f.Count)).Should().Equal(("Patient", 1), ("ExplanationOfBenefit", 2));
+    }
+
+    [Fact]
+    public async Task Initiate_PayerToPayer_NeedsTheRequestingPayer_AndOnlyItsTypes()
+    {
+        await Service().Invoking(s => s.InitiateExportAsync(new BulkExportRequest
+            {
+                Level = BulkExportLevel.PayerToPayer, RequestedBy = "client", ReceivingPayerId = " ",
+            }, Tenant))
+            .Should().ThrowAsync<BulkExportRequestException>();
+        await Service().Invoking(s => s.InitiateExportAsync(new BulkExportRequest
+            {
+                Level = BulkExportLevel.PayerToPayer, RequestedBy = "client", ReceivingPayerId = "NEW-PLAN", Type = "Claim",
+            }, Tenant))
+            .Should().ThrowAsync<BulkExportRequestException>();
+        _jobs.Jobs.Should().BeEmpty();
+    }
+
+    private static PayerToPayerConsentAttestation Attestation(string member, string payer, DateTime start, DateTime? end) => new()
+    {
+        TenantId = Tenant,
+        MemberId = member,
+        ReceivingPayerId = payer,
+        Policy = "sensitive",
+        PeriodStartUtc = start,
+        PeriodEndUtc = end,
+        ConsentFingerprint = member + payer,
+        RecordedAtUtc = start,
+        RecordedBy = "test",
+    };
+
+    private sealed class FakePayerToPayerSource : IPayerToPayerBulkSource
+    {
+        public List<(string Payer, string Client, string Member)> Reads { get; } = new();
+
+        public async IAsyncEnumerable<(string Type, string Line)> ReadAsync(
+            string tenantId, string receivingPayerId, string requestedBy, string memberId,
+            IReadOnlyCollection<string> types, DateTimeOffset? since,
+            [EnumeratorCancellation] CancellationToken ct = default)
+        {
+            await Task.Yield();
+            Reads.Add((receivingPayerId, requestedBy, memberId));
+            yield return ("Patient", $$"""{"resourceType":"Patient","id":"{{memberId}}"}""");
+            yield return ("ExplanationOfBenefit", $$"""{"resourceType":"ExplanationOfBenefit","id":"{{memberId}}-1"}""");
+            yield return ("ExplanationOfBenefit", $$"""{"resourceType":"ExplanationOfBenefit","id":"{{memberId}}-2"}""");
+        }
     }
 
     private sealed class FakeResourceSource : IBulkExportResourceSource

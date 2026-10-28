@@ -45,6 +45,15 @@ public interface IPayerToPayerConsentAttestationStore
     /// <summary>The payer's current consent for the member when it is in force at <paramref name="nowUtc"/>.</summary>
     Task<PayerToPayerConsentAttestation?> FindInForceAsync(
         string tenantId, string memberId, string receivingPayerId, DateTime nowUtc, CancellationToken ct = default);
+
+    /// <summary>
+    /// The members whose consent for <paramref name="receivingPayerId"/> is in
+    /// force at <paramref name="nowUtc"/>, in ordinal order: the members a
+    /// Payer-to-Payer bulk export for that payer covers (G-35). Listing is not
+    /// the decision; each member is asked again when it is exported.
+    /// </summary>
+    Task<IReadOnlyList<string>> ListMembersInForceAsync(
+        string tenantId, string receivingPayerId, DateTime nowUtc, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -61,9 +70,16 @@ public sealed class MongoPayerToPayerConsentAttestationStore : IPayerToPayerCons
     {
         var database = client.GetDatabase(configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice");
         _collection = database.GetCollection<BsonDocument>(CollectionName);
-        _collection.Indexes.CreateOne(new CreateIndexModel<BsonDocument>(
-            Builders<BsonDocument>.IndexKeys.Ascending("tenantId").Ascending("memberId").Ascending("receivingPayerId"),
-            new CreateIndexOptions { Unique = true, Name = "ux_tenant_member_payer" }));
+        _collection.Indexes.CreateMany(
+        [
+            new CreateIndexModel<BsonDocument>(
+                Builders<BsonDocument>.IndexKeys.Ascending("tenantId").Ascending("memberId").Ascending("receivingPayerId"),
+                new CreateIndexOptions { Unique = true, Name = "ux_tenant_member_payer" }),
+            // A payer's bulk export lists its members.
+            new CreateIndexModel<BsonDocument>(
+                Builders<BsonDocument>.IndexKeys.Ascending("tenantId").Ascending("receivingPayerId").Ascending("memberId"),
+                new CreateIndexOptions { Name = "ix_tenant_payer_member" }),
+        ]);
     }
 
     public async Task RecordAsync(PayerToPayerConsentAttestation a, CancellationToken ct = default)
@@ -113,6 +129,24 @@ public sealed class MongoPayerToPayerConsentAttestationStore : IPayerToPayerCons
         return attestation.InForce(nowUtc) ? attestation : null;
     }
 
+    public async Task<IReadOnlyList<string>> ListMembersInForceAsync(
+        string tenantId, string receivingPayerId, DateTime nowUtc, CancellationToken ct = default)
+    {
+        var f = Builders<BsonDocument>.Filter;
+        var filter = f.Eq("tenantId", tenantId)
+                     & f.Eq("receivingPayerId", receivingPayerId)
+                     & f.Lte("periodStart", nowUtc)
+                     & f.Or(f.Eq("periodEnd", BsonNull.Value), f.Gt("periodEnd", nowUtc));
+        var documents = await _collection.Find(filter)
+            .Project(Builders<BsonDocument>.Projection.Include("memberId").Exclude("_id"))
+            .ToListAsync(ct);
+        return documents
+            .Select(d => d["memberId"].AsString)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+    }
+
     private static FilterDefinition<BsonDocument> Key(string tenantId, string memberId, string payerId) =>
         Builders<BsonDocument>.Filter.Eq("tenantId", tenantId)
         & Builders<BsonDocument>.Filter.Eq("memberId", memberId)
@@ -135,4 +169,13 @@ public sealed class InMemoryPayerToPayerConsentAttestationStore : IPayerToPayerC
     public Task<PayerToPayerConsentAttestation?> FindInForceAsync(
         string tenantId, string memberId, string receivingPayerId, DateTime nowUtc, CancellationToken ct = default) =>
         Task.FromResult(_records.TryGetValue((tenantId, memberId, receivingPayerId), out var a) && a.InForce(nowUtc) ? a : null);
+
+    public Task<IReadOnlyList<string>> ListMembersInForceAsync(
+        string tenantId, string receivingPayerId, DateTime nowUtc, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<string>>(_records.Values
+            .Where(a => a.TenantId == tenantId && a.ReceivingPayerId == receivingPayerId && a.InForce(nowUtc))
+            .Select(a => a.MemberId)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList());
 }
