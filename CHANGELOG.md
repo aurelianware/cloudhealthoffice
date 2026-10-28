@@ -21,6 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requests with no recorded notice are counted in the CMS-0057-F metrics
   (`extensionNoticesOwed`). See docs/compliance/CMS-0057-F-EXTENSION-NOTICE.md.
 
+- **CMS-0057-F prior authorization: list of items and services that require
+  prior authorization.** benefit-plan-service builds the list for a state,
+  line of business and program from the same rule set PA requests are
+  evaluated against (`GET api/v1/prior-auth-rules/required-services`, JSON,
+  or `format=csv` to post as a file). Each entry names its codes or code
+  ranges and when PA applies (always or at listed places of service, with
+  listed diagnoses, or above a quantity limit). Drug (J) codes are left out
+  and reported separately, as are exemptions and any rule type the list
+  cannot describe, so a reviewer sees everything that shapes it before
+  publishing.
+
 - **CMS-0057-F prior authorization: appeal outcomes reach the reporting
   ledger.** Recording a decision on a member's pre-service authorization
   appeal (`POST api/service-cases/{id}/decision`) now requires a structured
