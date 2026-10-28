@@ -333,6 +333,22 @@ public class MetadataController : FhirControllerBase
                             ("request",      SearchParamType.Reference)
                         ],
                         supportedProfiles: [FhirAppealMapper.ClaimResponseProfileUrl]),
+                        // ── Bulk Data and PDex bulk Payer-to-Payer ──────────
+                        // Served with bulk export only: Group/{provider id}/$export,
+                        // a provider's attributed panel (G-34); and the Groups a
+                        // $bulk-member-match answers with, read by the payer
+                        // they were made for and exported as
+                        // $davinci-data-export (G-35). No Group search.
+                        .. BulkExportEnabled
+                            ? [BuildResource("Group", [],
+                                interactions: [CapabilityStatement.TypeRestfulInteraction.Read],
+                                operations:
+                                [
+                                    GroupExportOperation,
+                                    ("bulk-member-match", "http://hl7.org/fhir/us/davinci-pdex/OperationDefinition/BulkMemberMatch"),
+                                    ("davinci-data-export", "http://hl7.org/fhir/us/davinci-atr/OperationDefinition/davinci-data-export"),
+                                ])]
+                            : Array.Empty<CapabilityStatement.ResourceComponent>(),
                         // ── USCDI clinical resources (PAT-02) ─────────────
                         // Generated from ClinicalResourceInventory, the same
                         // table ClinicalResourceController routes from and the
@@ -348,13 +364,6 @@ public class MetadataController : FhirControllerBase
                         // clinical content to satisfy US Core invariants, so a
                         // US Core profile URL here would be a label rather than
                         // a conformance claim. See docs/architecture/clinical-fhir.md.
-                        // ── Bulk Data group export (G-34) ─────────────────
-                        // Group/{provider id}/$export, the provider's attributed
-                        // panel. Only the operation: Group is not read or
-                        // searched here.
-                        .. BulkExportEnabled
-                            ? [BuildResource("Group", [], interactions: [], operations: [GroupExportOperation])]
-                            : Array.Empty<CapabilityStatement.ResourceComponent>(),
                         .. ClinicalResourceInventory.All.Select(entry =>
                             BuildResource(
                                 entry.ResourceType,

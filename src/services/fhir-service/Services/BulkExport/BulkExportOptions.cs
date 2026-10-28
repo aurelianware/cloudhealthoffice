@@ -9,6 +9,8 @@ namespace FhirService.Services.BulkExport;
 ///   BulkExport:PurgeAfter                 when files are deleted however they ended (2.00:00:00)
 ///   BulkExport:MaxResourcesPerFile        NDJSON lines per file before a new one starts (10000)
 ///   BulkExport:PollInterval               how often the worker looks for work (00:00:05)
+///   BulkExport:MatchGroupLifetime         how long a $bulk-member-match Group can be read and exported (30.00:00:00)
+///   BulkExport:MaxMembersPerMatch         MemberBundles one $bulk-member-match may carry (500)
 ///   BulkExport:DocumentStore:Provider     Azure | Gcs | S3 | InMemory: where the files are written,
 ///   BulkExport:DocumentStore:...          with that provider's settings, as for DocumentStore:*
 /// </code>
@@ -34,6 +36,16 @@ public sealed class BulkExportOptions
 
     /// <summary>A job claimed by a worker that stopped is picked up again after this long.</summary>
     public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// How long the Groups a PDex <c>$bulk-member-match</c> answers with can be
+    /// read and exported (<c>Group/{id}/$davinci-data-export</c>). The consents
+    /// the match recorded are judged again whenever the export runs.
+    /// </summary>
+    public TimeSpan MatchGroupLifetime { get; set; } = TimeSpan.FromDays(30);
+
+    /// <summary>The members one <c>$bulk-member-match</c> may name; a larger request is split by the payer.</summary>
+    public int MaxMembersPerMatch { get; set; } = 500;
 
     /// <summary>The store's container (bucket prefix) for export files.</summary>
     public const string Container = "bulk-exports";
@@ -61,6 +73,8 @@ public sealed class BulkExportOptions
             throw new InvalidOperationException("BulkExport:FileLifetime must be positive and no longer than BulkExport:PurgeAfter.");
         if (MaxResourcesPerFile <= 0)
             throw new InvalidOperationException("BulkExport:MaxResourcesPerFile must be positive.");
+        if (MatchGroupLifetime <= TimeSpan.Zero || MaxMembersPerMatch <= 0)
+            throw new InvalidOperationException("BulkExport:MatchGroupLifetime and BulkExport:MaxMembersPerMatch must be positive.");
         if (PollInterval <= TimeSpan.Zero || LeaseDuration <= TimeSpan.Zero)
             throw new InvalidOperationException("BulkExport:PollInterval and BulkExport:LeaseDuration must be positive.");
     }
