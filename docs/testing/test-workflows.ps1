@@ -220,9 +220,9 @@ catch {
 
 Write-Host ""
 Write-Host "🌐 Azure Portal Links for Monitoring:" -ForegroundColor Cyan
-Write-Host "• Logic Apps: https://portal.azure.com/#@/resource/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$LogicAppName" -ForegroundColor Blue
-Write-Host "• Integration Account: https://portal.azure.com/#@/resource/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/$ResourceGroup/providers/Microsoft.Logic/integrationAccounts/hipaa-attachments-ia" -ForegroundColor Blue
-Write-Host "• Service Bus: https://portal.azure.com/#@/resource/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/$ResourceGroup/providers/Microsoft.ServiceBus/namespaces/$ServiceBusNamespace" -ForegroundColor Blue
+Write-Host "• Logic Apps: https://portal.azure.com/#@/resource/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$LogicAppName" -ForegroundColor Blue
+Write-Host "• Integration Account: https://portal.azure.com/#@/resource/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$ResourceGroup/providers/Microsoft.Logic/integrationAccounts/hipaa-attachments-ia" -ForegroundColor Blue
+Write-Host "• Service Bus: https://portal.azure.com/#@/resource/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$ResourceGroup/providers/Microsoft.ServiceBus/namespaces/$ServiceBusNamespace" -ForegroundColor Blue
 
 Write-Host ""
 if ($TestFullWorkflow) {

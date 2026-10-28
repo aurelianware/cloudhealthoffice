@@ -1,7 +1,7 @@
 {
   "properties": {
     "integrationAccount": {
-      "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/development/providers/Microsoft.Logic/integrationAccounts/dev-integration"
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/development/providers/Microsoft.Logic/integrationAccounts/dev-integration"
     }
   }
 }

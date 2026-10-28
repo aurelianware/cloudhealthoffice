@@ -120,7 +120,19 @@ public sealed class AppealIndexInitializer : IHostedService
                 new CreateIndexOptions { Name = "ix_tenant_appeal_occurred" }),
             cancellationToken: cancellationToken);
 
-        _logger.LogInformation("Appeal, AppealEvent indexes ensured.");
+        // CMS-0057-F appeal-outcome reporting sweep (AppealDecisionReportingSweep):
+        // decided cases still owed to the authorization's reporting ledger.
+        var serviceCases = _db.GetCollection<MemberServiceCase>(MemberServiceCaseStore.CollectionName);
+        await serviceCases.Indexes.CreateOneAsync(
+            new CreateIndexModel<MemberServiceCase>(
+                Builders<MemberServiceCase>.IndexKeys
+                    .Ascending(x => x.Status)
+                    .Ascending(x => x.ReportedToAuthorizationAt)
+                    .Ascending(x => x.ReportingNextAttemptAt),
+                new CreateIndexOptions { Name = "ix_status_reported_next_attempt" }),
+            cancellationToken: cancellationToken);
+
+        _logger.LogInformation("Appeal, AppealEvent, MemberServiceCase indexes ensured.");
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

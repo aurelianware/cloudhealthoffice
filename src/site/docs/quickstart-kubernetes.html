@@ -266,7 +266,7 @@ kubectl cluster-info
             <p>The deploy script works out of the box with stub values &mdash; all services start and API endpoints work. For real Azure AD sign-in and Stripe payments:</p>
 <pre><code>cp .env.local.example .env.local
 <span class="code-comment"># Edit .env.local with your Azure AD app registration and Stripe test keys</span></code></pre>
-            <p>Without <code>.env.local</code>, the portal UI loads but Azure AD sign-in won&rsquo;t work. API endpoints function normally with the <code>X-Tenant-ID</code> header.</p>
+            <p>Without <code>.env.local</code>, the portal UI loads but Azure AD sign-in won&rsquo;t work. API endpoints still work with a local development token: <code>TOKEN=$(./scripts/dev-token.sh --tenant demo)</code>, sent as <code>Authorization: Bearer $TOKEN</code>.</p>
           </div>
         </div>
 
