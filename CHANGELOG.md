@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **SMART Backend Services client authentication (`private_key_jwt`, G-42).**
+  A tenant administrator can register a backend client with its public keys,
+  as a JWK Set (`jwks`) or a `jwksUri`, instead of receiving a client secret.
+  The client then gets `client_credentials` tokens by presenting a signed JWT
+  as the SMART Backend Services profile defines it (RS384 or ES384, `aud` =
+  the token endpoint, single-use `jti`, `exp` at most five minutes out).
+  `PUT /api/admin/smart/clients/{clientId}/keys` rotates the keys. This lets
+  outside providers' bulk `$export` clients authenticate. Secret clients are
+  unchanged. See `docs/security/smart-auth-tenancy.md`.
+
+### Changed
+
+- **`.well-known/smart-configuration`** now advertises RS384/ES384 (and the
+  256/512 variants) for `private_key_jwt`, the `client-confidential-asymmetric`
+  capability, and the `refresh_token` grant (D-25).
+
 ## [6.0.0] - 2026-10-28
 
 "Paths of Glory."

@@ -57,6 +57,12 @@ public interface ISmartIdentityStore
     /// </summary>
     Task<bool> SetClientPayerIdAsync(string tenantId, string clientId, string? payerId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Sets (or, with null, clears) the <c>jwks_uri</c> a registration's keys
+    /// are fetched from. Same tenant rule as <see cref="SetClientPayerIdAsync"/>.
+    /// </summary>
+    Task<bool> SetClientJwksUriAsync(string tenantId, string clientId, string? jwksUri, CancellationToken ct = default);
+
     /// <summary>Development seeding only: binds an identity directly, skipping enrolment.</summary>
     Task SeedDevelopmentBindingsAsync(
         IEnumerable<MemberLink> members, IEnumerable<ProviderUserLink> providers,
@@ -333,6 +339,16 @@ public sealed class MongoSmartIdentityStore : ISmartIdentityStore
         var result = await _clients.UpdateOneAsync(
             c => c.ClientId == clientId && c.TenantId == tenantId,
             Builders<ClientTenantRegistration>.Update.Set(c => c.PayerId, payerId),
+            cancellationToken: ct);
+        return result.MatchedCount == 1;
+    }
+
+    public async Task<bool> SetClientJwksUriAsync(string tenantId, string clientId, string? jwksUri, CancellationToken ct = default)
+    {
+        await ReadyAsync();
+        var result = await _clients.UpdateOneAsync(
+            c => c.ClientId == clientId && c.TenantId == tenantId,
+            Builders<ClientTenantRegistration>.Update.Set(c => c.JwksUri, jwksUri),
             cancellationToken: ct);
         return result.MatchedCount == 1;
     }
