@@ -30,15 +30,46 @@
             @if (_review.Status == "Received")
             {
                 <PermissionGate Permission="appeals:write">
+                    @if (IsAppeal)
+                    {
+                        <MudSelect T="string" @bind-Value="_outcome" Label="Appeal outcome" Required="true" data-testid="appeal-outcome">
+                            <MudSelectItem Value="@("Upheld")">Denial upheld</MudSelectItem>
+                            <MudSelectItem Value="@("Overturned")">Denial overturned (approved)</MudSelectItem>
+                            <MudSelectItem Value="@("PartiallyOverturned")">Denial partially overturned</MudSelectItem>
+                        </MudSelect>
+                    }
                     <MudTextField @bind-Value="_resolution" Label="Review outcome and rationale" Lines="5" MaxLength="4000" />
-                    <MudButton OnClick="RecordAsync" Disabled="@(_busy || string.IsNullOrWhiteSpace(_resolution))"
+                    <MudButton OnClick="RecordAsync" Disabled="@(_busy || string.IsNullOrWhiteSpace(_resolution) || (IsAppeal && _outcome is null))"
                                Variant="Variant.Filled" Color="Color.Primary">Record decision</MudButton>
                 </PermissionGate>
             }
             else
             {
+                @if (_review.DecisionOutcome is not null)
+                {
+                    <MudText Class="mt-3" data-testid="appeal-outcome-recorded">Appeal outcome: @OutcomeLabel(_review.DecisionOutcome)</MudText>
+                }
                 <MudText Class="mt-3">@_review.Resolution</MudText>
                 <MudText Typo="Typo.caption">Recorded by @_review.DecisionRecordedBy at @_review.DecisionRecordedAt?.ToUniversalTime().ToString("u")</MudText>
+                @switch (_review.Reporting)
+                {
+                    case "Reported":
+                        <MudAlert Severity="Severity.Success" Dense="true" Class="mt-2" data-testid="appeal-reporting">
+                            On the authorization's CMS-0057-F reporting record since @_review.ReportedToAuthorizationAt?.ToUniversalTime().ToString("u").
+                        </MudAlert>
+                        break;
+                    case "Pending":
+                        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2" data-testid="appeal-reporting">
+                            Not yet on the authorization's CMS-0057-F reporting record. It is retried automatically.
+                        </MudAlert>
+                        break;
+                    case "NeedsAttention":
+                        <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2" data-testid="appeal-reporting">
+                            The authorization's CMS-0057-F reporting record did not accept this outcome: @_review.ReportingRejectedReason
+                            Ask a reporting administrator to reconcile it.
+                        </MudAlert>
+                        break;
+                }
             }
             <MudAlert Severity="Severity.Info" Class="mt-4">
                 Recording a decision does not send notices, effectuate benefits or close the regulatory case.
@@ -79,6 +110,15 @@
     private List<ContactCaseResult> _cases = [];
     private CaseReview? _review;
     private string _resolution = string.Empty;
+    private string? _outcome;
+    private bool IsAppeal => _review?.Classification.EndsWith("Appeal", StringComparison.Ordinal) == true;
+    private static string OutcomeLabel(string? outcome) => outcome switch
+    {
+        "Upheld" => "denial upheld",
+        "Overturned" => "denial overturned (approved)",
+        "PartiallyOverturned" => "denial partially overturned",
+        _ => outcome ?? string.Empty,
+    };
     private string? _error;
     private bool _loading;
     private bool _busy;
@@ -104,7 +144,7 @@
         try
         {
             using var response = await Http.PostAsJsonAsync($"{BaseUrl}/{Uri.EscapeDataString(CaseId!)}/decision",
-                new { _review!.Revision, Resolution = _resolution });
+                new { _review!.Revision, Resolution = _resolution, Outcome = IsAppeal ? _outcome : null });
             if (!response.IsSuccessStatusCode) { _error = "The decision was refused. Refresh the case and check your permissions before retrying."; return; }
             await LoadAsync();
         }
@@ -125,5 +165,9 @@
         public string? Resolution { get; set; }
         public string? DecisionRecordedBy { get; set; }
         public DateTime? DecisionRecordedAt { get; set; }
+        public string? DecisionOutcome { get; set; }
+        public string? Reporting { get; set; }
+        public DateTime? ReportedToAuthorizationAt { get; set; }
+        public string? ReportingRejectedReason { get; set; }
     }
 }

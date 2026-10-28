@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CMS-0057-F prior authorization: appeal outcomes reach the reporting
+  ledger.** Recording a decision on a member's pre-service authorization
+  appeal (`POST api/service-cases/{id}/decision`) now requires a structured
+  outcome (`Upheld`, `Overturned`, `PartiallyOverturned`; refused for a
+  grievance). appeals-service writes it to the authorization's reporting
+  ledger as an `AppealDecision` fact (Denied, Approved or Modified), as the
+  service for the case's tenant, keyed by the case so a retry is never
+  counted twice. A fact that cannot be delivered right away is retried by a
+  background sweep with backoff; one the ledger refuses is flagged on the
+  case. The portal case screen asks for the outcome and shows whether it is
+  on the reporting record, so "approved after appeal" counts these appeals.
+
 - **CMS-0057-F prior authorization: lawful extensions, every denial reason,
   and the extension and appeal metrics.** A reviewer can take the one lawful
   extension of an open Medicare Advantage or Medicaid request's decision
