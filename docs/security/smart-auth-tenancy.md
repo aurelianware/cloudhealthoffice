@@ -188,6 +188,7 @@ through a named policy.
 | `GET /api/admin/smart/provider-users`, `DELETE …/{id}` (revoke) | `providers:write` |
 | `POST/GET /api/admin/smart/clients`, `GET/DELETE …/{clientId}` | `settings:manage` |
 | `PUT /api/admin/smart/clients/{clientId}/payer` (set the payer a backend client acts for) | `settings:manage` |
+| `PUT /api/admin/smart/clients/{clientId}/keys` (replace a `private_key_jwt` client's `jwks` or `jwksUri`) | `settings:manage` |
 | `GET …/{clientId}/approvals[?subject=]`, `DELETE …/{clientId}/approvals/{approvalId}`, `DELETE …/{clientId}/approvals[?subject=]` (withdraw app approvals of the tenant's own client; `404` for another tenant's) | `settings:manage` |
 | `POST /launch` | `members:read` |
 
@@ -204,11 +205,68 @@ through a named policy.
   addresses are allowed only on a Development host. Scopes must be registered
   and suitable for the client's kind. A `backend` client also takes `payerId`
   (see "Payer-to-Payer clients" below); it is required when the scopes include
-  `system/PayerToPayer.read`, and refused for interactive apps.
+  `system/PayerToPayer.read`, and refused for interactive apps. A `backend`
+  client may instead be registered with `jwks` (a JWK Set) or `jwksUri`; it
+  then authenticates with `private_key_jwt` and is given no secret (see
+  "Backend Services client authentication" below). The response says which,
+  in `tokenEndpointAuthMethod`.
 - Each change writes one audit line on log category
   `CloudHealthOffice.SmartAuth.Audit`, recording the action, tenant, actor and
   target. Token issuance, refusals with a reason code, and code redemptions are
   logged on the same category. Codes and tokens are never logged.
+
+## Backend Services client authentication (`private_key_jwt`, G-42)
+
+A backend client authenticates to `/connect/token` in one of two ways, chosen
+when it is registered:
+
+- **Client secret** (`client_secret_basic` / `client_secret_post`): the
+  default. The secret is returned once by `POST /clients`.
+- **Signed JWT** (`private_key_jwt`, the SMART Backend Services profile,
+  https://hl7.org/fhir/smart-app-launch/backend-services.html): register the
+  client with `jwks` (its public JWK Set) or `jwksUri` (an HTTPS URL that
+  serves it). No secret is issued, and a secret is never accepted for it.
+
+The client sends `grant_type=client_credentials`, `scope`,
+`client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer`
+and `client_assertion`, a JWT that:
+
+| Field | Rule |
+|---|---|
+| header `alg` | RS384 or ES384 (SMART's required pair); RS256, ES256, RS512 and ES512 are also accepted. No `HS*`, no `none`. |
+| header `kid` | A key of the client's registered set. |
+| header `typ` | `JWT` (SMART), `client-authentication+jwt`, or absent. |
+| `iss`, `sub` | Both the `client_id`. A `client_id` form field, if sent, must match. |
+| `aud` | The token endpoint URL, `{SmartAuth:Issuer}/connect/token` (the issuer itself is also accepted). One audience. |
+| `exp` | No more than five minutes in the future (one minute of clock skew). |
+| `jti` | Required, at most 256 characters, and single use per client: the (client, `jti`) pair is recorded in MongoDB (`smart_client_assertion_jtis`, TTL index) until the assertion expires, so a replay is refused on every pod. |
+
+Every refusal is `invalid_client` (an `iss`/`sub` mismatch is OpenIddict's
+`invalid_grant`), and the jti/lifetime refusals are logged on the audit
+category with reason `client_assertion_replayed`,
+`client_assertion_without_jti` or `client_assertion_lifetime_too_long`. The
+token itself is minted exactly as for a secret client: `tenant_id` from the
+registration, `payer_id` when set, only `system/` scopes the registration
+grants.
+
+Keys:
+
+- A registered JWK Set holds 1 to 10 public signing keys, each with a unique
+  `kid`: RSA of at least 2048 bits, or EC on P-256, P-384 or P-521. A set with
+  private material (`d`, the RSA CRT values) or a symmetric key is refused, not
+  stripped; the client must make a new key.
+- A `jwksUri` must be HTTPS. It is fetched at registration (an unreachable URL
+  or an invalid set is refused then) and, after that, when an assertion
+  arrives: a set is reused for 5 minutes, refetched early when an assertion
+  names a `kid` the cached set lacks (at most every 30 seconds), and kept for
+  up to an hour if the client's host is down. The fetch does not follow
+  redirects, reads at most 64 KB, and refuses to connect to loopback, private,
+  link-local and other non-public addresses (on Development only,
+  `SmartAuth:ClientJwks:AllowPrivateNetworks=true` lifts that).
+- `PUT /clients/{clientId}/keys` with `{ "jwks": … }` or `{ "jwksUri": … }`
+  replaces the keys of a `private_key_jwt` client. Assertions signed with a
+  removed key fail from then on; tokens already issued run to expiry. A secret
+  client is not converted; register a new client.
 
 ## Payer-to-Payer clients (deploy and operations)
 

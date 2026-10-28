@@ -275,6 +275,26 @@ public class SecurityConsentMetricsTests
                                         && s.EndsWith(".write", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void SmartConfiguration_AdvertisesBackendServicesAsymmetricAuth()
+    {
+        // G-42 / D-25: private_key_jwt is implemented in smart-auth-service, so
+        // the document advertises it with SMART's required RS384 and ES384 and
+        // the client-confidential-asymmetric capability.
+        var controller = new SmartConfigurationController(AcceptanceContext.DemoConfig())
+            .WithTenant();
+
+        var ok = controller.GetSmartConfiguration().Should().BeOfType<OkObjectResult>().Subject;
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value));
+        var root = doc.RootElement;
+
+        static List<string?> Strings(JsonElement e) => e.EnumerateArray().Select(x => x.GetString()).ToList();
+        Strings(root.GetProperty("token_endpoint_auth_methods_supported")).Should().Contain("private_key_jwt");
+        Strings(root.GetProperty("token_endpoint_auth_signing_alg_values_supported")).Should().Contain(["RS384", "ES384"]);
+        Strings(root.GetProperty("capabilities")).Should().Contain(["client-confidential-asymmetric", "permission-system"]);
+        Strings(root.GetProperty("grant_types_supported")).Should().Contain("client_credentials");
+    }
+
     /// <summary>
     /// Drives the REAL SMART scope middleware and reports the status it produced.
     /// 200 means the request reached the terminal delegate — the middleware

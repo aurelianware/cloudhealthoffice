@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using System.Text.Json;
+using Microsoft.IdentityModel.Tokens;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Abstractions;
@@ -15,16 +17,30 @@ public sealed record ClientRegistrationRequest(
     List<string>? RedirectUris,
     List<string>? Scopes,
     bool Confidential = false,
-    string? PayerId = null);
+    string? PayerId = null,
+    JsonElement? Jwks = null,
+    string? JwksUri = null);
 
 /// <summary>Body of <c>PUT {clientId}/payer</c>.</summary>
 public sealed record ClientPayerRequest(string? PayerId);
+
+/// <summary>
+/// Body of <c>PUT {clientId}/keys</c>: exactly one of a JWK Set or a
+/// <c>jwks_uri</c>.
+/// </summary>
+public sealed record ClientKeysRequest(JsonElement? Jwks, string? JwksUri);
 
 /// <summary>
 /// SMART client registrations. The registering administrator's CHO token
 /// decides the tenant the client belongs to; there is no tenant field. A
 /// client_credentials token is issued for that tenant and no other, and an
 /// interactive app issues tokens only to users mapped to that tenant.
+///
+/// A backend client authenticates either with a client secret (issued once,
+/// in the registration response) or, when it is registered with a JWK Set
+/// (<c>jwks</c>) or a <c>jwks_uri</c>, with a signed JWT assertion
+/// (<c>private_key_jwt</c>, SMART Backend Services; G-42). An asymmetric
+/// client is never given a secret.
 /// </summary>
 [ApiController]
 [Route("api/admin/smart/clients")]
@@ -73,6 +89,10 @@ public sealed class SmartClientRegistrationsController : ControllerBase
         var payerError = ValidatePayer(kind, payerId, grantsPayerToPayer: scopes.Contains(SmartScopes.SystemPayerToPayerRead));
         if (payerError != null) return BadRequest(new { error = payerError });
 
+        var keys = await ResolveKeysAsync(kind, request.Jwks, request.JwksUri, required: false, ct);
+        if (keys.Error != null) return BadRequest(new { error = keys.Error });
+        var asymmetric = keys.Set != null;
+
         var redirectUris = new List<Uri>();
         if (kind != SmartClientKind.Backend)
         {
@@ -90,7 +110,7 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             return Conflict(new { error = "client_id_taken" });
 
         var confidential = kind == SmartClientKind.Backend || request.Confidential;
-        var secret = confidential ? Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)) : null;
+        var secret = confidential && !asymmetric ? Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)) : null;
         var displayName = string.IsNullOrWhiteSpace(request.DisplayName) ? clientId : request.DisplayName.Trim();
 
         // Binding first: a client id another tenant already holds is refused
@@ -102,6 +122,7 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             Kind = kind,
             DisplayName = displayName,
             PayerId = payerId,
+            JwksUri = keys.Uri?.AbsoluteUri,
             CreatedBy = _actor.UserId,
             CreatedAt = DateTimeOffset.UtcNow,
         }, ct);
@@ -114,6 +135,7 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             ClientSecret = secret,
             ClientType = confidential ? ClientTypes.Confidential : ClientTypes.Public,
             DisplayName = displayName,
+            JsonWebKeySet = keys.Set,
         };
         foreach (var uri in redirectUris) descriptor.RedirectUris.Add(uri);
 
@@ -144,8 +166,12 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             throw;
         }
 
+        // The token endpoint authentication method the client is to use.
+        string? authMethod = !confidential ? null
+            : asymmetric ? ClientAuthenticationMethods.PrivateKeyJwt
+            : ClientAuthenticationMethods.ClientSecretBasic;
         _audit.Admin("client-registered", _actor.TenantId, _actor.UserId,
-            payerId is null ? $"client={clientId} kind={kind}" : $"client={clientId} kind={kind} payer={payerId}");
+            $"client={clientId} kind={kind} auth={authMethod ?? "none"}" + (payerId is null ? "" : $" payer={payerId}"));
         return StatusCode(201, new
         {
             clientId,
@@ -153,6 +179,8 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             tenantId = _actor.TenantId,
             displayName,
             clientSecret = secret,
+            tokenEndpointAuthMethod = authMethod,
+            jwksUri = keys.Uri?.AbsoluteUri,
             redirectUris = redirectUris.Select(u => u.ToString()),
             scopes,
             payerId,
@@ -187,6 +215,46 @@ public sealed class SmartClientRegistrationsController : ControllerBase
         _audit.Admin("client-payer-set", _actor.TenantId, _actor.UserId,
             $"client={clientId} previousPayer={binding.PayerId ?? "(none)"} payer={payerId ?? "(none)"}");
         return Ok(await _store.FindClientAsync(clientId, ct));
+    }
+
+    /// <summary>
+    /// PUT {clientId}/keys — replaces the keys one of this tenant's
+    /// <c>private_key_jwt</c> backend clients authenticates with: a new JWK
+    /// Set, or a (new) <c>jwks_uri</c>. Assertions signed with a key no longer
+    /// registered are refused from now on; access tokens already issued run to
+    /// expiry. A secret client is not converted here: register a new client.
+    /// </summary>
+    [HttpPut("{clientId}/keys")]
+    public async Task<IActionResult> SetKeys(string clientId, [FromBody] ClientKeysRequest request, CancellationToken ct)
+    {
+        var binding = await _store.FindClientAsync(clientId, ct);
+        if (binding == null || binding.TenantId != _actor.TenantId)
+            return NotFound();
+        var application = await _applications.FindByClientIdAsync(clientId, ct);
+        if (application is null)
+            return NotFound();
+        if (binding.Kind != SmartClientKind.Backend
+            || await _applications.GetJsonWebKeySetAsync(application, ct) is not { Keys.Count: > 0 })
+            return BadRequest(new { error = "Only a backend client registered with jwks or jwksUri has keys to replace." });
+
+        var keys = await ResolveKeysAsync(binding.Kind, request.Jwks, request.JwksUri, required: true, ct);
+        if (keys.Error != null) return BadRequest(new { error = keys.Error });
+
+        var descriptor = new OpenIddictApplicationDescriptor();
+        await _applications.PopulateAsync(descriptor, application, ct);
+        descriptor.JsonWebKeySet = keys.Set;
+        await _applications.UpdateAsync(application, descriptor, ct);
+        await _store.SetClientJwksUriAsync(_actor.TenantId, clientId, keys.Uri?.AbsoluteUri, ct);
+
+        _audit.Admin("client-keys-set", _actor.TenantId, _actor.UserId,
+            $"client={clientId} source={(keys.Uri is null ? "jwks" : "jwks_uri")} kids={string.Join(',', keys.Set!.Keys.Select(k => k.Kid))}");
+        return Ok(new
+        {
+            clientId,
+            tokenEndpointAuthMethod = ClientAuthenticationMethods.PrivateKeyJwt,
+            jwksUri = keys.Uri?.AbsoluteUri,
+            kids = keys.Set!.Keys.Select(k => k.Kid),
+        });
     }
 
     [HttpGet]
@@ -269,6 +337,42 @@ public sealed class SmartClientRegistrationsController : ControllerBase
 
     private async Task<bool> IsOwnClientAsync(string clientId, CancellationToken ct)
         => await _store.FindClientAsync(clientId, ct) is { } binding && binding.TenantId == _actor.TenantId;
+
+    private sealed record ResolvedKeys(JsonWebKeySet? Set, Uri? Uri, string? Error);
+
+    /// <summary>
+    /// The keys of an asymmetric (<c>private_key_jwt</c>) backend client:
+    /// an inline JWK Set, or the set its <c>jwks_uri</c> serves now (fetched
+    /// so a wrong or unreachable URI is refused at registration, and so the
+    /// OpenIddict application holds a key). Neither, when not
+    /// <paramref name="required"/>, means a secret client.
+    /// </summary>
+    private async Task<ResolvedKeys> ResolveKeysAsync(
+        string kind, JsonElement? jwks, string? jwksUri, bool required, CancellationToken ct)
+    {
+        var hasJwks = jwks is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) };
+        var hasUri = !string.IsNullOrWhiteSpace(jwksUri);
+        if (!hasJwks && !hasUri)
+            return new(null, null, required ? "Provide jwks or jwksUri." : null);
+        if (kind != SmartClientKind.Backend)
+            return new(null, null, "jwks and jwksUri are available to backend clients only.");
+        if (hasJwks && hasUri)
+            return new(null, null, "Provide jwks or jwksUri, not both.");
+
+        if (hasJwks)
+        {
+            var (set, error) = SmartClientJwks.Parse(jwks!.Value.GetRawText());
+            return new(set, null, error);
+        }
+
+        if (!SmartClientJwks.IsAcceptableJwksUri(jwksUri, out var uri))
+            return new(null, null, "jwksUri must be an absolute HTTPS URL without user info or fragment.");
+        var fetcher = HttpContext.RequestServices.GetRequiredService<SmartJwksFetcher>();
+        var (fetched, fetchError) = await fetcher.FetchAsync(uri, ct);
+        return fetched is null
+            ? new(null, null, $"jwksUri: {fetchError}")
+            : new(fetched, uri, null);
+    }
 
     /// <summary>
     /// A payer id belongs to backend clients only, must be well formed, and is
