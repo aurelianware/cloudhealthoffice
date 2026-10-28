@@ -5,7 +5,9 @@ using System.Text.Json;
 using CloudHealthOffice.Testing.FhirService;
 using FhirService.Services.Identity;
 using FluentAssertions;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -86,6 +88,50 @@ public class SmartAuthToFhirEndToEndTests
         echo.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
         other.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await other.Content.ReadAsStringAsync()).Should().Contain("Tenant context conflict");
+    }
+
+    [Fact]
+    public async Task BackendClientRegisteredToAProvider_ReadsThatProvidersAttributedMember()
+    {
+        // Provider Access for a backend client: smart-auth mints the
+        // registration's providerId as provider_id; fhir-service believes it
+        // from the registration issuer and attributes the client as that
+        // provider. The same client without a provider is not attributed.
+        var tenant = SmartAuthDriver.NewTenant();
+        var admin = _smart.Admin(tenant);
+        var resp = await admin.PostAsJsonAsync("/api/admin/smart/clients", new
+        {
+            kind = "backend", scopes = new[] { "system/*.read" }, providerId = "prov-e2e",
+        });
+        resp.StatusCode.Should().Be(HttpStatusCode.Created, await resp.Content.ReadAsStringAsync());
+        var created = JsonDocument.Parse(await resp.Content.ReadAsStringAsync()).RootElement;
+        var clientId = created.GetProperty("clientId").GetString()!;
+        var secret = created.GetProperty("clientSecret").GetString()!;
+
+        var (status, body) = await _smart.ClientCredentialsAsync(clientId, secret, "system/*.read");
+        status.Should().Be(HttpStatusCode.OK, body.ToString());
+        var token = body.GetProperty("access_token").GetString()!;
+        SmartAuthDriver.Claim(SmartAuthDriver.Read(token), "provider_id").Should().Be("prov-e2e");
+        SmartAuthDriver.Claim(SmartAuthDriver.Read(token), "sub").Should().Be(clientId);
+
+        using var fhir = await FhirTrustingSmartAuthAsync(confineTo: null, configuration: new Dictionary<string, string?>
+        {
+            [$"Cms0057:ProviderAttribution:PanelsByTenant:{tenant}:0:ProviderId"] = "prov-e2e",
+            [$"Cms0057:ProviderAttribution:PanelsByTenant:{tenant}:0:MemberIds:0"] = "pat-001",
+        });
+
+        var attributed = await Bearer(fhir, token).GetAsync("/fhir/r4/Patient/pat-001");
+        attributed.StatusCode.Should().Be(HttpStatusCode.OK, await attributed.Content.ReadAsStringAsync());
+        (await Bearer(fhir, token).GetAsync("/fhir/r4/Patient/pat-002")).StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "pat-002 is not on the provider's panel");
+
+        // Clear the provider: a new token is the bare client again, and not attributed.
+        (await admin.PutAsJsonAsync($"/api/admin/smart/clients/{clientId}/provider", new { providerId = (string?)null }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        var (_, bare) = await _smart.ClientCredentialsAsync(clientId, secret, "system/*.read");
+        var bareToken = bare.GetProperty("access_token").GetString()!;
+        SmartAuthDriver.Claim(SmartAuthDriver.Read(bareToken), "provider_id").Should().BeNull();
+        (await Bearer(fhir, bareToken).GetAsync("/fhir/r4/Patient/pat-001")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
@@ -285,7 +331,8 @@ public class SmartAuthToFhirEndToEndTests
 
     // ── fhir-service host trusting this smart-auth-service ────────────────────
 
-    private async Task<WebApplicationFactory<Program>> FhirTrustingSmartAuthAsync(string? confineTo, bool markSmartAuth = true)
+    private async Task<WebApplicationFactory<Program>> FhirTrustingSmartAuthAsync(
+        string? confineTo, bool markSmartAuth = true, IDictionary<string, string?>? configuration = null)
     {
         var smartHttp = _fixture.Factory.CreateClient();
         var discovery = JsonDocument.Parse(await smartHttp.GetStringAsync("/.well-known/openid-configuration")).RootElement;
@@ -326,6 +373,8 @@ public class SmartAuthToFhirEndToEndTests
             b.UseEnvironment("Development");
             // fhir-service requires MongoDB; these tests never touch it.
             b.UseUnreachableMongoWithInMemoryStores();
+            if (configuration is not null)
+                b.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(configuration));
             b.ConfigureTestServices(services =>
             {
                 services.RemoveAll<SmartTrustOptions>();

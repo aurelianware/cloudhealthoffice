@@ -39,6 +39,7 @@ public sealed class CallerIdentityResolver
 
         var map = issuer.Claims;
         var scopes = ParseScopes(principal);
+        var callerType = ClassifyCaller(scopes);
 
         return new AuthenticatedCaller
         {
@@ -48,7 +49,7 @@ public sealed class CallerIdentityResolver
             AuthorizedParty = FirstNonEmpty(principal, "azp"),
             ClientId = Mapped(principal, map.ClientIdClaim)
                        ?? FirstNonEmpty(principal, "client_id", "azp"),
-            CallerType = ClassifyCaller(scopes),
+            CallerType = callerType,
             Scopes = scopes,
 
             // Identity that only a configured mapping can establish.
@@ -61,6 +62,9 @@ public sealed class CallerIdentityResolver
                 Mapped(principal, map.PatientClaim) ?? FirstNonEmpty(principal, "patient")),
 
             RegisteredPayerId = issuer.IssuesChoClientRegistrations ? RegisteredPayer(principal) : null,
+            RegisteredProviderId = issuer.IssuesChoClientRegistrations && callerType == SmartCallerType.System
+                ? RegisteredProvider(principal)
+                : null,
         };
     }
 
@@ -80,6 +84,24 @@ public sealed class CallerIdentityResolver
         var value = values[0];
         if (value.Length is 0 or > 64 || !char.IsAsciiLetterOrDigit(value[0])) return null;
         return value.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_') ? value : null;
+    }
+
+    /// <summary>The claim CHO's authorization server mints a backend client's registered provider into.</summary>
+    public const string ProviderIdClaim = "provider_id";
+
+    /// <summary>
+    /// The value of exactly one <c>provider_id</c> claim that is a FHIR id
+    /// (<c>[A-Za-z0-9\-\.]{1,64}</c>, smart-auth-service's registration rule),
+    /// or null.
+    /// </summary>
+    private static string? RegisteredProvider(ClaimsPrincipal principal)
+    {
+        var values = principal.FindAll(ProviderIdClaim).Select(c => c.Value).ToList();
+        if (values.Count != 1) return null;
+        var value = values[0];
+        return value.Length is > 0 and <= 64 && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '.')
+            ? value
+            : null;
     }
 
     /// <summary>

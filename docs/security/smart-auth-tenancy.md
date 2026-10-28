@@ -61,7 +61,7 @@ about.
 | Authorize with `user/*`, `launch` scope or a `launch` parameter (provider) | An active provider link, and a `provider-app` client of the same tenant. A launch must be registered in the same tenant for the same client. | `sub` = providerId (fhir-service attributes Provider Access by `sub`), `tenant_id`, `fhirUser` = `Practitioner/{providerId}`, `npi`, plus `patient`/`encounter` **only** from the launch |
 | Provider asks for patient scopes with no launch | — | Refused. There is no patient picker. |
 | `system/*` scopes in an interactive flow | — | Refused |
-| client_credentials | A `backend` client registration. Only `system/` scopes are allowed. `system/PayerToPayer.read` additionally needs the registration's `payerId`. | `sub` = client_id, `tenant_id` = the registration's tenant, `payer_id` = the registration's `payerId` (when set) |
+| client_credentials | A `backend` client registration. Only `system/` scopes are allowed. `system/PayerToPayer.read` additionally needs the registration's `payerId`. | `sub` = client_id, `tenant_id` = the registration's tenant, `payer_id` = the registration's `payerId` (when set), `provider_id` = the registration's `providerId` (when set) |
 | Code or refresh exchange | The same binding must still be active and unchanged, and the client must still be registered to the same tenant | Rebuilt from the stored grant |
 
 If the binding is missing, the authorize response is `access_denied` and the
@@ -188,6 +188,7 @@ through a named policy.
 | `GET /api/admin/smart/provider-users`, `DELETE …/{id}` (revoke) | `providers:write` |
 | `POST/GET /api/admin/smart/clients`, `GET/DELETE …/{clientId}` | `settings:manage` |
 | `PUT /api/admin/smart/clients/{clientId}/payer` (set the payer a backend client acts for) | `settings:manage` |
+| `PUT /api/admin/smart/clients/{clientId}/provider` (set or clear the provider a backend client acts for) | `settings:manage` |
 | `PUT /api/admin/smart/clients/{clientId}/keys` (replace a `private_key_jwt` client's `jwks` or `jwksUri`) | `settings:manage` |
 | `GET …/{clientId}/approvals[?subject=]`, `DELETE …/{clientId}/approvals/{approvalId}`, `DELETE …/{clientId}/approvals[?subject=]` (withdraw app approvals of the tenant's own client; `404` for another tenant's) | `settings:manage` |
 | `POST /launch` | `members:read` |
@@ -209,7 +210,14 @@ through a named policy.
   client may instead be registered with `jwks` (a JWK Set) or `jwksUri`; it
   then authenticates with `private_key_jwt` and is given no secret (see
   "Backend Services client authentication" below). The response says which,
-  in `tokenEndpointAuthMethod`.
+  in `tokenEndpointAuthMethod`. A `backend` client also takes `providerId` (a
+  FHIR id): the provider it acts for in Provider Access. It is minted into its
+  tokens as `provider_id`; fhir-service believes it only from the issuer
+  marked `IssuesChoClientRegistrations`, only on a system-scope token, and
+  then attributes the client as that provider (single reads and bulk
+  `Group/{providerId}/$export`, whose jobs belong to the provider, so every
+  client registered to it in the tenant sees them). Refused for interactive
+  apps.
 - Each change writes one audit line on log category
   `CloudHealthOffice.SmartAuth.Audit`, recording the action, tenant, actor and
   target. Token issuance, refusals with a reason code, and code redemptions are
