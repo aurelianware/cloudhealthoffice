@@ -164,7 +164,7 @@ Write-Host "   • Direction: Send (Outbound to the clearinghouse)" -ForegroundC
 Write-Host ""
 
 Write-Host "🌐 Configure agreements in Azure Portal:" -ForegroundColor Cyan
-Write-Host "https://portal.azure.com/#@/resource/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/$ResourceGroup/providers/Microsoft.Logic/integrationAccounts/$IntegrationAccountName/agreements" -ForegroundColor Blue
+Write-Host "https://portal.azure.com/#@/resource/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$ResourceGroup/providers/Microsoft.Logic/integrationAccounts/$IntegrationAccountName/agreements" -ForegroundColor Blue
 
 Write-Host ""
 Write-Host "💡 Key Configuration Notes:" -ForegroundColor Yellow

@@ -31,6 +31,16 @@ public class TenantSeedService : BackgroundService
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         cts.CancelAfter(TimeSpan.FromSeconds(30)); // Timeout: don't hang forever
 
+        // The Entra tenant to seed comes only from configuration
+        // (SeedTenant__AzureTenantId); no tenant id is built into the image.
+        var seedAzureTenantId = _configuration["SeedTenant:AzureTenantId"];
+        if (string.IsNullOrWhiteSpace(seedAzureTenantId))
+        {
+            _logger.LogInformation(
+                "SeedTenant:AzureTenantId is not configured; skipping tenant subscription seed.");
+            return;
+        }
+
         try
         {
             var mongoClient = _serviceProvider.GetRequiredService<IMongoClient>();
@@ -39,8 +49,6 @@ public class TenantSeedService : BackgroundService
             var db = mongoClient.GetDatabase(dbName);
             var collection = db.GetCollection<TenantSubscription>(collectionName);
 
-            var seedAzureTenantId = _configuration["SeedTenant:AzureTenantId"]
-                                    ?? "32177734-051b-4fdc-9568-cc35530191b1";
             var seedTenantId = _configuration["SeedTenant:TenantId"] ?? "aurelianware";
             var seedOrgName = _configuration["SeedTenant:OrganizationName"] ?? "Cloud Health Office";
             var seedAdminEmail = _configuration["SeedTenant:AdminEmail"] ?? "";
