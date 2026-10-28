@@ -1,6 +1,7 @@
 using FhirService.Services.Identity;
 using FhirService.Models;
 using FhirService.Services;
+using FhirService.Services.ProviderAccess;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CloudHealthOffice.Infrastructure.Logging;
@@ -10,6 +11,13 @@ namespace FhirService.Controllers;
 /// <summary>
 /// FHIR Bulk Data Access endpoints for system-level and group-level export.
 /// The default service explicitly refuses initiation until durable export exists.
+/// With <c>BulkExport:Enabled</c>, a provider exports its own attributed panel
+/// as <c>Group/{its provider id}/$export</c> (G-34); a system-level export is
+/// still refused.
+///
+/// Every job belongs to the caller that started it. Another caller, in the same
+/// tenant or not, is answered as if the job did not exist, whether it polls,
+/// cancels or downloads.
 /// </summary>
 [Route("fhir/r4")]
 // DELIBERATELY SMART/system-only. A bulk export covers every member in its
@@ -48,6 +56,8 @@ public class BulkExportController : FhirControllerBase
             Type = type,
             Since = since,
             OutputFormat = outputFormat ?? "application/fhir+ndjson",
+            RequestUrl = $"{FhirBaseUrl}/$export{RawQueryString}",
+            RequestedBy = CallerId,
         };
 
         BulkExportJob job;
@@ -58,6 +68,10 @@ public class BulkExportController : FhirControllerBase
         catch (BulkExportNotImplementedException)
         {
             return BulkExportNotImplemented();
+        }
+        catch (BulkExportRequestException ex)
+        {
+            return FhirBadRequest(ex.Message);
         }
 
         _logger.LogInformation(
@@ -86,6 +100,8 @@ public class BulkExportController : FhirControllerBase
             Since = since,
             OutputFormat = outputFormat ?? "application/fhir+ndjson",
             GroupId = groupId,
+            RequestUrl = $"{FhirBaseUrl}/Group/{Uri.EscapeDataString(groupId)}/$export{RawQueryString}",
+            RequestedBy = CallerId,
         };
 
         BulkExportJob job;
@@ -96,6 +112,14 @@ public class BulkExportController : FhirControllerBase
         catch (BulkExportNotImplementedException)
         {
             return BulkExportNotImplemented();
+        }
+        catch (BulkExportRequestException ex)
+        {
+            return FhirBadRequest(ex.Message);
+        }
+        catch (BulkExportGroupNotFoundException)
+        {
+            return FhirNotFound("Group", groupId);
         }
 
         _logger.LogInformation(
@@ -110,13 +134,17 @@ public class BulkExportController : FhirControllerBase
     [HttpGet("$export-status/{jobId}")]
     public async Task<IActionResult> ExportStatus(string jobId, CancellationToken ct)
     {
-        var job = await _exportService.GetJobStatusAsync(jobId, TenantId, ct);
+        var job = await OwnJobAsync(jobId, ct);
 
         if (job == null)
             return NotFound(new { error = $"Export job '{jobId}' not found" });
 
-        if (job.Status == BulkExportStatus.Complete && job.Manifest != null)
-            return Ok(job.Manifest);
+        if (job.Status == BulkExportStatus.Complete)
+        {
+            if (job.ExpiresAt is { } expires)
+                Response.Headers["Expires"] = expires.ToString("R");
+            return Ok(job.Manifest ?? BuildManifest(job));
+        }
 
         if (job.Status == BulkExportStatus.Error)
         {
@@ -136,7 +164,8 @@ public class BulkExportController : FhirControllerBase
     [HttpDelete("$export-status/{jobId}")]
     public async Task<IActionResult> CancelExport(string jobId, CancellationToken ct)
     {
-        var cancelled = await _exportService.CancelJobAsync(jobId, TenantId, ct);
+        var cancelled = await OwnJobAsync(jobId, ct) is not null
+            && await _exportService.CancelJobAsync(jobId, TenantId, ct);
 
         if (!cancelled)
             return NotFound(new { error = $"Export job '{jobId}' not found" });
@@ -147,7 +176,55 @@ public class BulkExportController : FhirControllerBase
         return StatusCode(202);
     }
 
+    /// <summary>
+    /// GET /fhir/r4/$export-file/{jobId}/{fileName} — one NDJSON file of a
+    /// completed export. Served through fhir-service with the caller's token,
+    /// never as a link into storage (the manifest says
+    /// <c>requiresAccessToken: true</c>).
+    /// </summary>
+    [HttpGet("$export-file/{jobId}/{fileName}")]
+    public async Task<IActionResult> ExportFile(string jobId, string fileName, CancellationToken ct)
+    {
+        var job = await OwnJobAsync(jobId, ct);
+        var content = job is null ? null : await _exportService.OpenFileAsync(jobId, fileName, TenantId, ct);
+        if (content is null)
+            return NotFound(new { error = $"Export file '{fileName}' not found" });
+
+        Response.Headers.CacheControl = "no-store";
+        return File(content, "application/fhir+ndjson");
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>The validated caller, as Provider Access identifies it.</summary>
+    private string? CallerId => ProviderAccessAuthorizationFilter.ResolveCallerId(HttpContext);
+
+    /// <summary>The job, only when this caller started it.</summary>
+    private async Task<BulkExportJob?> OwnJobAsync(string jobId, CancellationToken ct)
+    {
+        var job = await _exportService.GetJobStatusAsync(jobId, TenantId, ct);
+        var caller = CallerId;
+        return job is not null
+               && !string.IsNullOrEmpty(caller)
+               && string.Equals(job.RequestedBy, caller, StringComparison.Ordinal)
+            ? job
+            : null;
+    }
+
+    private BulkExportManifest BuildManifest(BulkExportJob job) => new()
+    {
+        TransactionTime = (job.TransactionTime ?? job.CreatedAt).ToString("o"),
+        Request = job.Request,
+        RequiresAccessToken = true,
+        Output = job.Files
+            .Select(f => new BulkExportOutput
+            {
+                Type = f.Type,
+                Url = $"{FhirBaseUrl}/$export-file/{job.JobId}/{Uri.EscapeDataString(f.Name)}",
+                Count = f.Count,
+            })
+            .ToList(),
+    };
 
     private IActionResult BulkExportNotImplemented()
     {

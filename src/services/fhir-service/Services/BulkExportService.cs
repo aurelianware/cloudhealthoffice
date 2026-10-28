@@ -38,3 +38,18 @@ public sealed class BulkExportNotImplementedException : NotSupportedException
     public BulkExportNotImplementedException()
         : base("Bulk export is not implemented. No export job or download files were created.") { }
 }
+
+/// <summary>A kick-off the server refuses as malformed (400), with a message safe to return.</summary>
+public sealed class BulkExportRequestException : Exception
+{
+    public BulkExportRequestException(string message) : base(message) { }
+}
+
+/// <summary>
+/// A Group this caller may not export. Answered exactly as a Group that does
+/// not exist (404), so a caller cannot learn which provider ids are real.
+/// </summary>
+public sealed class BulkExportGroupNotFoundException : Exception
+{
+    public BulkExportGroupNotFoundException() : base("Group not found.") { }
+}

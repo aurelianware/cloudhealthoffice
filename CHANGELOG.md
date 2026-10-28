@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CMS-0057-F Provider Access: bulk `$export`.** Off by default
+  (`BulkExport:Enabled`); until then kick-off answers 501 as before. When on,
+  a provider exports its own attributed panel as
+  `POST fhir/r4/Group/{its provider id}/$export` (`_type`, `_since`), and every
+  member is authorized again (attribution, then opt-out) before anything is
+  written. A background worker writes NDJSON per resource type to a dedicated
+  bucket (`BulkExport:DocumentStore:*`, never the documents bucket), and the
+  caller who started the export downloads the files through
+  `GET fhir/r4/$export-file/{job}/{file}` with its own token for 24 hours.
+  Files are deleted after two days, or at once on `DELETE $export-status`.
+  System-level `$export` still answers 501. GCP: `enable_bulk_export` in
+  `infrastructure/gcp` and the `BULK_EXPORT_BUCKET` /
+  `FHIR_SERVICE_GOOGLE_ACCOUNT` deploy variables.
+
 - **CMS-0057-F prior authorization: extension screen and member extension
   notice.** The authorization record's Review tab shows the decision deadline
   in force and, for an open Medicare Advantage or Medicaid request, lets a

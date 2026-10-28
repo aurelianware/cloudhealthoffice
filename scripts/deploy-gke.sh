@@ -55,6 +55,10 @@
 #                            FHIR store, which streams to BigQuery (terraform outputs
 #                            managed_fhir_store_id and managed_fhir_store_service_account with
 #                            enable_managed_fhir_store = true; ADR 023). Optional; off without them.
+#   BULK_EXPORT_BUCKET  FHIR_SERVICE_GOOGLE_ACCOUNT
+#                            Provider Access Bulk Data $export files (terraform outputs bulk_export_bucket
+#                            and fhir_service_google_account with enable_bulk_export = true). Optional;
+#                            without them a Group $export answers 501.
 
 set -Eeuo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -374,6 +378,11 @@ if [[ -n "${MANAGED_FHIR_STORE:-}" && -n "${MANAGED_FHIR_STORE_SERVICE_ACCOUNT:-
     || warn "MANAGED_FHIR_STORE is set but Kafka is off: nothing will be published (fhir-service reads claims.finalized.v1)"
 elif [[ -n "${MANAGED_FHIR_STORE:-}${MANAGED_FHIR_STORE_SERVICE_ACCOUNT:-}" ]]; then
   warn "MANAGED_FHIR_STORE and MANAGED_FHIR_STORE_SERVICE_ACCOUNT go together; managed FHIR store publishing is off"
+fi
+if [[ -n "${BULK_EXPORT_BUCKET:-}" && -n "${FHIR_SERVICE_GOOGLE_ACCOUNT:-}" ]]; then
+  render_args+=(--bulk-export-bucket "$BULK_EXPORT_BUCKET" --fhir-service-google-account "$FHIR_SERVICE_GOOGLE_ACCOUNT")
+elif [[ -n "${BULK_EXPORT_BUCKET:-}${FHIR_SERVICE_GOOGLE_ACCOUNT:-}" ]]; then
+  warn "BULK_EXPORT_BUCKET and FHIR_SERVICE_GOOGLE_ACCOUNT go together; bulk export is off"
 fi
 rendered="$(mktemp)"
 python3 deploy/gcp/render_manifests.py "${render_args[@]}" > "$rendered"

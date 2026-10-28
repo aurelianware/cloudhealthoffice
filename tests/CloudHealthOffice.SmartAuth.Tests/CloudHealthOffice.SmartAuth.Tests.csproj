@@ -18,7 +18,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <!-- Security: force patched transitive versions (CVE-2024-30105, CVE-2024-43485) -->
-    <PackageReference Include="System.Text.Json" />
+    <!-- fhir-service reaches Azure.Core (via CloudHealthOffice.DocumentStore, bulk export files), which needs 10.x. -->
+    <PackageReference Include="System.Text.Json" VersionOverride="10.0.3" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />

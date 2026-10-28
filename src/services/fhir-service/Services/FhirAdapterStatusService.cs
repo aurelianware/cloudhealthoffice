@@ -85,7 +85,8 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
             + "conditional-delete sweeper; disabled by default)"),
         ("CRD", FhirAdapterModes.Demo, "CrdService"),
         ("DTR", FhirAdapterModes.Demo, "DtrService"),
-        ("BulkExport", FhirAdapterModes.Demo, "BulkExportService scaffold"),
+        ("BulkExport", FhirAdapterModes.Demo,
+            "BulkExportService (501) unless BulkExport:Enabled; then Provider Access Group export (DurableBulkExportService)"),
         // Purpose-scoped consent on one registry: ConsentPurposeOfUse
         // (PayerToPayerExchange / ProviderAccess) evaluated by the shared
         // ConsentAuthorizationPolicy. BOTH purposes are enforced server-side

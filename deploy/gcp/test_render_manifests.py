@@ -545,3 +545,47 @@ def test_sam_secret_payload_keeps_key_out_of_renderer_and_cli_arguments():
     assert base64.b64decode(secret["data"]["ProviderVerification__SamGovApiKey"]) == b"test-only-value"
     assert "test-only-value" not in result.stdout
     assert not result.stderr
+
+
+BULK_GSA = "cho-fhir-service@demo-project.iam.gserviceaccount.com"
+
+
+def test_fhir_service_has_no_bulk_export_by_default():
+    fhir = deployments(render())["fhir-service"]
+    assert not any(k.startswith("BulkExport__") for k in env(fhir))
+
+
+def test_bulk_export_writes_to_its_own_bucket_as_fhir_service():
+    docs = render("--bulk-export-bucket", "demo-project-cho-bulk-exports",
+                  "--fhir-service-google-account", BULK_GSA)
+    deps = deployments(docs)
+    fhir = deps["fhir-service"]
+    assert fhir["spec"]["template"]["spec"]["serviceAccountName"] == "fhir-service-sa"
+    assert {k: v for k, v in env(fhir).items() if k.startswith("BulkExport__")} == {
+        "BulkExport__Enabled": "true",
+        "BulkExport__DocumentStore__Provider": "Gcs",
+        "BulkExport__DocumentStore__Gcs__Bucket": "demo-project-cho-bulk-exports",
+    }
+    account = next(d for d in docs if d["kind"] == "ServiceAccount" and d["metadata"]["name"] == "fhir-service-sa")
+    assert account["metadata"]["annotations"]["iam.gke.io/gcp-service-account"] == BULK_GSA
+    assert not any("BulkExport__Enabled" in env(d) for n, d in deps.items() if n != "fhir-service")
+
+
+def test_bulk_export_shares_the_managed_store_identity():
+    docs = render("--bulk-export-bucket", "b",
+                  "--managed-fhir-store", MANAGED_STORE,
+                  "--managed-fhir-store-service-account", MANAGED_STORE_GSA)
+    account = next(d for d in docs if d["kind"] == "ServiceAccount" and d["metadata"]["name"] == "fhir-service-sa")
+    assert account["metadata"]["annotations"]["iam.gke.io/gcp-service-account"] == MANAGED_STORE_GSA
+    assert env(deployments(docs)["fhir-service"])["BulkExport__DocumentStore__Gcs__Bucket"] == "b"
+
+
+def test_bulk_export_needs_one_fhir_service_identity():
+    for extra in (["--bulk-export-bucket", "b"],
+                  ["--bulk-export-bucket", "b", "--fhir-service-google-account", BULK_GSA,
+                   "--managed-fhir-store", MANAGED_STORE, "--managed-fhir-store-service-account", MANAGED_STORE_GSA]):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--registry", REGISTRY, *extra],
+            capture_output=True, text=True,
+        )
+        assert result.returncode != 0, extra

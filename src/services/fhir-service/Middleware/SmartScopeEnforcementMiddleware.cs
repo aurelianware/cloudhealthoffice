@@ -312,6 +312,14 @@ public class SmartScopeEnforcementMiddleware
             // A bulk export covers every member in its scope, so a patient-context
             // token (bound to ONE member) may never start one; backend contexts only.
             ["$export"] = ("$export", ReadAccess, BackendContexts),
+
+            // Polling, cancelling and downloading an export are part of the
+            // same read, governed by the scope that started it. Without these
+            // entries DELETE (cancel) would fall back to the method and need a
+            // write scope no export client holds. The controller still answers
+            // only the caller that started the job.
+            ["$export-status"] = ("$export", ReadAccess, BackendContexts),
+            ["$export-file"] = ("$export", ReadAccess, BackendContexts),
         };
 
     /// <summary>

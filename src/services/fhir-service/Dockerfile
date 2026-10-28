@@ -19,6 +19,7 @@ COPY src/services/shared/CloudHealthOffice.PlanConfiguration/CloudHealthOffice.P
 COPY src/engines/CloudHealthOffice.ManagedFhirStore/CloudHealthOffice.ManagedFhirStore.csproj src/engines/CloudHealthOffice.ManagedFhirStore/
 COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/CloudHealthOffice.ProviderEnrollmentService.csproj src/engines/CloudHealthOffice.ProviderEnrollmentService/
 COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/CloudHealthOffice.PriorAuthRuleEngine.csproj src/engines/CloudHealthOffice.PriorAuthRuleEngine/
+COPY src/engines/CloudHealthOffice.DocumentStore/CloudHealthOffice.DocumentStore.csproj src/engines/CloudHealthOffice.DocumentStore/
 RUN dotnet restore src/services/fhir-service/fhir-service.csproj
 
 # Copy source code and build
@@ -31,6 +32,7 @@ COPY src/services/shared/CloudHealthOffice.PlanConfiguration/ src/services/share
 COPY src/engines/CloudHealthOffice.ManagedFhirStore/ src/engines/CloudHealthOffice.ManagedFhirStore/
 COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/ src/engines/CloudHealthOffice.ProviderEnrollmentService/
 COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/ src/engines/CloudHealthOffice.PriorAuthRuleEngine/
+COPY src/engines/CloudHealthOffice.DocumentStore/ src/engines/CloudHealthOffice.DocumentStore/
 # CHO-authored FHIR profile artifacts — embedded into fhir-service.dll at
 # build time via the <EmbeddedResource Include="...docs/fhir/profiles/*.json">
 # item in fhir-service.csproj (logical-name prefix `FhirArtifacts.`).

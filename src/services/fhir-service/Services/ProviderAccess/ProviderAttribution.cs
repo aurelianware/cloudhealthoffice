@@ -22,6 +22,18 @@ public interface IProviderAttributionSource
     /// </summary>
     Task<bool> IsAttributedAsync(
         string tenantId, string providerId, string memberId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The members this source places on <paramref name="providerId"/>'s
+    /// panel, for a bulk Provider Access export (G-34). A source that can only
+    /// answer one member at a time lists no one, so its members are not in a
+    /// bulk export until it can list them. Listing is never the access
+    /// decision: every listed member is asked again through
+    /// <see cref="IsAttributedAsync"/> and consent before anything is written.
+    /// </summary>
+    Task<IReadOnlyCollection<string>> ListAttributedAsync(
+        string tenantId, string providerId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyCollection<string>>(Array.Empty<string>());
 }
 
 /// <summary>
@@ -118,5 +130,23 @@ public sealed class ConfiguredProviderAttributionSource : IProviderAttributionSo
             && p.MemberIds.Any(m => string.Equals(m, memberId, StringComparison.Ordinal)));
 
         return Task.FromResult(attributed);
+    }
+
+    public Task<IReadOnlyCollection<string>> ListAttributedAsync(
+        string tenantId, string providerId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId)
+            || string.IsNullOrWhiteSpace(providerId)
+            || !_options.Value.PanelsByTenant.TryGetValue(tenantId, out var panels)
+            || panels is null)
+            return Task.FromResult<IReadOnlyCollection<string>>(Array.Empty<string>());
+
+        IReadOnlyCollection<string> members = panels
+            .Where(p => string.Equals(p.ProviderId, providerId, StringComparison.Ordinal) && p.MemberIds is not null)
+            .SelectMany(p => p.MemberIds)
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        return Task.FromResult(members);
     }
 }
