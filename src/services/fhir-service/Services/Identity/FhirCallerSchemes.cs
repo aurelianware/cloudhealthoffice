@@ -72,7 +72,11 @@ public static class FhirCallerSchemes
         configuration.GetSection(SmartTrustOptions.SectionName).Bind(smart);
 
         var choIssuers = cho.Issuers.Select(i => i.Issuer).ToHashSet(StringComparer.Ordinal);
-        var overlap = smart.NormalizedIssuers().Select(i => i.Issuer).Where(choIssuers.Contains).ToList();
+        // The Demo issuer is checked as configured too: it is trusted in the
+        // spelling smart-auth-service writes, but it names the same server.
+        var overlap = smart.NormalizedIssuers().Select(i => i.Issuer)
+            .Concat(smart.TrustedIssuers.Count == 0 && !string.IsNullOrWhiteSpace(smart.Issuer) ? [smart.Issuer!] : [])
+            .Where(choIssuers.Contains).Distinct(StringComparer.Ordinal).ToList();
         if (overlap.Count > 0)
         {
             // One issuer in both lists would make the scheme a token lands in a

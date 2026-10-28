@@ -81,6 +81,15 @@ explicitly must mark one itself.
 Trust is **administrator-controlled**. Nothing in a token can add an issuer,
 change an audience, or redirect key retrieval.
 
+The bundled smart-auth-service (OpenIddict) writes its issuer as
+`Uri.AbsoluteUri`, so a host-only `SmartAuth:Issuer` such as
+`https://auth.example.com` appears in its tokens and discovery document as
+`https://auth.example.com/`. In `Demo` mode fhir-service trusts the legacy
+single issuer in that spelling, so both services can carry the same
+configuration value. This is still one exact spelling. An explicit
+`TrustedIssuers` entry for smart-auth-service must be written the way it
+appears in smart-auth-service's discovery document, trailing slash included.
+
 The legacy single-issuer fields (`SmartAuth:Issuer`, `Audience`,
 `RequireHttpsMetadata`) still work in `Demo` mode and are **ignored** in
 `ExternalIssuer` mode, so a half-migrated configuration cannot keep trusting the

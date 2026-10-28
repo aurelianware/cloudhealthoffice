@@ -59,6 +59,32 @@ public class SmartTrustConfigurationTests
             .Which.Audiences.Should().ContainSingle().Which.Should().Be("fhir-api");
     }
 
+    [Theory]
+    [InlineData("https://auth.cloudhealthoffice.com", "https://auth.cloudhealthoffice.com/")]
+    [InlineData("https://auth.cloudhealthoffice.com/", "https://auth.cloudhealthoffice.com/")]
+    [InlineData("http://cho-smart-auth-service:8080", "http://cho-smart-auth-service:8080/")]
+    [InlineData("https://idp.example.com/smart", "https://idp.example.com/smart")]
+    public void DemoMode_TrustsTheIssuerAsTheBundledServerWritesIt(string configured, string trusted)
+    {
+        // Both services read the same SmartAuth:Issuer, and smart-auth-service
+        // (OpenIddict) writes it as Uri.AbsoluteUri. One spelling, exactly.
+        var options = new SmartTrustOptions { Mode = SmartTrustMode.Demo, Issuer = configured };
+
+        options.NormalizedIssuers().Should().ContainSingle().Which.Issuer.Should().Be(trusted);
+    }
+
+    [Fact]
+    public void ExternalIssuerMode_TakesTheIssuerExactlyAsWritten()
+    {
+        var options = new SmartTrustOptions
+        {
+            Mode = SmartTrustMode.ExternalIssuer,
+            TrustedIssuers = [new TrustedIssuerOptions { Issuer = "https://idp.example.com", Audiences = ["a"] }],
+        };
+
+        options.NormalizedIssuers().Single().Issuer.Should().Be("https://idp.example.com");
+    }
+
     [Fact]
     public void ExternalIssuerMode_IgnoresTheLegacySingleIssuerFields()
     {

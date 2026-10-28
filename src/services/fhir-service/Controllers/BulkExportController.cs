@@ -115,13 +115,26 @@ public class BulkExportController : FhirControllerBase
             return Ok(job.Manifest ?? BuildManifest(job));
         }
 
+        // Bulk Data 2.0: an error status carries an OperationOutcome, and a
+        // cancelled export's status URL is 404 from the moment it is deleted.
         if (job.Status == BulkExportStatus.Error)
         {
-            return StatusCode(500, new { error = job.ErrorMessage ?? "Export failed" });
+            return StatusCode(500, new Hl7.Fhir.Model.OperationOutcome
+            {
+                Issue =
+                [
+                    new Hl7.Fhir.Model.OperationOutcome.IssueComponent
+                    {
+                        Severity = Hl7.Fhir.Model.OperationOutcome.IssueSeverity.Error,
+                        Code = Hl7.Fhir.Model.OperationOutcome.IssueType.Exception,
+                        Diagnostics = job.ErrorMessage ?? "Export failed",
+                    },
+                ],
+            });
         }
 
         if (job.Status == BulkExportStatus.Cancelled)
-            return StatusCode(StatusCodes.Status410Gone);
+            return FhirNotFound("$export-status", jobId);
 
         // Still in progress
         Response.Headers["X-Progress"] = $"{job.ProgressPercent}% complete";

@@ -180,6 +180,8 @@ public class SmartBackendServicesAuthTests
         SmartAuthDriver.Claim(token, "tenant_id").Should().Be(tenant);
         SmartAuthDriver.Claim(token, "sub").Should().Be(client.ClientId);
         body.TryGetProperty("refresh_token", out _).Should().BeFalse();
+        body.GetProperty("scope").GetString().Should().Be("system/*.read",
+            "SMART Backend Services requires scope in the token response even when it equals the request");
     }
 
     [Fact]

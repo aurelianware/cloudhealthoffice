@@ -75,6 +75,25 @@ public class BulkExportProviderAccessTests : IClassFixture<BulkExportProviderAcc
     }
 
     [Fact]
+    public async Task TheCapabilityStatement_DeclaresPatientAndGroupExport_AndNoSystemExport()
+    {
+        // Inferno's Bulk Data suite reads these before it kicks anything off.
+        var json = await _host.CreateClient().GetStringAsync("/fhir/r4/metadata");
+        var rest = JsonDocument.Parse(json).RootElement.GetProperty("rest")[0];
+
+        static IEnumerable<string?> Ops(JsonElement element)
+            => element.TryGetProperty("operation", out var ops)
+                ? ops.EnumerateArray().Select(o => o.GetProperty("definition").GetString())
+                : [];
+        JsonElement Resource(string type)
+            => rest.GetProperty("resource").EnumerateArray().Single(r => r.GetProperty("type").GetString() == type);
+
+        Ops(Resource("Patient")).Should().Contain("http://hl7.org/fhir/uv/bulkdata/OperationDefinition/patient-export");
+        Ops(Resource("Group")).Should().Contain("http://hl7.org/fhir/uv/bulkdata/OperationDefinition/group-export");
+        Ops(rest).Should().NotContain("http://hl7.org/fhir/uv/bulkdata/OperationDefinition/export");
+    }
+
+    [Fact]
     public async Task ProviderExportsItsOwnPanel_AndDownloadsTheFile()
     {
         var client = Client();
@@ -205,7 +224,8 @@ public class BulkExportProviderAccessTests : IClassFixture<BulkExportProviderAcc
         await RunWorkerUntilIdleAsync();
 
         (await client.DeleteAsync(status)).StatusCode.Should().Be(HttpStatusCode.Accepted);
-        (await client.GetAsync(status)).StatusCode.Should().Be(HttpStatusCode.Gone);
+        (await client.GetAsync(status)).StatusCode.Should().Be(HttpStatusCode.NotFound,
+            "Bulk Data 2.0: a cancelled export's status URL is 404");
 
         await _host.Worker().PurgeAsync();
         (await client.GetAsync(status)).StatusCode.Should().Be(HttpStatusCode.NotFound);

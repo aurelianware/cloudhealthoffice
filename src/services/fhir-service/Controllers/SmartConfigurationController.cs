@@ -66,7 +66,7 @@ public class SmartConfigurationController : FhirControllerBase
             });
         }
 
-        var authBase = endpoints.Issuer;
+        var authBase = endpoints.Issuer.TrimEnd('/');
 
         var fhirBase = _config["Fhir:ServerBaseUrl"]
             ?? $"{Request.Scheme}://{Request.Host}/fhir/r4";
@@ -74,7 +74,7 @@ public class SmartConfigurationController : FhirControllerBase
         var config = new
         {
             // ── Core endpoints ────────────────────────────────────────────────
-            issuer = authBase,
+            issuer = endpoints.Issuer,
             jwks_uri = endpoints.JwksUri,
             authorization_endpoint = endpoints.AuthorizationEndpoint,
             token_endpoint = endpoints.TokenEndpoint,
@@ -196,12 +196,15 @@ public class SmartConfigurationController : FhirControllerBase
                 TokenEndpoint: metadata?.TokenEndpoint);
         }
 
-        var authBase = trusted?.Issuer
+        var issuer = trusted?.Issuer
             ?? _config["SmartAuth:Issuer"]
             ?? throw new InvalidOperationException("SmartAuth:Issuer is not configured.");
+        // "https://auth.example.com/" is as valid an issuer as the bare host;
+        // either way the endpoints hang off it with exactly one slash.
+        var authBase = issuer.TrimEnd('/');
 
         return new AuthorizationServerEndpoints(
-            Issuer: authBase,
+            Issuer: issuer,
             JwksUri: $"{authBase}/.well-known/jwks",
             AuthorizationEndpoint: $"{authBase}/connect/authorize",
             TokenEndpoint: $"{authBase}/connect/token");

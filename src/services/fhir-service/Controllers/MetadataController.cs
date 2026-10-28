@@ -76,7 +76,9 @@ public class MetadataController : FhirControllerBase
                             ("birthdate",    SearchParamType.Date),
                             ("identifier",   SearchParamType.Token),
                             ("gender",       SearchParamType.Token)
-                        ]),
+                        ],
+                        // Bulk Data (G-34): a provider's panel as Patient/$export.
+                        operations: BulkExportEnabled ? [PatientExportOperation] : null),
                         BuildResource("Coverage",
                         [
                             ("_id",          SearchParamType.Token),
@@ -346,18 +348,24 @@ public class MetadataController : FhirControllerBase
                         // clinical content to satisfy US Core invariants, so a
                         // US Core profile URL here would be a label rather than
                         // a conformance claim. See docs/architecture/clinical-fhir.md.
+                        // ── Bulk Data group export (G-34) ─────────────────
+                        // Group/{provider id}/$export, the provider's attributed
+                        // panel. Only the operation: Group is not read or
+                        // searched here.
+                        .. BulkExportEnabled
+                            ? [BuildResource("Group", [], interactions: [], operations: [GroupExportOperation])]
+                            : Array.Empty<CapabilityStatement.ResourceComponent>(),
                         .. ClinicalResourceInventory.All.Select(entry =>
                             BuildResource(
                                 entry.ResourceType,
                                 [.. entry.SearchParameters.Select(p => (p, SearchParamTypeFor(p)))])),
                     ],
+                    // No system-level $export: BulkExportController refuses
+                    // it (an export of every member in a tenant has no
+                    // approved caller), so it is not claimed. Patient and
+                    // Group export are declared on their resources above.
                     Operation =
                     [
-                        new CapabilityStatement.OperationComponent
-                        {
-                            Name = "export",
-                            Definition = "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/export",
-                        },
                         new CapabilityStatement.OperationComponent
                         {
                             Name = AppealSubmitController.OperationName,
@@ -381,6 +389,15 @@ public class MetadataController : FhirControllerBase
 
         return Ok(cs);
     }
+
+    private static readonly (string Name, string Definition) PatientExportOperation =
+        ("export", "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/patient-export");
+
+    private static readonly (string Name, string Definition) GroupExportOperation =
+        ("export", "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/group-export");
+
+    private bool BulkExportEnabled
+        => _config.GetValue<bool>($"{Services.BulkExport.BulkExportOptions.SectionName}:Enabled");
 
     /// <summary>
     /// The FHIR search-parameter type for a clinical parameter name. <c>_id</c>

@@ -94,9 +94,11 @@ public class MetadataCapabilityStatementAppealExtensionTests : IClassFixture<Fhi
             "Encounter", "Claim", "Questionnaire", "QuestionnaireResponse"
         });
 
-        rest.Operation.Should().Contain(o =>
-            o.Name == "export" &&
-            o.Definition == "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/export");
+        // System-level $export is refused by the server, so it is not claimed;
+        // with bulk export off neither is Patient or Group export.
+        rest.Operation.Should().NotContain(o => o.Name == "export");
+        rest.Resource.Single(r => r.Type.ToString() == "Patient").Operation.Should().BeEmpty();
+        rest.Resource.Should().NotContain(r => r.Type.ToString() == "Group");
 
         cs.Implementation.Description.Should().Contain("CMS-0057-F");
     }
