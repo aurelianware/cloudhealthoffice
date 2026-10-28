@@ -175,6 +175,9 @@ public class MetadataClinicalCapabilityTests : IClassFixture<FhirTestWebAppFacto
             // beside the FHIR base, and named in CapabilityStatement.rest
             // .security rather than as a resource entry.
             ".well-known",
+            // Bulk Data `Group/{id}/$export`: an operation on the caller's own
+            // panel, with no Group resource read or search behind it.
+            "Group",
         ], StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
