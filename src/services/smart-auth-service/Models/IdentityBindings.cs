@@ -148,6 +148,15 @@ public sealed class ClientTenantRegistration
     /// </summary>
     public string? PayerId { get; set; }
 
+    /// <summary>
+    /// Backend clients that authenticate with <c>private_key_jwt</c> (G-42)
+    /// from keys they publish: their <c>jwks_uri</c>, fetched (and cached) by
+    /// this server when the client presents an assertion. Null for a client
+    /// whose keys were registered inline (they live on the OpenIddict
+    /// application) and for a client that uses a client secret.
+    /// </summary>
+    public string? JwksUri { get; set; }
+
     public string CreatedBy { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
 }

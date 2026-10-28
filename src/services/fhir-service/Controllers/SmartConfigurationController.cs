@@ -84,7 +84,10 @@ public class SmartConfigurationController : FhirControllerBase
                 "client_secret_post",
                 "private_key_jwt"
             },
-            token_endpoint_auth_signing_alg_values_supported = new[] { "RS256" },
+            // private_key_jwt (SMART Backend Services, G-42): backend clients
+            // registered with a JWK Set or jwks_uri. SMART requires RS384 and
+            // ES384; smart-auth-service also accepts the 256/512 variants.
+            token_endpoint_auth_signing_alg_values_supported = new[] { "RS384", "ES384", "RS256", "ES256", "RS512", "ES512" },
             introspection_endpoint = $"{authBase}/connect/introspect",
             introspection_endpoint_auth_methods_supported = new[]
             {
@@ -95,7 +98,7 @@ public class SmartConfigurationController : FhirControllerBase
             userinfo_endpoint = $"{authBase}/connect/userinfo",
 
             // ── SMART-specific fields ─────────────────────────────────────────
-            grant_types_supported = new[] { "authorization_code", "client_credentials" },
+            grant_types_supported = new[] { "authorization_code", "refresh_token", "client_credentials" },
             response_types_supported = new[] { "code" },
             code_challenge_methods_supported = new[] { "S256" },
 
@@ -144,6 +147,7 @@ public class SmartConfigurationController : FhirControllerBase
                 "launch-standalone",
                 "client-public",
                 "client-confidential-symmetric",
+                "client-confidential-asymmetric",
                 "permission-patient",
                 "permission-user",
                 "permission-system",

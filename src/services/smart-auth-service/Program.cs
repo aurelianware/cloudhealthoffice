@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using CloudHealthOffice.Infrastructure.Extensions;
 using MongoDB.Driver;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using OpenIddict.Abstractions;
 using CloudHealthOffice.Infrastructure.Security;
 using SmartAuthService.Services;
@@ -133,6 +134,13 @@ builder.Services.AddOpenIddict()
         options.DisableAccessTokenEncryption();
         options.AddSmartCertificates(signingCertificates, encryptionCertificates);
 
+        // ── Backend client authentication (G-42) ─────────────────────────────
+        // client_secret_basic/post for secret clients; private_key_jwt for
+        // clients that registered keys (jwks or jwks_uri), with the SMART
+        // Backend Services rules (aud = token endpoint, single-use jti, exp at
+        // most five minutes out). See SmartClientAssertions.
+        options.AddSmartClientAssertions();
+
         // ── ASP.NET Core integration ─────────────────────────────────────────
         options.UseAspNetCore()
                .EnableAuthorizationEndpointPassthrough()
@@ -216,6 +224,23 @@ builder.Services.AddSingleton<ISmartIdentityStore>(sp => new MongoSmartIdentityS
 builder.Services.AddSingleton<ILaunchContextStore>(sp =>
     new MongoLaunchContextStore(RequireMongo(sp), sp.GetRequiredService<IConfiguration>()));
 builder.Services.AddScoped<SmartTokenContextResolver>();
+
+// private_key_jwt (G-42): single-use assertion ids, shared by every pod, and
+// the clients' keys (registered JWK Sets, or fetched from their jwks_uri).
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<IClientAssertionReplayStore>(sp => new MongoClientAssertionReplayStore(RequireMongo(sp)));
+builder.Services.AddSingleton<SmartJwksFetcher>();
+builder.Services.AddScoped<SmartClientKeyResolver>();
+var allowPrivateJwksHosts = builder.Environment.IsDevelopment()
+    && builder.Configuration.GetValue("SmartAuth:ClientJwks:AllowPrivateNetworks", false);
+builder.Services.AddHttpClient(SmartJwksFetcher.HttpClientName, client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(10);
+        client.MaxResponseContentBufferSize = SmartClientJwks.MaxDocumentBytes;
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => SmartJwksFetcher.CreateHandler(allowPrivateJwksHosts));
 builder.Services.AddSingleton<SmartAuthAudit>();
 builder.Services.AddSingleton<SmartConsent>();
 builder.Services.AddScoped<SmartAppApprovals>();
