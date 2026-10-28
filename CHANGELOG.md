@@ -44,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Group/{providerId}/$export`. fhir-service believes `provider_id` only from
   the issuer marked `IssuesChoClientRegistrations` and only on a system-scope
   token. The token's `sub` is still the client id.
+- **Bulk Provider Access exports members attributed from claims history
+  (G-34).** A provider's `Group/{providerId}/$export` now includes the members
+  it billed or rendered for inside the attribution lookback, not only those on
+  configured panels. claims-service lists them at
+  `GET api/provider-attribution/members` for fhir-service's service identity
+  only; if claims history cannot be read, the export fails instead of writing a
+  short panel. Each member is still checked for attribution and opt-out before
+  anything is written.
 
 ### Changed
 
