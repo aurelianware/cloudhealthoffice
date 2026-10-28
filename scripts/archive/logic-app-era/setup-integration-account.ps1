@@ -105,7 +105,7 @@ Write-Host "4. 🔗 Update Logic Apps to reference new Integration Account" -For
 
 Write-Host ""
 Write-Host "🌐 Integration Account URL:" -ForegroundColor Cyan
-Write-Host "https://portal.azure.com/#@/resource/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/$ResourceGroup/providers/Microsoft.Logic/integrationAccounts/$IntegrationAccountName" -ForegroundColor Blue
+Write-Host "https://portal.azure.com/#@/resource/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$ResourceGroup/providers/Microsoft.Logic/integrationAccounts/$IntegrationAccountName" -ForegroundColor Blue
 
 Write-Host ""
 Write-Host "🎯 Integration Account setup complete!" -ForegroundColor Green

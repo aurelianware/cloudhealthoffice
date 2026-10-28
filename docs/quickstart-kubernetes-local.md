@@ -57,7 +57,7 @@ cp .env.local.example .env.local
 # Edit .env.local with your Azure AD and Stripe test keys
 ```
 
-Without `.env.local`, the portal UI loads but Azure AD sign-in won't work. API endpoints function normally with the `X-Tenant-ID` header.
+Without `.env.local`, the portal UI loads but Azure AD sign-in won't work. API endpoints still work with a local development token: `TOKEN=$(./scripts/dev-token.sh --tenant demo)`, sent as `Authorization: Bearer $TOKEN`.
 
 ---
 

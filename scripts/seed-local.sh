@@ -26,6 +26,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Services take the tenant only from a validated token; mint a local one.
+TOKEN="$("$(dirname "$0")/dev-token.sh" --tenant "$TENANT_ID")"
+
 log "Using tenant: $TENANT_ID"
 log "Claims service:      $CLAIMS_URL"
 log "Benefit-plan service: $BENEFIT_URL"
@@ -50,7 +53,7 @@ echo
 # ── 1. Seed NCCI baseline edits ───────────────────────────────────────────────
 log "Seeding NCCI/MUE Q1 2025 baseline..."
 NCCI_SEED=$(curl -sf -X POST "$BENEFIT_URL/api/v1/ncci/seed" \
-  -H "X-Tenant-ID: $TENANT_ID" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json") || err "NCCI seed failed"
 ok "NCCI seeded: $(echo "$NCCI_SEED" | grep -o '"editCount":[0-9]*' || echo 'done')"
 echo
@@ -58,7 +61,7 @@ echo
 # ── 2. Create a benefit plan ──────────────────────────────────────────────────
 log "Creating PPO benefit plan..."
 PLAN_RESPONSE=$(curl -sf -X POST "$BENEFIT_URL/api/benefitplans" \
-  -H "X-Tenant-ID: $TENANT_ID" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "planId": "LOCAL-PPO-2025",
@@ -111,7 +114,7 @@ echo
 # claim up and is the only writer of its adjudicated outcome.
 log "Submitting test claim..."
 CLAIM_RESPONSE=$(curl -sf -X POST "$CLAIMS_URL/api/claims" \
-  -H "X-Tenant-ID: $TENANT_ID" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
     \"claimNumber\": \"LOCAL-TEST-001\",
@@ -151,7 +154,7 @@ log "Waiting for the adjudication pipeline to adjudicate $CLAIM_ID..."
 STATUS=""
 CLAIM_JSON=""
 for i in $(seq 1 60); do
-  CLAIM_JSON=$(curl -sf "$CLAIMS_URL/api/claims/$CLAIM_ID" -H "X-Tenant-ID: $TENANT_ID" || true)
+  CLAIM_JSON=$(curl -sf "$CLAIMS_URL/api/claims/$CLAIM_ID" -H "Authorization: Bearer $TOKEN" || true)
   STATUS=$(echo "$CLAIM_JSON" | grep -o '"status":"\{0,1\}[A-Za-z0-9]*' | head -1 | sed 's/"status":"\{0,1\}//')
   case "$STATUS" in
     4|5|6|7|8|9|Pended|Approved|Denied|Paid|Voided|PartiallyPaid) break ;;

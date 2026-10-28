@@ -24,7 +24,32 @@ public sealed class MemberServiceCase
     public string? EncryptedResolution { get; set; }
     public DateTime? DecisionRecordedAt { get; set; }
     public string? DecisionRecordedBy { get; set; }
+    /// <summary>The structured appeal outcome. Required for an appeal decision; null for a grievance.</summary>
+    public MemberAppealOutcome? DecisionOutcome { get; set; }
+    /// <summary>
+    /// CMS-0057-F reporting: when the appeal outcome was accepted as an AppealDecision fact on the
+    /// authorization's reporting ledger. Null while it is still owed; see <see cref="ReportingRejectedReason"/>.
+    /// </summary>
+    public DateTime? ReportedToAuthorizationAt { get; set; }
+    /// <summary>Delivery attempts so far, for the retry sweep.</summary>
+    public int ReportingAttempts { get; set; }
+    /// <summary>When the retry sweep may try again after a failed delivery.</summary>
+    public DateTime? ReportingNextAttemptAt { get; set; }
+    /// <summary>Set when authorization-service refused the fact for good; the sweep stops retrying.</summary>
+    public string? ReportingRejectedReason { get; set; }
     // Persist JSON to keep the pinned evaluation independent of BSON immutable-record conventions.
     public string PinnedRuleEvaluationJson { get; set; } = string.Empty;
     public ContactCaseResult Receipt { get; set; } = new();
+}
+
+/// <summary>What the appeal decided about the adverse prior-authorization determination.</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
+public enum MemberAppealOutcome
+{
+    /// <summary>The denial stands.</summary>
+    Upheld = 1,
+    /// <summary>The denial is reversed in full: the service is approved.</summary>
+    Overturned = 2,
+    /// <summary>The denial is reversed in part.</summary>
+    PartiallyOverturned = 3,
 }

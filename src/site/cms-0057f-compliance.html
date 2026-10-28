@@ -81,7 +81,31 @@
         "name": "What is CMS-0057-F?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "CMS-0057-F is the CMS Advancing Interoperability and Improving Prior Authorization Processes final rule. It requires impacted payers — Medicare Advantage organizations, state Medicaid and CHIP programs, and Qualified Health Plan issuers on the federal Marketplaces — to expose standardized HL7 FHIR R4 APIs and to modernize prior authorization. The goals are patient and provider access to data, payer-to-payer data exchange, and faster, more transparent prior authorization decisions. Most API and prior authorization provisions carry a compliance date of January 1, 2027."
+          "text": "CMS-0057-F is the CMS Advancing Interoperability and Improving Prior Authorization Processes final rule. It requires impacted payers — Medicare Advantage organizations, state Medicaid and CHIP programs, and Qualified Health Plan issuers on the federal Marketplaces — to expose standardized HL7 FHIR R4 APIs and to modernize prior authorization. The goals are patient and provider access to data, payer-to-payer data exchange, and faster, more transparent prior authorization decisions. The prior authorization decision timeframes took effect on January 1, 2026, and the four FHIR APIs are required by January 1, 2027. You will also see the rule written as CMS 0057 F, CMS0057 or simply 0057-F; the “F” marks the final rule, as opposed to the 2022 proposed rule, CMS-0057-P."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What are the CMS-0057-F deadlines?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "CMS-0057-F phases in over two years. From January 1, 2026, impacted payers must decide standard prior authorization requests within 7 calendar days and expedited requests within 72 hours, and give a specific reason for every denial; QHP issuers on the federally-facilitated Marketplaces are excluded from the timeframe provisions. The first public prior authorization metrics were due by March 31, 2026, and are reported annually after that. By January 1, 2027, payers must offer all four FHIR APIs: prior authorization data in the Patient Access API, the Provider Access API, the Payer-to-Payer API and the Prior Authorization API. State Medicaid and CHIP fee-for-service programs can apply for extensions or exemptions, and QHP issuers can request exceptions. The implementation timeline below shows a practical order of work."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What does CMS-0057-F readiness involve this late in 2026?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "With the API date close, readiness work narrows to three questions: can the payer serve each required API from data it actually holds, can it prove the prior authorization timeframes and denial reasons it has been subject to since January 2026, and which gaps need a written exception or a vendor commitment. A readiness review maps each API and operational provision to its data source, owner and evidence. The payer compliance checklist lists the items, and the CAPS vendor SOW questions help when a core vendor is delivering part of the work."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is policy codification for CMS-0057-F prior authorization?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Policy codification turns written medical and coverage policies into machine-readable rules: which services need prior authorization, for which members and plans, and what documentation must accompany a request. Under the Prior Authorization API, Coverage Requirements Discovery (CRD) answers the “is authorization required?” question from those rules, and Documentation Templates and Rules (DTR) turns the documentation requirements into FHIR Questionnaires. The quality of a payer’s codified policy decides how many requests CRD and DTR can answer automatically. See the prior authorization guide and the CRD, DTR and PAS evidence for what Cloud Health Office implements today and its stated limits."
         }
       },
       {
@@ -551,7 +575,22 @@
     <div class="qa-list">
       <div class="qa">
         <h3>What is CMS-0057-F?</h3>
-        <p>CMS-0057-F is the CMS <strong>Advancing Interoperability and Improving Prior Authorization Processes</strong> final rule. It requires impacted payers — Medicare Advantage organizations, state Medicaid and CHIP programs, and Qualified Health Plan issuers on the federal Marketplaces — to expose standardized HL7 FHIR R4 APIs and to modernize prior authorization. The goals are patient and provider access to data, payer-to-payer data exchange, and faster, more transparent prior authorization decisions. Most API and prior authorization provisions carry a compliance date of January 1, 2027.</p>
+        <p>CMS-0057-F is the CMS <strong>Advancing Interoperability and Improving Prior Authorization Processes</strong> final rule. It requires impacted payers — Medicare Advantage organizations, state Medicaid and CHIP programs, and Qualified Health Plan issuers on the federal Marketplaces — to expose standardized HL7 FHIR R4 APIs and to modernize prior authorization. The goals are patient and provider access to data, payer-to-payer data exchange, and faster, more transparent prior authorization decisions. The prior authorization decision timeframes took effect on January 1, 2026, and the four FHIR APIs are required by January 1, 2027. You will also see the rule written as CMS 0057 F, CMS0057 or simply 0057-F; the &ldquo;F&rdquo; marks the final rule, as opposed to the 2022 proposed rule, CMS-0057-P.</p>
+      </div>
+
+      <div class="qa">
+        <h3>What are the CMS-0057-F deadlines?</h3>
+        <p>CMS-0057-F phases in over two years. From <strong>January 1, 2026</strong>, impacted payers must decide standard prior authorization requests within 7 calendar days and expedited requests within 72 hours, and give a specific reason for every denial; QHP issuers on the federally-facilitated Marketplaces are excluded from the timeframe provisions. The first public prior authorization metrics were due by <strong>March 31, 2026</strong>, and are reported annually after that. By <strong>January 1, 2027</strong>, payers must offer all four FHIR APIs: prior authorization data in the Patient Access API, the Provider Access API, the Payer-to-Payer API and the Prior Authorization API. State Medicaid and CHIP fee-for-service programs can apply for extensions or exemptions, and QHP issuers can request exceptions. The <a href="#timeline">implementation timeline</a> below shows a practical order of work.</p>
+      </div>
+
+      <div class="qa">
+        <h3>What does CMS-0057-F readiness involve this late in 2026?</h3>
+        <p>With the API date close, readiness work narrows to three questions: can the payer serve each required API from data it actually holds, can it prove the prior authorization timeframes and denial reasons it has been subject to since January 2026, and which gaps need a written exception or a vendor commitment. A readiness review maps each API and operational provision to its data source, owner and evidence. The <a href="#checklist">payer compliance checklist</a> lists the items, and the <a href="/insights/cms-0057-f/caps-vendor-sow-questions">CAPS vendor SOW questions</a> help when a core vendor is delivering part of the work.</p>
+      </div>
+
+      <div class="qa">
+        <h3>What is policy codification for CMS-0057-F prior authorization?</h3>
+        <p>Policy codification turns written medical and coverage policies into machine-readable rules: which services need prior authorization, for which members and plans, and what documentation must accompany a request. Under the Prior Authorization API, Coverage Requirements Discovery (CRD) answers the &ldquo;is authorization required?&rdquo; question from those rules, and Documentation Templates and Rules (DTR) turns the documentation requirements into FHIR Questionnaires. The quality of a payer&rsquo;s codified policy decides how many requests CRD and DTR can answer automatically. See the <a href="/docs/prior-auth-guide">prior authorization guide</a> and the <a href="/evidence/prior-authorization">CRD, DTR and PAS evidence</a> for what Cloud Health Office implements today and its stated limits.</p>
       </div>
 
       <div class="qa">
@@ -1388,9 +1427,9 @@
 
   <div class="timeline-item">
     <div class="timeline-dot active"></div>
-    <div class="timeline-date">July 2026 — You are here · ~6 months to deadline</div>
+    <div class="timeline-date">Now — before January 1, 2027</div>
     <div class="timeline-title">Stand Up the Compliance Surface</div>
-    <div class="timeline-desc">Deploy CHO alongside your core admin system. Configure Azure AD OAuth 2.0, bring up the Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization API surfaces, and validate them against the relevant Da Vinci profiles with the compliance checker.</div>
+    <div class="timeline-desc">Deploy CHO alongside your core admin system. Connect OAuth 2.0 and SMART on FHIR to your identity provider, bring up the Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization API surfaces, and validate them against the relevant Da Vinci profiles with the compliance checker.</div>
   </div>
 
   <div class="timeline-item">

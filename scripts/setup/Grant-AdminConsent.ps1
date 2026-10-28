@@ -22,10 +22,10 @@
     Use device code authentication (for environments without browser access)
 
 .EXAMPLE
-    .\Grant-AdminConsent.ps1 -TenantId "32177734-051b-4fdc-9568-cc35530191b1" -ApiClientId "cfada1ac-f251-48ea-9330-39212aa4c862"
+    .\Grant-AdminConsent.ps1 -TenantId "00000000-0000-0000-0000-000000000000" -ApiClientId "cfada1ac-f251-48ea-9330-39212aa4c862"
 
 .EXAMPLE
-    .\Grant-AdminConsent.ps1 -TenantId "32177734-051b-4fdc-9568-cc35530191b1" -ApiClientId "cfada1ac-f251-48ea-9330-39212aa4c862" -PortalClientId "b8975dfe-3227-4dea-a053-c5bfb15b7cfd"
+    .\Grant-AdminConsent.ps1 -TenantId "00000000-0000-0000-0000-000000000000" -ApiClientId "cfada1ac-f251-48ea-9330-39212aa4c862" -PortalClientId "b8975dfe-3227-4dea-a053-c5bfb15b7cfd"
 #>
 
 param(
