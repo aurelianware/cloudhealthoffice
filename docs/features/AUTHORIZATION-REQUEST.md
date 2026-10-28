@@ -747,7 +747,7 @@ Authorization responses use the X12 278 transaction with these key segments:
 
 **Example Inpatient Request**:
 ```bash
-POST https://hipaa-logic-la.azurewebsites.net/api/auth_request_inpatient/triggers/HTTP_Inpatient_Authorization_Request/invoke
+POST https://your-logic-app.azurewebsites.net/api/auth_request_inpatient/triggers/HTTP_Inpatient_Authorization_Request/invoke
 Content-Type: application/json
 
 {

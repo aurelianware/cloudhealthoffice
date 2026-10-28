@@ -65,7 +65,7 @@ Edit `infra/main.parameters.json`:
   "sftpPassword": {
     "reference": {
       "keyVault": {
-        "id": "/subscriptions/.../Microsoft.KeyVault/vaults/cho-secrets"
+        "id": "/subscriptions/.../Microsoft.KeyVault/vaults/your-key-vault"
       },
       "secretName": "sftp-logicapp-password"
     }
@@ -78,7 +78,7 @@ Edit `infra/main.parameters.json`:
 ```bash
 # Store SFTP password in Key Vault
 az keyvault secret set \
-  --vault-name cho-secrets \
+  --vault-name your-key-vault \
   --name sftp-logicapp-password \
   --value "your-secure-password"
 ```

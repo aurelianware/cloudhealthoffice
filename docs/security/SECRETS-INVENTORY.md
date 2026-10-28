@@ -179,7 +179,7 @@ Anthropic--ApiKey    → Key Vault secret name (maps to config key Anthropic:Api
 **Populate via:**
 ```bash
 ./scripts/populate-keyvault-secrets.sh \
-  --vault-name cho-app-kv \
+  --vault-name your-key-vault \
   --file scripts/secrets-manifest.example.env
 ```
 (manifest already includes the `Anthropic--ApiKey` placeholder)

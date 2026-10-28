@@ -211,8 +211,8 @@ The workflow requires these Kubernetes secrets in `cho-workflows` namespace:
 ### cosmos-db-credentials
 ```bash
 kubectl create secret generic cosmos-db-credentials -n cho-workflows \
-  --from-literal=account-name=cloudhealthoffice-cosmos \
-  --from-literal=resource-group=prod-cloudhealthoffice-rg
+  --from-literal=account-name=your-cosmos-account \
+  --from-literal=resource-group=your-resource-group
 ```
 
 ### azure-service-principal
@@ -268,8 +268,8 @@ kubectl -n cho-workflows get secret azure-service-principal -o yaml
 
 # Verify Azure CLI authentication
 az cosmosdb sql container list \
-  --account-name cloudhealthoffice-cosmos \
-  --resource-group prod-cloudhealthoffice-rg \
+  --account-name your-cosmos-account \
+  --resource-group your-resource-group \
   --database-name CloudHealthOffice
 ```
 
@@ -299,8 +299,8 @@ curl -X DELETE http://tenant-service.cloudhealthoffice/api/v1/tenants/<tenant-id
 
 # Delete Cosmos containers (if created)
 az cosmosdb sql container delete \
-  --account-name cloudhealthoffice-cosmos \
-  --resource-group prod-cloudhealthoffice-rg \
+  --account-name your-cosmos-account \
+  --resource-group your-resource-group \
   --database-name CloudHealthOffice \
   --name Members \
   --yes

@@ -41,13 +41,13 @@ echo "SFTP Server: $SFTP_IP"
 ```bash
 # Create or update Key Vault
 az keyvault create \
-  --name cho-secrets \
+  --name your-key-vault \
   --resource-group rg-hipaa-aks \
   --location westus2
 
 # Store SFTP password
 az keyvault secret set \
-  --vault-name cho-secrets \
+  --vault-name your-key-vault \
   --name sftp-logicapp-password \
   --value "YourSecurePassword123"
 ```
@@ -66,7 +66,7 @@ az deployment group create \
     baseName=cho-prod \
     sftpHost=$SFTP_IP \
     sftpUsername=logicapp \
-    sftpPassword="@Microsoft.KeyVault(SecretUri=https://cho-secrets.vault.azure.net/secrets/sftp-logicapp-password/)"
+    sftpPassword="@Microsoft.KeyVault(SecretUri=https://your-key-vault.vault.azure.net/secrets/sftp-logicapp-password/)"
 ```
 
 ### 5. Test SFTP Connection
@@ -182,7 +182,7 @@ kubectl get events -n cho-sftp --sort-by='.lastTimestamp'
 ```bash
 ./scripts/deploy-sftp-server.sh && \
 export SFTP_IP=$(kubectl get svc sftp-service -n cho-sftp -o jsonpath='{.status.loadBalancer.ingress[0].ip}') && \
-az keyvault secret set --vault-name cho-secrets --name sftp-logicapp-password --value "SecurePass123" && \
+az keyvault secret set --vault-name your-key-vault --name sftp-logicapp-password --value "SecurePass123" && \
 ./scripts/configure-sftp-connection.sh
 ```
 

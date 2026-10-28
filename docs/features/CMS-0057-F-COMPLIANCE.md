@@ -596,7 +596,7 @@ Configure managed identity access:
 # Grant Logic App access to FHIR
 LOGIC_APP_IDENTITY=$(az webapp identity show \
   --resource-group your-rg \
-  --name cho-logicapp \
+  --name your-logic-app \
   --query principalId -o tsv)
 
 az role assignment create \
@@ -614,12 +614,12 @@ zip -r ../workflows.zip workflows/
 
 az webapp deploy \
   --resource-group your-rg \
-  --name cho-logicapp \
+  --name your-logic-app \
   --src-path workflows.zip \
   --type zip
 
 # Restart Logic App
-az webapp restart --resource-group your-rg --name cho-logicapp
+az webapp restart --resource-group your-rg --name your-logic-app
 ```
 
 ### Step 6: Configure X12 Integration
@@ -641,7 +641,7 @@ node dist/src/fhir/examples.js
 
 # Test FHIR endpoints
 curl -H "Authorization: Bearer $TOKEN" \
-  https://cho-logicapp.azurewebsites.net/api/fhir/Patient/12345
+  https://your-logic-app.azurewebsites.net/api/fhir/Patient/12345
 
 # Validate compliance
 npm run test:fhir
@@ -654,7 +654,7 @@ npm run test:fhir
 az monitor metrics alert create \
   --name "Prior-Auth-Timeline-Violation" \
   --resource-group your-rg \
-  --scopes "/subscriptions/{sub-id}/resourceGroups/your-rg/providers/Microsoft.Web/sites/cho-logicapp" \
+  --scopes "/subscriptions/{sub-id}/resourceGroups/your-rg/providers/Microsoft.Web/sites/your-logic-app" \
   --condition "avg customMetrics/PriorAuthResponseTime > 72" \
   --window-size 1h \
   --evaluation-frequency 15m \
