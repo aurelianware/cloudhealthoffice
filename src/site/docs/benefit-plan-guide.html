@@ -183,6 +183,7 @@
               <li><a href="#cost-sharing">Cost Sharing Rules</a></li>
               <li><a href="#accumulators">Accumulators</a></li>
               <li><a href="#network-assignment">Network Assignment</a></li>
+              <li><a href="#medicare-medicaid-configuration">Medicare Advantage &amp; Medicaid</a></li>
               <li><a href="#getting-started">Getting Started</a></li>
             </ul>
           </div>
@@ -394,15 +395,15 @@
         <p>High Deductible Health Plans (HDHPs) paired with Health Savings Accounts (HSAs) have IRS-mandated parameters that the plan configuration must enforce:</p>
 
         <ul>
-          <li><strong>Minimum deductible</strong> &mdash; Individual: $1,650 (2026); Family: $3,300 (2026). The plan deductible must meet or exceed these thresholds.</li>
-          <li><strong>Maximum out-of-pocket</strong> &mdash; Individual: $8,300 (2026); Family: $16,600 (2026). Total member cost sharing cannot exceed these limits.</li>
-          <li><strong>Preventive care exception</strong> &mdash; ACA-compliant preventive services must be covered at 100% <em>before</em> the deductible is met (first-dollar coverage). This is the only exception to the deductible-first rule.</li>
+          <li><strong>Minimum deductible</strong> &mdash; Individual: $1,700 (2026); Family: $3,400 (2026). The plan deductible must meet or exceed these thresholds.</li>
+          <li><strong>Maximum out-of-pocket</strong> &mdash; Individual: $8,500 (2026); Family: $17,000 (2026). Total member cost sharing cannot exceed these limits.</li>
+          <li><strong>Preventive care exception</strong> &mdash; ACA-compliant preventive services must be covered at 100% <em>before</em> the deductible is met (first-dollar coverage). Telehealth services may also be covered before the deductible for plan years beginning after December 31, 2024, under the 2025 tax law that made that safe harbor permanent.</li>
           <li><strong>No copays before deductible</strong> &mdash; Unlike standard plans, HDHPs cannot apply copays until the full deductible is satisfied (except preventive care).</li>
         </ul>
 
         <div class="callout callout-info">
-          <div class="callout-title">IRS compliance validation</div>
-          <p>When a plan is configured with <code>RegulatoryType = HDHP</code>, Cloud Health Office validates the deductible and OOP maximum against the current IRS thresholds and prevents activation if the plan does not meet the minimums. IRS thresholds are updated annually via configuration.</p>
+          <div class="callout-title">What Cloud Health Office enforces for HDHPs</div>
+          <p>For a plan with plan type <code>HDHP</code>, the benefit engine applies the deductible before paying any service category that is not entirely ACA preventive, and plan validation rejects the <code>NoDeductible</code> coordination-of-benefits credit setting, which would skip the deductible. The platform does not check the deductible and out-of-pocket amounts against the IRS limits above, so confirm them each plan year.</p>
         </div>
 
         <h3 id="pediatric-dental-vision">Pediatric Dental &amp; Vision (ACA EHB)</h3>
@@ -442,8 +443,8 @@
           <tbody>
             <tr><td><strong>Individual Deductible</strong></td><td>Amount the member must pay before the plan begins paying coinsurance</td><td>$1,500 &ndash; $8,300</td><td>Plan pays coinsurance; copays still apply</td></tr>
             <tr><td><strong>Family Deductible</strong></td><td>Combined deductible for all family members</td><td>$3,000 &ndash; $16,600</td><td>All family members' deductibles considered met</td></tr>
-            <tr><td><strong>Individual OOP Max</strong></td><td>Maximum total cost sharing for one member in a period</td><td>$8,300 (ACA max)</td><td>Plan pays 100%; no further member cost sharing</td></tr>
-            <tr><td><strong>Family OOP Max</strong></td><td>Combined OOP max for all family members</td><td>$16,600 (ACA max)</td><td>Plan pays 100% for all family members</td></tr>
+            <tr><td><strong>Individual OOP Max</strong></td><td>Maximum total cost sharing for one member in a period</td><td>Up to the ACA limit HHS sets each year</td><td>Plan pays 100%; no further member cost sharing</td></tr>
+            <tr><td><strong>Family OOP Max</strong></td><td>Combined OOP max for all family members</td><td>Up to the ACA limit HHS sets each year</td><td>Plan pays 100% for all family members</td></tr>
             <tr><td><strong>Lifetime Maximum</strong></td><td>Total plan benefits over member's lifetime (grandfathered plans only)</td><td>$1,000,000+</td><td>No further plan payments; ACA-compliant plans prohibit this</td></tr>
             <tr><td><strong>Visit Limits</strong></td><td>Maximum number of visits per service category per period</td><td>20 PT visits/year, 30 BH visits/year</td><td>Additional visits denied or require auth override</td></tr>
           </tbody>
@@ -609,6 +610,20 @@
         <!-- ============================= -->
         <!-- GETTING STARTED               -->
         <!-- ============================= -->
+        <h2 id="medicare-medicaid-configuration">Medicare Advantage and Medicaid Benefit Plan Configuration</h2>
+
+        <p>The plan structure above is the same for every line of business. What changes is where the numbers come from and which limits apply:</p>
+
+        <ul>
+          <li><strong>Medicare Advantage</strong> &mdash; Cost sharing, the in-network and combined maximum out-of-pocket amounts, and supplemental benefits come from the plan benefit package (PBP) in the plan&rsquo;s approved bid, and must stay within CMS&rsquo;s limits for the year. Configure each PBP as its own plan version so a mid-year correction is a new, auditable version rather than an edit in place (see <a href="/docs/publish-version-benefit-plan">Publish and version a benefit plan</a>).</li>
+          <li><strong>Medicaid</strong> &mdash; Benefits and the nominal copays allowed under federal and state rules come from the state contract and its benefit grid. State-specific rules, such as Texas TMPPM prior authorization requirements, are covered in the <a href="/docs/texas-compliance">Texas</a> and <a href="/docs/florida-compliance">Florida</a> compliance guides.</li>
+          <li><strong>Prior authorization flags</strong> &mdash; Which service categories need prior authorization is plan data; it is what <a href="/cms-0057f-compliance">CMS-0057-F</a> Coverage Requirements Discovery needs to answer &ldquo;is authorization required?&rdquo; for a member.</li>
+          <li><strong>Fee schedules</strong> &mdash; The allowed amount that cost sharing is calculated against comes from the <a href="/docs/fee-schedule-guide">fee schedule</a>, which can follow Medicare rates (see <a href="/claims-repricing">Medicare claims repricing</a>).</li>
+        </ul>
+
+        <h3 id="configuration-services">Benefit configuration services</h3>
+        <p>Turning a year&rsquo;s PBPs or a state benefit grid into tested plan configuration is usually the longest step in a new implementation. <a href="/services">Cloud Health Office Professional Services</a> can build and test the configuration with your team, or review a configuration your team has built. The <a href="/docs/validate-benefit-plan">validation walkthrough</a> shows how each plan is checked with a synthetic claim before it goes live.</p>
+
         <h2 id="getting-started">Getting Started</h2>
 
         <div class="callout callout-success">
