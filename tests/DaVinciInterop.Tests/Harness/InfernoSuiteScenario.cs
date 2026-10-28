@@ -77,6 +77,15 @@ public static class InfernoSuiteScenario
 
             var runner = new InfernoRunner(kit.ApiBaseUrl);
             var fixture = ChoSeedFixture.Load();
+
+            if (scenario.InfernoAuth == InfernoAuthModes.BackendServices)
+            {
+                run.Record(InteropFinding.Info(
+                    "inferno.auth.backendClient",
+                    await InfernoBackendClient.RegisterAsync(
+                        kit.ApiBaseUrl, scenario.RequiredInfernoSuite, fixture, cancellationToken)));
+            }
+
             var inputs = BuildInputs(scenario, fixture);
 
             var suiteId = scenario.RequiredInfernoSuite;
@@ -196,15 +205,50 @@ public static class InfernoSuiteScenario
 
         return scenario.InfernoInputs.Select(name => name switch
         {
-            "url" => new InfernoInput { Name = "url", Value = ChoUnderTest.ContainerBaseUrl(scenario.ChoSurface) },
+            "url" or "bulk_server_url" => new InfernoInput { Name = name, Value = ChoUnderTest.ContainerBaseUrl(scenario.ChoSurface) },
             "patient_ids" => new InfernoInput { Name = "patient_ids", Value = fixture.Member.MemberId },
-            "smart_auth_info" => InfernoInput.AccessToken("smart_auth_info", token),
+            "smart_auth_info" => SmartAuthInfo(scenario, fixture, token),
+            "group_id" => new InfernoInput { Name = "group_id", Value = fixture.BackendClient.ProviderId },
+            "bulk_timeout" => new InfernoInput { Name = "bulk_timeout", Value = BulkTimeoutSeconds },
+            "lines_to_validate" => new InfernoInput { Name = "lines_to_validate", Value = BulkLinesToValidate },
+            "since_timestamp" => new InfernoInput { Name = "since_timestamp", Value = BulkSinceTimestamp },
             _ => throw new InteropEnvironmentException(
                 $"Scenario '{scenario.Id}' declares an input '{name}' the harness does not know how to " +
                 "supply. Add it here deliberately: an input silently left unset makes the suite test " +
                 "something other than what the scenario claims."),
         }).ToList();
     }
+
+    /// <summary>
+    /// How long the Bulk Data kit polls an export before giving up, in seconds.
+    /// The interop data set is a handful of records, so an export that takes
+    /// longer than this is a defect rather than a slow server.
+    /// </summary>
+    public const string BulkTimeoutSeconds = "300";
+
+    /// <summary>Lines of each NDJSON file the kit validates. Every line, at this data size.</summary>
+    public const string BulkLinesToValidate = "1000";
+
+    /// <summary>
+    /// The <c>_since</c> the kit's parameter tests export with. Fixed, so a
+    /// run is reproducible, and before every seeded record, so the filtered
+    /// export is not empty for want of data.
+    /// </summary>
+    public const string BulkSinceTimestamp = "2026-01-01T00:00:00+00:00";
+
+    private static InfernoInput SmartAuthInfo(InteropScenarioDefinition scenario, ChoSeedFixture fixture, string token)
+        => scenario.InfernoAuth switch
+        {
+            InfernoAuthModes.ChoToken => InfernoInput.AccessToken("smart_auth_info", token),
+            InfernoAuthModes.BackendServices => InfernoInput.BackendServices(
+                "smart_auth_info",
+                ChoUnderTest.ContainerTokenUrl,
+                fixture.BackendClient.ClientId,
+                string.Join(' ', fixture.BackendClient.Scopes)),
+            _ => throw new InteropEnvironmentException(
+                $"Scenario '{scenario.Id}' declares infernoAuth '{scenario.InfernoAuth}', which the harness " +
+                $"does not know. Known: {InfernoAuthModes.ChoToken}, {InfernoAuthModes.BackendServices}."),
+        };
 
     private static async Task<InfernoTestRun> ExecuteAsync(
         InfernoRunner runner,
@@ -277,6 +321,7 @@ public static class InfernoSuiteScenario
         "US Core" => "3.1.1",
         "CARIN BB" => "2.2.0",
         "Plan-Net" => "1.2.0",
+        "Bulk Data" => "2.0.0",
         _ => null,
     };
 

@@ -23,6 +23,7 @@ public sealed class ScenarioInventoryTests
     [InlineData("INFERNO-USCORE-SERVER-001")]
     [InlineData("INFERNO-C4BB-SERVER-001")]
     [InlineData("INFERNO-PLANNET-SERVER-001")]
+    [InlineData("INFERNO-BULK-SERVER-001")]
     public void The_planned_scenario_inventory_is_present(string scenarioId)
     {
         Inventory.Scenario(scenarioId).Should().NotBeNull();
@@ -40,7 +41,7 @@ public sealed class ScenarioInventoryTests
             .Should().BeEquivalentTo([
                 "BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001",
                 "INFERNO-USCORE-SERVER-001", "INFERNO-C4BB-SERVER-001",
-                "INFERNO-PLANNET-SERVER-001",
+                "INFERNO-PLANNET-SERVER-001", "INFERNO-BULK-SERVER-001",
             ]);
     }
 
@@ -194,7 +195,9 @@ public sealed class ScenarioInventoryTests
                 "'{0}' is implemented against a conformance kit, so it must say which suite it runs",
                 scenario.Id);
 
-            scenario.InfernoInputs.Should().Contain("url",
+            // A Bulk Data suite names its base bulk_server_url; every other kit, url.
+            scenario.InfernoInputs.Should().Contain(
+                input => input == "url" || input == "bulk_server_url",
                 "'{0}' must tell the suite where CHO is", scenario.Id);
         }
     }
@@ -229,6 +232,53 @@ public sealed class ScenarioInventoryTests
         InfernoSuiteScenario.BuildInputs(scenario, ChoSeedFixture.Load())
             .Single(input => input.Name == "url").Value
             .Should().Be(ChoUnderTest.ContainerPublicDirectoryUrl);
+    }
+
+    /// <summary>
+    /// The Bulk Data kit authenticates itself, as a provider's bulk client
+    /// would. It must ask the token endpoint the kit can reach on the Compose
+    /// network (a loopback URL is its own container), as the client the
+    /// harness registers, and export the Group that client is bound to.
+    /// </summary>
+    [Fact]
+    public void The_bulk_data_suite_authenticates_with_backend_services_as_the_registered_provider_client()
+    {
+        var scenario = Inventory.Scenario("INFERNO-BULK-SERVER-001");
+        var fixture = ChoSeedFixture.Load();
+        var inputs = InfernoSuiteScenario.BuildInputs(scenario, fixture).ToDictionary(i => i.Name);
+
+        scenario.InfernoAuth.Should().Be(InfernoAuthModes.BackendServices);
+        inputs["bulk_server_url"].Value.Should().Be(ChoUnderTest.ContainerFhirBaseUrl);
+        inputs["group_id"].Value.Should().Be(fixture.BackendClient.ProviderId);
+
+        var auth = System.Text.Json.JsonDocument.Parse(inputs["smart_auth_info"].Value).RootElement;
+        inputs["smart_auth_info"].Type.Should().Be("auth_info");
+        auth.GetProperty("auth_type").GetString().Should().Be("backend_services");
+        auth.GetProperty("token_url").GetString().Should().Be(ChoUnderTest.ContainerTokenUrl)
+            .And.NotContain("127.0.0.1").And.NotContain("localhost");
+        auth.GetProperty("client_id").GetString().Should().Be(fixture.BackendClient.ClientId);
+        auth.GetProperty("requested_scopes").GetString().Should().Be("system/*.read");
+    }
+
+    /// <summary>
+    /// System-level export is not served (501 by design), and the TLS checks
+    /// cannot pass on the plain-HTTP interop network. Running any of those
+    /// groups would put a known, explained failure in every nightly result.
+    /// </summary>
+    [Fact]
+    public void The_bulk_data_suite_runs_only_group_and_patient_export()
+    {
+        Inventory.Scenario("INFERNO-BULK-SERVER-001").InfernoGroups
+            .Should().BeEquivalentTo(["bulk_data_group_export_v200", "bulk_data_patient_export_v200"]);
+    }
+
+    [Fact]
+    public void Every_scenario_names_a_known_auth_mode()
+    {
+        foreach (var scenario in Inventory.Scenarios)
+        {
+            scenario.InfernoAuth.Should().BeOneOf(InfernoAuthModes.ChoToken, InfernoAuthModes.BackendServices);
+        }
     }
 
     [Fact]

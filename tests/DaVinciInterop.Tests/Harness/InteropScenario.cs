@@ -56,6 +56,14 @@ public sealed record InteropScenarioDefinition
     /// </summary>
     [JsonPropertyName("choSurface")] public string ChoSurface { get; init; } = ChoSurfaces.Fhir;
 
+    /// <summary>
+    /// How the kit authenticates to CHO, for the <c>smart_auth_info</c> input:
+    /// <c>choToken</c> (the default; an already-issued development token) or
+    /// <c>backendServices</c> (the kit runs SMART Backend Services itself,
+    /// against cho-smart-auth-service, as a client the harness registers).
+    /// </summary>
+    [JsonPropertyName("infernoAuth")] public string InfernoAuth { get; init; } = InfernoAuthModes.ChoToken;
+
     public ChoRole ParsedChoRole => Enum.Parse<ChoRole>(ChoRole);
 
     /// <summary>The suite id, or a diagnostic naming the scenario that lacks one.</summary>
@@ -71,6 +79,13 @@ public static class ChoSurfaces
 {
     public const string Fhir = "fhir";
     public const string PublicDirectory = "publicDirectory";
+}
+
+/// <summary>How a conformance kit authenticates to CHO (see <see cref="InteropScenarioDefinition.InfernoAuth"/>).</summary>
+public static class InfernoAuthModes
+{
+    public const string ChoToken = "choToken";
+    public const string BackendServices = "backendServices";
 }
 
 /// <summary>The scenario inventory as loaded from interop/scenarios.json.</summary>

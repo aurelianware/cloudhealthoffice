@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Nightly Inferno Bulk Data run (G-60).** `INFERNO-BULK-SERVER-001` runs the
+  bulk-data-test-kit (`v0.13.2`) Bulk Data 2.0.0 Group and Patient export
+  groups against the seeded `interop-cho` profile, so export files are
+  downloaded and their resources validated every night. The kit authenticates
+  with SMART Backend Services as a provider-bound backend client the harness
+  registers through smart-auth-service's admin API, using the public keys the
+  kit publishes. Fetch it with `./scripts/interop/fetch-inferno.sh bulk-data`
+  and run it with `./scripts/interop/run.sh inferno bulk-data`. See
+  `docs/interop/davinci.md`.
 - **Outbound bulk Payer-to-Payer (G-35).** CHO, as the new payer, can ask a
   prior payer for many members at once over the PDex 2.1 bulk operations:
   `POST /fhir/r4/PayerToPayer/$bulk-initiate` records a job, and a background
@@ -120,6 +129,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capability, and the `refresh_token` grant (D-25).
 
 ### Fixed
+
+- **smart-auth-service answers over plain HTTP when its issuer is HTTP.** An
+  http issuer is only accepted in Development (the interop network), but
+  OpenIddict still refused every request there for not being HTTPS (ID2083),
+  so no token could be issued. The HTTPS requirement is now dropped for an
+  http issuer only; an https issuer keeps it.
 
 - **Fixes from the first Inferno Bulk Data run** (bulk-data-test-kit
   `v0.13.2`, Bulk Data 2.0.0 suite, run by hand against a local CHO; G-60).

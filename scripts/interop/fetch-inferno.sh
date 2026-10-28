@@ -7,6 +7,7 @@
 #   ./scripts/interop/fetch-inferno.sh c4bb
 #   ./scripts/interop/fetch-inferno.sh us-core
 #   ./scripts/interop/fetch-inferno.sh plan-net
+#   ./scripts/interop/fetch-inferno.sh bulk-data
 #   ./scripts/interop/fetch-inferno.sh us-core c4bb   # several at once
 #
 # Upstream publishes no container image for these kits, so the harness builds one
@@ -14,7 +15,8 @@
 # may download third-party code. The checkout lands in interop/.external/, which is
 # git-ignored — upstream sources are never committed into this repository.
 #
-# INFERNO-USCORE-SERVER-001, INFERNO-C4BB-SERVER-001 and INFERNO-PLANNET-SERVER-001 run against checkouts
+# INFERNO-USCORE-SERVER-001, INFERNO-C4BB-SERVER-001, INFERNO-PLANNET-SERVER-001
+# and INFERNO-BULK-SERVER-001 run against checkouts
 # this script produces; ./scripts/interop/run.sh inferno refuses to start without
 # them. See docs/interop/davinci.md.
 
@@ -40,7 +42,8 @@ case "$KIT" in
   c4bb)    KEY="inferno-c4bb";    DIR_NAME="carin-for-blue-button-test-kit" ;;
   us-core) KEY="inferno-us-core"; DIR_NAME="us-core-test-kit" ;;
   plan-net) KEY="inferno-plan-net"; DIR_NAME="davinci-plan-net-test-kit" ;;
-  *)       echo "Usage: $0 {pdex|dtr|c4bb|us-core|plan-net}" >&2; exit 2 ;;
+  bulk-data) KEY="inferno-bulk-data"; DIR_NAME="bulk-data-test-kit" ;;
+  *)       echo "Usage: $0 {pdex|dtr|c4bb|us-core|plan-net|bulk-data}" >&2; exit 2 ;;
 esac
 
 read -r REPO TAG COMMIT < <(python3 - "$VERSIONS" "$KEY" <<'PY'

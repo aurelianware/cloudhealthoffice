@@ -143,11 +143,18 @@ builder.Services.AddOpenIddict()
         options.AddSmartClientAssertions();
 
         // ── ASP.NET Core integration ─────────────────────────────────────────
-        options.UseAspNetCore()
+        var aspNetCore = options.UseAspNetCore()
                .EnableAuthorizationEndpointPassthrough()
                .EnableEndSessionEndpointPassthrough()
                .EnableTokenEndpointPassthrough()
                .EnableStatusCodePagesIntegration();
+
+        // An http issuer is only accepted in Development (SmartIssuer.Resolve),
+        // where it names a plain-HTTP host such as the interop compose network.
+        // OpenIddict would refuse every request there (ID2083), so drop its
+        // HTTPS check for exactly that case; an https issuer keeps it.
+        if (smartIssuer.Scheme == Uri.UriSchemeHttp)
+            aspNetCore.DisableTransportSecurityRequirement();
     })
     .AddValidation(options =>
     {

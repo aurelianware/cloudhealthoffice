@@ -46,6 +46,7 @@ public sealed record ChoSeedFixture
     [JsonPropertyName("tenantId")] public string TenantId { get; init; } = "";
     [JsonPropertyName("auth")] public ChoSeedAuth Auth { get; init; } = new();
     [JsonPropertyName("member")] public ChoSeedMember Member { get; init; } = new();
+    [JsonPropertyName("backendClient")] public ChoSeedBackendClient BackendClient { get; init; } = new();
 
     public static ChoSeedFixture Load() => LoadFrom(InteropPaths.ChoSeedFixture);
 
@@ -109,4 +110,20 @@ public sealed record ChoSeedFixture
 public sealed record ChoSeedMember
 {
     [JsonPropertyName("memberId")] public string MemberId { get; init; } = "";
+}
+
+/// <summary>
+/// The SMART Backend Services client a kit that authenticates itself is
+/// registered as. Keys are not part of it: the harness registers the public
+/// keys the kit publishes, so the private half stays in the kit.
+/// </summary>
+public sealed record ChoSeedBackendClient
+{
+    [JsonPropertyName("clientId")] public string ClientId { get; init; } = "";
+    [JsonPropertyName("displayName")] public string DisplayName { get; init; } = "";
+
+    /// <summary>The provider the client acts for: the Group a kit exports.</summary>
+    [JsonPropertyName("providerId")] public string ProviderId { get; init; } = "";
+
+    [JsonPropertyName("scopes")] public List<string> Scopes { get; init; } = new();
 }

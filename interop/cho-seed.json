@@ -24,6 +24,13 @@
       "settings:manage"
     ]
   },
+  "backendClient": {
+    "_comment": "The SMART Backend Services client INFERNO-BULK-SERVER-001 registers for the Bulk Data kit before it runs, through smart-auth-service's admin API with the auth identity above (settings:manage). Its keys are not here: the harness reads the public keys the kit itself publishes, so the private half never leaves the kit. providerId binds the client to the billing provider on the seeded claims, which is the Group the kit exports and the provider whose attributed patients a Patient export returns.",
+    "clientId": "inferno-bulk-data",
+    "displayName": "Inferno Bulk Data test kit (interop)",
+    "providerId": "1234567893",
+    "scopes": ["system/*.read"]
+  },
   "member": {
     "memberId": "INTEROP-MEM-1",
     "groupNumber": "INTEROP-GRP-1",
