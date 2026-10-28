@@ -385,6 +385,10 @@ builder.Services.AddSingleton<FhirService.Services.Clinical.IClinicalBackfillSto
 
 builder.Services.Configure<FhirService.Services.Clinical.ClinicalBackfillOptions>(
     builder.Configuration.GetSection(FhirService.Services.Clinical.ClinicalBackfillOptions.SectionName));
+// CMS-0057-F API usage: which patients' data the APIs disclosed, and to which
+// app, by day (Q-20). Read by the yearly usage report.
+builder.Services.AddSingleton<FhirService.Services.ApiUsage.IApiDisclosureLedger,
+    FhirService.Services.ApiUsage.MongoApiDisclosureLedger>();
 builder.Services.AddSingleton(sp =>
 {
     var limits = new FhirService.Services.Clinical.ClinicalPayloadLimits();
@@ -742,6 +746,8 @@ app.UseChoAuthentication();
 // SMART only: the issuer may serve the tenant, then scopes + patient binding.
 app.UseMiddleware<SmartIssuerTenantMiddleware>();
 app.UseMiddleware<SmartScopeEnforcementMiddleware>();
+// After scope enforcement: only reads the caller was allowed to make are counted.
+app.UseMiddleware<FhirService.Middleware.ApiDisclosureRecordingMiddleware>();
 app.MapControllers();
 app.MapChoHealthChecks();
 app.Run();

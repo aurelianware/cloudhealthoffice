@@ -76,6 +76,11 @@ public static class FhirServiceTestDatabase
             services.RemoveAll<global::FhirService.Services.PayerToPayer.IPayerToPayerConsentAttestationStore>();
             services.AddSingleton<global::FhirService.Services.PayerToPayer.IPayerToPayerConsentAttestationStore,
                 global::FhirService.Services.PayerToPayer.InMemoryPayerToPayerConsentAttestationStore>();
+
+            // The CMS-0057-F API usage ledger, written on every patient-context read.
+            services.RemoveAll<global::FhirService.Services.ApiUsage.IApiDisclosureLedger>();
+            services.AddSingleton<global::FhirService.Services.ApiUsage.IApiDisclosureLedger,
+                global::FhirService.Services.ApiUsage.InMemoryApiDisclosureLedger>();
         });
 
         return builder;

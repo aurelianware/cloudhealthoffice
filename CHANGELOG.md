@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CMS-0057-F Patient Access API usage figures.** fhir-service records each
+  day a member's app successfully reads that member's data through the Patient
+  Access API (tenant, patient id, OAuth client id and UTC day, no resource
+  content) in a new `api_disclosures` collection. `GET
+  api/v1/interoperability/usage?year=2026` (`compliance:read`) returns the two
+  figures a plan files each year: unique patients whose data went to an app,
+  and those whose data went more than once (more than one app-day). The report
+  says whether the year is complete and from which day the ledger covers it,
+  since nothing before this release was recorded. Plans still submit the
+  figures themselves (HPMS, their state, or MPMS).
+
 - **CMS-0057-F prior authorization: extension screen and member extension
   notice.** The authorization record's Review tab shows the decision deadline
   in force and, for an open Medicare Advantage or Medicaid request, lets a
