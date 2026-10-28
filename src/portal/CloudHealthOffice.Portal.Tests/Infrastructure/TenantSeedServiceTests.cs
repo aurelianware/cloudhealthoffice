@@ -160,9 +160,12 @@ public class TenantSeedServiceTests
     [Fact]
     public async Task ExecuteAsync_WithDefaultConfig_UsesDefaultValues()
     {
-        // Use empty config to exercise defaults
+        // Only the required Azure tenant id: everything else uses defaults
         var defaultConfig = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>())
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["SeedTenant:AzureTenantId"] = "configured-azure-tenant-id"
+            })
             .Build();
 
         var services = new ServiceCollection();
@@ -197,11 +200,39 @@ public class TenantSeedServiceTests
 
         _collection.Verify(c => c.InsertOneAsync(
             It.Is<TenantSubscription>(t =>
+                t.AzureTenantId == "configured-azure-tenant-id" &&
                 t.TenantId == "aurelianware" &&
                 t.OrganizationName == "Cloud Health Office" &&
                 t.Tier == "professional" &&
                 t.AdminEmails.Count == 0),
             It.IsAny<InsertOneOptions>(),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithoutAzureTenantId_SkipsSeeding()
+    {
+        var emptyConfig = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>())
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton(_mongoClient.Object);
+        var sp = services.BuildServiceProvider();
+
+        var sut = new TenantSeedService(sp, emptyConfig, _logger.Object);
+        using var cts = new CancellationTokenSource();
+
+        var task = sut.StartAsync(cts.Token);
+        await Task.Delay(TimeSpan.FromSeconds(7));
+        await cts.CancelAsync();
+
+        try { await task; } catch (OperationCanceledException) { }
+
+        _mongoClient.Verify(c => c.GetDatabase(It.IsAny<string>(), null), Times.Never);
+        _collection.Verify(c => c.InsertOneAsync(
+            It.IsAny<TenantSubscription>(),
+            It.IsAny<InsertOneOptions>(),
+            It.IsAny<CancellationToken>()), Times.Never);
     }
 }
