@@ -175,8 +175,9 @@ public class MetadataClinicalCapabilityTests : IClassFixture<FhirTestWebAppFacto
             // beside the FHIR base, and named in CapabilityStatement.rest
             // .security rather than as a resource entry.
             ".well-known",
-            // Bulk Data `Group/{id}/$export`: an operation on the caller's own
-            // panel, with no Group resource read or search behind it.
+            // Bulk Data `Group/{id}/$export`, an operation on the caller's own
+            // panel, and the PDex $bulk-member-match Groups, advertised only
+            // when bulk export is enabled (it is not in this host).
             "Group",
             // CHO's Payer-to-Payer operations ($member-data-export, $export):
             // operations only, governed by system/PayerToPayer.read.

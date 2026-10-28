@@ -2,6 +2,7 @@ using System.Text;
 using CloudHealthOffice.Infrastructure.Logging;
 using FhirService.Models;
 using FhirService.Services.PayerToPayer;
+using FhirService.Services.PayerToPayer.BulkMemberMatch;
 using FhirService.Services.ProviderAccess;
 using Microsoft.Extensions.Options;
 
@@ -168,8 +169,7 @@ public sealed class BulkExportWorker : BackgroundService
         var transactionTime = _time.GetUtcNow();
         var payerToPayer = job.Level == BulkExportLevel.PayerToPayer;
         var members = payerToPayer
-            ? await services.GetRequiredService<IPayerToPayerConsentAttestationStore>()
-                .ListMembersInForceAsync(job.TenantId, job.ReceivingPayerId!, transactionTime.UtcDateTime, ct)
+            ? await PayerToPayerMembersAsync(job, services, transactionTime, ct)
             : await AuthorizedMembersAsync(
                 job,
                 services.GetRequiredService<IProviderAttributionSource>(),
@@ -250,6 +250,27 @@ public sealed class BulkExportWorker : BackgroundService
         _logger.LogInformation(
             "Bulk export {JobId} for tenant {TenantId} completed: {Members} members, {Files} files.",
             LogSanitizer.Sanitize(job.JobId), LogSanitizer.Sanitize(job.TenantId), members.Count, stored.Count);
+    }
+
+    /// <summary>
+    /// The members a Payer-to-Payer export covers: those of its match Group
+    /// (PDex <c>$davinci-data-export</c>), or else every member whose consent
+    /// for the payer is in force. Listing is not the decision: each member's
+    /// consent is judged again when it is exported.
+    /// </summary>
+    private static async Task<IReadOnlyList<string>> PayerToPayerMembersAsync(
+        BulkExportJobRecord job, IServiceProvider services, DateTimeOffset now, CancellationToken ct)
+    {
+        if (job.GroupId is { } groupId)
+        {
+            var group = services.GetService<IPayerToPayerMatchGroupStore>() is { } groups
+                ? await groups.GetAsync(job.TenantId, groupId, now, ct)
+                : null;
+            return group?.MemberIds.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList() ?? [];
+        }
+
+        return await services.GetRequiredService<IPayerToPayerConsentAttestationStore>()
+            .ListMembersInForceAsync(job.TenantId, job.ReceivingPayerId!, now.UtcDateTime, ct);
     }
 
     /// <summary>

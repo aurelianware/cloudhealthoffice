@@ -331,6 +331,20 @@ public class MetadataController : FhirControllerBase
                             ("request",      SearchParamType.Reference)
                         ],
                         supportedProfiles: [FhirAppealMapper.ClaimResponseProfileUrl]),
+                        // ── PDex bulk Payer-to-Payer (G-35) ─────────────────
+                        // Served with bulk export only: the Groups a
+                        // $bulk-member-match answers with, read by the payer
+                        // they were made for, and exported as
+                        // $davinci-data-export. No Group search.
+                        .. BulkExportEnabled
+                            ? [BuildResource("Group", [],
+                                interactions: [CapabilityStatement.TypeRestfulInteraction.Read],
+                                operations:
+                                [
+                                    ("bulk-member-match", "http://hl7.org/fhir/us/davinci-pdex/OperationDefinition/BulkMemberMatch"),
+                                    ("davinci-data-export", "http://hl7.org/fhir/us/davinci-atr/OperationDefinition/davinci-data-export"),
+                                ])]
+                            : Array.Empty<CapabilityStatement.ResourceComponent>(),
                         // ── USCDI clinical resources (PAT-02) ─────────────
                         // Generated from ClinicalResourceInventory, the same
                         // table ClinicalResourceController routes from and the
@@ -381,6 +395,9 @@ public class MetadataController : FhirControllerBase
 
         return Ok(cs);
     }
+
+    private bool BulkExportEnabled
+        => _config.GetValue<bool>($"{Services.BulkExport.BulkExportOptions.SectionName}:Enabled");
 
     /// <summary>
     /// The FHIR search-parameter type for a clinical parameter name. <c>_id</c>
