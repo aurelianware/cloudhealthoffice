@@ -231,6 +231,114 @@ public class BulkExportProviderAccessTests : IClassFixture<BulkExportProviderAcc
         (await client.GetAsync(status)).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // ── patient and _typeFilter ──────────────────────────────────────────────
+
+    private static HttpRequestMessage PostParameters(string path, string parametersJson)
+    {
+        var request = KickOff(path);
+        request.Content = new StringContent(parametersJson, System.Text.Encoding.UTF8, "application/fhir+json");
+        return request;
+    }
+
+    private async Task<JsonDocument> ManifestAsync(HttpClient client, HttpResponseMessage kickOff)
+    {
+        kickOff.StatusCode.Should().Be(HttpStatusCode.Accepted, await kickOff.Content.ReadAsStringAsync());
+        await RunWorkerUntilIdleAsync();
+        var status = await client.GetAsync(kickOff.Content.Headers.ContentLocation!);
+        status.StatusCode.Should().Be(HttpStatusCode.OK);
+        return JsonDocument.Parse(await status.Content.ReadAsStringAsync());
+    }
+
+    [Theory]
+    [InlineData("/fhir/r4/Group/test-user/$export")]
+    [InlineData("/fhir/r4/Patient/$export")]
+    public async Task PatientParameter_NarrowsTheExport_AndReportsWhoWasNotExported(string path)
+    {
+        var client = Client();
+        var kickOff = await client.SendAsync(PostParameters(path, """
+            {"resourceType":"Parameters","parameter":[
+              {"name":"_type","valueString":"Patient"},
+              {"name":"patient","valueReference":{"reference":"Patient/pat-002"}},
+              {"name":"patient","valueReference":{"reference":"Patient/not-on-the-panel"}}
+            ]}
+            """));
+
+        using var manifest = await ManifestAsync(client, kickOff);
+        var output = manifest.RootElement.GetProperty("output").EnumerateArray().Single();
+        output.GetProperty("count").GetInt32().Should().Be(1);
+        var lines = await client.GetStringAsync(output.GetProperty("url").GetString());
+        lines.Should().Contain("\"id\":\"pat-002\"").And.NotContain("pat-001").And.NotContain("pat-003");
+
+        // Bulk Data: the patient it could not include goes in the error array,
+        // worded the same whether it does not exist or is not this caller's.
+        var error = manifest.RootElement.GetProperty("error").EnumerateArray().Single();
+        error.GetProperty("type").GetString().Should().Be("OperationOutcome");
+        var outcome = await client.GetStringAsync(error.GetProperty("url").GetString());
+        outcome.Should().Contain("Patient/not-on-the-panel").And.Contain(BulkExportWorker.PatientNotExported);
+    }
+
+    [Fact]
+    public async Task PatientParameter_IsRefusedOnTheQueryString()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, "/fhir/r4/Group/test-user/$export?patient=Patient/pat-001");
+        request.Headers.Add("Prefer", "respond-async");
+        (await Client().SendAsync(request)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Theory]
+    [InlineData("""{"resourceType":"Parameters","parameter":[{"name":"patient","valueReference":{"reference":"Coverage/x"}}]}""")]
+    [InlineData("""{"resourceType":"Parameters","parameter":[{"name":"includeAssociatedData","valueCode":"LatestProvenanceResources"}]}""")]
+    [InlineData("""{"resourceType":"Parameters","parameter":[{"name":"_type","valueString":"Patient"}]}""")]
+    public async Task ABadOrUnsupportedBodyParameter_IsRefused(string body)
+    {
+        // The last case names _type in both the query and the body.
+        var response = await Client().SendAsync(PostParameters("/fhir/r4/Group/test-user/$export?_type=Patient", body));
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, await response.Content.ReadAsStringAsync());
+    }
+
+    [Theory]
+    [InlineData("GET")]
+    [InlineData("POST")]
+    public async Task TypeFilter_KeepsOnlyMatchingResources(string method)
+    {
+        var client = Client();
+        HttpResponseMessage kickOff;
+        if (method == "GET")
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get,
+                "/fhir/r4/Group/test-user/$export?_type=Patient&_typeFilter=" + Uri.EscapeDataString("Patient?gender=female"));
+            request.Headers.Add("Prefer", "respond-async");
+            kickOff = await client.SendAsync(request);
+        }
+        else
+        {
+            kickOff = await client.SendAsync(PostParameters("/fhir/r4/Group/test-user/$export", """
+                {"resourceType":"Parameters","parameter":[
+                  {"name":"_type","valueString":"Patient"},
+                  {"name":"_typeFilter","valueString":"Patient?gender=female"}
+                ]}
+                """));
+        }
+
+        using var manifest = await ManifestAsync(client, kickOff);
+        var output = manifest.RootElement.GetProperty("output").EnumerateArray().Single();
+        output.GetProperty("count").GetInt32().Should().Be(1);
+        (await client.GetStringAsync(output.GetProperty("url").GetString())).Should().Contain("pat-001");
+    }
+
+    [Theory]
+    [InlineData("Patient?name:exact=x")]
+    [InlineData("Patient?general-practitioner=Practitioner/1")]
+    [InlineData("Observation?code=1234-5")]
+    [InlineData("Patient?no-such-param=1")]
+    [InlineData("gender=female")]
+    public async Task ATypeFilterThatCannotBeApplied_IsRefused(string filter)
+    {
+        var response = await Client().SendAsync(KickOff(
+            "/fhir/r4/Group/test-user/$export?_typeFilter=" + Uri.EscapeDataString(filter)));
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, await response.Content.ReadAsStringAsync());
+    }
+
     private async Task RunWorkerUntilIdleAsync()
     {
         var worker = _host.Worker();
@@ -246,8 +354,9 @@ public class BulkExportProviderAccessTests : IClassFixture<BulkExportProviderAcc
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             await Task.Yield();
+            var gender = memberId == "pat-001" ? "female" : "male";
             if (resourceType == "Patient")
-                yield return $$"""{"resourceType":"Patient","id":"{{memberId}}"}""";
+                yield return $$"""{"resourceType":"Patient","id":"{{memberId}}","gender":"{{gender}}"}""";
         }
     }
 }
