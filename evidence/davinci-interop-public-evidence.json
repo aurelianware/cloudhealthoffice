@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "davinci-interoperability",
-  "generatedAtUtc": "2026-10-28T22:31:34Z",
-  "sourceCommit": "581bcd5bf3fa788a960f8e5035ce7c819474690a",
-  "sourceCommitShort": "581bcd5bf3fa",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/581bcd5bf3fa788a960f8e5035ce7c819474690a",
+  "generatedAtUtc": "2026-10-28T22:55:32Z",
+  "sourceCommit": "834dc902d62ac39d145c950db9f75af7d9da2308",
+  "sourceCommitShort": "834dc902d62a",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/834dc902d62ac39d145c950db9f75af7d9da2308",
   "inventoryReviewedUtc": "2026-10-23T00:00:00Z",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence. External interoperability results never change a CMS-0057-F scenario status, and CMS acceptance statuses never imply an interoperability result. See docs/interop/davinci.md and docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md.",
@@ -159,6 +159,26 @@
       "exercised": true
     },
     {
+      "name": "inferno-framework/bulk-data-test-kit",
+      "key": "inferno-bulk-data",
+      "role": "ConformanceRunner",
+      "protocols": [
+        "Bulk Data"
+      ],
+      "upstreamRepository": "https://github.com/inferno-framework/bulk-data-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "reference": "https://github.com/inferno-framework/bulk-data-test-kit@v0.13.2",
+        "sourceCommit": "4d46b69a31dc3464cb6275864f25e9dae699ab9c"
+      },
+      "implementationGuides": {
+        "Bulk Data": "1.0.1 and 2.0.0"
+      },
+      "igVersionProvenance": "Read from the suite ids and titles in the kit's lib/ at the pinned tag.",
+      "exercised": true
+    },
+    {
       "name": "hl7/fhir-validator (validator_cli.jar)",
       "key": "hl7-validator",
       "role": "ConformanceRunner",
@@ -302,6 +322,19 @@
       "testedVersion": null
     },
     {
+      "id": "INFERNO-BULK-SERVER-001",
+      "title": "Inferno Bulk Data 2.0.0 Group and Patient export against CHO",
+      "protocol": "Bulk Data",
+      "choRole": "Server",
+      "externalTarget": "inferno-bulk-data",
+      "implemented": true,
+      "linkedFromScenario": null,
+      "description": "Run the bulk-data-test-kit bulk_data_v200 Group export and Patient export groups against the interop-cho profile with bulk export on (G-60): kick-off, status polling, the manifest, downloading the NDJSON files with the token the manifest requires, validating the resources in them, cancel, and the outputFormat and _since parameters. group_id is the seeded billing provider, whose patients come from claims-history attribution. The kit authenticates itself with SMART Backend Services (private_key_jwt) against cho-smart-auth-service as a backend client the harness registers, bound to that provider, so the token, the provider binding and the export are all the real path. Not run: the server TLS group and the SMART Backend Services group, whose TLS checks cannot pass on the plain-HTTP interop network, and the system export group, because CHO does not serve system-level $export. See knownMismatches for inferno-bulk-data in interop/versions.json.",
+      "status": "NotRun",
+      "linkedArtifact": null,
+      "testedVersion": null
+    },
+    {
       "id": "INFERNO-PDEX-CLIENT-001",
       "title": "Inferno PDex payer-client suite driven by CHO",
       "protocol": "PDex",
@@ -316,17 +349,17 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-10-28T22:31:17.8205321+00:00",
+    "generatedAtUtc": "2026-10-28T22:54:35.1015419+00:00",
     "environment": "CI",
-    "choCommit": "581bcd5bf3fa788a960f8e5035ce7c819474690a",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/581bcd5bf3fa788a960f8e5035ce7c819474690a",
+    "choCommit": "834dc902d62ac39d145c950db9f75af7d9da2308",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/834dc902d62ac39d145c950db9f75af7d9da2308",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "notRun": 7,
-      "total": 10
+      "notRun": 8,
+      "total": 11
     },
     "findings": [
       {
