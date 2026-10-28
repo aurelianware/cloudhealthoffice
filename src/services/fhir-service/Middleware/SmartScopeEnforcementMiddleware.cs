@@ -348,6 +348,7 @@ public class SmartScopeEnforcementMiddleware
             ["PayerToPayer/$member-data-export"] = ReadAccess,
             ["PayerToPayer/$export"] = ReadAccess,
             ["PayerToPayer/$initiate"] = WriteAccess,
+            ["PayerToPayer/$bulk-initiate"] = WriteAccess,
 
             // DTR: a questionnaire package is assembled and returned, not stored.
             ["Questionnaire/$questionnaire-package"] = ReadAccess,

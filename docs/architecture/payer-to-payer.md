@@ -69,6 +69,49 @@ Completed`, with terminal `NoMatch`, `Ambiguous`, `NotAuthorized`, and `Failed`.
 `DataReceived` exists so "retrieved but not stored" is a state the system can be
 in and report. Retrieval alone never reads as success.
 
+## Outbound bulk (PDex 2.1)
+
+`POST /fhir/r4/PayerToPayer/$bulk-initiate` (`targetPayerId`, `memberIds`,
+optional `asOfDate`) asks one prior payer for many members at once over the PDex
+bulk operations. It is off unless `Cms0057:PayerToPayerOutbound:Bulk:Enabled`
+(otherwise 501), needs the same `payer-to-payer:initiate` permission as
+`$initiate`, and refuses patient-scoped tokens. It answers 202 with a status URL
+(`PayerToPayer/$bulk-initiate/{jobId}`) that shows the job and each member's
+outcome. Jobs live in MongoDB (`p2p_outbound_bulk_jobs`) and a background worker
+(`PayerToPayerBulkOutboundWorker`) advances them, leasing each so two instances
+never advance the same job.
+
+`PayerToPayerBulkOutboundService` runs the single exchange's gates per member,
+then the PDex flow:
+
+1. each member is checked as `$initiate` checks one (member of the tenant, one
+   coverage with the payer, an active Payer-to-Payer opt-in, asked at the moment
+   of sending). A member who fails is sent nowhere;
+2. the rest go in one `Group/$bulk-member-match` (`Prefer: respond-async`): per
+   member an HRex Patient (member number with that payer when CHO holds it,
+   name, birth date, gender, and an opaque correlation identifier), the coverage
+   to match and the PDex consent naming CHO. No SSN, address, phone or email;
+3. the answer's Groups place each member by the correlation identifier on the
+   submitted Patient the payer contained, never by the payer's own ids. Two
+   members answered as one patient are both set aside (`Ambiguous`);
+4. opt-ins are asked again, then `Group/{id}/$davinci-data-export`
+   (`exportType=hl7.fhir.us.davinci-pdex#payertopayer`) runs on the matched
+   Group and its manifest is polled at the payer's `Retry-After`;
+5. the NDJSON files are sorted by member: a resource naming one matched member
+   is theirs, one naming several is kept by none (counted), and resources naming
+   no member go with the members whose resources refer to them;
+6. opt-ins are asked once more, and each member's package is validated and
+   ingested exactly as a single exchange's, under its own ledger entry
+   (`{jobId}-{n}`). The export's status URL is then deleted at the payer.
+
+A peer that cannot be reached is tried again until `JobTimeout` (24 h). The URLs
+a peer hands back are where SSRF would come in: a status URL must be on the
+directory entry's origin, a file URL on that origin or on one of the entry's
+`BulkFileHosts` over https, and CHO's token goes only to the payer's own origin.
+A Group id is put in a path only when it is a FHIR id. Files are capped at
+`MaxFileBytes` (64 MiB) each and `MaxTotalBytes` (256 MiB) per job, since a
+job's files are held together while they are sorted.
+
 ## Consent
 
 The consent model itself — purposes, lifecycle, the policy, the registry, and

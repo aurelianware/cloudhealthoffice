@@ -89,6 +89,15 @@ public static class FhirServiceTestDatabase
                 services.AddSingleton<global::FhirService.Services.BulkExport.IBulkExportJobStore,
                     global::FhirService.Services.BulkExport.InMemoryBulkExportJobStore>();
             }
+
+            // Outbound bulk Payer-to-Payer jobs, registered only when enabled.
+            if (services.Any(d => d.ServiceType
+                    == typeof(global::FhirService.Services.PayerToPayer.Outbound.Bulk.IPayerToPayerBulkOutboundJobStore)))
+            {
+                services.RemoveAll<global::FhirService.Services.PayerToPayer.Outbound.Bulk.IPayerToPayerBulkOutboundJobStore>();
+                services.AddSingleton<global::FhirService.Services.PayerToPayer.Outbound.Bulk.IPayerToPayerBulkOutboundJobStore,
+                    global::FhirService.Services.PayerToPayer.Outbound.Bulk.InMemoryPayerToPayerBulkOutboundJobStore>();
+            }
         });
 
         return builder;
