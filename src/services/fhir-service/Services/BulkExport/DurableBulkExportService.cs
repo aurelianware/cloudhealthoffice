@@ -99,6 +99,11 @@ public sealed partial class DurableBulkExportService : IBulkExportService
         if (request.OutputFormat is { } format && !NdjsonFormats.Contains(format))
             throw new BulkExportRequestException("_outputFormat must be application/fhir+ndjson.");
 
+        var types = ParseTypes(request.Type, BulkExportOptions.TypesFor(request.Level));
+        // Checked now so a bad filter is a 400 at kick-off, not a failed job.
+        BulkExportTypeFilter.Parse(request.TypeFilters, types);
+        var patients = ParsePatients(request.Patients, request.Level);
+
         var record = new BulkExportJobRecord
         {
             TenantId = tenantId,
@@ -107,8 +112,10 @@ public sealed partial class DurableBulkExportService : IBulkExportService
             Level = request.Level,
             GroupId = request.Level is BulkExportLevel.Group or BulkExportLevel.PayerToPayer ? request.GroupId : null,
             ReceivingPayerId = request.Level == BulkExportLevel.PayerToPayer ? request.ReceivingPayerId : null,
-            Types = ParseTypes(request.Type, BulkExportOptions.TypesFor(request.Level)),
+            Types = types,
             Since = ParseSince(request.Since),
+            TypeFilters = request.TypeFilters.ToList(),
+            Patients = patients,
             RequestUrl = request.RequestUrl ?? string.Empty,
             CreatedAt = _time.GetUtcNow(),
         };
@@ -170,6 +177,34 @@ public sealed partial class DurableBulkExportService : IBulkExportService
         // Written in the supported order, whatever order they were asked in.
         return supported.Where(requested.Contains).ToList();
     }
+
+    /// <summary>
+    /// The <c>patient</c> parameter as member ids: Group and Patient exports
+    /// only, each a <c>Patient/{id}</c> reference. It narrows the export and
+    /// never widens it: a patient outside the caller's scope is not exported.
+    /// </summary>
+    internal static IReadOnlyList<string>? ParsePatients(IReadOnlyList<string>? references, BulkExportLevel level)
+    {
+        if (references is null)
+            return null;
+        if (level is not (BulkExportLevel.Group or BulkExportLevel.Patient))
+            throw new BulkExportRequestException("patient is supported on Group and Patient exports only.");
+        if (references.Count == 0)
+            throw new BulkExportRequestException("patient must name at least one Patient reference.");
+
+        var ids = new List<string>();
+        foreach (var reference in references)
+        {
+            var match = PatientReferencePattern().Match(reference ?? string.Empty);
+            if (!match.Success)
+                throw new BulkExportRequestException("patient must be a reference of the form Patient/{id}.");
+            ids.Add(match.Groups[1].Value);
+        }
+        return ids.Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    [GeneratedRegex(@"^Patient/([A-Za-z0-9\-\.]{1,64})$")]
+    private static partial Regex PatientReferencePattern();
 
     /// <summary><c>_since</c> as a FHIR instant: a date and time with a time zone.</summary>
     internal static DateTimeOffset? ParseSince(string? since)

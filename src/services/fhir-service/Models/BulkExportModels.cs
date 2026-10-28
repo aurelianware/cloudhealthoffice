@@ -31,6 +31,18 @@ public class BulkExportRequest
     public string? GroupId { get; set; }
 
     /// <summary>
+    /// <c>_typeFilter</c> queries, one per entry (<c>Type?param=value</c>).
+    /// Empty when none was given.
+    /// </summary>
+    public List<string> TypeFilters { get; set; } = new();
+
+    /// <summary>
+    /// The Bulk Data <c>patient</c> parameter: references the export is
+    /// narrowed to. Null when the client named none (everyone in scope).
+    /// </summary>
+    public List<string>? Patients { get; set; }
+
+    /// <summary>
     /// For a Payer-to-Payer export, the requesting payer: the payer the
     /// authenticated client is registered to, never a value the client sent.
     /// </summary>

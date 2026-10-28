@@ -36,9 +36,9 @@ public class BulkExportControllerTests
         var controller = Controller();
         var result = level switch
         {
-            "group" => await controller.GroupExport("group-1", null, null, null, default),
-            "patient" => await controller.PatientExport(null, null, null, default),
-            _ => await controller.SystemExport("Patient,Coverage", null, null, default),
+            "group" => await controller.GroupExport("group-1", null, null, null, null, null, default),
+            "patient" => await controller.PatientExport(null, null, null, null, null, default),
+            _ => await controller.SystemExport("Patient,Coverage", null, null, null, null, default),
         };
 
         var obj = result.Should().BeOfType<ObjectResult>().Subject;
@@ -55,7 +55,7 @@ public class BulkExportControllerTests
     {
         var controller = Controller();
         controller.Request.Headers.Remove("Prefer");
-        (await controller.SystemExport(null, null, null, default)).Should().BeOfType<ObjectResult>()
+        (await controller.SystemExport(null, null, null, null, null, default)).Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(400);
     }
 
@@ -78,7 +78,7 @@ public class BulkExportControllerTests
         service.Setup(s => s.GetJobStatusAsync("real-job", "tenant-a", default)).ReturnsAsync(job);
         var controller = Controller(service.Object);
 
-        (await controller.SystemExport(null, null, null, default)).Should().BeOfType<StatusCodeResult>()
+        (await controller.SystemExport(null, null, null, null, null, default)).Should().BeOfType<StatusCodeResult>()
             .Which.StatusCode.Should().Be(202);
         controller.Response.Headers["Content-Location"].ToString().Should().EndWith("/$export-status/real-job");
         (await controller.ExportStatus("real-job", default)).Should().BeOfType<OkObjectResult>().Which.Value.Should().BeSameAs(job.Manifest);

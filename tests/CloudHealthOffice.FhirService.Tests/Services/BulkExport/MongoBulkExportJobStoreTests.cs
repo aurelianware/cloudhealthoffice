@@ -72,6 +72,25 @@ public sealed class MongoBulkExportJobStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TypeFiltersAndPatients_RoundTrip_AndAreAbsentOnOlderJobs()
+    {
+        await _store.CreateAsync(Job("t1", "f1", T0) with
+        {
+            TypeFilters = ["Coverage?status=active"],
+            Patients = ["pat-1", "pat-2"],
+        });
+        await _store.CreateAsync(Job("t1", "f2", T0));
+
+        var filtered = await _store.GetAsync("t1", "f1");
+        filtered!.TypeFilters.Should().Equal("Coverage?status=active");
+        filtered.Patients.Should().Equal("pat-1", "pat-2");
+
+        var plain = await _store.GetAsync("t1", "f2");
+        plain!.TypeFilters.Should().BeEmpty();
+        plain.Patients.Should().BeNull("no patient parameter means everyone in scope");
+    }
+
+    [Fact]
     public async Task Claim_TakesTheOldestWaitingJob_AndReclaimsOnlyAnExpiredLease()
     {
         await _store.CreateAsync(Job("t1", "newer", T0.AddMinutes(1)));

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Bulk export `_typeFilter` and `patient` (G-34).** Group and Patient
+  `$export` apply `_typeFilter` queries to each resource as it is written,
+  using the R4 search parameter's own FHIRPath (token, string and date
+  parameters, `_id`, `_lastUpdated`, and CARIN BB's EOB `type` and
+  `service-date`); anything else is refused at kick-off. A POST kick-off reads
+  its parameters from a FHIR Parameters body, which is where Bulk Data 2.0
+  puts `patient`: it narrows the export to the named members and never widens
+  it, and a named patient the export cannot include is reported in the
+  manifest's `error` array. Before this, `_typeFilter` on these endpoints was
+  silently ignored.
 - **Nightly Inferno Bulk Data run (G-60).** `INFERNO-BULK-SERVER-001` runs the
   bulk-data-test-kit (`v0.13.2`) Bulk Data 2.0.0 Group and Patient export
   groups against the seeded `interop-cho` profile, so export files are

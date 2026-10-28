@@ -1,9 +1,13 @@
 using FhirService.Services.Identity;
 using FhirService.Models;
 using FhirService.Services;
+using FhirService.Services.BulkExport;
 using FhirService.Services.ProviderAccess;
 using Microsoft.AspNetCore.Authorization;
+using Hl7.Fhir.Model;
+using Task = System.Threading.Tasks.Task;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Controllers;
@@ -40,43 +44,89 @@ public class BulkExportController : FhirControllerBase
         _logger = logger;
     }
 
-    /// <summary>GET or POST /fhir/r4/$export — initiate system-level bulk export</summary>
+    /// <summary>GET /fhir/r4/$export — initiate system-level bulk export</summary>
     [HttpGet("$export")]
-    [HttpPost("$export")]
     public Task<IActionResult> SystemExport(
         [FromQuery(Name = "_type")] string? type,
         [FromQuery(Name = "_since")] string? since,
         [FromQuery(Name = "_outputFormat")] string? outputFormat,
+        [FromQuery(Name = "_typeFilter")] string[]? typeFilter,
+        [FromQuery(Name = "patient")] string[]? patient,
         CancellationToken ct)
-        => KickOffAsync(BulkExportLevel.System, groupId: null, type, since, outputFormat, ct);
+        => KickOffAsync(BulkExportLevel.System, groupId: null, Query(type, since, outputFormat, typeFilter, patient), null, ct);
+
+    /// <summary>POST /fhir/r4/$export — the same, parameters in a Parameters body</summary>
+    [HttpPost("$export")]
+    public Task<IActionResult> SystemExportPost(
+        [FromQuery(Name = "_type")] string? type,
+        [FromQuery(Name = "_since")] string? since,
+        [FromQuery(Name = "_outputFormat")] string? outputFormat,
+        [FromQuery(Name = "_typeFilter")] string[]? typeFilter,
+        [FromQuery(Name = "patient")] string[]? patient,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] Parameters? body,
+        CancellationToken ct)
+        => KickOffAsync(BulkExportLevel.System, groupId: null, Query(type, since, outputFormat, typeFilter, patient), body, ct);
 
     /// <summary>
-    /// GET or POST /fhir/r4/Patient/$export — initiate patient-level bulk
-    /// export: every patient the caller may export (for a provider, its
-    /// attributed panel).
+    /// GET /fhir/r4/Patient/$export — initiate patient-level bulk export:
+    /// every patient the caller may export (for a provider, its attributed
+    /// panel).
     /// </summary>
     [HttpGet("Patient/$export")]
-    [HttpPost("Patient/$export")]
     public Task<IActionResult> PatientExport(
         [FromQuery(Name = "_type")] string? type,
         [FromQuery(Name = "_since")] string? since,
         [FromQuery(Name = "_outputFormat")] string? outputFormat,
+        [FromQuery(Name = "_typeFilter")] string[]? typeFilter,
+        [FromQuery(Name = "patient")] string[]? patient,
         CancellationToken ct)
-        => KickOffAsync(BulkExportLevel.Patient, groupId: null, type, since, outputFormat, ct);
+        => KickOffAsync(BulkExportLevel.Patient, groupId: null, Query(type, since, outputFormat, typeFilter, patient), null, ct);
 
-    /// <summary>GET or POST /fhir/r4/Group/{groupId}/$export — initiate group-level bulk export</summary>
+    /// <summary>
+    /// POST /fhir/r4/Patient/$export — the same, with the parameters in a
+    /// FHIR Parameters body. Only a POST can carry <c>patient</c>.
+    /// </summary>
+    [HttpPost("Patient/$export")]
+    public Task<IActionResult> PatientExportPost(
+        [FromQuery(Name = "_type")] string? type,
+        [FromQuery(Name = "_since")] string? since,
+        [FromQuery(Name = "_outputFormat")] string? outputFormat,
+        [FromQuery(Name = "_typeFilter")] string[]? typeFilter,
+        [FromQuery(Name = "patient")] string[]? patient,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] Parameters? body,
+        CancellationToken ct)
+        => KickOffAsync(BulkExportLevel.Patient, groupId: null, Query(type, since, outputFormat, typeFilter, patient), body, ct);
+
+    /// <summary>GET /fhir/r4/Group/{groupId}/$export — initiate group-level bulk export</summary>
     [HttpGet("Group/{groupId}/$export")]
-    [HttpPost("Group/{groupId}/$export")]
     public Task<IActionResult> GroupExport(
         string groupId,
         [FromQuery(Name = "_type")] string? type,
         [FromQuery(Name = "_since")] string? since,
         [FromQuery(Name = "_outputFormat")] string? outputFormat,
+        [FromQuery(Name = "_typeFilter")] string[]? typeFilter,
+        [FromQuery(Name = "patient")] string[]? patient,
         CancellationToken ct)
-        => KickOffAsync(BulkExportLevel.Group, groupId, type, since, outputFormat, ct);
+        => KickOffAsync(BulkExportLevel.Group, groupId, Query(type, since, outputFormat, typeFilter, patient), null, ct);
 
     /// <summary>
-    /// GET or POST /fhir/r4/PayerToPayer/$export — the Payer-to-Payer bulk
+    /// POST /fhir/r4/Group/{groupId}/$export — the same, with the parameters
+    /// in a FHIR Parameters body. Only a POST can carry <c>patient</c>.
+    /// </summary>
+    [HttpPost("Group/{groupId}/$export")]
+    public Task<IActionResult> GroupExportPost(
+        string groupId,
+        [FromQuery(Name = "_type")] string? type,
+        [FromQuery(Name = "_since")] string? since,
+        [FromQuery(Name = "_outputFormat")] string? outputFormat,
+        [FromQuery(Name = "_typeFilter")] string[]? typeFilter,
+        [FromQuery(Name = "patient")] string[]? patient,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] Parameters? body,
+        CancellationToken ct)
+        => KickOffAsync(BulkExportLevel.Group, groupId, Query(type, since, outputFormat, typeFilter, patient), body, ct);
+
+    /// <summary>
+    /// GET /fhir/r4/PayerToPayer/$export — the Payer-to-Payer bulk
     /// transfer (G-35): every member whose consent naming the requesting payer
     /// is in force (recorded by <c>$member-match</c> or
     /// <c>$member-data-export</c>, ADR 022), each exported as
@@ -84,19 +134,35 @@ public class BulkExportController : FhirControllerBase
     /// the payer they are registered to, exactly as the single-member export.
     /// </summary>
     [HttpGet("PayerToPayer/$export")]
-    [HttpPost("PayerToPayer/$export")]
     public Task<IActionResult> PayerToPayerExport(
         [FromQuery(Name = "_type")] string? type,
         [FromQuery(Name = "_since")] string? since,
         [FromQuery(Name = "_outputFormat")] string? outputFormat,
+        [FromQuery(Name = "_typeFilter")] string[]? typeFilter,
+        [FromQuery(Name = "patient")] string[]? patient,
         CancellationToken ct)
+        => PayerToPayerKickOffAsync(Query(type, since, outputFormat, typeFilter, patient), null, ct);
+
+    /// <summary>POST /fhir/r4/PayerToPayer/$export — the same, parameters in a Parameters body</summary>
+    [HttpPost("PayerToPayer/$export")]
+    public Task<IActionResult> PayerToPayerExportPost(
+        [FromQuery(Name = "_type")] string? type,
+        [FromQuery(Name = "_since")] string? since,
+        [FromQuery(Name = "_outputFormat")] string? outputFormat,
+        [FromQuery(Name = "_typeFilter")] string[]? typeFilter,
+        [FromQuery(Name = "patient")] string[]? patient,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] Parameters? body,
+        CancellationToken ct)
+        => PayerToPayerKickOffAsync(Query(type, since, outputFormat, typeFilter, patient), body, ct);
+
+    private Task<IActionResult> PayerToPayerKickOffAsync(ExportQuery query, Parameters? body, CancellationToken ct)
     {
         if (!IsBackendSystemCaller)
             return Task.FromResult(FhirForbidden(PayerToPayerController.BackendOnlyMessage));
         if (!TryBindReceivingPayer(null, _logger, "bulk export", out var receivingPayerId))
             return Task.FromResult(FhirForbidden(PayerToPayerController.PayerBindingMessage));
 
-        return KickOffAsync(BulkExportLevel.PayerToPayer, groupId: null, type, since, outputFormat, ct, receivingPayerId);
+        return KickOffAsync(BulkExportLevel.PayerToPayer, groupId: null, query, body, ct, receivingPayerId);
     }
 
     /// <summary>
@@ -130,8 +196,8 @@ public class BulkExportController : FhirControllerBase
         if (!string.IsNullOrEmpty(until) || !string.IsNullOrEmpty(typeFilter))
             return Task.FromResult(FhirBadRequest("_until and _typeFilter are not supported."));
 
-        return KickOffAsync(BulkExportLevel.PayerToPayer, groupId, type, since, outputFormat, ct, receivingPayerId,
-            path: $"Group/{Uri.EscapeDataString(groupId)}/$davinci-data-export");
+        return KickOffAsync(BulkExportLevel.PayerToPayer, groupId, Query(type, since, outputFormat, null, null), null, ct,
+            receivingPayerId, path: $"Group/{Uri.EscapeDataString(groupId)}/$davinci-data-export");
     }
 
     /// <summary>The PDex export type of a Payer-to-Payer <c>$davinci-data-export</c>.</summary>
@@ -221,11 +287,14 @@ public class BulkExportController : FhirControllerBase
     /// parameters on the query string. Answers 202 with the status URL.
     /// </summary>
     private async Task<IActionResult> KickOffAsync(
-        BulkExportLevel level, string? groupId, string? type, string? since, string? outputFormat, CancellationToken ct,
+        BulkExportLevel level, string? groupId, ExportQuery query, Parameters? body, CancellationToken ct,
         string? receivingPayerId = null, string? path = null)
     {
         if (!HasRespondAsyncHeader())
             return FhirBadRequest("Bulk Data export requires 'Prefer: respond-async' header");
+
+        if (!TryResolveParameters(query, body, out var parameters, out var parameterError))
+            return FhirBadRequest(parameterError);
 
         path ??= level switch
         {
@@ -238,10 +307,12 @@ public class BulkExportController : FhirControllerBase
         var request = new BulkExportRequest
         {
             Level = level,
-            Type = type,
-            Since = since,
-            OutputFormat = outputFormat ?? "application/fhir+ndjson",
+            Type = parameters.Type,
+            Since = parameters.Since,
+            OutputFormat = parameters.OutputFormat ?? "application/fhir+ndjson",
             GroupId = groupId,
+            TypeFilters = BulkExportTypeFilter.Split(parameters.TypeFilters).ToList(),
+            Patients = parameters.Patients?.ToList(),
             ReceivingPayerId = receivingPayerId,
             RequestUrl = $"{FhirBaseUrl}/{path}{RawQueryString}",
             RequestedBy = CallerId,
@@ -273,6 +344,91 @@ public class BulkExportController : FhirControllerBase
         return StatusCode(202);
     }
 
+    /// <summary>The kick-off parameters, from the query string or a POST's Parameters body.</summary>
+    private sealed record ExportQuery(
+        string? Type, string? Since, string? OutputFormat,
+        IReadOnlyList<string>? TypeFilters, IReadOnlyList<string>? Patients);
+
+    private static ExportQuery Query(
+        string? type, string? since, string? outputFormat, string[]? typeFilter, string[]? patient)
+        => new(type, since, outputFormat, typeFilter, patient);
+
+    /// <summary>
+    /// The parameters a kick-off was given. Bulk Data 2.0 puts a POST's
+    /// parameters in a Parameters body and allows <c>patient</c> only there;
+    /// a parameter named in both the query and the body, or one this server
+    /// does not apply, is refused rather than silently ignored.
+    /// </summary>
+    private static bool TryResolveParameters(
+        ExportQuery query, Parameters? body, out ExportQuery resolved, out string error)
+    {
+        resolved = query;
+        error = string.Empty;
+
+        if (query.Patients is { Count: > 0 })
+        {
+            error = "patient is accepted only in the Parameters body of a POST kick-off.";
+            return false;
+        }
+
+        if (body is null || body.Parameter.Count == 0)
+        {
+            resolved = query with { Patients = null };
+            return true;
+        }
+
+        string? type = null, since = null, outputFormat = null;
+        var typeFilters = new List<string>();
+        List<string>? patients = null;
+
+        foreach (var parameter in body.Parameter)
+        {
+            switch (parameter.Name)
+            {
+                case "_type" when parameter.Value is FhirString or Code:
+                    type = type is null ? Text(parameter) : $"{type},{Text(parameter)}";
+                    break;
+                case "_since" when parameter.Value is Instant or FhirDateTime or FhirString:
+                    since = Text(parameter);
+                    break;
+                case "_outputFormat" when parameter.Value is FhirString or Code:
+                    outputFormat = Text(parameter);
+                    break;
+                case "_typeFilter" when parameter.Value is FhirString:
+                    typeFilters.Add(Text(parameter)!);
+                    break;
+                case "patient" when parameter.Value is ResourceReference { Reference: { } reference }:
+                    (patients ??= new List<string>()).Add(reference);
+                    break;
+                case "_type" or "_since" or "_outputFormat" or "_typeFilter" or "patient":
+                    error = $"Parameter '{parameter.Name}' has the wrong value type.";
+                    return false;
+                default:
+                    error = $"Parameter '{parameter.Name}' is not supported by this server.";
+                    return false;
+            }
+        }
+
+        if ((type is not null && query.Type is not null)
+            || (since is not null && query.Since is not null)
+            || (outputFormat is not null && query.OutputFormat is not null)
+            || (typeFilters.Count > 0 && query.TypeFilters is { Count: > 0 }))
+        {
+            error = "A parameter was given in both the query string and the Parameters body.";
+            return false;
+        }
+
+        resolved = new ExportQuery(
+            type ?? query.Type,
+            since ?? query.Since,
+            outputFormat ?? query.OutputFormat,
+            typeFilters.Count > 0 ? typeFilters : query.TypeFilters,
+            patients);
+        return true;
+
+        static string? Text(Parameters.ParameterComponent p) => (p.Value as PrimitiveType)?.ToString();
+    }
+
     /// <summary>The validated caller, as Provider Access identifies it.</summary>
     private string? CallerId => ProviderAccessAuthorizationFilter.ResolveCallerId(HttpContext);
 
@@ -298,20 +454,28 @@ public class BulkExportController : FhirControllerBase
         return job;
     }
 
-    private BulkExportManifest BuildManifest(BulkExportJob job) => new()
+    /// <summary>
+    /// The manifest. OperationOutcome files are the export's <c>error</c>
+    /// array (patients it could not include), everything else its output.
+    /// </summary>
+    private BulkExportManifest BuildManifest(BulkExportJob job)
     {
-        TransactionTime = (job.TransactionTime ?? job.CreatedAt).ToString("o"),
-        Request = job.Request,
-        RequiresAccessToken = true,
-        Output = job.Files
-            .Select(f => new BulkExportOutput
-            {
-                Type = f.Type,
-                Url = $"{FhirBaseUrl}/$export-file/{job.JobId}/{Uri.EscapeDataString(f.Name)}",
-                Count = f.Count,
-            })
-            .ToList(),
-    };
+        BulkExportOutput Output(BulkExportFile f) => new()
+        {
+            Type = f.Type,
+            Url = $"{FhirBaseUrl}/$export-file/{job.JobId}/{Uri.EscapeDataString(f.Name)}",
+            Count = f.Count,
+        };
+
+        return new BulkExportManifest
+        {
+            TransactionTime = (job.TransactionTime ?? job.CreatedAt).ToString("o"),
+            Request = job.Request,
+            RequiresAccessToken = true,
+            Output = job.Files.Where(f => f.Type != BulkExportWorker.ErrorFileType).Select(Output).ToList(),
+            Error = job.Files.Where(f => f.Type == BulkExportWorker.ErrorFileType).Select(Output).ToList(),
+        };
+    }
 
     private IActionResult BulkExportNotImplemented()
     {

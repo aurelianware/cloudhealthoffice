@@ -32,6 +32,12 @@ public sealed record BulkExportJobRecord
     public string? ReceivingPayerId { get; init; }
     public required IReadOnlyList<string> Types { get; init; }
     public DateTimeOffset? Since { get; init; }
+
+    /// <summary><c>_typeFilter</c> queries as the client sent them; parsed again when the export runs.</summary>
+    public IReadOnlyList<string> TypeFilters { get; init; } = [];
+
+    /// <summary>The member ids the <c>patient</c> parameter named, or null for everyone in scope.</summary>
+    public IReadOnlyList<string>? Patients { get; init; }
     public required string RequestUrl { get; init; }
     public BulkExportStatus Status { get; init; } = BulkExportStatus.Accepted;
     public required DateTimeOffset CreatedAt { get; init; }
@@ -248,6 +254,8 @@ public sealed class MongoBulkExportJobStore : IBulkExportJobStore
         ["receivingPayerId"] = j.ReceivingPayerId is null ? BsonNull.Value : j.ReceivingPayerId,
         ["types"] = new BsonArray(j.Types),
         ["since"] = Date(j.Since),
+        ["typeFilters"] = new BsonArray(j.TypeFilters),
+        ["patients"] = j.Patients is null ? BsonNull.Value : new BsonArray(j.Patients),
         ["requestUrl"] = j.RequestUrl,
         ["status"] = j.Status.ToString(),
         ["createdAt"] = j.CreatedAt.UtcDateTime,
@@ -275,6 +283,13 @@ public sealed class MongoBulkExportJobStore : IBulkExportJobStore
         ReceivingPayerId = d.TryGetValue("receivingPayerId", out var payer) && payer.IsString ? payer.AsString : null,
         Types = d["types"].AsBsonArray.Select(t => t.AsString).ToList(),
         Since = Date(d, "since"),
+        // Jobs written before these parameters existed have neither.
+        TypeFilters = d.TryGetValue("typeFilters", out var filters) && filters.IsBsonArray
+            ? filters.AsBsonArray.Select(f => f.AsString).ToList()
+            : [],
+        Patients = d.TryGetValue("patients", out var patients) && patients.IsBsonArray
+            ? patients.AsBsonArray.Select(m => m.AsString).ToList()
+            : null,
         RequestUrl = d["requestUrl"].AsString,
         Status = Enum.Parse<BulkExportStatus>(d["status"].AsString),
         CreatedAt = Date(d, "createdAt")!.Value,

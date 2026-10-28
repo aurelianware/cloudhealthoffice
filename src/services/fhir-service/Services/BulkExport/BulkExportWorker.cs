@@ -1,4 +1,6 @@
 using System.Text;
+using System.Text.Json;
+using Hl7.Fhir.Serialization;
 using CloudHealthOffice.Infrastructure.Logging;
 using FhirService.Models;
 using FhirService.Services.PayerToPayer;
@@ -34,6 +36,19 @@ namespace FhirService.Services.BulkExport;
 public sealed class BulkExportWorker : BackgroundService
 {
     internal const string FailureMessage = "The export could not be completed.";
+
+    /// <summary>
+    /// What the error file says for a <c>patient</c> the export did not
+    /// include. One wording whether the patient does not exist or is outside
+    /// the caller's scope, so the file never tells a caller which.
+    /// </summary>
+    internal const string PatientNotExported = "Not exported: no such patient is available to this export.";
+
+    /// <summary>The manifest <c>error</c> file's type and name stem.</summary>
+    internal const string ErrorFileType = "OperationOutcome";
+
+    private static readonly JsonSerializerOptions FhirJson =
+        new JsonSerializerOptions().ForFhir(typeof(Hl7.Fhir.Model.Patient).Assembly);
     private const int PurgeBatch = 50;
     private static readonly TimeSpan ProgressHeartbeat = TimeSpan.FromMinutes(1);
 
@@ -176,6 +191,16 @@ public sealed class BulkExportWorker : BackgroundService
                 services.GetRequiredService<IProviderAccessAuthorizationService>(),
                 ct);
 
+        // The patient parameter narrows the members, never widens them.
+        var notExported = new List<string>();
+        if (job.Patients is { } requested)
+        {
+            notExported = requested.Where(p => !members.Contains(p, StringComparer.Ordinal)).ToList();
+            members = members.Where(m => requested.Contains(m, StringComparer.Ordinal)).ToList();
+        }
+
+        var filter = BulkExportTypeFilter.Parse(job.TypeFilters, job.Types);
+
         var progress = new ProgressReporter(this, job);
         var writers = job.Types.ToDictionary(
             t => t, t => new RotatingNdjsonWriter(work, t, _options.MaxResourcesPerFile), StringComparer.Ordinal);
@@ -193,7 +218,10 @@ public sealed class BulkExportWorker : BackgroundService
                     var source = services.GetRequiredService<IPayerToPayerBulkSource>();
                     await foreach (var (type, line) in source.ReadAsync(
                                        job.TenantId, job.ReceivingPayerId!, job.RequestedBy, member, job.Types, job.Since, ct))
-                        await writers[type].WriteAsync(line, ct);
+                    {
+                        if (Passes(filter, type, line))
+                            await writers[type].WriteAsync(line, ct);
+                    }
                 }
                 else
                 {
@@ -201,7 +229,10 @@ public sealed class BulkExportWorker : BackgroundService
                     foreach (var type in job.Types)
                     {
                         await foreach (var line in source.ReadAsync(job.TenantId, member, type, job.Since, ct))
-                            await writers[type].WriteAsync(line, ct);
+                        {
+                            if (Passes(filter, type, line))
+                                await writers[type].WriteAsync(line, ct);
+                        }
                     }
                 }
 
@@ -218,6 +249,17 @@ public sealed class BulkExportWorker : BackgroundService
             {
                 await writers[type].CloseAsync(ct);
                 written.AddRange(writers[type].Files.Select(f => (type, f.Name, f.Count, f.Path)));
+            }
+
+            // Bulk Data: problems with the request go in the manifest's error
+            // array, as OperationOutcome NDJSON.
+            if (notExported.Count > 0)
+            {
+                await using var errors = new RotatingNdjsonWriter(work, ErrorFileType, _options.MaxResourcesPerFile);
+                foreach (var patient in notExported)
+                    await errors.WriteAsync(NotExportedOutcome(patient), ct);
+                await errors.CloseAsync(ct);
+                written.AddRange(errors.Files.Select(f => (ErrorFileType, f.Name, f.Count, f.Path)));
             }
         }
         finally
@@ -251,6 +293,33 @@ public sealed class BulkExportWorker : BackgroundService
             "Bulk export {JobId} for tenant {TenantId} completed: {Members} members, {Files} files.",
             LogSanitizer.Sanitize(job.JobId), LogSanitizer.Sanitize(job.TenantId), members.Count, stored.Count);
     }
+
+    /// <summary>
+    /// Whether <paramref name="line"/> passes the export's <c>_typeFilter</c>.
+    /// Parsed only for a type a query names.
+    /// </summary>
+    internal static bool Passes(BulkExportTypeFilter filter, string type, string line)
+    {
+        if (!filter.Filters(type))
+            return true;
+        var resource = JsonSerializer.Deserialize<Hl7.Fhir.Model.Resource>(line, FhirJson);
+        return resource is not null && filter.Matches(resource);
+    }
+
+    private static string NotExportedOutcome(string patientId)
+        => JsonSerializer.Serialize(new Hl7.Fhir.Model.OperationOutcome
+        {
+            Issue =
+            [
+                new Hl7.Fhir.Model.OperationOutcome.IssueComponent
+                {
+                    Severity = Hl7.Fhir.Model.OperationOutcome.IssueSeverity.Error,
+                    Code = Hl7.Fhir.Model.OperationOutcome.IssueType.NotFound,
+                    Diagnostics = PatientNotExported,
+                    Expression = [$"Patient/{patientId}"],
+                },
+            ],
+        }, FhirJson);
 
     /// <summary>
     /// The members a Payer-to-Payer export covers: those of its match Group
