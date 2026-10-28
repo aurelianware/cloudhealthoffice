@@ -315,7 +315,7 @@ public class PayerToPayerBulkMemberMatchTests : IClassFixture<PayerToPayerBulkMe
         group.GetProperty("interaction").EnumerateArray().Select(i => i.GetProperty("code").GetString())
             .Should().Equal("read");
         group.GetProperty("operation").EnumerateArray().Select(o => o.GetProperty("name").GetString())
-            .Should().BeEquivalentTo(["bulk-member-match", "davinci-data-export"]);
+            .Should().BeEquivalentTo(["export", "bulk-member-match", "davinci-data-export"]);
     }
 
     private static HttpRequestMessage Export(string groupId, string query)

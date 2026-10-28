@@ -76,7 +76,9 @@ public class MetadataController : FhirControllerBase
                             ("birthdate",    SearchParamType.Date),
                             ("identifier",   SearchParamType.Token),
                             ("gender",       SearchParamType.Token)
-                        ]),
+                        ],
+                        // Bulk Data (G-34): a provider's panel as Patient/$export.
+                        operations: BulkExportEnabled ? [PatientExportOperation] : null),
                         BuildResource("Coverage",
                         [
                             ("_id",          SearchParamType.Token),
@@ -331,16 +333,18 @@ public class MetadataController : FhirControllerBase
                             ("request",      SearchParamType.Reference)
                         ],
                         supportedProfiles: [FhirAppealMapper.ClaimResponseProfileUrl]),
-                        // ── PDex bulk Payer-to-Payer (G-35) ─────────────────
-                        // Served with bulk export only: the Groups a
+                        // ── Bulk Data and PDex bulk Payer-to-Payer ──────────
+                        // Served with bulk export only: Group/{provider id}/$export,
+                        // a provider's attributed panel (G-34); and the Groups a
                         // $bulk-member-match answers with, read by the payer
-                        // they were made for, and exported as
-                        // $davinci-data-export. No Group search.
+                        // they were made for and exported as
+                        // $davinci-data-export (G-35). No Group search.
                         .. BulkExportEnabled
                             ? [BuildResource("Group", [],
                                 interactions: [CapabilityStatement.TypeRestfulInteraction.Read],
                                 operations:
                                 [
+                                    GroupExportOperation,
                                     ("bulk-member-match", "http://hl7.org/fhir/us/davinci-pdex/OperationDefinition/BulkMemberMatch"),
                                     ("davinci-data-export", "http://hl7.org/fhir/us/davinci-atr/OperationDefinition/davinci-data-export"),
                                 ])]
@@ -365,13 +369,12 @@ public class MetadataController : FhirControllerBase
                                 entry.ResourceType,
                                 [.. entry.SearchParameters.Select(p => (p, SearchParamTypeFor(p)))])),
                     ],
+                    // No system-level $export: BulkExportController refuses
+                    // it (an export of every member in a tenant has no
+                    // approved caller), so it is not claimed. Patient and
+                    // Group export are declared on their resources above.
                     Operation =
                     [
-                        new CapabilityStatement.OperationComponent
-                        {
-                            Name = "export",
-                            Definition = "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/export",
-                        },
                         new CapabilityStatement.OperationComponent
                         {
                             Name = AppealSubmitController.OperationName,
@@ -395,6 +398,12 @@ public class MetadataController : FhirControllerBase
 
         return Ok(cs);
     }
+
+    private static readonly (string Name, string Definition) PatientExportOperation =
+        ("export", "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/patient-export");
+
+    private static readonly (string Name, string Definition) GroupExportOperation =
+        ("export", "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/group-export");
 
     private bool BulkExportEnabled
         => _config.GetValue<bool>($"{Services.BulkExport.BulkExportOptions.SectionName}:Enabled");

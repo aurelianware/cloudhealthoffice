@@ -121,6 +121,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Fixes from the first Inferno Bulk Data run** (bulk-data-test-kit
+  `v0.13.2`, Bulk Data 2.0.0 suite, run by hand against a local CHO; G-60).
+  The SMART Backend Services and server groups now pass, and Group and
+  Patient kick-offs are accepted. Five defects were found and fixed:
+  - smart-auth-service's token response carries `scope`. SMART requires it
+    even when it equals the request; OpenIddict left it out.
+  - In `Demo` trust, fhir-service trusts the bundled smart-auth-service's
+    issuer as smart-auth-service writes it (`Uri.AbsoluteUri`). With the
+    same `SmartAuth:Issuer` on both services, a host-only issuer such as
+    `https://auth.example.com` arrived as `https://auth.example.com/` and
+    every token was refused. The match is still exact, and explicit
+    `TrustedIssuers` are taken as written.
+  - SMART discovery no longer advertises `//connect/token` when the issuer
+    ends in a slash. A Backend Services client signs its assertion for the
+    advertised URL, which then failed the `aud` check.
+  - The CapabilityStatement declares `export` on `Patient` and `Group`
+    (`patient-export`, `group-export`) when `BulkExport:Enabled` is set. It no
+    longer claims the system-level `$export`, which answers 501.
+  - A cancelled export's status URL answers 404 with an OperationOutcome, as
+    Bulk Data 2.0 requires (it was 410). A failed export's status answers 500
+    with an OperationOutcome instead of a plain JSON error.
+
 - **Bulk exports read CHO's own services in the export's tenant.** The bulk
   worker had no request to take a tenant from, so with the `ChoNative` binding
   its reads of member, coverage and claims data carried no tenant and no

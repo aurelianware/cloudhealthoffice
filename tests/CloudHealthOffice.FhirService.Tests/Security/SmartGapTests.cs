@@ -340,7 +340,8 @@ public class SmartGapTests : IClassFixture<FhirTestWebAppFactory>
         var registry = new TrustedIssuerRegistry(options);
         var caller = new AuthenticatedCaller
         {
-            Issuer = "http://smart-auth-service:8080",
+            // As smart-auth-service (OpenIddict) writes it: Uri.AbsoluteUri.
+            Issuer = "http://smart-auth-service:8080/",
             CallerType = SmartCallerType.Patient,
             Scopes = new HashSet<string>(),
         };

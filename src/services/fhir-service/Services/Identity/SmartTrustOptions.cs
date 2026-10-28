@@ -101,7 +101,7 @@ public sealed class SmartTrustOptions
             [
                 new TrustedIssuerOptions
                 {
-                    Issuer = Issuer!,
+                    Issuer = BundledIssuerAsWritten(Issuer!),
                     Audiences = string.IsNullOrWhiteSpace(Audience) ? ["fhir-api"] : [Audience!],
                     RequireHttpsMetadata = RequireHttpsMetadata,
                     Tenants = [.. Tenants],
@@ -113,6 +113,19 @@ public sealed class SmartTrustOptions
 
         return [];
     }
+
+    /// <summary>
+    /// The legacy Demo issuer as the bundled smart-auth-service writes it in
+    /// <c>iss</c> and in its discovery document. Both services read the same
+    /// <c>SmartAuth:Issuer</c> value, but smart-auth-service (OpenIddict) emits
+    /// it as <see cref="Uri.AbsoluteUri"/>, so "https://auth.example.com"
+    /// arrives as "https://auth.example.com/". Matching stays exact: this is
+    /// the one spelling the bundled server can produce, not a second one
+    /// accepted alongside it. Explicit <see cref="TrustedIssuers"/> entries
+    /// are taken exactly as written.
+    /// </summary>
+    internal static string BundledIssuerAsWritten(string configured)
+        => Uri.TryCreate(configured.Trim(), UriKind.Absolute, out var uri) ? uri.AbsoluteUri : configured;
 
     /// <summary>
     /// Fail-closed configuration check, run at startup before the first request.

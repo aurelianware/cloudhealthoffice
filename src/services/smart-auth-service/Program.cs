@@ -77,6 +77,7 @@ builder.Services.AddOpenIddict()
         // never depend on the request's Host or X-Forwarded headers.
         options.SetIssuer(smartIssuer);
         options.AddEventHandler(SmartIssuer.BaseUriHandler(smartIssuer));
+        options.AddEventHandler(SmartTokenResponse.GrantedScopeHandler);
 
         // ── Endpoints ────────────────────────────────────────────────────────
         options

@@ -42,13 +42,13 @@ public class SmartConfigurationEndpointTests
     }
 
     private static async Task<SmartConfigurationController> ControllerAsync(
-        SmartTrustMode mode, bool discoverySucceeds = true)
+        SmartTrustMode mode, bool discoverySucceeds = true, string demoIssuer = "https://auth.cloudhealthoffice.com")
     {
         var options = mode == SmartTrustMode.Demo
             ? new SmartTrustOptions
             {
                 Mode = SmartTrustMode.Demo,
-                Issuer = "https://auth.cloudhealthoffice.com",
+                Issuer = demoIssuer,
                 Audience = "fhir-api",
             }
             : new SmartTrustOptions
@@ -131,5 +131,23 @@ public class SmartConfigurationEndpointTests
 
         json.Should().Contain("/connect/authorize");
         json.Should().Contain("/connect/token");
+    }
+
+    [Theory]
+    [InlineData("https://auth.cloudhealthoffice.com")]
+    [InlineData("https://auth.cloudhealthoffice.com/")]
+    public async Task DemoMode_EndpointsHaveOneSlash_WhicheverWayTheIssuerIsWritten(string issuer)
+    {
+        // A client assertion's aud must be the token endpoint exactly, so a
+        // "//connect/token" here fails every backend client that reads it.
+        var result = (await ControllerAsync(SmartTrustMode.Demo, demoIssuer: issuer)).GetSmartConfiguration();
+
+        var json = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(
+            result.Should().BeOfType<OkObjectResult>().Subject.Value!)).RootElement;
+
+        json.GetProperty("token_endpoint").GetString().Should().Be("https://auth.cloudhealthoffice.com/connect/token");
+        json.GetProperty("authorization_endpoint").GetString().Should().Be("https://auth.cloudhealthoffice.com/connect/authorize");
+        json.GetProperty("jwks_uri").GetString().Should().Be("https://auth.cloudhealthoffice.com/.well-known/jwks");
+        json.GetProperty("introspection_endpoint").GetString().Should().Be("https://auth.cloudhealthoffice.com/connect/introspect");
     }
 }

@@ -90,8 +90,11 @@ public class BulkExportControllerTests
         var service = new Mock<IBulkExportService>();
         service.Setup(s => s.GetJobStatusAsync("cancelled", "tenant-a", default)).ReturnsAsync(
             new BulkExportJob { JobId = "cancelled", Status = BulkExportStatus.Cancelled, RequestedBy = "prov-1" });
-        (await Controller(service.Object).ExportStatus("cancelled", default)).Should().BeOfType<StatusCodeResult>()
-            .Which.StatusCode.Should().Be(410);
+        // Bulk Data 2.0: after a DELETE the status URL is 404 with an OperationOutcome.
+        var result = (await Controller(service.Object).ExportStatus("cancelled", default))
+            .Should().BeOfType<ObjectResult>().Subject;
+        result.StatusCode.Should().Be(404);
+        result.Value.Should().BeOfType<OperationOutcome>();
     }
 
     [Fact]
