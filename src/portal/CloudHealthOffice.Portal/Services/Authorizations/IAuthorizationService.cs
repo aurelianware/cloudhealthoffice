@@ -6,6 +6,12 @@ public interface IAuthorizationService
     Task<AuthorizationDetails?> GetAuthorizationByIdAsync(string authorizationId);
     Task<string> SubmitAuthorizationAsync(SubmitAuthorizationRequest request);
 
+    /// <summary>Takes the one lawful extension of an open request's decision timeframe (authorizations:decide).</summary>
+    Task<AuthorizationActionResult> ExtendDecisionDeadlineAsync(string id, string basis, string reason, DateTimeOffset? extendedDueAt = null);
+
+    /// <summary>Records the correspondence-service letter that carried the member's extension notice.</summary>
+    Task<AuthorizationActionResult> RecordExtensionNoticeAsync(string id, string letterId);
+
     /// <summary>Authorization Insights: CMS-0057 figures for the period, the queue now, denial reasons.</summary>
     Task<AuthorizationInsightsView> GetAuthorizationInsightsAsync(DateTime from, DateTime to, string? lineOfBusiness = null);
 

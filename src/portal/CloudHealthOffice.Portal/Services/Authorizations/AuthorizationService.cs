@@ -123,6 +123,48 @@ public class AuthorizationService : IAuthorizationService
         }
     }
 
+    public Task<AuthorizationActionResult> ExtendDecisionDeadlineAsync(string id, string basis, string reason,
+        DateTimeOffset? extendedDueAt = null) =>
+        PostActionAsync($"authorizations/{Uri.EscapeDataString(id)}/decision-extension",
+            new { basis, reason, extendedDueAt });
+
+    public Task<AuthorizationActionResult> RecordExtensionNoticeAsync(string id, string letterId) =>
+        PostActionAsync($"authorizations/{Uri.EscapeDataString(id)}/decision-extension/member-notice", new { letterId });
+
+    private async Task<AuthorizationActionResult> PostActionAsync(string path, object body)
+    {
+        var baseUrl = _configuration["Services:AuthorizationService"];
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/{path}", body);
+            if (response.IsSuccessStatusCode)
+                return new(await response.Content.ReadFromJsonAsync<AuthorizationDetails>(), null);
+            return new(null, response.StatusCode switch
+            {
+                HttpStatusCode.Forbidden => "You do not have permission to change this authorization's decision timeframe.",
+                HttpStatusCode.NotFound => "The authorization was not found.",
+                _ => await ErrorAsync(response) ?? "The authorization service refused the change. Reload the record and try again.",
+            });
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Authorization Service");
+            throw new ServiceUnavailableException("Authorization Service", ex);
+        }
+    }
+
+    /// <summary>The service's own <c>{ error }</c> text, which names the rule that refused it.</summary>
+    private static async Task<string?> ErrorAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            using var json = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            return json.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                   && json.RootElement.TryGetProperty("error", out var error) ? error.GetString() : null;
+        }
+        catch (System.Text.Json.JsonException) { return null; }
+    }
+
     private class SubmitAuthorizationResponse
     {
         public string AuthorizationId { get; set; } = string.Empty;

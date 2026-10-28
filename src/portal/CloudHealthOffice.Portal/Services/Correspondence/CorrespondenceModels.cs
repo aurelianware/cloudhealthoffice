@@ -70,3 +70,30 @@ public class CorrespondenceTemplate
     public DateOnly? EffectiveTo { get; set; }
     public DateTime? ApprovedAt { get; set; }
 }
+
+/// <summary>POST api/v1/correspondence/letters.</summary>
+public class CorrespondenceLetterRequest
+{
+    public string LetterTypeCode { get; set; } = string.Empty;
+    public List<CorrespondenceSubject> Subjects { get; set; } = new();
+    public CorrespondenceLetterRecipient Recipient { get; set; } = new();
+    public System.Text.Json.Nodes.JsonObject? Data { get; set; }
+    public string? LineOfBusiness { get; set; }
+    public string? State { get; set; }
+    public string? RuleRef { get; set; }
+    public string? Reason { get; set; }
+}
+
+public class CorrespondenceLetterRecipient
+{
+    public string Party { get; set; } = "Member";
+    public string Name { get; set; } = string.Empty;
+    public string? AddressLine1 { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public string? PostalCode { get; set; }
+    public string AddressSource { get; set; } = "Request";
+}
+
+/// <summary>The stored letter, or the service's reason for producing none (no approved template, a failed check...).</summary>
+public sealed record LetterRequestResult(CorrespondenceLetter? Letter, string? Error);

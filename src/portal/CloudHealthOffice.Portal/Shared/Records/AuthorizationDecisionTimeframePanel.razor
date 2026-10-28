@@ -1,0 +1,162 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
+@using System.Text.Json.Nodes
+@using CloudHealthOffice.Portal.Services
+@using Microsoft.Extensions.DependencyInjection
+@inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
+@inject IServiceProvider ServiceProvider
+@inject ILogger<AuthorizationDecisionTimeframePanel> Logger
+
+@* CMS-0057-F decision timeframe: the deadline in force, the one lawful
+   extension (Medicare Advantage and Medicaid, up to 14 days) and the written
+   notice the member must get about it. *@
+<MudPaper Class="pa-4 mt-4" Outlined="true" data-testid="decision-timeframe">
+    <MudText Typo="Typo.h6">Decision timeframe</MudText>
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Dense="true" Class="my-2" data-testid="timeframe-error">@_error</MudAlert>
+    }
+    <MudText Class="mt-2" data-testid="decision-due">Decision due @Format(Authorization.DecisionDueAt)</MudText>
+
+    @if (Authorization.DecisionExtension is { } extension)
+    {
+        <MudText Typo="Typo.body2" Class="mt-2" data-testid="extension-summary">
+            Extended from @Format(extension.OriginalDueAt) to @Format(extension.ExtendedDueAt)
+            on @Format(extension.GrantedAt) by @extension.GrantedBy (@BasisLabel(extension.Basis)). Reason given to the member: @extension.Reason
+        </MudText>
+        @if (extension.MemberNotice is { } notice)
+        {
+            <MudAlert Severity="Severity.Success" Dense="true" Class="mt-2" data-testid="extension-notice">
+                Member extension notice sent: letter @notice.LetterId, recorded @Format(notice.RecordedAt) by @notice.RecordedBy.
+            </MudAlert>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2" data-testid="extension-notice">
+                The member's written extension notice is not recorded. It must give the reason for the delay and
+                the right to file @GrievanceRight if they disagree.
+            </MudAlert>
+            @if (CanDecide && CanSendLetters)
+            {
+                <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy"
+                           OnClick="SendNoticeAsync" data-testid="send-extension-notice">Send extension notice</MudButton>
+            }
+        }
+    }
+    else if (IsOpen && AllowsExtension && CanDecide)
+    {
+        <MudText Typo="Typo.body2" Class="mt-3">
+            The timeframe can be extended once, by up to 14 calendar days, before it lapses. The member is then sent a written notice.
+        </MudText>
+        <MudSelect T="string" @bind-Value="_basis" Label="Ground for the extension" Class="mt-2" data-testid="extension-basis">
+            <MudSelectItem Value="@("EnrolleeRequested")">The member asked for it</MudSelectItem>
+            <MudSelectItem Value="@("ProviderRequested")">The provider asked for it</MudSelectItem>
+            <MudSelectItem Value="@("PlanNeedsAdditionalInformation")">The plan needs additional information in the member's interest</MudSelectItem>
+        </MudSelect>
+        <MudTextField @bind-Value="_reason" Label="Reason given to the member" Lines="3" MaxLength="500" Class="mt-2" />
+        <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" data-testid="extend-timeframe"
+                   Disabled="@(_busy || _basis is null || string.IsNullOrWhiteSpace(_reason))" OnClick="ExtendAsync">Extend by 14 days</MudButton>
+    }
+    else if (IsOpen && !AllowsExtension)
+    {
+        <MudText Typo="Typo.caption" Class="mt-2">Only Medicare Advantage and Medicaid timeframes can be extended.</MudText>
+    }
+</MudPaper>
+
+@code {
+    public const string ExtensionNoticeLetterType = "PA-DECISION-EXTENSION";
+
+    [Parameter, EditorRequired] public AuthorizationDetails Authorization { get; set; } = null!;
+    /// <summary>The record as the service returned it after an action.</summary>
+    [Parameter] public EventCallback<AuthorizationDetails> OnChanged { get; set; }
+
+    private string? _basis;
+    private string _reason = string.Empty;
+    private bool _busy;
+    private string? _error;
+
+    private IUserContextService? User => ServiceProvider.GetService<IUserContextService>();
+    private bool CanDecide => User?.HasPermission("authorizations:decide") == true;
+    private bool CanSendLetters => ServiceProvider.GetService<ICorrespondenceService>() is not null
+                                   && ServiceProvider.GetService<IMemberService>() is not null;
+    private bool IsOpen => Authorization.StatusText is "Submitted" or "InReview" or "Pended";
+    private bool AllowsExtension => Authorization.LineOfBusiness is "Medicare" or "Medicaid";
+    private string GrievanceRight => Authorization.LineOfBusiness == "Medicare" ? "an expedited grievance" : "a grievance";
+
+    private static string Format(DateTime? value) => value?.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'") ?? "not set";
+
+    private static string BasisLabel(string basis) => basis switch
+    {
+        "EnrolleeRequested" => "requested by the member",
+        "ProviderRequested" => "requested by the provider",
+        "PlanNeedsAdditionalInformation" => "plan needs additional information",
+        _ => basis,
+    };
+
+    private async Task ExtendAsync()
+    {
+        _busy = true; _error = null;
+        try
+        {
+            var result = await AuthorizationService.ExtendDecisionDeadlineAsync(Authorization.Id, _basis!, _reason.Trim());
+            if (!result.Succeeded) { _error = result.Error; return; }
+            await OnChanged.InvokeAsync(result.Authorization!);
+        }
+        catch (ServiceUnavailableException ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task SendNoticeAsync()
+    {
+        var extension = Authorization.DecisionExtension!;
+        _busy = true; _error = null;
+        try
+        {
+            var member = await ServiceProvider.GetRequiredService<IMemberService>().GetMemberByIdAsync(Authorization.MemberId);
+            if (member is null || string.IsNullOrWhiteSpace(member.Address) || string.IsNullOrWhiteSpace(member.City)
+                || string.IsNullOrWhiteSpace(member.State) || string.IsNullOrWhiteSpace(member.ZipCode))
+            {
+                _error = "The member record has no complete mailing address, so the notice cannot be produced. Correct the member's address first.";
+                return;
+            }
+            var letter = await ServiceProvider.GetRequiredService<ICorrespondenceService>().RequestLetterAsync(new CorrespondenceLetterRequest
+            {
+                LetterTypeCode = ExtensionNoticeLetterType,
+                Subjects = [new() { Kind = "Authorization", Id = Authorization.Id }, new() { Kind = "Member", Id = Authorization.MemberId }],
+                Recipient = new()
+                {
+                    Party = "Member", Name = $"{member.FirstName} {member.LastName}".Trim(), AddressLine1 = member.Address,
+                    City = member.City, State = member.State, PostalCode = member.ZipCode, AddressSource = "MemberRecord",
+                },
+                Data = new JsonObject
+                {
+                    ["authorizationNumber"] = Authorization.AuthorizationNumber,
+                    ["originalDueAt"] = extension.OriginalDueAt.ToUniversalTime().ToString("o"),
+                    ["extendedDueAt"] = extension.ExtendedDueAt.ToUniversalTime().ToString("o"),
+                    ["reason"] = extension.Reason,
+                    ["basis"] = extension.Basis,
+                    ["grievanceRight"] = Authorization.LineOfBusiness == "Medicare" ? "ExpeditedGrievance" : "Grievance",
+                },
+                LineOfBusiness = Authorization.LineOfBusiness,
+                State = member.State,
+                RuleRef = Authorization.LineOfBusiness == "Medicare" ? "42 CFR 422.568(b), 422.572(b)" : "42 CFR 438.210(d), 438.404(c)(4)",
+                Reason = "Decision timeframe extension notice",
+            });
+            if (letter.Letter is null) { _error = "The notice letter was not produced: " + letter.Error; return; }
+
+            var recorded = await AuthorizationService.RecordExtensionNoticeAsync(Authorization.Id, letter.Letter.Id);
+            if (!recorded.Succeeded)
+            {
+                _error = $"Letter {letter.Letter.Id} was produced but could not be recorded on the authorization: {recorded.Error}";
+                return;
+            }
+            await OnChanged.InvokeAsync(recorded.Authorization!);
+        }
+        catch (ServiceUnavailableException ex) { _error = ex.Message; }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Sending the extension notice failed");
+            _error = "The extension notice could not be sent. Reload the record before trying again.";
+        }
+        finally { _busy = false; }
+    }
+}

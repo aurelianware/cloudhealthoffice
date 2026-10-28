@@ -47,6 +47,13 @@ public interface IAuthorizationRepository
     Task ExtendDecisionDeadlineAsync(Authorization authorization, AuthorizationDecisionExtension extension,
         PaReportingFact? fact, CancellationToken ct = default)
         => throw new NotSupportedException("Decision-timeframe extensions require the native store.");
+    /// <summary>
+    /// Records the member's extension notice on the extension, ONLY IF the record still has
+    /// the revision it was read at, was extended, and has no notice yet.
+    /// Throws <see cref="Exceptions.AuthorizationConcurrencyException"/> when the record moved on.
+    /// </summary>
+    Task RecordExtensionNoticeAsync(Authorization authorization, ExtensionMemberNotice notice, CancellationToken ct = default)
+        => throw new NotSupportedException("Decision-timeframe extensions require the native store.");
     IAsyncEnumerable<Authorization> StreamReportingCohortAsync(DateTime from, DateTime toExclusive,
         LineOfBusiness lineOfBusiness, CancellationToken ct = default)
         => throw new NotSupportedException("Annual PA evidence requires the native store.");

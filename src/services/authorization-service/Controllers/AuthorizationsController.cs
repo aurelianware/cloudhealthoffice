@@ -688,6 +688,40 @@ public class AuthorizationsController : ControllerBase
     }
 
     /// <summary>
+    /// Records that the member was sent the extension notice (the reason for the
+    /// delay and the right to file a grievance), naming the correspondence-service
+    /// letter that carried it. Idempotent for the same letter; a different letter
+    /// after one is recorded is a conflict.
+    /// </summary>
+    [RequirePermission(DecidePermission)]
+    [HttpPost("{id}/decision-extension/member-notice")]
+    [ProducesResponseType(typeof(Authorization), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<Authorization>> RecordExtensionNotice(
+        string id, [FromBody] RecordExtensionNotice command)
+    {
+        if (!_backends.Resolve().IsAuthoritative)
+            return Conflict(new { error = "Decision-timeframe extensions require the native authoritative backend." });
+
+        var authorization = await _authorizationRepository.GetByIdAsync(id);
+        if (authorization == null) return NotFound($"Authorization {id} not found");
+        if (authorization.DecisionExtension is not { } extension)
+            return Conflict(new { error = "The decision timeframe was not extended; there is no extension notice to record." });
+        if (extension.MemberNotice is { } recorded)
+            return recorded.LetterId == command.LetterId
+                ? Ok(authorization)
+                : Conflict(new { error = "A different extension notice is already recorded." });
+
+        var notice = new ExtensionMemberNotice { LetterId = command.LetterId, RecordedAt = DateTime.UtcNow, RecordedBy = Actor };
+        await _authorizationRepository.RecordExtensionNoticeAsync(authorization, notice, HttpContext.RequestAborted);
+        _logger.LogInformation("Extension notice recorded for authorization {AuthNumber}",
+            LogSanitizer.Sanitize(authorization.AuthorizationNumber));
+        return Ok(authorization);
+    }
+
+    /// <summary>
     /// Raises the CDex additional-information request an A4 decision implies, and
     /// persists the handle on the authorization.
     ///

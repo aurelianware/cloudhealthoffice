@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CMS-0057-F prior authorization: extension screen and member extension
+  notice.** The authorization record's Review tab shows the decision deadline
+  in force and, for an open Medicare Advantage or Medicaid request, lets a
+  reviewer with `authorizations:decide` take the one lawful 14-day extension
+  with a ground and the reason given to the member. The reviewer then sends
+  the member's written extension notice (letter type `PA-DECISION-EXTENSION`,
+  addressed from the member record) through correspondence-service. The
+  letter is recorded on the extension
+  (`POST api/authorizations/{id}/decision-extension/member-notice`). Extended
+  requests with no recorded notice are counted in the CMS-0057-F metrics
+  (`extensionNoticesOwed`). See docs/compliance/CMS-0057-F-EXTENSION-NOTICE.md.
+
 - **CMS-0057-F prior authorization: lawful extensions, every denial reason,
   and the extension and appeal metrics.** A reviewer can take the one lawful
   extension of an open Medicare Advantage or Medicaid request's decision

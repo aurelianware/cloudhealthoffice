@@ -51,6 +51,10 @@ public static class Cms0057Reporting
         auth.DecisionExtension is not null
         || auth.ReportingLedger?.Facts.Any(f => f.Kind == PaReportingFactKind.ReviewExtension) == true;
 
+    /// <summary>True when the timeframe was extended here and the member's written extension notice is not recorded yet.</summary>
+    public static bool ExtensionNoticeOwed(Authorization auth) =>
+        auth.DecisionExtension is { MemberNotice: null };
+
     /// <summary>
     /// True when the request's latest recorded decision is an approving PA appeal
     /// decision (reporting-ledger evidence; appeals not recorded there are not seen).
@@ -173,6 +177,7 @@ public static class Cms0057Reporting
             DecidedWithinTimeframePercent = Percent(withinDeadline, hours.Count),
             Extended = requests.Count(WasExtended),
             ExtendedThenApproved = requests.Count(a => WasExtended(a) && IsApproved(a)),
+            ExtensionNoticesOwed = requests.Count(ExtensionNoticeOwed),
             ApprovedAfterAppeal = requests.Count(ApprovedAfterAppeal),
             ApprovedAfterAppealPercent = Percent(requests.Count(ApprovedAfterAppeal), requests.Count),
         };
@@ -206,6 +211,7 @@ public static class Cms0057Reporting
                     TimeframeHours = timeframe,
                     WithinTimeframe = hours is not null && hours.Value <= timeframe,
                     Extended = WasExtended(a),
+                    ExtensionNoticeOwed = ExtensionNoticeOwed(a),
                     Automated = IsAutomated(a),
                     DecidedBy = IsAutomated(a)
                         ? entry?.Source
@@ -267,6 +273,8 @@ public sealed class Cms0057RequestTypeMetrics
     /// <summary>Requests whose decision timeframe was extended.</summary>
     public int Extended { get; set; }
     public int ExtendedThenApproved { get; set; }
+    /// <summary>Extended here with no member extension notice recorded: a compliance follow-up, not a public metric.</summary>
+    public int ExtensionNoticesOwed { get; set; }
     public int ApprovedAfterAppeal { get; set; }
     public double? ApprovedAfterAppealPercent { get; set; }
 }
@@ -296,6 +304,8 @@ public sealed class Cms0057Decision
     public string? DenialReasonCode { get; set; }
     /// <summary>The deadline was lawfully extended; <see cref="TimeframeHours"/> is the extended window.</summary>
     public bool Extended { get; set; }
+    /// <summary>Extended here and the member's extension notice is not recorded.</summary>
+    public bool ExtensionNoticeOwed { get; set; }
     /// <summary>Every denial or reduction reason, per service line, not only the first.</summary>
     public List<Cms0057AdverseReason> AdverseReasons { get; set; } = new();
 }

@@ -182,6 +182,40 @@ public class AuthorizationsControllerSlaTests
             It.IsAny<AuthorizationDecisionExtension>(), It.IsAny<PaReportingFact?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task RecordExtensionNotice_RecordsTheLetterOnceAndIsIdempotent()
+    {
+        var auth = CreateAuth("AUTH-NOTICE", "E", hoursAgo: 24);
+        auth.DecisionExtension = new AuthorizationDecisionExtension
+        {
+            GrantedBy = "reviewer-1", Basis = DecisionExtensionBasis.PlanNeedsAdditionalInformation, Reason = "Records requested",
+        };
+        _repositoryMock.Setup(r => r.GetByIdAsync(auth.Id)).ReturnsAsync(auth);
+        _repositoryMock.Setup(r => r.RecordExtensionNoticeAsync(auth, It.IsAny<ExtensionMemberNotice>(), It.IsAny<CancellationToken>()))
+            .Callback<Authorization, ExtensionMemberNotice, CancellationToken>((a, n, _) => a.DecisionExtension!.MemberNotice = n)
+            .Returns(Task.CompletedTask);
+
+        var first = await _controller.RecordExtensionNotice(auth.Id, new RecordExtensionNotice { LetterId = "LTR-1" });
+        first.Result.Should().BeOfType<OkObjectResult>();
+        auth.DecisionExtension.MemberNotice!.RecordedBy.Should().Be("reviewer-1");
+
+        (await _controller.RecordExtensionNotice(auth.Id, new RecordExtensionNotice { LetterId = "LTR-1" }))
+            .Result.Should().BeOfType<OkObjectResult>();
+        (await _controller.RecordExtensionNotice(auth.Id, new RecordExtensionNotice { LetterId = "LTR-2" }))
+            .Result.Should().BeOfType<ConflictObjectResult>();
+        _repositoryMock.Verify(r => r.RecordExtensionNoticeAsync(It.IsAny<Authorization>(), It.IsAny<ExtensionMemberNotice>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RecordExtensionNotice_WithoutAnExtension_Conflicts()
+    {
+        var auth = CreateAuth("AUTH-NOEXT", "E", hoursAgo: 24);
+        _repositoryMock.Setup(r => r.GetByIdAsync(auth.Id)).ReturnsAsync(auth);
+        (await _controller.RecordExtensionNotice(auth.Id, new RecordExtensionNotice { LetterId = "LTR-1" }))
+            .Result.Should().BeOfType<ConflictObjectResult>();
+    }
+
     private static Authorization CreateAuth(
         string authNumber, string levelOfService, double hoursAgo, string tenantId = "tenant-1") => new()
     {
