@@ -143,6 +143,25 @@ plan in `PublicProviderDirectory:Directories`, and counsel's reading of the
   Cloudflare Access sign-in (#1305 to #1308, #1317, #1346, #1459); production
   reference architecture (#1456); managed FHIR store publishing to BigQuery,
   off by default (#1469).
+- **Smaller fixes worth knowing.** Claims are priced in the async pipeline
+  instead of being allowed at billed charges (#1235); date-of-service
+  eligibility is decided by coverage span (#1238); accumulators commit on final
+  adjudication with lock-safe approvals (#1285); appeals publish through a
+  transactional outbox (#1277); a failed PA lookup pends the claim (#1299);
+  authorization checks are bound to the individual member (#1419); PAS binds
+  its caller to the token (#1530) and Payer-to-Payer consent to the requesting
+  payer (ADR 022, #1433); denied authorizations are left out of P2P exports
+  (#1485); DTR state is durable across pods (#1414); Medicaid is excluded from
+  the Texas gold-card rule (#1546).
+- **Also new.** The CMS-0057-F compliance console with decision clocks and
+  public metrics (#1352); the extension model and plan edit service (ADR 019,
+  #1424); append-only claim notes (#1355); a member coverage view, with
+  Eligibility as a 270/271 simulator (#1341); appeals encryption through GCP
+  Secret Manager (#1562); a demo persona seeder (#1466); QuestPDF replaced by
+  SkiaSharp for licensing (#1465).
+- **CI.** Security and coverage gates are blocking, and CI no longer commits to
+  main (#1449); dependency PRs are no longer auto-merged on failing checks
+  (#1416).
 - **Remediation series** (#1391 to #1399): time-zone independent baseline,
   security fixes, integer-cent accumulators, the claim event outbox, resilient
   service calls, MongoDB write concurrency and the Cosmos removal.
