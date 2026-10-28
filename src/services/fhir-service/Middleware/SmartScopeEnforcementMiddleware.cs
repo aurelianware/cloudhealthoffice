@@ -352,6 +352,10 @@ public class SmartScopeEnforcementMiddleware
 
             // Bulk export for a group — the kick-off shape again.
             ["Group/$export"] = ReadAccess,
+
+            // Bulk export of every patient the caller may see: a read of
+            // Patient, as the Bulk Data IG scopes it (system/Patient.read).
+            ["Patient/$export"] = ReadAccess,
         };
 
     /// <summary>
@@ -441,7 +445,10 @@ public class SmartScopeEnforcementMiddleware
             var access = OperationAccess(resource, segments[3], methodAccess);
             return ExplicitScopeOperations.TryGetValue($"{resource}/{segments[3]}", out var policy)
                 ? new FhirInteraction(policy.ScopeResource, null, access, policy.Contexts, ExplicitScopeOnly: true)
-                : new FhirInteraction(resource, null, access, AllContexts);
+                : new FhirInteraction(resource, null, access,
+                    // A Patient-level export covers many members, so, like a
+                    // Group or system export, it is never a patient context's.
+                    string.Equals(segments[3], "$export", StringComparison.OrdinalIgnoreCase) ? BackendContexts : AllContexts);
         }
 
         // /fhir/r4/{Resource}/{id}/$operation

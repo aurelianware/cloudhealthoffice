@@ -2,8 +2,23 @@ using System.Text.Json.Serialization;
 
 namespace FhirService.Models;
 
+/// <summary>Which Bulk Data kick-off endpoint started an export.</summary>
+public enum BulkExportLevel
+{
+    /// <summary><c>/$export</c>: every member in the tenant.</summary>
+    System,
+
+    /// <summary><c>/Patient/$export</c>: every member the caller may export.</summary>
+    Patient,
+
+    /// <summary><c>/Group/{id}/$export</c>: the members of one Group.</summary>
+    Group,
+}
+
 public class BulkExportRequest
 {
+    public BulkExportLevel Level { get; set; } = BulkExportLevel.System;
+
     public string? Type { get; set; }
     public string? Since { get; set; }
     public string? OutputFormat { get; set; }
@@ -37,6 +52,7 @@ public class BulkExportJob
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? CompletedAt { get; set; }
     public string Request { get; set; } = string.Empty;
+    public BulkExportLevel Level { get; set; } = BulkExportLevel.Group;
     public string? GroupId { get; set; }
     public List<string> ResourceTypes { get; set; } = new();
     public string? Since { get; set; }

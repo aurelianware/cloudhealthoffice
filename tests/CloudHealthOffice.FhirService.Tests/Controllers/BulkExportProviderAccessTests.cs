@@ -105,6 +105,38 @@ public class BulkExportProviderAccessTests : IClassFixture<BulkExportProviderAcc
         lines.Should().OnlyContain(l => l.Contains("\"resourceType\":\"Patient\""));
     }
 
+    [Theory]
+    [InlineData("GET")]
+    [InlineData("POST")]
+    public async Task PatientExport_IsTheProvidersPanel(string method)
+    {
+        // Patient/$export is every patient the caller may export: for a
+        // provider, the same attributed panel as its own Group.
+        var client = Client();
+        var request = new HttpRequestMessage(new HttpMethod(method), "/fhir/r4/Patient/$export?_type=Patient");
+        request.Headers.Add("Prefer", "respond-async");
+        var kickOff = await client.SendAsync(request);
+        kickOff.StatusCode.Should().Be(HttpStatusCode.Accepted, await kickOff.Content.ReadAsStringAsync());
+        var status = kickOff.Content.Headers.ContentLocation!.ToString();
+
+        await RunWorkerUntilIdleAsync();
+
+        using var manifest = JsonDocument.Parse(await (await client.GetAsync(status)).Content.ReadAsStringAsync());
+        manifest.RootElement.GetProperty("request").GetString().Should().EndWith("/Patient/$export?_type=Patient");
+        var output = manifest.RootElement.GetProperty("output").EnumerateArray().Single();
+        output.GetProperty("type").GetString().Should().Be("Patient");
+        output.GetProperty("count").GetInt32().Should().Be(3);
+    }
+
+    [Fact]
+    public async Task GroupExport_CanBeStartedWithGet()
+    {
+        // The Bulk Data IG's kick-off is a GET; POST is the optional form.
+        var request = new HttpRequestMessage(HttpMethod.Get, "/fhir/r4/Group/test-user/$export?_type=Patient");
+        request.Headers.Add("Prefer", "respond-async");
+        (await Client().SendAsync(request)).StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
     [Fact]
     public async Task AnotherCaller_CannotPollCancelOrDownload()
     {
@@ -151,6 +183,18 @@ public class BulkExportProviderAccessTests : IClassFixture<BulkExportProviderAcc
             "Bearer", _host.IssueToken("patient/*.read", patientId: "pat-001"));
         var response = await client.SendAsync(KickOff("/fhir/r4/Group/test-user/$export"));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await client.SendAsync(KickOff("/fhir/r4/Patient/$export"))).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task PatientExport_NeedsPatientReadNotJustGroupRead()
+    {
+        // Patient/$export is scoped as a read of Patient (system/Patient.read
+        // or a wildcard), as the Bulk Data IG scopes it.
+        var client = _host.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", _host.IssueToken("system/Group.read system/$export.read"));
+        (await client.SendAsync(KickOff("/fhir/r4/Patient/$export"))).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
