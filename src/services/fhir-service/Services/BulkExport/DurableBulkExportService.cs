@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using FhirService.Models;
+using FhirService.Services.PayerToPayer.BulkMemberMatch;
 using Microsoft.Extensions.Options;
 
 namespace FhirService.Services.BulkExport;
@@ -23,6 +24,9 @@ namespace FhirService.Services.BulkExport;
 /// <c>PayerToPayer/$export</c> is the Payer-to-Payer bulk transfer (G-35): the
 /// requesting payer's members, those whose consent naming that payer is in
 /// force, each exported as the single-member <c>$member-data-export</c> would.
+/// Started as PDex <c>Group/{id}/$davinci-data-export</c>, it covers only the
+/// members of that Group, the matched Group a <c>$bulk-member-match</c> by the
+/// same client answered with.
 /// </para>
 /// </summary>
 public sealed partial class DurableBulkExportService : IBulkExportService
@@ -36,14 +40,17 @@ public sealed partial class DurableBulkExportService : IBulkExportService
     private readonly IBulkExportFileStore _files;
     private readonly IOptions<BulkExportOptions> _options;
     private readonly TimeProvider _time;
+    private readonly IPayerToPayerMatchGroupStore? _matchGroups;
 
     public DurableBulkExportService(
-        IBulkExportJobStore jobs, IBulkExportFileStore files, IOptions<BulkExportOptions> options, TimeProvider time)
+        IBulkExportJobStore jobs, IBulkExportFileStore files, IOptions<BulkExportOptions> options, TimeProvider time,
+        IPayerToPayerMatchGroupStore? matchGroups = null)
     {
         _jobs = jobs;
         _files = files;
         _options = options;
         _time = time;
+        _matchGroups = matchGroups;
     }
 
     public async Task<BulkExportJob> InitiateExportAsync(
@@ -71,6 +78,18 @@ public sealed partial class DurableBulkExportService : IBulkExportService
             case BulkExportLevel.PayerToPayer:
                 if (string.IsNullOrWhiteSpace(request.RequestedBy) || string.IsNullOrWhiteSpace(request.ReceivingPayerId))
                     throw new BulkExportRequestException("The requesting payer could not be identified.");
+                // A match Group: only the matched one, made for this client.
+                if (request.GroupId is { } groupId)
+                {
+                    var group = _matchGroups is null
+                        ? null
+                        : await _matchGroups.GetAsync(tenantId, groupId, _time.GetUtcNow(), ct);
+                    if (group is null
+                        || group.Code != PayerToPayerBulkMemberMatchService.Matched
+                        || !PayerToPayerBulkMemberMatchService.Owns(
+                            new BulkMemberMatchCaller(tenantId, request.ReceivingPayerId, request.RequestedBy), group))
+                        throw new BulkExportGroupNotFoundException();
+                }
                 break;
 
             default:
@@ -86,7 +105,7 @@ public sealed partial class DurableBulkExportService : IBulkExportService
             JobId = Guid.NewGuid().ToString("N"),
             RequestedBy = request.RequestedBy!,
             Level = request.Level,
-            GroupId = request.Level == BulkExportLevel.Group ? request.GroupId : null,
+            GroupId = request.Level is BulkExportLevel.Group or BulkExportLevel.PayerToPayer ? request.GroupId : null,
             ReceivingPayerId = request.Level == BulkExportLevel.PayerToPayer ? request.ReceivingPayerId : null,
             Types = ParseTypes(request.Type, BulkExportOptions.TypesFor(request.Level)),
             Since = ParseSince(request.Since),

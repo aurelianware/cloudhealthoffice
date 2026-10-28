@@ -740,6 +740,15 @@ if (bulkExportOptions.Enabled)
     // Payer-to-Payer bulk (G-35): each member through the single-member exchange.
     builder.Services.AddScoped<FhirService.Services.BulkExport.IPayerToPayerBulkSource,
         FhirService.Services.BulkExport.PayerToPayerBulkSource>();
+    // PDex $bulk-member-match (G-35): many members matched as $member-match
+    // matches one, answered as Groups the payer exports with
+    // Group/{id}/$davinci-data-export. Singleton store: indexes at construction.
+    builder.Services.AddSingleton<FhirService.Services.PayerToPayer.BulkMemberMatch.IPayerToPayerMatchGroupStore,
+        FhirService.Services.PayerToPayer.BulkMemberMatch.MongoPayerToPayerMatchGroupStore>();
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerBulkMemberMatcher,
+        FhirService.Services.PayerToPayer.PayerToPayerMemberMatchService>();
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.BulkMemberMatch.IPayerToPayerBulkMemberMatchService,
+        FhirService.Services.PayerToPayer.BulkMemberMatch.PayerToPayerBulkMemberMatchService>();
     builder.Services.AddSingleton<IBulkExportService, FhirService.Services.BulkExport.DurableBulkExportService>();
     builder.Services.AddHostedService<FhirService.Services.BulkExport.BulkExportWorker>();
 }
