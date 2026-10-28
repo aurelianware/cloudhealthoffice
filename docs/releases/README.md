@@ -6,7 +6,7 @@ This directory contains comprehensive release documentation for CloudHealthOffic
 
 ## Current Release
 
-### v6.0.0 (October 2026)
+### v6.0.0 — Paths of Glory (October 2026)
 
 MongoDB as the only document store (Cosmos DB removed), claims that pay correctly through one
 adjudicator, inpatient pricing from CMS's rules, plan configuration, and CMS-0057-F data from

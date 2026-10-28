@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [6.0.0] - 2026-10-28
 
+"Paths of Glory."
+
 A major version: the Cosmos DB SDK persistence path is gone and a public
 endpoint was removed. Covers the 340 pull requests merged between v5.0.0 and
 this release (#1222 to #1580). Release notes, with upgrade steps for 5.x:

@@ -1,4 +1,4 @@
-# v6.0.0
+# v6.0.0 — Paths of Glory
 
 **Release date:** October 28, 2026
 **Previous release:** [v5.0.0](./RELEASE_NOTES_v5.0.0.md) (October 6, 2026)
