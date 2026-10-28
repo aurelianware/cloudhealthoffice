@@ -74,6 +74,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
     public IClaimAdjustmentRepository AdjustmentRepository { get; } = Substitute.For<IClaimAdjustmentRepository>();
     public IClaimAdjustmentService AdjustmentService { get; } = Substitute.For<IClaimAdjustmentService>();
     public IClaimImportTransactionRepository ImportTransactionRepository { get; } = Substitute.For<IClaimImportTransactionRepository>();
+    public IProviderAttributionRepository AttributionRepository { get; } = Substitute.For<IProviderAttributionRepository>();
 
     /// <summary>
     /// Examiner-approval re-adjudication (the real one is the orchestrator's
@@ -232,6 +233,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(AdjustmentRepository);
             services.AddSingleton(AdjustmentService);
             services.AddSingleton(ImportTransactionRepository);
+            services.AddSingleton(AttributionRepository);
 
             // 5.7 — NcciEngine's repository implementation got removed by
             // the Cosmos/Mongo filter above. The engine's INcciEditService

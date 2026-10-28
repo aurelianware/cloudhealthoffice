@@ -1,5 +1,6 @@
 using ClaimsService.Repositories;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaimsService.Controllers;
@@ -21,6 +22,13 @@ namespace ClaimsService.Controllers;
 /// The response is a boolean and nothing else. No claim, no date, no count: a
 /// caller that may ask about a member does not thereby get to read that
 /// member's history, and the yes/no is all the authorization decision consumes.
+/// </para>
+///
+/// <para>
+/// The one exception is <c>members</c>, the provider's panel for a bulk
+/// <c>$export</c> (G-34): member ids only, and only for fhir-service's own
+/// service identity, which decides every listed member again before it writes
+/// anything.
 /// </para>
 ///
 /// <para>
@@ -96,7 +104,59 @@ public sealed class ProviderAttributionController : ControllerBase
 
         return Ok(new ProviderAttributionResponse(attributed));
     }
+
+    /// <summary>
+    /// GET /api/provider-attribution/members?provider={npi}&amp;since={utc} —
+    /// the members the provider treated on or after <paramref name="since"/>,
+    /// for a bulk Provider Access export. fhir-service only: no user, and no
+    /// other service, has a reason to list a provider's patients.
+    /// </summary>
+    [HttpGet("members")]
+    [RequireServiceClient(FhirServiceClientId)]
+    public async Task<IActionResult> ListMembers(
+        [FromQuery] string? provider,
+        [FromQuery] DateTime? since,
+        CancellationToken ct)
+    {
+        var tenantId = HttpContext.Items["TenantId"]?.ToString();
+        if (string.IsNullOrEmpty(tenantId))
+            return BadRequest(new { error = "Tenant context missing on request." });
+
+        if (string.IsNullOrWhiteSpace(provider))
+            return BadRequest(new { error = "provider is required." });
+        if (since is null)
+            return BadRequest(new { error = "since is required." });
+
+        IReadOnlyList<string> members;
+        try
+        {
+            members = await _repository.ListTreatedMembersAsync(tenantId, provider, since.Value, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // An empty list would read as "treated no one" and export a short
+            // panel without saying so; the export has to fail instead.
+            _logger.LogError(
+                ex,
+                "Provider panel lookup failed for tenant={Tenant}.",
+                LogSanitizer.Sanitize(tenantId));
+            return StatusCode(503, new { error = "Attribution source unavailable." });
+        }
+
+        return Ok(new ProviderPanelResponse(members));
+    }
+
+    /// <summary>The only service that may list a provider's panel.</summary>
+    public const string FhirServiceClientId = "fhir-service";
 }
+
+/// <summary>A provider's claims-history panel: member ids, nothing else.</summary>
+/// <param name="Members">The members, in ordinal order.</param>
+public sealed record ProviderPanelResponse(IReadOnlyList<string> Members);
 
 /// <summary>The whole answer: whether the relationship exists.</summary>
 /// <param name="Attributed">True when claims history shows the treatment relationship.</param>
