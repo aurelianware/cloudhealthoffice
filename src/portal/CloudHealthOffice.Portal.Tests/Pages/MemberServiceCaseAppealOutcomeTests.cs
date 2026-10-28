@@ -16,7 +16,7 @@ public class MemberServiceCaseAppealOutcomeTests : TestContext
     public MemberServiceCaseAppealOutcomeTests()
     {
         Services.AddMudServices();
-        Services.AddSingleton(new HttpClient(new CaseApi(() => _case)));
+        Services.AddSingleton(new HttpClient(new CaseApi(() => _case, _requests)));
         Services.AddSingleton<IConfiguration>(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Services:AppealsService"] = "http://appeals/api"
@@ -25,9 +25,11 @@ public class MemberServiceCaseAppealOutcomeTests : TestContext
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
-    private IRenderedComponent<MemberServiceCases> Open()
+    private readonly List<HttpRequestMessage> _requests = [];
+
+    private IRenderedComponent<MemberServiceCases> Open(params string[] permissions)
     {
-        Services.AddSingleton(GatingUsers.With("appeals:read", "appeals:write").Object);
+        Services.AddSingleton(GatingUsers.With(permissions.Length > 0 ? permissions : ["appeals:read", "appeals:write"]).Object);
         return RenderComponent<MemberServiceCases>(p => p.Add(x => x.CaseId, "case-1"));
     }
 
@@ -68,9 +70,41 @@ public class MemberServiceCaseAppealOutcomeTests : TestContext
         cut.Find("[data-testid=appeal-reporting]").TextContent.Should().Contain(text);
     }
 
-    private sealed class CaseApi(Func<object> body) : HttpMessageHandler
+    private object Refused() => new { contactId = "contact-1", memberId = "synthetic-member", classification = "Appeal",
+        status = "DecisionRecorded", decisionOutcome = "Overturned", reporting = "NeedsAttention",
+        reportingRejectedReason = "authorization-service refused the fact (400)." };
+
+    [Fact]
+    public void Reporting_admin_can_requeue_a_refused_outcome()
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(body()) });
+        _case = Refused();
+        var cut = Open("appeals:read", "appeals:admin");
+        cut.WaitForElement("[data-testid=appeal-reporting-requeue]");
+        _case = new { contactId = "contact-1", memberId = "synthetic-member", classification = "Appeal",
+            status = "DecisionRecorded", decisionOutcome = "Overturned", reporting = "Reported", reportedToAuthorizationAt = DateTime.UtcNow };
+
+        cut.Find("[data-testid=appeal-reporting-requeue]").Click();
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=appeal-reporting]").TextContent.Should().Contain("since"));
+        _requests.Should().Contain(r => r.Method == HttpMethod.Post
+            && r.RequestUri!.AbsolutePath == "/api/service-cases/case-1/reporting/requeue");
+    }
+
+    [Fact]
+    public void Reviewer_without_admin_sees_the_refusal_but_no_requeue()
+    {
+        _case = Refused();
+        var cut = Open();
+        cut.WaitForElement("[data-testid=appeal-reporting]");
+        cut.FindAll("[data-testid=appeal-reporting-requeue]").Should().BeEmpty();
+    }
+
+    private sealed class CaseApi(Func<object> body, List<HttpRequestMessage> requests) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            requests.Add(request);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(body()) });
+        }
     }
 }

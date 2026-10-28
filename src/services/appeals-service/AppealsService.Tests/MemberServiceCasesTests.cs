@@ -179,4 +179,65 @@ public class MemberServiceCasesTests
         MemberServiceCasesController.ReportingState(row).Should().Be("Reported");
         MemberServiceCasesController.ReportingState(new MemberServiceCase()).Should().BeNull();
     }
+
+    private MemberServiceCase Refused(string reason = "authorization-service refused the fact (400).") => new() {
+        Id = "case-1", TenantId = "t1", Classification = "Appeal", AuthorizationId = "auth-1",
+        Status = "DecisionRecorded", DecisionOutcome = MemberAppealOutcome.Overturned,
+        DecisionRecordedAt = new DateTime(2026, 10, 27, 15, 30, 0, DateTimeKind.Utc),
+        ReportingAttempts = 1, ReportingRejectedReason = reason };
+
+    [Fact]
+    public async Task Requeue_clears_the_refusal_and_reports_the_outcome_now()
+    {
+        var refused = Refused();
+        _store.SetupSequence(s => s.GetAsync("t1", "case-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(refused)
+            .ReturnsAsync(new MemberServiceCase { AuthorizationId = "auth-1", DecisionOutcome = MemberAppealOutcome.Overturned,
+                ReportedToAuthorizationAt = DateTime.UtcNow });
+        _store.Setup(s => s.RequeueRefusedReportingAsync(refused, "rep-1", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        MemberServiceCase? sent = null;
+        _reporter.Setup(r => r.SendAsync(It.IsAny<MemberServiceCase>(), It.IsAny<CancellationToken>()))
+            .Callback((MemberServiceCase c, CancellationToken _) => sent = c)
+            .ReturnsAsync((AppealDecisionDelivery.Accepted, (string?)null));
+
+        var result = (await Controller().RequeueReporting("case-1", default)).Should().BeOfType<OkObjectResult>().Subject;
+
+        System.Text.Json.JsonSerializer.Serialize(result.Value).Should().Contain("\"Reporting\":\"Reported\"");
+        sent!.ReportingRejectedReason.Should().BeNull();
+        sent.ReportingAttempts.Should().Be(0);
+        _store.Verify(s => s.RecordReportingAttemptAsync("t1", "case-1", It.IsNotNull<DateTime?>(), null, null,
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Only_a_refused_outcome_can_be_requeued()
+    {
+        var pending = Refused(); pending.ReportingRejectedReason = null;
+        _store.Setup(s => s.GetAsync("t1", "case-1", It.IsAny<CancellationToken>())).ReturnsAsync(pending);
+        (await Controller().RequeueReporting("case-1", default)).Should().BeOfType<ConflictObjectResult>();
+
+        // Someone else re-queued it between the read and the write.
+        _store.Setup(s => s.GetAsync("t1", "case-1", It.IsAny<CancellationToken>())).ReturnsAsync(Refused());
+        _store.Setup(s => s.RequeueRefusedReportingAsync(It.IsAny<MemberServiceCase>(), It.IsAny<string>(),
+            It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        (await Controller().RequeueReporting("case-1", default)).Should().BeOfType<ConflictObjectResult>();
+
+        _reporter.Verify(r => r.SendAsync(It.IsAny<MemberServiceCase>(), It.IsAny<CancellationToken>()), Times.Never);
+        (await Controller().RequeueReporting("other", default)).Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task Tenant_requeue_leaves_the_refused_outcomes_for_the_sweep()
+    {
+        var a = Refused(); var b = Refused("Gave up after 24 attempts; last: authorization-service answered 503."); b.Id = "case-2";
+        _store.Setup(s => s.ListReportingNeedsAttentionAsync("t1", 500, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { a, b });
+        _store.Setup(s => s.RequeueRefusedReportingAsync(a, "rep-1", It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _store.Setup(s => s.RequeueRefusedReportingAsync(b, "rep-1", It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = (await Controller().RequeueAllReporting(default)).Should().BeOfType<OkObjectResult>().Subject;
+
+        System.Text.Json.JsonSerializer.Serialize(result.Value).Should().Be("{\"Requeued\":1}");
+        _reporter.Verify(r => r.SendAsync(It.IsAny<MemberServiceCase>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using AppealsService.Models;
 using AppealsService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 using CloudHealthOffice.Infrastructure.Security;
 
 namespace AppealsService.Services;
@@ -102,6 +103,41 @@ public sealed class AppealDecisionReporting(IAppealDecisionReporter reporter, IM
             logger.LogError(ex, "Appeal outcome for service case {CaseId} could not be reported; the sweep retries it.", decided.Id);
             return AppealDecisionDelivery.RetryLater;
         }
+    }
+
+    /// <summary>
+    /// Operator remediation once the cause of a refusal is fixed (the authorization reconciled,
+    /// its denial evidenced, an outage that exhausted the retries over): clears the refusal and
+    /// tries the delivery again now. A fact that is still refused goes straight back to
+    /// NeedsAttention; one that fails transiently is left owed for the sweep. Null when the case
+    /// was not refused (or another operator re-queued it first).
+    /// </summary>
+    public async Task<AppealDecisionDelivery?> RequeueAsync(MemberServiceCase refused, string actor, CancellationToken ct)
+    {
+        if (!await RequeueOnlyAsync(refused, actor, ct)) return null;
+        refused.ReportingRejectedReason = null; refused.ReportingAttempts = 0; refused.ReportingNextAttemptAt = null;
+        return await DeliverAsync(refused, ct);
+    }
+
+    /// <summary>
+    /// Re-queues every refused outcome in <paramref name="tenant"/> (at most 500 per call) for
+    /// <see cref="HostedServices.AppealDecisionReportingSweep"/> to deliver on its next pass. Returns how many.
+    /// </summary>
+    public async Task<int> RequeueAllAsync(string tenant, string actor, CancellationToken ct)
+    {
+        var requeued = 0;
+        foreach (var refused in await store.ListReportingNeedsAttentionAsync(tenant, 500, ct))
+            if (await RequeueOnlyAsync(refused, actor, ct)) requeued++;
+        return requeued;
+    }
+
+    private async Task<bool> RequeueOnlyAsync(MemberServiceCase refused, string actor, CancellationToken ct)
+    {
+        var prior = refused.ReportingRejectedReason;
+        if (!await store.RequeueRefusedReportingAsync(refused, actor, DateTime.UtcNow, ct)) return false;
+        logger.LogWarning("Appeal outcome for service case {CaseId} re-queued for the PA reporting ledger by {Actor}; " +
+            "cleared refusal: {Reason}", refused.Id, LogSanitizer.Sanitize(actor, 256), prior);
+        return true;
     }
 
     private async Task<AppealDecisionDelivery> DeliverOnceAsync(MemberServiceCase decided, CancellationToken ct)

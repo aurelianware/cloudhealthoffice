@@ -18,6 +18,14 @@ public interface IMemberServiceCaseStore
     /// </summary>
     Task RecordReportingAttemptAsync(string tenant, string id, DateTime? reportedAt, string? rejectedReason,
         DateTime? nextAttemptAt, CancellationToken ct);
+    /// <summary>The tenant's decided appeals whose outcome the PA reporting ledger refused or the sweep gave up on.</summary>
+    Task<IReadOnlyList<MemberServiceCase>> ListReportingNeedsAttentionAsync(string tenant, int limit, CancellationToken ct);
+    /// <summary>
+    /// Puts a refused or given-up outcome back on the reporting queue with a fresh attempt budget,
+    /// keeping the cleared refusal in <see cref="MemberServiceCase.ReportingRequeues"/>. False when the
+    /// case is not (or no longer) in that state, e.g. another operator re-queued it first.
+    /// </summary>
+    Task<bool> RequeueRefusedReportingAsync(MemberServiceCase refused, string actor, DateTime at, CancellationToken ct);
     Task<MemberServiceCase> CreateOrReadAsync(MemberServiceCase record, CancellationToken ct);
 }
 
@@ -61,6 +69,29 @@ public sealed class MemberServiceCaseStore(IMongoDatabase db) : IMemberServiceCa
         if (rejectedReason is not null) update = update.Set(r => r.ReportingRejectedReason, rejectedReason);
         return _rows.UpdateOneAsync(r => r.TenantId == tenant && r.Id == id && r.ReportedToAuthorizationAt == null,
             update, cancellationToken: ct);
+    }
+
+    public async Task<IReadOnlyList<MemberServiceCase>> ListReportingNeedsAttentionAsync(string tenant, int limit,
+        CancellationToken ct) =>
+        await _rows.Find(r => r.TenantId == tenant && r.Status == "DecisionRecorded" && r.DecisionOutcome != null
+                && r.AuthorizationId != null && r.ReportedToAuthorizationAt == null && r.ReportingRejectedReason != null)
+            .SortBy(r => r.DecisionRecordedAt)
+            .Limit(Math.Clamp(limit, 1, 500)).ToListAsync(ct);
+
+    public async Task<bool> RequeueRefusedReportingAsync(MemberServiceCase refused, string actor, DateTime at,
+        CancellationToken ct)
+    {
+        if (refused.ReportingRejectedReason is not { } reason) return false;
+        var requeue = new AppealReportingRequeue { At = at, By = actor, PriorReason = reason, PriorAttempts = refused.ReportingAttempts };
+        // Matching the refusal being cleared makes a concurrent re-queue (or a refusal that
+        // changed underneath) a no-op instead of a second history entry. Revision is untouched.
+        var update = Builders<MemberServiceCase>.Update
+            .Set(r => r.ReportingRejectedReason, null).Set(r => r.ReportingAttempts, 0)
+            .Set(r => r.ReportingNextAttemptAt, null)
+            .PushEach(r => r.ReportingRequeues, new[] { requeue }, slice: -MemberServiceCase.MaxReportingRequeues);
+        return (await _rows.UpdateOneAsync(r => r.TenantId == refused.TenantId && r.Id == refused.Id
+            && r.ReportedToAuthorizationAt == null && r.ReportingRejectedReason == reason,
+            update, cancellationToken: ct)).ModifiedCount == 1;
     }
 
     public async Task<MemberServiceCase> CreateOrReadAsync(MemberServiceCase record, CancellationToken ct)

@@ -76,6 +76,46 @@ public sealed class MemberServiceCasesController(
         return NoContent();
     }
 
+    /// <summary>
+    /// CMS-0057-F: decided appeals whose outcome the authorization's PA reporting ledger refused
+    /// (no evidenced adverse determination, a time outside the ledger, the authorization not
+    /// found) or the sweep gave up on. Fix the cause, then re-queue them.
+    /// </summary>
+    [HttpGet("reporting/needs-attention")]
+    [RequirePermission("appeals:read")]
+    [AuditRecordAccess("MemberServiceCase", "Search")]
+    public async Task<ActionResult> ReportingNeedsAttention(CancellationToken ct) =>
+        Ok((await store.ListReportingNeedsAttentionAsync(actor.TenantId, 500, ct)).Select(r => new {
+            r.Id, r.AuthorizationId, r.DecisionOutcome, r.DecisionRecordedAt,
+            r.ReportingRejectedReason, r.ReportingAttempts, RequeueCount = r.ReportingRequeues.Count }));
+
+    /// <summary>
+    /// Re-queue one refused appeal outcome and try it on the ledger now. Admin-only operator
+    /// remediation, like the outbox replay. 409 when the outcome is not refused (reported,
+    /// still pending, or re-queued by someone else first).
+    /// </summary>
+    [HttpPost("{id}/reporting/requeue")]
+    [RequirePermission("appeals:admin,platform:admin")]
+    public async Task<ActionResult> RequeueReporting(string id, CancellationToken ct)
+    {
+        var row = await store.GetAsync(actor.TenantId, id, ct);
+        if (row is null) return NotFound();
+        if (ReportingState(row) != "NeedsAttention" || await reporting.RequeueAsync(row, actor.UserId, ct) is null)
+            return Conflict("Only an appeal outcome the reporting ledger refused can be re-queued. Reload the case.");
+        var now = await store.GetAsync(actor.TenantId, id, ct) ?? row;
+        return Ok(new { Reporting = ReportingState(now), now.ReportedToAuthorizationAt, now.ReportingRejectedReason });
+    }
+
+    /// <summary>
+    /// Re-queue every refused appeal outcome in the caller's tenant (e.g. after reconciling legacy
+    /// authorizations or an outage that exhausted the retries); the reporting sweep delivers them
+    /// on its next pass. Same auth as the per-case re-queue.
+    /// </summary>
+    [HttpPost("reporting/requeue")]
+    [RequirePermission("appeals:admin,platform:admin")]
+    public async Task<ActionResult> RequeueAllReporting(CancellationToken ct) =>
+        Ok(new { Requeued = await reporting.RequeueAllAsync(actor.TenantId, actor.UserId, ct) });
+
     /// <summary>Where the appeal outcome stands on the authorization's PA reporting ledger.</summary>
     internal static string? ReportingState(MemberServiceCase row) =>
         row.DecisionOutcome is null || string.IsNullOrWhiteSpace(row.AuthorizationId) ? null
