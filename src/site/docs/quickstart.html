@@ -341,7 +341,7 @@ kubectl port-forward -n cloudhealthoffice svc/claims-service 5001:80
 kubectl port-forward -n cloudhealthoffice svc/benefit-plan-service 5002:80
 kubectl port-forward -n cloudhealthoffice svc/payment-service 5006:80
 kubectl port-forward -n cloudhealthoffice svc/fhir-service 5080:80</code></pre>
-            <p>Open the portal at <a href="http://localhost:8080" target="_blank" rel="noopener noreferrer">http://localhost:8080</a>. API calls use the local seeded tenant header <code>X-Tenant-ID: demo</code>.</p>
+            <p>Open the portal at <a href="http://localhost:8080" target="_blank" rel="noopener noreferrer">http://localhost:8080</a>. API calls need a bearer token for the tenant: services take the tenant only from a validated token. Mint a local development token with <code>TOKEN=$(./scripts/dev-token.sh --tenant demo)</code> and send it as <code>Authorization: Bearer $TOKEN</code>. The seed script in step 4 mints its own.</p>
           </div>
         </div>
 

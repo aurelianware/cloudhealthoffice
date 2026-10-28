@@ -54,13 +54,22 @@ All should return `Healthy`.
 
 ---
 
-## 2. Set your tenant ID
+## 2. Get a local token
 
-All requests require `X-Tenant-ID`. Use any string for local dev:
+Every service takes the tenant only from a validated bearer token, so each
+request below carries one. Mint a development token for a tenant (any string
+works locally):
 
 ```bash
 TENANT="demo"
+TOKEN=$(./scripts/dev-token.sh --tenant "$TENANT")
 ```
+
+The token is a TenantAdmin token for that tenant, valid for 12 hours, signed
+with the public development key the services trust only when
+`ASPNETCORE_ENVIRONMENT` is `Development` (which the compose file sets). It
+does not authenticate against any deployed environment. A request without it
+gets `401`.
 
 ---
 
@@ -70,7 +79,7 @@ The NCCI engine runs as step 0 of adjudication. Seed the built-in Q1 2025 baseli
 
 ```bash
 curl -s -X POST http://localhost:5002/api/v1/ncci/seed \
-  -H "X-Tenant-ID: $TENANT" | jq .
+  -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 Expected response includes `editCount` with the number of NCCI pairs seeded.
@@ -83,7 +92,7 @@ Create a PPO plan with a $1,500 individual deductible, $30 copay for office visi
 
 ```bash
 PLAN=$(curl -s -X POST http://localhost:5002/api/benefitplans \
-  -H "X-Tenant-ID: $TENANT" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "planId": "LOCAL-PPO-2025",
@@ -137,7 +146,7 @@ claim up and is the only thing that sets its adjudicated outcome.
 ```bash
 submit_claim() {   # submit_claim <claimNumber> <claimLines JSON> <totalCharge>
   curl -s -X POST http://localhost:5001/api/claims \
-    -H "X-Tenant-ID: $TENANT" \
+    -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d "{
       \"claimNumber\": \"$1\",
@@ -181,13 +190,13 @@ Poll the claim until the pipeline has persisted a terminal status —
 ```bash
 wait_for_outcome() {   # wait_for_outcome <claimId>
   for i in $(seq 1 60); do
-    STATUS=$(curl -s "http://localhost:5001/api/claims/$1" -H "X-Tenant-ID: $TENANT" | jq -r '.status // empty')
+    STATUS=$(curl -s "http://localhost:5001/api/claims/$1" -H "Authorization: Bearer $TOKEN" | jq -r '.status // empty')
     case "$STATUS" in
       4|5|6|7|8|9|Pended|Approved|Denied|Paid|Voided|PartiallyPaid) break ;;
     esac
     sleep 1
   done
-  curl -s "http://localhost:5001/api/claims/$1" -H "X-Tenant-ID: $TENANT" \
+  curl -s "http://localhost:5001/api/claims/$1" -H "Authorization: Bearer $TOKEN" \
     | jq '{id, status, pendCode: .pendDetails.pendCode, adjudicationResult: (.adjudicationResult | {allowedAmount, patientResponsibility, payerPayment, denialReasonCode})}'
 }
 
@@ -225,7 +234,7 @@ benefit-plan service for a read-only estimate:
 
 ```bash
 curl -s -X POST http://localhost:5002/api/v1/adjudication/estimate \
-  -H "X-Tenant-ID: $TENANT" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
     \"memberId\": \"MBR001\",
@@ -248,7 +257,7 @@ Preflight check (recommended): make sure you have at least one approved claim.
 
 ```bash
 curl -s "http://localhost:5001/api/claims/search?status=5&pageSize=5" \
-  -H "X-Tenant-ID: $TENANT" | jq 'map({id, claimNumber, status})'
+  -H "Authorization: Bearer $TOKEN" | jq 'map({id, claimNumber, status})'
 ```
 
 If the result is empty (`[]`), submit a quick test claim and wait for the
@@ -268,7 +277,7 @@ Execute a payment run that picks up all adjudicated claims and generates 835 EDI
 
 ```bash
 PAYRUN=$(curl -s -X POST http://localhost:5006/api/paymentruns/execute \
-  -H "X-Tenant-ID: $TENANT" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
     \"paymentRunNumber\": \"RUN-$(date +%Y%m%d)-001\",
@@ -294,7 +303,7 @@ echo "Payment ID:  $PAYMENT_ID"
 
 ```bash
 curl -s "http://localhost:5006/api/payments/$PAYMENT_ID/835" \
-  -H "X-Tenant-ID: $TENANT" \
+  -H "Authorization: Bearer $TOKEN" \
   -o era-$(date +%Y%m%d).835
 
 echo "Saved ERA to era-$(date +%Y%m%d).835"
@@ -313,7 +322,7 @@ Use these checks to verify payment run persistence, payment lifecycle endpoints,
 
 ```bash
 curl -s "http://localhost:5006/api/paymentruns/$PAYRUN_ID" \
-  -H "X-Tenant-ID: $TENANT" | jq '{id, status, totalClaims, totalPaymentAmount, paymentIds, claimIds}'
+  -H "Authorization: Bearer $TOKEN" | jq '{id, status, totalClaims, totalPaymentAmount, paymentIds, claimIds}'
 ```
 
 Expected:
@@ -325,7 +334,7 @@ Expected:
 
 ```bash
 curl -s "http://localhost:5006/api/payments/$PAYMENT_ID" \
-  -H "X-Tenant-ID: $TENANT" | jq '{id, checkNumber, status, totalPaymentAmount, claimPayments}'
+  -H "Authorization: Bearer $TOKEN" | jq '{id, checkNumber, status, totalPaymentAmount, claimPayments}'
 ```
 
 Expected:
@@ -337,11 +346,11 @@ Expected:
 ```bash
 # Search payments in a date range
 curl -s "http://localhost:5006/api/payments?paymentDateFrom=2025-06-01&paymentDateTo=2025-12-31&page=1&pageSize=50" \
-  -H "X-Tenant-ID: $TENANT" | jq '.[0:3]'
+  -H "Authorization: Bearer $TOKEN" | jq '.[0:3]'
 
 # Payment summary
 curl -s "http://localhost:5006/api/payments/summary?from=2025-06-01&to=2025-12-31" \
-  -H "X-Tenant-ID: $TENANT" | jq .
+  -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 Expected:
@@ -353,13 +362,13 @@ Expected:
 ```bash
 # Mark as posted
 curl -s -X POST "http://localhost:5006/api/payments/$PAYMENT_ID/post" \
-  -H "X-Tenant-ID: $TENANT" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"postedBy":"local-tester","notes":"Posted during quickstart"}' | jq '{id, status, postedAt, postedBy}'
 
 # Mark as reconciled
 curl -s -X POST "http://localhost:5006/api/payments/$PAYMENT_ID/reconcile" \
-  -H "X-Tenant-ID: $TENANT" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"notes":"Bank reconciliation test"}' | jq '{id, status, reconciledAt}'
 ```
@@ -374,7 +383,7 @@ If you want to test manual ERA ingestion without payment-run execution:
 
 ```bash
 curl -s -X POST http://localhost:5006/api/payments \
-  -H "X-Tenant-ID: $TENANT" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "checkNumber": "MANUAL-TEST-001",
@@ -400,8 +409,8 @@ curl -s -X POST http://localhost:5006/api/payments \
 
 ## Payment quick troubleshooting
 
-- `400 TenantId field is required`: ensure you're on latest code where tenant comes from `X-Tenant-ID`; if not, include `"tenantId":"$TENANT"` in payload as temporary fallback.
-- `404` on `/api/payments/{id}/835`: verify `PAYMENT_ID` is non-empty and was created under the same tenant header.
+- `401` on any call: the token is missing or expired. Mint a new one with `TOKEN=$(./scripts/dev-token.sh --tenant "$TENANT")`.
+- `404` on `/api/payments/{id}/835`: verify `PAYMENT_ID` is non-empty and was created with a token for the same tenant.
 - `500` during payment run execution: confirm claims-service has adjudicated claims — the claim from step 6 must have reached `Approved` (5) before the payment run.
 - Intermittent failures right after `docker compose --profile core --profile finance up -d`: wait for health checks to pass (`curl http://localhost:5006/health`) before running API calls.
 
