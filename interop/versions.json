@@ -272,6 +272,62 @@
       "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Started by INFERNO-PLANNET-SERVER-001, which runs the whole davinci_plan_net_server_v110 suite against the interop-cho profile's public directory (/fhir/r4/directory/interop). This is the kit that judges the public Provider Directory (gap-matrix G-36)."
     },
     {
+      "name": "inferno-framework/bulk-data-test-kit",
+      "key": "inferno-bulk-data",
+      "role": "ConformanceRunner",
+      "protocols": [
+        "Bulk Data"
+      ],
+      "upstreamRepository": "https://github.com/inferno-framework/bulk-data-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "tag": "v0.13.2",
+        "commit": "4d46b69a31dc3464cb6275864f25e9dae699ab9c",
+        "reference": "https://github.com/inferno-framework/bulk-data-test-kit@v0.13.2",
+        "pinProvenance": "git ls-remote --tags resolved refs/tags/v0.13.2 to this commit on 2026-10-28, and it was the latest release on that date."
+      },
+      "compose": {
+        "service": "inferno-bulk-data",
+        "profiles": [
+          "interop-bulk-data"
+        ]
+      },
+      "endpoints": {
+        "fhirBaseUrl": null,
+        "cdsHooksBaseUrl": null,
+        "readinessUrl": "http://127.0.0.1:14572/"
+      },
+      "auth": {
+        "mode": "None",
+        "note": "The kit authenticates the way a provider's bulk client would: SMART Backend Services (private_key_jwt, ES384) against cho-smart-auth-service. Before the run the harness registers the public keys the kit itself publishes (/custom/bulk_data_v200/.well-known/jwks.json) as a backend client bound to the seeded provider, through smart-auth-service's own admin API. Nothing in CHO is weakened or bypassed."
+      },
+      "inferno": {
+        "apiBaseUrl": "http://127.0.0.1:14572/api",
+        "suites": [
+          "bulk_data_v101",
+          "bulk_data_v200",
+          "bulk_data_v200_client"
+        ],
+        "suitesProvenance": "Read from the Inferno::TestSuite ids in the kit's own lib/ at the pinned tag, not from documentation.",
+        "runner": "docker compose build && docker compose up (upstream run.sh) from a checkout at the pinned tag"
+      },
+      "implementationGuides": {
+        "Bulk Data": "1.0.1 and 2.0.0"
+      },
+      "igVersionProvenance": "Read from the suite ids and titles in the kit's lib/ at the pinned tag.",
+      "knownMismatches": [
+        "The kit's TLS checks (the server TLS group, and the token-endpoint TLS test inside its SMART Backend Services group) cannot pass on the interop network, which is plain HTTP; in a deployment TLS ends at the ingress. INFERNO-BULK-SERVER-001 does not run those two groups. Both passed against a TLS-serving local CHO in the first manual run (PR #1592).",
+        "CHO does not serve system-level $export (501 by design: a payer exports per provider Group or per patient), so the kit's system export group is not run."
+      ],
+      "requiredEgress": [
+        "https://github.com \u2014 the kit is fetched at the pinned tag during explicit setup",
+        "https://rubygems.org and Docker Hub \u2014 the kit image is built locally from upstream's Dockerfile",
+        "https://packages.fhir.org \u2014 the bundled hl7_validator_service loads IG packages"
+      ],
+      "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Started by INFERNO-BULK-SERVER-001, which runs the Group and Patient export groups of bulk_data_v200 against the interop-cho profile with bulk export on. This is the kit that judges what the export files contain (gap-matrix G-60)."
+    },
+    {
       "name": "hl7/fhir-validator (validator_cli.jar)",
       "key": "hl7-validator",
       "role": "ConformanceRunner",

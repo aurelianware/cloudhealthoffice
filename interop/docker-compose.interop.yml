@@ -18,6 +18,7 @@
 #   interop-c4bb         Inferno CARIN BB test kit     (INFERNO-C4BB-SERVER-001; judges Provider Access EOBs)
 #   interop-us-core      Inferno US Core test kit      (INFERNO-USCORE-SERVER-001; the US Core floor)
 #   interop-plan-net     Inferno Plan-Net test kit     (INFERNO-PLANNET-SERVER-001; judges the public Provider Directory)
+#   interop-bulk-data    Inferno Bulk Data test kit    (INFERNO-BULK-SERVER-001; judges Group and Patient export)
 #
 # Normally you do not run this file by hand — `scripts/interop/run.sh` and the
 # harness (InteropEnvironment) bring up exactly the services a scenario needs.
@@ -49,6 +50,7 @@ volumes:
   inferno_c4bb_data:
   inferno_us_core_data:
   inferno_plan_net_data:
+  inferno_bulk_data_data:
   inferno_redis_data:
   inferno_validator_igs:
 
@@ -357,6 +359,14 @@ services:
       Cms0057__ProviderAttribution__ClaimsHistory__Enabled: "true"
       SmartAuth__Issuer: ${INTEROP_SMART_ISSUER:-http://cho-smart-auth-service:8080}
       SmartAuth__RequireHttpsMetadata: "false"
+      # The bundled issuer serves this tenant. appsettings.Development.json
+      # confines it to demo-tenant, which would refuse every SMART token here.
+      SmartAuth__Tenants__0: interop-tenant
+      # Bulk export (G-60) for INFERNO-BULK-SERVER-001: Group and Patient
+      # $export, with the export files held in memory. Production keeps them in
+      # a document store; the files a kit downloads are the same either way.
+      BulkExport__Enabled: "true"
+      BulkExport__DocumentStore__Provider: InMemory
       Appeals__UseMockAdapter: "true"
     depends_on:
       interop-mongo:
@@ -411,7 +421,7 @@ services:
   # `hl7_validator_service` hostnames. Nothing is guessed: the variable names and
   # the port were read out of the kits at their pinned tags.
   #
-  # One redis and one validator serve all four kit profiles. Exactly one kit
+  # One redis and one validator serve every kit profile. Exactly one kit
   # profile is ever started at a time — a scenario names a single external
   # target — and teardown is `down --volumes`, so no state crosses between kits.
 
@@ -573,13 +583,46 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # The kit that judges bulk export, files included (gap-matrix G-60). It
+  # authenticates with SMART Backend Services against cho-smart-auth-service as
+  # a client the harness registers; see auth for inferno-bulk-data in
+  # interop/versions.json.
+  inferno-bulk-data:
+    profiles: [interop-bulk-data]
+    networks: [interop]
+    image: cho-interop/inferno-bulk-data:local
+    build:
+      context: ${INTEROP_INFERNO_BULK_DATA_DIR:-./.external/bulk-data-test-kit}
+    environment: *inferno-sidecars
+    volumes:
+      - inferno_bulk_data_data:/opt/inferno/data
+    depends_on: *inferno-depends
+    ports:
+      - "127.0.0.1:${INTEROP_INFERNO_BULK_DATA_PORT:-14572}:4567"
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-bulk-data-worker:
+    profiles: [interop-bulk-data]
+    networks: [interop]
+    image: cho-interop/inferno-bulk-data:local
+    build:
+      context: ${INTEROP_INFERNO_BULK_DATA_DIR:-./.external/bulk-data-test-kit}
+    command: ["bundle", "exec", "sidekiq", "-r", "./worker.rb"]
+    environment: *inferno-sidecars
+    volumes:
+      - inferno_bulk_data_data:/opt/inferno/data
+    depends_on: *inferno-depends
+    security_opt:
+      - no-new-privileges:true
+
   # ── Shared sidecars for the kit profiles ──────────────────────────────────
   # Both carry every kit profile, so starting a kit starts them and nothing
   # else does. Pinned by digest for the same reason the reference
   # implementations are: the validator's output IS the conformance verdict, so a
   # floating tag would mean the verdict could change without a reviewable diff.
   inferno-redis:
-    profiles: [interop-pdex, interop-dtr-inferno, interop-c4bb, interop-us-core, interop-plan-net]
+    profiles: [interop-pdex, interop-dtr-inferno, interop-c4bb, interop-us-core, interop-plan-net, interop-bulk-data]
     networks: [interop]
     # redis:7-alpine, resolved on 2026-10-23. Upstream's own compose uses a
     # floating `redis`; the queue's exact version does not affect a verdict, but
@@ -597,7 +640,7 @@ services:
       - no-new-privileges:true
 
   inferno-validator:
-    profiles: [interop-pdex, interop-dtr-inferno, interop-c4bb, interop-us-core, interop-plan-net]
+    profiles: [interop-pdex, interop-dtr-inferno, interop-c4bb, interop-us-core, interop-plan-net, interop-bulk-data]
     networks: [interop]
     # infernocommunity/inferno-resource-validator:latest, resolved on
     # 2026-10-23. This is the service each suite's `fhir_resource_validator`
