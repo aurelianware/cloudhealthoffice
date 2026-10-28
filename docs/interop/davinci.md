@@ -333,14 +333,15 @@ What the runner can now do that it could not before:
 
 ### The conformance scenarios
 
-All three are in [`interop/scenarios.json`](../../interop/scenarios.json) and
-all three run:
+All four are in [`interop/scenarios.json`](../../interop/scenarios.json) and
+all four run:
 
 | Scenario | Suite | Groups | What it judges |
 | --- | --- | --- | --- |
 | `INFERNO-USCORE-SERVER-001` | `us_core_v311` | `capability_statement`, `patient`, `encounter` | The US Core floor CMS-0057-F sets |
 | `INFERNO-C4BB-SERVER-001` | `c4bb_v200` (financial) | `capability_statement_group`, `patient`, `coverage`, `eob`, `organization`, `practitioner` | Patient, Coverage, Organization, Practitioner and the adjudicated EOB |
 | `INFERNO-PLANNET-SERVER-001` | `davinci_plan_net_server_v110` | all | The public Provider Directory (G-36), with no token |
+| `INFERNO-BULK-SERVER-001` | `bulk_data_v200` | `bulk_data_group_export_v200`, `bulk_data_patient_export_v200` | Group and Patient `$export` (G-60), the files included |
 
 `INFERNO-PLANNET-SERVER-001` is the one scenario pointed somewhere other than
 the authenticated FHIR base: its `choSurface` is `publicDirectory`, so the kit's
@@ -354,6 +355,21 @@ generated from Plan-Net **1.1.0** while CHO serves **1.2.0**; the canonicals are
 the same, so it matches CHO's resources, but a finding that turns on a rule
 1.2.0 changed is the kit's version, not CHO (see `knownMismatches` on
 `inferno-plan-net`).
+
+`INFERNO-BULK-SERVER-001` is the one scenario where the kit authenticates
+itself (`infernoAuth: backendServices`). Before the run the harness reads the
+public keys the kit publishes (`/custom/bulk_data_v200/.well-known/jwks.json`)
+and registers them through smart-auth-service's admin API as the backend
+client in `backendClient` of `interop/cho-seed.json`, bound to the seeded
+billing provider. The kit then runs SMART Backend Services (`private_key_jwt`,
+ES384) against `cho-smart-auth-service`, kicks off `Group/1234567893/$export`
+and `Patient/$export`, polls, downloads every NDJSON file with the token the
+manifest requires, and validates the resources in them. The profile turns
+bulk export on (`BulkExport__Enabled`, files held in memory) and lets the
+bundled issuer serve `interop-tenant` (`SmartAuth__Tenants__0`). The issuer is
+plain HTTP on the interop network, so smart-auth-service drops OpenIddict's
+HTTPS requirement for an http issuer, which `SmartIssuer.Resolve` only accepts
+in Development.
 
 Which groups run is **inventory data, not code**. It is a claim about what CHO
 serves, so it belongs where a reader can check it against the scenario's
@@ -369,14 +385,21 @@ What is deliberately not run, and why:
 * The SMART launch groups — the harness supplies an already-issued token rather
   than driving a launch.
 * `c4bb_server_v200_visual_inspection_and_attestation` — manual by construction.
+* The Bulk Data server TLS group and SMART Backend Services group — their TLS
+  checks cannot pass on the plain-HTTP interop network (TLS ends at the ingress
+  in a deployment). Both passed against a TLS-serving local CHO in the first
+  manual run.
+* The Bulk Data system export group — CHO does not serve system-level
+  `$export` (501): a payer exports per provider Group or per patient.
 
 Run them with:
 
 ```bash
-./scripts/interop/fetch-inferno.sh us-core c4bb plan-net   # explicit setup, once
+./scripts/interop/fetch-inferno.sh us-core c4bb plan-net bulk-data   # explicit setup, once
 ./scripts/interop/run.sh inferno us-core
 ./scripts/interop/run.sh inferno c4bb
 ./scripts/interop/run.sh inferno plan-net
+./scripts/interop/run.sh inferno bulk-data
 ./scripts/interop/run.sh inferno all
 ```
 
@@ -486,6 +509,7 @@ Suite ids at the current pins:
 | CARIN BB `v0.16.3` | `c4bb_v110`, `c4bb_v200`, `c4bb_v200devnonfinancial`, `c4bb_v200_client` |
 | US Core `v1.1.6` | `us_core_v311`, `us_core_v400`, `us_core_v501`, `us_core_v610`, `us_core_v700`, `us_core_v800` (plus a `us_core_client_*` suite per version) |
 | Plan-Net `v0.13.4` | `davinci_plan_net_server_v110` |
+| Bulk Data `v0.13.2` | `bulk_data_v101`, `bulk_data_v200`, `bulk_data_v200_client` |
 
 Every id above is read from the `Inferno::TestSuite` ids in each kit's own `lib/`
 at the pinned tag, not from documentation.
@@ -496,9 +520,9 @@ them. `us_core_v311` is CHO's suite — `Cms0057ComplianceChecker` and the
 CapabilityStatement target US Core 3.1.1+, the floor CMS-0057-F sets — with
 `us_core_v610` the natural second run.
 
-Fetch them with `./scripts/interop/fetch-inferno.sh us-core c4bb plan-net`; all
-three were fetched at these pins and the script's pin check passed (Plan-Net on
-2026-10-28).
+Fetch them with `./scripts/interop/fetch-inferno.sh us-core c4bb plan-net bulk-data`;
+all four were fetched at these pins and the script's pin check passed (Plan-Net
+and Bulk Data on 2026-10-28).
 
 ### What the `interop-cho` profile runs
 
@@ -667,14 +691,14 @@ Known at the current pins:
 
 ## 13. Limitations
 
-* Six scenarios execute today: `BR-PAS-SUBMIT-001` (PAS), `BR-CRD-001` (CRD),
+* Seven scenarios execute today: `BR-PAS-SUBMIT-001` (PAS), `BR-CRD-001` (CRD),
   `BR-DTR-001` (DTR), `INFERNO-USCORE-SERVER-001` (US Core),
-  `INFERNO-C4BB-SERVER-001` (CARIN BB) and `INFERNO-PLANNET-SERVER-001`
-  (Plan-Net). Everything else in the inventory is
+  `INFERNO-C4BB-SERVER-001` (CARIN BB), `INFERNO-PLANNET-SERVER-001`
+  (Plan-Net) and `INFERNO-BULK-SERVER-001` (Bulk Data). Everything else in the inventory is
   `NotRun` — deliberately, because a placeholder must never look like a result.
 * CHO participates in the three br-payer scenarios as the **client**, through its
   real production code (`MetadataController` for PAS, `CrdController` for CRD);
-  its FHIR service does not run as a container in any of them. In the three
+  its FHIR service does not run as a container in any of them. In the four
   conformance scenarios CHO is the **server**, and the `interop-cho` profile runs
   its real services. Its contents are described under "What the `interop-cho`
   profile runs".

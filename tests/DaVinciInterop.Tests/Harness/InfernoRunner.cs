@@ -45,6 +45,30 @@ public sealed record InfernoInput
         Type = "auth_info",
         Value = JsonSerializer.Serialize(new { auth_type = "public", access_token = accessToken }),
     };
+
+    /// <summary>
+    /// SMART Backend Services, run by the kit itself: it signs a client
+    /// assertion with its own key and requests tokens from
+    /// <paramref name="tokenUrl"/> as <paramref name="clientId"/>. The token
+    /// URL is given rather than discovered, so the run does not depend on the
+    /// kit reaching discovery before it can authenticate; discovery is
+    /// CHO's own claim and its own tests cover it.
+    /// </summary>
+    public static InfernoInput BackendServices(
+        string name, string tokenUrl, string clientId, string requestedScopes) => new()
+    {
+        Name = name,
+        Type = "auth_info",
+        Value = JsonSerializer.Serialize(new
+        {
+            auth_type = "backend_services",
+            use_discovery = "false",
+            token_url = tokenUrl,
+            client_id = clientId,
+            requested_scopes = requestedScopes,
+            encryption_algorithm = "ES384",
+        }),
+    };
 }
 
 /// <summary>One result row Inferno reports for a test, group or suite.</summary>

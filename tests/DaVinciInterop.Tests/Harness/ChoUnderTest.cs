@@ -33,6 +33,20 @@ public static class ChoUnderTest
     public static string HostFhirBaseUrl => $"{Host("INTEROP_CHO_FHIR_PORT", 18023)}/fhir/r4";
 
     /// <summary>
+    /// smart-auth-service, as a kit on the Compose network addresses it. It is
+    /// also the issuer (<c>SmartAuth__Issuer</c> in the compose file), so a
+    /// kit's token request and assertion audience name the same address the
+    /// tokens are issued under.
+    /// </summary>
+    public const string ContainerSmartAuthUrl = "http://cho-smart-auth-service:8080";
+
+    /// <summary>The token endpoint, as a kit on the Compose network addresses it.</summary>
+    public const string ContainerTokenUrl = ContainerSmartAuthUrl + "/connect/token";
+
+    /// <summary>smart-auth-service, from the host (its admin API).</summary>
+    public static string HostSmartAuthUrl => Host("INTEROP_SMART_AUTH_PORT", 18024);
+
+    /// <summary>
     /// The public Provider Directory the profile publishes (G-36). Its id must
     /// match <c>PublicProviderDirectory__Directories__interop</c> on
     /// cho-fhir-service in the compose file.
@@ -79,6 +93,7 @@ public static class ChoUnderTest
     public static IReadOnlyDictionary<string, int> PortDefaults => new Dictionary<string, int>
     {
         ["INTEROP_CHO_FHIR_PORT"] = 18023,
+        ["INTEROP_SMART_AUTH_PORT"] = 18024,
         ["INTEROP_CHO_MEMBER_PORT"] = 18025,
         ["INTEROP_CHO_COVERAGE_PORT"] = 18026,
         ["INTEROP_CHO_CLAIMS_PORT"] = 18027,

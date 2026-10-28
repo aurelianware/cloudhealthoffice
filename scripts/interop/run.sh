@@ -10,6 +10,7 @@
 #   ./scripts/interop/run.sh inferno us-core    # US Core 3.1.1 server groups (INFERNO-USCORE-SERVER-001)
 #   ./scripts/interop/run.sh inferno c4bb       # CARIN BB financial groups (INFERNO-C4BB-SERVER-001)
 #   ./scripts/interop/run.sh inferno plan-net   # Plan-Net public directory (INFERNO-PLANNET-SERVER-001)
+#   ./scripts/interop/run.sh inferno bulk-data  # Bulk Data Group and Patient export (INFERNO-BULK-SERVER-001)
 #   ./scripts/interop/run.sh inferno all        # every conformance kit
 #   ./scripts/interop/run.sh unit               # harness unit tests only, no Docker
 #
@@ -17,8 +18,9 @@
 # CHO driving an independent payer and this harness judging the answers; the
 # conformance kits have an independent implementation judging CHO. They start
 # the interop-cho profile — CHO's own services, not the mock — seed it through
-# those services' APIs, and hand the kit CHO's endpoint and a development token.
-# The kits must be fetched first: ./scripts/interop/fetch-inferno.sh us-core c4bb plan-net
+# those services' APIs, and hand the kit CHO's endpoint and a development token
+# (the Bulk Data kit instead authenticates itself with SMART Backend Services).
+# The kits must be fetched first: ./scripts/interop/fetch-inferno.sh us-core c4bb plan-net bulk-data
 #
 # Each scenario starts the pinned HL7 Da Vinci burden-reduction payer reference
 # implementation, waits for it to actually be ready, performs a real exchange
@@ -69,10 +71,12 @@ if [[ "$TARGET" == "inferno" ]]; then
              LABEL='Inferno CARIN BB financial groups (INFERNO-C4BB-SERVER-001)' ;;
     plan-net) FILTER='Scenario=INFERNO-PLANNET-SERVER-001'
              LABEL='Inferno Plan-Net public Provider Directory (INFERNO-PLANNET-SERVER-001)' ;;
+    bulk-data) FILTER='Scenario=INFERNO-BULK-SERVER-001'
+             LABEL='Inferno Bulk Data Group and Patient export (INFERNO-BULK-SERVER-001)' ;;
     all)     FILTER='Target~inferno-framework'
              LABEL='every Inferno conformance kit' ;;
     *)
-      echo "Unknown mode '$MODE' for target 'inferno'. Modes: us-core | c4bb | plan-net | all." >&2
+      echo "Unknown mode '$MODE' for target 'inferno'. Modes: us-core | c4bb | plan-net | bulk-data | all." >&2
       exit 2
       ;;
   esac
@@ -81,7 +85,7 @@ else
     smoke) FILTER='Scenario=BR-PAS-SUBMIT-001'; LABEL='PAS $submit smoke (BR-PAS-SUBMIT-001)' ;;
     crd)   FILTER='Scenario=BR-CRD-001';        LABEL='CRD CDS Hooks (BR-CRD-001)' ;;
     dtr)   FILTER='Scenario=BR-DTR-001';        LABEL='DTR $questionnaire-package, chained from CRD (BR-DTR-001)' ;;
-    all)   FILTER='Scenario!=INFERNO-USCORE-SERVER-001&Scenario!=INFERNO-C4BB-SERVER-001&Scenario!=INFERNO-PLANNET-SERVER-001&Category=DaVinciInterop'
+    all)   FILTER='Scenario!=INFERNO-USCORE-SERVER-001&Scenario!=INFERNO-C4BB-SERVER-001&Scenario!=INFERNO-PLANNET-SERVER-001&Scenario!=INFERNO-BULK-SERVER-001&Category=DaVinciInterop'
            LABEL='all br-payer external scenarios' ;;
     unit)  : ;;
     *)
@@ -103,7 +107,7 @@ cleanup() {
       ${CHO_INTEROP_COMPOSE_OVERRIDE:+--file "$CHO_INTEROP_COMPOSE_OVERRIDE"} \
       --profile interop-br --profile interop-br-provider --profile interop-cho \
       --profile interop-pdex --profile interop-dtr-inferno \
-      --profile interop-c4bb --profile interop-us-core --profile interop-plan-net \
+      --profile interop-c4bb --profile interop-us-core --profile interop-plan-net --profile interop-bulk-data \
       down --volumes --remove-orphans --timeout 30 >/dev/null 2>&1 || true
   fi
   exit "$status"
@@ -119,7 +123,7 @@ if [[ "$TARGET" != "br-payer" && "$TARGET" != "inferno" ]]; then
   echo "Unknown interop target '$TARGET'." >&2
   echo "Executable targets in this repository:" >&2
   echo "  br-payer  BR-PAS-SUBMIT-001, BR-CRD-001, BR-DTR-001" >&2
-  echo "  inferno   INFERNO-USCORE-SERVER-001, INFERNO-C4BB-SERVER-001, INFERNO-PLANNET-SERVER-001" >&2
+  echo "  inferno   INFERNO-USCORE-SERVER-001, INFERNO-C4BB-SERVER-001, INFERNO-PLANNET-SERVER-001, INFERNO-BULK-SERVER-001" >&2
   echo "Other targets are pinned in interop/versions.json but have no scenario yet;" >&2
   echo "see docs/interop/davinci.md for how to add one." >&2
   exit 2
@@ -132,7 +136,8 @@ if [[ "$TARGET" == "inferno" ]]; then
   for kit in \
     "us-core:$REPO_ROOT/interop/.external/us-core-test-kit:$MODE:us-core" \
     "c4bb:$REPO_ROOT/interop/.external/carin-for-blue-button-test-kit:$MODE:c4bb" \
-    "plan-net:$REPO_ROOT/interop/.external/davinci-plan-net-test-kit:$MODE:plan-net"
+    "plan-net:$REPO_ROOT/interop/.external/davinci-plan-net-test-kit:$MODE:plan-net" \
+    "bulk-data:$REPO_ROOT/interop/.external/bulk-data-test-kit:$MODE:bulk-data"
   do
     IFS=: read -r name path mode wanted <<<"$kit"
     [[ "$mode" == "all" || "$mode" == "$wanted" ]] || continue
