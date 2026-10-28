@@ -457,6 +457,26 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         authorization.Revision++;
     }
 
+    public async Task RecordExtensionNoticeAsync(Authorization authorization, ExtensionMemberNotice notice,
+        CancellationToken ct = default)
+    {
+        var b = Builders<Authorization>.Filter;
+        var filter = b.Eq(a => a.Id, authorization.Id) & b.Eq(a => a.TenantId, GetTenantId())
+            & RevisionIs(authorization.Revision)
+            & b.Ne(a => a.DecisionExtension, null)
+            & b.Eq(a => a.DecisionExtension!.MemberNotice, null);
+        var update = Builders<Authorization>.Update
+            .Set(a => a.DecisionExtension!.MemberNotice, notice)
+            .Set(a => a.LastUpdatedDate, notice.RecordedAt)
+            .Set(a => a.LastUpdatedBy, notice.RecordedBy);
+        var result = await _collection.UpdateOneAsync(filter, Bumped(update), cancellationToken: ct);
+        if (result.ModifiedCount != 1) throw new AuthorizationConcurrencyException(authorization.Id, authorization.Revision);
+        authorization.DecisionExtension!.MemberNotice = notice;
+        authorization.LastUpdatedDate = notice.RecordedAt;
+        authorization.LastUpdatedBy = notice.RecordedBy;
+        authorization.Revision++;
+    }
+
     public async IAsyncEnumerable<Authorization> StreamReportingCohortAsync(DateTime from, DateTime toExclusive,
         LineOfBusiness lineOfBusiness, [EnumeratorCancellation] CancellationToken ct = default)
     {

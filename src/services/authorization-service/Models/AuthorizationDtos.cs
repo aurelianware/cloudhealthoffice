@@ -160,3 +160,10 @@ public class ExtendDecisionDeadline
     [Required, StringLength(500)]
     public string Reason { get; set; } = string.Empty;
 }
+
+/// <summary>Records the member's extension notice: the correspondence-service letter that carried it.</summary>
+public class RecordExtensionNotice
+{
+    [Required, StringLength(100), RegularExpression(@"^[A-Za-z0-9][A-Za-z0-9._:-]*$")]
+    public string LetterId { get; set; } = string.Empty;
+}

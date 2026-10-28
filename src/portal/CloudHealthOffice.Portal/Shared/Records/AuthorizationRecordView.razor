@@ -199,6 +199,11 @@
                             <MudAlert Severity="Severity.Info">No reviewer notes available</MudAlert>
                         }
 
+                        @if (_authorization.DecisionDueAt is not null)
+                        {
+                            <AuthorizationDecisionTimeframePanel Authorization="_authorization" OnChanged="OnTimeframeChanged" />
+                        }
+
                         @if (!string.IsNullOrWhiteSpace(_authorization.DenialReason))
                         {
                             <MudTextField Label="Denial Reason" 
@@ -306,6 +311,8 @@
             StateHasChanged();
         }
     }
+
+    private void OnTimeframeChanged(AuthorizationDetails updated) => _authorization = updated;
 
     private Severity GetSeverity(string status)
     {

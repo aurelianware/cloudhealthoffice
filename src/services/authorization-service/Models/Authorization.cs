@@ -736,6 +736,20 @@ public sealed class AuthorizationDecisionExtension
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public DecisionExtensionBasis Basis { get; set; }
     public string Reason { get; set; } = string.Empty;
+    /// <summary>
+    /// The written notice to the member of the reason for the delay and of the right
+    /// to file an expedited grievance (Medicare Advantage) or a grievance (Medicaid).
+    /// Null while it is still owed.
+    /// </summary>
+    public ExtensionMemberNotice? MemberNotice { get; set; }
+}
+
+/// <summary>The extension notice letter sent to the member (correspondence-service letter id).</summary>
+public sealed class ExtensionMemberNotice
+{
+    public string LetterId { get; set; } = string.Empty;
+    public DateTime RecordedAt { get; set; }
+    public string RecordedBy { get; set; } = string.Empty;
 }
 
 /// <summary>

@@ -336,6 +336,38 @@ public sealed class AuthorizationRepositoryMongoConcurrencyTests(MongoRunnerFixt
     }
 
     [Fact]
+    public async Task AnExtensionNotice_IsRecordedOnce_AndNeverWithoutAnExtension()
+    {
+        await SeedAsync("N1");
+        var unextended = await ReadAsync("N1");
+        var refused = () => Repo().RecordExtensionNoticeAsync(unextended,
+            new ExtensionMemberNotice { LetterId = "LTR-0", RecordedAt = DateTime.UtcNow, RecordedBy = "reviewer-1" });
+        await refused.Should().ThrowAsync<AuthorizationConcurrencyException>("there is no extension to attach a notice to");
+
+        await _db.GetCollection<BsonDocument>(Collection).UpdateOneAsync(new BsonDocument("_id", "N1"),
+            new BsonDocument("$set", new BsonDocument { { "LineOfBusiness", (int)LineOfBusiness.Medicaid } }));
+        var read = await ReadAsync("N1");
+        var extension = AuthorizationDeadlinePolicy.Extend(read, new ExtendDecisionDeadline
+        {
+            Basis = DecisionExtensionBasis.EnrolleeRequested, Reason = "Member asked for time",
+        }, "reviewer-1", read.SubmittedDate.AddDays(1));
+        await Repo().ExtendDecisionDeadlineAsync(read, extension, null);
+        var stale = await ReadAsync("N1");
+        var current = await ReadAsync("N1");
+
+        await Repo().RecordExtensionNoticeAsync(current,
+            new ExtensionMemberNotice { LetterId = "LTR-1", RecordedAt = DateTime.UtcNow, RecordedBy = "reviewer-1" });
+
+        var stored = await ReadAsync("N1");
+        stored.DecisionExtension!.MemberNotice!.LetterId.Should().Be("LTR-1");
+        stored.DecisionExtension.Reason.Should().Be("Member asked for time");
+        stored.Revision.Should().Be(current.Revision);
+        var second = () => Repo().RecordExtensionNoticeAsync(stale,
+            new ExtensionMemberNotice { LetterId = "LTR-2", RecordedAt = DateTime.UtcNow, RecordedBy = "reviewer-2" });
+        await second.Should().ThrowAsync<AuthorizationConcurrencyException>();
+    }
+
+    [Fact]
     public async Task AnAuthorizationWrittenBeforeTheRevisionExisted_UpdatesOnce_ThenCarriesARevision()
     {
         await SeedAsync("A1");

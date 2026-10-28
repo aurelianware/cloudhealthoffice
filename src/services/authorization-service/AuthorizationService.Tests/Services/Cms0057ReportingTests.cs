@@ -218,10 +218,15 @@ public class Cms0057ReportingTests
         m.Standard.Extended.Should().Be(2);
         m.Standard.ExtendedThenApproved.Should().Be(1);
         m.ExtendedThenApprovedPercent.Should().Be(25, "CMS's denominator is all requests");
+        m.Standard.ExtensionNoticesOwed.Should().Be(2, "neither extension has a member notice recorded");
+        auths[0].DecisionExtension!.MemberNotice = new ExtensionMemberNotice { LetterId = "LTR-1" };
+        Cms0057Reporting.ComputeMetrics(auths, Jan1, Dec31, null).Standard.ExtensionNoticesOwed.Should().Be(1);
         Cms0057Reporting.DecidedWithinTimeframe(auths[1]).Should().BeFalse("an unextended request is still late after 7 days");
 
         var decision = Cms0057Reporting.RecentDecisions(auths, Jan1, 10).Single(d => d.Id == "EXT-ON-TIME");
         decision.Extended.Should().BeTrue();
+        decision.ExtensionNoticeOwed.Should().BeFalse("its notice is recorded");
+        Cms0057Reporting.RecentDecisions(auths, Jan1, 10).Single(d => d.Id == "EXT-DENIED").ExtensionNoticeOwed.Should().BeTrue();
         decision.TimeframeHours.Should().Be(168 + 14 * 24);
         decision.WithinTimeframe.Should().BeTrue();
     }

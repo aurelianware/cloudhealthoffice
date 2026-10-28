@@ -39,6 +39,31 @@ public class CorrespondenceService : ICorrespondenceService
     public async Task<List<CorrespondenceTemplate>> GetTemplatesAsync() =>
         await GetAsync<List<CorrespondenceTemplate>>("templates") ?? new();
 
+    public async Task<LetterRequestResult> RequestLetterAsync(CorrespondenceLetterRequest request)
+    {
+        var baseUrl = (_configuration["Services:CorrespondenceService"] ?? "http://correspondence-service.cloudhealthoffice").TrimEnd('/');
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/api/v1/correspondence/letters", request);
+            if (response.IsSuccessStatusCode)
+                return new(await response.Content.ReadFromJsonAsync<CorrespondenceLetter>(), null);
+            string? error = null;
+            try
+            {
+                using var json = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                if (json.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                    && json.RootElement.TryGetProperty("error", out var e)) error = e.GetString();
+            }
+            catch (System.Text.Json.JsonException) { }
+            return new(null, error ?? $"The letter was not produced ({(int)response.StatusCode}).");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", ServiceName);
+            throw new ServiceUnavailableException(ServiceName, ex);
+        }
+    }
+
     private async Task<T?> GetAsync<T>(string path)
     {
         var baseUrl = (_configuration["Services:CorrespondenceService"] ?? "http://correspondence-service.cloudhealthoffice").TrimEnd('/');

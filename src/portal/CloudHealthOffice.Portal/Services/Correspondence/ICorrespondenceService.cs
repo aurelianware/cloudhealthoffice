@@ -10,4 +10,7 @@ public interface ICorrespondenceService
 
     Task<List<CorrespondenceLetterType>> GetLetterTypesAsync();
     Task<List<CorrespondenceTemplate>> GetTemplatesAsync();
+
+    /// <summary>Requests one letter (correspondence:write and read access to each subject): the stored letter, or why none was produced.</summary>
+    Task<LetterRequestResult> RequestLetterAsync(CorrespondenceLetterRequest request);
 }
