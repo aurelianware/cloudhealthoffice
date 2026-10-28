@@ -167,7 +167,7 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
     /// a subject. Never read from a header or the query string — the caller
     /// does not get to name itself.
     /// </summary>
-    private static string? ResolveCallerId(HttpContext http)
+    public static string? ResolveCallerId(HttpContext http)
     {
         var user = http.User;
         if (user is null)

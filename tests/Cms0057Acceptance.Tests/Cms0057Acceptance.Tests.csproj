@@ -46,7 +46,8 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Moq" />
     <PackageReference Include="Hl7.Fhir.R4" />
-    <PackageReference Include="System.Text.Json" />
+    <!-- fhir-service reaches Azure.Core (via CloudHealthOffice.DocumentStore, bulk export files), which needs 10.x. -->
+    <PackageReference Include="System.Text.Json" VersionOverride="10.0.3" />
   </ItemGroup>
 
   <ItemGroup>

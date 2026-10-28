@@ -692,7 +692,35 @@ builder.Services.Configure<DtrConfig>(builder.Configuration.GetSection("Cms0057:
 // Singleton: the store ensures its indexes at construction.
 builder.Services.AddSingleton<IDtrResourceStore, MongoDtrResourceStore>();
 builder.Services.AddSingleton<IDtrService, DtrService>();
-builder.Services.AddSingleton<IBulkExportService, BulkExportService>();
+// Bulk Data $export (G-34, Q-18). Off by default, and then kick-off answers
+// 501 exactly as before. When on, a provider exports its own attributed panel
+// into the export store (BulkExport:DocumentStore:*, its own bucket) and
+// downloads it back through this service.
+var bulkExportOptions = builder.Configuration
+    .GetSection(FhirService.Services.BulkExport.BulkExportOptions.SectionName)
+    .Get<FhirService.Services.BulkExport.BulkExportOptions>() ?? new();
+if (bulkExportOptions.Enabled)
+{
+    bulkExportOptions.Validate();
+    builder.Services.Configure<FhirService.Services.BulkExport.BulkExportOptions>(
+        builder.Configuration.GetSection(FhirService.Services.BulkExport.BulkExportOptions.SectionName));
+    // Singleton: the store ensures its indexes at construction.
+    builder.Services.AddSingleton<FhirService.Services.BulkExport.IBulkExportJobStore,
+        FhirService.Services.BulkExport.MongoBulkExportJobStore>();
+    builder.Services.AddSingleton<FhirService.Services.BulkExport.IBulkExportFileStore>(sp =>
+        FhirService.Services.BulkExport.DocumentStoreBulkExportFileStore.Create(
+            sp.GetRequiredService<IConfiguration>(),
+            builder.Environment.EnvironmentName,
+            sp.GetRequiredService<ILoggerFactory>()));
+    builder.Services.AddScoped<FhirService.Services.BulkExport.IBulkExportResourceSource,
+        FhirService.Services.BulkExport.BulkExportResourceSource>();
+    builder.Services.AddSingleton<IBulkExportService, FhirService.Services.BulkExport.DurableBulkExportService>();
+    builder.Services.AddHostedService<FhirService.Services.BulkExport.BulkExportWorker>();
+}
+else
+{
+    builder.Services.AddSingleton<IBulkExportService, BulkExportService>();
+}
 
 // ── Managed FHIR store publishing (ADR 023) ──────────────────────────────────
 // Off unless ManagedFhirStore:Provider names a provider. When on, finalized

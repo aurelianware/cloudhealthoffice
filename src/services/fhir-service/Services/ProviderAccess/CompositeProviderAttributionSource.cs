@@ -63,4 +63,21 @@ public sealed class CompositeProviderAttributionSource : IProviderAttributionSou
 
         return attributed;
     }
+
+    /// <summary>
+    /// Everyone any source lists. As with <see cref="IsAttributedAsync"/>, a
+    /// source that throws stops the listing rather than letting a partial
+    /// panel stand in for the whole one.
+    /// </summary>
+    public async Task<IReadOnlyCollection<string>> ListAttributedAsync(
+        string tenantId, string providerId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(providerId))
+            return Array.Empty<string>();
+
+        var members = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var source in _sources)
+            members.UnionWith(await source.ListAttributedAsync(tenantId, providerId, ct));
+        return members;
+    }
 }

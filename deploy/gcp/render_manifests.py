@@ -318,9 +318,9 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
         return None
     if kind == "Secret" and name in MANAGED_SECRETS:
         return None
-    if kind == "ServiceAccount" and name == MANAGED_FHIR_STORE_ACCOUNT and args.managed_fhir_store:
+    if kind == "ServiceAccount" and name == MANAGED_FHIR_STORE_ACCOUNT and fhir_service_google_account(args):
         annotations = doc.setdefault("metadata", {}).get("annotations") or {}
-        annotations[WORKLOAD_IDENTITY_ANNOTATION] = args.managed_fhir_store_service_account
+        annotations[WORKLOAD_IDENTITY_ANNOTATION] = fhir_service_google_account(args)
         doc["metadata"]["annotations"] = annotations
     if kind == "ServiceAccount" and production(args):
         annotations = doc.get("metadata", {}).get("annotations") or {}
@@ -474,6 +474,12 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             spec["serviceAccountName"] = MANAGED_FHIR_STORE_ACCOUNT
             for key, value in managed_fhir_store_env(args).items():
                 set_env(container, key, value)
+        if name == MANAGED_FHIR_STORE_SERVICE and args.bulk_export_bucket:
+            # Bulk Data $export files (G-34): their own bucket, never the documents one.
+            spec["serviceAccountName"] = MANAGED_FHIR_STORE_ACCOUNT
+            set_env(container, "BulkExport__Enabled", "true")
+            set_env(container, "BulkExport__DocumentStore__Provider", "Gcs")
+            set_env(container, "BulkExport__DocumentStore__Gcs__Bucket", args.bulk_export_bucket)
         if name == "smart-auth-service":
             # The only service whose manifest and Development settings name no
             # service-token client id; the demo token config requires one.
@@ -656,6 +662,13 @@ def validate_production_args(parser: argparse.ArgumentParser, args: argparse.Nam
     args.token_public_key_pem = pem + "\n"
 
 
+def fhir_service_google_account(args: argparse.Namespace) -> str:
+    """The one Google account fhir-service-sa acts as: the managed store's publisher, else its own."""
+    if args.managed_fhir_store:
+        return args.managed_fhir_store_service_account
+    return args.fhir_service_google_account if args.bulk_export_bucket else ""
+
+
 def managed_fhir_store_env(args: argparse.Namespace) -> dict[str, str]:
     """fhir-service settings for publishing to a Cloud Healthcare API FHIR store."""
     match = MANAGED_FHIR_STORE_ID.match(args.managed_fhir_store)
@@ -711,6 +724,10 @@ def main() -> int:
                         help="Google service account fhir-service publishes as (terraform output managed_fhir_store_service_account)")
     parser.add_argument("--managed-fhir-store-tenant", default="demo",
                         help="The one CHO tenant whose claims are published (default: %(default)s)")
+    parser.add_argument("--bulk-export-bucket", default="",
+                        help="Google Cloud Storage bucket for Bulk Data $export files (terraform output bulk_export_bucket)")
+    parser.add_argument("--fhir-service-google-account", default="",
+                        help="Google service account fhir-service acts as (terraform output fhir_service_google_account)")
     parser.add_argument("--appeals-secrets-project", default="", help="Project containing appeal-body-encryption-key-v1")
     parser.add_argument("--appeals-secrets-service-account", default="", help="Secret-reading Google service account for appeals-service")
     parser.add_argument("--list-images", action="store_true", help="Print 'name dockerfile' for each image to build, then exit")
@@ -750,6 +767,12 @@ def main() -> int:
         parser.error("--managed-fhir-store must be projects/P/locations/L/datasets/D/fhirStores/S")
     if args.managed_fhir_store and not args.managed_fhir_store_tenant.strip():
         parser.error("--managed-fhir-store-tenant must name a tenant")
+    if args.bulk_export_bucket and not (args.fhir_service_google_account or args.managed_fhir_store):
+        parser.error("--bulk-export-bucket needs --fhir-service-google-account (or the managed FHIR store's account)")
+    if (args.fhir_service_google_account and args.managed_fhir_store
+            and args.fhir_service_google_account != args.managed_fhir_store_service_account):
+        # A Kubernetes service account maps to one Google account.
+        parser.error("--fhir-service-google-account must be the managed FHIR store's service account when both are set")
     if production(args):
         validate_production_args(parser, args)
 

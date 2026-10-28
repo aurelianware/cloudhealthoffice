@@ -55,7 +55,8 @@
     <!-- Same FHIR parser/serializer version the CHO FHIR service uses, so an
          external response is validated by the parser CHO would actually run. -->
     <PackageReference Include="Hl7.Fhir.R4" />
-    <PackageReference Include="System.Text.Json" />
+    <!-- fhir-service reaches Azure.Core (via CloudHealthOffice.DocumentStore, bulk export files), which needs 10.x. -->
+    <PackageReference Include="System.Text.Json" VersionOverride="10.0.3" />
   </ItemGroup>
 
   <ItemGroup>

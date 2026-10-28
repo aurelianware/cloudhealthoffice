@@ -194,6 +194,9 @@ jobs:
           MANAGED_FHIR_STORE: ${{ vars.MANAGED_FHIR_STORE }}
           MANAGED_FHIR_STORE_SERVICE_ACCOUNT: ${{ vars.MANAGED_FHIR_STORE_SERVICE_ACCOUNT }}
           MANAGED_FHIR_STORE_TENANT: ${{ vars.MANAGED_FHIR_STORE_TENANT }}
+          # Bulk Data $export files (terraform outputs in infrastructure/gcp/bulk-export.tf); optional.
+          BULK_EXPORT_BUCKET: ${{ vars.BULK_EXPORT_BUCKET }}
+          FHIR_SERVICE_GOOGLE_ACCOUNT: ${{ vars.FHIR_SERVICE_GOOGLE_ACCOUNT }}
           # Production security (all five, or none for the development-key demo).
           TOKEN_SIGNING_KEY_VERSION: ${{ vars.TOKEN_SIGNING_KEY_VERSION }}
           TOKEN_SERVICE_GOOGLE_ACCOUNT: ${{ vars.TOKEN_SERVICE_GOOGLE_ACCOUNT }}

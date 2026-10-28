@@ -8,6 +8,26 @@ public class BulkExportRequest
     public string? Since { get; set; }
     public string? OutputFormat { get; set; }
     public string? GroupId { get; set; }
+
+    /// <summary>The kick-off URL as the client sent it (the manifest's <c>request</c>).</summary>
+    public string? RequestUrl { get; set; }
+
+    /// <summary>
+    /// The validated caller (token <c>sub</c>, else client id) starting the
+    /// export. Only this caller may poll, download or cancel it.
+    /// </summary>
+    public string? RequestedBy { get; set; }
+}
+
+/// <summary>One NDJSON file a completed export wrote.</summary>
+public class BulkExportFile
+{
+    public string Type { get; set; } = string.Empty;
+
+    /// <summary>The file's name in the download URL, e.g. <c>Patient-1.ndjson</c>.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    public int Count { get; set; }
 }
 
 public class BulkExportJob
@@ -23,6 +43,18 @@ public class BulkExportJob
     public BulkExportManifest? Manifest { get; set; }
     public string? ErrorMessage { get; set; }
     public int ProgressPercent { get; set; }
+
+    /// <summary>See <see cref="BulkExportRequest.RequestedBy"/>.</summary>
+    public string? RequestedBy { get; set; }
+
+    /// <summary>The files a completed export wrote; the manifest lists them.</summary>
+    public List<BulkExportFile> Files { get; set; } = new();
+
+    /// <summary>When a completed export's files stop being served (the manifest's <c>Expires</c>).</summary>
+    public DateTimeOffset? ExpiresAt { get; set; }
+
+    /// <summary>The instant the export's data was read as of (the manifest's <c>transactionTime</c>).</summary>
+    public DateTimeOffset? TransactionTime { get; set; }
 }
 
 public enum BulkExportStatus

@@ -22,7 +22,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Text.Json" />
+    <!-- fhir-service reaches Azure.Core (via CloudHealthOffice.DocumentStore, bulk export files), which needs 10.x. -->
+    <PackageReference Include="System.Text.Json" VersionOverride="10.0.3" />
     <ProjectReference Include="..\..\src\services\fhir-service\fhir-service.csproj" />
     <!-- Cross-service seam test (PAS $submit → authorization-service → $inquire).
          Aliased so authorization-service's top-level Program and namespaces do
