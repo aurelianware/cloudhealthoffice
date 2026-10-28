@@ -93,6 +93,30 @@
           "@type": "Answer",
           "text": "RBRVS (Resource-Based Relative Value Scale) pricing calculates the allowed amount using three RVU components: Work RVU, Practice Expense RVU, and Malpractice RVU. These are adjusted by Geographic Practice Cost Indices (GPCI) for the provider's locality, then multiplied by the CMS Conversion Factor to produce the final allowed amount."
         }
+      },
+      {
+        "@type": "Question",
+        "name": "What is an RVU lookup?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "An RVU lookup returns the work, practice expense and malpractice relative value units CMS assigns to a CPT or HCPCS code in the Medicare Physician Fee Schedule. Medicare's allowed amount is [(Work RVU x Work GPCI) + (PE RVU x PE GPCI) + (MP RVU x MP GPCI)] x the conversion factor for the year."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is a wRVU?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "A wRVU is the work relative value unit on its own: the part of a code's RVUs that reflects the clinician's time, skill and effort. Physician groups often use wRVUs to measure productivity and set compensation."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is Cloud Health Office a claims repricing service?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Cloud Health Office is software. Its fee schedule engine prices claims to Medicare RBRVS, OPPS and MS-DRG rates during claims adjudication, and Cloud Health Office Professional Services can help a plan configure fee schedules and contract rates."
+        }
       }
     ]
   }
@@ -507,6 +531,50 @@
             <a href="/pricing-api" style="color:#0E7490;">Request API access</a> for programmatic evaluation.
           </p>
         </div>
+      </section>
+
+      <!-- ===== RVU LOOKUP EXPLAINED ===== -->
+      <section class="assessment-section" id="rvu-lookup">
+        <h2>RVU Lookup: How a Medicare Physician Fee Is Calculated</h2>
+        <p>
+          An RVU lookup returns the relative value units CMS assigns to a CPT or HCPCS code in the
+          Medicare Physician Fee Schedule (RBRVS). Each code carries three RVUs: <strong>work</strong>
+          (the clinician&rsquo;s time, skill and effort), <strong>practice expense</strong> (staff, equipment
+          and supplies, with separate facility and non-facility values) and <strong>malpractice</strong>
+          (professional liability cost). Medicare&rsquo;s allowed amount is:
+        </p>
+        <p style="font-family:'IBM Plex Mono',monospace; font-size:0.9rem; background:#F1F5F9; padding:12px 16px; border-radius:6px; overflow-x:auto;">
+          [(Work RVU &times; Work GPCI) + (PE RVU &times; PE GPCI) + (MP RVU &times; MP GPCI)] &times; Conversion Factor
+        </p>
+        <p>
+          The geographic practice cost indices (GPCIs) adjust each component for the Medicare locality,
+          and the conversion factor turns RVUs into dollars for the year. From 2026, CMS publishes two
+          conversion factors: one for qualifying alternative payment model participants and one for
+          everyone else. The lookup above returns each component, so you can see why a rate differs
+          between an office and a hospital setting or between two localities.
+        </p>
+        <h3>wRVU lookup</h3>
+        <p>
+          A wRVU is the work RVU on its own. Physician groups and health systems often use wRVUs to measure
+          clinician productivity and set compensation, because they ignore practice expense and malpractice
+          cost. The work RVU is the first component the lookup returns.
+        </p>
+        <h3>HCPCS pricing lookup</h3>
+        <p>
+          CPT codes and many Level II HCPCS codes are priced on the Physician Fee Schedule. Other Level II
+          HCPCS codes, such as drugs, durable medical equipment and lab tests, are priced on separate CMS fee
+          schedules (ASP drug pricing, DMEPOS and the Clinical Laboratory Fee Schedule), which this lookup does
+          not cover. Hospital outpatient services are priced under OPPS by APC, and inpatient stays by MS-DRG.
+        </p>
+        <h3>Repricing software or repricing services?</h3>
+        <p>
+          Medicare repricing usually means pricing a claim at, or as a percentage of, the Medicare rate.
+          Some plans and TPAs outsource it to a repricing service; others run it in their own claims system.
+          Cloud Health Office is software: the same <a href="/docs/fee-schedule-engine" style="color:#0E7490;">fee schedule engine</a>
+          prices claims during <a href="/docs/claims-guide" style="color:#0E7490;">claims adjudication</a>, and
+          <a href="/services" style="color:#0E7490;">Professional Services</a> can help configure fee schedules and
+          contract rates. See <a href="/pricing" style="color:#0E7490;">pricing</a> for platform engagements.
+        </p>
       </section>
 
       <!-- ===== WHO IS THIS FOR ===== -->
