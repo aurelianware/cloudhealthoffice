@@ -211,4 +211,26 @@ public sealed class ProviderAttributionRepositoryTests(MongoRunnerFixture mongo)
         (await Attributed(Member, provider: "   ")).Should().BeFalse();
         (await Attributed("  ")).Should().BeFalse();
     }
+
+    [Fact]
+    public async Task ThePanelListsExactlyTheMembersTheQuestionAttributes()
+    {
+        // The bulk panel is the boolean rule without the member: everyone it
+        // would say yes for, and no one it would refuse.
+        var panel = await _repository.ListTreatedMembersAsync(Tenant, Npi, Since);
+
+        panel.Should().Equal(
+            "MEM-1", "MEM-DENIED", "MEM-ON-FLOOR", "MEM-RENDERED", "MEM-SPANNING");
+        foreach (var member in panel)
+            (await Attributed(member)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ThePanelIsPerTenantAndPerProvider()
+    {
+        (await _repository.ListTreatedMembersAsync(OtherTenant, Npi, Since)).Should().Equal(OtherTenantMember);
+        (await _repository.ListTreatedMembersAsync(Tenant, GroupNpi, Since)).Should().Equal(RenderedMember);
+        (await _repository.ListTreatedMembersAsync(Tenant, StrangerNpi, Since)).Should().BeEmpty();
+        (await _repository.ListTreatedMembersAsync(Tenant, "  ", Since)).Should().BeEmpty();
+    }
 }

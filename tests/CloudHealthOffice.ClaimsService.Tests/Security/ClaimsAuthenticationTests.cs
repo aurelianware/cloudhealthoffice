@@ -306,6 +306,29 @@ public class ClaimsAuthenticationTests : IClassFixture<ClaimsApiFactory>
     }
 
     [Fact]
+    public async Task ProviderPanel_OnlyFhirServiceMayListIt()
+    {
+        // A provider's whole claims-history panel exists for bulk $export
+        // (G-34): fhir-service's own identity, and nobody else, not even a
+        // claims reader or another CHO service.
+        _factory.AttributionRepository
+            .ListTreatedMembersAsync(Tenant, "1234567893", Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { "MEM-1", "MEM-2" });
+        const string path = "/api/provider-attribution/members?provider=1234567893&since=2024-10-28T00:00:00Z";
+
+        var fhir = ClientWithToken(ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken("fhir-service", Tenant));
+        var listed = await fhir.GetAsync(path);
+        Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
+        Assert.Equal(["MEM-1", "MEM-2"], (await listed.Content.ReadFromJsonAsync<PanelBody>())!.Members);
+
+        var other = ClientWithToken(ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken("claims-examiner-service", Tenant));
+        Assert.Equal(HttpStatusCode.Forbidden, (await other.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Supervisor().GetAsync(path)).StatusCode);
+    }
+
+    private sealed record PanelBody(string[] Members);
+
+    [Fact]
     public async Task AiExamination_ReadOnlyUser_Returns403()
     {
         var claim = StubClaim(ClaimStatus.Pended);

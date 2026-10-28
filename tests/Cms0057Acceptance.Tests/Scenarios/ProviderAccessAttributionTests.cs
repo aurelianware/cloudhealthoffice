@@ -190,6 +190,56 @@ public class ProviderAccessAttributionTests
         decision.Reason.Should().Be(ProviderAccessDenialReason.ConsentDenied);
     }
 
+    // ── The bulk panel (G-34) ────────────────────────────────────────────────
+
+    [Fact]
+    [Trait("Scenario", "PROV-02")]
+    [Trait("Backend", "Replace")]
+    public async Task PROV02_Replace_TheBulkPanelListsMembersTreatedInClaimsAsWellAsThoseOnPanels()
+    {
+        // A bulk export asks for the provider's whole panel. Claims history
+        // now lists the members it attributes, so a plan relying on it alone
+        // no longer exports nobody. Another provider's patient stays out.
+        var path = new Path(treated: [(Provider, Treated), ("1999999984", Untreated)]);
+
+        var panel = await path.Attribution(panel: [Panelled])
+            .ListAttributedAsync(AcceptanceContext.TenantId, Provider);
+
+        panel.Should().BeEquivalentTo([Panelled, Treated]);
+        path.Upstream.Should().ContainSingle()
+            .Which.Should().StartWith("/api/provider-attribution/members?")
+            .And.Contain("provider=" + Provider)
+            .And.Contain("since=")
+            .And.NotContain("member=");
+    }
+
+    [Fact]
+    [Trait("Scenario", "PROV-02")]
+    [Trait("Backend", "Replace")]
+    public async Task PROV02_Replace_TheBulkPanelHonoursTheLookback()
+    {
+        var path = new Path(treated: [(Provider, Treated)], treatedAt: DateTime.UtcNow.AddMonths(-30));
+
+        (await path.Attribution().ListAttributedAsync(AcceptanceContext.TenantId, Provider))
+            .Should().BeEmpty();
+        (await path.Attribution(lookbackMonths: 36).ListAttributedAsync(AcceptanceContext.TenantId, Provider))
+            .Should().BeEquivalentTo([Treated]);
+    }
+
+    [Fact]
+    [Trait("Scenario", "PROV-02")]
+    [Trait("Backend", "Replace")]
+    public async Task PROV02_Replace_AnUnreadableClaimsHistoryFailsTheBulkPanelRatherThanShorteningIt()
+    {
+        // A panel missing its claims-history members would export a short
+        // file that looks complete. The listing throws, and the export fails.
+        var path = new Path(treated: [(Provider, Treated)]) { Unavailable = true };
+
+        await path.Attribution(panel: [Panelled])
+            .Invoking(a => a.ListAttributedAsync(AcceptanceContext.TenantId, Provider))
+            .Should().ThrowAsync<AttributionSourceUnavailableException>();
+    }
+
     // ── Harness ──────────────────────────────────────────────────────────────
 
     private static ProviderAccessRequest Request(string member) => new()
@@ -227,41 +277,7 @@ public class ProviderAccessAttributionTests
             int lookbackMonths = 24,
             bool optedOut = false)
         {
-            var options = Options.Create(new ProviderAttributionOptions
-            {
-                PanelsByTenant = new()
-                {
-                    [AcceptanceContext.TenantId] =
-                    [
-                        new ConfiguredProviderPanel
-                        {
-                            ProviderId = Provider,
-                            MemberIds = (panel ?? []).ToList(),
-                        }
-                    ],
-                },
-                ClaimsHistory = new ClaimsHistoryAttributionOptions
-                {
-                    Enabled = true,
-                    LookbackMonths = lookbackMonths,
-                },
-            });
-
-            var factory = new Mock<IHttpClientFactory>();
-            factory.Setup(f => f.CreateClient(It.IsAny<string>()))
-                .Returns(() => new HttpClient(new ClaimsServiceHandler(this))
-                {
-                    BaseAddress = new Uri("http://claims-service.test/"),
-                });
-
-            var attribution = new CompositeProviderAttributionSource(
-                new IProviderAttributionSource[]
-                {
-                    new ConfiguredProviderAttributionSource(options),
-                    new ClaimsHistoryProviderAttributionSource(
-                        factory.Object, options,
-                        NullLogger<ClaimsHistoryProviderAttributionSource>.Instance),
-                });
+            var attribution = Attribution(panel, lookbackMonths);
 
             var consents = optedOut
                 ? new List<ConfiguredConsentRecord>
@@ -290,6 +306,46 @@ public class ProviderAccessAttributionTests
                 AcceptanceContext.Logger<ProviderAccessAuthorizationService>());
         }
 
+        /// <summary>The composed attribution sources: panels, then claims history over HTTP.</summary>
+        public IProviderAttributionSource Attribution(IEnumerable<string>? panel = null, int lookbackMonths = 24)
+        {
+            var options = Options.Create(new ProviderAttributionOptions
+            {
+                PanelsByTenant = new()
+                {
+                    [AcceptanceContext.TenantId] =
+                    [
+                        new ConfiguredProviderPanel
+                        {
+                            ProviderId = Provider,
+                            MemberIds = (panel ?? []).ToList(),
+                        }
+                    ],
+                },
+                ClaimsHistory = new ClaimsHistoryAttributionOptions
+                {
+                    Enabled = true,
+                    LookbackMonths = lookbackMonths,
+                },
+            });
+
+            var factory = new Mock<IHttpClientFactory>();
+            factory.Setup(f => f.CreateClient(It.IsAny<string>()))
+                .Returns(() => new HttpClient(new ClaimsServiceHandler(this))
+                {
+                    BaseAddress = new Uri("http://claims-service.test/"),
+                });
+
+            return new CompositeProviderAttributionSource(
+                new IProviderAttributionSource[]
+                {
+                    new ConfiguredProviderAttributionSource(options),
+                    new ClaimsHistoryProviderAttributionSource(
+                        factory.Object, options,
+                        NullLogger<ClaimsHistoryProviderAttributionSource>.Instance),
+                });
+        }
+
         /// <summary>
         /// claims-service's own controller, over a repository that applies the
         /// same question the Mongo filter does: has this provider treated this
@@ -307,6 +363,19 @@ public class ProviderAccessAttributionTests
                     tenantId.Should().Be(
                         AcceptanceContext.TenantId, "the upstream filters by the tenant it was told");
                     return _treated.Contains((provider, member)) && _treatedAt >= since;
+                });
+            repository
+                .Setup(r => r.ListTreatedMembersAsync(
+                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((string tenantId, string provider, DateTime since, CancellationToken _) =>
+                {
+                    tenantId.Should().Be(
+                        AcceptanceContext.TenantId, "the upstream filters by the tenant it was told");
+                    return _treated
+                        .Where(t => t.Provider == provider && _treatedAt >= since)
+                        .Select(t => t.Member)
+                        .Order(StringComparer.Ordinal)
+                        .ToList();
                 });
 
             var http = new DefaultHttpContext();
@@ -333,13 +402,17 @@ public class ProviderAccessAttributionTests
                 throw new HttpRequestException("claims-service is unreachable");
 
             var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
-            var result = await path.Controller().IsAttributed(
-                query.TryGetValue("provider", out var p) ? p.ToString() : null,
-                query.TryGetValue("member", out var m) ? m.ToString() : null,
-                query.TryGetValue("since", out var s)
-                    ? DateTime.Parse(s.ToString(), null, System.Globalization.DateTimeStyles.RoundtripKind)
-                    : null,
-                ct);
+            var provider = query.TryGetValue("provider", out var p) ? p.ToString() : null;
+            DateTime? since = query.TryGetValue("since", out var s)
+                ? DateTime.Parse(s.ToString(), null, System.Globalization.DateTimeStyles.RoundtripKind)
+                : null;
+            var result = uri.AbsolutePath.EndsWith("/members", StringComparison.Ordinal)
+                ? await path.Controller().ListMembers(provider, since, ct)
+                : await path.Controller().IsAttributed(
+                    provider,
+                    query.TryGetValue("member", out var m) ? m.ToString() : null,
+                    since,
+                    ct);
 
             return result switch
             {

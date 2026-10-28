@@ -3,6 +3,7 @@ using System.Text.Json;
 using FhirService.Middleware;
 using FhirService.Services;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.Extensions.Options;
 
 namespace FhirService.Services.ProviderAccess;
@@ -84,6 +85,47 @@ public sealed class ClaimsHistoryProviderAttributionSource : IProviderAttributio
             || string.IsNullOrWhiteSpace(memberId))
             return false;
 
+        var since = Floor();
+
+        var path = "api/provider-attribution"
+                   + $"?provider={Uri.EscapeDataString(providerId.Trim())}"
+                   + $"&member={Uri.EscapeDataString(memberId.Trim())}"
+                   + $"&since={Uri.EscapeDataString(since.ToString("o"))}";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        var answer = await AskAsync<ClaimsAttributionAnswer>(request, tenantId, "attribution", ct);
+        return answer.Attributed;
+    }
+
+    /// <summary>
+    /// The provider's claims-history panel, for a bulk export (G-34). Asked as
+    /// fhir-service itself: exports run in the background with no caller, and
+    /// claims-service lists a panel for fhir-service's service identity only.
+    /// Fail-closed as the single question is: a fault throws, so an export
+    /// fails rather than silently leaving the provider's patients out.
+    /// </summary>
+    public async Task<IReadOnlyCollection<string>> ListAttributedAsync(
+        string tenantId, string providerId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(providerId))
+            return Array.Empty<string>();
+
+        var since = Floor();
+        var path = "api/provider-attribution/members"
+                   + $"?provider={Uri.EscapeDataString(providerId.Trim())}"
+                   + $"&since={Uri.EscapeDataString(since.ToString("o"))}";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, path).UseChoServiceIdentity();
+        var panel = await AskAsync<ClaimsPanelAnswer>(request, tenantId, "panel", ct);
+        if (panel.Members is null)
+            throw new AttributionSourceUnavailableException("Claims history answered an unreadable body.");
+
+        return panel.Members.Where(m => !string.IsNullOrWhiteSpace(m)).Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>The lookback floor for a decision made now.</summary>
+    private DateTime Floor()
+    {
         var lookbackMonths = _options.Value.ClaimsHistory.LookbackMonths;
         if (lookbackMonths <= 0)
         {
@@ -93,31 +135,35 @@ public sealed class ClaimsHistoryProviderAttributionSource : IProviderAttributio
                 "Provider attribution lookback is not configured.");
         }
 
-        var since = LookbackFloor(_time.GetUtcNow().UtcDateTime, lookbackMonths);
+        return LookbackFloor(_time.GetUtcNow().UtcDateTime, lookbackMonths);
+    }
 
-        var path = "api/provider-attribution"
-                   + $"?provider={Uri.EscapeDataString(providerId.Trim())}"
-                   + $"&member={Uri.EscapeDataString(memberId.Trim())}"
-                   + $"&since={Uri.EscapeDataString(since.ToString("o"))}";
-
+    /// <summary>
+    /// Sends <paramref name="request"/> to claims-service for
+    /// <paramref name="tenantId"/> and reads its JSON answer. Every way of not
+    /// getting one throws <see cref="AttributionSourceUnavailableException"/>.
+    /// </summary>
+    private async Task<T> AskAsync<T>(
+        HttpRequestMessage request, string tenantId, string question, CancellationToken ct) where T : class
+    {
         var client = _clientFactory.CreateClient(UpstreamClientNames.ClaimsService);
+
+        // The tenant being decided for is named on the call rather than
+        // left to ambient propagation, so the question asked is about the
+        // tenant the decision is for.
+        request.Headers.Add(TenantHeaderPropagationHandler.HeaderName, tenantId);
+        // Set explicitly: the shared claims-service client defaults to
+        // application/fhir+json for the FHIR proxies, and this endpoint is
+        // not FHIR. A request that carries its own Accept keeps the
+        // client default from being applied, so asking for JSON here is
+        // what stops a 406. The FHIR callers are unaffected.
+        request.Headers.Accept.Clear();
+        request.Headers.Accept.Add(
+            new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
 
         HttpResponseMessage response;
         try
         {
-            // The tenant being decided for is named on the call rather than
-            // left to ambient propagation, so the question asked is about the
-            // tenant the decision is for.
-            using var request = new HttpRequestMessage(HttpMethod.Get, path);
-            request.Headers.Add(TenantHeaderPropagationHandler.HeaderName, tenantId);
-            // Set explicitly: the shared claims-service client defaults to
-            // application/fhir+json for the FHIR proxies, and this endpoint is
-            // not FHIR. A request that carries its own Accept keeps the
-            // client default from being applied, so asking for JSON here is
-            // what stops a 406. The FHIR callers are unaffected.
-            request.Headers.Accept.Clear();
-            request.Headers.Accept.Add(
-                new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
             response = await client.SendAsync(request, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -138,9 +184,9 @@ public sealed class ClaimsHistoryProviderAttributionSource : IProviderAttributio
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
             {
                 _logger.LogError(
-                    "Claims history refused the attribution call ({Status}) for tenant={Tenant}; "
+                    "Claims history refused the {Question} call ({Status}) for tenant={Tenant}; "
                     + "check service authentication. Attribution will be denied.",
-                    (int)response.StatusCode, LogSanitizer.Sanitize(tenantId));
+                    question, (int)response.StatusCode, LogSanitizer.Sanitize(tenantId));
                 throw new AttributionSourceUnavailableException(
                     "Claims history refused the attribution call.");
             }
@@ -148,8 +194,9 @@ public sealed class ClaimsHistoryProviderAttributionSource : IProviderAttributio
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(
-                    "Claims history answered {Status} for tenant={Tenant}; attribution will be denied.",
-                    (int)response.StatusCode, LogSanitizer.Sanitize(tenantId));
+                    "Claims history answered {Status} to the {Question} call for tenant={Tenant}; "
+                    + "attribution will be denied.",
+                    (int)response.StatusCode, question, LogSanitizer.Sanitize(tenantId));
                 throw new AttributionSourceUnavailableException(
                     "Claims history could not answer the attribution question.");
             }
@@ -165,10 +212,10 @@ public sealed class ClaimsHistoryProviderAttributionSource : IProviderAttributio
                     "Claims history response could not be read.");
             }
 
-            ClaimsAttributionAnswer? answer;
+            T? answer;
             try
             {
-                answer = JsonSerializer.Deserialize<ClaimsAttributionAnswer>(body, JsonOptions);
+                answer = JsonSerializer.Deserialize<T>(body, JsonOptions);
             }
             catch (JsonException)
             {
@@ -180,16 +227,18 @@ public sealed class ClaimsHistoryProviderAttributionSource : IProviderAttributio
                 // An unparseable body is not a "no". It is an upstream whose
                 // contract has moved, and guessing either way would be wrong.
                 _logger.LogWarning(
-                    "Claims history answered an unreadable body for tenant={Tenant}; "
+                    "Claims history answered an unreadable body to the {Question} call for tenant={Tenant}; "
                     + "attribution will be denied.",
-                    LogSanitizer.Sanitize(tenantId));
+                    question, LogSanitizer.Sanitize(tenantId));
                 throw new AttributionSourceUnavailableException(
                     "Claims history answered an unreadable body.");
             }
 
-            return answer.Attributed;
+            return answer;
         }
     }
 
     private sealed record ClaimsAttributionAnswer(bool Attributed);
+
+    private sealed record ClaimsPanelAnswer(IReadOnlyList<string>? Members);
 }

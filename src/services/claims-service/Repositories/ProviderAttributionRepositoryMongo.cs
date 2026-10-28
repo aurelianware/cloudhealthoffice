@@ -39,14 +39,49 @@ public sealed class ProviderAttributionRepositoryMongo : IProviderAttributionRep
         return match is not null;
     }
 
+    public async Task<IReadOnlyList<string>> ListTreatedMembersAsync(
+        string tenantId,
+        string providerNpi,
+        DateTime sinceUtc,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+
+        if (string.IsNullOrWhiteSpace(providerNpi))
+            return Array.Empty<string>();
+
+        // Grouped on the server rather than a distinct command, whose answer
+        // is one document and so capped at 16 MB: a hospital's billing NPI can
+        // treat more members than that holds, and a silently short panel would
+        // leave members out of the export with nothing to say so.
+        var members = await _collection.Aggregate()
+            .Match(TreatedBy(tenantId, providerNpi, sinceUtc))
+            .Group(c => c.MemberId, g => new { MemberId = g.Key })
+            .ToListAsync(ct);
+
+        return members
+            .Select(m => m.MemberId)
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Order(StringComparer.Ordinal)
+            .ToList();
+    }
+
     internal static FilterDefinition<Claim> BuildFilter(
         string tenantId, string providerNpi, string memberId, DateTime sinceUtc)
+        => TreatedBy(tenantId, providerNpi, sinceUtc)
+           & Builders<Claim>.Filter.Eq(c => c.MemberId, memberId.Trim());
+
+    /// <summary>
+    /// The claims that evidence this provider treating someone in the window:
+    /// the attribution rule, without the member. The boolean question adds
+    /// the member; the panel groups on it.
+    /// </summary>
+    private static FilterDefinition<Claim> TreatedBy(string tenantId, string providerNpi, DateTime sinceUtc)
     {
         var b = Builders<Claim>.Filter;
         var npi = providerNpi.Trim();
 
         return b.Eq(c => c.TenantId, tenantId)
-               & b.Eq(c => c.MemberId, memberId.Trim())
                // Current versions only, as the FHIR search repository defines
                // them. A superseded version describes the same visit as its
                // chain head, so counting it would change nothing but the cost.
