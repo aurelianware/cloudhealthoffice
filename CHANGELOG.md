@@ -7,6 +7,149 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-10-28
+
+A major version: the Cosmos DB SDK persistence path is gone and a public
+endpoint was removed. Covers the 340 pull requests merged between v5.0.0 and
+this release (#1222 to #1580). Release notes, with upgrade steps for 5.x:
+`docs/releases/RELEASE_NOTES_v6.0.0.md`.
+
+### Breaking changes (summary)
+
+Each is itemized under Removed or Changed below; the upgrade steps are in the
+release notes.
+
+- **MongoDB is the only document store (ADR 017, #1398).** Services refuse to
+  start with `Database:Provider` set to anything but `MongoDb`, with
+  `CosmosDb:ConnectionString` or `CosmosDb:Endpoint` and no
+  `MongoDb:ConnectionString`, or with no `MongoDb:ConnectionString` at all, in
+  every environment. There is no migration tool from Cosmos DB SQL API data.
+- **Azure DocumentDB connection strings must include `retrywrites=false`.**
+- **benefit-plan-service `POST /api/v1/adjudication/adjudicate` returns 404**
+  (#1399). Use `POST /api/v1/adjudication/estimate`.
+- **The claims Cosmos partition-key migration endpoints are gone**
+  (`/api/v1/admin/claims/cosmos-migration/*`), as is `src/tools/migration-wizard`.
+- **`BatchEligibility:CosmosDb` is now `BatchEligibility:MongoDb`.**
+- **`Portal:Search:RequireCriteria` is gone**; record search always needs
+  criteria (#1463).
+- **Redis accumulators store integer cents (#1393).** benefit-plan-service must
+  be scaled to zero before the new version starts
+  (`docs/operations/ACCUMULATOR-CENTS-CUTOVER.md`).
+- **PCP assignment writes use multi-document transactions (#1547, #1549)**, so
+  MongoDB must run as a replica set (or a managed service that supports
+  transactions) (`docs/operations/PCP-ATOMIC-CAPACITY.md`).
+- **Error bodies from 13 services are RFC 7807 problem documents** with a
+  `traceId`, not `{ error | message }` objects.
+- **Behaviour changes on the claim path that change what is paid:** money
+  rounds half away from zero; deductibles apply on non-HDHP plans; claims past
+  the timely filing limit deny CO-29 by default (#1448); eligibility fails
+  closed on unknown or unreachable members (#1445); unmapped procedure codes
+  deny CARC 204 instead of 18.
+
+### Not yet done for CMS-0057-F (1 January 2027)
+
+This release does not complete the January 2027 API requirements. Still to
+come, planned for 6.1 and 6.2:
+
+- **SMART Backend Services client authentication** (`private_key_jwt` / JWKS,
+  G-42). Outside providers' bulk clients and payer-to-payer callers cannot
+  authenticate with it yet.
+- **Plan-Net 1.2.0 conformance for the public Provider Directory** (G-36). The
+  directory is public, but it has not been conformance-checked and serves no
+  Location, HealthcareService, Endpoint or OrganizationAffiliation.
+- **The rest of bulk `$export` (G-34).** The Provider Access Group export ships
+  **off** behind `BulkExport:Enabled`. Still missing: a claims-history panel
+  listing (a plan relying on claims attribution alone exports nobody),
+  Payer-to-Payer history over bulk, `Patient/$export`, and a Bulk Data
+  conformance run. System-level `$export` answers 501.
+- **No X12 278 bridge.** CHO relies on HHS enforcement discretion for FHIR-only
+  prior authorization.
+
+The plan-side items (the `PA-DECISION-EXTENSION` letter template, listing a
+plan in `PublicProviderDirectory:Directories`, and counsel's reading of the
+"more than once" usage figure) are the plan's to supply. See
+`docs/epa-gap-matrix.md` for the status of every requirement.
+
+### Also in this release (not itemized below)
+
+- **Claims money path.** Plan-paid not billed (#1240); deductibles, family
+  limits and ACA preventive (#1237, #1245); COB to tertiary payers (#1266,
+  #1278, #1279); 835 compliance and balancing (#1249, #1254, #1258, #1263,
+  #1275, #1381); golden 837 to 835 test (#1260).
+- **One adjudicator.** Side doors removed, outages pend instead of deny, every
+  denial carries a CARC, Pay/Deny kept workable until the payment cycle
+  (#1335 to #1339, #1344); edit-level dispositions and override policy on
+  examiner approval (#1360 to #1362).
+- **Claim intake.** Exact and suspect duplicate detection (#1236), WEDI SNIP 1
+  to 5 with 999 (#1272, #1281), TA1 (#1287), 837I institutional model (#1252),
+  837 replacement and void linking by REF*F8 (#1446), timely filing (#1448).
+- **Pricing.** One pricing engine for adjudication and the Pricing API, and one
+  contract model with backfill, dual read and a per-tenant cutover flag (ADR
+  016, #1268, #1479); NCCI PTP and MUE (#1267, #1363); MPFS multiple procedure
+  reduction (#1234, #1248).
+- **Inpatient.** A native MS-DRG grouper at parity with CMS's on every corpus
+  row (ADR 024, #1478, #1492, #1498), IPPS payment with the hospital-level
+  adjustments, hospital-specific portion and pass-throughs, checked against
+  CMS's own pricer (#1499, #1502, #1503, #1505, #1508, #1510). Grouping in
+  adjudication is off unless `pricing.inpatient.groupDrg` is set (#1517).
+- **CMS-0057-F and FHIR.** ePA waves for tenant isolation, SLA watchdog,
+  persisted PAS decisions and RFAI clocks (#1294, #1297, #1300, #1406 to #1409);
+  Patient, Coverage, Encounter, Claim and prior authorizations served from
+  CHO's own services (#1420, #1476, #1480); Payer-to-Payer from CHO services
+  (ADR 020, #1429); Provider Access opt-out model (ADR 021, #1431) and
+  attribution from real treatment (#1504); CARIN Blue Button EOB (#1526);
+  Inferno kits run against CHO in CI and CRD decides from the member's record
+  (#1509, #1511, #1522); PA reporting evidence and annual drafts (#1542,
+  #1550).
+- **C-CDA reader** for problems, allergies and medications, and the clinical
+  summary a UM reviewer reads (#1532, #1533, #1539).
+- **Plan configuration.** Cascading settings with overrides, carriers and
+  programs, sponsor policies, contract terms and per-sponsor billing (#1507,
+  #1515, #1519, #1521, #1523, #1525, #1529, #1531, #1534, #1540).
+- **Enrollment and EDI operations.** EDI file records and one intake path for
+  834 and 837 at any size (#1482, #1494, #1497); 834 exceptions as work items
+  and orphaned dependents (#1481, #1483, #1493, #1500); 834 parsed per the
+  X220A1 loops (#1239).
+- **Payments and finance** (each off by default): NACHA CCD+ files and
+  exactly-once bank transmission (#1269, #1283); a double-entry GL journal
+  (#1286) and ACH settlements posted to it (#1491); premium rating engine,
+  rated invoices, 820 and lockbox cash, BAI2 reconciliation (#1270, #1271,
+  #1288, #1289). AR legacy cash postings need the reconciliation runbook
+  (#1276, `docs/operations/AR-LEGACY-POSTING-RECONCILIATION.md`).
+- **Member service, UM and appeals.** contact-service and the Service screen,
+  follow-ups and case intake recovery (#1506, #1552, #1553, #1559, #1563);
+  utilization management with clinical criteria and concurrent review (#1477);
+  appeal deadlines, extensions, external review and State rule packs (#1243,
+  #1247, #1265, #1404, #1512); correspondence step 1 (#1470).
+- **Documents.** GCS and S3 document store providers, the document catalog,
+  attachments and member documents in it, 275 matching by TRN02, scanning
+  and retry (#1436, #1439, #1440, #1442, #1443, #1554, #1558).
+- **Work management** with routing, queues and Get Next (#1345, #1353, #1358).
+- **Portal.** Record pages for claims, members, providers, authorizations,
+  appeals and payments, global search and a regrouped nav (#1368 to #1377);
+  Insights for claims, authorizations and appeals (#1386 to #1390); calls to
+  backend routes that do not exist fixed or hidden (#1473, #1474).
+- **Security and audit.** An access log on every read of claim, member,
+  provider, authorization, payment and appeal records (#1365, #1378, #1379,
+  #1385, #1389); tenant scoping enforced on every MongoDB query by an
+  architecture test (#1452); Cloud KMS token signing and Kubernetes service
+  identity (#1458); evidence-first security challenge campaigns (#1426, #1430,
+  #1434, #1435, #1438, #1441); real OIG LEIE and SAM.gov exclusion screening
+  (#1242, #1564); the `@azure/msal-node` advisory fixed by an override
+  (#1567).
+- **Google Cloud.** GKE demo environment deployed on every merge to main, with
+  Cloudflare Access sign-in (#1305 to #1308, #1317, #1346, #1459); production
+  reference architecture (#1456); managed FHIR store publishing to BigQuery,
+  off by default (#1469).
+- **Remediation series** (#1391 to #1399): time-zone independent baseline,
+  security fixes, integer-cent accumulators, the claim event outbox, resilient
+  service calls, MongoDB write concurrency and the Cosmos removal.
+- **Docs and site.** Medicaid readiness assessments for California, Texas,
+  Oregon and Illinois (#1541, #1543 to #1545, #1548), which conclude readiness
+  is not yet verified; unsupported compliance claims removed (#1460, #1461);
+  marketing repositioning and new website (#1411, #1450); Azure resource
+  names, subscription and tenant ids scrubbed (#1571, #1573).
+
 ### Added
 
 - **CMS-0057-F Provider Access: bulk `$export`.** Off by default
@@ -151,6 +294,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fhir-service to it through Workload Identity. `claims.finalized.v1` gains an
   additive `ClaimVersionId`. See
   `docs/architecture/managed-fhir-store-analytics.md`.
+
 - **Demo persona seeder (`tools/DemoPersonaSeeder`).** Seeds a demo tenant
   with named synthetic personas through the services' own APIs, and writes a
   demo script with the IDs to type. The cast:
@@ -243,52 +387,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stored are not recalculated. The figures that change for the MCC benchmark,
   and the sign-off this needs, are in
   `docs/architecture/money-rounding-impact.md`.
+
 - **Every .NET project builds with `TreatWarningsAsErrors`** (root
   `Directory.Build.props`, imported by `src/Directory.Build.props`). No
   warning codes are exempted.
+
 - **The portal's System.Security.Cryptography.Xml override is 9.0.21**, the
   first 9.0.x release outside GHSA-7hqp-7c5m-4vq6, GHSA-c399-9853-6jmj and
   GHSA-r955-8q5j-3h83.
 
-### Fixed
+- **Services refuse to start against a missing or Cosmos database.**
+  - `Database:Provider` set to anything but `MongoDb` fails at start-up.
+  - `CosmosDb:ConnectionString` or `CosmosDb:Endpoint` without
+    `MongoDb:ConnectionString` fails at start-up.
+  - Every service now requires `MongoDb:ConnectionString` in every
+    environment, Development and Testing included. Before this, some services
+    fell back to Cosmos, started with no database, or ran on in-memory stores:
+    idcard, reference-data, fhir, authorization, rfai, consent,
+    personal-representative and attachment. Their in-memory stores remain
+    only as test doubles.
 
-- Update MessagePack to 2.5.303 for GHSA-qhrr-8q5h-9q3h, preserving vulnerability warnings as build errors; repair NBomber load-harness compilation.
+- **eligibility-service batch storage is configured under
+  `BatchEligibility:MongoDb`** instead of `BatchEligibility:CosmosDb`.
 
-- Guard authorization lifecycle transitions, audit cancellation through the backend, and expire ended approvals with tenant/revision-fenced history updates.
+- **Some `CosmosDb:*` keys are still read**, as Mongo collection-name
+  overrides; they are listed in ADR 017.
 
-- Persist receipt-based authorization decision deadlines and prevent RFAI document arrival from restarting SLA or turnaround clocks.
+- **The Azure DocumentDB connection string must include `retrywrites=false`.**
 
-- Persist reviewer and automated authorization outcomes per service line, require coded explanations for denied/reduced units, and project committed decisions through PAS and claims validation.
+- **Redis accumulators store integer cents.** `RedisAccumulatorService`
+  wrote amounts with `HINCRBYFLOAT` and read them back as
+  `double` → `decimal`. 10,000 × $0.10 did not sum to $1,000.00, and a
+  deductible filled exactly to its limit could read as not met. Every hash
+  value is now an integer number of hundredths (`HINCRBY`, integer Lua
+  arithmetic, cents in the per-claim journal and clamp results). An amount
+  with sub-cent precision is rejected, not rounded.
 
-- **Authorization numbers are unique per tenant (D-39).** MongoDB indexes
-  prevent concurrent PAS inserts from creating ambiguous records. A losing
-  insert returns the existing decision only for an identical request hash;
-  another payload gets 409. Startup refuses legacy duplicates without changing
-  them; see `docs/operations/AUTHORIZATION-NUMBER-UNIQUENESS.md`. The tenant/status
-  index also closes D-37. The ePA matrix now records real metrics as PARTIAL,
-  backed by an acceptance test of the production reporting calculator.
+- **Hashes written before integer cents are never read as cents.** New
+  hashes carry `__v=2`. A hash without it is a cache miss: its amounts and
+  journals are dropped, its fences are kept, and it is rebuilt from
+  claims-service. **Deploying needs benefit-plan-service scaled to zero
+  first**, because old and new pods misread each other's values. See
+  `docs/operations/ACCUMULATOR-CENTS-CUTOVER.md`.
 
-- **837 amounts parse with the invariant culture.** CLM02 and the SV1/SV2
-  charge and units used the thread culture, so on a host with ',' as the
-  decimal mark 180.50 parsed as 18050 (de-DE) or 0 (fr-FR).
-- **Capitation contracts: New Contract opened an editor with no contract**
-  and failed on render. It now starts a new contract.
-- **Capitation statements "Approve All"** reported every Generated statement
-  as approved even when some approvals were refused; it now names the refused
-  ones. The provider dialog no longer swallows save failures.
-- **fhir-service DTR and payer-to-payer stores use the host's database
-  name** when `MongoDb:DatabaseName` is unset, instead of a name differing
-  only in case (which MongoDB refuses).
-- **No sync-over-async on request and message paths** (Kafka consume loops,
-  batch eligibility index creation, `Task.WhenAll` followed by `.Result`).
-- **smart-auth-service no longer builds a second service container** for
-  OpenIddict's MongoDB stores; they use the registered database.
+- **Accumulator audit rows are written before the operation returns.**
+  These are the audit writes on commit, increment and reversal. They were
+  fire-and-forget `Task.Run`s, so a write could be lost on an error or at
+  shutdown, and they used a scoped writer after its request scope had
+  ended. A failed audit write now fails the operation with
+  `AccumulatorAuditException`. The caller retries it (commits come from
+  the claims-service accumulator outbox), and the retry writes the row. For
+  increments, the audit row is written first.
 
-### Security
+- **CI runs the .NET unit tests a second time with `TZ=America/Phoenix`**
+  (`test-dotnet.yml` matrix). The UTC leg keeps the `.NET Unit Tests` check
+  name, artifact and coverage.
 
-- **Member and subscriber ids are masked in log lines** (`***6789`) through
-  the shared `LogSanitizer`, which also replaces control characters in
-  logged values. Claim, tenant and provider ids are not masked.
+- **Benefit engine: deductibles now apply on non-HDHP plans.** The benefit-plan
+  projection (`ChoBenefitPlanProvider`) emitted only copay/coinsurance rules, so
+  the engine never took the deductible unless the plan was an HDHP — claims were
+  overpaid by the unmet deductible. Benefits with `DeductibleApplies=true` now
+  project an explicit deductible rule for both network tiers.
+
+- **Benefit engine: unset family limits no longer zero out cost share.** A plan
+  with no family deductible or family OOP max seeded zero-limit family
+  accumulators that read as "met", so members owed nothing. Unset (null) limits
+  now mean "no limit"; an explicit $0 deductible still means no deductible; a
+  zero OOP max is treated as unset and logged. Embedded remaining amounts are
+  now bounded by the closer of the individual and family limits. Aggregate plans
+  with no family limit use the member's individual deductible / OOP max as the
+  pool instead of dropping it.
+
+- **ACA preventive services carry no in-network cost share** (§2713 /
+  45 CFR 147.130) regardless of the `DeductibleApplies` default, and HDHP plans
+  exempt them from deductible-first (IRS Notice 2004-23).
+
+- **Coinsurance stored on the percent scale (e.g. `20`) is normalized** to the
+  engine's fraction, matching how the FHIR projector reads it.
+
+- **Benefit engine: unmapped procedure codes deny with CARC 204** ("not covered
+  under the patient's current benefit plan") instead of CARC 18 ("exact
+  duplicate claim/service"), on both the per-line and DRG paths. Payment
+  estimates still report these as `NO_BENEFIT_MAPPING` / `needs_review`.
 
 ### Removed
 
@@ -332,25 +512,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plan terminology crosswalk before pricing, and in-process prior-auth rule
   evaluation for a claim.
 
-### Changed
-
-- **Services refuse to start against a missing or Cosmos database.**
-  - `Database:Provider` set to anything but `MongoDb` fails at start-up.
-  - `CosmosDb:ConnectionString` or `CosmosDb:Endpoint` without
-    `MongoDb:ConnectionString` fails at start-up.
-  - Every service now requires `MongoDb:ConnectionString` in every
-    environment, Development and Testing included. Before this, some services
-    fell back to Cosmos, started with no database, or ran on in-memory stores:
-    idcard, reference-data, fhir, authorization, rfai, consent,
-    personal-representative and attachment. Their in-memory stores remain
-    only as test doubles.
-- **eligibility-service batch storage is configured under
-  `BatchEligibility:MongoDb`** instead of `BatchEligibility:CosmosDb`.
-- **Some `CosmosDb:*` keys are still read**, as Mongo collection-name
-  overrides; they are listed in ADR 017.
-- **The Azure DocumentDB connection string must include `retrywrites=false`.**
-
 ### Fixed
+
+- Update MessagePack to 2.5.303 for GHSA-qhrr-8q5h-9q3h, preserving vulnerability warnings as build errors; repair NBomber load-harness compilation.
+
+- Guard authorization lifecycle transitions, audit cancellation through the backend, and expire ended approvals with tenant/revision-fenced history updates.
+
+- Persist receipt-based authorization decision deadlines and prevent RFAI document arrival from restarting SLA or turnaround clocks.
+
+- Persist reviewer and automated authorization outcomes per service line, require coded explanations for denied/reduced units, and project committed decisions through PAS and claims validation.
+
+- **Authorization numbers are unique per tenant (D-39).** MongoDB indexes
+  prevent concurrent PAS inserts from creating ambiguous records. A losing
+  insert returns the existing decision only for an identical request hash;
+  another payload gets 409. Startup refuses legacy duplicates without changing
+  them; see `docs/operations/AUTHORIZATION-NUMBER-UNIQUENESS.md`. The tenant/status
+  index also closes D-37. The ePA matrix now records real metrics as PARTIAL,
+  backed by an acceptance test of the production reporting calculator.
+
+- **837 amounts parse with the invariant culture.** CLM02 and the SV1/SV2
+  charge and units used the thread culture, so on a host with ',' as the
+  decimal mark 180.50 parsed as 18050 (de-DE) or 0 (fr-FR).
+
+- **Capitation contracts: New Contract opened an editor with no contract**
+  and failed on render. It now starts a new contract.
+
+- **Capitation statements "Approve All"** reported every Generated statement
+  as approved even when some approvals were refused; it now names the refused
+  ones. The provider dialog no longer swallows save failures.
+
+- **fhir-service DTR and payer-to-payer stores use the host's database
+  name** when `MongoDb:DatabaseName` is unset, instead of a name differing
+  only in case (which MongoDB refuses).
+
+- **No sync-over-async on request and message paths** (Kafka consume loops,
+  batch eligibility index creation, `Task.WhenAll` followed by `.Result`).
+
+- **smart-auth-service no longer builds a second service container** for
+  OpenIddict's MongoDB stores; they use the registered database.
 
 - **Concurrent writes no longer silently overwrite each other (MongoDB).**
   Repositories that read a document and replaced it whole now condition the
@@ -391,13 +590,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a conflict. The low-risk sites still open, and the known residual gaps, are
   listed in
   `docs/architecture/mongo-write-concurrency.md`.
+
 - **Benefit-plan plan-year boundaries no longer shift with the host time
   zone.** `PlanYearStart` and `PlanYearEnd` were stored as local times, so on
   a host east of UTC a January 1 start fell in the previous year. They now use
   the UTC calendar-date serializer, like the accumulator plan-year fields.
+
 - **The provider-enrollment Mongo cache can hold more than one record.** Every
   upsert wrote `ObjectId.Empty` as `_id`, so the second (NPI, state) record
   failed with a duplicate-key error.
+
 - **A claim is no longer sent twice while its first send is in flight.**
   The Stedi and Mock gateways treated a `Transmitting` transmission like a
   failed one, so a second submit of the same idempotency key (or the loser of
@@ -407,11 +609,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sender is taken to have crashed and the claim may be resent. A retry of a
   failed send claims it with a conditional save first, so of two concurrent
   retries only one sends; the other gets the replay instead of a 409.
+
 - **An AR adjustment can no longer be counted twice on its balance.** Posting
   and reversing saved the balance entry, then the adjustment, and the entry
   had a fresh GUID. A retry after a failed adjustment save added a second
   entry. Entries now carry a fixed id per adjustment (`adj-post:{id}`,
   `adj-reverse:{id}`), and a retry that finds it only saves the adjustment.
+
 - **The claim lifecycle store's MongoDB indexes are created.** Its
   `EnsureIndexesAsync` declared a unique index on `_id`, which MongoDB
   rejects. That failed host start-up and left the unique tenant +
@@ -428,10 +632,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   open circuit surfaces as a 503 `HttpRequestException`, so the claims
   pipeline's "pend, don't deny" behaviour applies unchanged. See
   `docs/architecture/service-client-resilience.md`.
+
 - **Whether a claim pend is an outage is a typed flag, not reason text.**
   `ClaimAdjudicationStageResult.CheckUnavailable`, set by each stage, replaces
   substring matching of pend reasons, so rewording a message can no longer
   make an outage pend overridable by an examiner.
+
 - **claims-examiner-service no longer drops claims.pended.v1 messages.**
   - A claims-service transport failure, or a 5xx on the write-back, is
     retried with backoff.
@@ -447,6 +653,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     writes nothing, and the consumer retries the message, then
     dead-letters it. Other Anthropic failures still write `EscalateToHuman`.
   - Model dispositions outside the known set escalate to a human.
+
 - **A client's resilience timeouts follow its own `HttpClient.Timeout`.**
   The shared pipeline had given every client a 10 s attempt and a 30 s total
   timeout. That cut Stedi (30 s), FHIR Payer-to-Payer (up to 300 s), the
@@ -459,6 +666,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     constructors.
 
   The inventory is in `docs/architecture/service-client-resilience.md`.
+
 - **A failing call is retried by one layer, not two.** Clients that retry
   on their own now opt out of the shared pipeline (`WithoutChoResilience`).
   Before, a failing Stedi call made up to 9 attempts and NPPES or SAM.gov
@@ -469,6 +677,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - NPPES, which keeps `AddStandardResilienceHandler`.
   - The SAM.gov exclusions API, which keeps the screener's own loop.
   - The exclusion dataset download.
+
 - **eligibility-service uses its configured HttpClient.** A duplicate
   `AddScoped` registration had replaced the typed client and its 5 s timeout.
 
@@ -485,6 +694,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     and work-management-service already deduplicate.
 
   See `docs/architecture/claim-event-outbox.md`.
+
 - **The claim-event outbox refuses tenant-scoped databases.** Its dispatcher
   scans only the base claims database, so with `MongoDb:UseTenantScoping` a
   tenant's pending events were never retried. claims-service now fails at
@@ -492,6 +702,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of running without retries. Tenant-scoped deployments are not
   supported by the outbox yet; `Claims:EventOutbox:Enabled=false` starts
   without the dispatcher.
+
 - **The claim-event outbox age query no longer scans every claim.**
   `OldestClaimEventAsync` filtered on `PendingClaimEvents.0` and sorted on
   `PendingClaimEvents.CreatedAtMs`, neither indexed, so every dispatcher
@@ -500,37 +711,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `$exists` on the indexed path. On MongoDB the query reads one claim. Azure
   DocumentDB sorts in memory (ADR 017), over the pending claims only; this
   is not verified on a DocumentDB cluster.
+
 - **Shared Kafka producer.** `CloudHealthOffice.Events.Kafka.ChoKafkaProducer`
   has idempotence on, `acks=all` and a bounded delivery timeout.
   claims-service now publishes all its claim events through it. Six other
   services still build their own producer; they are listed in the outbox
   doc.
 
-### Changed
+- **Accumulator plan-year dates no longer shift with the host time zone.**
+  The MongoDB driver stored an `Unspecified`-kind plan-year boundary such as
+  2025-01-01 as local time converted to UTC: 07:00Z on a UTC-7 host and
+  2024-12-31T22:00Z on a UTC+2 host. On the UTC+2 host the read-back start
+  then built the previous plan year's snapshot id. Plan-year fields on
+  accumulator snapshots, events and processed-claim lease targets now use
+  `UtcCalendarDateSerializer` (Infrastructure), which stores the wall-clock
+  date as UTC. On a UTC host it writes exactly what the default serializer
+  wrote, so documents from UTC pods read back unchanged. Documents written by
+  a non-UTC host are not rewritten; they still hold the shifted value.
 
-- **Redis accumulators store integer cents.** `RedisAccumulatorService`
-  wrote amounts with `HINCRBYFLOAT` and read them back as
-  `double` → `decimal`. 10,000 × $0.10 did not sum to $1,000.00, and a
-  deductible filled exactly to its limit could read as not met. Every hash
-  value is now an integer number of hundredths (`HINCRBY`, integer Lua
-  arithmetic, cents in the per-claim journal and clamp results). An amount
-  with sub-cent precision is rejected, not rounded.
-- **Hashes written before integer cents are never read as cents.** New
-  hashes carry `__v=2`. A hash without it is a cache miss: its amounts and
-  journals are dropped, its fences are kept, and it is rebuilt from
-  claims-service. **Deploying needs benefit-plan-service scaled to zero
-  first**, because old and new pods misread each other's values. See
-  `docs/operations/ACCUMULATOR-CENTS-CUTOVER.md`.
-- **Accumulator audit rows are written before the operation returns.**
-  These are the audit writes on commit, increment and reversal. They were
-  fire-and-forget `Task.Run`s, so a write could be lost on an error or at
-  shutdown, and they used a scoped writer after its request scope had
-  ended. A failed audit write now fails the operation with
-  `AccumulatorAuditException`. The caller retries it (commits come from
-  the claims-service accumulator outbox), and the retry writes the row. For
-  increments, the audit row is written first.
+- **Eligibility's default service date is today in UTC** from the injected
+  `TimeProvider`, not the host's `DateTime.Today`. This covers quick check,
+  benefit details, accumulation and the auth-requirement lookups.
 
 ### Security
+
+- **Member and subscriber ids are masked in log lines** (`***6789`) through
+  the shared `LogSanitizer`, which also replaces control characters in
+  logged values. Claim, tenant and provider ids are not masked.
 
 - **Attachment uploads are validated before anything is stored.**
   `POST api/attachments` built the blob path from client-supplied parent ids
@@ -545,19 +752,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The parent claim, authorization or appeal must exist for the caller's
     tenant, read from the service that owns it. If that check cannot be
     made, the upload is refused with 502.
+
 - **Member last-name search is an escaped, case-insensitive prefix match**
   of at most 100 characters. Before, the caller's text was run as a
-  MongoDB `$regex`, so `.*` matched every member of the tenant. The Cosmos
-  path changes from `CONTAINS` to `STARTSWITH` to match.
+  MongoDB `$regex`, so `.*` matched every member of the tenant.
+
 - **834 enrollment events no longer store SSN or date of birth.** The raw
   snapshot on `EnrollmentEvent.RawSegment` replaces NM109 and DMG02 with
   `[REDACTED]` for the subscriber and every dependent. Names and addresses
   remain. Events stored before this change are not rewritten.
+
 - **Development hosts refuse to start on a deployed platform**
   (Kubernetes, App Service or Container Apps) unless
   `CHO_ALLOW_DEV_ON_DEPLOYED_HOST=true`, and then warn on stderr. The portal
   now runs the same check. The GKE demo renderer and
   `scripts/deploy-local.sh` set the override.
+
 - **Unexpected errors no longer return exception text.** The affected
   services are attachment, eligibility, member, provider, premium-billing,
   payment, benefit-plan, capitation, trading-partner, fhir, idcard,
@@ -570,62 +780,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provider credentialing 503 no longer carries
   `error: "credentialing_publish_failed"`. The portal still shows raw
   exception text in about 200 places; that is not yet changed.
+
 - **Secret scanning covers service `appsettings*.json` files.** The
   path-based exemption in `.gitleaks.toml` is removed, and
   `verify-gitleaks-rules.sh` fails if it returns.
+
 - **Claim transmissions are read within the caller's tenant.** This covers
   claim-status and attachment submission by transmission id, remittance
   posting and acknowledgment replay. Another tenant's transmission id is
   answered "not found", and attachment submission now requires a tenant.
+
 - **Stedi attachment submission resolves the payer within the caller's
   tenant.** Before, it read the transmission by id across tenants and
   resolved the payer under the stored record's tenant, so another tenant's
   transmission id returned a different error than an unknown one.
-
-### Fixed
-
-- **Accumulator plan-year dates no longer shift with the host time zone.**
-  The MongoDB driver stored an `Unspecified`-kind plan-year boundary such as
-  2025-01-01 as local time converted to UTC: 07:00Z on a UTC-7 host and
-  2024-12-31T22:00Z on a UTC+2 host. On the UTC+2 host the read-back start
-  then built the previous plan year's snapshot id. Plan-year fields on
-  accumulator snapshots, events and processed-claim lease targets now use
-  `UtcCalendarDateSerializer` (Infrastructure), which stores the wall-clock
-  date as UTC. On a UTC host it writes exactly what the default serializer
-  wrote, so documents from UTC pods read back unchanged. Documents written by
-  a non-UTC host are not rewritten; they still hold the shifted value.
-- **Eligibility's default service date is today in UTC** from the injected
-  `TimeProvider`, not the host's `DateTime.Today`. This covers quick check,
-  benefit details, accumulation and the auth-requirement lookups.
-
-### Changed
-
-- **CI runs the .NET unit tests a second time with `TZ=America/Phoenix`**
-  (`test-dotnet.yml` matrix). The UTC leg keeps the `.NET Unit Tests` check
-  name, artifact and coverage.
-
-- **Benefit engine: deductibles now apply on non-HDHP plans.** The benefit-plan
-  projection (`ChoBenefitPlanProvider`) emitted only copay/coinsurance rules, so
-  the engine never took the deductible unless the plan was an HDHP — claims were
-  overpaid by the unmet deductible. Benefits with `DeductibleApplies=true` now
-  project an explicit deductible rule for both network tiers.
-- **Benefit engine: unset family limits no longer zero out cost share.** A plan
-  with no family deductible or family OOP max seeded zero-limit family
-  accumulators that read as "met", so members owed nothing. Unset (null) limits
-  now mean "no limit"; an explicit $0 deductible still means no deductible; a
-  zero OOP max is treated as unset and logged. Embedded remaining amounts are
-  now bounded by the closer of the individual and family limits. Aggregate plans
-  with no family limit use the member's individual deductible / OOP max as the
-  pool instead of dropping it.
-- **ACA preventive services carry no in-network cost share** (§2713 /
-  45 CFR 147.130) regardless of the `DeductibleApplies` default, and HDHP plans
-  exempt them from deductible-first (IRS Notice 2004-23).
-- **Coinsurance stored on the percent scale (e.g. `20`) is normalized** to the
-  engine's fraction, matching how the FHIR projector reads it.
-- **Benefit engine: unmapped procedure codes deny with CARC 204** ("not covered
-  under the patient's current benefit plan") instead of CARC 18 ("exact
-  duplicate claim/service"), on both the per-line and DRG paths. Payment
-  estimates still report these as `NO_BENEFIT_MAPPING` / `needs_review`.
 
 ## [5.0.0] - 2026-10-06
 
