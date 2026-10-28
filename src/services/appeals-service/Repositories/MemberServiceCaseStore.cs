@@ -1,4 +1,5 @@
 using AppealsService.Models;
+using CloudHealthOffice.Infrastructure.Data;
 using MongoDB.Driver;
 
 namespace AppealsService.Repositories;
@@ -41,6 +42,7 @@ public sealed class MemberServiceCaseStore(IMongoDatabase db) : IMemberServiceCa
             && r.Revision == revision && r.Status == "Received", update, cancellationToken: ct)).ModifiedCount == 1;
     }
 
+    [CrossTenantQuery("Background reporter: finds decided appeals still owed to the PA reporting ledger across tenants, then reports each under its own TenantId.")]
     public async Task<IReadOnlyList<MemberServiceCase>> ListUnreportedAppealDecisionsAsync(DateTime now, int limit,
         CancellationToken ct) =>
         await _rows.Find(r => r.Status == "DecisionRecorded" && r.DecisionOutcome != null && r.AuthorizationId != null
