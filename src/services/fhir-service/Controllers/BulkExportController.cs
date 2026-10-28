@@ -99,6 +99,44 @@ public class BulkExportController : FhirControllerBase
         return KickOffAsync(BulkExportLevel.PayerToPayer, groupId: null, type, since, outputFormat, ct, receivingPayerId);
     }
 
+    /// <summary>
+    /// GET or POST /fhir/r4/Group/{groupId}/$davinci-data-export — the PDex
+    /// Payer-to-Payer bulk export of a Group <c>$bulk-member-match</c> answered
+    /// with (G-35). Only the matched Group of the client that asked for it,
+    /// with <c>exportType=hl7.fhir.us.davinci-pdex#payertopayer</c>; each member
+    /// is exported as <c>PayerToPayer/$export</c> exports it, consent judged
+    /// again when the export runs. <c>_until</c> and <c>_typeFilter</c> are
+    /// refused rather than ignored.
+    /// </summary>
+    [HttpGet("Group/{groupId}/$davinci-data-export")]
+    [HttpPost("Group/{groupId}/$davinci-data-export")]
+    public Task<IActionResult> DavinciDataExport(
+        string groupId,
+        [FromQuery(Name = "exportType")] string? exportType,
+        [FromQuery(Name = "_type")] string? type,
+        [FromQuery(Name = "_since")] string? since,
+        [FromQuery(Name = "_until")] string? until,
+        [FromQuery(Name = "_typeFilter")] string? typeFilter,
+        [FromQuery(Name = "_outputFormat")] string? outputFormat,
+        CancellationToken ct)
+    {
+        if (!IsBackendSystemCaller)
+            return Task.FromResult(FhirForbidden(PayerToPayerController.BackendOnlyMessage));
+        if (!TryBindReceivingPayer(null, _logger, "bulk export", out var receivingPayerId))
+            return Task.FromResult(FhirForbidden(PayerToPayerController.PayerBindingMessage));
+
+        if (!string.Equals(exportType, PayerToPayerExportType, StringComparison.Ordinal))
+            return Task.FromResult(FhirBadRequest($"exportType must be {PayerToPayerExportType}."));
+        if (!string.IsNullOrEmpty(until) || !string.IsNullOrEmpty(typeFilter))
+            return Task.FromResult(FhirBadRequest("_until and _typeFilter are not supported."));
+
+        return KickOffAsync(BulkExportLevel.PayerToPayer, groupId, type, since, outputFormat, ct, receivingPayerId,
+            path: $"Group/{Uri.EscapeDataString(groupId)}/$davinci-data-export");
+    }
+
+    /// <summary>The PDex export type of a Payer-to-Payer <c>$davinci-data-export</c>.</summary>
+    public const string PayerToPayerExportType = "hl7.fhir.us.davinci-pdex#payertopayer";
+
     /// <summary>GET /fhir/r4/$export-status/{jobId} — poll export job status</summary>
     [HttpGet("$export-status/{jobId}")]
     public async Task<IActionResult> ExportStatus(string jobId, CancellationToken ct)
@@ -171,12 +209,12 @@ public class BulkExportController : FhirControllerBase
     /// </summary>
     private async Task<IActionResult> KickOffAsync(
         BulkExportLevel level, string? groupId, string? type, string? since, string? outputFormat, CancellationToken ct,
-        string? receivingPayerId = null)
+        string? receivingPayerId = null, string? path = null)
     {
         if (!HasRespondAsyncHeader())
             return FhirBadRequest("Bulk Data export requires 'Prefer: respond-async' header");
 
-        var path = level switch
+        path ??= level switch
         {
             BulkExportLevel.Group => $"Group/{Uri.EscapeDataString(groupId!)}/$export",
             BulkExportLevel.Patient => "Patient/$export",

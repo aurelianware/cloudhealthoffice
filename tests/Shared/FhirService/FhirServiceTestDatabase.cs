@@ -98,6 +98,14 @@ public static class FhirServiceTestDatabase
                 services.AddSingleton<global::FhirService.Services.PayerToPayer.Outbound.Bulk.IPayerToPayerBulkOutboundJobStore,
                     global::FhirService.Services.PayerToPayer.Outbound.Bulk.InMemoryPayerToPayerBulkOutboundJobStore>();
             }
+
+            // PDex $bulk-member-match Groups (G-35), registered with bulk export.
+            if (services.Any(d => d.ServiceType == typeof(global::FhirService.Services.PayerToPayer.BulkMemberMatch.IPayerToPayerMatchGroupStore)))
+            {
+                services.RemoveAll<global::FhirService.Services.PayerToPayer.BulkMemberMatch.IPayerToPayerMatchGroupStore>();
+                services.AddSingleton<global::FhirService.Services.PayerToPayer.BulkMemberMatch.IPayerToPayerMatchGroupStore,
+                    global::FhirService.Services.PayerToPayer.BulkMemberMatch.InMemoryPayerToPayerMatchGroupStore>();
+            }
         });
 
         return builder;

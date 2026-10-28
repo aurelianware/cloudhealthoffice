@@ -33,7 +33,21 @@ public interface IPayerToPayerMemberMatchService
     Task<MemberMatchResult> MatchAsync(MemberMatchRequest request, CancellationToken ct = default);
 }
 
-public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchService
+/// <summary>
+/// One member of a PDex <c>$bulk-member-match</c>, matched the way the single
+/// operation matches but sorted the way the bulk one reports (G-35).
+/// </summary>
+public interface IPayerToPayerBulkMemberMatcher
+{
+    /// <summary>
+    /// Matched, <see cref="MemberMatchOutcome.ConsentNotAccepted"/> for a member
+    /// that matched but whose consent cannot be honoured, or another outcome
+    /// for a member not matched.
+    /// </summary>
+    Task<MemberMatchResult> MatchMemberOfBulkAsync(MemberMatchRequest request, CancellationToken ct = default);
+}
+
+public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchService, IPayerToPayerBulkMemberMatcher
 {
     private readonly IPayerToPayerMemberMatchSource _source;
     private readonly IPayerToPayerConsentAttestationStore _attestations;
@@ -74,20 +88,75 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
         if (!criteria.IsSufficient)
             return Failed(request, MemberMatchOutcome.InsufficientCriteria);
 
+        var resolved = await ResolveAsync(tenantId, criteria, ct);
+        if (resolved.Outcome != MemberMatchOutcome.Matched)
+            return Failed(request, resolved.Outcome, resolved.Member?.MemberId);
+
+        // The consent must be this member's: its patient bears one of the member's
+        // identifiers, or agrees on family name and birth date. Otherwise one
+        // consent could be replayed for any member. Answered as no match, so a
+        // match that a mismatched consent spoiled reveals nothing more.
+        if (!NamesMember(consent, resolved))
+            return Failed(request, MemberMatchOutcome.NoMatch, consentFailure: PdexConsentFailure.PatientNotBound);
+
+        return await AcceptAsync(request, tenantId, consent, resolved, now, ct);
+    }
+
+    /// <summary>
+    /// One member of a PDex <c>$bulk-member-match</c>. The bulk operation sorts
+    /// each member into matched, not matched, or matched but consent-constrained,
+    /// so here the member is resolved first and the consent judged after:
+    /// <see cref="MemberMatchOutcome.ConsentNotAccepted"/> means the member
+    /// matched and its consent cannot be honoured (unusable, or naming another
+    /// person). Every outcome other than Matched and ConsentNotAccepted is a
+    /// member not matched. Nothing is recorded unless the consent is accepted.
+    /// </summary>
+    public async Task<MemberMatchResult> MatchMemberOfBulkAsync(MemberMatchRequest request, CancellationToken ct = default)
+    {
+        var tenantId = request.TenantId?.Trim() ?? string.Empty;
+        if (!string.Equals(tenantId, _source.ServedTenantId, StringComparison.Ordinal))
+            return Failed(request, MemberMatchOutcome.TenantMismatch);
+
+        var criteria = MemberMatchCriteria.From(request);
+        if (!criteria.IsSufficient)
+            return Failed(request, MemberMatchOutcome.InsufficientCriteria);
+
+        var resolved = await ResolveAsync(tenantId, criteria, ct);
+        if (resolved.Outcome != MemberMatchOutcome.Matched)
+            return Failed(request, resolved.Outcome, resolved.Member?.MemberId);
+
+        var now = _time.GetUtcNow().UtcDateTime;
+        var consent = PdexConsentValidator.Validate(request.Consent, request.ReceivingPayerId, _localPayerId, now);
+        if (!consent.Valid)
+            return Failed(request, MemberMatchOutcome.ConsentNotAccepted, resolved.Member!.MemberId, consent.Failure);
+        if (!NamesMember(consent, resolved))
+            return Failed(request, MemberMatchOutcome.ConsentNotAccepted, resolved.Member!.MemberId,
+                PdexConsentFailure.PatientNotBound);
+
+        return await AcceptAsync(request, tenantId, consent, resolved, now, ct);
+    }
+
+    /// <summary>
+    /// The member and coverage the criteria resolve to, decided fail-safe:
+    /// anything short of exactly one member with one coverage context is not a
+    /// match.
+    /// </summary>
+    private async Task<Resolution> ResolveAsync(string tenantId, MemberMatchCriteria criteria, CancellationToken ct)
+    {
         var candidates = await _source.GetCandidatesAsync(tenantId, criteria, ct);
         // The source cannot look these criteria up (an SSN-only request where
         // SSNs cannot be searched, ADR 020): no match can be proven either way.
         if (!candidates.Searchable)
-            return Failed(request, MemberMatchOutcome.InsufficientCriteria);
+            return new(MemberMatchOutcome.InsufficientCriteria);
         // More candidates than the source reads: a unique match cannot be
         // proven, so the request is answered as ambiguous rather than guessed.
         if (!candidates.Complete)
-            return Failed(request, MemberMatchOutcome.AmbiguousMatch);
+            return new(MemberMatchOutcome.AmbiguousMatch);
         // A supplied SSN the source cannot compare could contradict the member on
         // file (another person sharing a name and birth date): ignoring it would
         // let that contradiction pass, so the request is answered as ambiguous.
         if (criteria.Ssn is not null && !candidates.SsnVerifiable)
-            return Failed(request, MemberMatchOutcome.AmbiguousMatch);
+            return new(MemberMatchOutcome.AmbiguousMatch);
         var members = candidates.Members;
 
         // A supplied member/subscriber id is the only criterion that needs a
@@ -111,8 +180,8 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
             if (strong.Count > 1) break;
         }
 
-        if (strong.Count == 0) return Failed(request, MemberMatchOutcome.NoMatch);
-        if (strong.Count > 1) return Failed(request, MemberMatchOutcome.AmbiguousMatch);
+        if (strong.Count == 0) return new(MemberMatchOutcome.NoMatch);
+        if (strong.Count > 1) return new(MemberMatchOutcome.AmbiguousMatch);
 
         var (matched, matchedCoverages) = strong[0];
         // Coverage selection always needs the matched member's coverages; fetch
@@ -122,18 +191,26 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
 
         var selection = PayerToPayerCoverageSelector.Select(matchedCoverages, criteria);
         if (selection.Outcome == CoverageSelectionOutcome.Ambiguous)
-            return Failed(request, MemberMatchOutcome.AmbiguousCoverage, matched.MemberId);
+            return new(MemberMatchOutcome.AmbiguousCoverage, matched);
 
-        // The consent must be this member's: its patient bears one of the member's
-        // identifiers, or agrees on family name and birth date. Otherwise one
-        // consent could be replayed for any member. Answered as no match, so a
-        // match that a mismatched consent spoiled reveals nothing more.
-        if (!consent.NamesMember(
-                matchedCoverages.Select(c => c.SubscriberId).Append(matched.MemberId), matched.LastName, matched.Dob))
-            return Failed(request, MemberMatchOutcome.NoMatch, consentFailure: PdexConsentFailure.PatientNotBound);
+        return new(MemberMatchOutcome.Matched, matched, matchedCoverages, selection.Coverage);
+    }
 
-        // Bound to the requesting payer: the export it asks for next is served
-        // to that payer, for this member, while the consent is in force.
+    private static bool NamesMember(PdexConsentValidation consent, Resolution resolved)
+        => consent.NamesMember(
+            resolved.Coverages.Select(c => c.SubscriberId).Append(resolved.Member!.MemberId),
+            resolved.Member.LastName, resolved.Member.Dob);
+
+    /// <summary>
+    /// Records the accepted consent for the requesting payer, so the export it
+    /// asks for next is served to that payer, for this member, while the consent
+    /// is in force.
+    /// </summary>
+    private async Task<MemberMatchResult> AcceptAsync(
+        MemberMatchRequest request, string tenantId, PdexConsentValidation consent, Resolution resolved, DateTime now,
+        CancellationToken ct)
+    {
+        var matched = resolved.Member!;
         await _attestations.RecordAsync(new PayerToPayerConsentAttestation
         {
             TenantId = tenantId,
@@ -147,13 +224,22 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
             RecordedBy = request.InitiatedBy ?? "unknown",
         }, ct);
 
-        var audit = Audit(request, MemberMatchOutcome.Matched, matched.MemberId, selection.Coverage?.CoverageId,
+        var audit = Audit(request, MemberMatchOutcome.Matched, matched.MemberId, resolved.Coverage?.CoverageId,
             consent.Fingerprint);
         _logger.LogInformation(
             "P2P member-match: tenant={Tenant} receivingPayer={Payer} member={Member} coverage={Coverage}",
             LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.ReceivingPayerId), LogSanitizer.MaskId(audit.MatchedMemberId), LogSanitizer.Sanitize(audit.SelectedCoverageId));
 
-        return MemberMatchResult.Matched(matched, selection.Coverage, audit);
+        return MemberMatchResult.Matched(matched, resolved.Coverage, audit);
+    }
+
+    private sealed record Resolution(
+        MemberMatchOutcome Outcome,
+        ChoMember? Member = null,
+        IReadOnlyList<ChoCoverage>? MatchedCoverages = null,
+        ChoCoverage? Coverage = null)
+    {
+        public IReadOnlyList<ChoCoverage> Coverages => MatchedCoverages ?? [];
     }
 
     private MemberMatchResult Failed(

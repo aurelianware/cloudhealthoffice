@@ -90,6 +90,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   start a bulk export at `Patient/$export`. It exports the same attributed panel
   as `Group/{providerId}/$export`. It needs `system/Patient.read` (or a
   wildcard) and a backend token.
+- **PDex bulk member match (G-35).** With `BulkExport:Enabled`, a requesting
+  payer can match many members at once with `POST Group/$bulk-member-match`
+  (PDex 2.1 Parameters, one `MemberBundle` per member, up to
+  `BulkExport:MaxMembersPerMatch`, 500 by default). Each member is matched as
+  `$member-match` matches one and sorted into the PDex Groups: matched, not
+  matched, and matched but consent-constrained. With `Prefer: respond-async`
+  the answer is at a status URL. The payer can read its Groups at
+  `GET Group/{id}` for `BulkExport:MatchGroupLifetime` (30 days by default),
+  and exports the matched one with
+  `Group/{id}/$davinci-data-export?exportType=hl7.fhir.us.davinci-pdex#payertopayer`,
+  which exports each member as `PayerToPayer/$export` does. `_until` and
+  `_typeFilter` are refused. All of it needs `system/PayerToPayer.read` and a
+  client registered to the payer.
 
 ### Changed
 

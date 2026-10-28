@@ -349,6 +349,10 @@ public class SmartScopeEnforcementMiddleware
             ["PayerToPayer/$export"] = ReadAccess,
             ["PayerToPayer/$initiate"] = WriteAccess,
             ["PayerToPayer/$bulk-initiate"] = WriteAccess,
+            // PDex bulk: matching many members is a read as matching one is,
+            // and the export of the matched Group is the bulk kick-off again.
+            ["Group/$bulk-member-match"] = ReadAccess,
+            ["Group/$davinci-data-export"] = ReadAccess,
 
             // DTR: a questionnaire package is assembled and returned, not stored.
             ["Questionnaire/$questionnaire-package"] = ReadAccess,
@@ -388,6 +392,10 @@ public class SmartScopeEnforcementMiddleware
             ["PayerToPayer/$member-data-export"] = (PayerToPayerScopeResource, SystemContexts),
             // The bulk form of the same export (G-35), under the same grant.
             ["PayerToPayer/$export"] = (PayerToPayerScopeResource, SystemContexts),
+            // PDex bulk Payer-to-Payer (G-35): the match of many members, its
+            // status URL, and the export of the matched Group.
+            ["Group/$bulk-member-match"] = (PayerToPayerScopeResource, SystemContexts),
+            ["Group/$davinci-data-export"] = (PayerToPayerScopeResource, SystemContexts),
         };
 
     /// <summary>
@@ -474,11 +482,22 @@ public class SmartScopeEnforcementMiddleware
 
         // /fhir/r4/{Resource}/{id}/$operation
         if (segments.Length >= 5 && segments[4].StartsWith('$'))
-            return new FhirInteraction(resource, segments[3], OperationAccess(resource, segments[4], methodAccess),
-                string.Equals(segments[4], "$export", StringComparison.OrdinalIgnoreCase) ? BackendContexts : AllContexts);
+        {
+            var access = OperationAccess(resource, segments[4], methodAccess);
+            return ExplicitScopeOperations.TryGetValue($"{resource}/{segments[4]}", out var policy)
+                ? new FhirInteraction(policy.ScopeResource, segments[3], access, policy.Contexts, ExplicitScopeOnly: true)
+                : new FhirInteraction(resource, segments[3], access,
+                    string.Equals(segments[4], "$export", StringComparison.OrdinalIgnoreCase) ? BackendContexts : AllContexts);
+        }
 
         // Plain REST: /fhir/r4/{Resource}[/{id}]
         var id = segments.Length >= 4 ? segments[3] : null;
+
+        // The only Groups served are those a $bulk-member-match made for a
+        // payer, so reading one is part of that exchange, under its grant.
+        if (string.Equals(resource, "Group", StringComparison.OrdinalIgnoreCase))
+            return new FhirInteraction(PayerToPayerScopeResource, id, methodAccess, SystemContexts, ExplicitScopeOnly: true);
+
         return new FhirInteraction(resource, id, methodAccess, AllContexts);
     }
 
