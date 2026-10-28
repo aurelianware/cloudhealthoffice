@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Logging;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 
@@ -193,7 +194,7 @@ public sealed class SmartJwksFetcher
         {
             // The exception text can carry what an internal host said; keep it
             // in the service log, not in the administrator's response.
-            _logger.LogWarning(ex, "SMART client jwks_uri fetch failed: {Uri}", uri);
+            _logger.LogWarning(ex, "SMART client jwks_uri fetch failed: {Uri}", LogSanitizer.Sanitize(uri.AbsoluteUri));
             return (null, "The jwks_uri could not be fetched.");
         }
 

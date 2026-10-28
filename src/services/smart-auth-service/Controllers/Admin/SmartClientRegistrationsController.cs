@@ -166,7 +166,10 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             throw;
         }
 
-        var authMethod = TokenEndpointAuthMethod(confidential, asymmetric);
+        // The token endpoint authentication method the client is to use.
+        string? authMethod = !confidential ? null
+            : asymmetric ? ClientAuthenticationMethods.PrivateKeyJwt
+            : ClientAuthenticationMethods.ClientSecretBasic;
         _audit.Admin("client-registered", _actor.TenantId, _actor.UserId,
             $"client={clientId} kind={kind} auth={authMethod ?? "none"}" + (payerId is null ? "" : $" payer={payerId}"));
         return StatusCode(201, new
@@ -370,11 +373,6 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             ? new(null, null, $"jwksUri: {fetchError}")
             : new(fetched, uri, null);
     }
-
-    private static string? TokenEndpointAuthMethod(bool confidential, bool asymmetric)
-        => !confidential ? null
-            : asymmetric ? ClientAuthenticationMethods.PrivateKeyJwt
-            : ClientAuthenticationMethods.ClientSecretBasic;
 
     /// <summary>
     /// A payer id belongs to backend clients only, must be well formed, and is
