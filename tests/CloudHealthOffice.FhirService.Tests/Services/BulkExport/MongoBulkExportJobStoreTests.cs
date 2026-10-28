@@ -56,7 +56,19 @@ public sealed class MongoBulkExportJobStoreTests : IAsyncLifetime
         job.Types.Should().Equal("Patient", "Coverage");
         job.Since.Should().Be(T0.AddDays(-30));
         job.CreatedAt.Should().Be(T0);
+        job.Level.Should().Be(BulkExportLevel.Group);
+        job.GroupId.Should().Be("prov-1");
         (await _store.GetAsync("t2", "j1")).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task APatientExport_RoundTripsWithNoGroup()
+    {
+        await _store.CreateAsync(Job("t1", "p1", T0) with { Level = BulkExportLevel.Patient, GroupId = null });
+
+        var job = await _store.GetAsync("t1", "p1");
+        job!.Level.Should().Be(BulkExportLevel.Patient);
+        job.GroupId.Should().BeNull();
     }
 
     [Fact]

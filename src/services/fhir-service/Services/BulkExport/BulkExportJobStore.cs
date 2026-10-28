@@ -14,7 +14,16 @@ public sealed record BulkExportJobRecord
     public required string TenantId { get; init; }
     public required string JobId { get; init; }
     public required string RequestedBy { get; init; }
-    public required string GroupId { get; init; }
+
+    /// <summary>
+    /// The kick-off that started it. A Group export's Group and a Patient
+    /// export's "everyone the caller may export" are the same provider panel
+    /// today; the level is kept so the two are never confused later.
+    /// </summary>
+    public BulkExportLevel Level { get; init; } = BulkExportLevel.Group;
+
+    /// <summary>The Group a Group export named; null for a Patient export.</summary>
+    public string? GroupId { get; init; }
     public required IReadOnlyList<string> Types { get; init; }
     public DateTimeOffset? Since { get; init; }
     public required string RequestUrl { get; init; }
@@ -41,6 +50,7 @@ public sealed record BulkExportJobRecord
         CreatedAt = CreatedAt,
         CompletedAt = CompletedAt,
         Request = RequestUrl,
+        Level = Level,
         GroupId = GroupId,
         ResourceTypes = Types.ToList(),
         Since = Since?.ToString("o"),
@@ -226,7 +236,8 @@ public sealed class MongoBulkExportJobStore : IBulkExportJobStore
         ["tenantId"] = j.TenantId,
         ["jobId"] = j.JobId,
         ["requestedBy"] = j.RequestedBy,
-        ["groupId"] = j.GroupId,
+        ["level"] = j.Level.ToString(),
+        ["groupId"] = j.GroupId is null ? BsonNull.Value : j.GroupId,
         ["types"] = new BsonArray(j.Types),
         ["since"] = Date(j.Since),
         ["requestUrl"] = j.RequestUrl,
@@ -248,7 +259,11 @@ public sealed class MongoBulkExportJobStore : IBulkExportJobStore
         TenantId = d["tenantId"].AsString,
         JobId = d["jobId"].AsString,
         RequestedBy = d["requestedBy"].AsString,
-        GroupId = d["groupId"].AsString,
+        // Jobs written before Patient exports existed are all Group exports.
+        Level = d.TryGetValue("level", out var level) && Enum.TryParse<BulkExportLevel>(level.AsString, out var parsed)
+            ? parsed
+            : BulkExportLevel.Group,
+        GroupId = d.TryGetValue("groupId", out var group) && group.IsString ? group.AsString : null,
         Types = d["types"].AsBsonArray.Select(t => t.AsString).ToList(),
         Since = Date(d, "since"),
         RequestUrl = d["requestUrl"].AsString,

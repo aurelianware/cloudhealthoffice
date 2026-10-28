@@ -44,9 +44,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Group/{providerId}/$export`. fhir-service believes `provider_id` only from
   the issuer marked `IssuesChoClientRegistrations` and only on a system-scope
   token. The token's `sub` is still the client id.
+- **`Patient/$export` (G-34).** With `BulkExport:Enabled`, a provider can
+  start a bulk export at `Patient/$export`. It exports the same attributed panel
+  as `Group/{providerId}/$export`. It needs `system/Patient.read` (or a
+  wildcard) and a backend token.
 
 ### Changed
 
+- Every bulk export kick-off (`$export`, `Patient/$export`,
+  `Group/{id}/$export`) now accepts GET, the Bulk Data IG's kick-off method, as
+  well as POST.
 - The public directory's Location, HealthcareService, Endpoint and
   OrganizationAffiliation are new; its Practitioner, PractitionerRole and
   Organization now declare only the Plan-Net profiles, and PractitionerRole

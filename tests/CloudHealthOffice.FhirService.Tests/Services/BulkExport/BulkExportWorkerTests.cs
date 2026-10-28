@@ -62,6 +62,7 @@ public class BulkExportWorkerTests
     private async Task<BulkExportJob> StartAsync(string? types = null, string? since = null)
         => await Service().InitiateExportAsync(new BulkExportRequest
         {
+            Level = BulkExportLevel.Group,
             GroupId = Provider,
             RequestedBy = Provider,
             Type = types,
@@ -204,15 +205,30 @@ public class BulkExportWorkerTests
     {
         var service = Service();
         await service.Invoking(s => s.InitiateExportAsync(
-                new BulkExportRequest { GroupId = "prov-2", RequestedBy = Provider }, Tenant))
+                new BulkExportRequest { Level = BulkExportLevel.Group, GroupId = "prov-2", RequestedBy = Provider }, Tenant))
             .Should().ThrowAsync<BulkExportGroupNotFoundException>();
         await service.Invoking(s => s.InitiateExportAsync(
-                new BulkExportRequest { GroupId = Provider, RequestedBy = null }, Tenant))
+                new BulkExportRequest { Level = BulkExportLevel.Group, GroupId = Provider, RequestedBy = null }, Tenant))
             .Should().ThrowAsync<BulkExportGroupNotFoundException>();
         await service.Invoking(s => s.InitiateExportAsync(
                 new BulkExportRequest { RequestedBy = Provider }, Tenant))
             .Should().ThrowAsync<BulkExportNotImplementedException>();
         _jobs.Jobs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Initiate_PatientExport_IsTheCallersPanel_WithNoGroup()
+    {
+        var job = await Service().InitiateExportAsync(
+            new BulkExportRequest { Level = BulkExportLevel.Patient, GroupId = "ignored", RequestedBy = Provider }, Tenant);
+
+        job.Level.Should().Be(BulkExportLevel.Patient);
+        job.GroupId.Should().BeNull();
+        job.RequestedBy.Should().Be(Provider);
+
+        await Service().Invoking(s => s.InitiateExportAsync(
+                new BulkExportRequest { Level = BulkExportLevel.Patient, RequestedBy = " " }, Tenant))
+            .Should().ThrowAsync<BulkExportRequestException>();
     }
 
     [Theory]
@@ -225,7 +241,8 @@ public class BulkExportWorkerTests
     {
         await Service().Invoking(s => s.InitiateExportAsync(new BulkExportRequest
             {
-                GroupId = Provider, RequestedBy = Provider, Type = type, Since = since, OutputFormat = format,
+                Level = BulkExportLevel.Group, GroupId = Provider, RequestedBy = Provider, Type = type, Since = since,
+                OutputFormat = format,
             }, Tenant))
             .Should().ThrowAsync<BulkExportRequestException>();
         _jobs.Jobs.Should().BeEmpty();

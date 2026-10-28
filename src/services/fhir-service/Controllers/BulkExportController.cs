@@ -12,8 +12,8 @@ namespace FhirService.Controllers;
 /// FHIR Bulk Data Access endpoints for system-level and group-level export.
 /// The default service explicitly refuses initiation until durable export exists.
 /// With <c>BulkExport:Enabled</c>, a provider exports its own attributed panel
-/// as <c>Group/{its provider id}/$export</c> (G-34); a system-level export is
-/// still refused.
+/// as <c>Group/{its provider id}/$export</c> or <c>Patient/$export</c> (G-34);
+/// a system-level export is still refused.
 ///
 /// Every job belongs to the caller that started it. Another caller, in the same
 /// tenant or not, is answered as if the job did not exist, whether it polls,
@@ -40,95 +40,40 @@ public class BulkExportController : FhirControllerBase
         _logger = logger;
     }
 
-    /// <summary>POST /fhir/r4/$export — initiate system-level bulk export</summary>
+    /// <summary>GET or POST /fhir/r4/$export — initiate system-level bulk export</summary>
+    [HttpGet("$export")]
     [HttpPost("$export")]
-    public async Task<IActionResult> SystemExport(
+    public Task<IActionResult> SystemExport(
         [FromQuery(Name = "_type")] string? type,
         [FromQuery(Name = "_since")] string? since,
         [FromQuery(Name = "_outputFormat")] string? outputFormat,
         CancellationToken ct)
-    {
-        if (!HasRespondAsyncHeader())
-            return FhirBadRequest("Bulk Data export requires 'Prefer: respond-async' header");
+        => KickOffAsync(BulkExportLevel.System, groupId: null, type, since, outputFormat, ct);
 
-        var request = new BulkExportRequest
-        {
-            Type = type,
-            Since = since,
-            OutputFormat = outputFormat ?? "application/fhir+ndjson",
-            RequestUrl = $"{FhirBaseUrl}/$export{RawQueryString}",
-            RequestedBy = CallerId,
-        };
+    /// <summary>
+    /// GET or POST /fhir/r4/Patient/$export — initiate patient-level bulk
+    /// export: every patient the caller may export (for a provider, its
+    /// attributed panel).
+    /// </summary>
+    [HttpGet("Patient/$export")]
+    [HttpPost("Patient/$export")]
+    public Task<IActionResult> PatientExport(
+        [FromQuery(Name = "_type")] string? type,
+        [FromQuery(Name = "_since")] string? since,
+        [FromQuery(Name = "_outputFormat")] string? outputFormat,
+        CancellationToken ct)
+        => KickOffAsync(BulkExportLevel.Patient, groupId: null, type, since, outputFormat, ct);
 
-        BulkExportJob job;
-        try
-        {
-            job = await _exportService.InitiateExportAsync(request, TenantId, ct);
-        }
-        catch (BulkExportNotImplementedException)
-        {
-            return BulkExportNotImplemented();
-        }
-        catch (BulkExportRequestException ex)
-        {
-            return FhirBadRequest(ex.Message);
-        }
-
-        _logger.LogInformation(
-            "Bulk export initiated: job={JobId}, tenant={TenantId}",
-            LogSanitizer.Sanitize(job.JobId), LogSanitizer.Sanitize(TenantId));
-
-        Response.Headers["Content-Location"] = $"{FhirBaseUrl}/$export-status/{job.JobId}";
-        return StatusCode(202);
-    }
-
-    /// <summary>POST /fhir/r4/Group/{groupId}/$export — initiate group-level bulk export</summary>
+    /// <summary>GET or POST /fhir/r4/Group/{groupId}/$export — initiate group-level bulk export</summary>
+    [HttpGet("Group/{groupId}/$export")]
     [HttpPost("Group/{groupId}/$export")]
-    public async Task<IActionResult> GroupExport(
+    public Task<IActionResult> GroupExport(
         string groupId,
         [FromQuery(Name = "_type")] string? type,
         [FromQuery(Name = "_since")] string? since,
         [FromQuery(Name = "_outputFormat")] string? outputFormat,
         CancellationToken ct)
-    {
-        if (!HasRespondAsyncHeader())
-            return FhirBadRequest("Bulk Data export requires 'Prefer: respond-async' header");
-
-        var request = new BulkExportRequest
-        {
-            Type = type,
-            Since = since,
-            OutputFormat = outputFormat ?? "application/fhir+ndjson",
-            GroupId = groupId,
-            RequestUrl = $"{FhirBaseUrl}/Group/{Uri.EscapeDataString(groupId)}/$export{RawQueryString}",
-            RequestedBy = CallerId,
-        };
-
-        BulkExportJob job;
-        try
-        {
-            job = await _exportService.InitiateExportAsync(request, TenantId, ct);
-        }
-        catch (BulkExportNotImplementedException)
-        {
-            return BulkExportNotImplemented();
-        }
-        catch (BulkExportRequestException ex)
-        {
-            return FhirBadRequest(ex.Message);
-        }
-        catch (BulkExportGroupNotFoundException)
-        {
-            return FhirNotFound("Group", groupId);
-        }
-
-        _logger.LogInformation(
-            "Group bulk export initiated: job={JobId}, group={GroupId}, tenant={TenantId}",
-            LogSanitizer.Sanitize(job.JobId), LogSanitizer.Sanitize(groupId), LogSanitizer.Sanitize(TenantId));
-
-        Response.Headers["Content-Location"] = $"{FhirBaseUrl}/$export-status/{job.JobId}";
-        return StatusCode(202);
-    }
+        => KickOffAsync(BulkExportLevel.Group, groupId, type, since, outputFormat, ct);
 
     /// <summary>GET /fhir/r4/$export-status/{jobId} — poll export job status</summary>
     [HttpGet("$export-status/{jobId}")]
@@ -195,6 +140,60 @@ public class BulkExportController : FhirControllerBase
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// One kick-off, whichever level: the Bulk Data IG's GET, or POST with the
+    /// parameters on the query string. Answers 202 with the status URL.
+    /// </summary>
+    private async Task<IActionResult> KickOffAsync(
+        BulkExportLevel level, string? groupId, string? type, string? since, string? outputFormat, CancellationToken ct)
+    {
+        if (!HasRespondAsyncHeader())
+            return FhirBadRequest("Bulk Data export requires 'Prefer: respond-async' header");
+
+        var path = level switch
+        {
+            BulkExportLevel.Group => $"Group/{Uri.EscapeDataString(groupId!)}/$export",
+            BulkExportLevel.Patient => "Patient/$export",
+            _ => "$export",
+        };
+
+        var request = new BulkExportRequest
+        {
+            Level = level,
+            Type = type,
+            Since = since,
+            OutputFormat = outputFormat ?? "application/fhir+ndjson",
+            GroupId = groupId,
+            RequestUrl = $"{FhirBaseUrl}/{path}{RawQueryString}",
+            RequestedBy = CallerId,
+        };
+
+        BulkExportJob job;
+        try
+        {
+            job = await _exportService.InitiateExportAsync(request, TenantId, ct);
+        }
+        catch (BulkExportNotImplementedException)
+        {
+            return BulkExportNotImplemented();
+        }
+        catch (BulkExportRequestException ex)
+        {
+            return FhirBadRequest(ex.Message);
+        }
+        catch (BulkExportGroupNotFoundException)
+        {
+            return FhirNotFound("Group", groupId ?? string.Empty);
+        }
+
+        _logger.LogInformation(
+            "Bulk export initiated: job={JobId}, level={Level}, tenant={TenantId}",
+            LogSanitizer.Sanitize(job.JobId), level, LogSanitizer.Sanitize(TenantId));
+
+        Response.Headers["Content-Location"] = $"{FhirBaseUrl}/$export-status/{job.JobId}";
+        return StatusCode(202);
+    }
 
     /// <summary>The validated caller, as Provider Access identifies it.</summary>
     private string? CallerId => ProviderAccessAuthorizationFilter.ResolveCallerId(HttpContext);

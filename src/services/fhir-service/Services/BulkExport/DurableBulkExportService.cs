@@ -13,8 +13,10 @@ namespace FhirService.Services.BulkExport;
 /// <para>
 /// The Group is the provider's own panel, so its id is the caller's own
 /// provider id. A provider exporting any other Group is answered as if that
-/// Group did not exist. A system-level <c>$export</c> (every member in the
-/// tenant) is still refused as not implemented: it has no approved caller.
+/// Group did not exist. <c>Patient/$export</c> exports every patient the
+/// caller may see, which for a provider is that same panel. A system-level
+/// <c>$export</c> (every member in the tenant) is still refused as not
+/// implemented: it has no approved caller.
 /// </para>
 /// </summary>
 public sealed partial class DurableBulkExportService : IBulkExportService
@@ -41,12 +43,25 @@ public sealed partial class DurableBulkExportService : IBulkExportService
     public async Task<BulkExportJob> InitiateExportAsync(
         BulkExportRequest request, string tenantId, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(request.GroupId))
-            throw new BulkExportNotImplementedException();
+        switch (request.Level)
+        {
+            case BulkExportLevel.Group:
+                if (string.IsNullOrWhiteSpace(request.RequestedBy)
+                    || !string.Equals(request.GroupId, request.RequestedBy, StringComparison.Ordinal))
+                    throw new BulkExportGroupNotFoundException();
+                break;
 
-        if (string.IsNullOrWhiteSpace(request.RequestedBy)
-            || !string.Equals(request.GroupId, request.RequestedBy, StringComparison.Ordinal))
-            throw new BulkExportGroupNotFoundException();
+            // Every patient the caller may export: for a provider, the same
+            // attributed panel its own Group holds, decided member by member
+            // when the export runs.
+            case BulkExportLevel.Patient:
+                if (string.IsNullOrWhiteSpace(request.RequestedBy))
+                    throw new BulkExportRequestException("The caller could not be identified.");
+                break;
+
+            default:
+                throw new BulkExportNotImplementedException();
+        }
 
         if (request.OutputFormat is { } format && !NdjsonFormats.Contains(format))
             throw new BulkExportRequestException("_outputFormat must be application/fhir+ndjson.");
@@ -55,8 +70,9 @@ public sealed partial class DurableBulkExportService : IBulkExportService
         {
             TenantId = tenantId,
             JobId = Guid.NewGuid().ToString("N"),
-            RequestedBy = request.RequestedBy,
-            GroupId = request.GroupId,
+            RequestedBy = request.RequestedBy!,
+            Level = request.Level,
+            GroupId = request.Level == BulkExportLevel.Group ? request.GroupId : null,
             Types = ParseTypes(request.Type),
             Since = ParseSince(request.Since),
             RequestUrl = request.RequestUrl ?? string.Empty,

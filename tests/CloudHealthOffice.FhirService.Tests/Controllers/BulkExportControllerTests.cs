@@ -28,14 +28,18 @@ public class BulkExportControllerTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task DefaultService_Returns501OutcomeWithoutJobLocationOrManifest(bool group)
+    [InlineData("system")]
+    [InlineData("patient")]
+    [InlineData("group")]
+    public async Task DefaultService_Returns501OutcomeWithoutJobLocationOrManifest(string level)
     {
         var controller = Controller();
-        var result = group
-            ? await controller.GroupExport("group-1", null, null, null, default)
-            : await controller.SystemExport("Patient,Coverage", null, null, default);
+        var result = level switch
+        {
+            "group" => await controller.GroupExport("group-1", null, null, null, default),
+            "patient" => await controller.PatientExport(null, null, null, default),
+            _ => await controller.SystemExport("Patient,Coverage", null, null, default),
+        };
 
         var obj = result.Should().BeOfType<ObjectResult>().Subject;
         obj.StatusCode.Should().Be(501);
