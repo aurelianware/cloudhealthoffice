@@ -22,6 +22,7 @@ public sealed class ScenarioInventoryTests
     [InlineData("INFERNO-PDEX-CLIENT-001")]
     [InlineData("INFERNO-USCORE-SERVER-001")]
     [InlineData("INFERNO-C4BB-SERVER-001")]
+    [InlineData("INFERNO-PLANNET-SERVER-001")]
     public void The_planned_scenario_inventory_is_present(string scenarioId)
     {
         Inventory.Scenario(scenarioId).Should().NotBeNull();
@@ -39,6 +40,7 @@ public sealed class ScenarioInventoryTests
             .Should().BeEquivalentTo([
                 "BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001",
                 "INFERNO-USCORE-SERVER-001", "INFERNO-C4BB-SERVER-001",
+                "INFERNO-PLANNET-SERVER-001",
             ]);
     }
 
@@ -210,5 +212,31 @@ public sealed class ScenarioInventoryTests
         Inventory.Scenario("INFERNO-C4BB-SERVER-001").InfernoSuite
             .Should().Be("c4bb_v200",
                 "the non-financial suite at this pin cannot match CHO's -Basis profiles in either direction");
+    }
+
+    /// <summary>
+    /// The Plan-Net suite judges the public directory, which the regulation
+    /// makes available without credentials. Pointing it at the authenticated
+    /// base, or handing it a token, would test a different claim.
+    /// </summary>
+    [Fact]
+    public void The_plan_net_suite_judges_the_public_directory_without_a_token()
+    {
+        var scenario = Inventory.Scenario("INFERNO-PLANNET-SERVER-001");
+
+        scenario.ChoSurface.Should().Be(ChoSurfaces.PublicDirectory);
+        scenario.InfernoInputs.Should().NotContain("smart_auth_info");
+        InfernoSuiteScenario.BuildInputs(scenario, ChoSeedFixture.Load())
+            .Single(input => input.Name == "url").Value
+            .Should().Be(ChoUnderTest.ContainerPublicDirectoryUrl);
+    }
+
+    [Fact]
+    public void Every_scenario_names_a_surface_the_harness_knows()
+    {
+        foreach (var scenario in Inventory.Scenarios)
+        {
+            scenario.ChoSurface.Should().BeOneOf(ChoSurfaces.Fhir, ChoSurfaces.PublicDirectory);
+        }
     }
 }

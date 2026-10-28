@@ -16,7 +16,7 @@ namespace DaVinciInterop.Tests.Harness;
 /// </para>
 ///
 /// <para>
-/// Both kit scenarios share this because they differ only in data: which suite,
+/// Every kit scenario shares this because they differ only in data: which suite,
 /// which groups, which inputs. That is inventory, and it lives in
 /// interop/scenarios.json. Two copies of this orchestration would be two places
 /// for the Inferno API contract to rot.
@@ -73,7 +73,7 @@ public static class InfernoSuiteScenario
             await environment.StartAsync(ReadinessStage.HttpReachable, buildImages: true, cancellationToken);
 
             await SeedAsync(run, cancellationToken);
-            await PreflightAsync(run, client, cancellationToken);
+            await PreflightAsync(run, client, scenario.ChoSurface, cancellationToken);
 
             var runner = new InfernoRunner(kit.ApiBaseUrl);
             var fixture = ChoSeedFixture.Load();
@@ -164,16 +164,16 @@ public static class InfernoSuiteScenario
     /// </para>
     /// </summary>
     private static async Task PreflightAsync(
-        InteropScenarioRun run, InteropHttpClient client, CancellationToken cancellationToken)
+        InteropScenarioRun run, InteropHttpClient client, string surface, CancellationToken cancellationToken)
     {
-        var response = await client.GetFhirAsync(
-            $"{ChoUnderTest.HostFhirBaseUrl}/metadata", cancellationToken);
+        var baseUrl = ChoUnderTest.HostBaseUrl(surface);
+        var response = await client.GetFhirAsync($"{baseUrl}/metadata", cancellationToken);
 
         if (response.StatusCode != System.Net.HttpStatusCode.OK)
         {
             throw new InteropEnvironmentException(
                 $"CHO's own FHIR surface answered HTTP {(int)response.StatusCode} at " +
-                $"{ChoUnderTest.HostFhirBaseUrl}/metadata, so the kit was never started. A conformance " +
+                $"{baseUrl}/metadata, so the kit was never started. A conformance " +
                 "suite run against an endpoint that is not serving reports failures about the harness, " +
                 "not about CHO.");
         }
@@ -196,7 +196,7 @@ public static class InfernoSuiteScenario
 
         return scenario.InfernoInputs.Select(name => name switch
         {
-            "url" => new InfernoInput { Name = "url", Value = ChoUnderTest.ContainerFhirBaseUrl },
+            "url" => new InfernoInput { Name = "url", Value = ChoUnderTest.ContainerBaseUrl(scenario.ChoSurface) },
             "patient_ids" => new InfernoInput { Name = "patient_ids", Value = fixture.Member.MemberId },
             "smart_auth_info" => InfernoInput.AccessToken("smart_auth_info", token),
             _ => throw new InteropEnvironmentException(
@@ -276,6 +276,7 @@ public static class InfernoSuiteScenario
     {
         "US Core" => "3.1.1",
         "CARIN BB" => "2.2.0",
+        "Plan-Net" => "1.2.0",
         _ => null,
     };
 

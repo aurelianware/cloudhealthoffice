@@ -47,6 +47,15 @@ public sealed record InteropScenarioDefinition
     /// <summary>The suite inputs the harness supplies, by the names the suite declares.</summary>
     [JsonPropertyName("infernoInputs")] public List<string> InfernoInputs { get; init; } = new();
 
+    /// <summary>
+    /// Which CHO FHIR surface the suite's <c>url</c> input names:
+    /// <c>fhir</c> (the authenticated base, the default) or
+    /// <c>publicDirectory</c> (the unauthenticated Plan-Net directory). A
+    /// Plan-Net suite pointed at the authenticated base would be judging a
+    /// surface the regulation does not make public.
+    /// </summary>
+    [JsonPropertyName("choSurface")] public string ChoSurface { get; init; } = ChoSurfaces.Fhir;
+
     public ChoRole ParsedChoRole => Enum.Parse<ChoRole>(ChoRole);
 
     /// <summary>The suite id, or a diagnostic naming the scenario that lacks one.</summary>
@@ -55,6 +64,13 @@ public sealed record InteropScenarioDefinition
             ? InfernoSuite!
             : throw new InvalidOperationException(
                 $"Scenario '{Id}' declares no infernoSuite in interop/scenarios.json.");
+}
+
+/// <summary>The CHO FHIR surfaces a conformance scenario can point a kit at.</summary>
+public static class ChoSurfaces
+{
+    public const string Fhir = "fhir";
+    public const string PublicDirectory = "publicDirectory";
 }
 
 /// <summary>The scenario inventory as loaded from interop/scenarios.json.</summary>

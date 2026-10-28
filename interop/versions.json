@@ -225,6 +225,53 @@
       "startupNotes": "Started by INFERNO-USCORE-SERVER-001, which runs the us_core_v311 CapabilityStatement, Patient and Encounter groups. v1.1.6 stops suppressing HL7 validator messages in the 6.1.0 server suite, so a system that passed an earlier release may not pass this one — a stricter result rather than a regression."
     },
     {
+      "name": "inferno-framework/davinci-plan-net-test-kit",
+      "key": "inferno-plan-net",
+      "role": "ConformanceRunner",
+      "protocols": ["Plan-Net"],
+      "upstreamRepository": "https://github.com/inferno-framework/davinci-plan-net-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "tag": "v0.13.4",
+        "commit": "c7d67b1c9d9838f3a9eba7d7ed47bb2902d22aec",
+        "reference": "https://github.com/inferno-framework/davinci-plan-net-test-kit@v0.13.4",
+        "pinProvenance": "git ls-remote --tags resolved refs/tags/v0.13.4 to this commit on 2026-10-28, and it was the latest release on that date."
+      },
+      "compose": {
+        "service": "inferno-plan-net",
+        "profiles": ["interop-plan-net"]
+      },
+      "endpoints": {
+        "fhirBaseUrl": null,
+        "cdsHooksBaseUrl": null,
+        "readinessUrl": "http://127.0.0.1:14571/"
+      },
+      "auth": {
+        "mode": "None",
+        "note": "The public Provider Directory requires no authentication, and the scenario supplies none: the kit's OAuth input is optional and is left unset, so the run also proves the directory answers an anonymous client."
+      },
+      "inferno": {
+        "apiBaseUrl": "http://127.0.0.1:14571/api",
+        "suites": ["davinci_plan_net_server_v110"],
+        "suitesProvenance": "Read from the Inferno::TestSuite ids in the kit's own lib/ at the pinned tag, not from documentation.",
+        "runner": "docker compose build && docker compose up (upstream run.sh) from a checkout at the pinned tag"
+      },
+      "implementationGuides": {
+        "Plan-Net": "1.1.0"
+      },
+      "igVersionProvenance": "Read from package/package.json inside lib/davinci_plan_net_test_kit/igs/package.tgz at the pinned tag (hl7.fhir.us.davinci-pdex-plan-net 1.1.0).",
+      "knownMismatches": [
+        "The kit is generated from Plan-Net 1.1.0; CHO serves 1.2.0 (the version CMS-0057-F's Provider Directory API recommends). The profile, extension and CapabilityStatement canonicals are unversioned and identical in both releases, so the kit matches CHO's resources and validates them against the 1.1.0 definitions. A finding that turns on a 1.1.0 rule 1.2.0 changed is a kit-version artifact, not a CHO defect; the resolution is a kit release generated against 1.2.0, never serving 1.1.0 to pass."
+      ],
+      "requiredEgress": [
+        "https://github.com — the kit is fetched at the pinned tag during explicit setup",
+        "https://rubygems.org and Docker Hub — the kit image is built locally from upstream's Dockerfile",
+        "https://packages.fhir.org — the bundled hl7_validator_service loads IG packages"
+      ],
+      "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Started by INFERNO-PLANNET-SERVER-001, which runs the whole davinci_plan_net_server_v110 suite against the interop-cho profile's public directory (/fhir/r4/directory/interop). This is the kit that judges the public Provider Directory (gap-matrix G-36)."
+    },
+    {
       "name": "hl7/fhir-validator (validator_cli.jar)",
       "key": "hl7-validator",
       "role": "ConformanceRunner",

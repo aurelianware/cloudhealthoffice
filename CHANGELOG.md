@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The public Provider Directory is Da Vinci PDex Plan-Net 1.2.0 (G-36).**
+  `/fhir/r4/directory/{directory}/` now serves all nine Plan-Net profiles:
+  networks, organizations (including the plan's own payer Organization),
+  Practitioner, PractitionerRole, Location, HealthcareService,
+  OrganizationAffiliation, InsurancePlan and Endpoint. It answers every SHALL
+  search parameter, chain, `_has` reverse chain, `_include` and `_revinclude`
+  of the Plan-Net CapabilityStatement, which `/metadata` instantiates, plus
+  vread and ETags. provider-service projects the directory
+  (`/fhir/plannet-export/*`, read by fhir-service only); fhir-service holds each
+  published directory as an in-memory snapshot, rebuilt in the background after
+  `PublicProviderDirectory:RefreshMinutes` (60). New settings:
+  `PublicProviderDirectory:Payers:<directory id>:*` (the plan's own
+  Organization; Plan-Net requires its address), `RefreshMinutes` and
+  `MaxResources`. See `docs/architecture/public-provider-directory.md`.
+- **The Inferno Plan-Net kit runs nightly against the public directory**
+  (`INFERNO-PLANNET-SERVER-001`, kit `v0.13.4`, generated from Plan-Net 1.1.0),
+  with no token. The `interop-cho` profile gains benefit-plan-service and its
+  Redis, and the seeder writes a network, two providers and a plan for it.
 - **SMART Backend Services client authentication (`private_key_jwt`, G-42).**
   A tenant administrator can register a backend client with its public keys,
   as a JWK Set (`jwks`) or a `jwksUri`, instead of receiving a client secret.
@@ -21,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The public directory's Location, HealthcareService, Endpoint and
+  OrganizationAffiliation are new; its Practitioner, PractitionerRole and
+  Organization now declare only the Plan-Net profiles, and PractitionerRole
+  carries Plan-Net codes (ProviderRoleCS, specialties from the Plan-Net value
+  set) instead of the CHO tier and secondary specialties. The authenticated
+  `/fhir/r4/` routes are unchanged.
 - **`.well-known/smart-configuration`** now advertises RS384/ES384 (and the
   256/512 variants) for `private_key_jwt`, the `client-confidential-asymmetric`
   capability, and the `refresh_token` grant (D-25).
