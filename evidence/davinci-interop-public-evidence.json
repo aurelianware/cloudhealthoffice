@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "davinci-interoperability",
-  "generatedAtUtc": "2026-10-28T13:02:36Z",
-  "sourceCommit": "a9018891c4dc14cac27dcf6485b8b8b31c649914",
-  "sourceCommitShort": "a9018891c4dc",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/a9018891c4dc14cac27dcf6485b8b8b31c649914",
+  "generatedAtUtc": "2026-10-28T16:30:20Z",
+  "sourceCommit": "4f60a46e07437058d529cbdaa6012131aa7d1352",
+  "sourceCommitShort": "4f60a46e0743",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/4f60a46e07437058d529cbdaa6012131aa7d1352",
   "inventoryReviewedUtc": "2026-10-23T00:00:00Z",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence. External interoperability results never change a CMS-0057-F scenario status, and CMS acceptance statuses never imply an interoperability result. See docs/interop/davinci.md and docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md.",
@@ -139,6 +139,26 @@
       "exercised": true
     },
     {
+      "name": "inferno-framework/davinci-plan-net-test-kit",
+      "key": "inferno-plan-net",
+      "role": "ConformanceRunner",
+      "protocols": [
+        "Plan-Net"
+      ],
+      "upstreamRepository": "https://github.com/inferno-framework/davinci-plan-net-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "reference": "https://github.com/inferno-framework/davinci-plan-net-test-kit@v0.13.4",
+        "sourceCommit": "c7d67b1c9d9838f3a9eba7d7ed47bb2902d22aec"
+      },
+      "implementationGuides": {
+        "Plan-Net": "1.1.0"
+      },
+      "igVersionProvenance": "Read from package/package.json inside lib/davinci_plan_net_test_kit/igs/package.tgz at the pinned tag (hl7.fhir.us.davinci-pdex-plan-net 1.1.0).",
+      "exercised": true
+    },
+    {
       "name": "hl7/fhir-validator (validator_cli.jar)",
       "key": "hl7-validator",
       "role": "ConformanceRunner",
@@ -269,6 +289,19 @@
       "testedVersion": null
     },
     {
+      "id": "INFERNO-PLANNET-SERVER-001",
+      "title": "Inferno Plan-Net server suite against CHO's public Provider Directory",
+      "protocol": "Plan-Net",
+      "choRole": "Server",
+      "externalTarget": "inferno-plan-net",
+      "implemented": true,
+      "linkedFromScenario": null,
+      "description": "Run the whole davinci-plan-net-test-kit server suite against the public Provider Directory the interop-cho profile publishes at /fhir/r4/directory/interop (G-36): the CapabilityStatement, and the Endpoint, InsurancePlan, OrganizationAffiliation, PractitionerRole, Practitioner, HealthcareService, Location, Network and Organization groups, each with its searches, chains, reverse chains, includes and revincludes. The whole suite rather than named groups, because CHO claims every Plan-Net resource type. Only url is supplied: the suite's OAuth input is optional and is left unset, because the directory is public and a run with a token would not prove that, and the suite finds instances with parameterless searches (its default) over what scripts/interop/seed-cho.mjs seeded. The kit is generated from Plan-Net 1.1.0 while CHO serves 1.2.0; see knownMismatches for inferno-plan-net in interop/versions.json.",
+      "status": "NotRun",
+      "linkedArtifact": null,
+      "testedVersion": null
+    },
+    {
       "id": "INFERNO-PDEX-CLIENT-001",
       "title": "Inferno PDex payer-client suite driven by CHO",
       "protocol": "PDex",
@@ -283,17 +316,17 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-10-28T13:02:20.7831652+00:00",
+    "generatedAtUtc": "2026-10-28T16:29:29.7498482+00:00",
     "environment": "CI",
-    "choCommit": "a9018891c4dc14cac27dcf6485b8b8b31c649914",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/a9018891c4dc14cac27dcf6485b8b8b31c649914",
+    "choCommit": "4f60a46e07437058d529cbdaa6012131aa7d1352",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/4f60a46e07437058d529cbdaa6012131aa7d1352",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "notRun": 6,
-      "total": 9
+      "notRun": 7,
+      "total": 10
     },
     "findings": [
       {
