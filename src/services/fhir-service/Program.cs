@@ -57,11 +57,37 @@ builder.Services.AddSingleton(new CloudHealthOffice.Infrastructure.Middleware.Te
         "/fhir/r4/metadata", "/fhir/r4/.well-known", "/fhir/r4/adapter-status",
         "/fhir/r4/StructureDefinition", "/fhir/r4/OperationDefinition",
         "/fhir/r4/CodeSystem", "/fhir/r4/ValueSet",
+        // The public Provider Directory takes its tenant from the published
+        // directory id, never from a token (PublicProviderDirectoryController).
+        "/fhir/r4/directory",
     ],
 });
 builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment);
 builder.Services.AddFhirCallerSchemes(builder.Configuration);
 builder.Services.AddFhirAccessPolicies();
+
+// ── Public Provider Directory (CMS-9115-F, D-29) ─────────────────────────────
+// Directories are published per plan in configuration; none by default.
+builder.Services.Configure<FhirService.Services.PublicDirectory.PublicProviderDirectoryOptions>(
+    builder.Configuration.GetSection(FhirService.Services.PublicDirectory.PublicProviderDirectoryOptions.SectionName));
+var publicDirectoryPermit = builder.Configuration.GetValue(
+    $"{FhirService.Services.PublicDirectory.PublicProviderDirectoryOptions.SectionName}:PermitPerMinute", 300);
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // Unauthenticated, so the only key is the client address. Behind a proxy
+    // that does not forward it, every caller shares one bucket: size the
+    // permit for that.
+    options.AddPolicy(FhirService.Controllers.PublicProviderDirectoryController.RateLimitPolicy, http =>
+        System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+            http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+            {
+                PermitLimit = publicDirectoryPermit,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+});
 
 // ── Shared infrastructure ─────────────────────────────────────────────────────
 // ICacheProvider (via AddChoCaching) backs the tenant-config and rule-set
@@ -748,6 +774,7 @@ app.UseMiddleware<SmartIssuerTenantMiddleware>();
 app.UseMiddleware<SmartScopeEnforcementMiddleware>();
 // After scope enforcement: only reads the caller was allowed to make are counted.
 app.UseMiddleware<FhirService.Middleware.ApiDisclosureRecordingMiddleware>();
+app.UseRateLimiter();
 app.MapControllers();
 app.MapChoHealthChecks();
 app.Run();
