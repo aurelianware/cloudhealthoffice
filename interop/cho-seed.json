@@ -15,7 +15,13 @@
       "coverage:read",
       "coverage:write",
       "claims:read",
-      "claims:work"
+      "claims:work",
+      "networks:read",
+      "networks:write",
+      "providers:read",
+      "providers:write",
+      "benefits:read",
+      "settings:manage"
     ]
   },
   "member": {
@@ -129,5 +135,77 @@
         }
       ]
     }
-  ]
+  ],
+  "directory": {
+    "_comment": "What the public Plan-Net Provider Directory publishes (G-36, INFERNO-PLANNET-SERVER-001): one network, one practitioner and one hospital in it, and one plan on that network with one plan document (published as a Plan-Net Endpoint). The NPIs 1888888884 and 1999999992 are synthetic, with valid check digits, and distinct from the claims NPIs so the directory seed cannot change what the CARIN BB suite reads. The directory id and payer are configured on cho-fhir-service in interop/docker-compose.interop.yml.",
+    "directoryId": "interop",
+    "network": {
+      "id": "INTEROP-NET-1",
+      "organizationId": "INTEROP-NET-1",
+      "name": "Interop Gold Network (synthetic)",
+      "networkType": "HMO",
+      "lineOfBusiness": "Commercial",
+      "status": "Active",
+      "effectiveDate": "2026-01-01T00:00:00Z",
+      "identifiers": [{ "system": "urn:cho:interop:network", "value": "INTEROP-NET-1" }],
+      "contactInfo": { "primaryContactName": "Network Services (synthetic)", "phone": "555-0150" }
+    },
+    "providers": [
+      {
+        "_comment": "Individual. 207R00000X (Internal Medicine) is in Plan-Net's IndividualAndGroupSpecialtiesVS, so the role carries a specialty.",
+        "npi": "1888888884",
+        "providerType": "Individual",
+        "status": "Active",
+        "firstName": "Testcase",
+        "lastName": "Practitioner",
+        "credentials": "MD",
+        "primarySpecialty": "Internal Medicine",
+        "taxonomyCode": "207R00000X",
+        "address": "10 Synthetic Way",
+        "city": "Springfield",
+        "state": "FL",
+        "zipCode": "32401",
+        "phone": "555-0160",
+        "acceptingNewPatients": true,
+        "handicapAccessible": true,
+        "networkParticipations": [
+          { "networkId": "INTEROP-NET-1", "lineOfBusiness": "Commercial", "networkTier": "Tier1", "effectiveDate": "2026-01-01T00:00:00Z", "acceptingNewPatients": true }
+        ]
+      },
+      {
+        "_comment": "Organization. 282N00000X (General Acute Care Hospital) gives a HealthcareService of category hosp and an OrganizationAffiliation of role hospital.",
+        "npi": "1999999992",
+        "providerType": "Organization",
+        "status": "Active",
+        "organizationName": "Interop General Hospital (synthetic)",
+        "primarySpecialty": "General Acute Care Hospital",
+        "taxonomyCode": "282N00000X",
+        "address": "20 Synthetic Way",
+        "city": "Springfield",
+        "state": "FL",
+        "zipCode": "32401",
+        "phone": "555-0170",
+        "acceptingNewPatients": true,
+        "networkParticipations": [
+          { "networkId": "INTEROP-NET-1", "lineOfBusiness": "Commercial", "networkTier": "Tier1", "effectiveDate": "2026-01-01T00:00:00Z", "acceptingNewPatients": true }
+        ]
+      }
+    ],
+    "plan": {
+      "_comment": "Distinct from the coverage fixture's INTEROP-PLAN-1, so the directory seed cannot change claims adjudication. tenantId is overwritten by benefit-plan-service from the token; the model requires it to be present.",
+      "tenantId": "interop-tenant",
+      "planId": "INTEROP-DIR-PLAN-1",
+      "planName": "Interop Gold HMO (synthetic)",
+      "payer": "Interop Health Plan (synthetic)",
+      "effectiveDate": "2026-01-01T00:00:00Z",
+      "planType": "HMO",
+      "lineOfBusiness": "Commercial",
+      "networkTiers": [
+        { "tierName": "In-Network", "tierLevel": 1, "networkId": "INTEROP-NET-1" }
+      ],
+      "documents": [
+        { "docType": "SBC", "location": "https://example.org/interop/sbc.pdf", "contentType": "application/pdf", "displayName": "Summary of Benefits and Coverage (synthetic)" }
+      ]
+    }
+  }
 }

@@ -17,6 +17,7 @@
 #   interop-dtr-inferno  Inferno DTR test kit          (no scenario yet — see docs/interop/davinci.md)
 #   interop-c4bb         Inferno CARIN BB test kit     (INFERNO-C4BB-SERVER-001; judges Provider Access EOBs)
 #   interop-us-core      Inferno US Core test kit      (INFERNO-USCORE-SERVER-001; the US Core floor)
+#   interop-plan-net     Inferno Plan-Net test kit     (INFERNO-PLANNET-SERVER-001; judges the public Provider Directory)
 #
 # Normally you do not run this file by hand — `scripts/interop/run.sh` and the
 # harness (InteropEnvironment) bring up exactly the services a scenario needs.
@@ -47,6 +48,7 @@ volumes:
   inferno_dtr_data:
   inferno_c4bb_data:
   inferno_us_core_data:
+  inferno_plan_net_data:
   inferno_redis_data:
   inferno_validator_igs:
 
@@ -225,6 +227,52 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # InsurancePlan and Endpoint for the public Provider Directory (G-36): the
+  # Plan-Net directory fhir-service publishes reads them here, alongside the
+  # networks and providers it reads from cho-provider-service. benefit-plan-
+  # service needs Redis, so the profile carries its own rather than borrowing
+  # the kits' queue.
+  interop-redis:
+    profiles: [interop-cho]
+    networks: [interop]
+    # redis:7-alpine, the digest inferno-redis pins.
+    image: redis@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  cho-benefit-plan-service:
+    build:
+      context: ..
+      dockerfile: src/services/benefit-plan-service/Dockerfile
+      args:
+        REGISTRY: ${CHO_IMAGE_REGISTRY:-mcr.microsoft.com}
+    profiles: [interop-cho]
+    networks: [interop]
+    ports:
+      - "127.0.0.1:${INTEROP_CHO_BENEFIT_PLAN_PORT:-18030}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      MongoDb__ConnectionString: mongodb://interop-mongo:27017
+      MongoDb__DatabaseName: InteropBenefitPlanDB
+      Redis__ConnectionString: interop-redis:6379
+      Services__ClaimsServiceUrl: http://cho-claims-service:8080/
+      Services__ProviderServiceUrl: http://cho-provider-service:8080/
+      # The seeded plan's document link (published as a Plan-Net Endpoint) is
+      # an https URL on this host; nothing ever fetches it.
+      BenefitPlan__AllowedDocumentHosts__0: example.org
+    depends_on:
+      interop-mongo:
+        condition: service_healthy
+      interop-redis:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
   # ── SMART authorization server ────────────────────────────────────────────
   # Previously absent: SmartAuth__Issuer defaulted to http://localhost:18024,
   # where nothing listened, so discovery and JWKS retrieval could not succeed
@@ -285,6 +333,23 @@ services:
       Services__EncounterServiceUrl: http://cho-encounter-service:8080/
       Services__ClaimsServiceUrl: http://cho-claims-service:8080/
       Services__ProviderServiceUrl: http://cho-provider-service:8080/
+      Services__BenefitPlanServiceUrl: http://cho-benefit-plan-service:8080/
+      # The public Plan-Net Provider Directory (G-36) INFERNO-PLANNET-SERVER-001
+      # judges, at /fhir/r4/directory/interop. The id must match
+      # ChoUnderTest.PublicDirectoryId. The payer is the plan's own synthetic
+      # Organization; Plan-Net requires it to carry an address.
+      PublicProviderDirectory__Directories__interop: interop-tenant
+      PublicProviderDirectory__Payers__interop__Name: Interop Health Plan (synthetic)
+      PublicProviderDirectory__Payers__interop__Phone: 555-0199
+      PublicProviderDirectory__Payers__interop__Website: https://example.org/interop-health-plan
+      PublicProviderDirectory__Payers__interop__AddressLine: 1 Synthetic Way
+      PublicProviderDirectory__Payers__interop__City: Springfield
+      PublicProviderDirectory__Payers__interop__State: FL
+      PublicProviderDirectory__Payers__interop__PostalCode: "32401"
+      # The kit issues several hundred searches from one address in a few
+      # minutes; the production default (300 a minute) would throttle the
+      # conformance run rather than test it.
+      PublicProviderDirectory__PermitPerMinute: "100000"
       # Provider Access attribution from claims history rather than from a
       # configured panel (ADR 028, docs/architecture/provider-access-attribution.md).
       # The Inferno Provider Access suites exercise the attribution decision, so
@@ -305,6 +370,8 @@ services:
       cho-encounter-service:
         condition: service_healthy
       cho-provider-service:
+        condition: service_healthy
+      cho-benefit-plan-service:
         condition: service_healthy
       cho-smart-auth-service:
         condition: service_healthy
@@ -474,13 +541,45 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # The kit that judges the public Provider Directory (gap-matrix G-36). It is
+  # generated from Plan-Net 1.1.0 while CHO serves 1.2.0; see startupNotes for
+  # inferno-plan-net in interop/versions.json before reading a result.
+  inferno-plan-net:
+    profiles: [interop-plan-net]
+    networks: [interop]
+    image: cho-interop/inferno-plan-net:local
+    build:
+      context: ${INTEROP_INFERNO_PLAN_NET_DIR:-./.external/davinci-plan-net-test-kit}
+    environment: *inferno-sidecars
+    volumes:
+      - inferno_plan_net_data:/opt/inferno/data
+    depends_on: *inferno-depends
+    ports:
+      - "127.0.0.1:${INTEROP_INFERNO_PLAN_NET_PORT:-14571}:4567"
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-plan-net-worker:
+    profiles: [interop-plan-net]
+    networks: [interop]
+    image: cho-interop/inferno-plan-net:local
+    build:
+      context: ${INTEROP_INFERNO_PLAN_NET_DIR:-./.external/davinci-plan-net-test-kit}
+    command: ["bundle", "exec", "sidekiq", "-r", "./worker.rb"]
+    environment: *inferno-sidecars
+    volumes:
+      - inferno_plan_net_data:/opt/inferno/data
+    depends_on: *inferno-depends
+    security_opt:
+      - no-new-privileges:true
+
   # ── Shared sidecars for the kit profiles ──────────────────────────────────
   # Both carry every kit profile, so starting a kit starts them and nothing
   # else does. Pinned by digest for the same reason the reference
   # implementations are: the validator's output IS the conformance verdict, so a
   # floating tag would mean the verdict could change without a reviewable diff.
   inferno-redis:
-    profiles: [interop-pdex, interop-dtr-inferno, interop-c4bb, interop-us-core]
+    profiles: [interop-pdex, interop-dtr-inferno, interop-c4bb, interop-us-core, interop-plan-net]
     networks: [interop]
     # redis:7-alpine, resolved on 2026-10-23. Upstream's own compose uses a
     # floating `redis`; the queue's exact version does not affect a verdict, but
@@ -498,7 +597,7 @@ services:
       - no-new-privileges:true
 
   inferno-validator:
-    profiles: [interop-pdex, interop-dtr-inferno, interop-c4bb, interop-us-core]
+    profiles: [interop-pdex, interop-dtr-inferno, interop-c4bb, interop-us-core, interop-plan-net]
     networks: [interop]
     # infernocommunity/inferno-resource-validator:latest, resolved on
     # 2026-10-23. This is the service each suite's `fhir_resource_validator`

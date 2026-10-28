@@ -331,15 +331,29 @@ What the runner can now do that it could not before:
   must never produce. An ambiguous short id is an error rather than a first
   match.
 
-### The two conformance scenarios
+### The conformance scenarios
 
-Both are in [`interop/scenarios.json`](../../interop/scenarios.json) and both
-now run:
+All three are in [`interop/scenarios.json`](../../interop/scenarios.json) and
+all three run:
 
 | Scenario | Suite | Groups | What it judges |
 | --- | --- | --- | --- |
 | `INFERNO-USCORE-SERVER-001` | `us_core_v311` | `capability_statement`, `patient`, `encounter` | The US Core floor CMS-0057-F sets |
 | `INFERNO-C4BB-SERVER-001` | `c4bb_v200` (financial) | `capability_statement_group`, `patient`, `coverage`, `eob`, `organization`, `practitioner` | Patient, Coverage, Organization, Practitioner and the adjudicated EOB |
+| `INFERNO-PLANNET-SERVER-001` | `davinci_plan_net_server_v110` | all | The public Provider Directory (G-36), with no token |
+
+`INFERNO-PLANNET-SERVER-001` is the one scenario pointed somewhere other than
+the authenticated FHIR base: its `choSurface` is `publicDirectory`, so the kit's
+`url` is the directory the profile publishes (`/fhir/r4/directory/interop`), and
+it is given no token, because the directory is public by regulation and a run
+with credentials would not prove that. The kit finds what it tests with
+parameterless searches, so the seeder writes one network, one practitioner, one
+hospital and one plan with a document, and then reads every Plan-Net type back
+from the directory without a token before the kit starts. The pinned kit is
+generated from Plan-Net **1.1.0** while CHO serves **1.2.0**; the canonicals are
+the same, so it matches CHO's resources, but a finding that turns on a rule
+1.2.0 changed is the kit's version, not CHO (see `knownMismatches` on
+`inferno-plan-net`).
 
 Which groups run is **inventory data, not code**. It is a claim about what CHO
 serves, so it belongs where a reader can check it against the scenario's
@@ -359,9 +373,10 @@ What is deliberately not run, and why:
 Run them with:
 
 ```bash
-./scripts/interop/fetch-inferno.sh us-core c4bb   # explicit setup, once
+./scripts/interop/fetch-inferno.sh us-core c4bb plan-net   # explicit setup, once
 ./scripts/interop/run.sh inferno us-core
 ./scripts/interop/run.sh inferno c4bb
+./scripts/interop/run.sh inferno plan-net
 ./scripts/interop/run.sh inferno all
 ```
 
@@ -470,6 +485,7 @@ Suite ids at the current pins:
 | DTR `v0.17.1` | `dtr_payer_server`, `dtr_full_ehr`, `dtr_light_ehr`, `dtr_smart_app` |
 | CARIN BB `v0.16.3` | `c4bb_v110`, `c4bb_v200`, `c4bb_v200devnonfinancial`, `c4bb_v200_client` |
 | US Core `v1.1.6` | `us_core_v311`, `us_core_v400`, `us_core_v501`, `us_core_v610`, `us_core_v700`, `us_core_v800` (plus a `us_core_client_*` suite per version) |
+| Plan-Net `v0.13.4` | `davinci_plan_net_server_v110` |
 
 Every id above is read from the `Inferno::TestSuite` ids in each kit's own `lib/`
 at the pinned tag, not from documentation.
@@ -480,8 +496,9 @@ them. `us_core_v311` is CHO's suite — `Cms0057ComplianceChecker` and the
 CapabilityStatement target US Core 3.1.1+, the floor CMS-0057-F sets — with
 `us_core_v610` the natural second run.
 
-Fetch them with `./scripts/interop/fetch-inferno.sh us-core c4bb`; both were
-fetched at these pins and the script's pin check passed.
+Fetch them with `./scripts/interop/fetch-inferno.sh us-core c4bb plan-net`; all
+three were fetched at these pins and the script's pin check passed (Plan-Net on
+2026-10-28).
 
 ### What the `interop-cho` profile runs
 
@@ -495,6 +512,7 @@ suite means. It serves CHO's **real** path:
 | `FhirAdapters:Sources:Encounter` = `ChoNative` | `cho-encounter-service` |
 | `FhirAdapters:Sources:Claim` = `ChoNative` | `cho-claims-service` |
 | `FhirAdapters:Resources:Practitioner` (Hybrid, proxied) | `cho-provider-service` |
+| `PublicProviderDirectory:Directories:interop` (public Plan-Net directory) | `cho-provider-service` (networks, providers) and `cho-benefit-plan-service` (InsurancePlan, Endpoint; with its own `interop-redis`) |
 
 `FhirAdapters:Mode` is `Hybrid`, not `Demo`, because that is what the bindings
 make true — `Demo` is the honest label only while `MockFhirDataAdapter` serves
@@ -649,13 +667,14 @@ Known at the current pins:
 
 ## 13. Limitations
 
-* Five scenarios execute today: `BR-PAS-SUBMIT-001` (PAS), `BR-CRD-001` (CRD),
-  `BR-DTR-001` (DTR), `INFERNO-USCORE-SERVER-001` (US Core) and
-  `INFERNO-C4BB-SERVER-001` (CARIN BB). Everything else in the inventory is
+* Six scenarios execute today: `BR-PAS-SUBMIT-001` (PAS), `BR-CRD-001` (CRD),
+  `BR-DTR-001` (DTR), `INFERNO-USCORE-SERVER-001` (US Core),
+  `INFERNO-C4BB-SERVER-001` (CARIN BB) and `INFERNO-PLANNET-SERVER-001`
+  (Plan-Net). Everything else in the inventory is
   `NotRun` — deliberately, because a placeholder must never look like a result.
 * CHO participates in the three br-payer scenarios as the **client**, through its
   real production code (`MetadataController` for PAS, `CrdController` for CRD);
-  its FHIR service does not run as a container in any of them. In the two
+  its FHIR service does not run as a container in any of them. In the three
   conformance scenarios CHO is the **server**, and the `interop-cho` profile runs
   its real services. Its contents are described under "What the `interop-cho`
   profile runs".

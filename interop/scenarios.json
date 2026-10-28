@@ -106,6 +106,25 @@
       "description": "Run the carin-for-blue-button-test-kit c4bb_v200 (financial) groups against the seeded interop-cho profile: the CapabilityStatement, and the Patient, Coverage, ExplanationOfBenefit, Organization and Practitioner groups. The RelatedPerson group is not run because CHO publishes no RelatedPerson; the SMART launch group is not run because the harness supplies an already-issued token rather than driving a launch; and the visual inspection and attestation group is manual by construction. The kit's c4bb_v200devnonfinancial suite is NOT run at the current pin: it checks the superseded '-NonFinancial' canonicals from the April 2023 branch snapshot it bundles, while CHO declares the CARIN BB 2.2.0 '-Basis' profiles, so it could not match CHO's EOBs in either direction. See knownMismatches for inferno-c4bb in interop/versions.json."
     },
     {
+      "id": "INFERNO-PLANNET-SERVER-001",
+      "title": "Inferno Plan-Net server suite against CHO's public Provider Directory",
+      "protocol": "Plan-Net",
+      "choRole": "Server",
+      "externalTarget": "inferno-plan-net",
+      "requiredServices": [
+        "cho-fhir-service",
+        "cho-provider-service",
+        "cho-benefit-plan-service",
+        "inferno-plan-net"
+      ],
+      "implemented": true,
+      "infernoSuite": "davinci_plan_net_server_v110",
+      "infernoGroups": [],
+      "infernoInputs": ["url"],
+      "choSurface": "publicDirectory",
+      "description": "Run the whole davinci-plan-net-test-kit server suite against the public Provider Directory the interop-cho profile publishes at /fhir/r4/directory/interop (G-36): the CapabilityStatement, and the Endpoint, InsurancePlan, OrganizationAffiliation, PractitionerRole, Practitioner, HealthcareService, Location, Network and Organization groups, each with its searches, chains, reverse chains, includes and revincludes. The whole suite rather than named groups, because CHO claims every Plan-Net resource type. Only url is supplied: the suite's OAuth input is optional and is left unset, because the directory is public and a run with a token would not prove that, and the suite finds instances with parameterless searches (its default) over what scripts/interop/seed-cho.mjs seeded. The kit is generated from Plan-Net 1.1.0 while CHO serves 1.2.0; see knownMismatches for inferno-plan-net in interop/versions.json."
+    },
+    {
       "id": "INFERNO-PDEX-CLIENT-001",
       "title": "Inferno PDex payer-client suite driven by CHO",
       "protocol": "PDex",

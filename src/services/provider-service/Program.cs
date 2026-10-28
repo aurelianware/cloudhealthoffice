@@ -208,6 +208,11 @@ builder.Services.AddSingleton<IFhirPractitionerRoleProjector, FhirPractitionerRo
 // and mirrors the 5.7 / 5.8 projector pattern.
 builder.Services.AddSingleton<IFhirOrganizationProjector, FhirOrganizationProjector>();
 
+// Da Vinci PDex Plan-Net 1.2.0 projection (G-36) — the feed fhir-service
+// reads to build each published public Provider Directory
+// (PlanNetDirectoryExportController). Composes the three projectors above.
+builder.Services.AddSingleton<IPlanNetDirectoryProjector, PlanNetDirectoryProjector>();
+
 // HTTP context accessor (repositories read the token tenant from the request)
 builder.Services.AddHttpContextAccessor();
 

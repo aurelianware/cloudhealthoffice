@@ -33,6 +33,35 @@ public static class ChoUnderTest
     public static string HostFhirBaseUrl => $"{Host("INTEROP_CHO_FHIR_PORT", 18023)}/fhir/r4";
 
     /// <summary>
+    /// The public Provider Directory the profile publishes (G-36). Its id must
+    /// match <c>PublicProviderDirectory__Directories__interop</c> on
+    /// cho-fhir-service in the compose file.
+    /// </summary>
+    public const string PublicDirectoryId = "interop";
+
+    /// <summary>The public directory, as a kit on the Compose network addresses it.</summary>
+    public const string ContainerPublicDirectoryUrl = ContainerFhirBaseUrl + "/directory/" + PublicDirectoryId;
+
+    /// <summary>The public directory, from the host.</summary>
+    public static string HostPublicDirectoryUrl => $"{HostFhirBaseUrl}/directory/{PublicDirectoryId}";
+
+    /// <summary>The base a kit is given for <paramref name="surface"/> (see <see cref="ChoSurfaces"/>).</summary>
+    public static string ContainerBaseUrl(string surface) => surface switch
+    {
+        ChoSurfaces.Fhir => ContainerFhirBaseUrl,
+        ChoSurfaces.PublicDirectory => ContainerPublicDirectoryUrl,
+        _ => throw new InteropEnvironmentException($"Unknown CHO surface '{surface}' in interop/scenarios.json."),
+    };
+
+    /// <summary>The same base, as the harness reaches it from the host.</summary>
+    public static string HostBaseUrl(string surface) => surface switch
+    {
+        ChoSurfaces.Fhir => HostFhirBaseUrl,
+        ChoSurfaces.PublicDirectory => HostPublicDirectoryUrl,
+        _ => throw new InteropEnvironmentException($"Unknown CHO surface '{surface}' in interop/scenarios.json."),
+    };
+
+    /// <summary>
     /// The seeder's service URLs, as the environment variables
     /// scripts/interop/seed-cho.mjs reads.
     /// </summary>
@@ -42,6 +71,8 @@ public static class ChoUnderTest
         ["INTEROP_COVERAGE_URL"] = Host("INTEROP_CHO_COVERAGE_PORT", 18026),
         ["INTEROP_CLAIMS_URL"] = Host("INTEROP_CHO_CLAIMS_PORT", 18027),
         ["INTEROP_FHIR_URL"] = Host("INTEROP_CHO_FHIR_PORT", 18023),
+        ["INTEROP_PROVIDER_URL"] = Host("INTEROP_CHO_PROVIDER_PORT", 18029),
+        ["INTEROP_BENEFIT_PLAN_URL"] = Host("INTEROP_CHO_BENEFIT_PLAN_PORT", 18030),
     };
 
     /// <summary>The compose port variables and their defaults, for the guard test.</summary>
@@ -51,6 +82,8 @@ public static class ChoUnderTest
         ["INTEROP_CHO_MEMBER_PORT"] = 18025,
         ["INTEROP_CHO_COVERAGE_PORT"] = 18026,
         ["INTEROP_CHO_CLAIMS_PORT"] = 18027,
+        ["INTEROP_CHO_PROVIDER_PORT"] = 18029,
+        ["INTEROP_CHO_BENEFIT_PLAN_PORT"] = 18030,
     };
 
     private static string Host(string variable, int fallback)

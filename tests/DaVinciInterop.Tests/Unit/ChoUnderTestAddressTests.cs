@@ -45,6 +45,19 @@ public sealed class ChoUnderTestAddressTests
     }
 
     [Fact]
+    public void The_public_directory_the_kit_is_given_is_the_one_the_compose_file_publishes()
+    {
+        // A directory id that drifts from the compose file is answered 404 by
+        // fhir-service, and the Plan-Net kit would report that as CHO failing.
+        var tenant = ChoSeedFixture.Load().TenantId;
+
+        Compose.Should().Contain(
+            $"PublicProviderDirectory__Directories__{ChoUnderTest.PublicDirectoryId}: {tenant}",
+            "the directory the kit is pointed at must be published for the tenant the seeder writes");
+        ChoUnderTest.ContainerPublicDirectoryUrl.Should().StartWith(ChoUnderTest.ContainerFhirBaseUrl + "/directory/");
+    }
+
+    [Fact]
     public void The_addresses_the_harness_uses_are_loopback()
     {
         ChoUnderTest.HostFhirBaseUrl.Should().StartWith("http://127.0.0.1:");

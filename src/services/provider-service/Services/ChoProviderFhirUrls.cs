@@ -89,4 +89,26 @@ internal static class ChoProviderFhirUrls
     /// emitting a TaxId identifier on an Organization.
     /// </summary>
     public const string EinSystem = "urn:oid:2.16.840.1.113883.4.4";
+
+    // ── Da Vinci PDex Plan-Net 1.2.0 (public Provider Directory, G-36) ──
+
+    public const string PlanNetBase = "http://hl7.org/fhir/us/davinci-pdex-plan-net/";
+    public const string PlanNetStructureDefinitionBase = PlanNetBase + "StructureDefinition/";
+    public const string PlanNetCodeSystemBase = PlanNetBase + "CodeSystem/";
+
+    public const string PlanNetNetworkProfile = PlanNetStructureDefinitionBase + "plannet-Network";
+    public const string PlanNetLocationProfile = PlanNetStructureDefinitionBase + "plannet-Location";
+    public const string PlanNetHealthcareServiceProfile = PlanNetStructureDefinitionBase + "plannet-HealthcareService";
+    public const string PlanNetOrganizationAffiliationProfile = PlanNetStructureDefinitionBase + "plannet-OrganizationAffiliation";
+
+    public const string PlanNetNewPatientsExt = PlanNetStructureDefinitionBase + "newpatients";
+    public const string PlanNetNetworkReferenceExt = PlanNetStructureDefinitionBase + "network-reference";
+    public const string PlanNetAccessibilityExt = PlanNetStructureDefinitionBase + "accessibility";
+
+    public const string PlanNetOrgTypeSystem = PlanNetCodeSystemBase + "OrgTypeCS";
+    public const string PlanNetProviderRoleSystem = PlanNetCodeSystemBase + "ProviderRoleCS";
+    public const string PlanNetAcceptingPatientsSystem = PlanNetCodeSystemBase + "AcceptingPatientsCS";
+    public const string PlanNetAccessibilitySystem = PlanNetCodeSystemBase + "AccessibilityCS";
+    public const string PlanNetHealthcareServiceCategorySystem = PlanNetCodeSystemBase + "HealthcareServiceCategoryCS";
+    public const string PlanNetOrganizationAffiliationRoleSystem = PlanNetCodeSystemBase + "OrganizationAffiliationRoleCS";
 }

@@ -1,21 +1,25 @@
+using System.Buffers;
 using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using CloudHealthOffice.Infrastructure.Logging;
-using CloudHealthOffice.Infrastructure.Security;
-using FhirService.Services;
 using FhirService.Services.PublicDirectory;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
-using SharedTenantMiddleware = CloudHealthOffice.Infrastructure.Middleware.TenantMiddleware;
 
 namespace FhirService.Controllers;
 
 /// <summary>
-/// The public Provider Directory API (CMS-9115-F, D-29): read and search of a
-/// plan's Practitioner, PractitionerRole, Organization and InsurancePlan
-/// resources with no user authentication, as CMS requires.
+/// The public Provider Directory API (CMS-9115-F, D-29), a Da Vinci PDex
+/// Plan-Net 1.2.0 server (G-36): read, vread and search of a plan's
+/// Practitioner, PractitionerRole, Organization (plan, networks and provider
+/// organizations), Location, HealthcareService, OrganizationAffiliation,
+/// InsurancePlan and Endpoint resources, with no user authentication, as CMS
+/// requires and Plan-Net expects.
 ///
 /// The plan is named by the public directory id in the URL
 /// (<c>/fhir/r4/directory/{directory}/...</c>), which maps to a tenant only
@@ -27,16 +31,22 @@ namespace FhirService.Controllers;
 ///   * Any credential the request carries is ignored. The caller is treated as
 ///     anonymous for the whole request, so no token's tenant or scopes shape
 ///     the answer and no caller's credential travels upstream.
-///   * provider-service and benefit-plan-service are called as fhir-service,
-///     for the directory's tenant only.
-///   * Every response passes through <see cref="PublicDirectoryResponseFilter"/>,
+///   * Directory data is read by <see cref="PlanNetDirectorySource"/> as
+///     fhir-service, for the directory's tenant only, outside any request.
+///   * Everything read passes through <see cref="PublicDirectoryResponseFilter"/>,
 ///     which removes CHO-internal extensions (such as the integrity score), tax
-///     ids and inactive providers.
+///     ids and inactive providers, before it is kept.
 ///   * Requests are rate limited per client address.
 ///
+/// Answers come from the directory's snapshot (<see cref="PlanNetDirectoryStore"/>),
+/// searched in memory by <see cref="PlanNetSearchEngine"/>. Plan-Net's
+/// searches cross resource types (chains, reverse chains, includes) in ways
+/// the owning services' own search APIs were never built for, and a directory
+/// is public, low-churn data, so one consistent snapshot per directory,
+/// refreshed on a timer, is both the simpler and the more faithful design.
+///
 /// The authenticated directory on <c>/fhir/r4/Practitioner</c> and friends is
-/// unchanged. Location stays on that route only: it is served from NPPES, not
-/// from the plan's own network data.
+/// unchanged.
 /// </summary>
 [Route("fhir/r4/directory/{directory}")]
 [AllowAnonymous]
@@ -45,104 +55,217 @@ namespace FhirService.Controllers;
 public sealed class PublicProviderDirectoryController : FhirControllerBase
 {
     public const string RateLimitPolicy = "public-provider-directory";
+    private const string FhirJson = "application/fhir+json";
 
-    private readonly HttpClient _providerService;
-    private readonly HttpClient _benefitPlanService;
+    private readonly PlanNetDirectoryStore _store;
     private readonly ILogger<PublicProviderDirectoryController> _logger;
 
     public PublicProviderDirectoryController(
-        IHttpClientFactory httpClientFactory,
+        PlanNetDirectoryStore store,
         ILogger<PublicProviderDirectoryController> logger)
     {
-        _providerService = httpClientFactory.CreateClient("ProviderService");
-        _benefitPlanService = httpClientFactory.CreateClient(UpstreamClientNames.BenefitPlanService);
+        _store = store;
         _logger = logger;
     }
 
-    [HttpGet("Practitioner/{id}")]
-    [Produces("application/fhir+json")]
-    public Task<IActionResult> ReadPractitioner(string id, CancellationToken ct)
-        => FetchAsync(_providerService, "Practitioner", $"fhir/Practitioner/{Uri.EscapeDataString(id)}", id, ct);
-
-    [HttpGet("Practitioner")]
-    [Produces("application/fhir+json")]
-    public Task<IActionResult> SearchPractitioners(CancellationToken ct = default)
-        => FetchAsync(_providerService, "Practitioner", $"fhir/Practitioner{Query}", null, ct);
-
-    [HttpGet("PractitionerRole/{id}")]
-    [Produces("application/fhir+json")]
-    public Task<IActionResult> ReadPractitionerRole(string id, CancellationToken ct)
-        => FetchAsync(_providerService, "PractitionerRole", $"fhir/PractitionerRole/{Uri.EscapeDataString(id)}", id, ct);
-
-    [HttpGet("PractitionerRole")]
-    [Produces("application/fhir+json")]
-    public Task<IActionResult> SearchPractitionerRoles(CancellationToken ct = default)
-        => FetchAsync(_providerService, "PractitionerRole", $"fhir/PractitionerRole{Query}", null, ct);
-
-    [HttpGet("Organization/{id}")]
-    [Produces("application/fhir+json")]
-    public Task<IActionResult> ReadOrganization(string id, CancellationToken ct)
-        => FetchAsync(_providerService, "Organization", $"fhir/Organization/{Uri.EscapeDataString(id)}", id, ct);
-
-    [HttpGet("Organization")]
-    [Produces("application/fhir+json")]
-    public Task<IActionResult> SearchOrganizations(CancellationToken ct = default)
-        => FetchAsync(_providerService, "Organization", $"fhir/Organization{Query}", null, ct);
-
-    [HttpGet("InsurancePlan/{id}")]
-    [Produces("application/fhir+json")]
-    public Task<IActionResult> ReadInsurancePlan(string id, CancellationToken ct)
-        => FetchAsync(_benefitPlanService, "InsurancePlan", $"fhir/InsurancePlan/{Uri.EscapeDataString(id)}", id, ct);
-
-    [HttpGet("InsurancePlan")]
-    [Produces("application/fhir+json")]
-    public Task<IActionResult> SearchInsurancePlans(CancellationToken ct = default)
-        => FetchAsync(_benefitPlanService, "InsurancePlan", $"fhir/InsurancePlan{Query}", null, ct);
-
-    private string Query => HttpContext.Request.QueryString.HasValue ? HttpContext.Request.QueryString.Value! : string.Empty;
-
-    private async Task<IActionResult> FetchAsync(
-        HttpClient upstream, string resourceType, string path, string? id, CancellationToken ct)
+    private string DirectoryBaseUrl
     {
-        var loggablePath = LogSanitizer.Sanitize(path);
+        get
+        {
+            var req = HttpContext.Request;
+            return $"{req.Scheme}://{req.Host}{req.PathBase}/fhir/r4/directory/{PublicDirectoryAccessFilter.Directory(HttpContext)}";
+        }
+    }
+
+    [HttpGet("metadata")]
+    [Produces(FhirJson)]
+    public IActionResult Metadata()
+        => Json(PlanNetCapabilityStatement.Build(
+            DirectoryBaseUrl, PublicDirectoryAccessFilter.Directory(HttpContext), DateTimeOffset.UtcNow));
+
+    [HttpGet("{type}")]
+    [Produces(FhirJson)]
+    public async Task<IActionResult> Search(string type, CancellationToken ct)
+    {
+        if (!PlanNetSearchParameters.IsDirectoryType(type)) return NotADirectoryType(type);
+
+        var snapshot = await SnapshotAsync(ct);
+        if (snapshot.Result is not null) return snapshot.Result;
+
+        var query = HttpContext.Request.Query
+            .SelectMany(q => q.Value.Select(v => new KeyValuePair<string, string>(q.Key, v ?? string.Empty)));
+
+        PlanNetSearchResult result;
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, path).UseChoServiceIdentity();
-            request.Headers.Add(SharedTenantMiddleware.TenantHeaderName, PublicDirectoryAccessFilter.Tenant(HttpContext));
-            using var response = await upstream.SendAsync(request, ct);
-            var body = await response.Content.ReadAsStringAsync(ct);
+            result = PlanNetSearchEngine.Search(snapshot.Value!, type, query);
+        }
+        catch (PlanNetSearchException ex)
+        {
+            return FhirBadRequest(LogSanitizer.Sanitize(ex.Message));
+        }
 
-            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                return FhirNotFound(resourceType, id ?? string.Empty);
-            if (!response.IsSuccessStatusCode)
+        return Content(SearchBundle(type, result, snapshot.Value!), FhirJson, Encoding.UTF8);
+    }
+
+    [HttpGet("{type}/{id}")]
+    [Produces(FhirJson)]
+    public async Task<IActionResult> Read(string type, string id, CancellationToken ct)
+    {
+        if (!PlanNetSearchParameters.IsDirectoryType(type)) return NotADirectoryType(type);
+
+        var snapshot = await SnapshotAsync(ct);
+        if (snapshot.Result is not null) return snapshot.Result;
+
+        var resource = snapshot.Value!.Get(type, id);
+        return resource is null ? FhirNotFound(type, id) : Resource(resource);
+    }
+
+    [HttpGet("{type}/{id}/_history/{versionId}")]
+    [Produces(FhirJson)]
+    public async Task<IActionResult> VRead(string type, string id, string versionId, CancellationToken ct)
+    {
+        if (!PlanNetSearchParameters.IsDirectoryType(type)) return NotADirectoryType(type);
+
+        var snapshot = await SnapshotAsync(ct);
+        if (snapshot.Result is not null) return snapshot.Result;
+
+        // Only the current version is kept; an earlier one is gone, not hidden.
+        var resource = snapshot.Value!.Get(type, id);
+        return resource is not null && resource["meta"]?["versionId"]?.GetValue<string>() == versionId
+            ? Resource(resource)
+            : FhirNotFound(type, $"{id}/_history/{versionId}");
+    }
+
+    private async Task<(PlanNetDirectorySnapshot? Value, IActionResult? Result)> SnapshotAsync(CancellationToken ct)
+    {
+        var directory = PublicDirectoryAccessFilter.Directory(HttpContext);
+        try
+        {
+            return (await _store.GetAsync(directory, PublicDirectoryAccessFilter.Tenant(HttpContext), ct), null);
+        }
+        catch (PlanNetDirectoryUnavailableException ex)
+        {
+            // The reason is for operators; upstream detail is not for the public.
+            _logger.LogWarning("Public directory {Directory} unavailable: {Reason}",
+                LogSanitizer.Sanitize(directory), LogSanitizer.Sanitize(ex.Message));
+            return (null, FhirBadGateway("The provider directory is temporarily unavailable."));
+        }
+    }
+
+    private IActionResult NotADirectoryType(string type)
+        => StatusCode(404, new Hl7.Fhir.Model.OperationOutcome
+        {
+            Issue =
+            [
+                new Hl7.Fhir.Model.OperationOutcome.IssueComponent
+                {
+                    Severity = Hl7.Fhir.Model.OperationOutcome.IssueSeverity.Error,
+                    Code = Hl7.Fhir.Model.OperationOutcome.IssueType.NotSupported,
+                    Diagnostics = $"The provider directory does not serve '{LogSanitizer.Sanitize(type)}'.",
+                },
+            ],
+        });
+
+    private IActionResult Resource(JsonObject resource)
+    {
+        if (resource["meta"]?["versionId"]?.GetValue<string>() is { } version)
+            HttpContext.Response.Headers.ETag = $"W/\"{version}\"";
+        return Json(resource);
+    }
+
+    private ContentResult Json(JsonNode node)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+            node.WriteTo(writer);
+        return Content(Encoding.UTF8.GetString(buffer.WrittenSpan), FhirJson, Encoding.UTF8);
+    }
+
+    private string SearchBundle(string type, PlanNetSearchResult result, PlanNetDirectorySnapshot snapshot)
+    {
+        var baseUrl = DirectoryBaseUrl;
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("resourceType", "Bundle");
+            writer.WriteString("id", Guid.NewGuid().ToString());
+            writer.WriteStartObject("meta");
+            writer.WriteString("lastUpdated", snapshot.BuiltAt.ToString("o"));
+            writer.WriteEndObject();
+            writer.WriteString("type", "searchset");
+            writer.WriteNumber("total", result.Total);
+
+            writer.WriteStartArray("link");
+            WriteLink(writer, "self", PageUrl(baseUrl, type, result, result.Page));
+            if (result.PageSize > 0 && result.Page * result.PageSize < result.Total)
+                WriteLink(writer, "next", PageUrl(baseUrl, type, result, result.Page + 1));
+            if (result.Page > 1)
+                WriteLink(writer, "previous", PageUrl(baseUrl, type, result, result.Page - 1));
+            writer.WriteEndArray();
+
+            writer.WriteStartArray("entry");
+            foreach (var resource in result.Matches) WriteEntry(writer, baseUrl, resource, "match");
+            foreach (var resource in result.Included) WriteEntry(writer, baseUrl, resource, "include");
+            if (result.Ignored.Count > 0)
             {
-                // Upstream refusals (including 401/403 when the service token
-                // could not be minted) are not the public caller's doing, and
-                // their bodies are not for the public.
-                _logger.LogWarning(
-                    "Public directory {Resource} upstream returned {Status} for {Path}",
-                    resourceType, (int)response.StatusCode, loggablePath);
-                return (int)response.StatusCode == 400
-                    ? FhirBadRequest($"The {resourceType} search could not be processed.")
-                    : FhirBadGateway($"{resourceType} directory is unavailable.");
+                // Lenient handling: say what was not applied, so a client never
+                // mistakes an unfiltered page for a filtered one.
+                var outcome = new JsonObject
+                {
+                    ["resourceType"] = "OperationOutcome",
+                    ["issue"] = new JsonArray
+                    {
+                        new JsonObject
+                        {
+                            ["severity"] = "warning",
+                            ["code"] = "not-supported",
+                            ["diagnostics"] = "Not applied: " + string.Join(", ", result.Ignored.Select(i => LogSanitizer.Sanitize(i))),
+                        },
+                    },
+                };
+                writer.WriteStartObject();
+                writer.WritePropertyName("resource");
+                outcome.WriteTo(writer);
+                writer.WriteStartObject("search");
+                writer.WriteString("mode", "outcome");
+                writer.WriteEndObject();
+                writer.WriteEndObject();
             }
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
 
-            var filtered = PublicDirectoryResponseFilter.Filter(body);
-            if (filtered is null)
-                return FhirNotFound(resourceType, id ?? string.Empty);
+    private static void WriteEntry(Utf8JsonWriter writer, string baseUrl, JsonObject resource, string mode)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("fullUrl", $"{baseUrl}/{PlanNetDirectorySnapshot.Key(resource)}");
+        writer.WritePropertyName("resource");
+        resource.WriteTo(writer);
+        writer.WriteStartObject("search");
+        writer.WriteString("mode", mode);
+        writer.WriteEndObject();
+        writer.WriteEndObject();
+    }
 
-            return new ContentResult { Content = filtered, ContentType = "application/fhir+json", StatusCode = 200 };
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogWarning(ex, "Public directory {Resource} upstream unreachable for {Path}", resourceType, loggablePath);
-            return FhirBadGateway($"{resourceType} directory is unreachable.");
-        }
-        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
-        {
-            _logger.LogWarning(ex, "Public directory {Resource} upstream timed out for {Path}", resourceType, loggablePath);
-            return FhirBadGateway($"{resourceType} directory timed out.");
-        }
+    private static void WriteLink(Utf8JsonWriter writer, string relation, string url)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("relation", relation);
+        writer.WriteString("url", url);
+        writer.WriteEndObject();
+    }
+
+    private static string PageUrl(string baseUrl, string type, PlanNetSearchResult result, int page)
+    {
+        var parts = result.Applied
+            .Select(p => $"{Uri.EscapeDataString(p.Key)}={Uri.EscapeDataString(p.Value)}")
+            .Append($"_count={result.PageSize}")
+            .Append($"_page={page}");
+        return $"{baseUrl}/{type}?{string.Join('&', parts)}";
     }
 }
 
@@ -154,6 +277,7 @@ public sealed class PublicProviderDirectoryController : FhirControllerBase
 public sealed class PublicDirectoryAccessFilter : IAsyncActionFilter
 {
     private const string TenantItemKey = "PublicDirectoryTenant";
+    private const string DirectoryItemKey = "PublicDirectoryId";
 
     private readonly PublicProviderDirectoryOptions _options;
 
@@ -162,6 +286,11 @@ public sealed class PublicDirectoryAccessFilter : IAsyncActionFilter
     /// <summary>The tenant of the directory this request reads.</summary>
     public static string Tenant(HttpContext http)
         => http.Items[TenantItemKey] as string
+           ?? throw new InvalidOperationException("No public directory was resolved for this request.");
+
+    /// <summary>The published id of the directory this request reads.</summary>
+    public static string Directory(HttpContext http)
+        => http.Items[DirectoryItemKey] as string
            ?? throw new InvalidOperationException("No public directory was resolved for this request.");
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
@@ -189,6 +318,7 @@ public sealed class PublicDirectoryAccessFilter : IAsyncActionFilter
         http.User = new ClaimsPrincipal(new ClaimsIdentity());
         http.Items.Remove("TenantId");
         http.Items[TenantItemKey] = tenant;
+        http.Items[DirectoryItemKey] = directory;
         await next();
     }
 }

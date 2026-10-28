@@ -70,6 +70,13 @@ builder.Services.AddFhirAccessPolicies();
 // Directories are published per plan in configuration; none by default.
 builder.Services.Configure<FhirService.Services.PublicDirectory.PublicProviderDirectoryOptions>(
     builder.Configuration.GetSection(FhirService.Services.PublicDirectory.PublicProviderDirectoryOptions.SectionName));
+// Each published directory is served from an in-memory Plan-Net snapshot
+// (G-36), built from provider-service and benefit-plan-service as
+// fhir-service and refreshed on a timer.
+Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton(builder.Services, TimeProvider.System);
+builder.Services.AddSingleton<FhirService.Services.PublicDirectory.IPlanNetDirectorySource,
+    FhirService.Services.PublicDirectory.PlanNetDirectorySource>();
+builder.Services.AddSingleton<FhirService.Services.PublicDirectory.PlanNetDirectoryStore>();
 var publicDirectoryPermit = builder.Configuration.GetValue(
     $"{FhirService.Services.PublicDirectory.PublicProviderDirectoryOptions.SectionName}:PermitPerMinute", 300);
 builder.Services.AddRateLimiter(options =>

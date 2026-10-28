@@ -34,6 +34,8 @@ const SERVICES = {
   coverage: process.env.INTEROP_COVERAGE_URL ?? 'http://127.0.0.1:18026',
   claims: process.env.INTEROP_CLAIMS_URL ?? 'http://127.0.0.1:18027',
   fhir: process.env.INTEROP_FHIR_URL ?? 'http://127.0.0.1:18023',
+  provider: process.env.INTEROP_PROVIDER_URL ?? 'http://127.0.0.1:18029',
+  benefitPlan: process.env.INTEROP_BENEFIT_PLAN_URL ?? 'http://127.0.0.1:18030',
 };
 
 
@@ -95,7 +97,7 @@ async function call(method, url, token, body, accept = 'application/json') {
     method,
     headers: {
       Accept: accept,
-      Authorization: `Bearer ${token}`,
+      ...(token === null ? {} : { Authorization: `Bearer ${token}` }),
       ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -156,6 +158,59 @@ async function seed(fixture, token) {
     }
     await put(claim.claimNumber, 'POST', `${SERVICES.claims}/api/v1/claims`, token, asPayload(claim));
   }
+
+  await seedDirectory(fixture.directory, token);
+}
+
+/**
+ * Creates a record unless a read says it is already there. None of these
+ * creates is idempotent on its own — a second network or plan POST with the
+ * same id fails on the store's key, and a second provider POST is refused by
+ * NPI — so each is asked about first, and an unexpected answer stops the seed.
+ */
+async function createUnlessPresent(label, existsUrl, createUrl, token, body) {
+  const existing = await call('GET', existsUrl, token);
+  if (existing.status === 200) {
+    console.log(`    ${label}: already present`);
+    return;
+  }
+  if (existing.status !== 404) {
+    throw new Error(
+      `${label}: the lookup answered ${existing.status}, so whether it is already seeded is ` +
+      `unknown. Refusing to create rather than risk a duplicate.\n${existing.text.slice(0, 2000)}`);
+  }
+  await put(label, 'POST', createUrl, token, body);
+}
+
+/**
+ * The public Plan-Net directory's sources (G-36): the network and providers in
+ * provider-service, the plan and its document in benefit-plan-service.
+ * fhir-service builds the published directory from these; nothing is written
+ * to fhir-service itself.
+ */
+async function seedDirectory(directory, token) {
+  console.log(`==> provider-service ${SERVICES.provider}`);
+  const network = asPayload(directory.network);
+  await createUnlessPresent(
+    network.organizationId,
+    `${SERVICES.provider}/api/v1/networks/${network.organizationId}`,
+    `${SERVICES.provider}/api/v1/networks`,
+    token, network);
+  for (const provider of directory.providers) {
+    await createUnlessPresent(
+      provider.npi,
+      `${SERVICES.provider}/api/v1/providers/npi/${provider.npi}`,
+      `${SERVICES.provider}/api/v1/providers`,
+      token, asPayload(provider));
+  }
+
+  console.log(`==> benefit-plan-service ${SERVICES.benefitPlan}`);
+  const plan = asPayload(directory.plan);
+  await createUnlessPresent(
+    plan.planId,
+    `${SERVICES.benefitPlan}/api/v1/plans/${plan.planId}`,
+    `${SERVICES.benefitPlan}/api/v1/plans`,
+    token, plan);
 }
 
 /**
@@ -189,6 +244,46 @@ async function verify(fixture, token) {
         `returned ${served.length ? served.join(', ') : 'nothing'}.`);
     }
     console.log(`    ${claim.claimNumber} — ${claim.expectProfile.split('/').pop()}`);
+  }
+
+  await verifyDirectory(fixture.directory);
+}
+
+/**
+ * Reads the public directory back the way the Plan-Net kit will: with no
+ * token, through fhir-service. Every Plan-Net resource type must have at least
+ * one instance, because the kit finds what it tests with parameterless
+ * searches and reports a type with none as untested rather than as CHO's
+ * failure — which would read as a pass that proved nothing.
+ */
+async function verifyDirectory(directory) {
+  const base = `${SERVICES.fhir}/fhir/r4/directory/${directory.directoryId}`;
+  console.log(`==> verifying the public directory ${base} (no token)`);
+  const checks = [
+    ['Organization', 'type=ntwk', 'plannet-Network'],
+    ['Organization', 'type=prvgrp,fac,atyprv,payer', 'plannet-Organization'],
+    ['Practitioner', '', 'plannet-Practitioner'],
+    ['PractitionerRole', '', 'plannet-PractitionerRole'],
+    ['Location', '', 'plannet-Location'],
+    ['HealthcareService', '', 'plannet-HealthcareService'],
+    ['OrganizationAffiliation', '', 'plannet-OrganizationAffiliation'],
+    ['InsurancePlan', '', 'plannet-InsurancePlan'],
+    ['Endpoint', '', 'plannet-Endpoint'],
+  ];
+  for (const [type, query, profile] of checks) {
+    const url = `${base}/${type}?${query ? `${query}&` : ''}_count=1`;
+    const { status, text } = await call('GET', url, null, undefined, 'application/fhir+json');
+    if (status !== 200) {
+      throw new Error(`the public directory answered ${status} to ${url}.\n${text.slice(0, 2000)}`);
+    }
+    const bundle = JSON.parse(text);
+    const first = bundle.entry?.[0]?.resource;
+    if (!first) {
+      throw new Error(`the public directory has no ${profile} (${url} returned total ${bundle.total ?? 0}).`);
+    }
+    expectProfile(
+      first, `http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/${profile}`, type);
+    console.log(`    ${type}/${first.id} — ${profile} (total ${bundle.total})`);
   }
 }
 
