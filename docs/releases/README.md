@@ -6,6 +6,22 @@ This directory contains comprehensive release documentation for CloudHealthOffic
 
 ## Current Release
 
+### v6.0.0 — Paths of Glory (October 2026)
+
+MongoDB as the only document store (Cosmos DB removed), claims that pay correctly through one
+adjudicator, inpatient pricing from CMS's rules, plan configuration, and CMS-0057-F data from
+CHO's own services. Breaking: read the upgrade notes. Does not yet complete the January 2027
+CMS-0057-F API requirements.
+
+| Document | Description |
+|----------|-------------|
+| [v6.0.0 Release Notes](./RELEASE_NOTES_v6.0.0.md) | Highlights, breaking changes, upgrading from 5.x, what is not yet done |
+| [Changelog](../../CHANGELOG.md) | Itemized changes |
+
+---
+
+## Previous Releases
+
 ### v5.0.0 — 2001: A Payer Odyssey (October 2026)
 
 Cloud Health Office as the system of record behind its CMS-0057-F APIs, claims lifecycle and X12
@@ -17,8 +33,6 @@ trading-partner surface; production SMART/OAuth trust and service-wide token aut
 | [Changelog](../../CHANGELOG.md) | Itemized changes (includes untagged 4.1.0–4.4.0) |
 
 ---
-
-## Previous Releases
 
 ### v4.0.0 — Production Multi-Tenant SaaS (February 11, 2026)
 
@@ -83,6 +97,7 @@ First production release of CloudHealthOffice.
 
 | Migration Path | Guide |
 |----------------|-------|
+| **v5.x → v6.0.0** | [Release Notes - Upgrading from 5.x](./RELEASE_NOTES_v6.0.0.md#upgrading-from-5x) |
 | **v2.x → v3.0.0** | [Release Notes - Upgrade Instructions](./RELEASE_NOTES_v3.0.0.md#-upgrade-instructions) |
 | **Azure Logic Apps → Argo Workflows** | [Argo Workflows Migration Guide](../ARGO-MIGRATION-GUIDE.md) |
 | **Multi-Cloud Deployment** | [Multi-Cloud Deployment Guide](../MULTI-CLOUD-DEPLOYMENT.md) |
