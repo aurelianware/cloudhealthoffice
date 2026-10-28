@@ -364,6 +364,59 @@ public class SmartOAuthTrustTests
             .RegisteredPayerId.Should().Be("PAYER-A");
     }
 
+    [Fact]
+    [Trait("Scenario", "SEC-01")]
+    [Trait("Backend", "Replace")]
+    public async Task SEC01_Replace_AProviderIdIsBelievedOnlyFromTheRegistrationAuthority_OnASystemToken()
+    {
+        // A backend client's provider (Provider Access, bulk Group export) comes
+        // from its CHO registration, minted into provider_id by the marked issuer.
+        static Claim[] Claims(string scope) => [new("scope", scope), new("provider_id", "prov-001"), new("sub", "cho-client-1")];
+
+        var (parameters, registry) = Server();
+        var unmarked = await ValidateAsync(Mint(PayerKey, claims: Claims("system/*.read")), parameters);
+        new CallerIdentityResolver(registry).Resolve(new ClaimsPrincipal(unmarked.ClaimsIdentity))!
+            .RegisteredProviderId.Should().BeNull("only CHO's registration authority speaks for a client's provider");
+
+        var (markedParameters, markedRegistry) = Server(payer => payer.IssuesChoClientRegistrations = true, markPayer: true);
+        var resolver = new CallerIdentityResolver(markedRegistry);
+
+        var system = await ValidateAsync(Mint(PayerKey, claims: Claims("system/*.read")), markedParameters);
+        resolver.Resolve(new ClaimsPrincipal(system.ClaimsIdentity))!.RegisteredProviderId.Should().Be("prov-001");
+
+        // A user or patient token never carries a registered provider, even from the authority.
+        var user = await ValidateAsync(Mint(PayerKey, claims: Claims("user/*.read")), markedParameters);
+        resolver.Resolve(new ClaimsPrincipal(user.ClaimsIdentity))!.RegisteredProviderId.Should().BeNull();
+
+        // Two values, or a value that is not a FHIR id, is no mapping.
+        var twice = await ValidateAsync(Mint(PayerKey, claims:
+            [new("scope", "system/*.read"), new("provider_id", "prov-001"), new("provider_id", "prov-002")]), markedParameters);
+        resolver.Resolve(new ClaimsPrincipal(twice.ClaimsIdentity))!.RegisteredProviderId.Should().BeNull();
+        var malformed = await ValidateAsync(Mint(PayerKey, claims:
+            [new("scope", "system/*.read"), new("provider_id", "prov/001")]), markedParameters);
+        resolver.Resolve(new ClaimsPrincipal(malformed.ClaimsIdentity))!.RegisteredProviderId.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Scenario", "SEC-01")]
+    [Trait("Backend", "Replace")]
+    public void SEC01_Replace_ABackendClientRegisteredToAProviderIsThatProviderForProviderAccess()
+    {
+        var http = new Microsoft.AspNetCore.Http.DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "cho-client-1")], "test")),
+        };
+        FhirService.Services.ProviderAccess.ProviderAccessAuthorizationFilter.ResolveCallerId(http)
+            .Should().Be("cho-client-1", "with no registered provider the caller is the token subject");
+
+        http.Items[AuthenticatedCaller.HttpContextItemKey] = new AuthenticatedCaller
+        {
+            Issuer = PayerIdp, Subject = "cho-client-1", RegisteredProviderId = "prov-001",
+            CallerType = SmartCallerType.System, Scopes = new HashSet<string> { "system/*.read" },
+        };
+        FhirService.Services.ProviderAccess.ProviderAccessAuthorizationFilter.ResolveCallerId(http).Should().Be("prov-001");
+    }
+
     // ── Fail-closed production configuration ──────────────────────────────────
 
     [Fact]

@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using FhirService.Middleware;
 using FhirService.Services.Clinical;
 using Hl7.Fhir.Model;
@@ -161,14 +162,21 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
 
     /// <summary>
     /// The calling provider or backend client, from the validated token.
-    /// Claims are read under their JWT names: neither the CHO nor the SMART
-    /// scheme maps inbound claims (D-32), so <c>sub</c> arrives as <c>sub</c>;
-    /// <c>client_id</c>/<c>azp</c> cover backend service tokens issued without
-    /// a subject. Never read from a header or the query string — the caller
-    /// does not get to name itself.
+    /// A backend client registered to act for a provider (smart-auth-service
+    /// <c>providerId</c>, minted as <c>provider_id</c> and believed only from
+    /// CHO's registration issuer; see
+    /// <see cref="AuthenticatedCaller.RegisteredProviderId"/>) is that
+    /// provider. Otherwise claims are read under their JWT names: neither the
+    /// CHO nor the SMART scheme maps inbound claims (D-32), so <c>sub</c>
+    /// arrives as <c>sub</c>; <c>client_id</c>/<c>azp</c> cover backend
+    /// service tokens issued without a subject. Never read from a header or
+    /// the query string — the caller does not get to name itself.
     /// </summary>
     public static string? ResolveCallerId(HttpContext http)
     {
+        if (http.Items[AuthenticatedCaller.HttpContextItemKey] is AuthenticatedCaller { RegisteredProviderId: { } provider })
+            return provider;
+
         var user = http.User;
         if (user is null)
             return null;

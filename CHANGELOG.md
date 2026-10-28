@@ -36,6 +36,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PUT /api/admin/smart/clients/{clientId}/keys` rotates the keys. This lets
   outside providers' bulk `$export` clients authenticate. Secret clients are
   unchanged. See `docs/security/smart-auth-tenancy.md`.
+- **A backend client can act for a provider (G-42).** A tenant administrator
+  sets `providerId` on a backend client registration (or later with
+  `PUT /api/admin/smart/clients/{clientId}/provider`). Its tokens carry
+  `provider_id`, and fhir-service treats the client as that provider for
+  Provider Access: attribution on single reads, and bulk
+  `Group/{providerId}/$export`. fhir-service believes `provider_id` only from
+  the issuer marked `IssuesChoClientRegistrations` and only on a system-scope
+  token. The token's `sub` is still the client id.
 
 ### Changed
 

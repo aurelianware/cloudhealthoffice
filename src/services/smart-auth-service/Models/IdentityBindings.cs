@@ -149,6 +149,16 @@ public sealed class ClientTenantRegistration
     public string? PayerId { get; set; }
 
     /// <summary>
+    /// Backend clients only: the provider this client acts for in Provider
+    /// Access (its attributed panel, and bulk <c>Group/{providerId}/$export</c>).
+    /// Set by the tenant administrator who registered the client (never by the
+    /// client) and minted into its access tokens as the <c>provider_id</c>
+    /// claim; the token's <c>sub</c> stays the client id. Null for a backend
+    /// client that does not act for a provider.
+    /// </summary>
+    public string? ProviderId { get; set; }
+
+    /// <summary>
     /// Backend clients that authenticate with <c>private_key_jwt</c> (G-42)
     /// from keys they publish: their <c>jwks_uri</c>, fetched (and cached) by
     /// this server when the client presents an assertion. Null for a client

@@ -19,10 +19,14 @@ public sealed record ClientRegistrationRequest(
     bool Confidential = false,
     string? PayerId = null,
     JsonElement? Jwks = null,
-    string? JwksUri = null);
+    string? JwksUri = null,
+    string? ProviderId = null);
 
 /// <summary>Body of <c>PUT {clientId}/payer</c>.</summary>
 public sealed record ClientPayerRequest(string? PayerId);
+
+/// <summary>Body of <c>PUT {clientId}/provider</c>.</summary>
+public sealed record ClientProviderRequest(string? ProviderId);
 
 /// <summary>
 /// Body of <c>PUT {clientId}/keys</c>: exactly one of a JWK Set or a
@@ -89,6 +93,10 @@ public sealed class SmartClientRegistrationsController : ControllerBase
         var payerError = ValidatePayer(kind, payerId, grantsPayerToPayer: scopes.Contains(SmartScopes.SystemPayerToPayerRead));
         if (payerError != null) return BadRequest(new { error = payerError });
 
+        var providerId = string.IsNullOrWhiteSpace(request.ProviderId) ? null : request.ProviderId.Trim();
+        var providerError = ValidateProvider(kind, providerId);
+        if (providerError != null) return BadRequest(new { error = providerError });
+
         var keys = await ResolveKeysAsync(kind, request.Jwks, request.JwksUri, required: false, ct);
         if (keys.Error != null) return BadRequest(new { error = keys.Error });
         var asymmetric = keys.Set != null;
@@ -122,6 +130,7 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             Kind = kind,
             DisplayName = displayName,
             PayerId = payerId,
+            ProviderId = providerId,
             JwksUri = keys.Uri?.AbsoluteUri,
             CreatedBy = _actor.UserId,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -171,7 +180,8 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             : asymmetric ? ClientAuthenticationMethods.PrivateKeyJwt
             : ClientAuthenticationMethods.ClientSecretBasic;
         _audit.Admin("client-registered", _actor.TenantId, _actor.UserId,
-            $"client={clientId} kind={kind} auth={authMethod ?? "none"}" + (payerId is null ? "" : $" payer={payerId}"));
+            $"client={clientId} kind={kind} auth={authMethod ?? "none"}"
+            + (payerId is null ? "" : $" payer={payerId}") + (providerId is null ? "" : $" provider={providerId}"));
         return StatusCode(201, new
         {
             clientId,
@@ -184,6 +194,7 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             redirectUris = redirectUris.Select(u => u.ToString()),
             scopes,
             payerId,
+            providerId,
         });
     }
 
@@ -214,6 +225,33 @@ public sealed class SmartClientRegistrationsController : ControllerBase
 
         _audit.Admin("client-payer-set", _actor.TenantId, _actor.UserId,
             $"client={clientId} previousPayer={binding.PayerId ?? "(none)"} payer={payerId ?? "(none)"}");
+        return Ok(await _store.FindClientAsync(clientId, ct));
+    }
+
+    /// <summary>
+    /// PUT {clientId}/provider — sets (or, with null, clears) the provider one
+    /// of this tenant's backend clients acts for in Provider Access. Applies
+    /// to tokens issued from now on; access tokens already issued keep the
+    /// provider they were minted with until they expire.
+    /// </summary>
+    [HttpPut("{clientId}/provider")]
+    public async Task<IActionResult> SetProvider(string clientId, [FromBody] ClientProviderRequest request, CancellationToken ct)
+    {
+        var binding = await _store.FindClientAsync(clientId, ct);
+        if (binding == null || binding.TenantId != _actor.TenantId)
+            return NotFound();
+
+        var providerId = string.IsNullOrWhiteSpace(request.ProviderId) ? null : request.ProviderId.Trim();
+        var providerError = ValidateProvider(binding.Kind, providerId);
+        if (providerError != null) return BadRequest(new { error = providerError });
+        if (binding.Kind != SmartClientKind.Backend)
+            return BadRequest(new { error = "providerId is available to backend clients only." });
+
+        if (!await _store.SetClientProviderIdAsync(_actor.TenantId, clientId, providerId, ct))
+            return NotFound();
+
+        _audit.Admin("client-provider-set", _actor.TenantId, _actor.UserId,
+            $"client={clientId} previousProvider={binding.ProviderId ?? "(none)"} provider={providerId ?? "(none)"}");
         return Ok(await _store.FindClientAsync(clientId, ct));
     }
 
@@ -372,6 +410,19 @@ public sealed class SmartClientRegistrationsController : ControllerBase
         return fetched is null
             ? new(null, null, $"jwksUri: {fetchError}")
             : new(fetched, uri, null);
+    }
+
+    /// <summary>
+    /// A provider id belongs to backend clients only and is a FHIR id, the
+    /// same rule as a provider-user enrolment's provider.
+    /// </summary>
+    private static string? ValidateProvider(string kind, string? providerId)
+    {
+        if (providerId != null && kind != SmartClientKind.Backend)
+            return "providerId is available to backend clients only.";
+        if (providerId != null && !SmartIdentifiers.IsFhirId(providerId))
+            return "providerId must be a FHIR id: 1-64 letters, digits, '-' or '.'.";
+        return null;
     }
 
     /// <summary>

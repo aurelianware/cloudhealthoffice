@@ -3,6 +3,7 @@ using FhirService.Models;
 using FhirService.Services;
 using FhirService.Services.Clinical;
 using Hl7.Fhir.Model;
+using FhirService.Services.ProviderAccess;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FhirService.Controllers;
@@ -189,18 +190,12 @@ public class ClinicalResourceController : FhirControllerBase
         IsPatientContext = SmartPatientId is not null,
     };
 
-    /// <summary>The caller, from the validated token. Never from a header or the query string.</summary>
-    private string? ResolveCallerId()
-    {
-        // JWT claim names: neither scheme maps inbound claims (D-32).
-        foreach (var claim in new[] { "sub", "client_id", "azp" })
-        {
-            var value = User?.FindFirst(claim)?.Value;
-            if (!string.IsNullOrWhiteSpace(value)) return value;
-        }
-
-        return User?.Identity?.Name;
-    }
+    /// <summary>
+    /// The caller, from the validated token, by the Provider Access rule
+    /// (a backend client registered to a provider is that provider). Never
+    /// from a header or the query string.
+    /// </summary>
+    private string? ResolveCallerId() => ProviderAccessAuthorizationFilter.ResolveCallerId(HttpContext);
 
     /// <summary>
     /// The same uniform refusal the Provider Access layer gives, for the same

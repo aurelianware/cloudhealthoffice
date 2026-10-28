@@ -79,6 +79,15 @@ public sealed record AuthenticatedCaller
     /// </summary>
     public string? RegisteredPayerId { get; init; }
 
+    /// <summary>
+    /// The provider this backend client is registered to act for in Provider
+    /// Access: the <c>provider_id</c> claim, taken ONLY from the issuer marked
+    /// <see cref="TrustedIssuerOptions.IssuesChoClientRegistrations"/>, only for
+    /// a system-context token, and only when the token carries exactly one
+    /// well-formed FHIR id. Null otherwise, whatever the token says.
+    /// </summary>
+    public string? RegisteredProviderId { get; init; }
+
     /// <summary>Tenant asserted by the token, when the issuer maps one.</summary>
     public string? TenantClaim { get; init; }
 

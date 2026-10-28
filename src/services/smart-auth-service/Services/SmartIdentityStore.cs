@@ -58,6 +58,12 @@ public interface ISmartIdentityStore
     Task<bool> SetClientPayerIdAsync(string tenantId, string clientId, string? payerId, CancellationToken ct = default);
 
     /// <summary>
+    /// Sets (or, with null, clears) the provider a backend registration acts
+    /// for. Same tenant rule as <see cref="SetClientPayerIdAsync"/>.
+    /// </summary>
+    Task<bool> SetClientProviderIdAsync(string tenantId, string clientId, string? providerId, CancellationToken ct = default);
+
+    /// <summary>
     /// Sets (or, with null, clears) the <c>jwks_uri</c> a registration's keys
     /// are fetched from. Same tenant rule as <see cref="SetClientPayerIdAsync"/>.
     /// </summary>
@@ -339,6 +345,16 @@ public sealed class MongoSmartIdentityStore : ISmartIdentityStore
         var result = await _clients.UpdateOneAsync(
             c => c.ClientId == clientId && c.TenantId == tenantId,
             Builders<ClientTenantRegistration>.Update.Set(c => c.PayerId, payerId),
+            cancellationToken: ct);
+        return result.MatchedCount == 1;
+    }
+
+    public async Task<bool> SetClientProviderIdAsync(string tenantId, string clientId, string? providerId, CancellationToken ct = default)
+    {
+        await ReadyAsync();
+        var result = await _clients.UpdateOneAsync(
+            c => c.ClientId == clientId && c.TenantId == tenantId,
+            Builders<ClientTenantRegistration>.Update.Set(c => c.ProviderId, providerId),
             cancellationToken: ct);
         return result.MatchedCount == 1;
     }

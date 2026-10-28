@@ -27,7 +27,8 @@ public sealed record SmartTokenContext(
     string? FhirUser = null,
     string? Npi = null,
     SmartIdentity? Identity = null,
-    string? PayerId = null);
+    string? PayerId = null,
+    string? ProviderId = null);
 
 /// <summary>A context, or the reason there is none. A refusal issues no token.</summary>
 public sealed record SmartContextResolution(SmartTokenContext? Context, string? Refusal)
@@ -58,6 +59,13 @@ public sealed class SmartTokenContextResolver
     /// receiving payer of an inbound Payer-to-Payer request from it.
     /// </summary>
     public const string PayerIdClaim = "payer_id";
+
+    /// <summary>
+    /// The provider a backend client is registered to act for, from
+    /// <see cref="ClientTenantRegistration.ProviderId"/>. fhir-service takes
+    /// the Provider Access caller (attribution, bulk Group export) from it.
+    /// </summary>
+    public const string ProviderIdClaim = "provider_id";
 
     /// <summary>Refusal reason: a P2P token asked for by a registration with no payer id.</summary>
     public const string PayerToPayerNeedsPayerRefusal = "payer_to_payer_requires_registered_payer_id";
@@ -223,8 +231,10 @@ public sealed class SmartTokenContextResolver
         if (payerId == null && scopes.Contains(SmartScopes.SystemPayerToPayerRead))
             return SmartContextResolution.Refuse(PayerToPayerNeedsPayerRefusal);
 
+        var providerId = string.IsNullOrWhiteSpace(client.ProviderId) ? null : client.ProviderId;
+
         return SmartContextResolution.Grant(
-            new SmartTokenContext(SmartCallerContext.Client, client.TenantId, clientId, PayerId: payerId));
+            new SmartTokenContext(SmartCallerContext.Client, client.TenantId, clientId, PayerId: payerId, ProviderId: providerId));
     }
 
     /// <summary>
@@ -293,6 +303,7 @@ public sealed class SmartTokenContextResolver
         if (context.FhirUser != null) identity.SetClaim(SmartClaims.FhirUser, context.FhirUser);
         if (context.Npi != null) identity.SetClaim(NpiClaim, context.Npi);
         if (context.PayerId != null) identity.SetClaim(PayerIdClaim, context.PayerId);
+        if (context.ProviderId != null) identity.SetClaim(ProviderIdClaim, context.ProviderId);
         if (context.Identity is { } who)
         {
             identity.SetClaim(IdentityIssuerClaim, who.Issuer);
@@ -311,7 +322,7 @@ public sealed class SmartTokenContextResolver
         {
             Claims.Subject or TenantClaim or SmartClaims.FhirUser
                 => [Destinations.AccessToken, Destinations.IdentityToken],
-            SmartClaims.Patient or SmartClaims.Encounter or NpiClaim or PayerIdClaim
+            SmartClaims.Patient or SmartClaims.Encounter or NpiClaim or PayerIdClaim or ProviderIdClaim
                 => [Destinations.AccessToken],
             Claims.Name => [Destinations.IdentityToken],
             // cho_ctx / cho_idp_* and anything else: no token destination.
