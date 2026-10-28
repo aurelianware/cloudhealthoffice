@@ -14,7 +14,7 @@ namespace AppealsService.Controllers;
 public sealed class MemberServiceCasesController(
     IMemberServiceCaseStore store, IContactIntakeReader contacts, ICurrentActor actor,
     IRulePackCatalog catalog, IAppealHolidayCalendarProvider holidays, IAppealFieldEncryptor encryptor,
-    IMemberCaseSubjectValidator subjects) : ControllerBase
+    IMemberCaseSubjectValidator subjects, AppealDecisionReporting reporting) : ControllerBase
 {
     [HttpGet("{id}")]
     [RequirePermission(ChoRolePermissions.ServiceRead)]
@@ -42,7 +42,8 @@ public sealed class MemberServiceCasesController(
             row.Revision, row.ReceivedAt, row.Receipt.DueAt, row.Receipt.RulePackVersion,
             Summary = await encryptor.DecryptAsync(row.EncryptedSummary, ct),
             Resolution = await encryptor.DecryptAsync(row.EncryptedResolution, ct),
-            row.DecisionRecordedAt, row.DecisionRecordedBy,
+            row.DecisionRecordedAt, row.DecisionRecordedBy, row.DecisionOutcome,
+            Reporting = ReportingState(row), row.ReportedToAuthorizationAt, row.ReportingRejectedReason,
             RuleEvaluation = JsonSerializer.Deserialize<JsonElement>(row.PinnedRuleEvaluationJson)
         });
     }
@@ -53,11 +54,34 @@ public sealed class MemberServiceCasesController(
     {
         if (string.IsNullOrWhiteSpace(request.Resolution) || request.Resolution.Length > 4000)
             return BadRequest("Record the review outcome in at most 4000 characters.");
+        var row = await store.GetAsync(actor.TenantId, id, ct);
+        if (row is null) return NotFound();
+        var appeal = row.Classification.EndsWith("Appeal", StringComparison.Ordinal);
+        if (appeal && (request.Outcome is not { } outcome || !Enum.IsDefined(outcome)))
+            return BadRequest("Record whether the appeal upheld, overturned or partially overturned the denial.");
+        if (!appeal && request.Outcome is not null)
+            return BadRequest("A grievance has no appeal outcome.");
         var encrypted = await encryptor.EncryptAsync(request.Resolution, ct) ?? throw new InvalidOperationException("Resolution encryption failed.");
-        if (!await store.RecordDecisionAsync(actor.TenantId, id, request.Revision, encrypted, actor.UserId, DateTime.UtcNow, ct))
+        var at = DateTime.UtcNow;
+        if (!await store.RecordDecisionAsync(actor.TenantId, id, request.Revision, encrypted, actor.UserId, at,
+                appeal ? request.Outcome : null, ct))
             return Conflict("The case changed or already has a recorded decision. Reload it before continuing.");
+        if (appeal && !string.IsNullOrWhiteSpace(row.AuthorizationId))
+        {
+            // CMS-0057-F: put the outcome on the authorization's reporting ledger now; whatever
+            // does not land here is retried by AppealDecisionReportingSweep. The decision stands either way.
+            row.Status = "DecisionRecorded"; row.DecisionOutcome = request.Outcome; row.DecisionRecordedAt = at;
+            await reporting.DeliverAsync(row, ct);
+        }
         return NoContent();
     }
+
+    /// <summary>Where the appeal outcome stands on the authorization's PA reporting ledger.</summary>
+    internal static string? ReportingState(MemberServiceCase row) =>
+        row.DecisionOutcome is null || string.IsNullOrWhiteSpace(row.AuthorizationId) ? null
+        : row.ReportedToAuthorizationAt is not null ? "Reported"
+        : row.ReportingRejectedReason is not null ? "NeedsAttention"
+        : "Pending";
 
     [HttpPost("from-contact/{contactId}")]
     [RequirePermission(ChoRolePermissions.ServiceContact)]
@@ -114,4 +138,6 @@ public sealed class MemberCaseDecisionRequest
 {
     public long Revision { get; set; }
     public string Resolution { get; set; } = string.Empty;
+    /// <summary>Required for an appeal (it feeds CMS-0057-F reporting); refused for a grievance.</summary>
+    public MemberAppealOutcome? Outcome { get; set; }
 }

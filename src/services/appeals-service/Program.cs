@@ -183,6 +183,10 @@ builder.Services.AddHttpClient("ContactAppealAuthorization", client => {
     client.Timeout = TimeSpan.FromSeconds(15);
 });
 builder.Services.AddScoped<IMemberCaseSubjectValidator, HttpMemberCaseSubjectValidator>();
+// CMS-0057-F: appeal outcomes go onto the authorization's reporting ledger.
+builder.Services.AddSingleton<IAppealDecisionReporter, HttpAppealDecisionReporter>();
+builder.Services.AddSingleton<AppealDecisionReporting>();
+builder.Services.AddHostedService<AppealsService.HostedServices.AppealDecisionReportingSweep>();
 
 var app = builder.Build();
 
