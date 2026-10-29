@@ -519,6 +519,10 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             # The only service whose manifest and Development settings name no
             # service-token client id; the demo token config requires one.
             set_env(container, "ChoAuth__ServiceToken__ClientId", "smart-auth-service")
+            # No SmartAuth:SigningCertificates here, so OpenIddict makes development
+            # certificates and saves them to the X509 store under $HOME. appuser has
+            # no home directory, so discovery and every token request answered 500.
+            set_env(container, "HOME", "/tmp")
         if name == "portal" and production(args):
             portal_access_settings(container, args)
 

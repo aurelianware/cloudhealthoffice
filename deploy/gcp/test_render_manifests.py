@@ -103,6 +103,7 @@ def test_smart_auth_and_fhir_start_without_external_identity():
     assert not [k for k in config["data"] if k.startswith("SmartAuth__TrustedProxyNetworks__")]
     deps = deployments(docs)
     assert env(deps["smart-auth-service"])["ChoAuth__ServiceToken__ClientId"] == "smart-auth-service"
+    assert env(deps["smart-auth-service"])["HOME"] == "/tmp"
     fhir = deps["fhir-service"]["spec"]["template"]["spec"]["containers"][0]
     for probe in ("livenessProbe", "readinessProbe"):
         if fhir.get(probe, {}).get("httpGet"):
