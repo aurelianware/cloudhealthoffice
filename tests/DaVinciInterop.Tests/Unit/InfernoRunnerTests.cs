@@ -124,13 +124,28 @@ public sealed class InfernoRunnerTests
             });
     }
 
+    [Fact]
+    public async Task Requests_to_the_kit_carry_a_content_length_and_are_never_chunked()
+    {
+        // Puma buffers a chunked body to a Tempfile, and Inferno's API calls
+        // request.body.string on it: every session and run answered 500 in CI.
+        var recorder = new RequestRecorder();
+        var runner = new InfernoRunner("http://inferno.invalid/api", new HttpClient(recorder));
+
+        await runner.StartSuiteRunAsync("session-1", "us_core_v311", []);
+
+        recorder.LastContentLength.Should().Be(System.Text.Encoding.UTF8.GetByteCount(recorder.LastBody));
+    }
+
     private sealed class RequestRecorder : HttpMessageHandler
     {
         public string LastBody { get; private set; } = "";
+        public long? LastContentLength { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            LastContentLength = request.Content?.Headers.ContentLength;
             LastBody = request.Content is null
                 ? ""
                 : await request.Content.ReadAsStringAsync(cancellationToken);

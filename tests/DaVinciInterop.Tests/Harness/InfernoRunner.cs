@@ -188,9 +188,9 @@ public sealed class InfernoRunner
     /// </summary>
     public async Task<string> CreateSessionAsync(string suiteId, CancellationToken cancellationToken = default)
     {
-        var response = await _http.PostAsJsonAsync(
+        var response = await _http.PostAsync(
             $"{_apiBaseUrl}/test_sessions?test_suite_id={Uri.EscapeDataString(suiteId)}",
-            new { suite_options = Array.Empty<object>() },
+            JsonBody(new { suite_options = Array.Empty<object>() }),
             cancellationToken);
         await EnsureSuccessAsync(response, $"create a test session for '{suiteId}'", cancellationToken);
 
@@ -346,9 +346,23 @@ public sealed class InfernoRunner
             statusCode: response.StatusCode);
     }
 
+    /// <summary>
+    /// A JSON body sent with a Content-Length, never chunked.
+    ///
+    /// <para>
+    /// <c>PostAsJsonAsync</c> streams its body with <c>Transfer-Encoding:
+    /// chunked</c>. Puma buffers a chunked body to a Tempfile rather than a
+    /// StringIO, and Inferno's API reads <c>request.body.string</c>, so every
+    /// session or run request answered 500 "undefined method `string' for an
+    /// instance of Tempfile" in CI. A sized body stays a StringIO.
+    /// </para>
+    /// </summary>
+    private static StringContent JsonBody(object body) =>
+        new(JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json");
+
     private async Task<InfernoTestRun> StartRunAsync(object body, CancellationToken cancellationToken)
     {
-        var response = await _http.PostAsJsonAsync($"{_apiBaseUrl}/test_runs", body, cancellationToken);
+        var response = await _http.PostAsync($"{_apiBaseUrl}/test_runs", JsonBody(body), cancellationToken);
         await EnsureSuccessAsync(response, "start a test run", cancellationToken);
 
         return await response.Content.ReadFromJsonAsync<InfernoTestRun>(JsonOptions, cancellationToken)
