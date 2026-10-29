@@ -64,6 +64,17 @@ public sealed class ChoSeedFixtureAuthTests
     }
 
     [Fact]
+    public void The_token_can_read_every_resource_the_us_core_scenario_judges()
+    {
+        // INFERNO-USCORE-SERVER-001 hands this token to the kit, and
+        // fhir-service admits a CHO caller per resource by permission
+        // ([FhirAccess] on each controller). Without encounters:read every
+        // Encounter search answered 403 (run 40956429968), which is the
+        // harness's token speaking, not CHO's Encounter projection.
+        Fixture.Auth.Permissions.Should().Contain(["members:read", "encounters:read"]);
+    }
+
+    [Fact]
     public void The_signature_verifies_against_the_declared_key()
     {
         var token = Fixture.DevelopmentToken();
