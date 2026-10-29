@@ -102,6 +102,17 @@ public sealed record InfernoTestGroup
     [JsonPropertyName("id")] public string Id { get; init; } = "";
     [JsonPropertyName("title")] public string? Title { get; init; }
     [JsonPropertyName("test_groups")] public List<InfernoTestGroup> TestGroups { get; init; } = new();
+    [JsonPropertyName("inputs")] public List<InfernoDeclaredInput> Inputs { get; init; } = new();
+}
+
+/// <summary>An input a suite or group declares, as Inferno's API describes it.</summary>
+public sealed record InfernoDeclaredInput
+{
+    [JsonPropertyName("name")] public string Name { get; init; } = "";
+    [JsonPropertyName("optional")] public bool? Optional { get; init; }
+
+    /// <summary>The kit's own default; a string, or occasionally a list or object.</summary>
+    [JsonPropertyName("default")] public JsonElement? Default { get; init; }
 }
 
 /// <summary>A suite as Inferno's API describes it.</summary>
@@ -110,6 +121,7 @@ public sealed record InfernoTestSuite
     [JsonPropertyName("id")] public string Id { get; init; } = "";
     [JsonPropertyName("title")] public string? Title { get; init; }
     [JsonPropertyName("test_groups")] public List<InfernoTestGroup> TestGroups { get; init; } = new();
+    [JsonPropertyName("inputs")] public List<InfernoDeclaredInput> Inputs { get; init; } = new();
 
     /// <summary>Every group in the suite, depth first, including nested ones.</summary>
     public IEnumerable<InfernoTestGroup> AllGroups()
@@ -164,35 +176,28 @@ public sealed class InfernoRunner
     }
 
     /// <summary>
-    /// Creates a test session for a suite, handing it the CHO endpoint and any
-    /// other configuration the suite declares as input.
+    /// Creates a test session for a suite.
+    ///
+    /// <para>
+    /// Inputs are not set here. Inferno's JSON API has no endpoint for writing
+    /// session data directly (a PUT to <c>session_data</c> answers 405); a run
+    /// takes its inputs in the <c>test_runs</c> request itself, which is where
+    /// <see cref="StartSuiteRunAsync"/> and <see cref="StartGroupRunAsync"/>
+    /// send them.
+    /// </para>
     /// </summary>
-    public async Task<string> CreateSessionAsync(
-        string suiteId,
-        IReadOnlyList<InfernoInput> inputs,
-        CancellationToken cancellationToken = default)
+    public async Task<string> CreateSessionAsync(string suiteId, CancellationToken cancellationToken = default)
     {
         var response = await _http.PostAsJsonAsync(
             $"{_apiBaseUrl}/test_sessions?test_suite_id={Uri.EscapeDataString(suiteId)}",
             new { suite_options = Array.Empty<object>() },
             cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, $"create a test session for '{suiteId}'", cancellationToken);
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         using var document = JsonDocument.Parse(body);
-        var sessionId = document.RootElement.GetProperty("id").GetString()
-                        ?? throw new InvalidOperationException("Inferno returned a session without an id.");
-
-        if (inputs.Count > 0)
-        {
-            var setInputs = await _http.PutAsJsonAsync(
-                $"{_apiBaseUrl}/test_sessions/{sessionId}/session_data",
-                inputs,
-                cancellationToken);
-            setInputs.EnsureSuccessStatusCode();
-        }
-
-        return sessionId;
+        return document.RootElement.GetProperty("id").GetString()
+               ?? throw new InvalidOperationException("Inferno returned a session without an id.");
     }
 
     /// <summary>Starts a run of the whole suite within an existing session.</summary>
@@ -273,10 +278,78 @@ public sealed class InfernoRunner
             ". Name the group by its full runnable id.");
     }
 
+    /// <summary>
+    /// Adds the kit's own default for every required input the scenario does
+    /// not supply.
+    ///
+    /// <para>
+    /// Inferno's web UI pre-fills declared defaults; its JSON API does not, and
+    /// refuses a run (422, "Missing the following required inputs") until each
+    /// is sent. The Plan-Net suite, for one, requires <c>no_param_search</c>,
+    /// <c>max_instances</c> and <c>max_pages</c>. Sending the kit's defaults is
+    /// exactly what a person pressing "Run" would send, so it does not tune the
+    /// suite in CHO's favour. A required input with no default is left out, and
+    /// the kit's refusal then names it.
+    /// </para>
+    /// </summary>
+    public static (List<InfernoInput> Inputs, List<string> Defaulted) WithDeclaredDefaults(
+        IReadOnlyList<InfernoInput> supplied, IEnumerable<InfernoDeclaredInput> declared)
+    {
+        var inputs = supplied.ToList();
+        var defaulted = new List<string>();
+        var present = supplied.Select(input => input.Name).ToHashSet(StringComparer.Ordinal);
+
+        foreach (var input in declared)
+        {
+            if (input.Optional == true || present.Contains(input.Name) || input.Default is not { } value
+                || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                continue;
+            }
+
+            inputs.Add(new InfernoInput
+            {
+                Name = input.Name,
+                Value = value.ValueKind == JsonValueKind.String ? value.GetString()! : value.GetRawText(),
+            });
+            present.Add(input.Name);
+            defaulted.Add(input.Name);
+        }
+
+        return (inputs, defaulted);
+    }
+
+    /// <summary>
+    /// Fails with what the kit said, not only its status code. A bare
+    /// "500 (Internal Server Error)" from a kit says nothing about which input,
+    /// suite or sidecar it choked on, and the kit's own logs only reach the
+    /// run artifacts.
+    /// </summary>
+    private static async Task EnsureSuccessAsync(
+        HttpResponseMessage response, string action, CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (body.Length > 2000)
+        {
+            body = body[..2000] + "…";
+        }
+
+        throw new HttpRequestException(
+            $"Inferno refused to {action}: HTTP {(int)response.StatusCode} {response.ReasonPhrase}. " +
+            $"Body: {Redaction.Body(body)}",
+            inner: null,
+            statusCode: response.StatusCode);
+    }
+
     private async Task<InfernoTestRun> StartRunAsync(object body, CancellationToken cancellationToken)
     {
         var response = await _http.PostAsJsonAsync($"{_apiBaseUrl}/test_runs", body, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, "start a test run", cancellationToken);
 
         return await response.Content.ReadFromJsonAsync<InfernoTestRun>(JsonOptions, cancellationToken)
                ?? throw new InvalidOperationException("Inferno returned an unreadable test run.");

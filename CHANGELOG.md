@@ -179,6 +179,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provider-service's 20-character limit, so the seed stopped before the
   directory was complete. It is now "Hospital"; the Plan-Net specialty display
   still comes from taxonomy `282N00000X`.
+- **Inferno runs refused after seeding.** With seeding fixed, three more
+  problems stopped the kits before a single test ran. smart-auth-service in
+  the interop profile could not save its development signing certificate (its
+  container user has no home directory), so every token request answered 500;
+  it now gets `HOME=/tmp`. The harness wrote inputs with a PUT that Inferno's
+  API does not have (405); inputs now travel only with the run request, as
+  Inferno expects. And Inferno's API, unlike its UI, does not pre-fill a
+  required input's default, so Plan-Net refused to start without
+  `no_param_search`, `max_instances` and `max_pages`; the harness now sends the
+  kit's own defaults for required inputs a scenario leaves unset and records
+  which. A kit's refusal now carries its response body into the failure
+  message.
 
 - **smart-auth-service answers over plain HTTP when its issuer is HTTP.** An
   http issuer is only accepted in Development (the interop network), but

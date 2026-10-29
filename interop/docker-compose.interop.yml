@@ -321,6 +321,14 @@ services:
       MongoDb__ConnectionString: mongodb://interop-mongo:27017
       MongoDb__DatabaseName: InteropSmartAuthDB
       SmartAuth__Issuer: ${INTEROP_SMART_ISSUER:-http://cho-smart-auth-service:8080}
+      # No SmartAuth:SigningCertificates here, so OpenIddict makes development
+      # signing and encryption certificates and saves them to the current
+      # user's X509 store under $HOME. The image's appuser is a system account
+      # with no home directory, so that save failed with "Access to the path
+      # '/home/appuser' is denied" and every token request answered 500. /tmp
+      # is writable and dies with the container, which is all a development
+      # certificate needs.
+      HOME: /tmp
     depends_on:
       interop-mongo:
         condition: service_healthy
