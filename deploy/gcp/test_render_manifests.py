@@ -648,3 +648,21 @@ def test_conformance_hosts_are_checked():
         "--conformance-fhir-host", "fhir-test.example.com", "--conformance-auth-host", "auth-test.example.com")
     assert "not a CIDR" in render_error(*CONFORMANCE[:4], "--trusted-proxy-network", "10.52.0.0")
     assert "only used with" in render_error("--trusted-proxy-network", "10.0.0.0/8")
+
+
+def conformance_annotation(docs, name):
+    return deployments(docs)[name]["spec"]["template"]["metadata"]["annotations"][
+        "cloudhealthoffice.com/conformance-settings"]
+
+
+def test_conformance_settings_restart_the_two_services_when_they_change():
+    # ConfigMap changes reach pods only at start; a same-tag deploy must still roll them.
+    off, on = render(), render(*CONFORMANCE)
+    other = render(*CONFORMANCE[:4], "--trusted-proxy-network", "10.60.0.0/14")
+    for name in ("fhir-service", "smart-auth-service"):
+        assert conformance_annotation(off, name) == "off"
+        assert conformance_annotation(on, name) != "off"
+        assert conformance_annotation(on, name) == conformance_annotation(render(*CONFORMANCE), name)
+        assert conformance_annotation(other, name) != conformance_annotation(on, name)
+    claims = deployments(on)["claims-service"]["spec"]["template"].get("metadata", {}).get("annotations") or {}
+    assert "cloudhealthoffice.com/conformance-settings" not in claims
