@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The nightly Bulk Data run now judges the SMART Backend Services token
+  endpoint.** `INFERNO-BULK-SERVER-001` adds the kit's SMART Backend Services
+  group (discovery STU2 and six authorization tests) to the Group and Patient
+  export groups. Its token-endpoint TLS test reports omit through the kit's
+  own `INFERNO_DISABLE_TLS_TEST` switch, because the interop network is plain
+  HTTP; that test passed on hosted Inferno against the GKE demo (G-60).
+
 - **The GKE demo can be put in front of hosted Inferno (G-60).** With
   `CONFORMANCE_FHIR_HOST` and `CONFORMANCE_AUTH_HOST` set, the demo deploy makes
   smart-auth-service's issuer and fhir-service's base URL those public tunnel

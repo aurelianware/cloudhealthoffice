@@ -18,7 +18,7 @@
 #   interop-c4bb         Inferno CARIN BB test kit     (INFERNO-C4BB-SERVER-001; judges Provider Access EOBs)
 #   interop-us-core      Inferno US Core test kit      (INFERNO-USCORE-SERVER-001; the US Core floor)
 #   interop-plan-net     Inferno Plan-Net test kit     (INFERNO-PLANNET-SERVER-001; judges the public Provider Directory)
-#   interop-bulk-data    Inferno Bulk Data test kit    (INFERNO-BULK-SERVER-001; judges Group and Patient export)
+#   interop-bulk-data    Inferno Bulk Data test kit    (INFERNO-BULK-SERVER-001; judges SMART Backend Services, Group and Patient export)
 #
 # Normally you do not run this file by hand — `scripts/interop/run.sh` and the
 # harness (InteropEnvironment) bring up exactly the services a scenario needs.
@@ -733,7 +733,13 @@ services:
     image: cho-interop/inferno-bulk-data:local
     build:
       context: ${INTEROP_INFERNO_BULK_DATA_DIR:-./.external/bulk-data-test-kit}
-    environment: *inferno-sidecars
+    environment: &inferno-bulk-data-env
+      <<: *inferno-sidecars
+      # The kit's own switch for its TLS version tests (tls-test-kit): they
+      # report "omit" instead of failing. The interop network is plain HTTP, so
+      # they could only fail here; hosted Inferno passed them against the GKE
+      # demo on 2026-10-29 (docs/deploy/GCP-CONFORMANCE-TESTING.md, G-60).
+      INFERNO_DISABLE_TLS_TEST: "true"
     volumes:
       - inferno_bulk_data_data:/opt/inferno/data
     ports:
@@ -752,7 +758,7 @@ services:
     build:
       context: ${INTEROP_INFERNO_BULK_DATA_DIR:-./.external/bulk-data-test-kit}
     command: ["bundle", "exec", "sidekiq", "-r", "./worker.rb"]
-    environment: *inferno-sidecars
+    environment: *inferno-bulk-data-env
     volumes:
       - inferno_bulk_data_data:/opt/inferno/data
     depends_on:

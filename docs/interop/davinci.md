@@ -341,7 +341,7 @@ all four run:
 | `INFERNO-USCORE-SERVER-001` | `us_core_v311` | `capability_statement`, `patient`, `encounter` | The US Core floor CMS-0057-F sets |
 | `INFERNO-C4BB-SERVER-001` | `c4bb_v200` (financial) | `capability_statement_group`, `patient`, `coverage`, `eob`, `organization`, `practitioner` | Patient, Coverage, Organization, Practitioner and the adjudicated EOB |
 | `INFERNO-PLANNET-SERVER-001` | `davinci_plan_net_server_v110` | all | The public Provider Directory (G-36), with no token |
-| `INFERNO-BULK-SERVER-001` | `bulk_data_v200` | `bulk_data_group_export_v200`, `bulk_data_patient_export_v200` | Group and Patient `$export` (G-60), the files included |
+| `INFERNO-BULK-SERVER-001` | `bulk_data_v200` | `bulk_data_smart_backend_services_v200`, `bulk_data_group_export_v200`, `bulk_data_patient_export_v200` | The SMART Backend Services token endpoint (its TLS test omitted on plain HTTP; passed on hosted Inferno), and Group and Patient `$export` (G-60), the files included |
 
 `INFERNO-PLANNET-SERVER-001` is the one scenario pointed somewhere other than
 the authenticated FHIR base: its `choSurface` is `publicDirectory`, so the kit's
