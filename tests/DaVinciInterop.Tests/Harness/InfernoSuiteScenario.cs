@@ -89,18 +89,19 @@ public static class InfernoSuiteScenario
             var inputs = BuildInputs(scenario, fixture);
 
             var suiteId = scenario.RequiredInfernoSuite;
-            var sessionId = await runner.CreateSessionAsync(suiteId, inputs, cancellationToken);
+            var sessionId = await runner.CreateSessionAsync(suiteId, cancellationToken);
+
+            var suite = await runner.DescribeSuiteAsync(suiteId, cancellationToken);
 
             if (scenario.InfernoGroups.Count == 0)
             {
+                var suiteInputs = WithKitDefaults(run, suiteId, inputs, suite.Inputs);
                 runs.Add(await ExecuteAsync(
-                    runner, () => runner.StartSuiteRunAsync(sessionId, suiteId, inputs, cancellationToken),
+                    runner, () => runner.StartSuiteRunAsync(sessionId, suiteId, suiteInputs, cancellationToken),
                     cancellationToken));
             }
             else
             {
-                var suite = await runner.DescribeSuiteAsync(suiteId, cancellationToken);
-
                 foreach (var declaredGroupId in scenario.InfernoGroups)
                 {
                     var groupId = InfernoRunner.ResolveGroupId(suite, declaredGroupId);
@@ -110,8 +111,10 @@ public static class InfernoSuiteScenario
                         $"'{declaredGroupId}' resolved to runnable group '{groupId}', read from the kit's own " +
                         "suite description rather than composed from a naming rule."));
 
+                    var group = suite.AllGroups().Single(g => g.Id == groupId);
+                    var groupInputs = WithKitDefaults(run, groupId, inputs, group.Inputs);
                     runs.Add(await ExecuteAsync(
-                        runner, () => runner.StartGroupRunAsync(sessionId, groupId, inputs, cancellationToken),
+                        runner, () => runner.StartGroupRunAsync(sessionId, groupId, groupInputs, cancellationToken),
                         cancellationToken));
                 }
             }
@@ -235,6 +238,26 @@ public static class InfernoSuiteScenario
     /// export is not empty for want of data.
     /// </summary>
     public const string BulkSinceTimestamp = "2026-01-01T00:00:00+00:00";
+
+    /// <summary>
+    /// The scenario's inputs plus the kit's defaults for any required input it
+    /// leaves unset, recording which were defaulted so the evidence says so.
+    /// </summary>
+    private static List<InfernoInput> WithKitDefaults(
+        InteropScenarioRun run, string runnableId, IReadOnlyList<InfernoInput> inputs,
+        IEnumerable<InfernoDeclaredInput> declared)
+    {
+        var (withDefaults, defaulted) = InfernoRunner.WithDeclaredDefaults(inputs, declared);
+        if (defaulted.Count > 0)
+        {
+            run.Record(InteropFinding.Info(
+                $"inferno.inputs.defaulted.{runnableId}",
+                $"'{runnableId}' ran with the kit's own defaults for {string.Join(", ", defaulted)}, as " +
+                "Inferno's UI would pre-fill them."));
+        }
+
+        return withDefaults;
+    }
 
     private static InfernoInput SmartAuthInfo(InteropScenarioDefinition scenario, ChoSeedFixture fixture, string token)
         => scenario.InfernoAuth switch

@@ -60,6 +60,70 @@ public sealed class InfernoRunnerTests
     }
 
     /// <summary>Captures the request body and answers with an empty finished run.</summary>
+    [Fact]
+    public void Required_inputs_the_scenario_omits_take_the_kits_own_defaults()
+    {
+        // Inferno's API refuses a run that leaves a required input unset, even
+        // one the kit gives a default (Plan-Net's no_param_search, max_instances
+        // and max_pages); its UI would have pre-filled them.
+        var declared = System.Text.Json.JsonSerializer.Deserialize<List<InfernoDeclaredInput>>(
+            """
+            [
+              {"name":"url"},
+              {"name":"smart_auth_info","optional":true},
+              {"name":"no_param_search","default":"true"},
+              {"name":"max_instances","default":"200"},
+              {"name":"optional_ids","optional":true,"default":"x"},
+              {"name":"no_default"}
+            ]
+            """)!;
+        var supplied = new List<InfernoInput> { new() { Name = "url", Value = "http://cho/fhir" } };
+
+        var (inputs, defaulted) = InfernoRunner.WithDeclaredDefaults(supplied, declared);
+
+        inputs.Select(i => (i.Name, i.Value)).Should().Equal(
+            ("url", "http://cho/fhir"), ("no_param_search", "true"), ("max_instances", "200"));
+        defaulted.Should().Equal("no_param_search", "max_instances");
+    }
+
+    [Fact]
+    public void A_supplied_input_is_never_replaced_by_a_default()
+    {
+        var declared = new List<InfernoDeclaredInput>
+        {
+            new() { Name = "max_pages", Default = System.Text.Json.JsonDocument.Parse("\"20\"").RootElement },
+        };
+        var supplied = new List<InfernoInput> { new() { Name = "max_pages", Value = "5" } };
+
+        var (inputs, defaulted) = InfernoRunner.WithDeclaredDefaults(supplied, declared);
+
+        inputs.Should().ContainSingle().Which.Value.Should().Be("5");
+        defaulted.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_refused_session_reports_what_the_kit_said()
+    {
+        // A bare "500 (Internal Server Error)" is all the nightly run showed;
+        // the kit's own message only reached the artifacts.
+        var runner = new InfernoRunner("http://inferno.invalid/api", new HttpClient(new Refusing()));
+
+        var act = () => runner.CreateSessionAsync("davinci_plan_net_server_v110");
+
+        (await act.Should().ThrowAsync<HttpRequestException>())
+            .Which.Message.Should().Contain("HTTP 500").And.Contain("validator unreachable");
+    }
+
+    private sealed class Refusing : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.InternalServerError)
+            {
+                Content = new StringContent("""{"errors":"validator unreachable"}"""),
+            });
+    }
+
     private sealed class RequestRecorder : HttpMessageHandler
     {
         public string LastBody { get; private set; } = "";
