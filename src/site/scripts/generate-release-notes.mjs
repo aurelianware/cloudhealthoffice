@@ -47,7 +47,6 @@ const slugOf = (version) => `v${version.join('-')}`;
 // GitHub's heading anchors, so links like #not-yet-done-for-cms-0057-f keep working.
 const anchorOf = (heading) => heading
   .toLowerCase()
-  .replace(/<[^>]+>/g, '')
   .replace(/[^\p{L}\p{N}\s_-]/gu, '')
   .trim()
   .replace(/\s/g, '-');
@@ -76,7 +75,7 @@ function resolveHref(href) {
 
 function linkTag(label, href) {
   const resolved = resolveHref(href);
-  const external = /^https?:/.test(resolved) && !resolved.startsWith(SITE);
+  const external = /^https?:/.test(resolved) && new URL(resolved).hostname !== new URL(SITE).hostname;
   return `<a href="${escapeHtml(resolved)}"${external ? ' rel="noopener"' : ''}>${label}</a>`;
 }
 
