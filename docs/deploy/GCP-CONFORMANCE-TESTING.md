@@ -29,9 +29,10 @@ Without the two variables nothing changes.
 
    Leave `/connect/authorize` behind Access. In demo security, smart-auth-service offers the development sign-in there.
 2. **Tunnel routes.** In Zero Trust → Networks → Tunnels → `cho-demo` → Public hostnames, add `fhir-test…` → `http://fhir-service.cloudhealthoffice.svc.cluster.local:80` and `auth-test…` → `http://smart-auth-service.cloudhealthoffice.svc.cluster.local:80`.
-3. **TLS.** In SSL/TLS → Edge Certificates, set **Minimum TLS Version** to 1.2. Inferno's TLS test expects TLS 1.0 and 1.1 to be refused, and Cloudflare's default accepts them.
-4. **Repository variables.** Set `CONFORMANCE_FHIR_HOST` and `CONFORMANCE_AUTH_HOST` (bare hostnames), and optionally `TRUSTED_PROXY_NETWORKS` (comma-separated CIDRs). For the Bulk Data export groups, also set `BULK_EXPORT_BUCKET` and `FHIR_SERVICE_GOOGLE_ACCOUNT`. Then run **Deploy demo to GKE**.
-5. **Check discovery.** `curl https://fhir-test…/fhir/r4/.well-known/smart-configuration` should show `token_endpoint` `https://auth-test…/connect/token`, `private_key_jwt`, and `client-confidential-asymmetric`. A 503 means fhir-service could not read the issuer's discovery document: check the `/.well-known/*` bypass.
+3. **Bot protection.** Inferno is a script on a cloud IP, so Cloudflare's bot features answer it with a challenge page (`cf-mitigated: challenge`, HTTP 403) before it reaches CHO. On the Free plan, Bot Fight Mode cannot be skipped per hostname: turn it off for the run. Otherwise add a WAF custom rule, first in order, for `(http.host in {"fhir-test…" "auth-test…"})` with action **Skip** (remaining custom rules, Security Level, Browser Integrity Check, Super Bot Fight Mode).
+4. **TLS.** In SSL/TLS → Edge Certificates, set **Minimum TLS Version** to 1.2. Inferno's TLS test expects TLS 1.0 and 1.1 to be refused, and Cloudflare's default accepts them.
+5. **Repository variables.** Set `CONFORMANCE_FHIR_HOST` and `CONFORMANCE_AUTH_HOST` (bare hostnames), and optionally `TRUSTED_PROXY_NETWORKS` (comma-separated CIDRs). For the Bulk Data export groups, also set `BULK_EXPORT_BUCKET` and `FHIR_SERVICE_GOOGLE_ACCOUNT`. Then run **Deploy demo to GKE**.
+6. **Check discovery.** `curl https://fhir-test…/fhir/r4/.well-known/smart-configuration` should show `token_endpoint` `https://auth-test…/connect/token`, `private_key_jwt`, and `client-confidential-asymmetric`. A 503 means fhir-service could not read the issuer's discovery document: check the `/.well-known/*` bypass.
 
 ## Each run
 
@@ -49,8 +50,8 @@ Without the two variables nothing changes.
 
    The response says `"tokenEndpointAuthMethod": "private_key_jwt"`. `providerId` matters only for the export groups (it is the Group exported). With production security, the development token is refused; use a demo TenantAdmin's CHO token instead.
 2. **Open the bypasses** for `/connect/token` and `/fhir/r4/*`.
-3. **Run Inferno.** Start a **Bulk Data Access v2.0.0** session with Bulk Data FHIR URL `https://fhir-test…/fhir/r4`, client ID `inferno-hosted`, encryption algorithm ES384, scope `system/*.read`, and the key ID blank. Run **SMART Backend Services**. With bulk export on, also run the Group and Patient export groups (Group ID = the `providerId` above). Skip system export, which CHO answers with 501 by design.
-4. **Close up.** Turn the two bypasses off, delete the client (`DELETE /api/admin/smart/clients/inferno-hosted`), and keep the Inferno session's results as the G-60 evidence.
+3. **Run Inferno.** On the Bulk Data test kit page, start a **Bulk Data Access v2.0.0 Server** session with Bulk Data FHIR URL `https://fhir-test…/fhir/r4`, client ID `inferno-hosted`, encryption algorithm ES384, scope `system/*.read`, and the key ID blank. Run **SMART Backend Services**. With bulk export on, also run the Group and Patient export groups (Group ID = the `providerId` above). Skip system export, which CHO answers with 501 by design.
+4. **Close up.** Turn the two bypasses off (and Bot Fight Mode back on if you turned it off), delete the client (`DELETE /api/admin/smart/clients/inferno-hosted`), and keep the Inferno session's results as the G-60 evidence.
 
 ## If a test fails
 
@@ -61,3 +62,7 @@ Without the two variables nothing changes.
 | Token request refused for `aud` | The token URL Inferno used is not `https://<CONFORMANCE_AUTH_HOST>/connect/token` |
 | FHIR calls answer 401 after a token is issued | fhir-service could not read discovery or keys, or the token's tenant is not `demo` |
 | An HTML login page instead of JSON | A path still sits behind Access |
+| 403 with `cf-mitigated: challenge` | Cloudflare bot protection challenged Inferno: see step 3 |
+| 502 from Cloudflare | The tunnel route's service URL is wrong; cloudflared's log names the host it could not resolve |
+| 500 "The X509 certificate could not be added to the store" | smart-auth-service has no writable `HOME` (fixed in the rendered manifests) |
+| Settings changed but discovery shows the old issuer | Pods predate the change: `kubectl rollout restart deployment/smart-auth-service deployment/fhir-service -n cloudhealthoffice` |
