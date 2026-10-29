@@ -6,6 +6,21 @@ This directory contains comprehensive release documentation for CloudHealthOffic
 
 ## Current Release
 
+### v6.1.0 — Spartacus (TBD)
+
+SMART Backend Services authentication in both directions, the public Provider Directory as
+Plan-Net 1.2.0, and the rest of Bulk Data `$export` (still off by default). No breaking changes.
+Not tagged until the nightly Inferno run is clean.
+
+| Document | Description |
+|----------|-------------|
+| [v6.1.0 Release Notes](./RELEASE_NOTES_v6.1.0.md) | Highlights, upgrading from 6.0, what is still open for CMS-0057-F |
+| [Changelog](../../CHANGELOG.md) | Itemized changes |
+
+---
+
+## Previous Releases
+
 ### v6.0.0 — Paths of Glory (October 2026)
 
 MongoDB as the only document store (Cosmos DB removed), claims that pay correctly through one
@@ -19,8 +34,6 @@ CMS-0057-F API requirements.
 | [Changelog](../../CHANGELOG.md) | Itemized changes |
 
 ---
-
-## Previous Releases
 
 ### v5.0.0 — 2001: A Payer Odyssey (October 2026)
 

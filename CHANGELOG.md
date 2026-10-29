@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.1.0] - TBD
+
+"Spartacus."
+
+A minor version with no breaking changes: SMART Backend Services
+authentication in both directions, the public Provider Directory as Plan-Net
+1.2.0, and the rest of Bulk Data `$export` (still off by default). Covers the
+pull requests merged between v6.0.0 and this release (#1583 to #1608).
+Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
+
 ### Added
 
 - **The GKE demo can publish public Provider Directories (G-36).** The
