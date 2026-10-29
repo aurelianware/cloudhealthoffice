@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "davinci-interoperability",
-  "generatedAtUtc": "2026-10-29T15:23:08Z",
-  "sourceCommit": "aff9b13f3c06e4bf398f88b771822a8cc43fa974",
-  "sourceCommitShort": "aff9b13f3c06",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/aff9b13f3c06e4bf398f88b771822a8cc43fa974",
+  "generatedAtUtc": "2026-10-29T17:54:12Z",
+  "sourceCommit": "20d0c614012f9c3e49439b11e87661967b1b8b5d",
+  "sourceCommitShort": "20d0c614012f",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/20d0c614012f9c3e49439b11e87661967b1b8b5d",
   "inventoryReviewedUtc": "2026-10-23T00:00:00Z",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence. External interoperability results never change a CMS-0057-F scenario status, and CMS acceptance statuses never imply an interoperability result. See docs/interop/davinci.md and docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md.",
@@ -323,13 +323,13 @@
     },
     {
       "id": "INFERNO-BULK-SERVER-001",
-      "title": "Inferno Bulk Data 2.0.0 Group and Patient export against CHO",
+      "title": "Inferno Bulk Data 2.0.0 SMART Backend Services, Group and Patient export against CHO",
       "protocol": "Bulk Data",
       "choRole": "Server",
       "externalTarget": "inferno-bulk-data",
       "implemented": true,
       "linkedFromScenario": null,
-      "description": "Run the bulk-data-test-kit bulk_data_v200 Group export and Patient export groups against the interop-cho profile with bulk export on (G-60): kick-off, status polling, the manifest, downloading the NDJSON files with the token the manifest requires, validating the resources in them, cancel, and the outputFormat and _since parameters. group_id is the seeded billing provider, whose patients come from claims-history attribution. The kit authenticates itself with SMART Backend Services (private_key_jwt) against cho-smart-auth-service as a backend client the harness registers, bound to that provider, so the token, the provider binding and the export are all the real path. Not run: the server TLS group and the SMART Backend Services group, whose TLS checks cannot pass on the plain-HTTP interop network, and the system export group, because CHO does not serve system-level $export. See knownMismatches for inferno-bulk-data in interop/versions.json.",
+      "description": "Run the bulk-data-test-kit bulk_data_v200 SMART Backend Services, Group export and Patient export groups against the interop-cho profile with bulk export on (G-60): kick-off, status polling, the manifest, downloading the NDJSON files with the token the manifest requires, validating the resources in them, cancel, and the outputFormat and _since parameters. group_id is the seeded billing provider, whose patients come from claims-history attribution. The kit authenticates itself with SMART Backend Services (private_key_jwt) against cho-smart-auth-service as a backend client the harness registers, bound to that provider, so the token, the provider binding and the export are all the real path. The SMART Backend Services group (SMART discovery STU2 and the six Backend Services authorization tests) judges the token endpoint itself: invalid grant_type, client_assertion_type and JWT refused, a valid assertion answered with the required token body. Its token-endpoint TLS test reports omit, by the kit's own INFERNO_DISABLE_TLS_TEST switch, because the interop network is plain HTTP; it passed on hosted Inferno against the GKE demo over real TLS (2026-10-29). Not run: the server TLS group, for the same reason, and the system export group, because CHO does not serve system-level $export. See knownMismatches for inferno-bulk-data in interop/versions.json.",
       "status": "NotRun",
       "linkedArtifact": null,
       "testedVersion": null
@@ -349,10 +349,10 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-10-29T15:22:48.3649638+00:00",
+    "generatedAtUtc": "2026-10-29T17:52:55.0654597+00:00",
     "environment": "CI",
-    "choCommit": "aff9b13f3c06e4bf398f88b771822a8cc43fa974",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/aff9b13f3c06e4bf398f88b771822a8cc43fa974",
+    "choCommit": "20d0c614012f9c3e49439b11e87661967b1b8b5d",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/20d0c614012f9c3e49439b11e87661967b1b8b5d",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 3,
