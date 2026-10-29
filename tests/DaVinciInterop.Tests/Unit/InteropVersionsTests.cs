@@ -101,6 +101,48 @@ public sealed class InteropVersionsTests
         }
     }
 
+    [Fact]
+    public void Every_inferno_kit_migrates_its_database_before_the_app_and_worker_start()
+    {
+        // Inferno does not create its SQLite schema on boot. Without a migrate
+        // step both containers die on their first query ("no such table:
+        // headers"), which is how every nightly run from 2026-10-24 to
+        // 2026-10-28 failed while reporting green.
+        var compose = File.ReadAllLines(InteropPaths.ComposeFile)
+            .SkipWhile(l => l.TrimEnd() != "services:")
+            .ToArray();
+        var kits = Versions.Targets
+            .Select(t => t.Compose?.Service)
+            .Where(s => s is not null && s.StartsWith("inferno-", StringComparison.Ordinal))
+            .Select(s => s!)
+            .ToList();
+
+        kits.Should().NotBeEmpty();
+        foreach (var kit in kits)
+        {
+            var migrate = kit + "-migrate";
+            string.Join('\n', ServiceBlock(compose, migrate)).Should().Contain(
+                "command: [\"bundle\", \"exec\", \"inferno\", \"migrate\"]",
+                "'{0}' must run `inferno migrate` on the kit's data volume", migrate);
+
+            foreach (var service in new[] { kit, kit + "-worker" })
+            {
+                string.Join('\n', ServiceBlock(compose, service)).Should().Contain(
+                    $"{migrate}:\n        condition: service_completed_successfully",
+                    "'{0}' must not start until its kit's schema exists", service);
+            }
+        }
+    }
+
+    /// <summary>The lines of one service's definition, header excluded.</summary>
+    private static IReadOnlyList<string> ServiceBlock(IReadOnlyList<string> compose, string service) =>
+        compose
+            .SkipWhile(l => l.TrimEnd() != $"  {service}:")
+            .Skip(1)
+            .TakeWhile(l => !(Indent(l) == 2 && l.TrimEnd().EndsWith(':') && !l.TrimStart().StartsWith('#')))
+            .Select(l => l.TrimEnd())
+            .ToList();
+
     /// <summary>The <c>profiles:</c> list of one service, as the inline form this file uses.</summary>
     private static IReadOnlyList<string> ComposeProfilesOf(IReadOnlyList<string> compose, string service)
     {
