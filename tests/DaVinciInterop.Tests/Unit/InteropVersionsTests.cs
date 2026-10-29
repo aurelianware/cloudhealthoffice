@@ -135,6 +135,31 @@ public sealed class InteropVersionsTests
     }
 
     [Fact]
+    public void The_c4bb_kit_hands_its_ig_files_to_the_validator_before_it_starts()
+    {
+        // The C4BB suites name their IGs by file ('igs/carin4bb-200.tgz'), and
+        // the validator resolves that path under its own /app. Without the copy
+        // every validation answered 500 and Inferno reported "Unable to connect
+        // to validator" for every C4BB validation test (run 40937514337).
+        var compose = File.ReadAllLines(InteropPaths.ComposeFile)
+            .SkipWhile(l => l.TrimEnd() != "services:")
+            .ToArray();
+
+        var copy = string.Join('\n', ServiceBlock(compose, "inferno-c4bb-igs"));
+        copy.Should().Contain("lib/carin_for_blue_button_test_kit/igs/*.tgz /validator-igs/");
+        copy.Should().Contain("- inferno_validator_igs:/validator-igs");
+        string.Join('\n', ServiceBlock(compose, "inferno-validator")).Should().Contain(
+            "- inferno_validator_igs:/app/igs", "the copy only helps if the validator reads the same volume at /app/igs");
+
+        foreach (var service in new[] { "inferno-c4bb", "inferno-c4bb-worker" })
+        {
+            string.Join('\n', ServiceBlock(compose, service)).Should().Contain(
+                "inferno-c4bb-igs:\n        condition: service_completed_successfully",
+                "'{0}' must not run a validation before the IG files are in place", service);
+        }
+    }
+
+    [Fact]
     public void The_interop_mongo_is_a_replica_set_so_coverage_writes_can_commit()
     {
         // coverage-service writes inside a Mongo transaction and answers 503

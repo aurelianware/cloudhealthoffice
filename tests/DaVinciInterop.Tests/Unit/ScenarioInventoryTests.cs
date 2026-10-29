@@ -281,22 +281,29 @@ public sealed class ScenarioInventoryTests
     }
 
     /// <summary>
-    /// The kit's TLS version tests read INFERNO_DISABLE_TLS_TEST in the worker
-    /// that runs them, so the worker is where it has to be set. Without it the
-    /// token-endpoint TLS test fails every night against plain HTTP.
+    /// Every kit's TLS version tests read INFERNO_DISABLE_TLS_TEST in the worker
+    /// that runs them. The interop network is plain HTTP, so without it those
+    /// tests fail every night in every kit and say nothing about CHO (US Core
+    /// and Plan-Net both failed that way in run 40937514337).
     /// </summary>
     [Fact]
-    public void The_bulk_data_kit_worker_switches_its_tls_tests_to_omit()
+    public void Every_inferno_kit_worker_switches_its_tls_tests_to_omit()
     {
         var compose = File.ReadAllText(InteropPaths.ComposeFile);
-        var worker = Regex.Match(compose, @"\n  inferno-bulk-data-worker:\n(?<body>(?:    .*\n|\n)+)").Groups["body"].Value;
-        var anchor = Regex.Match(worker, @"environment: \*(?<name>[\w-]+)").Groups["name"].Value;
 
-        anchor.Should().NotBeEmpty("the worker takes its environment from an anchor");
         Regex.IsMatch(
                 compose,
-                $@"environment: &{Regex.Escape(anchor)}\n(?:      .*\n)*?      INFERNO_DISABLE_TLS_TEST: ""true""")
-            .Should().BeTrue("the anchor the worker uses must set INFERNO_DISABLE_TLS_TEST");
+                @"environment: &inferno-sidecars\n(?:      .*\n)*?      INFERNO_DISABLE_TLS_TEST: ""true""")
+            .Should().BeTrue("the shared kit environment must set INFERNO_DISABLE_TLS_TEST");
+
+        var workers = Regex.Matches(compose, @"\n  (?<name>inferno-[\w-]+-worker):\n(?<body>(?:    .*\n|\n)+?)(?=  \S)");
+        workers.Should().NotBeEmpty();
+        foreach (Match worker in workers)
+        {
+            worker.Groups["body"].Value.Should().Contain(
+                "environment: *inferno-sidecars",
+                "'{0}' runs the TLS tests, so it must take the shared kit environment", worker.Groups["name"].Value);
+        }
     }
 
     [Fact]

@@ -188,6 +188,18 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **The nightly Inferno run no longer reports harness faults as CHO failures.**
+  Three things in run 40937514337 were the harness, not CHO. Every CARIN BB
+  validation errored with "Unable to connect to validator": the C4BB suites
+  name their IGs by file, and the validator never had the files, so it
+  answered 500. A one-shot service now copies the kit's IG packages into the
+  validator before the kit starts. The US Core and Plan-Net TLS tests failed
+  on the plain-HTTP interop network; every kit now runs with the kits' own
+  `INFERNO_DISABLE_TLS_TEST` switch, as Bulk Data already did, so they report
+  omit. Bulk Data never ran because the seed reached fhir-service before it
+  listened (ECONNRESET); the seed now waits for every CHO service it calls to
+  answer `/health/live`.
+
 - **Inferno answered 500 to every session the harness opened.** The harness
   sent its JSON with `Transfer-Encoding: chunked`; Puma buffers a chunked body
   to a Tempfile, and Inferno's API calls `request.body.string` on it ("undefined

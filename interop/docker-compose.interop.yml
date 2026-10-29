@@ -488,6 +488,13 @@ services:
     environment: &inferno-sidecars
       REDIS_URL: redis://inferno-redis:6379/0
       FHIR_RESOURCE_VALIDATOR_URL: http://inferno-validator:3500
+      # The kits' own switch for their TLS version tests (tls-test-kit 1.0.2 in
+      # every kit pinned here): they report "omit" instead of failing. The
+      # interop network is plain HTTP, so they could only fail here, and a
+      # failure would say nothing about CHO; in a deployment TLS ends at the
+      # ingress. Hosted Inferno passed them against the GKE demo on 2026-10-29
+      # (docs/deploy/GCP-CONFORMANCE-TESTING.md, G-60).
+      INFERNO_DISABLE_TLS_TEST: "true"
     volumes:
       - inferno_pdex_data:/opt/inferno/data
     ports:
@@ -579,6 +586,28 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # The C4BB suites name their IGs by file (`igs 'igs/carin4bb-200.tgz'`), not
+  # by package id, because they pin builds the registry does not serve. The
+  # validator resolves that path against its own working directory, /app, so
+  # the file has to be in the validator's /app/igs. Upstream gets it there with
+  # a bind mount; here the kit is built from a checkout, so this one-shot copies
+  # the packages the kit ships into the validator's IG volume before the app and
+  # worker start. Without it every validation answers 500 "Unable to
+  # find/resolve/read -ig igs/carin4bb-200.tgz", which Inferno reports as
+  # "Unable to connect to validator" (every C4BB validation test errored that
+  # way in run 40937514337).
+  inferno-c4bb-igs:
+    profiles: [interop-c4bb]
+    networks: [interop]
+    image: cho-interop/inferno-c4bb:local
+    build:
+      context: ${INTEROP_INFERNO_C4BB_DIR:-./.external/carin-for-blue-button-test-kit}
+    command: ["sh", "-c", "cp lib/carin_for_blue_button_test_kit/igs/*.tgz /validator-igs/ && ls -l /validator-igs"]
+    volumes:
+      - inferno_validator_igs:/validator-igs
+    security_opt:
+      - no-new-privileges:true
+
   inferno-c4bb:
     profiles: [interop-c4bb]
     networks: [interop]
@@ -593,6 +622,8 @@ services:
     depends_on:
       <<: *inferno-depends
       inferno-c4bb-migrate:
+        condition: service_completed_successfully
+      inferno-c4bb-igs:
         condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
@@ -610,6 +641,8 @@ services:
     depends_on:
       <<: *inferno-depends
       inferno-c4bb-migrate:
+        condition: service_completed_successfully
+      inferno-c4bb-igs:
         condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
@@ -733,13 +766,7 @@ services:
     image: cho-interop/inferno-bulk-data:local
     build:
       context: ${INTEROP_INFERNO_BULK_DATA_DIR:-./.external/bulk-data-test-kit}
-    environment: &inferno-bulk-data-env
-      <<: *inferno-sidecars
-      # The kit's own switch for its TLS version tests (tls-test-kit): they
-      # report "omit" instead of failing. The interop network is plain HTTP, so
-      # they could only fail here; hosted Inferno passed them against the GKE
-      # demo on 2026-10-29 (docs/deploy/GCP-CONFORMANCE-TESTING.md, G-60).
-      INFERNO_DISABLE_TLS_TEST: "true"
+    environment: *inferno-sidecars
     volumes:
       - inferno_bulk_data_data:/opt/inferno/data
     ports:
@@ -758,7 +785,7 @@ services:
     build:
       context: ${INTEROP_INFERNO_BULK_DATA_DIR:-./.external/bulk-data-test-kit}
     command: ["bundle", "exec", "sidekiq", "-r", "./worker.rb"]
-    environment: *inferno-bulk-data-env
+    environment: *inferno-sidecars
     volumes:
       - inferno_bulk_data_data:/opt/inferno/data
     depends_on:
