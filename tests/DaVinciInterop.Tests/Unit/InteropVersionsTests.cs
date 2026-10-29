@@ -134,6 +134,22 @@ public sealed class InteropVersionsTests
         }
     }
 
+    [Fact]
+    public void The_interop_mongo_is_a_replica_set_so_coverage_writes_can_commit()
+    {
+        // coverage-service writes inside a Mongo transaction and answers 503
+        // PCP_PANEL_UNAVAILABLE on a standalone server, which left the
+        // interop-cho seed unable to create a single Coverage.
+        var compose = File.ReadAllLines(InteropPaths.ComposeFile)
+            .SkipWhile(l => l.TrimEnd() != "services:")
+            .ToArray();
+        var mongo = string.Join('\n', ServiceBlock(compose, "interop-mongo"));
+
+        mongo.Should().Contain("\"--replSet\", \"rs0\"");
+        mongo.Should().Contain("rs.initiate(", "the healthcheck must initiate the set on a fresh volume");
+        mongo.Should().Contain("isWritablePrimary", "healthy must mean transactions are available");
+    }
+
     /// <summary>The lines of one service's definition, header excluded.</summary>
     private static IReadOnlyList<string> ServiceBlock(IReadOnlyList<string> compose, string service) =>
         compose

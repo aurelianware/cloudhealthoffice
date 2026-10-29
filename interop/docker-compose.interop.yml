@@ -108,14 +108,30 @@ services:
   #
   # Mode is Hybrid rather than Demo because that is what the bindings make true:
   # Demo is the honest label only while the mock serves these resources.
+  # A single-node replica set, not a standalone mongod: coverage-service writes
+  # every coverage change inside a Mongo transaction (the PCP roster fence,
+  # #1547) and answers 503 PCP_PANEL_UNAVAILABLE when transactions are not
+  # supported, which a standalone server never does. The healthcheck initiates
+  # the set on first run and reports healthy only once this node is primary,
+  # so no CHO service connects before transactions work. The connection strings
+  # below need no replicaSet parameter: the driver discovers the set from the
+  # one seed.
   interop-mongo:
     image: mongo:7
     profiles: [interop-cho]
     networks: [interop]
+    command: ["--replSet", "rs0", "--bind_ip_all"]
     volumes:
       - interop_mongo_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - >-
+          try { rs.status() } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'interop-mongo:27017' }] }) };
+          if (!db.hello().isWritablePrimary) { quit(1) }
       interval: 5s
       timeout: 5s
       retries: 24
