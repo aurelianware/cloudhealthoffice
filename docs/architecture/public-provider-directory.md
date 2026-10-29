@@ -47,6 +47,23 @@ payer Organization fails Plan-Net validation for want of an address.
 fhir-service also needs `Services:ProviderServiceUrl` and
 `Services:BenefitPlanServiceUrl`.
 
+### On the GKE demo
+
+`scripts/deploy-gke.sh` (and the GKE deploy workflow, from the repository
+variable of the same name) takes the directories as one JSON value,
+`PUBLIC_PROVIDER_DIRECTORY`, keyed by directory id:
+
+```json
+{"demo": {"Tenant": "demo", "Name": "Demo Health Plan (synthetic)", "Phone": "555-0100",
+          "AddressLine": "1 Synthetic Way", "City": "Springfield", "State": "FL", "PostalCode": "32401"}}
+```
+
+`deploy/gcp/render_manifests.py --public-directory` turns each entry into the
+settings above on fhir-service. It refuses a directory id that is not a URL
+segment, an unknown setting, a missing `Tenant`, `Name` or address field
+(Plan-Net fails without the address), and `IdentifierSystem` without
+`IdentifierValue`. Unset, nothing is published.
+
 ## How it is built
 
 ```

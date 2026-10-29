@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The GKE demo can publish public Provider Directories (G-36).** The
+  `PUBLIC_PROVIDER_DIRECTORY` repository variable (or environment variable for
+  `scripts/deploy-gke.sh`) is a JSON object keyed by directory id, each entry
+  naming its tenant and the plan's own name and address; the deploy turns it
+  into fhir-service's `PublicProviderDirectory:*` settings. A missing address
+  field, an unknown setting or a directory id that is not a URL segment fails
+  the render. Unset, nothing is published, as before. Until now only the
+  interop compose profile could publish a directory.
+
 - **The nightly Bulk Data run now judges the SMART Backend Services token
   endpoint.** `INFERNO-BULK-SERVER-001` adds the kit's SMART Backend Services
   group (discovery STU2 and six authorization tests) to the Group and Patient

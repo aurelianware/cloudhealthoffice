@@ -65,6 +65,13 @@
 #                            Backend Services and Bulk Data against the demo. smart-auth-service's
 #                            issuer and fhir-service's base URL become these hosts. Optional; both or
 #                            neither. Needs CLOUDFLARE_TUNNEL_TOKEN. See docs/deploy/GCP-CONFORMANCE-TESTING.md.
+#   PUBLIC_PROVIDER_DIRECTORY
+#                            JSON object of the plans whose public Plan-Net Provider Directory
+#                            fhir-service publishes, keyed by directory id, each naming its Tenant and
+#                            the plan's Name and address: {"demo": {"Tenant": "demo", "Name": "...",
+#                            "AddressLine": "...", "City": "...", "State": "FL", "PostalCode": "..."}}.
+#                            Optional; nothing is published without it. See
+#                            docs/architecture/public-provider-directory.md.
 #   TRUSTED_PROXY_NETWORKS   Comma-separated CIDRs smart-auth-service believes X-Forwarded-Proto from
 #                            (where cloudflared runs). Default: the cluster's pod range, read with
 #                            gcloud (GKE_CLUSTER, GKE_LOCATION), else the nodes' pod CIDRs.
@@ -419,6 +426,10 @@ if [[ -n "${CONFORMANCE_FHIR_HOST:-}" && -n "${CONFORMANCE_AUTH_HOST:-}" ]]; the
   warn "Route these hostnames only behind Cloudflare Access; bypass just the paths in docs/deploy/GCP-CONFORMANCE-TESTING.md, and only while a suite runs"
 elif [[ -n "${CONFORMANCE_FHIR_HOST:-}${CONFORMANCE_AUTH_HOST:-}" ]]; then
   err "CONFORMANCE_FHIR_HOST and CONFORMANCE_AUTH_HOST go together"
+fi
+if [[ -n "${PUBLIC_PROVIDER_DIRECTORY:-}" ]]; then
+  render_args+=(--public-directory "$PUBLIC_PROVIDER_DIRECTORY")
+  ok "public Provider Directory: $(python3 -c 'import json,sys; print(", ".join(sorted(json.loads(sys.argv[1]))))' "$PUBLIC_PROVIDER_DIRECTORY" 2>/dev/null || echo '(checked by render_manifests.py)') at /fhir/r4/directory/<id>/"
 fi
 rendered="$(mktemp)"
 python3 deploy/gcp/render_manifests.py "${render_args[@]}" > "$rendered"
