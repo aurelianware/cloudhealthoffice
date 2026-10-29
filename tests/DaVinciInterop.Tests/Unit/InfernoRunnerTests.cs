@@ -159,6 +159,74 @@ public sealed class InfernoRunnerTests
         }
     }
 
+    [Fact]
+    public void A_token_the_kit_obtained_reaches_the_next_group_instead_of_being_overwritten()
+    {
+        // Run 40956429968: the export groups were sent the harness's original
+        // smart_auth_info (no token), which replaced the token the SMART group
+        // had stored, and every kick-off answered 401.
+        var original = InfernoInput.BackendServices(
+            "smart_auth_info", "http://cho-smart-auth-service:8080/connect/token", "inferno-bulk-data",
+            "system/*.read");
+        var supplied = new List<InfernoInput>
+        {
+            original,
+            new() { Name = "bulk_server_url", Value = "http://cho-fhir-service:8080/fhir/r4" },
+        };
+        var session = new Dictionary<string, string>
+        {
+            ["smart_auth_info"] = """{"auth_type":"backend_services","access_token":"issued"}""",
+            ["bulk_server_url"] = "http://somewhere-else.invalid",
+        };
+
+        var (inputs, carried) = InfernoRunner.WithSessionAuth(supplied, session);
+
+        carried.Should().Equal("smart_auth_info");
+        inputs.Single(i => i.Name == "smart_auth_info").Should().Be(
+            original with { Value = """{"auth_type":"backend_services","access_token":"issued"}""" });
+        inputs.Single(i => i.Name == "bulk_server_url").Value.Should().Be(
+            "http://cho-fhir-service:8080/fhir/r4", "only auth_info is the kit's to fill in");
+    }
+
+    [Fact]
+    public void An_auth_input_the_session_has_not_changed_is_not_reported_as_carried()
+    {
+        var original = InfernoInput.AccessToken("smart_auth_info", "minted");
+        var (inputs, carried) = InfernoRunner.WithSessionAuth(
+            [original], new Dictionary<string, string> { ["smart_auth_info"] = original.Value });
+
+        carried.Should().BeEmpty();
+        inputs.Should().Equal(original);
+    }
+
+    [Fact]
+    public async Task Session_data_is_read_by_name_and_empty_values_are_left_out()
+    {
+        var handler = new Answering(
+            """[{"name":"smart_auth_info","value":"{\"access_token\":\"t\"}"},{"name":"group_id","value":null},{"name":"since_timestamp","value":""}]""");
+        var runner = new InfernoRunner("http://inferno.invalid/api", new HttpClient(handler));
+
+        var data = await runner.ReadSessionDataAsync("session-1");
+
+        handler.LastUri.Should().Be("http://inferno.invalid/api/test_sessions/session-1/session_data");
+        data.Should().Equal(new Dictionary<string, string> { ["smart_auth_info"] = """{"access_token":"t"}""" });
+    }
+
+    private sealed class Answering(string body) : HttpMessageHandler
+    {
+        public string? LastUri { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            LastUri = request.RequestUri!.ToString();
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
+            });
+        }
+    }
+
     [Theory]
     [InlineData("pass", InteropStatus.Passed)]
     [InlineData("fail", InteropStatus.Failed)]
