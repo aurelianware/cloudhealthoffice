@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Cloud Health Office release notes</title>
+    <link>https://cloudhealthoffice.com/release-notes</link>
+    <atom:link href="https://cloudhealthoffice.com/release-notes/feed.xml" rel="self" type="application/rss+xml"/>
+    <description>New releases of Cloud Health Office, the core administration platform for health plans.</description>
+    <language>en-us</language>
+    <lastBuildDate>Wed, 28 Oct 2026 00:00:00 GMT</lastBuildDate>
+    <item>
+      <title>Cloud Health Office v6.0.0: Paths of Glory</title>
+      <link>https://cloudhealthoffice.com/release-notes/v6-0-0</link>
+      <guid isPermaLink="true">https://cloudhealthoffice.com/release-notes/v6-0-0</guid>
+      <pubDate>Wed, 28 Oct 2026 00:00:00 GMT</pubDate>
+      <description>Cloud Health Office v6.0.0 (Paths of Glory): Claims pay correctly, through one adjudicator; inpatient pricing from CMS's rules.</description>
+    </item>
+    <item>
+      <title>Cloud Health Office v5.0.0: 2001: A Payer Odyssey</title>
+      <link>https://cloudhealthoffice.com/release-notes/v5-0-0</link>
+      <guid isPermaLink="true">https://cloudhealthoffice.com/release-notes/v5-0-0</guid>
+      <pubDate>Tue, 06 Oct 2026 00:00:00 GMT</pubDate>
+      <description>Cloud Health Office v5.0.0 (2001: A Payer Odyssey): CMS-0057-F: Cloud Health Office as the native authorization and data backend.</description>
+    </item>
+  </channel>
+</rss>
