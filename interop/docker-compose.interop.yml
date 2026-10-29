@@ -36,6 +36,14 @@
 
 name: cho-interop
 
+# Every Inferno kit app and worker waits for the shared sidecars to be healthy.
+# Each also waits for its own kit's migrate service; see the Inferno section.
+x-inferno-depends: &inferno-depends
+  inferno-redis:
+    condition: service_healthy
+  inferno-validator:
+    condition: service_healthy
+
 networks:
   interop:
     name: cho-interop
@@ -100,14 +108,30 @@ services:
   #
   # Mode is Hybrid rather than Demo because that is what the bindings make true:
   # Demo is the honest label only while the mock serves these resources.
+  # A single-node replica set, not a standalone mongod: coverage-service writes
+  # every coverage change inside a Mongo transaction (the PCP roster fence,
+  # #1547) and answers 503 PCP_PANEL_UNAVAILABLE when transactions are not
+  # supported, which a standalone server never does. The healthcheck initiates
+  # the set on first run and reports healthy only once this node is primary,
+  # so no CHO service connects before transactions work. The connection strings
+  # below need no replicaSet parameter: the driver discovers the set from the
+  # one seed.
   interop-mongo:
     image: mongo:7
     profiles: [interop-cho]
     networks: [interop]
+    command: ["--replSet", "rs0", "--bind_ip_all"]
     volumes:
       - interop_mongo_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - >-
+          try { rs.status() } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'interop-mongo:27017' }] }) };
+          if (!db.hello().isWritablePrimary) { quit(1) }
       interval: 5s
       timeout: 5s
       retries: 24
@@ -413,6 +437,16 @@ services:
   # both containers die on boot with SQLite3::CantOpenException, which is how
   # these profiles behaved before this wiring existed.
   #
+  # A writable file is not yet a usable database. Inferno does not create its
+  # schema on boot: upstream's setup.sh runs `bundle exec inferno migrate` once
+  # before `docker compose up`, and without it both containers die on their
+  # first query with `SQLite3::SQLException: no such table: headers`. That is
+  # how every nightly run from 2026-10-24 to 2026-10-28 failed. Each kit
+  # therefore has a one-shot `<kit>-migrate` service on the same volume, and
+  # its app and worker start only after it exits 0
+  # (service_completed_successfully), so they never race each other to create
+  # the schema. The migration is idempotent, so a reused volume is harmless.
+  #
   # The app and the worker reach redis and the validator by the addresses in
   # each kit's own .env.production (REDIS_URL, FHIR_RESOURCE_VALIDATOR_URL).
   # Inferno loads that file with Dotenv.load, which does not overwrite a variable
@@ -425,6 +459,18 @@ services:
   # profile is ever started at a time — a scenario names a single external
   # target — and teardown is `down --volumes`, so no state crosses between kits.
 
+  inferno-pdex-migrate:
+    profiles: [interop-pdex]
+    networks: [interop]
+    image: cho-interop/inferno-pdex:local
+    build:
+      context: ${INTEROP_INFERNO_PDEX_DIR:-./.external/davinci-pdex-test-kit}
+    command: ["bundle", "exec", "inferno", "migrate"]
+    volumes:
+      - inferno_pdex_data:/opt/inferno/data
+    security_opt:
+      - no-new-privileges:true
+
   inferno-pdex:
     profiles: [interop-pdex]
     networks: [interop]
@@ -436,13 +482,12 @@ services:
       FHIR_RESOURCE_VALIDATOR_URL: http://inferno-validator:3500
     volumes:
       - inferno_pdex_data:/opt/inferno/data
-    depends_on: &inferno-depends
-      inferno-redis:
-        condition: service_healthy
-      inferno-validator:
-        condition: service_healthy
     ports:
       - "127.0.0.1:${INTEROP_INFERNO_PDEX_PORT:-14567}:4567"
+    depends_on:
+      <<: *inferno-depends
+      inferno-pdex-migrate:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
 
@@ -456,7 +501,22 @@ services:
     environment: *inferno-sidecars
     volumes:
       - inferno_pdex_data:/opt/inferno/data
-    depends_on: *inferno-depends
+    depends_on:
+      <<: *inferno-depends
+      inferno-pdex-migrate:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-dtr-migrate:
+    profiles: [interop-dtr-inferno]
+    networks: [interop]
+    image: cho-interop/inferno-dtr:local
+    build:
+      context: ${INTEROP_INFERNO_DTR_DIR:-./.external/davinci-dtr-test-kit}
+    command: ["bundle", "exec", "inferno", "migrate"]
+    volumes:
+      - inferno_dtr_data:/opt/inferno/data
     security_opt:
       - no-new-privileges:true
 
@@ -469,9 +529,12 @@ services:
     environment: *inferno-sidecars
     volumes:
       - inferno_dtr_data:/opt/inferno/data
-    depends_on: *inferno-depends
     ports:
       - "127.0.0.1:${INTEROP_INFERNO_DTR_PORT:-14568}:4567"
+    depends_on:
+      <<: *inferno-depends
+      inferno-dtr-migrate:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
 
@@ -485,7 +548,10 @@ services:
     environment: *inferno-sidecars
     volumes:
       - inferno_dtr_data:/opt/inferno/data
-    depends_on: *inferno-depends
+    depends_on:
+      <<: *inferno-depends
+      inferno-dtr-migrate:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
 
@@ -493,6 +559,18 @@ services:
   # Neither the PDex nor the DTR kit covers CARIN BB. See the knownMismatches
   # entry for this target in interop/versions.json before reading a result from
   # its non-financial suite.
+  inferno-c4bb-migrate:
+    profiles: [interop-c4bb]
+    networks: [interop]
+    image: cho-interop/inferno-c4bb:local
+    build:
+      context: ${INTEROP_INFERNO_C4BB_DIR:-./.external/carin-for-blue-button-test-kit}
+    command: ["bundle", "exec", "inferno", "migrate"]
+    volumes:
+      - inferno_c4bb_data:/opt/inferno/data
+    security_opt:
+      - no-new-privileges:true
+
   inferno-c4bb:
     profiles: [interop-c4bb]
     networks: [interop]
@@ -502,9 +580,12 @@ services:
     environment: *inferno-sidecars
     volumes:
       - inferno_c4bb_data:/opt/inferno/data
-    depends_on: *inferno-depends
     ports:
       - "127.0.0.1:${INTEROP_INFERNO_C4BB_PORT:-14569}:4567"
+    depends_on:
+      <<: *inferno-depends
+      inferno-c4bb-migrate:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
 
@@ -518,7 +599,22 @@ services:
     environment: *inferno-sidecars
     volumes:
       - inferno_c4bb_data:/opt/inferno/data
-    depends_on: *inferno-depends
+    depends_on:
+      <<: *inferno-depends
+      inferno-c4bb-migrate:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-us-core-migrate:
+    profiles: [interop-us-core]
+    networks: [interop]
+    image: cho-interop/inferno-us-core:local
+    build:
+      context: ${INTEROP_INFERNO_US_CORE_DIR:-./.external/us-core-test-kit}
+    command: ["bundle", "exec", "inferno", "migrate"]
+    volumes:
+      - inferno_us_core_data:/opt/inferno/data
     security_opt:
       - no-new-privileges:true
 
@@ -531,9 +627,12 @@ services:
     environment: *inferno-sidecars
     volumes:
       - inferno_us_core_data:/opt/inferno/data
-    depends_on: *inferno-depends
     ports:
       - "127.0.0.1:${INTEROP_INFERNO_US_CORE_PORT:-14570}:4567"
+    depends_on:
+      <<: *inferno-depends
+      inferno-us-core-migrate:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
 
@@ -547,13 +646,28 @@ services:
     environment: *inferno-sidecars
     volumes:
       - inferno_us_core_data:/opt/inferno/data
-    depends_on: *inferno-depends
+    depends_on:
+      <<: *inferno-depends
+      inferno-us-core-migrate:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
 
   # The kit that judges the public Provider Directory (gap-matrix G-36). It is
   # generated from Plan-Net 1.1.0 while CHO serves 1.2.0; see startupNotes for
   # inferno-plan-net in interop/versions.json before reading a result.
+  inferno-plan-net-migrate:
+    profiles: [interop-plan-net]
+    networks: [interop]
+    image: cho-interop/inferno-plan-net:local
+    build:
+      context: ${INTEROP_INFERNO_PLAN_NET_DIR:-./.external/davinci-plan-net-test-kit}
+    command: ["bundle", "exec", "inferno", "migrate"]
+    volumes:
+      - inferno_plan_net_data:/opt/inferno/data
+    security_opt:
+      - no-new-privileges:true
+
   inferno-plan-net:
     profiles: [interop-plan-net]
     networks: [interop]
@@ -563,9 +677,12 @@ services:
     environment: *inferno-sidecars
     volumes:
       - inferno_plan_net_data:/opt/inferno/data
-    depends_on: *inferno-depends
     ports:
       - "127.0.0.1:${INTEROP_INFERNO_PLAN_NET_PORT:-14571}:4567"
+    depends_on:
+      <<: *inferno-depends
+      inferno-plan-net-migrate:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
 
@@ -579,7 +696,10 @@ services:
     environment: *inferno-sidecars
     volumes:
       - inferno_plan_net_data:/opt/inferno/data
-    depends_on: *inferno-depends
+    depends_on:
+      <<: *inferno-depends
+      inferno-plan-net-migrate:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
 
@@ -587,6 +707,18 @@ services:
   # authenticates with SMART Backend Services against cho-smart-auth-service as
   # a client the harness registers; see auth for inferno-bulk-data in
   # interop/versions.json.
+  inferno-bulk-data-migrate:
+    profiles: [interop-bulk-data]
+    networks: [interop]
+    image: cho-interop/inferno-bulk-data:local
+    build:
+      context: ${INTEROP_INFERNO_BULK_DATA_DIR:-./.external/bulk-data-test-kit}
+    command: ["bundle", "exec", "inferno", "migrate"]
+    volumes:
+      - inferno_bulk_data_data:/opt/inferno/data
+    security_opt:
+      - no-new-privileges:true
+
   inferno-bulk-data:
     profiles: [interop-bulk-data]
     networks: [interop]
@@ -596,9 +728,12 @@ services:
     environment: *inferno-sidecars
     volumes:
       - inferno_bulk_data_data:/opt/inferno/data
-    depends_on: *inferno-depends
     ports:
       - "127.0.0.1:${INTEROP_INFERNO_BULK_DATA_PORT:-14572}:4567"
+    depends_on:
+      <<: *inferno-depends
+      inferno-bulk-data-migrate:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
 
@@ -612,7 +747,10 @@ services:
     environment: *inferno-sidecars
     volumes:
       - inferno_bulk_data_data:/opt/inferno/data
-    depends_on: *inferno-depends
+    depends_on:
+      <<: *inferno-depends
+      inferno-bulk-data-migrate:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
 

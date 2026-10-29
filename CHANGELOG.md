@@ -154,6 +154,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Inferno kits never booted in the nightly run.** Every Inferno kit app and
+  worker died on its first query with `no such table: headers`, because
+  nothing ran `inferno migrate` on the kit's fresh SQLite volume (upstream's
+  `setup.sh` does it once by hand). The `inferno` job is allowed to fail, so
+  the nightly runs from 2026-10-24 to 2026-10-28 showed green with no US Core,
+  CARIN BB, Plan-Net or Bulk Data result. Each kit profile now has a one-shot
+  `<kit>-migrate` service that the app and worker wait for.
+- **Interop seed could not create Coverage.** coverage-service has written
+  coverage inside a Mongo transaction since the PCP roster fence, and the
+  interop profile's standalone `mongo:7` cannot run one, so every seed stopped
+  at `503 PCP_PANEL_UNAVAILABLE` before a suite ran. `interop-mongo` is now a
+  single-node replica set, initiated by its healthcheck.
+
 - **smart-auth-service answers over plain HTTP when its issuer is HTTP.** An
   http issuer is only accepted in Development (the interop network), but
   OpenIddict still refused every request there for not being HTTPS (ID2083),
