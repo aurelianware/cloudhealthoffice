@@ -126,7 +126,7 @@
     },
     {
       "id": "INFERNO-BULK-SERVER-001",
-      "title": "Inferno Bulk Data 2.0.0 Group and Patient export against CHO",
+      "title": "Inferno Bulk Data 2.0.0 SMART Backend Services, Group and Patient export against CHO",
       "protocol": "Bulk Data",
       "choRole": "Server",
       "externalTarget": "inferno-bulk-data",
@@ -140,10 +140,10 @@
       ],
       "implemented": true,
       "infernoSuite": "bulk_data_v200",
-      "infernoGroups": ["bulk_data_group_export_v200", "bulk_data_patient_export_v200"],
+      "infernoGroups": ["bulk_data_smart_backend_services_v200", "bulk_data_group_export_v200", "bulk_data_patient_export_v200"],
       "infernoInputs": ["bulk_server_url", "smart_auth_info", "group_id", "bulk_timeout", "lines_to_validate", "since_timestamp"],
       "infernoAuth": "backendServices",
-      "description": "Run the bulk-data-test-kit bulk_data_v200 Group export and Patient export groups against the interop-cho profile with bulk export on (G-60): kick-off, status polling, the manifest, downloading the NDJSON files with the token the manifest requires, validating the resources in them, cancel, and the outputFormat and _since parameters. group_id is the seeded billing provider, whose patients come from claims-history attribution. The kit authenticates itself with SMART Backend Services (private_key_jwt) against cho-smart-auth-service as a backend client the harness registers, bound to that provider, so the token, the provider binding and the export are all the real path. Not run: the server TLS group and the SMART Backend Services group, whose TLS checks cannot pass on the plain-HTTP interop network, and the system export group, because CHO does not serve system-level $export. See knownMismatches for inferno-bulk-data in interop/versions.json."
+      "description": "Run the bulk-data-test-kit bulk_data_v200 SMART Backend Services, Group export and Patient export groups against the interop-cho profile with bulk export on (G-60): kick-off, status polling, the manifest, downloading the NDJSON files with the token the manifest requires, validating the resources in them, cancel, and the outputFormat and _since parameters. group_id is the seeded billing provider, whose patients come from claims-history attribution. The kit authenticates itself with SMART Backend Services (private_key_jwt) against cho-smart-auth-service as a backend client the harness registers, bound to that provider, so the token, the provider binding and the export are all the real path. The SMART Backend Services group (SMART discovery STU2 and the six Backend Services authorization tests) judges the token endpoint itself: invalid grant_type, client_assertion_type and JWT refused, a valid assertion answered with the required token body. Its token-endpoint TLS test reports omit, by the kit's own INFERNO_DISABLE_TLS_TEST switch, because the interop network is plain HTTP; it passed on hosted Inferno against the GKE demo over real TLS (2026-10-29). Not run: the server TLS group, for the same reason, and the system export group, because CHO does not serve system-level $export. See knownMismatches for inferno-bulk-data in interop/versions.json."
     },
     {
       "id": "INFERNO-PDEX-CLIENT-001",

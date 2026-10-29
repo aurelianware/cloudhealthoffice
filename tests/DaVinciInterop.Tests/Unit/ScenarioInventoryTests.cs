@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using FluentAssertions;
 
 namespace DaVinciInterop.Tests.Unit;
@@ -261,15 +262,41 @@ public sealed class ScenarioInventoryTests
     }
 
     /// <summary>
-    /// System-level export is not served (501 by design), and the TLS checks
-    /// cannot pass on the plain-HTTP interop network. Running any of those
-    /// groups would put a known, explained failure in every nightly result.
+    /// System-level export is not served (501 by design), and the server TLS
+    /// group cannot pass on the plain-HTTP interop network. Running either
+    /// would put a known, explained failure in every nightly result. The SMART
+    /// Backend Services group runs: its one TLS test is switched to omit by the
+    /// kit's own setting (see the compose test below), and the rest of it
+    /// judges the token endpoint.
     /// </summary>
     [Fact]
-    public void The_bulk_data_suite_runs_only_group_and_patient_export()
+    public void The_bulk_data_suite_runs_smart_backend_services_and_group_and_patient_export()
     {
         Inventory.Scenario("INFERNO-BULK-SERVER-001").InfernoGroups
-            .Should().BeEquivalentTo(["bulk_data_group_export_v200", "bulk_data_patient_export_v200"]);
+            .Should().BeEquivalentTo([
+                "bulk_data_smart_backend_services_v200",
+                "bulk_data_group_export_v200",
+                "bulk_data_patient_export_v200",
+            ]);
+    }
+
+    /// <summary>
+    /// The kit's TLS version tests read INFERNO_DISABLE_TLS_TEST in the worker
+    /// that runs them, so the worker is where it has to be set. Without it the
+    /// token-endpoint TLS test fails every night against plain HTTP.
+    /// </summary>
+    [Fact]
+    public void The_bulk_data_kit_worker_switches_its_tls_tests_to_omit()
+    {
+        var compose = File.ReadAllText(InteropPaths.ComposeFile);
+        var worker = Regex.Match(compose, @"\n  inferno-bulk-data-worker:\n(?<body>(?:    .*\n|\n)+)").Groups["body"].Value;
+        var anchor = Regex.Match(worker, @"environment: \*(?<name>[\w-]+)").Groups["name"].Value;
+
+        anchor.Should().NotBeEmpty("the worker takes its environment from an anchor");
+        Regex.IsMatch(
+                compose,
+                $@"environment: &{Regex.Escape(anchor)}\n(?:      .*\n)*?      INFERNO_DISABLE_TLS_TEST: ""true""")
+            .Should().BeTrue("the anchor the worker uses must set INFERNO_DISABLE_TLS_TEST");
     }
 
     [Fact]

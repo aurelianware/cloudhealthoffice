@@ -240,7 +240,8 @@ jobs:
   #   INFERNO-PLANNET-SERVER-001 Plan-Net (kit generated from 1.1.0) — the whole
   #                              server suite against the public Provider
   #                              Directory, with no token
-  #   INFERNO-BULK-SERVER-001    Bulk Data 2.0.0 — Group and Patient export,
+  #   INFERNO-BULK-SERVER-001    Bulk Data 2.0.0 — SMART Backend Services
+  #                              (TLS test omitted), Group and Patient export,
   #                              files downloaded and validated; the kit
   #                              authenticates with SMART Backend Services
   #

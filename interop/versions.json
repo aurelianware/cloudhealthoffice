@@ -317,7 +317,7 @@
       },
       "igVersionProvenance": "Read from the suite ids and titles in the kit's lib/ at the pinned tag.",
       "knownMismatches": [
-        "The kit's TLS checks (the server TLS group, and the token-endpoint TLS test inside its SMART Backend Services group) cannot pass on the interop network, which is plain HTTP; in a deployment TLS ends at the ingress. INFERNO-BULK-SERVER-001 does not run those two groups. Both passed against a TLS-serving local CHO in the first manual run (PR #1592).",
+        "The kit's TLS checks (the server TLS group, and the token-endpoint TLS test inside its SMART Backend Services group) cannot pass on the interop network, which is plain HTTP; in a deployment TLS ends at the ingress. INFERNO-BULK-SERVER-001 does not run the server TLS group, and runs the SMART Backend Services group with INFERNO_DISABLE_TLS_TEST set on the kit, so its TLS test reports omit. Both passed against a TLS-serving local CHO in the first manual run (PR #1592), and the token-endpoint TLS test passed on hosted Inferno against the GKE demo (2026-10-29).",
         "CHO does not serve system-level $export (501 by design: a payer exports per provider Group or per patient), so the kit's system export group is not run."
       ],
       "requiredEgress": [
@@ -325,7 +325,7 @@
         "https://rubygems.org and Docker Hub \u2014 the kit image is built locally from upstream's Dockerfile",
         "https://packages.fhir.org \u2014 the bundled hl7_validator_service loads IG packages"
       ],
-      "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Started by INFERNO-BULK-SERVER-001, which runs the Group and Patient export groups of bulk_data_v200 against the interop-cho profile with bulk export on. This is the kit that judges what the export files contain (gap-matrix G-60)."
+      "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Started by INFERNO-BULK-SERVER-001, which runs the SMART Backend Services, Group and Patient export groups of bulk_data_v200 against the interop-cho profile with bulk export on. This is the kit that judges what the export files contain (gap-matrix G-60)."
     },
     {
       "name": "hl7/fhir-validator (validator_cli.jar)",
