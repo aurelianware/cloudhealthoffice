@@ -3,289 +3,113 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Version history for the Cloud Health Office payer platform, CMS-0057-F APIs, and claims services.">
-  <meta name="keywords" content="healthcare EDI releases, FHIR R4, CMS-0057-F, version history, Argo Workflows, Kubernetes, AKS, release roadmap">
-  <meta name="author" content="Aurelianware">
+  <title>Cloud Health Office Release Notes | Payer Platform</title>
+  <meta name="description" content="What changed in each Cloud Health Office release: claims, pricing, CMS-0057-F APIs and platform, with breaking changes and upgrade notes. Latest: v6.0.0 Paths of Glory.">
   <link rel="canonical" href="https://cloudhealthoffice.com/release-notes">
-
-  <!-- Open Graph -->
+  <link rel="alternate" type="application/rss+xml" title="Cloud Health Office release notes" href="/release-notes/feed.xml">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Cloud Health Office">
   <meta property="og:url" content="https://cloudhealthoffice.com/release-notes">
   <meta property="og:title" content="Cloud Health Office Release Notes | Payer Platform">
-  <meta property="og:description" content="Version history for the Cloud Health Office payer platform, CMS-0057-F APIs, and claims services.">
+  <meta property="og:description" content="What changed in each Cloud Health Office release: claims, pricing, CMS-0057-F APIs and platform, with breaking changes and upgrade notes. Latest: v6.0.0 Paths of Glory.">
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
-
-  <!-- Twitter / X -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:url" content="https://cloudhealthoffice.com/release-notes">
-  <meta name="twitter:title" content="Cloud Health Office Release Notes | Payer Platform">
-  <meta name="twitter:description" content="Version history for the Cloud Health Office payer platform, CMS-0057-F APIs, and claims services.">
-  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
-
-  <title>Cloud Health Office Release Notes | Payer Platform</title>
-  <!-- Privacy-friendly analytics by Plausible -->
-  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
-  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
-  <link rel="stylesheet" href="css/sentinel.css">
-  <script src="js/auth.js"></script>
-  <script src="js/mobile-nav.js"></script>
+  <meta name="twitter:card" content="summary">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "CollectionPage",
+      "name": "Cloud Health Office release notes",
+      "description": "What changed in each Cloud Health Office release: claims, pricing, CMS-0057-F APIs and platform, with breaking changes and upgrade notes. Latest: v6.0.0 Paths of Glory.",
+      "url": "https://cloudhealthoffice.com/release-notes",
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg"
+        }
+      },
+      "mainEntity": {
+        "@type": "ItemList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "url": "https://cloudhealthoffice.com/release-notes/v6-0-0",
+            "name": "v6.0.0 Paths of Glory"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "url": "https://cloudhealthoffice.com/release-notes/v5-0-0",
+            "name": "v5.0.0 2001: A Payer Odyssey"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Release notes",
+          "item": "https://cloudhealthoffice.com/release-notes"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+  <link rel="stylesheet" href="/css/sentinel.css">
   <style>
-    .release-hero {
-      text-align: center;
-      padding: 60px 20px;
-      background: linear-gradient(180deg, #FFFFFF 0%, #F5F7FA 100%);
-      border-bottom: 2px solid #0E7490;
-    }
-    
-    .release-hero h1 {
-      font-size: 3rem;
-      margin-bottom: 20px;
-      text-shadow: none;
-    }
-    
-    .version-badge {
-      display: inline-block;
-      background: linear-gradient(135deg, #0E7490 0%, #0F766E 100%);
-      color: #FFFFFF;
-      padding: 8px 20px;
-      border-radius: 20px;
-      font-weight: bold;
-      font-size: 1.2rem;
-      margin-bottom: 20px;
-    }
-    
-    .content-container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 40px 20px;
-    }
-    
-    .feature-section {
-      margin: 60px 0;
-      padding: 40px;
-      background: #F5F7FA;
-      border-radius: 12px;
-      border-left: 4px solid #0E7490;
-    }
-    
-    .feature-section h2 {
-      color: #0E7490;
-      margin-top: 0;
-      font-size: 2rem;
-    }
-    
-    .feature-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 30px;
-      margin-top: 30px;
-    }
-    
-    .feature-card {
-      background: #F5F7FA;
-      border: 1px solid #D9E1EA;
-      border-radius: 8px;
-      padding: 25px;
-      transition: all 0.3s ease;
-    }
-    
-    .feature-card:hover {
-      border-color: #0E7490;
-      box-shadow: 0 0 20px rgba(14, 116, 144, 0.2);
-    }
-    
-    .feature-card h3 {
-      color: #0F766E;
-      margin-top: 0;
-      font-size: 1.3rem;
-    }
-    
-    .status-badge {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 0.85rem;
-      font-weight: bold;
-      margin-bottom: 15px;
-    }
-    
-    .status-ready {
-      background: rgba(15, 118, 110, 0.2);
-      color: #0F766E;
-      border: 1px solid #0F766E;
-    }
-    
-    .status-new {
-      background: rgba(14, 116, 144, 0.2);
-      color: #0E7490;
-      border: 1px solid #0E7490;
-    }
-    
-    .compliance-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 30px 0;
-    }
-    
-    .compliance-table th,
-    .compliance-table td {
-      padding: 15px;
-      text-align: left;
-      border-bottom: 1px solid #D9E1EA;
-    }
-    
-    .compliance-table th {
-      background: #F5F7FA;
-      color: #0E7490;
-      font-weight: bold;
-    }
-    
-    .compliance-table tr:hover {
-      background: rgba(14, 116, 144, 0.05);
-    }
-    
-    .check-icon {
-      color: #0F766E;
-      font-weight: bold;
-    }
-
-    .status-pass {
-      color: #0F766E;
-      font-weight: bold;
-    }
-
-    .status-part {
-      color: #9A5B00;
-      font-weight: bold;
-    }
-
-    .status-note {
-      display: block;
-      margin-top: 6px;
-      color: #475569;
-      font-size: 0.85em;
-      line-height: 1.5;
-    }
-    
-    .sandbox-section {
-      background: linear-gradient(135deg, #F5F7FA 0%, #EEF3F8 100%);
-      border: 2px solid #0F766E;
-      border-radius: 12px;
-      padding: 40px;
-      margin: 60px 0;
-      text-align: center;
-    }
-    
-    .sandbox-section h2 {
-      color: #0F766E;
-      margin-top: 0;
-    }
-    
-    .code-block {
-      background: #FFFFFF;
-      border: 1px solid #D9E1EA;
-      border-radius: 8px;
-      padding: 20px;
-      margin: 20px 0;
-      text-align: left;
-      overflow-x: auto;
-    }
-    
-    .code-block code {
-      color: #0E7490;
-      font-family: 'Consolas', 'Monaco', monospace;
-    }
-    
-    .signup-form {
-      background: #F5F7FA;
-      border: 2px solid #0E7490;
-      border-radius: 12px;
-      padding: 40px;
-      margin: 60px 0;
-      text-align: center;
-    }
-    
-    .signup-form h2 {
-      color: #0E7490;
-      margin-top: 0;
-    }
-    
-    .signup-form input[type="email"] {
-      width: 100%;
-      max-width: 400px;
-      padding: 15px 20px;
-      border: 2px solid #D9E1EA;
-      border-radius: 8px;
-      background: #F5F7FA;
-      color: #0B1F33;
-      font-size: 1rem;
-      margin: 20px 0;
-    }
-    
-    .signup-form input[type="email"]:focus {
-      border-color: #0E7490;
-      outline: none;
-      box-shadow: 0 0 10px rgba(14, 116, 144, 0.3);
-    }
-    
-    .signup-form .button {
-      margin-top: 10px;
-    }
-    
-    .timeline-section {
-      margin: 60px 0;
-    }
-    
-    .timeline-item {
-      display: flex;
-      margin: 30px 0;
-      padding-left: 30px;
-      border-left: 3px solid #0E7490;
-    }
-    
-    .timeline-date {
-      min-width: 150px;
-      color: #0E7490;
-      font-weight: bold;
-    }
-    
-    .timeline-content {
-      flex: 1;
-    }
-    
-    .timeline-content h4 {
-      margin-top: 0;
-      color: #0F766E;
-    }
-    
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 20px;
-      margin: 30px 0;
-    }
-    
-    .metric-card {
-      background: #F5F7FA;
-      border: 1px solid #D9E1EA;
-      border-radius: 8px;
-      padding: 20px;
-      text-align: center;
-    }
-    
-    .metric-value {
-      font-size: 2.5rem;
-      font-weight: bold;
-      color: #0E7490;
-      text-shadow: none;
-    }
-    
-    .metric-label {
-      color: #475569;
-      font-size: 0.9rem;
-      margin-top: 10px;
-    }
+    .rn { max-width: 860px; margin: 0 auto; padding: 48px 20px 96px; }
+    .rn-crumbs { font-size: .9rem; color: var(--cho-muted); margin-bottom: 28px; }
+    .rn-crumbs a { color: var(--cho-accent); }
+    .rn-eyebrow { color: var(--cho-accent); font-size: .8rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .rn h1 { font-size: clamp(2rem, 4.5vw, 3rem); line-height: 1.1; margin: 10px 0 18px; }
+    .rn h2 { margin-top: 56px; padding-top: 8px; border-top: 1px solid var(--cho-line); font-size: 1.7rem; }
+    .rn h3 { margin-top: 36px; font-size: 1.25rem; }
+    .rn h4 { margin-top: 28px; font-size: 1.05rem; }
+    .rn p, .rn li { font-size: 1.04rem; line-height: 1.75; color: var(--cho-body); }
+    .rn li { margin: 6px 0; }
+    .rn a { color: var(--cho-accent); }
+    .rn a:hover { color: var(--cho-accent-hover); }
+    .rn code { font-family: var(--cho-mono); font-size: .88em; background: var(--cho-surface-2); padding: .1rem .35rem; border-radius: 4px; overflow-wrap: anywhere; }
+    .rn pre { background: var(--cho-navy); color: var(--cho-navy-ink); padding: 18px 20px; border-radius: 8px; overflow-x: auto; }
+    .rn pre code { background: none; padding: 0; color: inherit; }
+    .rn hr { border: 0; border-top: 1px solid var(--cho-line); margin: 40px 0; }
+    .rn blockquote { margin: 24px 0; padding: 4px 20px; border-left: 4px solid var(--cho-accent); background: var(--cho-surface); }
+    .rn-meta { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 0 0 28px; padding: 16px 20px; background: var(--cho-surface); border: 1px solid var(--cho-line); border-radius: 8px; font-size: .95rem; }
+    .rn-meta dt { font-weight: 600; color: var(--cho-ink); }
+    .rn-meta dd { margin: 0; }
+    .rn-meta div { display: flex; gap: 6px; }
+    .rn-toc { margin: 0 0 32px; padding: 16px 20px; border: 1px solid var(--cho-line); border-radius: 8px; }
+    .rn-toc p { margin: 0 0 6px; font-weight: 600; color: var(--cho-ink); }
+    .rn-toc ul { margin: 0; padding-left: 20px; }
+    .rn-toc li { font-size: .97rem; margin: 2px 0; }
+    .rn-table { margin: 24px 0; overflow-x: auto; border: 1px solid var(--cho-line); border-radius: 8px; }
+    .rn-table table { margin: 0; width: 100%; border-collapse: collapse; font-size: .95rem; }
+    .rn-table th, .rn-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--cho-line); vertical-align: top; }
+    .rn-table th { background: var(--cho-surface); color: var(--cho-ink); }
+    .rn-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0; }
+    .rn-actions a { border: 1px solid var(--cho-line-strong); border-radius: 6px; padding: 9px 14px; text-decoration: none; font-weight: 500; }
+    .rn-pager { display: flex; justify-content: space-between; gap: 16px; margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--cho-line); }
+    .rn-card { margin: 28px 0; padding: 24px; border: 1px solid var(--cho-line); border-radius: 10px; }
+    .rn-card h2 { margin: 6px 0 4px; padding: 0; border: 0; font-size: 1.5rem; }
+    .rn-card h2 a { color: var(--cho-ink); text-decoration: none; }
+    .rn-card time { color: var(--cho-muted); font-size: .95rem; }
+    .rn-card ul { margin: 14px 0 0; }
+    .rn-latest { border-color: var(--cho-accent); box-shadow: 0 0 0 1px var(--cho-accent); }
   </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -294,9 +118,7 @@
 <link rel="stylesheet" href="/css/enterprise.css">
 </head>
 <body>
-  <a href="#main-content" class="skip-to-main">Skip to main content</a>
-
-  <nav class="site-nav" aria-label="Primary">
+<nav class="site-nav" aria-label="Primary">
 <div class="site-nav-inner">
 <a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
 <button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
@@ -357,401 +179,31 @@
 </ul>
 </div>
 </nav>
-  <script>
-    // Update navigation with auth status on page load
-    document.addEventListener('DOMContentLoaded', () => {
-      updateNavigation('#mainNav');
-    });
-  </script>
+<main id="main-content" class="rn">
+<div class="rn-crumbs"><a href="/">Home</a> / Release notes</div>
+<div class="rn-eyebrow">Version history</div>
+<h1>Cloud Health Office Release Notes</h1>
+<p>What changed in each release of Cloud Health Office, the core administration platform for health plans. Each release lists its highlights, breaking changes, upgrade steps, and what is validated and what is not yet done.</p>
+<div class="rn-actions"><a href="/release-notes/feed.xml">Subscribe (RSS)</a><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/CHANGELOG.md" rel="noopener">Full changelog</a><a href="/cms-0057f-compliance">CMS-0057-F compliance status</a></div>
 
-  <main id="main-content">
-    <div class="release-hero">
-      <span class="version-badge">Version History</span>
-      <h1>Cloud Health Office Release Notes</h1>
-      <p style="font-size: 1.5rem; max-width: 800px; margin: 0 auto;">
-        Source-available payer platform history. Security-scanned release process.<br>
-        36 Microservices. 9 Adjudication Engines.<br>
-        <strong>CMS-0057-F Readiness &mdash; Evidence Before the Deadline</strong>
-      </p>
-    </div>
-
-    <div class="content-container">
-      <!-- Key Metrics -->
-      <section class="feature-section">
-        <h2>V4 At A Glance</h2>
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-value">36</div>
-            <div class="metric-label">Microservices</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">9</div>
-            <div class="metric-label">Adjudication Engines</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">CI</div>
-            <div class="metric-label">Automated Validation</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">Scan</div>
-            <div class="metric-label">Dependency Checks</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">Scan</div>
-            <div class="metric-label">Current Security Posture</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">5</div>
-            <div class="metric-label">FHIR R4 APIs</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- V4 Features -->
-      <section id="v4-features" class="feature-section">
-        <h2>V4 &mdash; SaaS Architecture Foundation</h2>
-        <p>V4 delivered multi-tenant isolation, security hardening, cloud portability, and a developer-first API experience. Current security posture should always be evaluated from the latest dependency and secret scans.</p>
-
-        <div class="feature-grid">
-          <div class="feature-card">
-            <span class="status-badge status-new">NEW IN V4</span>
-            <h3>Multi-Tenant SaaS Isolation</h3>
-            <p>Tenant isolation patterns for payer evaluation and customer-owned deployments.</p>
-            <ul>
-              <li>TenantContextService maps Azure AD tenant to CHO tenant</li>
-              <li>X-Tenant-ID header injection on all API calls</li>
-              <li>Cross-tenant data leakage prevention</li>
-              <li>Dynamic tenant name display with demo/production badges</li>
-            </ul>
-          </div>
-
-          <div class="feature-card">
-            <span class="status-badge status-new">NEW IN V4</span>
-            <h3>Security Hardening</h3>
-            <p>Dependency, secret, and configuration hardening across the release process.</p>
-            <ul>
-              <li>59 package updates across all services</li>
-              <li>CVE-2024-43485 (System.Formats.Asn1 RCE) fixed</li>
-              <li>CVE-2024-21907 (Newtonsoft.Json) fixed</li>
-              <li>Global transitive dependency enforcement</li>
-            </ul>
-          </div>
-
-          <div class="feature-card">
-            <span class="status-badge status-new">NEW IN V4</span>
-            <h3>Cloud Portability</h3>
-            <p>Cloud-agnostic infrastructure with dual-provider support.</p>
-            <ul>
-              <li>IDocumentStore&lt;T&gt; abstraction layer</li>
-              <li>Azure Cosmos DB (production)</li>
-              <li>MongoDB / DigitalOcean (65% cost savings)</li>
-              <li>3-click GitHub Actions deployment toggle</li>
-            </ul>
-          </div>
-
-          <div class="feature-card">
-            <span class="status-badge status-new">NEW IN V4</span>
-            <h3>OpenAPI 3.1 Specifications</h3>
-            <p>Full API documentation with interactive Swagger UI for all FHIR endpoints.</p>
-            <ul>
-              <li>Patient Access API spec (CARIN Blue Button)</li>
-              <li>Provider Access API spec (Da Vinci PDex)</li>
-              <li>Claims Scrubbing API spec with ROI metrics</li>
-              <li>Interactive Swagger UI viewers</li>
-            </ul>
-          </div>
-
-          <div class="feature-card">
-            <span class="status-badge status-new">NEW IN V4</span>
-            <h3>Developer Quickstarts</h3>
-            <p>From zero to first API call in under 30 minutes.</p>
-            <ul>
-              <li>CMS-0057-F Compliance quickstart (15 min)</li>
-              <li>Patient Access API quickstart (30 min)</li>
-              <li>Claims Scrubbing API quickstart (20 min)</li>
-              <li>Code examples in JavaScript, Python, C#</li>
-            </ul>
-          </div>
-
-          <div class="feature-card">
-            <span class="status-badge status-new">NEW IN V4</span>
-            <h3>SFTP Trading Partner Integration</h3>
-            <p>Direct SFTP connectivity for EDI file exchange with trading partners.</p>
-            <ul>
-              <li>Multi-tenant SFTP endpoint provisioning</li>
-              <li>837/835/277 transaction folder structure</li>
-              <li>Azure Key Vault credential storage</li>
-              <li>Dental claims EDI support</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <!-- Platform -->
-      <section class="feature-section">
-        <h2>Platform Overview</h2>
-        <p>The full Cloud Health Office platform as of V4.</p>
-
-        <table class="compliance-table">
-          <thead>
-            <tr>
-              <th>Component</th>
-              <th>Count</th>
-              <th>Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>Microservices</strong></td>
-              <td>36</td>
-              <td>C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo</td>
-            </tr>
-            <tr>
-              <td><strong>Calculation Engines</strong></td>
-              <td>9</td>
-              <td>Benefit, Fee Schedule, NCCI, COB, Risk Adjustment, Encounter, Claims Scrub, Capitation, Operating Mode</td>
-            </tr>
-            <tr>
-              <td><strong>X12 Parsers</strong></td>
-              <td>5</td>
-              <td>275, 276, 277, 278 (Python), 834 (Node.js)</td>
-            </tr>
-            <tr>
-              <td><strong>FHIR R4 APIs</strong></td>
-              <td>5</td>
-              <td>Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory</td>
-            </tr>
-            <tr>
-              <td><strong>Argo Workflows</strong></td>
-              <td>17</td>
-              <td>Claims adjudication, EDI ingest, enrollment import, RFAI</td>
-            </tr>
-            <tr>
-              <td><strong>Portal Pages</strong></td>
-              <td>60</td>
-              <td>Blazor Server + MudBlazor, Microsoft Entra ID (multi-tenant)</td>
-            </tr>
-            <tr>
-              <td><strong>CI/CD Workflows</strong></td>
-              <td>20</td>
-              <td>GitHub Actions &mdash; build, test, deploy, security scan</td>
-            </tr>
-            <tr>
-              <td><strong>Claims Scrubbing Rules</strong></td>
-              <td>20+</td>
-              <td>Data completeness, ICD-10/CPT format, NPI Luhn, POS, filing limits</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-      <!-- Pricing -->
-      <section class="feature-section">
-        <h2>Pricing</h2>
-        <p>Cloud Health Office V4 is priced per member per month (PMPM) across Platform Engagement &mdash; payer-scale relationships organized into three layers: Layer 1 &mdash; Compliance Accelerator (CMS-0057-F surface alongside legacy core), Layer 2 &mdash; Progressive Modernization (domain-by-domain Augment or Replace), and Layer 3 &mdash; Full CAPS Platform (cloud-native end-to-end). Pilot-scoped terms; early production deployment terms negotiated per engagement.</p>
-        <p>Public Tools, Transactional Services, and Managed Data Services are available alongside Platform Engagement for developers, integrators, and small plans with specific data needs.</p>
-        <p style="color: #475569; margin-top: 20px;"><a href="/pricing" style="color: #0E7490;">See full pricing across all four product lines &rarr;</a></p>
-      </section>
-
-      <!-- CMS-0057-F Compliance -->
-      <section class="feature-section">
-        <h2>CMS-0057-F Readiness Status</h2>
-        <p>Cloud Health Office implements the CMS-0057-F surfaces on FHIR R4, US Core, and the Da Vinci Implementation Guides. Each row below carries the status the platform's own acceptance evidence gives it, counted by scenario &mdash; not a single verdict per API. Every surface still requires payer-specific validation before production use.</p>
-        <p style="color: #475569;">The source of truth for every status is &sect;11 of the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer" style="color: #0E7490;">ePA gap matrix</a>, and the executable evidence behind it is published in the <a href="/evidence" style="color: #0E7490;">Evidence Hub</a>. <strong>Passable</strong> means the acceptance suite exercises the behaviour at a named revision against synthetic data. <strong>Partial</strong> means the surface is implemented but something stated in the matrix is still open. Neither is CMS certification, and no Inferno or Touchstone conformance suite has been run against Cloud Health Office as a payer server yet.</p>
-
-        <table class="compliance-table">
-          <thead>
-            <tr>
-              <th>Requirement</th>
-              <th>Implementation</th>
-              <th>Deadline</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Patient Access API</td>
-              <td>FHIR R4 &mdash; Claim, EOB, Coverage, Patient, Encounter</td>
-              <td>January 1, 2027</td>
-              <td><span class="status-part">Partial</span> &mdash; 3 of 3 scenarios partial<br><span class="status-note">Member, coverage and claim data come from Cloud Health Office's own services; no projection has been validated against a published profile.</span></td>
-            </tr>
-            <tr>
-              <td>Provider Access API</td>
-              <td>FHIR R4 &mdash; non-financial CARIN BB EOB, Patient, Condition, Observation</td>
-              <td>January 1, 2027</td>
-              <td><span class="status-pass">Passable</span> on 2 of 3 scenarios, <span class="status-part">partial</span> on 1<br><span class="status-note">Attribution and member opt-out are exercised against real services; the claims and encounter payload is not yet profile-validated.</span></td>
-            </tr>
-            <tr>
-              <td>Prior Authorization API</td>
-              <td>FHIR R4 + CDS Hooks &mdash; CRD, DTR and PAS</td>
-              <td>January 1, 2027</td>
-              <td><span class="status-pass">Passable</span> on 2 of 8 scenarios, <span class="status-part">partial</span> on 6<br><span class="status-note">CRD, DTR and PAS are implemented and persist their records, and are not yet conformant to the Da Vinci guides.</span></td>
-            </tr>
-            <tr>
-              <td>Payer-to-Payer API</td>
-              <td>FHIR R4 &mdash; bidirectional member data exchange</td>
-              <td>January 1, 2027</td>
-              <td><span class="status-pass">Passable</span> on 1 of 4 scenarios, <span class="status-part">partial</span> on 3<br><span class="status-note">Opt-in enforcement is exercised end to end. Export and member-match run against Cloud Health Office's own data but are single-tenant and not profile-validated.</span></td>
-            </tr>
-            <tr>
-              <td>Provider Directory API</td>
-              <td>FHIR R4 &mdash; Practitioner, Organization, Location, Network</td>
-              <td>January 1, 2027</td>
-              <td><span class="status-part">Implemented surface</span><br><span class="status-note">Served, but outside the 21 acceptance scenarios, so no scenario status is claimed for it.</span></td>
-            </tr>
-            <tr>
-              <td>USCDI v1/v2</td>
-              <td>US Core profiles, Da Vinci IGs (PDex, PAS, CRD, DTR, HRex)</td>
-              <td>January 1, 2027</td>
-              <td><span class="status-part">Mapped</span><br><span class="status-note">Data classes are mapped to US Core; profile validation in CI is the open item for every surface above.</span></td>
-            </tr>
-          </tbody>
-        </table>
-
-        <p><strong>Scenario counts</strong> are the 21 CMS-0057-F acceptance scenarios as of 23 October 2026: 6 passable, 15 partial, none failing. Eighteen of them belong to the four APIs above; the remaining three cover SMART on FHIR authorization (partial), the consent registry (passable) and the public prior-authorization metric set (partial), which has no row here because it is a reporting obligation rather than an API. The counts move as the matrix moves &mdash; the <a href="/evidence">Evidence Hub</a> renders the current published snapshot and the revision it was generated from, and this page does not.</p>
-        <p><strong>Full readiness documentation:</strong> <a href="/docs/compliance" target="_blank" rel="noopener noreferrer">CMS-0057-F Readiness Guide &rarr;</a></p>
-      </section>
-
-      <!-- V3 Features (Retained) -->
-      <section class="feature-section">
-        <h2>V3 Features (Included)</h2>
-        <p>V4 includes all V3 features: multi-cloud deployment, Argo Workflows orchestration, and Kubernetes-native infrastructure.</p>
-
-        <div class="feature-grid">
-          <div class="feature-card">
-            <span class="status-badge status-ready">V3</span>
-            <h3>Multi-Cloud Deployment</h3>
-            <p>Deploy on Azure AKS, AWS EKS, or GCP GKE with unified Helm charts, Argo Workflows, and HashiCorp Vault.</p>
-          </div>
-
-          <div class="feature-card">
-            <span class="status-badge status-ready">V3</span>
-            <h3>Argo Workflows</h3>
-            <p>17 Kubernetes-native workflow DAGs for claims adjudication, EDI ingest, enrollment import, and RFAI.</p>
-          </div>
-
-          <div class="feature-card">
-            <span class="status-badge status-ready">V3</span>
-            <h3>ClaimRiskScorer</h3>
-            <p>ML-powered fraud/abuse detection with PyTorch risk scoring (0-100) and custom ZZZ segment in 277.</p>
-          </div>
-
-          <div class="feature-card">
-            <span class="status-badge status-ready">V3</span>
-            <h3>Migration Wizard</h3>
-            <p>Blazor web app for legacy system migration with 95%+ auto-match mapping and one-click API cutover.</p>
-          </div>
-        </div>
-      </section>
-
-      <!-- V2 Features (Retained) -->
-      <section class="feature-section">
-        <h2>V2 Features (Included)</h2>
-        <p>V4 includes the V2 FHIR surfaces as part of the CMS-0057-F readiness path, with payer-specific validation still required before production use.</p>
-
-        <div class="feature-grid">
-          <div class="feature-card">
-            <span class="status-badge status-ready">V2</span>
-            <h3>Patient Access API</h3>
-            <p>FHIR R4 API enabling patients to access claims, encounters, and clinical data within 1 business day of adjudication.</p>
-          </div>
-
-          <div class="feature-card">
-            <span class="status-badge status-ready">V2</span>
-            <h3>Provider Access API</h3>
-            <p>Real-time patient data access for providers with proper authorization and consent management.</p>
-          </div>
-
-          <div class="feature-card">
-            <span class="status-badge status-ready">V2</span>
-            <h3>Prior Authorization API</h3>
-            <p>Automated prior auth with 72-hour urgent and 7-day standard response tracking via FHIR R4 + CDS Hooks.</p>
-          </div>
-
-          <div class="feature-card">
-            <span class="status-badge status-ready">V2</span>
-            <h3>Payer-to-Payer API</h3>
-            <p>Bulk FHIR export for bidirectional member data exchange during enrollment transitions.</p>
-          </div>
-        </div>
-      </section>
-
-      <!-- Quick Start -->
-      <section id="sandbox-testing" class="sandbox-section">
-        <h2>Quick Start</h2>
-        <p style="font-size: 1.2rem;">Get Cloud Health Office running in your environment.</p>
-
-        <div class="code-block">
-          <code>
-# Clone and run<br>
-git clone https://github.com/aurelianware/cloudhealthoffice.git<br>
-cd cloudhealthoffice<br>
-docker compose --profile core up -d<br>
-<br>
-# Verify<br>
-curl http://localhost:5001/health/live<br>
-<br>
-# Or deploy with Helm (Azure/AWS/GCP)<br>
-helm install cloudhealthoffice ./infrastructure/helm/cloudhealthoffice<br>
-<br>
-# Run the test suite<br>
-npm install &amp;&amp; npm test
-          </code>
-        </div>
-
-        <p style="margin: 30px 0;">Deploy instantly to Azure:</p>
-
-        <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Finfrastructure%2Fazure%2Fmain.json" class="button button-green" target="_blank" rel="noopener noreferrer">Deploy to Azure &rarr;</a>
-
-        <p style="margin-top: 30px; color: #475569;">Docker Compose for local evaluation (first run builds images, typically 10&ndash;20 minutes; instant on repeat runs). Kubernetes deployment requires customer-specific cloud, identity, security, and data validation.</p>
-      </section>
-
-      <!-- Documentation Links -->
-      <section class="feature-section">
-        <h2>Documentation</h2>
-        <div class="feature-grid">
-          <div class="feature-card">
-            <h3>Quickstart</h3>
-            <p>Run the platform locally with Docker Compose, or deploy to Kubernetes/Azure.</p>
-            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/guides/QUICKSTART.md" target="_blank" rel="noopener noreferrer">Read Guide &rarr;</a>
-          </div>
-
-          <div class="feature-card">
-            <h3>Architecture</h3>
-            <p>System design, service interactions, and the 10-step claims adjudication pipeline.</p>
-            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/guides/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer">Read Guide &rarr;</a>
-          </div>
-
-          <div class="feature-card">
-            <h3>CMS-0057-F Compliance</h3>
-            <p>Regulatory readiness mapping with FHIR R4 implementation details.</p>
-            <a href="/docs/compliance" target="_blank" rel="noopener noreferrer">Read Guide &rarr;</a>
-          </div>
-
-          <div class="feature-card">
-            <h3>Deployment Guide</h3>
-            <p>Deployment reference for Azure and Kubernetes with environment-specific validation.</p>
-            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/guides/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer">Read Guide &rarr;</a>
-          </div>
-        </div>
-      </section>
-
-      <!-- CTA Section -->
-      <section class="cta-section" style="text-align: center; margin: 60px 0;">
-        <h2>Evidence-Backed Payer Platform</h2>
-        <p style="font-size: 1.2rem; max-width: 700px; margin: 20px auto;">
-          36 microservices. 9 adjudication engines. 5 FHIR R4 APIs.<br>
-          CMS-0057-F readiness surface. Security-scanned. Deployable to customer-owned cloud infrastructure after payer validation.
-        </p>
-        <div style="margin-top: 30px;">
-          <a href="https://github.com/aurelianware/cloudhealthoffice" class="button" target="_blank" rel="noopener noreferrer">View on GitHub</a>
-          <a href="/platform" class="button button-green">Platform Overview</a>
-        </div>
-      </section>
-    </div>
-  </main>
-
-  <footer class="cho-footer">
+<article class="rn-card rn-latest">
+<div class="rn-eyebrow">Latest release</div>
+<h2 id="v6-0-0"><a href="/release-notes/v6-0-0">v6.0.0: Paths of Glory</a></h2>
+<time datetime="2026-10-28">October 28, 2026</time>
+<ul><li>Claims pay correctly, through one adjudicator</li><li>Inpatient pricing from CMS's rules</li><li>CMS-0057-F: data from CHO's own services</li><li>Plan configuration, enrollment and member service</li><li>Security and platform</li></ul>
+<div class="rn-actions"><a href="/release-notes/v6-0-0">Read the v6.0.0 notes</a></div>
+</article>
+<article class="rn-card">
+<div class="rn-eyebrow">Release</div>
+<h2 id="v5-0-0"><a href="/release-notes/v5-0-0">v5.0.0: 2001: A Payer Odyssey</a></h2>
+<time datetime="2026-10-06">October 6, 2026</time>
+<ul><li>CMS-0057-F: Cloud Health Office as the native authorization and data backend</li><li>External interoperability with HL7 Da Vinci reference implementations</li><li>Security</li><li>Claims: full Phase 1 lifecycle (released as 4.4.0 in CHANGELOG)</li><li>Benefit plans and reference data</li><li>X12 trading-partner surface through a vendor-neutral gateway</li><li>Scale validation: the Million Claim Challenge</li><li>Platform and operations</li></ul>
+<div class="rn-actions"><a href="/release-notes/v5-0-0">Read the v5.0.0 notes</a></div>
+</article>
+<h2 id="earlier-releases">Earlier releases</h2>
+<p>Notes for v4.0.0 and earlier are on <a href="https://github.com/aurelianware/cloudhealthoffice/releases" rel="noopener">GitHub releases</a>, and every change is itemized in the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/CHANGELOG.md" rel="noopener">changelog</a>.</p>
+</main>
+<footer class="cho-footer">
 <div class="cho-footer-inner">
 <div class="cho-footer-brand">
 <strong>Cloud Health Office</strong>
