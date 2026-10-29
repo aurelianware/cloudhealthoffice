@@ -188,6 +188,15 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **The interop stack now runs authorization-service and seeds an
+  Encounter.** Bulk Data `$export` jobs read prior-authorization
+  ExplanationOfBenefit from authorization-service, which the interop profile
+  never started, so every export ended in error and the kit's status polls got
+  500. The US Core kit found no Encounter to judge because the seed wrote
+  none; it now writes one through encounter-service and checks fhir-service
+  serves it. A scenario that does not pass now keeps the containers' logs in
+  its evidence.
+
 - **fhir-service answers FHIR POST search.** `POST [type]/_search` with a
   form-encoded body (FHIR R4 http.html#search, required by US Core 3.1.1)
   matched no endpoint and answered 403, so Inferno's US Core kit failed

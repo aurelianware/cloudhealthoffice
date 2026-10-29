@@ -150,6 +150,14 @@ public static class InfernoSuiteScenario
             throw;
         }
 
+        // A kit's failure is often explained only in CHO's own logs (a 500
+        // whose cause the kit never sees), so a run that did not pass keeps
+        // them, as a run that threw already does.
+        if (result.ParsedStatus != InteropStatus.Passed)
+        {
+            await environment.CaptureLogsAsync(CancellationToken.None);
+        }
+
         WriteEvidence(writer, versions, inventory, result, client, environment);
         return new Outcome(result, runs);
     }

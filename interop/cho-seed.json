@@ -15,6 +15,7 @@
       "coverage:read",
       "coverage:write",
       "encounters:read",
+      "encounters:write",
       "claims:read",
       "claims:work",
       "networks:read",
@@ -140,6 +141,55 @@
           "serviceDateTo": "2026-04-09T00:00:00Z",
           "units": 3,
           "chargeAmount": 18400.00
+        }
+      ]
+    }
+  ],
+  "encounters": [
+    {
+      "_comment": "The visit behind INTEROP-CLM-PROF-1, as an encounter record (837P). Unlike claims-service, encounter-service reads its enums as names (Commercial, Professional, Original), not numbers. fhir-service serves it as FHIR Encounter, which INTEROP-USCORE-SERVER-001 judges; without one the kit had no Encounter to test.",
+      "encounterControlNumber": "INTEROP-ENC-1",
+      "claimId": "INTEROP-CLM-PROF-1",
+      "claimNumber": "INTEROP-CLM-PROF-1",
+      "memberId": "INTEROP-MEM-1",
+      "subscriberId": "INTEROP-MEM-1",
+      "groupNumber": "INTEROP-GRP-1",
+      "patientFirstName": "Testcase",
+      "patientLastName": "Interop",
+      "billingProviderNPI": "1234567893",
+      "billingProviderName": "Interop Provider A (synthetic)",
+      "renderingProviderNPI": "1679576722",
+      "lineOfBusiness": "Commercial",
+      "encounterType": "Professional",
+      "submissionType": "Original",
+      "claimFrequencyCode": "1",
+      "payerId": "INTEROP-PAYER",
+      "payerName": "Interop Health Plan (synthetic)",
+      "placeOfServiceCode": "11",
+      "totalChargeAmount": 250.0,
+      "serviceDateFrom": "2026-03-02T00:00:00Z",
+      "serviceDateTo": "2026-03-02T00:00:00Z",
+      "diagnosisCodes": [
+        {
+          "code": "E119",
+          "codeQualifier": "ABK",
+          "pointerNumber": 1,
+          "description": "Type 2 diabetes mellitus without complications"
+        }
+      ],
+      "serviceLines": [
+        {
+          "lineNumber": 1,
+          "procedureCode": "99213",
+          "procedureDescription": "Office or other outpatient visit, established patient",
+          "diagnosisPointers": [
+            1
+          ],
+          "units": 1,
+          "chargeAmount": 250.0,
+          "serviceDateFrom": "2026-03-02T00:00:00Z",
+          "serviceDateTo": "2026-03-02T00:00:00Z",
+          "placeOfServiceCode": "11"
         }
       ]
     }

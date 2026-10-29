@@ -228,6 +228,30 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # fhir-service reads the prior-authorization ExplanationOfBenefit projection
+  # (G-31) from here, and Bulk Data $export writes it into every
+  # ExplanationOfBenefit file. Without it the export worker's call failed on
+  # DNS (fhir-service's default URL names the cluster service), every export
+  # job ended in error, and the Bulk Data kit's status polls got 500
+  # (run 40970129547). No port is published: only fhir-service calls it.
+  cho-authorization-service:
+    build:
+      context: ..
+      dockerfile: src/services/authorization-service/Dockerfile
+      args:
+        REGISTRY: ${CHO_IMAGE_REGISTRY:-mcr.microsoft.com}
+    profiles: [interop-cho]
+    networks: [interop]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      MongoDb__ConnectionString: mongodb://interop-mongo:27017
+      MongoDb__DatabaseName: InteropAuthorizationDB
+    depends_on:
+      interop-mongo:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
   # Practitioner / PractitionerRole / Organization are Hybrid in
   # FhirAdapters:Resources, which means fhir-service proxies them here rather
   # than inventing them (see cho-practitioner-directory). US Core requires
@@ -368,6 +392,7 @@ services:
       Services__ClaimsServiceUrl: http://cho-claims-service:8080/
       Services__ProviderServiceUrl: http://cho-provider-service:8080/
       Services__BenefitPlanServiceUrl: http://cho-benefit-plan-service:8080/
+      Services__AuthorizationServiceUrl: http://cho-authorization-service:8080/
       # The public Plan-Net Provider Directory (G-36) INFERNO-PLANNET-SERVER-001
       # judges, at /fhir/r4/directory/interop. The id must match
       # ChoUnderTest.PublicDirectoryId. The payer is the plan's own synthetic
@@ -414,6 +439,8 @@ services:
       cho-provider-service:
         condition: service_healthy
       cho-benefit-plan-service:
+        condition: service_healthy
+      cho-authorization-service:
         condition: service_healthy
       cho-smart-auth-service:
         condition: service_healthy

@@ -33,6 +33,7 @@ const SERVICES = {
   member: process.env.INTEROP_MEMBER_URL ?? 'http://127.0.0.1:18025',
   coverage: process.env.INTEROP_COVERAGE_URL ?? 'http://127.0.0.1:18026',
   claims: process.env.INTEROP_CLAIMS_URL ?? 'http://127.0.0.1:18027',
+  encounter: process.env.INTEROP_ENCOUNTER_URL ?? 'http://127.0.0.1:18028',
   fhir: process.env.INTEROP_FHIR_URL ?? 'http://127.0.0.1:18023',
   provider: process.env.INTEROP_PROVIDER_URL ?? 'http://127.0.0.1:18029',
   benefitPlan: process.env.INTEROP_BENEFIT_PLAN_URL ?? 'http://127.0.0.1:18030',
@@ -159,6 +160,18 @@ async function seed(fixture, token) {
     await put(claim.claimNumber, 'POST', `${SERVICES.claims}/api/v1/claims`, token, asPayload(claim));
   }
 
+  console.log(`==> encounter-service ${SERVICES.encounter}`);
+  // Encounter submission assigns a new id on every POST, so a re-run would
+  // stack a second encounter on the member. Ask by control number first.
+  for (const encounter of fixture.encounters) {
+    await createUnlessPresent(
+      encounter.encounterControlNumber,
+      `${SERVICES.encounter}/api/encounters/control-number/${encounter.encounterControlNumber}`,
+      `${SERVICES.encounter}/api/encounters`,
+      token,
+      asPayload(encounter));
+  }
+
   await seedDirectory(fixture.directory, token);
 }
 
@@ -244,6 +257,24 @@ async function verify(fixture, token) {
         `returned ${served.length ? served.join(', ') : 'nothing'}.`);
     }
     console.log(`    ${claim.claimNumber} — ${claim.expectProfile.split('/').pop()}`);
+  }
+
+  // The encounters as the US Core kit will find them: by patient, through
+  // fhir-service. No profile is checked — the projection declares none
+  // (EncounterFhirProjector) — only that each seeded encounter is served.
+  const encounterUrl = `${SERVICES.fhir}/fhir/r4/Encounter?patient=${fixture.member.memberId}`;
+  console.log(`==> verifying the encounters ${encounterUrl}`);
+  const encounters = await readFhir(encounterUrl, token, 'the Encounter search');
+  const identifiers = (encounters.entry ?? [])
+    .flatMap((e) => e.resource?.identifier ?? [])
+    .map((i) => i.value);
+  for (const encounter of fixture.encounters) {
+    if (!identifiers.includes(encounter.encounterControlNumber)) {
+      throw new Error(
+        `${encounter.encounterControlNumber} was seeded but the Encounter search did not return it ` +
+        `(total ${encounters.total ?? 0}).`);
+    }
+    console.log(`    Encounter ${encounter.encounterControlNumber}`);
   }
 
   await verifyDirectory(fixture.directory);
