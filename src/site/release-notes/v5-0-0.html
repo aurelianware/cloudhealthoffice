@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>v5.0.0: 2001: A Payer Odyssey Release Notes | Cloud Health Office</title>
+  <meta name="description" content="Cloud Health Office v5.0.0 (2001: A Payer Odyssey): CMS-0057-F: Cloud Health Office as the native authorization and data backend.">
+  <link rel="canonical" href="https://cloudhealthoffice.com/release-notes/v5-0-0">
+  <link rel="alternate" type="application/rss+xml" title="Cloud Health Office release notes" href="/release-notes/feed.xml">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:url" content="https://cloudhealthoffice.com/release-notes/v5-0-0">
+  <meta property="og:title" content="v5.0.0: 2001: A Payer Odyssey Release Notes | Cloud Health Office">
+  <meta property="og:description" content="Cloud Health Office v5.0.0 (2001: A Payer Odyssey): CMS-0057-F: Cloud Health Office as the native authorization and data backend.">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
+  <meta property="article:published_time" content="2026-10-06">
+  <meta name="twitter:card" content="summary">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "Cloud Health Office v5.0.0: 2001: A Payer Odyssey release notes",
+      "description": "Cloud Health Office v5.0.0 (2001: A Payer Odyssey): CMS-0057-F: Cloud Health Office as the native authorization and data backend.",
+      "url": "https://cloudhealthoffice.com/release-notes/v5-0-0",
+      "mainEntityOfPage": "https://cloudhealthoffice.com/release-notes/v5-0-0",
+      "datePublished": "2026-10-06",
+      "author": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc."
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg"
+        }
+      },
+      "about": {
+        "@type": "SoftwareApplication",
+        "name": "Cloud Health Office",
+        "softwareVersion": "5.0.0",
+        "applicationCategory": "BusinessApplication"
+      }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Release notes",
+          "item": "https://cloudhealthoffice.com/release-notes"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "v5.0.0",
+          "item": "https://cloudhealthoffice.com/release-notes/v5-0-0"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <style>
+    .rn { max-width: 860px; margin: 0 auto; padding: 48px 20px 96px; }
+    .rn-crumbs { font-size: .9rem; color: var(--cho-muted); margin-bottom: 28px; }
+    .rn-crumbs a { color: var(--cho-accent); }
+    .rn-eyebrow { color: var(--cho-accent); font-size: .8rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .rn h1 { font-size: clamp(2rem, 4.5vw, 3rem); line-height: 1.1; margin: 10px 0 18px; }
+    .rn h2 { margin-top: 56px; padding-top: 8px; border-top: 1px solid var(--cho-line); font-size: 1.7rem; }
+    .rn h3 { margin-top: 36px; font-size: 1.25rem; }
+    .rn h4 { margin-top: 28px; font-size: 1.05rem; }
+    .rn p, .rn li { font-size: 1.04rem; line-height: 1.75; color: var(--cho-body); }
+    .rn li { margin: 6px 0; }
+    .rn a { color: var(--cho-accent); }
+    .rn a:hover { color: var(--cho-accent-hover); }
+    .rn code { font-family: var(--cho-mono); font-size: .88em; background: var(--cho-surface-2); padding: .1rem .35rem; border-radius: 4px; overflow-wrap: anywhere; }
+    .rn pre { background: var(--cho-navy); color: var(--cho-navy-ink); padding: 18px 20px; border-radius: 8px; overflow-x: auto; }
+    .rn pre code { background: none; padding: 0; color: inherit; }
+    .rn hr { border: 0; border-top: 1px solid var(--cho-line); margin: 40px 0; }
+    .rn blockquote { margin: 24px 0; padding: 4px 20px; border-left: 4px solid var(--cho-accent); background: var(--cho-surface); }
+    .rn-meta { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 0 0 28px; padding: 16px 20px; background: var(--cho-surface); border: 1px solid var(--cho-line); border-radius: 8px; font-size: .95rem; }
+    .rn-meta dt { font-weight: 600; color: var(--cho-ink); }
+    .rn-meta dd { margin: 0; }
+    .rn-meta div { display: flex; gap: 6px; }
+    .rn-toc { margin: 0 0 32px; padding: 16px 20px; border: 1px solid var(--cho-line); border-radius: 8px; }
+    .rn-toc p { margin: 0 0 6px; font-weight: 600; color: var(--cho-ink); }
+    .rn-toc ul { margin: 0; padding-left: 20px; }
+    .rn-toc li { font-size: .97rem; margin: 2px 0; }
+    .rn-table { margin: 24px 0; overflow-x: auto; border: 1px solid var(--cho-line); border-radius: 8px; }
+    .rn-table table { margin: 0; width: 100%; border-collapse: collapse; font-size: .95rem; }
+    .rn-table th, .rn-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--cho-line); vertical-align: top; }
+    .rn-table th { background: var(--cho-surface); color: var(--cho-ink); }
+    .rn-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0; }
+    .rn-actions a { border: 1px solid var(--cho-line-strong); border-radius: 6px; padding: 9px 14px; text-decoration: none; font-weight: 500; }
+    .rn-pager { display: flex; justify-content: space-between; gap: 16px; margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--cho-line); }
+    .rn-card { margin: 28px 0; padding: 24px; border: 1px solid var(--cho-line); border-radius: 10px; }
+    .rn-card h2 { margin: 6px 0 4px; padding: 0; border: 0; font-size: 1.5rem; }
+    .rn-card h2 a { color: var(--cho-ink); text-decoration: none; }
+    .rn-card time { color: var(--cho-muted); font-size: .95rem; }
+    .rn-card ul { margin: 14px 0 0; }
+    .rn-latest { border-color: var(--cho-accent); box-shadow: 0 0 0 1px var(--cho-accent); }
+  </style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<script defer src="/js/mobile-nav.js"></script>
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body>
+<nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/blueprints/google-cloud">Reference architecture</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="/api-explorer">API explorer</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+<main id="main-content" class="rn">
+<div class="rn-crumbs"><a href="/">Home</a> / <a href="/release-notes">Release notes</a> / v5.0.0</div>
+<div class="rn-eyebrow">Release notes</div>
+<h1>v5.0.0: 2001: A Payer Odyssey</h1>
+<dl class="rn-meta"><div><dt>Released</dt><dd>October 6, 2026</dd></div><div><dt>Previous github release</dt><dd><a href="https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.0.0" rel="noopener">v4.0.0</a> (February 11, 2026)</dd></div></dl>
+<aside class="rn-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#highlights">Highlights</a></li><li><a href="#breaking-and-behavior-changes">Breaking and behavior changes</a></li><li><a href="#upgrade-notes">Upgrade notes</a></li></ul></aside>
+<p>This is the first tagged release since v4.0.0. It rolls up the work recorded in CHANGELOG as 4.1.0 through 4.4.0 (never tagged) plus everything merged since — roughly 360 pull requests. The theme is that Cloud Health Office now <em>is</em> the system of record behind its CMS-0057-F APIs, its claims lifecycle and its X12 trading-partner surface, rather than a layer in front of one. It is a major version because several defaults and security behaviors changed; read <strong>Breaking and behavior changes</strong> before upgrading.</p>
+<p>As with recent site and docs work, these notes describe what the code does and what has evidence behind it. Where something is validated only locally or against reference implementations, it says so.</p>
+<h2 id="highlights">Highlights</h2>
+<h3 id="cms-0057-f-cloud-health-office-as-the-native-authorization-and-data-backend">CMS-0057-F: Cloud Health Office as the native authorization and data backend</h3>
+<ul><li><strong>Cloud Health Office as the native prior-authorization backend</strong> — a backend seam selected by operating mode makes Cloud Health Office the system of record (Replace mode, the default) for the CMS-0057-F prior-auth slice, with external-core integration (Augment mode) as an explicit, never-silent alternative (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1144" rel="noopener">#1144</a>).</li><li><strong>Da Vinci PAS <code>Claim/$inquire</code></strong> — prior-authorization status through the FHIR surface (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1154" rel="noopener">#1154</a>).</li><li><strong>CDex additional-information round trip</strong> for pended prior authorizations (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1156" rel="noopener">#1156</a>), and <strong>durable prior-authorization data retention</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1155" rel="noopener">#1155</a>).</li><li><strong>Drug exclusions enforced</strong> in the prior-auth workflow (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1147" rel="noopener">#1147</a>).</li><li><strong>Payer-to-Payer, implemented natively</strong> — member match (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1149" rel="noopener">#1149</a>), member data export (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1148" rel="noopener">#1148</a>), outbound exchange (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1150" rel="noopener">#1150</a>), durable inbound ingestion into the member record (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1151" rel="noopener">#1151</a>), and a dedicated P2P consent lifecycle (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1152" rel="noopener">#1152</a>).</li><li><strong>Provider Access enforced through the shared consent registry</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1153" rel="noopener">#1153</a>).</li><li><strong>USCDI clinical resources served</strong> through Patient and Provider Access — twelve resource types governed from a single inventory that drives routes, SMART scopes, Provider Access filtering, P2P import and the CapabilityStatement (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1157" rel="noopener">#1157</a>).</li><li><strong>Acceptance evidence</strong> — a CMS-0057-F acceptance scenario suite (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1143" rel="noopener">#1143</a>), hardened and published evidence (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1146" rel="noopener">#1146</a>), and versioned evidence in CI.</li></ul>
+<h3 id="external-interoperability-with-hl7-da-vinci-reference-implementations">External interoperability with HL7 Da Vinci reference implementations</h3>
+<ul><li>A separate <strong>Da Vinci interoperability harness</strong> runs real HL7 reference implementations in digest-pinned containers and exchanges FHIR with them across a process boundary — nothing mocked or replayed (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1159" rel="noopener">#1159</a>).</li><li>Scenarios: PAS submit against <code>br-payer</code>, <strong>CRD</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1160" rel="noopener">#1160</a>), and <strong>DTR <code>$questionnaire-package</code></strong> chained from the payer's CRD determination (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1161" rel="noopener">#1161</a>). Evidence is republished as the harness runs.</li></ul>
+<h3 id="security">Security</h3>
+<ul><li><strong>Production SMART on FHIR / OAuth trust (SEC-01)</strong> — explicit <code>Demo</code> vs <code>ExternalIssuer</code> identity mode, a multi-issuer trust registry keyed on exact <code>iss</code>, validated OIDC discovery and JWKS with an SSRF boundary, rate-limited key rotation, asymmetric-only algorithm policy, and a single per-request caller identity (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1158" rel="noopener">#1158</a>).</li><li><strong>CHO token auth and tenant isolation across all services</strong>, payment controls, NACHA transmission controls, and SMART production sign-in (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1217" rel="noopener">#1217</a>).</li><li><strong>Secret scanning now actually scans.</strong> The gitleaks configuration had no detectors and passed unconditionally; it now runs the default rule set (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1184" rel="noopener">#1184</a>).</li><li><strong>HashiCorp Vault secret provider</strong> (Kubernetes auth preferred, no new package dependency), so off-Azure deployments have a working secret store (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1182" rel="noopener">#1182</a>).</li><li>Log-forging fix in the SMART authorization controller (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/792" rel="noopener">#792</a>).</li></ul>
+<h3 id="claims-full-phase-1-lifecycle-released-as-440-in-changelog">Claims: full Phase 1 lifecycle (released as 4.4.0 in CHANGELOG)</h3>
+<ul><li>Submit → adjudicate → pay → adjust → reverse, end to end: claim identity and versioning, a seven-stage adjudication pipeline (scrubbing, network and credentialing, benefit calculation, NCCI/MUE, coordination of benefits, AI examination, persistence), operator-initiated batched 835 remittance, FHIR ExplanationOfBenefit projection, adjustment chains with re-adjudication, and batched 835 reversals (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/725" rel="noopener">#725</a>–#744).</li><li><strong>Prospective adjudication (payment estimate) API</strong> — read-only estimates that reuse the production engines without writing accumulators (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1091" rel="noopener">#1091</a>).</li><li><strong>Pended-claim examiner workflow</strong>, claim audit event timeline, and evaluator journeys (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1069" rel="noopener">#1069</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1082" rel="noopener">#1082</a>–#1085).</li><li><strong>Inbound X12 834 and 837 parsers</strong> (professional and institutional) wired to enrollment and claim submission, with an end-to-end 834→837 smoke test and an EDI Transactions console in the portal (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1002" rel="noopener">#1002</a>–#1018).</li><li><strong>Capitation (PMPM) payments</strong> — contracts, monthly runs, statements, NACHA / Stripe Connect / check disbursement, and capitation 835 ERAs (4.3.0).</li></ul>
+<h3 id="benefit-plans-and-reference-data">Benefit plans and reference data</h3>
+<ul><li>Version-safe authoring for benefit rules, exclusions and plan networks, a plan validation workflow, and provider network verification (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1076" rel="noopener">#1076</a>–#1081).</li><li><strong>Canonical reference data service</strong> with hardened schema migrations (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1094" rel="noopener">#1094</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1095" rel="noopener">#1095</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1097" rel="noopener">#1097</a>); ICD-10 display catalog and terminology-backed diagnosis metadata (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/914" rel="noopener">#914</a>–#920).</li></ul>
+<h3 id="x12-trading-partner-surface-through-a-vendor-neutral-gateway">X12 trading-partner surface through a vendor-neutral gateway</h3>
+<ul><li>A healthcare transaction gateway abstraction (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1106" rel="noopener">#1106</a>) with a Stedi implementation covering real <strong>270/271 eligibility</strong> including dependents, <strong>837 submission</strong>, the <strong>277CA acknowledgment</strong> lifecycle with durable replay, <strong>276/277 claim status</strong>, <strong>275 attachments</strong>, and <strong>835 ERA ingestion</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1107" rel="noopener">#1107</a>–#1118).</li><li>Payer-side receivers: <strong>inbound 270/271 eligibility responder</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1110" rel="noopener">#1110</a>) and <strong>inbound 275 attachment receiver</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1116" rel="noopener">#1116</a>).</li><li><strong>835 payment posting</strong> onto claim financials and member accumulators (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1122" rel="noopener">#1122</a>) and a <strong>claim intelligence read model</strong> composing 837/277CA/276/275/835 without letting one transaction overwrite another (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1119" rel="noopener">#1119</a>).</li><li>Canonical <strong>payer reference directory</strong> synchronized from Stedi's payer list (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1108" rel="noopener">#1108</a>).</li><li>Provider eligibility API for Cloud Dental Office (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1204" rel="noopener">#1204</a>).</li></ul>
+<h3 id="scale-validation-the-million-claim-challenge">Scale validation: the Million Claim Challenge</h3>
+<ul><li>A local and Kubernetes validation harness that adjudicates synthetic claims through the real pipeline and scores outcomes against expected results (payment deltas, pends, prior auth, COB, retro eligibility, subrogation, exclusions, behavioral-health carve-outs).</li><li>Runs progressed from 100K to one million claims, with every previously unsupported scenario converted to scored (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/987" rel="noopener">#987</a>–#989). Fixes found only at that scale — Redis accumulator eviction, MongoDB cache sizing, service CPU contention — are in this release (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/992" rel="noopener">#992</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1000" rel="noopener">#1000</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/990" rel="noopener">#990</a>).</li><li>Raw 837 adjudication scales out over Azure Service Bus across claims-service replicas (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1040" rel="noopener">#1040</a>).</li><li>Method, results and errata are published in the Million Claim Challenge episode series; results are local-validation scope, not production traffic.</li></ul>
+<h3 id="platform-and-operations">Platform and operations</h3>
+<ul><li><strong>MongoDB is the default data provider</strong>, and all services route through shared infrastructure (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1177" rel="noopener">#1177</a>). Several defects that kept services from starting together on a clean cluster were fixed (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1174" rel="noopener">#1174</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1178" rel="noopener">#1178</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1188" rel="noopener">#1188</a>).</li><li>Full local Kubernetes (kind) deployment and quickstart (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/790" rel="noopener">#790</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/791" rel="noopener">#791</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/797" rel="noopener">#797</a>).</li><li>Runbooks: production readiness, disaster recovery, observability incidents, 837 adjudication operations (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1072" rel="noopener">#1072</a>–#1075).</li><li>Public trust and security center, and an Evidence Hub (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1067" rel="noopener">#1067</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1163" rel="noopener">#1163</a>).</li><li>Marketing site moved off Azure Static Web Apps; container deploys of the site retired (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/770" rel="noopener">#770</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/772" rel="noopener">#772</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1169" rel="noopener">#1169</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1212" rel="noopener">#1212</a>).</li></ul>
+<h2 id="breaking-and-behavior-changes">Breaking and behavior changes</h2>
+<ul><li><strong>Identity mode is explicit.</strong> <code>SmartAuth:Mode</code> must be <code>Demo</code> or <code>ExternalIssuer</code>. A <code>Demo</code> deployment on a non-development host <strong>fails at startup</strong>. Configure <code>ExternalIssuer</code> and its trust registry before upgrading production.</li><li><strong>Tenant comes from the token only.</strong> Backend services and smart-auth-service resolve the tenant through the shared CHO <code>TenantMiddleware</code>: an <code>X-Tenant-ID</code> header is accepted only as an echo of the token's tenant (a mismatch is <strong>403</strong>), a token without a tenant is <strong>401</strong>, and <code>X-Dev-Tenant-ID</code> is no longer honored in any environment. This supersedes the header fallback introduced with SEC-01.</li><li><strong>Backend services require CHO tokens and are default-deny</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1217" rel="noopener">#1217</a>). Startup fails if no <code>ChoAuth</code> issuers are configured; symmetric keys are allowed only in Development/Testing. See <code>docs/security/service-auth-rollout-playbook.md</code> for the rollout order.</li><li><strong>MongoDB is now the default provider</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1177" rel="noopener">#1177</a>). Deployments relying on the previous default must set their provider explicitly.</li><li><strong>Payer IDs are resolved through the payer reference directory.</strong> Arbitrary payer IDs are no longer passed through to the clearinghouse; <code>PayerMap</code> / <code>TenantPayerMap</code> are deprecated fallbacks.</li><li><strong><code>claims-scrubbing-service</code> is decommissioned</strong>; scrubbing is a stage of the adjudication pipeline (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/734" rel="noopener">#734</a>).</li><li><strong>Argo claims-adjudication workflow, event source and SLA watchdog templates were removed</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1217" rel="noopener">#1217</a>); adjudication runs in claims-service.</li><li><strong>Cosmos claims partition key moved to <code>/tenantId</code></strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/743" rel="noopener">#743</a>). The legacy container is retained for a deletion window — see the 4.4.0 follow-ups.</li></ul>
+<h2 id="upgrade-notes">Upgrade notes</h2>
+<ol><li>Read <code>docs/architecture/smart-oauth-trust.md</code> and <code>docs/architecture/idp-integration-contract.md</code>; configure your issuer(s).</li><li>Follow <code>docs/security/service-auth-rollout-playbook.md</code> to provision service tokens before rolling services.</li><li>Set the data provider explicitly if you are not on MongoDB.</li></ol>
+<p><strong>Full changelog:</strong> <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/CHANGELOG.md" rel="noopener">CHANGELOG.md</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/compare/v4.0.0...v5.0.0" rel="noopener">v4.0.0...v5.0.0</a></p>
+<div class="rn-actions">
+<a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/releases/RELEASE_NOTES_v5.0.0.md" rel="noopener">Source of these notes</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/CHANGELOG.md" rel="noopener">Full changelog</a>
+<a href="/release-notes/feed.xml">Subscribe (RSS)</a>
+</div>
+<div class="rn-pager">
+<span></span>
+<span><a href="/release-notes/v6-0-0">v6.0.0 Paths of Glory &rarr;</a></span>
+</div>
+</main>
+<footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+</body>
+</html>

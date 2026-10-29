@@ -19,10 +19,12 @@ on:
     branches: [main]
     paths:
       - 'src/site/**'
+      - 'docs/releases/**'
       - '.github/workflows/deploy-cloudflare-pages.yml'
   pull_request:
     paths:
       - 'src/site/**'
+      - 'docs/releases/**'
       - '.github/workflows/deploy-cloudflare-pages.yml'
 
 permissions:
