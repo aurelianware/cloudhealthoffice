@@ -178,6 +178,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Inferno answered 500 to every session the harness opened.** The harness
+  sent its JSON with `Transfer-Encoding: chunked`; Puma buffers a chunked body
+  to a Tempfile, and Inferno's API calls `request.body.string` on it ("undefined
+  method `string' for an instance of Tempfile"). Requests to a kit now carry a
+  Content-Length.
+
 - **GKE demo SMART hosts now work after a deploy, and pass hosted Inferno.**
   smart-auth-service on GKE answered every discovery and token request with
   500 ("The X509 certificate could not be added to the store") because its
