@@ -188,6 +188,14 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **fhir-service answers FHIR POST search.** `POST [type]/_search` with a
+  form-encoded body (FHIR R4 http.html#search, required by US Core 3.1.1)
+  matched no endpoint and answered 403, so Inferno's US Core kit failed
+  Patient `_id` search. It is now served as the equivalent GET search,
+  rewritten before routing and authentication, so scopes, patient binding and
+  `[FhirAccess]` apply to it exactly as to the GET. Parameters in the URL and
+  the body both apply.
+
 - **The nightly Inferno run no longer reports harness faults as CHO failures.**
   Three things in run 40937514337 were the harness, not CHO. Every CARIN BB
   validation errored with "Unable to connect to validator": the C4BB suites

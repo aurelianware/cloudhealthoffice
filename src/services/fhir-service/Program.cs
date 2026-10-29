@@ -852,6 +852,13 @@ var app = builder.Build();
             + "See docs/security/smart-auth-tenancy.md (Outbound: CHO as a SMART Backend Services client).");
 }
 
+// POST [type]/_search becomes the equivalent GET before routing picks an
+// endpoint (and so its [FhirAccess] policy) and before anything authorizes it.
+// Routing is explicit so that it runs after the rewrite; without this call
+// WebApplication would route first.
+app.UseMiddleware<FhirPostSearchMiddleware>();
+app.UseRouting();
+
 app.UseChoObservability();
 
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
