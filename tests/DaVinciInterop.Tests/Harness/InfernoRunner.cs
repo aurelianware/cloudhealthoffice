@@ -320,6 +320,76 @@ public sealed class InfernoRunner
     }
 
     /// <summary>
+    /// Reads the session's stored inputs and outputs, by name. Values that are
+    /// empty are left out.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, string>> ReadSessionDataAsync(
+        string sessionId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetAsync(
+            $"{_apiBaseUrl}/test_sessions/{Uri.EscapeDataString(sessionId)}/session_data", cancellationToken);
+        await EnsureSuccessAsync(response, $"read the session data of '{sessionId}'", cancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var document = JsonDocument.Parse(body);
+        var data = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var entry in document.RootElement.EnumerateArray())
+        {
+            if (entry.TryGetProperty("name", out var name) && name.GetString() is { Length: > 0 } key
+                && entry.TryGetProperty("value", out var value) && value.ValueKind != JsonValueKind.Null)
+            {
+                var text = value.ValueKind == JsonValueKind.String ? value.GetString()! : value.GetRawText();
+                if (text.Length > 0)
+                {
+                    data[key] = text;
+                }
+            }
+        }
+
+        return data;
+    }
+
+    /// <summary>
+    /// Replaces each supplied <c>auth_info</c> input with the session's value
+    /// for it, when the session holds one that differs.
+    ///
+    /// <para>
+    /// A kit that authenticates itself writes what it obtained back into the
+    /// session: the Bulk Data SMART Backend Services group stores the access
+    /// token it was issued in <c>smart_auth_info</c>, and the export groups
+    /// read it from there. Inferno persists every input a run is given, so
+    /// sending the harness's original <c>smart_auth_info</c> (a client id and
+    /// token URL, no token) with the next group overwrote the token, and every
+    /// kick-off went out unauthenticated and answered 401 (run 40956429968).
+    /// Inferno's UI pre-fills the next group from the session, which is what
+    /// this does. Only auth_info inputs are carried: they are the ones a kit
+    /// fills in itself, and every other input stays what the scenario says.
+    /// </para>
+    /// </summary>
+    public static (List<InfernoInput> Inputs, List<string> Carried) WithSessionAuth(
+        IReadOnlyList<InfernoInput> supplied, IReadOnlyDictionary<string, string> session)
+    {
+        var inputs = new List<InfernoInput>(supplied.Count);
+        var carried = new List<string>();
+
+        foreach (var input in supplied)
+        {
+            if (input.Type == "auth_info" && session.TryGetValue(input.Name, out var stored)
+                && !string.Equals(stored, input.Value, StringComparison.Ordinal))
+            {
+                inputs.Add(input with { Value = stored });
+                carried.Add(input.Name);
+            }
+            else
+            {
+                inputs.Add(input);
+            }
+        }
+
+        return (inputs, carried);
+    }
+
+    /// <summary>
     /// Fails with what the kit said, not only its status code. A bare
     /// "500 (Internal Server Error)" from a kit says nothing about which input,
     /// suite or sidecar it choked on, and the kit's own logs only reach the

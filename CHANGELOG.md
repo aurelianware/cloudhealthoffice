@@ -188,6 +188,14 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **Bulk Data export groups now run with the token the kit obtained.** The
+  SMART Backend Services group stores the access token CHO issued it in the
+  session's `smart_auth_info`, but the harness sent its original
+  `smart_auth_info` (client id and token URL, no token) with each later group,
+  and Inferno saved that over the token. Every Group and Patient kick-off went
+  out unauthenticated and got 401 (run 40956429968). Later groups now take
+  their `auth_info` inputs from the session, as Inferno's UI pre-fills them.
+
 - **The nightly Inferno run no longer reports harness faults as CHO failures.**
   Three things in run 40937514337 were the harness, not CHO. Every CARIN BB
   validation errored with "Unable to connect to validator": the C4BB suites

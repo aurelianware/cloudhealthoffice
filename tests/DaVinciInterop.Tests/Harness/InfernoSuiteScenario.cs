@@ -113,6 +113,12 @@ public static class InfernoSuiteScenario
 
                     var group = suite.AllGroups().Single(g => g.Id == groupId);
                     var groupInputs = WithKitDefaults(run, groupId, inputs, group.Inputs);
+                    if (runs.Count > 0)
+                    {
+                        groupInputs = await WithSessionAuthAsync(run, runner, sessionId, groupId, groupInputs,
+                            cancellationToken);
+                    }
+
                     runs.Add(await ExecuteAsync(
                         runner, () => runner.StartGroupRunAsync(sessionId, groupId, groupInputs, cancellationToken),
                         cancellationToken));
@@ -257,6 +263,27 @@ public static class InfernoSuiteScenario
         }
 
         return withDefaults;
+    }
+
+    private static async Task<List<InfernoInput>> WithSessionAuthAsync(
+        InteropScenarioRun run,
+        InfernoRunner runner,
+        string sessionId,
+        string runnableId,
+        List<InfernoInput> inputs,
+        CancellationToken cancellationToken)
+    {
+        var session = await runner.ReadSessionDataAsync(sessionId, cancellationToken);
+        var (carried, names) = InfernoRunner.WithSessionAuth(inputs, session);
+        if (names.Count > 0)
+        {
+            run.Record(InteropFinding.Info(
+                $"inferno.inputs.carried.{runnableId}",
+                $"'{runnableId}' ran with the session's {string.Join(", ", names)}, as an earlier group left " +
+                "it, so the credentials the kit obtained itself reach the groups that use them."));
+        }
+
+        return carried;
     }
 
     private static InfernoInput SmartAuthInfo(InteropScenarioDefinition scenario, ChoSeedFixture fixture, string token)
