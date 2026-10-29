@@ -27,6 +27,13 @@ public static class ChoSeedRunner
         TimeSpan timeout,
         CancellationToken cancellationToken = default)
     {
+        using (var http = new HttpClient(new HttpClientHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(10) })
+        {
+            await WaitUntilLiveAsync(
+                http, serviceUrls.Values, InteropSettings.Timeouts.Readiness, InteropSettings.Timeouts.ReadinessPoll,
+                cancellationToken);
+        }
+
         var script = Path.Combine(InteropPaths.RepositoryRoot, "scripts", "interop", "seed-cho.mjs");
         if (!File.Exists(script))
         {
@@ -79,6 +86,65 @@ public static class ChoSeedRunner
         }
 
         return Redaction.Body(combined);
+    }
+
+    /// <summary>
+    /// Waits until every service the seed calls answers <c>/health/live</c>.
+    ///
+    /// <para>
+    /// <c>docker compose up --detach</c> returns once each container has
+    /// started, not once it listens. fhir-service is the last CHO service to
+    /// start (it depends on all the others), so a seed that begins the moment
+    /// the kit answers can reach it before Kestrel is up. Docker's port proxy
+    /// then resets the connection, which is how INFERNO-BULK-SERVER-001, the
+    /// first scenario of a run and so the one starting from cold, failed in
+    /// run 40937514337 with ECONNRESET before its suite ran.
+    /// </para>
+    /// </summary>
+    /// <exception cref="InteropEnvironmentException">A service was not live within the timeout.</exception>
+    public static async Task WaitUntilLiveAsync(
+        HttpClient http,
+        IEnumerable<string> serviceUrls,
+        TimeSpan timeout,
+        TimeSpan poll,
+        CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        foreach (var baseUrl in serviceUrls.Distinct(StringComparer.Ordinal))
+        {
+            var url = baseUrl.TrimEnd('/') + "/health/live";
+            string last = "no answer yet";
+            while (true)
+            {
+                try
+                {
+                    using var response = await http.GetAsync(url, cancellationToken);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        break;
+                    }
+
+                    last = $"HTTP {(int)response.StatusCode}";
+                }
+                catch (HttpRequestException ex)
+                {
+                    last = ex.Message;
+                }
+                catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    last = "the request timed out";
+                }
+
+                if (stopwatch.Elapsed >= timeout)
+                {
+                    throw new InteropEnvironmentException(
+                        $"{url} was not live within {timeout.TotalSeconds:0} seconds ({last}), so the " +
+                        "interop-cho profile was not seeded and no conformance suite was run.");
+                }
+
+                await Task.Delay(poll, cancellationToken);
+            }
+        }
     }
 
     private static void TryKill(Process process)
