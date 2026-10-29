@@ -60,6 +60,17 @@ What it changes:
     to the Google one (Workload Identity) and ManagedFhirStore__* names the
     store and the one tenant it holds (--managed-fhir-store-tenant, default
     demo). The store streams to BigQuery by its own configuration.
+  - With --conformance-fhir-host and --conformance-auth-host, fhir-service and
+    smart-auth-service answer as those public HTTPS hostnames (Cloudflare
+    Tunnel routes), so an external SMART Backend Services or Bulk Data suite
+    such as hosted Inferno can run against the demo: smart-auth-service's
+    issuer is https://AUTH_HOST, fhir-service's base URL is
+    https://FHIR_HOST/fhir/r4 and it trusts that issuer as an explicit
+    ExternalIssuer entry (the CHO authorization server, confined to
+    --conformance-tenant), and smart-auth-service believes X-Forwarded-Proto
+    from --trusted-proxy-network (the pod range cloudflared runs in), since
+    the tunnel delivers HTTPS requests as plain HTTP. Without them both keep
+    the manifests' hostnames. See docs/deploy/GCP-CONFORMANCE-TESTING.md.
 
 Usage:
   render_manifests.py --registry REGION-docker.pkg.dev/PROJECT/cho --tag SHA \
@@ -74,11 +85,14 @@ Usage:
        --token-public-key-file token-service.pub.pem
        --access-team-domain TEAM.cloudflareaccess.com --access-audience AUD_TAG
        [--access-tenant demo] [--host-environment Staging] [--platform-tenant-id ENTRA_TID]]
+      [--conformance-fhir-host HOST --conformance-auth-host HOST
+       --trusted-proxy-network CIDR [--conformance-tenant demo]]
 """
 
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import re
 import sys
@@ -167,6 +181,9 @@ WORKLOAD_IDENTITY_ANNOTATION = "iam.gke.io/gcp-service-account"
 # to the managed FHIR store's Google service account when publishing is on.
 MANAGED_FHIR_STORE_SERVICE = "fhir-service"
 MANAGED_FHIR_STORE_ACCOUNT = "fhir-service-sa"
+# A bare DNS name: no scheme, port, path or trailing dot.
+CONFORMANCE_HOST = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
+
 MANAGED_FHIR_STORE_ID = re.compile(
     r"^projects/(?P<project>[a-z][a-z0-9-]{4,28}[a-z0-9])/locations/(?P<location>[a-z0-9-]+)"
     r"/datasets/(?P<dataset>[A-Za-z0-9_.-]{1,256})/fhirStores/(?P<store>[A-Za-z0-9_.-]{1,256})$")
@@ -360,6 +377,8 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             # Placeholder CIDRs fail parsing at startup; there is no ingress proxy in the demo.
             for key in [k for k in data if k.startswith("SmartAuth__TrustedProxyNetworks__")]:
                 del data[key]
+        if conformance(args):
+            conformance_config(name, data, args)
         return doc
 
     spec = pod_spec(doc)
@@ -491,6 +510,34 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
         add_service_identity(doc, spec, name, args)
 
     return doc
+
+
+def conformance(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "conformance_fhir_host", ""))
+
+
+def conformance_config(name: str, data: dict, args: argparse.Namespace) -> None:
+    """Public hostnames for an external conformance suite (--conformance-*-host)."""
+    fhir_base = f"https://{args.conformance_fhir_host}/fhir/r4"
+    issuer = f"https://{args.conformance_auth_host}"
+    if name == "smart-auth-service-config":
+        data["SmartAuth__Issuer"] = issuer
+        data["SmartAuth__FhirBaseUrl"] = fhir_base
+        for i, network in enumerate(args.trusted_proxy_network):
+            data[f"SmartAuth__TrustedProxyNetworks__{i}"] = network
+    if name == "fhir-service-config":
+        data["Fhir__ServerBaseUrl"] = fhir_base
+        data["SmartAuth__Issuer"] = issuer
+        # An explicit entry rather than Demo trust, so it holds on Staging hosts
+        # too. smart-auth-service writes its issuer as Uri.AbsoluteUri, with the
+        # trailing slash, and explicit entries are matched exactly as written.
+        data.update({
+            "SmartAuth__Mode": "ExternalIssuer",
+            "SmartAuth__TrustedIssuers__0__Issuer": f"{issuer}/",
+            "SmartAuth__TrustedIssuers__0__Audiences__0": "fhir-api",
+            "SmartAuth__TrustedIssuers__0__Tenants__0": args.conformance_tenant,
+            "SmartAuth__TrustedIssuers__0__IssuesChoClientRegistrations": "true",
+        })
 
 
 def env_value(container: dict, name: str) -> str | None:
@@ -746,6 +793,14 @@ def main() -> int:
     parser.add_argument("--access-tenant", action="append", default=None,
                         help="CHO tenant that accepts Cloudflare Access sign-in (repeatable; default demo)")
     parser.add_argument("--platform-tenant-id", default="", help="Entra directory of platform administrators (default: none)")
+    parser.add_argument("--conformance-fhir-host", default="",
+                        help="Public HTTPS hostname routed to fhir-service, for an external conformance suite")
+    parser.add_argument("--conformance-auth-host", default="",
+                        help="Public HTTPS hostname routed to smart-auth-service (its SMART issuer)")
+    parser.add_argument("--conformance-tenant", default="demo",
+                        help="The one CHO tenant fhir-service accepts smart-auth-service tokens for (default: %(default)s)")
+    parser.add_argument("--trusted-proxy-network", action="append", default=[],
+                        help="CIDR smart-auth-service believes X-Forwarded-Proto from (repeatable; the tunnel's pod range)")
     args = parser.parse_args()
     args.service_clients = []
     if args.access_tenant is None:
@@ -773,6 +828,30 @@ def main() -> int:
             and args.fhir_service_google_account != args.managed_fhir_store_service_account):
         # A Kubernetes service account maps to one Google account.
         parser.error("--fhir-service-google-account must be the managed FHIR store's service account when both are set")
+    if bool(args.conformance_fhir_host) != bool(args.conformance_auth_host):
+        parser.error("--conformance-fhir-host and --conformance-auth-host go together")
+    if conformance(args):
+        for host in (args.conformance_fhir_host, args.conformance_auth_host):
+            if not CONFORMANCE_HOST.match(host):
+                parser.error(f"--conformance-*-host must be a bare hostname such as fhir.example.com, got '{host}'")
+        if args.conformance_fhir_host == args.conformance_auth_host:
+            parser.error("--conformance-fhir-host and --conformance-auth-host must differ (one tunnel route each)")
+        if not args.trusted_proxy_network:
+            parser.error("--conformance-*-host needs --trusted-proxy-network: the tunnel delivers HTTPS as plain HTTP")
+        for network in args.trusted_proxy_network:
+            # smart-auth-service's TrustedProxy.Parse refuses an address
+            # without a prefix length, so it is refused here first.
+            try:
+                ipaddress.ip_network(network)
+                valid = "/" in network
+            except ValueError:
+                valid = False
+            if not valid:
+                parser.error(f"--trusted-proxy-network '{network}' is not a CIDR network (for example 10.52.0.0/14)")
+        if not args.conformance_tenant.strip():
+            parser.error("--conformance-tenant must name a tenant")
+    elif args.trusted_proxy_network:
+        parser.error("--trusted-proxy-network is only used with --conformance-*-host")
     if production(args):
         validate_production_args(parser, args)
 

@@ -59,6 +59,15 @@
 #                            Provider Access Bulk Data $export files (terraform outputs bulk_export_bucket
 #                            and fhir_service_google_account with enable_bulk_export = true). Optional;
 #                            without them a Group $export answers 501.
+#   CONFORMANCE_FHIR_HOST  CONFORMANCE_AUTH_HOST
+#                            Public hostnames the Cloudflare Tunnel routes to fhir-service and
+#                            smart-auth-service, so an external suite (hosted Inferno) can run SMART
+#                            Backend Services and Bulk Data against the demo. smart-auth-service's
+#                            issuer and fhir-service's base URL become these hosts. Optional; both or
+#                            neither. Needs CLOUDFLARE_TUNNEL_TOKEN. See docs/deploy/GCP-CONFORMANCE-TESTING.md.
+#   TRUSTED_PROXY_NETWORKS   Comma-separated CIDRs smart-auth-service believes X-Forwarded-Proto from
+#                            (where cloudflared runs). Default: the cluster's pod range, read with
+#                            gcloud (GKE_CLUSTER, GKE_LOCATION), else the nodes' pod CIDRs.
 
 set -Eeuo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -383,6 +392,33 @@ if [[ -n "${BULK_EXPORT_BUCKET:-}" && -n "${FHIR_SERVICE_GOOGLE_ACCOUNT:-}" ]]; 
   render_args+=(--bulk-export-bucket "$BULK_EXPORT_BUCKET" --fhir-service-google-account "$FHIR_SERVICE_GOOGLE_ACCOUNT")
 elif [[ -n "${BULK_EXPORT_BUCKET:-}${FHIR_SERVICE_GOOGLE_ACCOUNT:-}" ]]; then
   warn "BULK_EXPORT_BUCKET and FHIR_SERVICE_GOOGLE_ACCOUNT go together; bulk export is off"
+fi
+if [[ -n "${CONFORMANCE_FHIR_HOST:-}" && -n "${CONFORMANCE_AUTH_HOST:-}" ]]; then
+  [[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]] \
+    || err "CONFORMANCE_FHIR_HOST / CONFORMANCE_AUTH_HOST are routed by the Cloudflare Tunnel; set CLOUDFLARE_TUNNEL_TOKEN"
+  # cloudflared delivers the HTTPS requests it carries as plain HTTP, so
+  # smart-auth-service learns the scheme from X-Forwarded-Proto, believed only
+  # from the pod range cloudflared runs in.
+  proxy_networks="${TRUSTED_PROXY_NETWORKS:-}"
+  if [[ -z "$proxy_networks" && -n "${GKE_CLUSTER:-}" && -n "${GKE_LOCATION:-}" ]] && command -v gcloud >/dev/null; then
+    proxy_networks="$(gcloud container clusters describe "$GKE_CLUSTER" --location "$GKE_LOCATION" \
+      ${GCP_PROJECT_ID:+--project "$GCP_PROJECT_ID"} --format='value(clusterIpv4Cidr)' 2>/dev/null || true)"
+  fi
+  if [[ -z "$proxy_networks" ]]; then
+    proxy_networks="$(kubectl get nodes -o jsonpath='{range .items[*]}{.spec.podCIDR}{","}{end}')"
+    proxy_networks="${proxy_networks%,}"
+    [[ -n "$proxy_networks" ]] && warn "Trusting the current nodes' pod CIDRs ($proxy_networks); a replaced node is not trusted until the next deploy. Set TRUSTED_PROXY_NETWORKS to the cluster pod range to avoid that."
+  fi
+  [[ -n "$proxy_networks" ]] || err "Could not find the cluster pod range; set TRUSTED_PROXY_NETWORKS"
+  render_args+=(--conformance-fhir-host "$CONFORMANCE_FHIR_HOST" --conformance-auth-host "$CONFORMANCE_AUTH_HOST")
+  IFS=',' read -ra networks <<<"$proxy_networks"
+  for network in "${networks[@]}"; do
+    [[ -n "${network// /}" ]] && render_args+=(--trusted-proxy-network "${network// /}")
+  done
+  ok "conformance hostnames: https://$CONFORMANCE_FHIR_HOST/fhir/r4, issuer https://$CONFORMANCE_AUTH_HOST (proxy networks $proxy_networks)"
+  warn "Route these hostnames only behind Cloudflare Access; bypass just the paths in docs/deploy/GCP-CONFORMANCE-TESTING.md, and only while a suite runs"
+elif [[ -n "${CONFORMANCE_FHIR_HOST:-}${CONFORMANCE_AUTH_HOST:-}" ]]; then
+  err "CONFORMANCE_FHIR_HOST and CONFORMANCE_AUTH_HOST go together"
 fi
 rendered="$(mktemp)"
 python3 deploy/gcp/render_manifests.py "${render_args[@]}" > "$rendered"

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The GKE demo can be put in front of hosted Inferno (G-60).** With
+  `CONFORMANCE_FHIR_HOST` and `CONFORMANCE_AUTH_HOST` set, the demo deploy makes
+  smart-auth-service's issuer and fhir-service's base URL those public tunnel
+  hostnames, has fhir-service trust that issuer as an explicit `ExternalIssuer`
+  entry, and has smart-auth-service believe `X-Forwarded-Proto` from the
+  cluster's pod range (cloudflared delivers HTTPS as plain HTTP). Off by default.
+  The Cloudflare Access, tunnel and TLS steps and the Inferno run are in
+  `docs/deploy/GCP-CONFORMANCE-TESTING.md`.
 - **CMS-0057-F prior authorization: refused appeal outcomes can be re-queued.**
   An appeal outcome the authorization's reporting ledger refused (no evidenced
   adverse determination, a time outside the ledger, the authorization not

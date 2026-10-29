@@ -388,7 +388,8 @@ What is deliberately not run, and why:
 * The Bulk Data server TLS group and SMART Backend Services group — their TLS
   checks cannot pass on the plain-HTTP interop network (TLS ends at the ingress
   in a deployment). Both passed against a TLS-serving local CHO in the first
-  manual run.
+  manual run. To run them with hosted Inferno against the GKE demo, see
+  [GCP-CONFORMANCE-TESTING.md](../deploy/GCP-CONFORMANCE-TESTING.md).
 * The Bulk Data system export group — CHO does not serve system-level
   `$export` (501): a payer exports per provider Group or per patient.
 
