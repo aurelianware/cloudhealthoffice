@@ -174,6 +174,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   interop profile's standalone `mongo:7` cannot run one, so every seed stopped
   at `503 PCP_PANEL_UNAVAILABLE` before a suite ran. `interop-mongo` is now a
   single-node replica set, initiated by its healthcheck.
+- **Interop seed rejected the hospital.** The seeded organization's
+  `primarySpecialty` ("General Acute Care Hospital", 27 characters) exceeded
+  provider-service's 20-character limit, so the seed stopped before the
+  directory was complete. It is now "Hospital"; the Plan-Net specialty display
+  still comes from taxonomy `282N00000X`.
 
 - **smart-auth-service answers over plain HTTP when its issuer is HTTP.** An
   http issuer is only accepted in Development (the interop network), but
