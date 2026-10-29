@@ -70,6 +70,21 @@ public sealed class InteropChoProfileTests
     }
 
     [Fact]
+    public void Bulk_export_can_reach_every_service_it_reads_explanations_of_benefit_from()
+    {
+        // The export worker reads prior-authorization EOBs from
+        // authorization-service. Unset, fhir-service falls back to the
+        // cluster name, which does not resolve here: every export job ended
+        // in error and the Bulk Data kit's status polls got 500 (run 40970129547).
+        foreach (var urlKey in new[] { "Services__ClaimsServiceUrl", "Services__AuthorizationServiceUrl" })
+        {
+            FhirServiceEnvironment.Should().ContainKey(urlKey);
+            ComposeServiceNames().Should().Contain(new Uri(FhirServiceEnvironment[urlKey]).Host,
+                "{0} must name a service the interop-cho profile actually starts", urlKey);
+        }
+    }
+
+    [Fact]
     public void The_mode_label_matches_what_the_bindings_make_true()
     {
         // Demo is the honest label only while the mock serves these resources.
