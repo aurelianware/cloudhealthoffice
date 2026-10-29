@@ -189,7 +189,7 @@ jobs:
 
       # ---------- Security scanning ----------
       - name: Scan for secrets and credentials
-        uses: trufflesecurity/trufflehog@v3.99.2
+        uses: trufflesecurity/trufflehog@v3.99.7
         continue-on-error: true
         with:
           path: ./
