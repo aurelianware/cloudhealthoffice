@@ -46,6 +46,7 @@ flowchart LR
 | GKE-specific manifest changes | [`deploy/gcp/render_manifests.py`](../../deploy/gcp/render_manifests.py) (the service manifests themselves are shared with AKS and local) |
 | Kafka | [`deploy/gcp/kafka/kafka-cluster.yaml`](../../deploy/gcp/kafka/kafka-cluster.yaml), topics from [`infrastructure/kafka/topics.yaml`](../../infrastructure/kafka/topics.yaml) |
 | Demo scripts | [`scripts/demo/gcp/`](../../scripts/demo/gcp/README.md) |
+| Hosted Inferno (SMART Backend Services, Bulk Data) against the demo | [GCP-CONFORMANCE-TESTING.md](GCP-CONFORMANCE-TESTING.md) |
 
 ## Set up (once)
 

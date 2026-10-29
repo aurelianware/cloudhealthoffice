@@ -197,6 +197,10 @@ jobs:
           # Bulk Data $export files (terraform outputs in infrastructure/gcp/bulk-export.tf); optional.
           BULK_EXPORT_BUCKET: ${{ vars.BULK_EXPORT_BUCKET }}
           FHIR_SERVICE_GOOGLE_ACCOUNT: ${{ vars.FHIR_SERVICE_GOOGLE_ACCOUNT }}
+          # Public tunnel hostnames for an external conformance suite (docs/deploy/GCP-CONFORMANCE-TESTING.md); optional.
+          CONFORMANCE_FHIR_HOST: ${{ vars.CONFORMANCE_FHIR_HOST }}
+          CONFORMANCE_AUTH_HOST: ${{ vars.CONFORMANCE_AUTH_HOST }}
+          TRUSTED_PROXY_NETWORKS: ${{ vars.TRUSTED_PROXY_NETWORKS }}
           # Production security (all five, or none for the development-key demo).
           TOKEN_SIGNING_KEY_VERSION: ${{ vars.TOKEN_SIGNING_KEY_VERSION }}
           TOKEN_SERVICE_GOOGLE_ACCOUNT: ${{ vars.TOKEN_SERVICE_GOOGLE_ACCOUNT }}

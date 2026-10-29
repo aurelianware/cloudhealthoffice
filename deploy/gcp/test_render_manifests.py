@@ -589,3 +589,62 @@ def test_bulk_export_needs_one_fhir_service_identity():
             capture_output=True, text=True,
         )
         assert result.returncode != 0, extra
+
+
+CONFORMANCE = ("--conformance-fhir-host", "fhir-test.example.com",
+               "--conformance-auth-host", "auth-test.example.com",
+               "--trusted-proxy-network", "10.52.0.0/14")
+
+
+def test_conformance_hosts_are_off_by_default():
+    docs = render()
+    assert config_map(docs, "fhir-service-config")["Fhir__ServerBaseUrl"] == "https://api.cloudhealthoffice.com/fhir/r4"
+    assert not any(k.startswith("SmartAuth__") for k in config_map(docs, "fhir-service-config"))
+    assert config_map(docs, "smart-auth-service-config")["SmartAuth__Issuer"] == "https://auth.cloudhealthoffice.com"
+
+
+def test_conformance_hosts_set_the_issuer_and_the_fhir_base_url():
+    docs = render(*CONFORMANCE)
+    auth = config_map(docs, "smart-auth-service-config")
+    assert auth["SmartAuth__Issuer"] == "https://auth-test.example.com"
+    assert auth["SmartAuth__FhirBaseUrl"] == "https://fhir-test.example.com/fhir/r4"
+    assert {k: v for k, v in auth.items() if k.startswith("SmartAuth__TrustedProxyNetworks__")} == {
+        "SmartAuth__TrustedProxyNetworks__0": "10.52.0.0/14"}
+    fhir = config_map(docs, "fhir-service-config")
+    assert fhir["Fhir__ServerBaseUrl"] == "https://fhir-test.example.com/fhir/r4"
+    assert {k: v for k, v in fhir.items() if k.startswith("SmartAuth__")} == {
+        "SmartAuth__Issuer": "https://auth-test.example.com",
+        "SmartAuth__Mode": "ExternalIssuer",
+        # As smart-auth-service writes it (Uri.AbsoluteUri); explicit entries match exactly.
+        "SmartAuth__TrustedIssuers__0__Issuer": "https://auth-test.example.com/",
+        "SmartAuth__TrustedIssuers__0__Audiences__0": "fhir-api",
+        "SmartAuth__TrustedIssuers__0__Tenants__0": "demo",
+        "SmartAuth__TrustedIssuers__0__IssuesChoClientRegistrations": "true",
+    }
+
+
+def test_conformance_hosts_hold_under_production_security(tmp_path):
+    docs = render(*CONFORMANCE, *production_args(tmp_path))
+    assert config_map(docs, "fhir-service-config")["SmartAuth__Mode"] == "ExternalIssuer"
+    assert config_map(docs, "smart-auth-service-config")["SmartAuth__TrustedProxyNetworks__0"] == "10.52.0.0/14"
+
+
+def render_error(*extra: str) -> str:
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--registry", REGISTRY, *extra], capture_output=True, text=True)
+    assert result.returncode != 0
+    return result.stderr
+
+
+def test_conformance_hosts_are_checked():
+    assert "go together" in render_error("--conformance-fhir-host", "fhir-test.example.com")
+    assert "bare hostname" in render_error(
+        "--conformance-fhir-host", "https://fhir-test.example.com", "--conformance-auth-host", "auth-test.example.com",
+        "--trusted-proxy-network", "10.0.0.0/8")
+    assert "must differ" in render_error(
+        "--conformance-fhir-host", "x.example.com", "--conformance-auth-host", "x.example.com",
+        "--trusted-proxy-network", "10.0.0.0/8")
+    assert "needs --trusted-proxy-network" in render_error(
+        "--conformance-fhir-host", "fhir-test.example.com", "--conformance-auth-host", "auth-test.example.com")
+    assert "not a CIDR" in render_error(*CONFORMANCE[:4], "--trusted-proxy-network", "10.52.0.0")
+    assert "only used with" in render_error("--trusted-proxy-network", "10.0.0.0/8")
