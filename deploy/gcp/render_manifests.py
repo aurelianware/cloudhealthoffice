@@ -73,6 +73,13 @@ What it changes:
     carry a fingerprint of these settings, so changing them restarts the two
     services even when the image tag is unchanged. Without them both keep
     the manifests' hostnames. See docs/deploy/GCP-CONFORMANCE-TESTING.md.
+  - With --public-directory, fhir-service publishes those plans' public
+    Plan-Net Provider Directories (G-36): a JSON object keyed by directory id,
+    each entry naming its Tenant and the plan's own Organization (Name and
+    the address Plan-Net requires, plus optional Phone, Website and
+    IdentifierSystem/IdentifierValue), becomes PublicProviderDirectory__*.
+    Without it nothing is published. See
+    docs/architecture/public-provider-directory.md.
 
 Usage:
   render_manifests.py --registry REGION-docker.pkg.dev/PROJECT/cho --tag SHA \
@@ -89,6 +96,7 @@ Usage:
        [--access-tenant demo] [--host-environment Staging] [--platform-tenant-id ENTRA_TID]]
       [--conformance-fhir-host HOST --conformance-auth-host HOST
        --trusted-proxy-network CIDR [--conformance-tenant demo]]
+      [--public-directory '{"demo": {"Tenant": "demo", "Name": "...", "AddressLine": "...", ...}}']
 """
 
 from __future__ import annotations
@@ -190,6 +198,12 @@ CONFORMANCE_SERVICES = {"fhir-service", "smart-auth-service"}
 CONFORMANCE_ANNOTATION = "cloudhealthoffice.com/conformance-settings"
 
 # A bare DNS name: no scheme, port, path or trailing dot.
+# The public directory id appears in the URL; fhir-service accepts only this shape.
+DIRECTORY_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
+# PayerOrganization's settings. Plan-Net requires the plan's Organization to
+# carry an address, so the address fields are required along with Name.
+DIRECTORY_PAYER_REQUIRED = ("Name", "AddressLine", "City", "State", "PostalCode")
+DIRECTORY_PAYER_OPTIONAL = ("Phone", "Website", "IdentifierSystem", "IdentifierValue")
 CONFORMANCE_HOST = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 
 MANAGED_FHIR_STORE_ID = re.compile(
@@ -515,6 +529,9 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             set_env(container, "BulkExport__Enabled", "true")
             set_env(container, "BulkExport__DocumentStore__Provider", "Gcs")
             set_env(container, "BulkExport__DocumentStore__Gcs__Bucket", args.bulk_export_bucket)
+        if name == "fhir-service":
+            for key, value in public_directory_env(args.public_directories).items():
+                set_env(container, key, value)
         if name == "smart-auth-service":
             # The only service whose manifest and Development settings name no
             # service-token client id; the demo token config requires one.
@@ -530,6 +547,46 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
         add_service_identity(doc, spec, name, args)
 
     return doc
+
+
+def parse_public_directories(raw: str) -> dict:
+    """--public-directory's JSON, checked; raises ValueError with the reason."""
+    if not raw.strip():
+        return {}
+    try:
+        directories = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"is not JSON: {e}") from None
+    if not isinstance(directories, dict) or not directories:
+        raise ValueError('must be a JSON object keyed by directory id, such as {"demo": {"Tenant": "demo", ...}}')
+    for directory_id, entry in directories.items():
+        if not DIRECTORY_ID.match(directory_id):
+            raise ValueError(f"directory id '{directory_id}' must be lowercase letters, digits and hyphens (it is a URL segment)")
+        if not isinstance(entry, dict):
+            raise ValueError(f"'{directory_id}' must be an object")
+        unknown = set(entry) - {"Tenant", *DIRECTORY_PAYER_REQUIRED, *DIRECTORY_PAYER_OPTIONAL}
+        if unknown:
+            raise ValueError(f"'{directory_id}' has unknown settings: {', '.join(sorted(unknown))}")
+        for key, value in entry.items():
+            if not isinstance(value, str):
+                raise ValueError(f"'{directory_id}'.{key} must be a string")
+        missing = [k for k in ("Tenant", *DIRECTORY_PAYER_REQUIRED) if not entry.get(k, "").strip()]
+        if missing:
+            raise ValueError(f"'{directory_id}' needs {', '.join(missing)} (Plan-Net requires the plan's address)")
+        if bool(entry.get("IdentifierSystem", "").strip()) != bool(entry.get("IdentifierValue", "").strip()):
+            raise ValueError(f"'{directory_id}': IdentifierSystem and IdentifierValue go together")
+    return directories
+
+
+def public_directory_env(directories: dict) -> dict[str, str]:
+    """fhir-service's PublicProviderDirectory__* settings for --public-directory."""
+    settings = {}
+    for directory_id, entry in sorted(directories.items()):
+        settings[f"PublicProviderDirectory__Directories__{directory_id}"] = entry["Tenant"]
+        for key in (*DIRECTORY_PAYER_REQUIRED, *DIRECTORY_PAYER_OPTIONAL):
+            if entry.get(key, "").strip():
+                settings[f"PublicProviderDirectory__Payers__{directory_id}__{key}"] = entry[key]
+    return settings
 
 
 def conformance(args: argparse.Namespace) -> bool:
@@ -830,6 +887,10 @@ def main() -> int:
                         help="The one CHO tenant fhir-service accepts smart-auth-service tokens for (default: %(default)s)")
     parser.add_argument("--trusted-proxy-network", action="append", default=[],
                         help="CIDR smart-auth-service believes X-Forwarded-Proto from (repeatable; the tunnel's pod range)")
+    parser.add_argument("--public-directory", default="",
+                        help="JSON object of public Plan-Net Provider Directories fhir-service publishes, keyed by "
+                             "directory id: {\"demo\": {\"Tenant\": \"demo\", \"Name\": ..., \"AddressLine\": ..., "
+                             "\"City\": ..., \"State\": ..., \"PostalCode\": ...}} (default: none)")
     args = parser.parse_args()
     args.service_clients = []
     if args.access_tenant is None:
@@ -881,6 +942,10 @@ def main() -> int:
             parser.error("--conformance-tenant must name a tenant")
     elif args.trusted_proxy_network:
         parser.error("--trusted-proxy-network is only used with --conformance-*-host")
+    try:
+        args.public_directories = parse_public_directories(args.public_directory)
+    except ValueError as e:
+        parser.error(f"--public-directory {e}")
     if production(args):
         validate_production_args(parser, args)
 

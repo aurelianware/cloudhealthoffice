@@ -667,3 +667,45 @@ def test_conformance_settings_restart_the_two_services_when_they_change():
         assert conformance_annotation(other, name) != conformance_annotation(on, name)
     claims = deployments(on)["claims-service"]["spec"]["template"].get("metadata", {}).get("annotations") or {}
     assert "cloudhealthoffice.com/conformance-settings" not in claims
+
+
+DIRECTORY = {"demo": {"Tenant": "demo", "Name": "Demo Health Plan (synthetic)", "Phone": "555-0100",
+                      "AddressLine": "1 Synthetic Way", "City": "Springfield", "State": "FL", "PostalCode": "32401"}}
+
+
+def test_no_public_directory_by_default():
+    fhir = deployments(render())["fhir-service"]
+    assert not any(k.startswith("PublicProviderDirectory__") for k in env(fhir))
+
+
+def test_public_directory_publishes_each_plan_from_fhir_service():
+    deps = deployments(render("--public-directory", json.dumps(DIRECTORY)))
+    assert {k: v for k, v in env(deps["fhir-service"]).items() if k.startswith("PublicProviderDirectory__")} == {
+        "PublicProviderDirectory__Directories__demo": "demo",
+        "PublicProviderDirectory__Payers__demo__Name": "Demo Health Plan (synthetic)",
+        "PublicProviderDirectory__Payers__demo__Phone": "555-0100",
+        "PublicProviderDirectory__Payers__demo__AddressLine": "1 Synthetic Way",
+        "PublicProviderDirectory__Payers__demo__City": "Springfield",
+        "PublicProviderDirectory__Payers__demo__State": "FL",
+        "PublicProviderDirectory__Payers__demo__PostalCode": "32401",
+    }
+    assert not any(k.startswith("PublicProviderDirectory__")
+                   for n, d in deps.items() if n != "fhir-service" for k in env(d))
+
+
+def test_an_empty_public_directory_setting_publishes_nothing():
+    fhir = deployments(render("--public-directory", ""))["fhir-service"]
+    assert not any(k.startswith("PublicProviderDirectory__") for k in env(fhir))
+
+
+def test_public_directory_is_checked():
+    entry = DIRECTORY["demo"]
+    assert "is not JSON" in render_error("--public-directory", "{demo")
+    assert "keyed by directory id" in render_error("--public-directory", "[]")
+    assert "URL segment" in render_error("--public-directory", json.dumps({"Demo Plan": entry}))
+    assert "unknown settings: Adress" in render_error("--public-directory", json.dumps({"demo": {**entry, "Adress": "x"}}))
+    no_address = {k: v for k, v in entry.items() if k != "PostalCode"}
+    assert "needs PostalCode" in render_error("--public-directory", json.dumps({"demo": no_address}))
+    assert "needs Tenant" in render_error("--public-directory", json.dumps({"demo": {**entry, "Tenant": " "}}))
+    assert "go together" in render_error("--public-directory", json.dumps({"demo": {**entry, "IdentifierSystem": "urn:x"}}))
+    assert "must be a string" in render_error("--public-directory", json.dumps({"demo": {**entry, "PostalCode": 32401}}))

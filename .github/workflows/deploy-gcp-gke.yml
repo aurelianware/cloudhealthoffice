@@ -201,6 +201,8 @@ jobs:
           CONFORMANCE_FHIR_HOST: ${{ vars.CONFORMANCE_FHIR_HOST }}
           CONFORMANCE_AUTH_HOST: ${{ vars.CONFORMANCE_AUTH_HOST }}
           TRUSTED_PROXY_NETWORKS: ${{ vars.TRUSTED_PROXY_NETWORKS }}
+          # Public Plan-Net Provider Directories, as JSON (docs/architecture/public-provider-directory.md); optional.
+          PUBLIC_PROVIDER_DIRECTORY: ${{ vars.PUBLIC_PROVIDER_DIRECTORY }}
           # Production security (all five, or none for the development-key demo).
           TOKEN_SIGNING_KEY_VERSION: ${{ vars.TOKEN_SIGNING_KEY_VERSION }}
           TOKEN_SERVICE_GOOGLE_ACCOUNT: ${{ vars.TOKEN_SERVICE_GOOGLE_ACCOUNT }}
