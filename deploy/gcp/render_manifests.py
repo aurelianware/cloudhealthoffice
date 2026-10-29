@@ -69,7 +69,9 @@ What it changes:
     ExternalIssuer entry (the CHO authorization server, confined to
     --conformance-tenant), and smart-auth-service believes X-Forwarded-Proto
     from --trusted-proxy-network (the pod range cloudflared runs in), since
-    the tunnel delivers HTTPS requests as plain HTTP. Without them both keep
+    the tunnel delivers HTTPS requests as plain HTTP. Their pod templates
+    carry a fingerprint of these settings, so changing them restarts the two
+    services even when the image tag is unchanged. Without them both keep
     the manifests' hostnames. See docs/deploy/GCP-CONFORMANCE-TESTING.md.
 
 Usage:
@@ -92,6 +94,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import ipaddress
 import json
 import re
@@ -181,6 +184,11 @@ WORKLOAD_IDENTITY_ANNOTATION = "iam.gke.io/gcp-service-account"
 # to the managed FHIR store's Google service account when publishing is on.
 MANAGED_FHIR_STORE_SERVICE = "fhir-service"
 MANAGED_FHIR_STORE_ACCOUNT = "fhir-service-sa"
+# The services whose ConfigMaps --conformance-*-host changes, and the
+# pod-template annotation that restarts them when those settings change.
+CONFORMANCE_SERVICES = {"fhir-service", "smart-auth-service"}
+CONFORMANCE_ANNOTATION = "cloudhealthoffice.com/conformance-settings"
+
 # A bare DNS name: no scheme, port, path or trailing dot.
 CONFORMANCE_HOST = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 
@@ -396,6 +404,14 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
         elif name in SCALED_TO_ZERO and not production(args):
             replicas = 0
         doc["spec"]["replicas"] = replicas
+        if name in CONFORMANCE_SERVICES:
+            # Their conformance settings live in ConfigMaps, which pods read
+            # only at start. A changed fingerprint on the pod template rolls
+            # them even when the image tag is unchanged.
+            template_metadata = doc["spec"]["template"].setdefault("metadata", {})
+            template_annotations = template_metadata.get("annotations") or {}
+            template_annotations[CONFORMANCE_ANNOTATION] = conformance_fingerprint(args)
+            template_metadata["annotations"] = template_annotations
 
     # Drop tolerations for AKS node taints (keys in the kubernetes.azure.com
     # domain, e.g. the spot scale-set taint). Compare the key's domain part
@@ -503,6 +519,10 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             # The only service whose manifest and Development settings name no
             # service-token client id; the demo token config requires one.
             set_env(container, "ChoAuth__ServiceToken__ClientId", "smart-auth-service")
+            # No SmartAuth:SigningCertificates here, so OpenIddict makes development
+            # certificates and saves them to the X509 store under $HOME. appuser has
+            # no home directory, so discovery and every token request answered 500.
+            set_env(container, "HOME", "/tmp")
         if name == "portal" and production(args):
             portal_access_settings(container, args)
 
@@ -514,6 +534,15 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
 
 def conformance(args: argparse.Namespace) -> bool:
     return bool(getattr(args, "conformance_fhir_host", ""))
+
+
+def conformance_fingerprint(args: argparse.Namespace) -> str:
+    """Changes whenever the rendered conformance settings do ("off" without them)."""
+    if not conformance(args):
+        return "off"
+    settings = "|".join([args.conformance_fhir_host, args.conformance_auth_host,
+                         args.conformance_tenant, *args.trusted_proxy_network])
+    return hashlib.sha256(settings.encode()).hexdigest()[:16]
 
 
 def conformance_config(name: str, data: dict, args: argparse.Namespace) -> None:
