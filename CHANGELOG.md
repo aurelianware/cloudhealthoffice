@@ -162,6 +162,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **GKE demo SMART hosts now work after a deploy, and pass hosted Inferno.**
+  smart-auth-service on GKE answered every discovery and token request with
+  500 ("The X509 certificate could not be added to the store") because its
+  container user had no writable `HOME` for OpenIddict's development
+  certificates; it now gets `HOME=/tmp`. fhir-service and smart-auth-service
+  restart when the conformance settings change, even with an unchanged image
+  tag. With both fixed, the hosted Inferno Bulk Data kit's SMART Backend
+  Services group passed against the demo on 2026-10-29 (G-60). The runbook
+  adds Cloudflare bot protection, which challenged the kit.
+
 - **Inferno kits never booted in the nightly run.** Every Inferno kit app and
   worker died on its first query with `no such table: headers`, because
   nothing ran `inferno migrate` on the kit's fresh SQLite volume (upstream's
