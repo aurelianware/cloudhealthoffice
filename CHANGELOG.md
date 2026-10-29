@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CMS-0057-F prior authorization: refused appeal outcomes can be re-queued.**
+  An appeal outcome the authorization's reporting ledger refused (no evidenced
+  adverse determination, a time outside the ledger, the authorization not
+  found) or that the retry sweep gave up on used to stay off the reporting
+  record for good. `GET api/service-cases/reporting/needs-attention` lists them
+  for the tenant; once the cause is fixed, an `appeals:admin` (or
+  `platform:admin`) operator re-queues one with
+  `POST api/service-cases/{id}/reporting/requeue`, which sends it again at once,
+  or every refused outcome in the tenant with
+  `POST api/service-cases/reporting/requeue`, which the sweep delivers on its
+  next pass. Each re-queue resets the attempt budget and keeps the refusal it
+  cleared, who cleared it and when on the case. The portal case screen shows
+  administrators a "Re-queue for reporting" button on a refused outcome.
+
 - **Bulk export `_typeFilter` and `patient` (G-34).** Group and Patient
   `$export` apply `_typeFilter` queries to each resource as it is written,
   using the R4 search parameter's own FHIRPath (token, string and date

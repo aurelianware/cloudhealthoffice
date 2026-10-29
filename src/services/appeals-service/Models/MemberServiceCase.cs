@@ -37,9 +37,24 @@ public sealed class MemberServiceCase
     public DateTime? ReportingNextAttemptAt { get; set; }
     /// <summary>Set when authorization-service refused the fact for good; the sweep stops retrying.</summary>
     public string? ReportingRejectedReason { get; set; }
+    /// <summary>
+    /// Each time an operator put a refused or given-up outcome back on the queue, newest last
+    /// (at most <see cref="MaxReportingRequeues"/>), so the refusal it cleared stays on record.
+    /// </summary>
+    public List<AppealReportingRequeue> ReportingRequeues { get; set; } = new();
+    public const int MaxReportingRequeues = 20;
     // Persist JSON to keep the pinned evaluation independent of BSON immutable-record conventions.
     public string PinnedRuleEvaluationJson { get; set; } = string.Empty;
     public ContactCaseResult Receipt { get; set; } = new();
+}
+
+/// <summary>An operator re-queue of a refused appeal-outcome report, and the refusal it cleared.</summary>
+public sealed class AppealReportingRequeue
+{
+    public DateTime At { get; set; }
+    public string By { get; set; } = string.Empty;
+    public string PriorReason { get; set; } = string.Empty;
+    public int PriorAttempts { get; set; }
 }
 
 /// <summary>What the appeal decided about the adverse prior-authorization determination.</summary>

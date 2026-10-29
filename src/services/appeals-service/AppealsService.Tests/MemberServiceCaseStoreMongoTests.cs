@@ -78,4 +78,32 @@ public sealed class MemberServiceCaseStoreMongoTests(MongoRunnerFixture mongo) :
         Assert.Equal(1, stored.Revision);
         Assert.NotNull(stored.ReportedToAuthorizationAt);
     }
+
+    [Fact]
+    public async Task Refused_outcomes_are_listed_per_tenant_and_requeued_once_with_their_refusal_kept()
+    {
+        var store = new MemberServiceCaseStore(_db);
+        var appeal = Case(); appeal.Classification = "Appeal"; appeal.AuthorizationId = "auth-1";
+        await store.CreateOrReadAsync(appeal, default);
+        var at = new DateTime(2026, 10, 26, 10, 0, 0, DateTimeKind.Utc);
+        Assert.True(await store.RecordDecisionAsync("tenant-1", appeal.Id, 0, "c", "r", at, MemberAppealOutcome.Upheld, default));
+        await store.RecordReportingAttemptAsync("tenant-1", appeal.Id, null, "refused (400).", null, default);
+
+        Assert.Empty(await store.ListUnreportedAppealDecisionsAsync(DateTime.UtcNow, 10, default));
+        Assert.Empty(await store.ListReportingNeedsAttentionAsync("other-tenant", 10, default));
+        var refused = Assert.Single(await store.ListReportingNeedsAttentionAsync("tenant-1", 10, default));
+
+        var writes = await Task.WhenAll(Enumerable.Range(0, 8).Select(i =>
+            store.RequeueRefusedReportingAsync(refused, "admin-" + i, DateTime.UtcNow, default)));
+        Assert.Single(writes, w => w);
+        Assert.Empty(await store.ListReportingNeedsAttentionAsync("tenant-1", 10, default));
+        var owed = Assert.Single(await store.ListUnreportedAppealDecisionsAsync(DateTime.UtcNow, 10, default));
+        Assert.Equal(0, owed.ReportingAttempts);
+        Assert.Null(owed.ReportingRejectedReason);
+        Assert.Equal(1, owed.Revision);
+        var requeue = Assert.Single(owed.ReportingRequeues);
+        Assert.Equal("refused (400).", requeue.PriorReason);
+        Assert.Equal(1, requeue.PriorAttempts);
+        Assert.False(await store.RequeueRefusedReportingAsync(owed, "admin", DateTime.UtcNow, default));
+    }
 }

@@ -8,6 +8,7 @@
 @attribute [Authorize]
 @inject HttpClient Http
 @inject IConfiguration Config
+@inject IUserContextService UserContextService
 
 <PageTitle>Member service cases - Cloud Health Office</PageTitle>
 <PermissionGate Permission="appeals:read">
@@ -68,6 +69,12 @@
                             The authorization's CMS-0057-F reporting record did not accept this outcome: @_review.ReportingRejectedReason
                             Ask a reporting administrator to reconcile it.
                         </MudAlert>
+                        @if (_canRequeue)
+                        {
+                            <MudButton OnClick="RequeueAsync" Disabled="@_busy" Variant="Variant.Outlined" Color="Color.Warning"
+                                       Class="mt-2" data-testid="appeal-reporting-requeue">Re-queue for reporting</MudButton>
+                            <MudText Typo="Typo.caption" Class="d-block">Fix the cause first (reconcile the authorization or evidence its denial); the outcome is sent again now.</MudText>
+                        }
                         break;
                 }
             }
@@ -122,8 +129,14 @@
     private string? _error;
     private bool _loading;
     private bool _busy;
+    private bool _canRequeue;
     private string BaseUrl => (Config["Services:AppealsService"] ?? "http://appeals-service.cloudhealthoffice/api").TrimEnd('/') + "/service-cases";
 
+    protected override async Task OnInitializedAsync()
+    {
+        await UserContextService.GetCurrentUserAsync();
+        _canRequeue = UserContextService.HasPermission("appeals:admin") || UserContextService.HasPermission("platform:admin");
+    }
     protected override async Task OnParametersSetAsync() => await LoadAsync();
     private async Task LoadAsync()
     {
@@ -149,6 +162,18 @@
             await LoadAsync();
         }
         catch (HttpRequestException) { _error = "The response was unavailable. Refresh before retrying; the decision may have been recorded."; }
+        finally { _busy = false; }
+    }
+    private async Task RequeueAsync()
+    {
+        _busy = true;
+        try
+        {
+            using var response = await Http.PostAsync($"{BaseUrl}/{Uri.EscapeDataString(CaseId!)}/reporting/requeue", null);
+            if (!response.IsSuccessStatusCode) { _error = "The outcome could not be re-queued. Refresh the case; it may already have been re-queued."; return; }
+            await LoadAsync();
+        }
+        catch (HttpRequestException) { _error = "The response was unavailable. Refresh before retrying; the outcome may have been re-queued."; }
         finally { _busy = false; }
     }
     private sealed class CaseReview
