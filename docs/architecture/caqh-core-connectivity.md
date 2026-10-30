@@ -25,7 +25,7 @@ open.
 | Real-time 276 → 277 at `/core/claimstatus` | Done (claims-service: `EDI/ClaimStatusInquiry`) |
 | 271 data content rules: every requested service type, CORE generic service types, patient financials, TRN echo | Done |
 | 271 subscriber-not-found AAA codes and name normalisation | Later PR, see below |
-| System availability (86% per week) reporting and published downtime schedule | Later PR |
+| System availability (86% per week) reporting and published downtime schedule | Done (`GET /core/eligibility/availability`, `GET /core/claimstatus/availability`) |
 | CORE certification test (CORE-authorised testing vendor) | Not started; optional |
 
 The endpoint is off by default (`CoreConnectivity:Enabled`).
@@ -207,9 +207,59 @@ histogram_quantile(0.9, sum by (le, cho_core_payload_type) (
   increase(cho_core_realtime_duration_seconds_bucket[30d])))
 ```
 
-Availability needs a probe outside the cluster (the platform's uptime checks)
-against `GET /core/eligibility?wsdl`; reporting it, and publishing the
-downtime schedule, are in a later PR.
+### Availability and downtime
+
+The rule asks for the system to be available at least 86% of each calendar
+week (at most about 23.5 hours down), counting every kind of downtime, and
+for the plan to publish:
+
+- its **regular** downtime (the weekly maintenance window),
+- **non-routine planned** downtime at least a week ahead,
+- **unscheduled or emergency** downtime as soon as it is known.
+
+CHO keeps that schedule and record in `CoreConnectivity:Availability` and
+publishes it, without credentials, at `GET {endpoint}/availability`
+(`/core/eligibility/availability` and `/core/claimstatus/availability`). The response gives the current status, the
+downtime in force, the weekly regular windows, the windows coming up in the
+next 30 days (`PublishHorizon`), and the availability of this week and last
+week (Sunday 00:00 UTC to Sunday). Planned windows announced less than a week
+ahead are flagged `shortNotice`.
+
+```json
+"CoreConnectivity": {
+  "Availability": {
+    "Regular": [
+      { "Day": "Sunday", "Start": "06:00:00", "Duration": "02:00:00", "Reason": "Weekly maintenance" }
+    ],
+    "Windows": [
+      { "Kind": "Planned", "Start": "2026-12-06T04:00:00Z", "End": "2026-12-06T10:00:00Z",
+        "AnnouncedAt": "2026-11-20T15:00:00Z", "Reason": "Database upgrade" },
+      { "Kind": "Unscheduled", "Start": "2026-11-03T14:12:00Z", "End": "2026-11-03T14:55:00Z",
+        "Reason": "Coverage database failover" }
+    ]
+  }
+}
+```
+
+Operations add an `Unscheduled` window (with no `End` while it is still going
+on) when an outage happens, and give it an `End` once it is over, so the
+weekly figure counts it. Each host reads its own `CoreConnectivity` section,
+so keep the `Availability` block in shared configuration (the Helm values or
+the config map both services mount).
+
+During a published window, a request that still reaches CHO is answered at
+once with the handler's "unable to respond" payload (271 with AAA 42),
+instead of running the inquiry and waiting out the budget. The audit line
+and metric record it with outcome `downtime`.
+
+At startup each host logs a warning for a schedule that breaks the rule on its
+own: regular downtime above 23.5 hours a week, a planned window announced less
+than a week ahead, or a planned or emergency window with no end.
+
+The published record is what CHO itself knows. The figure that counts in a
+CORE audit is the measured one, so keep an uptime probe outside the cluster
+(the platform's uptime checks) on `GET /core/eligibility?wsdl`, and use its
+weekly figure to check that every outage made it into the record.
 
 ## Audit
 

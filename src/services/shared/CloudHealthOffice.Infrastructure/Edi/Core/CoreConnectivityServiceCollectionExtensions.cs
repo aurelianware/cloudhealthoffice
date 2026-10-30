@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace CloudHealthOffice.Infrastructure.Edi.Core;
 
@@ -29,6 +31,7 @@ public static class CoreConnectivityServiceCollectionExtensions
     /// <list type="bullet">
     /// <item><c>POST</c>: a SOAP 1.2 or MIME multipart CORE envelope.</item>
     /// <item><c>GET ?wsdl</c>: the WSDL for the SOAP form.</item>
+    /// <item><c>GET availability</c>: the published downtime schedule and weekly availability.</item>
     /// </list>
     /// The endpoint is anonymous to the platform's token check because CORE
     /// credentials (client certificate, UsernameToken, MIME UserName/Password)
@@ -51,6 +54,21 @@ public static class CoreConnectivityServiceCollectionExtensions
             var location = $"{http.Request.Scheme}://{http.Request.Host}{http.Request.PathBase}{http.Request.Path}";
             return Results.Text(CoreWsdl.For(location), "text/xml");
         }).AllowAnonymous();
+
+        // CORE system availability: the published downtime schedule and the
+        // weekly availability figure. Public, like the WSDL; it names no
+        // trading partner.
+        group.MapGet("availability", (HttpContext http, IOptionsMonitor<CoreConnectivityOptions> options) =>
+            {
+                var time = http.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System;
+                return Results.Json(CoreAvailabilityReport.Build(options.CurrentValue.Availability, time.GetUtcNow()));
+            })
+            .AllowAnonymous();
+
+        var availability = app.ServiceProvider.GetRequiredService<IOptionsMonitor<CoreConnectivityOptions>>().CurrentValue.Availability;
+        var logger = app.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(CoreAvailabilitySchedule));
+        foreach (var problem in CoreAvailabilitySchedule.Problems(availability))
+            logger.LogWarning("CORE availability schedule: {Problem}", problem);
 
         return group;
     }

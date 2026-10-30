@@ -44,6 +44,9 @@ public sealed class CoreConnectivityOptions
 
     /// <summary>Registered submitters (providers, clearinghouses, vendors).</summary>
     public List<CoreSubmitterRegistration> Submitters { get; set; } = [];
+
+    /// <summary>Published downtime and the record of outages, for the CORE system availability rule.</summary>
+    public CoreAvailabilityOptions Availability { get; set; } = new();
 }
 
 /// <summary>
