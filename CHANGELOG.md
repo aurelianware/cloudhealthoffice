@@ -191,8 +191,9 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 - **DaVinci Interop: known kit issues stop counting against CHO.** A
   conformance scenario can name kit tests that no correct server can pass
   (`infernoKnownKitIssues` in `interop/scenarios.json`, each with a reason).
-  Their failures are recorded as findings but don't fail the run. The first
-  three are CARIN BB's oral, pharmacy and professional EOB validation tests:
+  Their failures are recorded as findings but don't fail the run. They are
+  CARIN BB's five EOB subtype validation tests (inpatient, outpatient, oral,
+  pharmacy and professional):
   the pinned kit validates every EOB against each subtype profile, so a
   member with mixed claim types fails them all. See "Known kit issues" in
   `docs/interop/davinci.md`.
