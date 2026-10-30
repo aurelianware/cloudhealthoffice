@@ -875,3 +875,76 @@ a.ev-card:hover h3 {
   color: var(--ev-cyan);
   font-weight: 600;
 }
+
+/* Inferno conformance kit cards (rendered by js/evidence-snapshot.js) */
+.ev-kits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(330px, 100%), 1fr));
+  gap: 1.1rem;
+  margin-top: 1.2rem;
+}
+
+.ev-kit {
+  background: var(--ev-bg);
+  border: 1px solid var(--ev-border);
+  border-radius: 12px;
+  padding: 1.2rem 1.3rem;
+  min-width: 0;
+}
+
+.ev-kit__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.ev-kit__head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #0B1F33;
+}
+
+.ev-kit p {
+  margin: 0.55rem 0 0;
+  font-size: 0.88rem;
+  color: var(--ev-text-dim);
+}
+
+.ev-kit__kit {
+  font-family: var(--ev-mono);
+  font-size: 0.78rem !important;
+  overflow-wrap: anywhere;
+}
+
+.ev-kit__scope {
+  font-size: 0.8rem !important;
+  color: var(--ev-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.ev-kit__reason {
+  border-left: 3px solid var(--ev-amber);
+  padding-left: 0.6rem;
+}
+
+.ev-kit__list {
+  margin-top: 0.7rem;
+  font-size: 0.82rem;
+}
+
+.ev-kit__list summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #0B1F33;
+}
+
+.ev-kit__list ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.ev-kit__list li {
+  margin-bottom: 0.4rem;
+  overflow-wrap: anywhere;
+}

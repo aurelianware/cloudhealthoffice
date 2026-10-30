@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>What a Conformance Test Kit Proves, and What It Doesn&rsquo;t | Cloud Health Office</title>
-  <meta name="description" content="How Cloud Health Office runs ONC's Inferno FHIR conformance test kits against its own APIs, why the kit versions are pinned, which suite cannot grade us at all, and why no kit has yet produced a verdict on the platform."/>
+  <meta name="description" content="How Cloud Health Office runs ONC's Inferno FHIR conformance test kits against its own APIs, why the kit versions are pinned, which suite cannot grade us at all, and what a pass would and would not mean."/>
   <meta name="keywords" content="Inferno test kit, ONC Inferno, FHIR conformance testing, CARIN Blue Button test kit, US Core test kit, payer FHIR conformance, CMS-0057-F testing, Da Vinci conformance"/>
   <meta name="author" content="Aurelianware, Inc."/>
   <link rel="canonical" href="https://cloudhealthoffice.com/insights/cms-0057-f/what-a-conformance-test-kit-proves"/>
@@ -20,7 +20,7 @@
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image"/>
   <meta name="twitter:title" content="What a Conformance Test Kit Proves, and What It Doesn&rsquo;t"/>
-  <meta name="twitter:description" content="How Cloud Health Office runs ONC's Inferno conformance kits against its own APIs &mdash; and why no kit has produced a verdict on the platform yet."/>
+  <meta name="twitter:description" content="How Cloud Health Office runs ONC's Inferno conformance kits against its own APIs &mdash; and what a pass would and would not mean."/>
   <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png"/>
 
   <script type="application/ld+json">
@@ -30,9 +30,10 @@
     {
       "@type": "Article",
       "headline": "What a Conformance Test Kit Proves, and What It Doesn't",
-      "description": "How Cloud Health Office runs ONC's Inferno FHIR conformance test kits against its own APIs, why the kit versions are pinned, which suite cannot grade the platform at all, and why no kit has yet produced a verdict.",
+      "description": "How Cloud Health Office runs ONC's Inferno FHIR conformance test kits against its own APIs, why the kit versions are pinned, which suite cannot grade the platform at all, and what a pass would and would not mean.",
       "url": "https://cloudhealthoffice.com/insights/cms-0057-f/what-a-conformance-test-kit-proves",
       "datePublished": "2026-10-23",
+      "dateModified": "2026-10-30",
       "isPartOf": {
         "@type": "WebSite",
         "name": "Cloud Health Office",
@@ -232,6 +233,11 @@
 
         <p>That is the gap a conformance test kit fills, and it is why we run them. It is also why this page exists: the kits are easy to misrepresent, and &ldquo;we run Inferno&rdquo; is the kind of sentence that sounds like a certification and is not one.</p>
 
+        <div class="callout green">
+          <span class="k">Update, 30 October 2026</span>
+          <p><strong>The kits have now produced verdicts.</strong> Four kits run nightly: US Core, CARIN Blue Button, Plan-Net, and Bulk Data with SMART Backend Services. The latest results, failures and known kit issues included, are on the <a href="/evidence/inferno-conformance">Inferno conformance results page</a>. What each kit tests and which CMS-0057-F API it maps to is in <a href="/insights/cms-0057-f/inferno-test-kits-cms-0057-f-apis">Which Inferno test kit checks which CMS-0057-F API</a>. The rest of this article is as published on October 23.</p>
+        </div>
+
         <div class="callout amber">
           <span class="k">State of play, 23 October 2026</span>
           <p><strong>No Inferno kit has yet produced a verdict on Cloud Health Office, in any suite.</strong> Two suites are wired and execute; three more are defined and not yet executed. The harness only became able to run a kit end to end this week. When the first results exist they will be published, and the first of them should be expected to be findings rather than a pass.</p>
@@ -322,7 +328,7 @@
 
         <h2 id="stand"><span class="num">08</span>Where this leaves us</h2>
         <p>Two suites wired and able to run, for the first time, as of this week. Three defined and not executed. One that cannot grade us at all until its upstream catches up with the Implementation Guide. And no verdict on Cloud Health Office from any conformance kit, which is a sentence we would rather publish now than explain later.</p>
-        <p>The requirement-by-requirement position on CMS-0057-F is maintained in the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer">ePA gap matrix</a> in the public repository, which is the source of truth and is deliberately harsher than any marketing page. The executable evidence that does exist today is in the <a href="/evidence">Evidence Hub</a>. When a kit produces its first real findings, they will appear there too, whatever they say.</p>
+        <p>The requirement-by-requirement position on CMS-0057-F is maintained in the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer">ePA gap matrix</a> in the public repository, which is the source of truth and is deliberately harsher than any marketing page. The executable evidence that does exist today is in the <a href="/evidence">Evidence Hub</a>. When a kit produces its first real findings, they will appear there too, whatever they say. (They now do: see the <a href="/evidence/inferno-conformance">Inferno conformance results</a>.)</p>
 
         <h2 id="disclosure"><span class="num">Disclosure</span>Where we sit in this</h2>
         <p>Cloud Health Office is a payer interoperability software company, so read this with that in mind. The platform is source-available under BSL 1.1: the harness described here, the scenario inventory, the version pins and the gap matrix are all in the public repository, and a plan&rsquo;s architecture team can read them before anything is deployed.</p>

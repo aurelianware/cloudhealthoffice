@@ -81,7 +81,7 @@ jobs:
           # checkout as shallow, and the sitemap generator (SITEMAP_STRICT=1)
           # then refuses to publish.
           if git fetch --quiet --no-tags origin ci-evidence; then
-            for f in davinci-interop-public-evidence.json cms0057-public-evidence.json; do
+            for f in davinci-interop-public-evidence.json cms0057-public-evidence.json inferno-conformance-public-evidence.json; do
               if git cat-file -e "FETCH_HEAD:evidence/$f" 2>/dev/null; then
                 git show "FETCH_HEAD:evidence/$f" > "src/site/insights/cms-0057-f/$f"
                 echo "Using published $f from ci-evidence"
