@@ -211,6 +211,11 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **DaVinci Interop prints the validator's log in the job log.** When the
+  inferno-validator sidecar answers with an error, every kit reports "Unable
+  to connect to validator" without the reason. The Inferno job now prints the
+  last 200 lines of the validator log the harness saved with the evidence.
+
 - **A merge to main no longer cancels a dispatched DaVinci Interop run.** The
   workflow's concurrency group was per branch, so a push to main (which never
   runs the Inferno kits) cancelled the dispatched or nightly run that does.
