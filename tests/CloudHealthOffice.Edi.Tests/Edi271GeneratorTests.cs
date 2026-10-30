@@ -64,12 +64,17 @@ public class Edi271GeneratorTests
         Assert.Contains("TRN*2*CTRL271*PAY01~", edi);
         Assert.Contains("DTP*346*D8*20260101~", edi);
         Assert.Contains("DTP*347*D8*20261231~", edi);
-        Assert.Contains("EB*1*IND*30**Gold_Plan~", edi);
+        // EB05 plan description as written; EB11 Y because a plan-wide benefit needs authorization.
+        Assert.Contains("EB*1*IND*30**Gold Plan******Y~", edi);
         Assert.Contains("REF*1L*GRP100~", edi);
-        Assert.Contains("EB*C*IND*30***23**1000.00~", edi);
-        Assert.Contains("EB*G*IND*30***23**3000.00~", edi);
-        Assert.Contains("EB*B*IND*30***23**25.00****Y~", edi);
-        Assert.Contains("MSG*Prior authorization required for Health Benefit Plan Coverage~", edi);
+        // Plan amounts in EB07 for the calendar year (23), plus the remaining amount (29).
+        Assert.Contains("EB*C*IND*30***23*1000.00*****Y~", edi);
+        Assert.Contains("EB*C*IND*30***29*0.00*****Y~", edi);
+        Assert.Contains("EB*G*IND*30***23*3000.00*****Y~", edi);
+        Assert.Contains("EB*G*IND*30***29*0.00*****Y~", edi);
+        // Plan-wide co-payment: per visit (27), amount in EB07, in network.
+        Assert.Contains("EB*B*IND*30***27*25.00*****Y~", edi);
+        Assert.DoesNotContain("EB*1*IND*30~", edi);
 
         var segments = edi.Split('~', StringSplitOptions.RemoveEmptyEntries);
         var stIndex = Array.FindIndex(segments, s => s.StartsWith("ST*"));
@@ -85,7 +90,7 @@ public class Edi271GeneratorTests
     }
 
     [Fact]
-    public void Generate_NotCoveredResponse_IncludesAaaAndMsg()
+    public void Generate_NotCoveredResponse_IncludesInactiveEbAndMsg_WithoutAaa()
     {
         var generator = new Edi271Generator(NullLogger<Edi271Generator>.Instance);
 
@@ -110,7 +115,8 @@ public class Edi271GeneratorTests
         var edi = generator.Generate(inquiry, response, isaSenderId: "", isaReceiverId: "");
 
         Assert.Contains("EB*6**30~", edi);
-        Assert.Contains("AAA*N**42*Y~", edi);
+        // AAA 42 means "try again later", which is wrong for coverage that has ended.
+        Assert.DoesNotContain("AAA*", edi);
         Assert.Contains("MSG*Coverage terminated~", edi);
     }
 }
