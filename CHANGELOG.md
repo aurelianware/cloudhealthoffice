@@ -204,6 +204,11 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **A merge to main no longer cancels a dispatched DaVinci Interop run.** The
+  workflow's concurrency group was per branch, so a push to main (which never
+  runs the Inferno kits) cancelled the dispatched or nightly run that does.
+  The group is now per branch and trigger.
+
 - **DaVinci Interop runs the CARIN BB Coverage group after the EOB group.**
   The kit's Coverage group reads the Coverage ids its EOB searches saved from
   `insurance.coverage`. The scenario listed Coverage first, so it skipped
