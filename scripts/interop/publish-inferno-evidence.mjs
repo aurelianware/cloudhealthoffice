@@ -5,7 +5,13 @@
 //
 //   node scripts/interop/publish-inferno-evidence.mjs \
 //     [--run artifacts/interop/run.json] \
-//     [--out src/site/insights/cms-0057-f/inferno-conformance-public-evidence.json]
+//     [--out src/site/insights/cms-0057-f/inferno-conformance-public-evidence.json] \
+//     [--badges artifacts/interop/badges]
+//
+// --badges also writes one shields.io endpoint document per kit
+// (inferno-<kit>.json), published to ci-evidence/badges/ for the README. A
+// badge says what the kit reported and nothing more: there is no official
+// Inferno badge, and none of these imply certification.
 //
 // A sibling of publish-public-evidence.mjs, kept as a separate document for one
 // reason: the kits only run on the nightly schedule and on a manual dispatch,
@@ -52,6 +58,8 @@ const outPath = resolve(
   repoRoot,
   arg('--out', 'src/site/insights/cms-0057-f/inferno-conformance-public-evidence.json')
 );
+
+const badgesDir = arg('--badges', null);
 
 const readJson = (p) => JSON.parse(readFileSync(p, 'utf8'));
 
@@ -250,6 +258,40 @@ const snapshot = {
 
 mkdirSync(dirname(outPath), { recursive: true });
 writeFileSync(outPath, `${JSON.stringify(snapshot, null, 2)}\n`);
+
+const BADGE_LABELS = {
+  'US Core': 'Inferno US Core',
+  'CARIN BB': 'Inferno CARIN BB',
+  'Plan-Net': 'Inferno Plan-Net',
+  'Bulk Data': 'Inferno Bulk Data'
+};
+
+function badgeFor(kit) {
+  const t = kit.tests;
+  if (kit.status === 'Passed') {
+    return { message: t ? `passed ${t.passed}/${t.passed + t.failed}` : 'passed', color: 'brightgreen' };
+  }
+  if (kit.status === 'Failed') {
+    return {
+      message: t ? `${t.failed} failing of ${t.passed + t.failed}` : 'failed',
+      color: 'red'
+    };
+  }
+  return { message: 'no result yet', color: 'lightgrey' };
+}
+
+if (badgesDir) {
+  const dir = resolve(repoRoot, badgesDir);
+  mkdirSync(dir, { recursive: true });
+  for (const kit of kits) {
+    const { message, color } = badgeFor(kit);
+    const name = `inferno-${kit.kit.key.replace(/^inferno-/, '')}.json`;
+    writeFileSync(
+      join(dir, name),
+      `${JSON.stringify({ schemaVersion: 1, label: BADGE_LABELS[kit.protocol] || `Inferno ${kit.protocol}`, message, color })}\n`
+    );
+  }
+}
 
 console.log(
   `Wrote ${outPath}\n` +

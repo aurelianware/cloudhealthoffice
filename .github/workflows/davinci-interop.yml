@@ -384,7 +384,9 @@ jobs:
 
       - name: Project the public snapshot
         if: steps.evidence.outputs.present == 'true'
-        run: node scripts/interop/publish-inferno-evidence.mjs --run artifacts/interop/run.json
+        run: >-
+          node scripts/interop/publish-inferno-evidence.mjs --run artifacts/interop/run.json
+          --badges artifacts/interop/badges
 
       - name: Publish the snapshot to ci-evidence
         id: publish
@@ -394,6 +396,10 @@ jobs:
         run: >-
           bash scripts/ci/publish-evidence.sh "interop: Inferno conformance evidence from ${{ github.sha }}"
           src/site/insights/cms-0057-f/inferno-conformance-public-evidence.json:evidence/inferno-conformance-public-evidence.json
+          artifacts/interop/badges/inferno-us-core.json:badges/inferno-us-core.json
+          artifacts/interop/badges/inferno-c4bb.json:badges/inferno-c4bb.json
+          artifacts/interop/badges/inferno-plan-net.json:badges/inferno-plan-net.json
+          artifacts/interop/badges/inferno-bulk-data.json:badges/inferno-bulk-data.json
 
       - name: Redeploy the site
         if: steps.publish.outputs.published == 'true'
