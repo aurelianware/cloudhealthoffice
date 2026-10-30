@@ -22,7 +22,7 @@ open.
 | 999 on rejection only, TA1 for a rejected interchange | Done for 270 |
 | "Unable to respond" 271 (AAA 42) at the response budget | Done |
 | Response-time metric and audit log line | Done |
-| Real-time 276 → 277 at `/core/claimstatus` | Next PR (needs a 276 parser and 277 generator in claims-service) |
+| Real-time 276 → 277 at `/core/claimstatus` | Done (claims-service: `EDI/ClaimStatusInquiry`) |
 | 271 data content rules (service types, patient financials, AAA codes, name normalisation) | Later PR, gaps listed below |
 | System availability (86% per week) reporting and published downtime schedule | Later PR |
 | CORE certification test (CORE-authorised testing vendor) | Not started; optional |
@@ -37,7 +37,7 @@ same shared processor:
 | URL | Service | Request PayloadType | Response PayloadTypes |
 | --- | --- | --- | --- |
 | `POST /core/eligibility` | eligibility-service | `X12_270_Request_005010X279A1` | `X12_271_Response_005010X279A1`, `X12_999_Response_005010X231A1`, `X12_TA1_Response_00501X231A1` |
-| `POST /core/claimstatus` | claims-service (next PR) | `X12_276_Request_005010X212` | `X12_277_Response_005010X212`, 999, TA1 |
+| `POST /core/claimstatus` | claims-service | `X12_276_Request_005010X212` | `X12_277_Response_005010X212`, 999, TA1 |
 
 `GET {url}?wsdl` returns the WSDL for the SOAP form. The companion guide a plan
 publishes lists both URLs. CORE does not require a single URL for all
@@ -78,6 +78,49 @@ SOAP 1.2, `multipart/form-data` for MIME. The response uses the same envelope.
      envelope was fine.
 4. **Response.** `SenderID` and `ReceiverID` are swapped, `PayloadID` is
    echoed so the submitter can match the response, and `TimeStamp` is now.
+
+## Claim status (276 → 277)
+
+claims-service reads the 276 (005010X212) with `Edi276Parser` and answers
+every 2200 inquiry loop (TRN) in one 277 (`Edi277ClaimStatusGenerator`). The
+interchange goes through the same X12 intake as other paths (TA1 for a
+rejected envelope, 999 for a 276 that cannot be parsed).
+
+Finding the claim (`ClaimStatusLookup`):
+
+1. `REF*1K` (payer claim control number) is CHO's claim id; else
+2. `REF*EJ` (patient control number) is the claim's CLM01 (`ClaimNumber`); else
+3. the subscriber's claims for the provider and service dates are searched.
+
+A candidate is only returned when it belongs to the subscriber the 276 names
+(member or subscriber id), and it must also match the provider NPI (billing or
+rendering), the total charge (`AMT*T3`) and the service dates when they are
+sent, and the dependent's last name for a dependent inquiry. At most 10 claims
+are returned per inquiry. Knowing a claim id is never enough to read a claim.
+
+STC01 by CHO status:
+
+| CHO status | STC01 | Meaning |
+| --- | --- | --- |
+| Submitted, Received | `A2:20` | Accepted into adjudication |
+| InAdjudication | `P1:20` | Pending, in process |
+| Pended | `P2:20` | Pending, payer review |
+| Approved (Pay), Deny | `P1:3` | Adjudicated, awaiting payment cycle (not final until the 835) |
+| Paid, PartiallyPaid | `F1:65` | Finalized, paid (STC05 paid amount, STC06 adjudication date, STC08 paid date) |
+| Denied | `F2:1` | Finalized, denied; see the remittance advice |
+| Voided | `F0:1` | Finalized; see the remittance advice |
+| (no matching claim) | `A4:35` | Claim not found |
+| (lookup failed, or past the response budget) | `E1:0` | Response not possible, system status |
+
+Each 2200 loop echoes the inquiry's TRN, and returns `REF*1K` (claim id),
+`REF*EJ` (CLM01) and `DTP*472`. A lookup failure answers only that inquiry
+with E1; the other inquiries in the same 276 still get their status.
+
+The claims-service 277CA generator (`ClaimAcknowledgmentService`) uses
+single-letter categories (`A:20`, `F:2`) and status codes 2/4/15/16/19 that do
+not mean what its comments say in the X12 Claim Status Code list (2 is "more
+detailed information in letter", 65 is "paid"). The real-time 277 uses the
+codes above; the 277CA should be aligned in a separate change.
 
 ## Authentication
 
