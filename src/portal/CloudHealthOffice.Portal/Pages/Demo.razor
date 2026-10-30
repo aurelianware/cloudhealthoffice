@@ -85,6 +85,7 @@
 @code {
     private sealed record DemoStep(int Number, string Title, string LookFor, string Href, string Icon);
 
+    // Steps 3 to 7 open the prior authorizations scripts/demo/gcp/cho_demo.py seed-story loads (fixed ids).
     private static readonly DemoStep[] Steps =
     [
         new(1, "Members and eligibility",
@@ -93,16 +94,25 @@
         new(2, "A claim, adjudicated",
             "Open a paid claim for its line-level adjudication, then a pended one for the AI examiner's advisory note.",
             "/claims", Icons.Material.Filled.Description),
-        new(3, "Prior authorization",
-            "Open an authorization to see decision clocks, any extension, and per-line approval or denial reasons.",
-            "/authorizations", Icons.Material.Filled.Approval),
-        new(4, "Appeals",
-            "Follow a denied authorization through appeal to its outcome.",
-            "/appeals", Icons.Material.Filled.Gavel),
-        new(5, "CMS-0057-F compliance console",
-            "Prior-auth decision timeliness and the metrics a plan must post publicly.",
+        new(3, "Prior auth approved in minutes",
+            "Maria Alvarez's lumbar MRI is on the plan's auto-approve list, so a rule approved it six minutes after receipt.",
+            "/authorizations/story-pa-auto-approved/review", Icons.Material.Filled.Bolt),
+        new(4, "A partial approval, line by line",
+            "Daniel Brooks asked for 12 therapy visits and manual therapy. Each line has its own decision and a coded reason.",
+            "/authorizations/story-pa-partial/services", Icons.Material.Filled.Rule),
+        new(5, "A denial with a specific reason",
+            "Keisha Thompson's knee arthroscopy was denied because conservative therapy wasn't documented.",
+            "/authorizations/story-pa-denied/services", Icons.Material.Filled.Block),
+        new(6, "One lawful 14-day extension",
+            "Samuel Ortiz's sleep study needs consult notes. The deadline moved once, and the member notice is recorded.",
+            "/authorizations/story-pa-extended/review", Icons.Material.Filled.EventRepeat),
+        new(7, "An expedited request on the clock",
+            "Ana Lopez's expedited inpatient request is still open. See how close it is to its 72-hour decision deadline.",
+            "/authorizations/story-pa-expedited-open/review", Icons.Material.Filled.Timer),
+        new(8, "CMS-0057-F compliance console",
+            "Decision timeliness across all requests and the metrics a plan must post publicly each year.",
             "/compliance/cms-0057f", Icons.Material.Filled.Policy),
-        new(6, "Batch adjudication",
+        new(9, "Batch adjudication",
             "Benchmark runs: claim counts, throughput and dead letters for each run on this environment.",
             "/mass-adjudication-runs", Icons.Material.Filled.Speed),
     ];

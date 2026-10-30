@@ -22,6 +22,40 @@ public class AuthorizationDetails : AuthorizationSummary
     public DecisionExtensionView? DecisionExtension { get; set; }
     /// <summary>The record's revision, for the timeframe actions to reload against.</summary>
     public long Revision { get; set; }
+    /// <summary>The requested lines and each line's decision, as authorization-service stores them.</summary>
+    public List<AuthorizationLineView> RequestedServices { get; set; } = new();
+    public List<AuthorizationDiagnosisView> DiagnosisCodes { get; set; } = new();
+}
+
+/// <summary>One requested service line and its decision (278 2000F; HCR01 in ServiceStatus).</summary>
+public class AuthorizationLineView
+{
+    public int? LineNumber { get; set; }
+    public string ProcedureCode { get; set; } = string.Empty;
+    public string? ProcedureDescription { get; set; }
+    public decimal RequestedUnits { get; set; }
+    public decimal? ApprovedUnits { get; set; }
+    public string? ServiceStatus { get; set; }
+    public string? DenialReasonCode { get; set; }
+    public string? DenialReason { get; set; }
+    public string? PendReason { get; set; }
+
+    /// <summary>The line's decision in words: A1 certified, A2 modified, A3 denied, A4 pended.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string DecisionText => ServiceStatus switch
+    {
+        "A1" => "Approved",
+        "A2" => "Modified",
+        "A3" => "Denied",
+        "A4" => "Pended",
+        _ => "Pending",
+    };
+}
+
+public class AuthorizationDiagnosisView
+{
+    public string Code { get; set; } = string.Empty;
+    public string? Description { get; set; }
 }
 
 /// <summary>The one lawful extension of an open request's decision timeframe (CMS-0057-F).</summary>

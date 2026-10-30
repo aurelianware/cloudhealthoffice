@@ -13,6 +13,8 @@ scripts/demo/gcp/port-forward.sh opens.
   cho_demo.py adapter-status        Show the FHIR adapter labels (demo / hybrid / live)
   cho_demo.py seed-auths            Load a CMS-0057-F prior-authorization scenario for the
                                     portal's CMS-0057-F Console (needs port-forward's 5006)
+  cho_demo.py seed-story            Load the five prior authorizations the portal's /demo
+                                    guided tour links to (needs port-forward's 5006)
 
 The token is signed with the public development key in ChoDevelopmentAuth.
 It is accepted only by Development and Testing hosts, which is how the demo
@@ -299,6 +301,144 @@ def build_cms0057_fixtures(now=None, seasonal_count: int = 36) -> list[dict]:
     return fixtures
 
 
+# ── Guided-tour prior-authorization story ───────────────────────────────────
+
+# Fixed ids, so the portal's /demo guided tour can link straight to each record.
+STORY_IDS = {
+    "auto": "story-pa-auto-approved",
+    "partial": "story-pa-partial",
+    "denied": "story-pa-denied",
+    "extended": "story-pa-extended",
+    "expedited": "story-pa-expedited-open",
+}
+
+
+def build_story_fixtures(now=None) -> list[dict]:
+    """Five synthetic Medicaid prior authorizations that tell one story each.
+
+    An automated approval in minutes, a partial approval with a reason on every
+    line, a full denial, a standard request extended once with the member
+    notice recorded, and an expedited request close to its 72-hour deadline.
+    Members, providers and letter ids are invented. Dates are relative to now.
+    """
+    import datetime as _dt
+    now = now or _dt.datetime.now(_dt.timezone.utc)
+    provider = ("1093817465", "Trinity Valley Orthopedics")
+
+    def story(key, number, member, first, last, dob, level, status, submitted, services, diagnosis):
+        return {
+            "id": STORY_IDS[key], "authorizationNumber": f"STORY-{number}",
+            "memberId": member, "patientFirstName": first, "patientLastName": last,
+            "patientDateOfBirth": f"{dob}T00:00:00Z",
+            "lineOfBusiness": "Medicaid", "authorizationType": "PreAuthorization",
+            "requestingProviderNPI": provider[0], "requestingProviderName": provider[1],
+            "serviceTypeCode": "1", "levelOfService": level,
+            "requestedServiceDateFrom": _iso(submitted + _dt.timedelta(days=10)),
+            "requestedServices": [
+                {"lineNumber": n, "procedureCode": code, "procedureDescription": text, "requestedUnits": units}
+                for n, (code, text, units) in enumerate(services, start=1)],
+            "diagnosisCodes": [{"code": diagnosis[0], "codeQualifier": "BK", "description": diagnosis[1]}],
+            "status": status, "submittedDate": _iso(submitted), "createdDate": _iso(submitted),
+            "statusHistory": [{"status": "Submitted", "changedAt": _iso(submitted), "changedBy": "provider-portal"}],
+        }
+
+    def decide(fx, decided_at, hcr, reason, by, lines, denial_code=None):
+        fx["reviewedDate"] = _iso(decided_at)
+        fx["reviewDecision"] = hcr
+        if by is None:
+            fx["reviewerName"] = "Dr. Priya Raman, MD"
+        if hcr == "A3":
+            fx["denialReason"] = reason
+            fx["denialReasonCode"] = denial_code
+        # (line, 278 HCR01, approved units, denial code, reason) per requested line.
+        for line, (line_hcr, units, code, line_reason) in zip(fx["requestedServices"], lines):
+            line["serviceStatus"] = line_hcr
+            if units is not None:
+                line["approvedUnits"] = units
+            if code:
+                line["denialReasonCode"] = code
+                line["denialReason"] = line_reason
+        fx["statusHistory"].append({
+            "status": fx["status"], "reviewDecision": hcr, "reason": reason, "changedAt": _iso(decided_at),
+            "changedBy": "system" if by else "dr.raman", "source": by,
+            "lineDecisions": [{"lineNumber": n, "reviewDecision": line_hcr, "approvedUnits": units,
+                               "denialReasonCode": code, "denialReason": line_reason}
+                              for n, (line_hcr, units, code, line_reason) in enumerate(lines, start=1)],
+        })
+        return fx
+
+    fixtures = []
+
+    submitted = now - _dt.timedelta(days=2, hours=3)
+    fixtures.append(decide(
+        story("auto", "01", "STORY-MBR-01", "Maria", "Alvarez", "1988-03-14", "E", "Approved", submitted,
+              [("72148", "MRI lumbar spine without contrast", 1)], ("M54.16", "Radiculopathy, lumbar region")),
+        submitted + _dt.timedelta(minutes=6), "A1", "Service is on the plan's auto-approve list",
+        "automated:AutoApproveList", [("A1", 1, None, None)]))
+
+    submitted = now - _dt.timedelta(days=4)
+    fixtures.append(decide(
+        story("partial", "02", "STORY-MBR-02", "Daniel", "Brooks", "1975-11-02", "E", "Modified", submitted,
+              [("97110", "Therapeutic exercise, 15 minutes", 12), ("97140", "Manual therapy, 15 minutes", 12)],
+              ("S83.241A", "Medial meniscus tear, right knee")),
+        submitted + _dt.timedelta(hours=70), "A2", "Approved 6 of 12 visits; manual therapy not supported", None,
+        [("A2", 6, "N115", "Six visits meet criteria; reassess progress before more are approved"),
+         ("A3", 0, "N350", "Manual therapy is not supported by the submitted therapy notes")]))
+
+    submitted = now - _dt.timedelta(days=5)
+    fixtures.append(decide(
+        story("denied", "03", "STORY-MBR-03", "Keisha", "Thompson", "1969-07-21", "E", "Denied", submitted,
+              [("29881", "Knee arthroscopy with meniscectomy", 1)], ("M17.11", "Primary osteoarthritis, right knee")),
+        submitted + _dt.timedelta(hours=96), "A3", "Six weeks of conservative therapy are not documented", None,
+        [("A3", 0, "N350", "Six weeks of conservative therapy are not documented")], "N350"))
+
+    # Standard request, extended once (Medicaid allows one 14-day extension) with the notice sent.
+    submitted = now - _dt.timedelta(days=6)
+    extended = story("extended", "04", "STORY-MBR-04", "Samuel", "Ortiz", "1981-01-30", "E", "Pended", submitted,
+                     [("95810", "Polysomnography, attended sleep study", 1)], ("G47.33", "Obstructive sleep apnea"))
+    original_due = submitted + _dt.timedelta(hours=168)
+    granted = submitted + _dt.timedelta(days=5)
+    extended["pendReason"] = "Waiting for the sleep medicine consult notes"
+    extended["decisionReceivedAt"] = _iso(submitted)
+    extended["decisionDueAt"] = _iso(original_due + _dt.timedelta(days=14))
+    extended["decisionDeadlinePolicy"] = "cho-receipt-v1"
+    extended["decisionExtension"] = {
+        "grantedAt": _iso(granted), "grantedBy": "dr.raman",
+        "originalDueAt": _iso(original_due), "extendedDueAt": _iso(original_due + _dt.timedelta(days=14)),
+        "basis": "PlanNeedsAdditionalInformation",
+        "reason": "Consult notes requested from the referring physician; a decision without them would likely be a denial",
+        "memberNotice": {"letterId": "STORY-LTR-0004", "recordedAt": _iso(granted + _dt.timedelta(hours=2)),
+                         "recordedBy": "correspondence-service"},
+    }
+    fixtures.append(extended)
+
+    submitted = now - _dt.timedelta(hours=60)
+    expedited = story("expedited", "05", "STORY-MBR-05", "Ana", "Lopez", "1992-09-08", "U", "InReview", submitted,
+                      [("99223", "Initial hospital care, high complexity", 1)], ("J18.9", "Pneumonia, unspecified"))
+    expedited["notes"] = "Expedited: treating physician attests that waiting could seriously jeopardize the member's health"
+    fixtures.append(expedited)
+    return fixtures
+
+
+def cmd_seed_story(_args) -> int:
+    fixtures = build_story_fixtures()
+    token = mint_token()
+    # A first insert starts every clock fresh and drops any extension, so the
+    # extended request is sent twice: the second write is an update, which keeps it.
+    for batch in (fixtures, [f for f in fixtures if f.get("decisionExtension")]):
+        status, _, body = request("POST", f"{AUTH_URL}/api/authorizations/dev-seed", token, {"authorizations": batch})
+        if status != 200:
+            print(f"dev-seed returned HTTP {status}: {str(body)[:500]}")
+            if status == 0:
+                print("Is scripts/demo/gcp/port-forward.sh running? It forwards authorization-service to localhost:5006.")
+            return 1
+    print(f"Seeded the {len(fixtures)} guided-tour prior authorizations for tenant '{TENANT}':")
+    for fx in fixtures:
+        print(f"  {fx['authorizationNumber']}  {fx['patientFirstName']} {fx['patientLastName']:<10} "
+              f"{fx['status']:<9} {PORTAL_URL}/authorizations/{fx['id']}")
+    return 0
+
+
 def cmd_seed_auths(_args) -> int:
     fixtures = build_cms0057_fixtures()
     status, _, body = request("POST", f"{AUTH_URL}/api/authorizations/dev-seed", mint_token(), {"authorizations": fixtures})
@@ -367,6 +507,7 @@ def main() -> int:
     sub.add_parser("claims").set_defaults(func=cmd_claims)
     sub.add_parser("adapter-status").set_defaults(func=cmd_adapter_status)
     sub.add_parser("seed-auths").set_defaults(func=cmd_seed_auths)
+    sub.add_parser("seed-story").set_defaults(func=cmd_seed_story)
     args = parser.parse_args()
     return args.func(args)
 

@@ -124,62 +124,100 @@
             else if (ActiveTab == "services")
             {
                 <div data-testid="authorization-tab-services">
-                    <MudGrid Class="mt-4">
-                        <MudItem xs="12" md="6">
-                            <MudTextField Label="Diagnosis Code" 
-                                        Value="_authorization.DiagnosisCode" 
-                                        ReadOnly="true" 
-                                        Variant="Variant.Outlined" />
-                        </MudItem>
-                        <MudItem xs="12" md="6">
-                            <MudTextField Label="Diagnosis Description" 
-                                        Value="_authorization.DiagnosisDescription" 
-                                        ReadOnly="true" 
-                                        Variant="Variant.Outlined" />
-                        </MudItem>
-                        <MudItem xs="12" md="6">
-                            <MudTextField Label="Procedure Code" 
-                                        Value="_authorization.ProcedureCode" 
-                                        ReadOnly="true" 
-                                        Variant="Variant.Outlined" />
-                        </MudItem>
-                        <MudItem xs="12" md="6">
-                            <MudTextField Label="Procedure Description" 
-                                        Value="_authorization.ProcedureDescription" 
-                                        ReadOnly="true" 
-                                        Variant="Variant.Outlined" />
-                        </MudItem>
-                        <MudItem xs="12" md="4">
-                            <MudTextField Label="Units Requested" 
-                                        Value="_authorization.UnitsRequested.ToString()" 
-                                        ReadOnly="true" 
-                                        Variant="Variant.Outlined" />
-                        </MudItem>
-                        <MudItem xs="12" md="4">
-                            <MudTextField Label="Units Approved" 
-                                        Value="@(_authorization.UnitsApproved?.ToString() ?? "N/A")" 
-                                        ReadOnly="true" 
-                                        Variant="Variant.Outlined" />
-                        </MudItem>
-                        <MudItem xs="12" md="4">
-                            <MudTextField Label="Approval Rate" 
-                                        Value="@GetApprovalRate()" 
-                                        ReadOnly="true" 
-                                        Variant="Variant.Outlined" />
-                        </MudItem>
-                        <MudItem xs="12" md="6">
-                            <MudTextField Label="Service Start Date" 
-                                        Value="@_authorization.ServiceStartDate.ToString("MM/dd/yyyy")" 
-                                        ReadOnly="true" 
-                                        Variant="Variant.Outlined" />
-                        </MudItem>
-                        <MudItem xs="12" md="6">
-                            <MudTextField Label="Service End Date" 
-                                        Value="@(_authorization.ServiceEndDate?.ToString("MM/dd/yyyy") ?? "N/A")" 
-                                        ReadOnly="true" 
-                                        Variant="Variant.Outlined" />
-                        </MudItem>
-                    </MudGrid>
+                    @if (_authorization.RequestedServices.Count > 0)
+                    {
+                        @if (_authorization.DiagnosisCodes.Count > 0)
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-4">
+                                <strong>Diagnosis:</strong>
+                                @string.Join("; ", _authorization.DiagnosisCodes.Select(d => string.IsNullOrWhiteSpace(d.Description) ? d.Code : $"{d.Code} {d.Description}"))
+                            </MudText>
+                        }
+                        <MudSimpleTable Dense="true" Class="mt-3" data-testid="authorization-lines">
+                            <thead>
+                                <tr>
+                                    <th>Line</th>
+                                    <th>Service</th>
+                                    <th>Requested</th>
+                                    <th>Approved</th>
+                                    <th>Decision</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var (line, index) in _authorization.RequestedServices.Select((l, i) => (l, i)))
+                                {
+                                    <tr data-testid="authorization-line">
+                                        <td>@(line.LineNumber ?? index + 1)</td>
+                                        <td>@line.ProcedureCode @line.ProcedureDescription</td>
+                                        <td>@line.RequestedUnits.ToString("0.##")</td>
+                                        <td>@(line.ApprovedUnits?.ToString("0.##") ?? "")</td>
+                                        <td><MudChip T="string" Size="Size.Small" Color="@LineColor(line)">@line.DecisionText</MudChip></td>
+                                        <td>@(string.IsNullOrWhiteSpace(line.DenialReasonCode) ? "" : $"{line.DenialReasonCode}: ")@(line.DenialReason ?? line.PendReason)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                    else
+                    {
+                        <MudGrid Class="mt-4">
+                            <MudItem xs="12" md="6">
+                                <MudTextField Label="Diagnosis Code" 
+                                            Value="_authorization.DiagnosisCode" 
+                                            ReadOnly="true" 
+                                            Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudTextField Label="Diagnosis Description" 
+                                            Value="_authorization.DiagnosisDescription" 
+                                            ReadOnly="true" 
+                                            Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudTextField Label="Procedure Code" 
+                                            Value="_authorization.ProcedureCode" 
+                                            ReadOnly="true" 
+                                            Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudTextField Label="Procedure Description" 
+                                            Value="_authorization.ProcedureDescription" 
+                                            ReadOnly="true" 
+                                            Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" md="4">
+                                <MudTextField Label="Units Requested" 
+                                            Value="_authorization.UnitsRequested.ToString()" 
+                                            ReadOnly="true" 
+                                            Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" md="4">
+                                <MudTextField Label="Units Approved" 
+                                            Value="@(_authorization.UnitsApproved?.ToString() ?? "N/A")" 
+                                            ReadOnly="true" 
+                                            Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" md="4">
+                                <MudTextField Label="Approval Rate" 
+                                            Value="@GetApprovalRate()" 
+                                            ReadOnly="true" 
+                                            Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudTextField Label="Service Start Date" 
+                                            Value="@_authorization.ServiceStartDate.ToString("MM/dd/yyyy")" 
+                                            ReadOnly="true" 
+                                            Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudTextField Label="Service End Date" 
+                                            Value="@(_authorization.ServiceEndDate?.ToString("MM/dd/yyyy") ?? "N/A")" 
+                                            ReadOnly="true" 
+                                            Variant="Variant.Outlined" />
+                            </MudItem>
+                        </MudGrid>
+                    }
                 </div>
             }
             else if (ActiveTab == "review")
@@ -335,6 +373,14 @@
         else
             return $"{ms / 60000.0:F1}m";
     }
+
+    private static Color LineColor(AuthorizationLineView line) => line.ServiceStatus switch
+    {
+        "A1" => Color.Success,
+        "A2" => Color.Warning,
+        "A3" => Color.Error,
+        _ => Color.Default,
+    };
 
     private string GetApprovalRate()
     {
