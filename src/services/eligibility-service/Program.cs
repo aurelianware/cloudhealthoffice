@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Core;
 using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Extensions;
@@ -111,6 +112,12 @@ builder.Services.AddScoped<IEdi271Generator, Edi271Generator>();
 // X12 interchange control: ISA/IEA validation, TA1, duplicate ISA13, outbound 271 TA1 tracking.
 builder.Services.AddChoX12Interchange(builder.Configuration);
 
+// Real-time 270 → 271, shared by POST api/eligibility/270 and the CAQH CORE
+// endpoint (/core/eligibility, mapped only when CoreConnectivity:Enabled).
+builder.Services.AddScoped<IRealTime270Service, RealTime270Service>();
+builder.Services.AddChoCoreConnectivity(builder.Configuration);
+builder.Services.AddScoped<ICoreRealTimeHandler, Core270Handler>();
+
 // Temporal coverage can be real even when historical accumulator data is not.
 // Production defaults to explicit unavailable values, never synthetic zeroes.
 builder.Services.AddTemporalAccumulatorSource(builder.Configuration, builder.Environment);
@@ -155,6 +162,8 @@ if (app.Environment.IsDevelopment())
 app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoX12InterchangeEndpoints("api/eligibility/interchange");
+if (app.Configuration.GetValue<bool>("CoreConnectivity:Enabled"))
+    app.MapChoCoreConnectivity("core/eligibility", "eligibility:check");
 app.MapChoHealthChecks();
 
 app.Run();

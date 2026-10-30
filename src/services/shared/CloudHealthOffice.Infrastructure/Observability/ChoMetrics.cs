@@ -47,6 +47,18 @@ public static class ChoMetrics
             description: "Adjudication outcomes by result type");
 
     /// <summary>
+    /// Histogram tracking CAQH CORE real-time exchange duration (seconds),
+    /// envelope in to envelope out. The CORE rule: 90% of real-time responses
+    /// within 20 seconds per calendar month.
+    /// Dimensions: cho.core.payload_type, cho.core.error_code, cho.core.outcome.
+    /// </summary>
+    public static readonly Histogram<double> CoreRealTimeDuration =
+        Meter.CreateHistogram<double>(
+            "cho.core.realtime.duration",
+            unit: "s",
+            description: "CAQH CORE real-time request duration in seconds");
+
+    /// <summary>
     /// Histogram tracking Da Vinci PAS $submit request duration (seconds).
     /// Target: under 15 seconds per PAS IG 2.1.0 Section 5.2.1.
     /// Dimensions: pas.decision, pas.rule.
