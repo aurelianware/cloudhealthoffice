@@ -246,7 +246,9 @@ public sealed class FhirPractitionerRoleProjector : IFhirPractitionerRoleProject
                 var coding = Coding(
                     ChoProviderFhirUrls.NuccTaxonomySystem,
                     provider.TaxonomyCode,
-                    string.IsNullOrEmpty(provider.PrimarySpecialty) ? null : provider.PrimarySpecialty);
+                    // The coding's display is NUCC's name for the code; the
+                    // plan's own specialty label stays in text.
+                    PlanNetSpecialties.Display(provider.TaxonomyCode));
                 codeNode = CodeableConcept(coding,
                     text: string.IsNullOrEmpty(provider.PrimarySpecialty)
                         ? provider.TaxonomyCode

@@ -312,7 +312,7 @@ public class PriorAuthorizationEobProjectorTests
         diagnosis["diagnosisCodeableConcept"]!["coding"]!.AsArray()[0]!["system"]!.GetValue<string>()
             .Should().Be("http://hl7.org/fhir/sid/icd-10-cm");
         diagnosis["diagnosisCodeableConcept"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>()
-            .Should().Be("M5451");
+            .Should().Be("M54.51", "the 278 carries M5451; FHIR's ICD-10-CM spelling has the dot");
     }
 
     [Theory]

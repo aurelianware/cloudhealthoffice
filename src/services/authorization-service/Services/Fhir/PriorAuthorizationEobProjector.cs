@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using AuthorizationService.Models;
+using CloudHealthOffice.Infrastructure.ReferenceData;
 
 namespace AuthorizationService.Services.Fhir;
 
@@ -339,7 +340,7 @@ public sealed class PriorAuthorizationEobProjector : IPriorAuthorizationEobProje
             var coding = new JsonObject
             {
                 ["system"] = Icd10CmSystem,
-                ["code"] = diagnosis.Code,
+                ["code"] = Icd10CmCode.ToFhir(diagnosis.Code),
             };
             if (!string.IsNullOrWhiteSpace(diagnosis.Description))
                 coding["display"] = diagnosis.Description;

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using EncounterService.Models;
+using CloudHealthOffice.Infrastructure.ReferenceData;
 
 namespace EncounterService.Fhir;
 
@@ -284,7 +285,7 @@ public sealed class EncounterFhirProjector : IEncounterFhirProjector
             var coding = new JsonObject
             {
                 ["system"] = Icd10CmSystem,
-                ["code"] = diagnosis.Code,
+                ["code"] = Icd10CmCode.ToFhir(diagnosis.Code),
             };
             if (!string.IsNullOrWhiteSpace(diagnosis.Description)) coding["display"] = diagnosis.Description;
             reasons.Add(new JsonObject { ["coding"] = new JsonArray { coding } });
