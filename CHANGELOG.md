@@ -192,6 +192,12 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **DaVinci Interop runs the CARIN BB Coverage group after the EOB group.**
+  The kit's Coverage group reads the Coverage ids its EOB searches saved from
+  `insurance.coverage`. The scenario listed Coverage first, so it skipped
+  with "No Coverage resources appear to be available" every run. The groups
+  now run in the kit's own order.
+
 - **`_lastUpdated` with a fraction of a second matches only that fraction.**
   A FHIR search date with a time part matched the whole second it named, so
   `_lastUpdated` set to one resource's `meta.lastUpdated` (which carries
