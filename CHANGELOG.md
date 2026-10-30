@@ -198,6 +198,15 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
   document's Endpoint uses a `.invalid` host instead of `example.org`, which
   the validator refuses.
 
+- **US Core searches the Inferno kit makes no longer answer 400.** Patient
+  and Encounter searches accept `_revinclude=Provenance:target`, which US Core
+  requires. CHO keeps no Provenance, so the result is the same as the search
+  without it. Any other `_revinclude` is still refused. Encounter adds
+  `identifier` (the submitter's control number) and `class`. encounter-service
+  matches `class` through the place of service it is derived from, and a code
+  the projection never emits matches nothing. The CapabilityStatement declares
+  all of these.
+
 - **FHIR codings now pass terminology validation.** ICD-10-CM codes are
   dotted when projected to FHIR (`J189` becomes `J18.9`) on ExplanationOfBenefit,
   Claim, Encounter, the prior-authorization EOB and CarePlan; X12 keeps the

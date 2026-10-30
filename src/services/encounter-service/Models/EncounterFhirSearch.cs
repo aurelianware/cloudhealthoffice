@@ -39,6 +39,16 @@ public sealed class EncounterFhirSearchQuery
     /// <summary>CHO encounter type (professional, institutional, dental).</summary>
     public EncounterType? EncounterType { get; init; }
 
+    /// <summary>The submitter's encounter control number (FHIR <c>identifier</c>).</summary>
+    public string? ControlNumber { get; init; }
+
+    /// <summary>
+    /// v3-ActCode codes (FHIR <c>class</c>), any of which matches. The class is
+    /// derived from the place of service, so these are matched through it; a
+    /// code the projection never emits matches nothing.
+    /// </summary>
+    public IReadOnlyList<string> Classes { get; init; } = [];
+
     /// <summary>Inclusive lower bound on the record's last update (UTC).</summary>
     public DateTime? LastUpdatedFrom { get; init; }
 

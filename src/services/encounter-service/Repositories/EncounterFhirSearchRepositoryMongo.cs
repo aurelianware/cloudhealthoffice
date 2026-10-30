@@ -1,3 +1,4 @@
+using EncounterService.Fhir;
 using EncounterService.Models;
 using MongoDB.Driver;
 
@@ -63,7 +64,33 @@ public sealed class EncounterFhirSearchRepositoryMongo : IEncounterFhirSearchRep
         if (!string.IsNullOrWhiteSpace(query.Status))
             filter &= StatusFilter(query.Status.Trim().ToLowerInvariant());
 
+        if (!string.IsNullOrWhiteSpace(query.ControlNumber))
+            filter &= f.Eq(e => e.EncounterControlNumber, query.ControlNumber.Trim());
+
+        if (query.Classes.Count > 0)
+            filter &= ClassFilter(query.Classes);
+
         return filter;
+    }
+
+    /// <summary>
+    /// The inverse of <c>EncounterFhirProjector.ClassOf</c>, which derives the
+    /// class from the place of service. The codes OR; one the projection never
+    /// emits adds nothing, so a search for only such codes matches nothing.
+    /// </summary>
+    private static FilterDefinition<Encounter> ClassFilter(IEnumerable<string> classes)
+    {
+        var f = Builders<Encounter>.Filter;
+        var any = new List<FilterDefinition<Encounter>>();
+        foreach (var code in classes)
+        {
+            if (EncounterFhirProjector.PlacesOfServiceFor(code.Trim()) is not { } match) continue;
+            any.Add(match.Excluding
+                ? f.Nin(e => e.PlaceOfServiceCode, match.PlacesOfService)
+                : f.In(e => e.PlaceOfServiceCode, match.PlacesOfService));
+        }
+        // {$in: []} matches no document.
+        return any.Count == 0 ? f.In(e => e.Id, Array.Empty<string>()) : f.Or(any);
     }
 
     /// <summary>
