@@ -1,243 +1,109 @@
 @page "/demo"
 @using Microsoft.AspNetCore.Authorization
-@using CloudHealthOffice.Portal.Services
 @attribute [AllowAnonymous]
-@inject NavigationManager Navigation
-@inject ITenantService TenantService
 
-<PageTitle>Demo - Cloud Health Office</PageTitle>
+<PageTitle>Guided demo - Cloud Health Office</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
-    <!-- Demo Mode Banner -->
-    <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Class="mb-4" Icon="@Icons.Material.Filled.Preview">
-        <MudText Typo="Typo.h6">🎯 Demo Mode - Read-Only Preview</MudText>
+    <!-- Synthetic data banner. Every figure a visitor sees elsewhere in the portal comes from the demo tenant's synthetic records; this page shows none of its own. -->
+    <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Class="mb-4" Icon="@Icons.Material.Filled.Science">
+        <MudText Typo="Typo.h6">Synthetic demo environment</MudText>
         <MudText Typo="Typo.body2" Class="mt-2">
-            You're viewing a fully-featured demo environment with sample data. 
-            Ready to start processing real claims? 
-            <MudLink Href="/signup" Color="Color.Inherit" Underline="Underline.Always" Style="font-weight: bold;">
-                Start your 14-day free trial →
-            </MudLink>
+            Every member, provider, claim and authorization here is synthetic. Nothing is live payer data,
+            and this environment is not a production or HIPAA-attested deployment.
         </MudText>
     </MudAlert>
 
     <MudText Typo="Typo.h3" GutterBottom="true">
-        <MudIcon Icon="@Icons.Material.Filled.Dashboard" Class="mr-2" />
-        Demo Dashboard - Demo Health Plan
+        <MudIcon Icon="@Icons.Material.Filled.Explore" Class="mr-2" />
+        Guided demo
     </MudText>
     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
-        Enterprise-grade payer platform with real-time X12 EDI processing
+        Work through these in order. Each one opens the real screen a plan's staff would use, running on the demo tenant.
     </MudText>
 
-    <MudGrid Class="mt-4">
-        <!-- Quick Actions with Demo Indicators -->
-        <MudItem xs="12" sm="6" md="3">
-            <MudCard>
-                <MudCardContent>
-                    <MudText Typo="Typo.h6">Claims (837/835)</MudText>
-                    <MudText Typo="Typo.h3" Color="Color.Primary">2,847</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Processed today</MudText>
-                    <MudChip Size="Size.Small" Color="Color.Success" Class="mt-2">96.2% Auto-adjudicated</MudChip>
-                </MudCardContent>
-                <MudCardActions>
-                    <MudButton StartIcon="@Icons.Material.Filled.Description" Color="Color.Primary"
-                               Href="/demo/claims" Variant="Variant.Text">
-                        View Claims →
-                    </MudButton>
-                </MudCardActions>
-            </MudCard>
-        </MudItem>
-
-        <MudItem xs="12" sm="6" md="3">
-            <MudCard>
-                <MudCardContent>
-                    <MudText Typo="Typo.h6">Eligibility (270/271)</MudText>
-                    <MudText Typo="Typo.h3" Color="Color.Primary">1,523</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Verifications today</MudText>
-                    <MudChip Size="Size.Small" Color="Color.Info" Class="mt-2">Avg: 180ms</MudChip>
-                </MudCardContent>
-                <MudCardActions>
-                    <MudButton StartIcon="@Icons.Material.Filled.VerifiedUser" Color="Color.Primary"
-                               Href="/demo/eligibility" Variant="Variant.Text">
-                        Check Eligibility →
-                    </MudButton>
-                </MudCardActions>
-            </MudCard>
-        </MudItem>
-
-        <MudItem xs="12" sm="6" md="3">
-            <MudCard>
-                <MudCardContent>
-                    <MudText Typo="Typo.h6">Prior Auths (278)</MudText>
-                    <MudText Typo="Typo.h3" Color="Color.Primary">347</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Requests today</MudText>
-                    <MudChip Size="Size.Small" Color="Color.Success" Class="mt-2">87% Auto-approved</MudChip>
-                </MudCardContent>
-                <MudCardActions>
-                    <MudButton StartIcon="@Icons.Material.Filled.Approval" Color="Color.Primary"
-                               Href="/demo/authorizations" Variant="Variant.Text">
-                        Review Authorizations →
-                    </MudButton>
-                </MudCardActions>
-            </MudCard>
-        </MudItem>
-
-        <MudItem xs="12" sm="6" md="3">
-            <MudCard>
-                <MudCardContent>
-                    <MudText Typo="Typo.h6">Members Enrolled</MudText>
-                    <MudText Typo="Typo.h3" Color="Color.Primary">45,892</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Active members</MudText>
-                    <MudChip Size="Size.Small" Color="Color.Info" Class="mt-2">+2.4% MoM</MudChip>
-                </MudCardContent>
-                <MudCardActions>
-                    <MudButton StartIcon="@Icons.Material.Filled.People" Color="Color.Primary"
-                               Href="/demo/members" Variant="Variant.Text">
-                        View Members →
-                    </MudButton>
-                </MudCardActions>
-            </MudCard>
-        </MudItem>
+    <MudGrid>
+        @foreach (var step in Steps)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Style="height: 100%" Class="d-flex flex-column">
+                    <MudCardContent Class="flex-grow-1">
+                        <MudText Typo="Typo.overline" Color="Color.Secondary">Step @step.Number</MudText>
+                        <MudText Typo="Typo.h6" GutterBottom="true">@step.Title</MudText>
+                        <MudText Typo="Typo.body2">@step.LookFor</MudText>
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudButton StartIcon="@step.Icon" Color="Color.Primary" Href="@step.Href" Variant="Variant.Text">
+                            Open →
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
     </MudGrid>
 
-    <!-- Key Metrics Row -->
-    <MudGrid Class="mt-6">
-        <MudItem xs="12" md="6">
-            <MudCard Elevation="2">
-                <MudCardHeader>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h6">Recent X12 Transactions (Last 24h)</MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
-                        <thead>
-                            <tr>
-                                <th>Transaction Type</th>
-                                <th>Count</th>
-                                <th>Success Rate</th>
-                                <th>Avg Time</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>837 - Claims</td>
-                                <td>2,847</td>
-                                <td><MudChip Size="Size.Small" Color="Color.Success">99.1%</MudChip></td>
-                                <td>245ms</td>
-                            </tr>
-                            <tr>
-                                <td>835 - Remittance</td>
-                                <td>2,741</td>
-                                <td><MudChip Size="Size.Small" Color="Color.Success">99.8%</MudChip></td>
-                                <td>156ms</td>
-                            </tr>
-                            <tr>
-                                <td>270 - Eligibility Inquiry</td>
-                                <td>1,523</td>
-                                <td><MudChip Size="Size.Small" Color="Color.Success">98.7%</MudChip></td>
-                                <td>180ms</td>
-                            </tr>
-                            <tr>
-                                <td>271 - Eligibility Response</td>
-                                <td>1,502</td>
-                                <td><MudChip Size="Size.Small" Color="Color.Success">99.2%</MudChip></td>
-                                <td>142ms</td>
-                            </tr>
-                            <tr>
-                                <td>278 - Prior Authorization</td>
-                                <td>347</td>
-                                <td><MudChip Size="Size.Small" Color="Color.Success">97.4%</MudChip></td>
-                                <td>892ms</td>
-                            </tr>
-                        </tbody>
-                    </MudSimpleTable>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
+    <MudPaper Class="mt-6 pa-6" Elevation="2">
+        <MudText Typo="Typo.h6" GutterBottom="true">What is built, and what is not yet proven</MudText>
+        <MudList Dense="true">
+            <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
+                <MudText><strong>Claims:</strong> 837 intake, adjudication with NCCI edits, 835 remittance, and an advisory AI examiner whose recommendations a person decides on.</MudText>
+            </MudListItem>
+            <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
+                <MudText><strong>CMS-0057-F APIs:</strong> Patient Access, Provider Access with bulk export, Payer-to-Payer, Prior Authorization (Da Vinci PAS) and a public Plan-Net provider directory are built.</MudText>
+            </MudListItem>
+            <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
+                <MudText><strong>SMART Backend Services:</strong> passed the hosted Inferno Bulk Data test group against this demo environment.</MudText>
+            </MudListItem>
+            <MudListItem Icon="@Icons.Material.Filled.Info" IconColor="Color.Info">
+                <MudText><strong>Not yet:</strong> production use at a health plan, full Da Vinci and Plan-Net conformance runs, and adapters to an existing core system, which are built per engagement.</MudText>
+            </MudListItem>
+        </MudList>
+    </MudPaper>
 
-        <MudItem xs="12" md="6">
-            <MudCard Elevation="2">
-                <MudCardHeader>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h6">Platform Capabilities</MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudList Dense="true">
-                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
-                            <MudText><strong>X12 EDI Processing:</strong> 837, 835, 270, 271, 275, 277 (X12 278 bridging planned)</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
-                            <MudText><strong>FHIR API:</strong> R4 APIs aligned to CARIN BB (profile validation not yet in place)</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
-                            <MudText><strong>Prior Authorization:</strong> Automated workflows + attachment handling</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
-                            <MudText><strong>Real-time Adjudication:</strong> Sub-second claim decisions</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
-                            <MudText><strong>HIPAA Compliant:</strong> Azure-native infrastructure with BAA</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
-                            <MudText><strong>Multi-Payer Support:</strong> Unlimited trading partners & plans</MudText>
-                        </MudListItem>
-                    </MudList>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
-    </MudGrid>
-
-    <!-- CTA Section -->
     <MudPaper Class="mt-6 pa-6" Elevation="3">
         <MudGrid>
             <MudItem xs="12" md="8">
-                <MudText Typo="Typo.h5" GutterBottom="true">Ready to Process Real Claims?</MudText>
+                <MudText Typo="Typo.h5" GutterBottom="true">Want to see it with your plan's workflows?</MudText>
                 <MudText Typo="Typo.body1" Color="Color.Secondary">
-                    Start your 14-day free trial with full access to all enterprise features. 
-                    No credit card required until trial ends. Deploy in under 1 hour.
+                    We run pilots on synthetic or de-identified data first, beside your existing core system.
                 </MudText>
-                <MudList Dense="true" Class="mt-3">
-                    <MudListItem Icon="@Icons.Material.Filled.Speed">
-                        <strong>&lt;1 hour onboarding</strong> - Deploy to your Azure subscription
-                    </MudListItem>
-                    <MudListItem Icon="@Icons.Material.Filled.Security">
-                        <strong>HIPAA-ready infrastructure</strong> - Full BAA and compliance controls
-                    </MudListItem>
-                    <MudListItem Icon="@Icons.Material.Filled.Support">
-                        <strong>Expert support</strong> - Implementation assistance included
-                    </MudListItem>
-                </MudList>
             </MudItem>
             <MudItem xs="12" md="4" Class="d-flex align-center justify-center">
-                <MudStack Spacing="3">
-                    <MudButton Href="/signup" 
-                               Variant="Variant.Filled" 
-                               Color="Color.Primary" 
-                               Size="Size.Large"
-                               StartIcon="@Icons.Material.Filled.RocketLaunch"
-                               FullWidth="true">
-                        Start Free Trial
-                    </MudButton>
-                    <MudButton Href="/welcome" 
-                               Variant="Variant.Outlined" 
-                               Color="Color.Primary" 
-                               Size="Size.Large"
-                               StartIcon="@Icons.Material.Filled.Info"
-                               FullWidth="true">
-                        Learn More
-                    </MudButton>
-                </MudStack>
+                <MudButton Href="/contact-sales"
+                           Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           Size="Size.Large"
+                           StartIcon="@Icons.Material.Filled.Forum"
+                           FullWidth="true">
+                    Talk to us
+                </MudButton>
             </MudItem>
         </MudGrid>
     </MudPaper>
 </MudContainer>
 
 @code {
-    protected override async Task OnInitializedAsync()
-    {
-        // Demo page is always accessible - no auth required
-        // Just load demo tenant data
-        var demoTenant = await TenantService.GetDemoTenantAsync();
-    }
+    private sealed record DemoStep(int Number, string Title, string LookFor, string Href, string Icon);
+
+    private static readonly DemoStep[] Steps =
+    [
+        new(1, "Members and eligibility",
+            "Open a member to see coverage spans, dependents, ID cards and accumulators.",
+            "/members", Icons.Material.Filled.People),
+        new(2, "A claim, adjudicated",
+            "Open a paid claim for its line-level adjudication, then a pended one for the AI examiner's advisory note.",
+            "/claims", Icons.Material.Filled.Description),
+        new(3, "Prior authorization",
+            "Open an authorization to see decision clocks, any extension, and per-line approval or denial reasons.",
+            "/authorizations", Icons.Material.Filled.Approval),
+        new(4, "Appeals",
+            "Follow a denied authorization through appeal to its outcome.",
+            "/appeals", Icons.Material.Filled.Gavel),
+        new(5, "CMS-0057-F compliance console",
+            "Prior-auth decision timeliness and the metrics a plan must post publicly.",
+            "/compliance/cms-0057f", Icons.Material.Filled.Policy),
+        new(6, "Batch adjudication",
+            "Benchmark runs: claim counts, throughput and dead letters for each run on this environment.",
+            "/mass-adjudication-runs", Icons.Material.Filled.Speed),
+    ];
 }
