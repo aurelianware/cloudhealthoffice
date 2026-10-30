@@ -107,7 +107,7 @@ async function main() {
 
   console.log(`Recorded ${steps.length} steps to ${OUT}`);
   if (failures.length) {
-    console.error(`These steps did not render cleanly; check the screenshots:\n  ${failures.join('\n  ')}`);
+    console.error(`These steps failed to render cleanly; check the screenshots:\n  ${failures.join('\n  ')}`);
     process.exitCode = 1;
   }
 }
