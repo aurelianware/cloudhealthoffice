@@ -18,7 +18,6 @@ public class EligibilityController : ControllerBase
     private readonly IEdi270Parser _edi270Parser;
     private readonly IEdi271Generator _edi271Generator;
     private readonly ILogger<EligibilityController> _logger;
-    private readonly IX12InterchangeIntake? _interchangeIntake;
     private readonly IOutboundInterchangeTracker? _outboundTracker;
     private readonly TimeProvider _timeProvider;
 
@@ -40,7 +39,6 @@ public class EligibilityController : ControllerBase
         TimeProvider? timeProvider = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
-        _interchangeIntake = interchangeOptions?.Value.Enabled == false ? null : interchangeIntake;
         _outboundTracker = outboundTracker;
         _eligibilityService = eligibilityService;
         _repository = repository;
@@ -224,13 +222,14 @@ public class EligibilityController : ControllerBase
     /// <summary>
     /// X12 270/271 EDI endpoint — accepts raw 270 text, returns raw 271 text.
     /// Content-Type: text/plain; body = raw X12 270 EDI string.
+    /// The same pipeline answers CAQH CORE real-time envelopes at <c>/core/eligibility</c>.
     /// </summary>
     [HttpPost("270")]
     [RequirePermission("eligibility:check")]
     [Consumes("text/plain")]
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> ProcessEdi270()
+    public async Task<IActionResult> ProcessEdi270([FromServices] IRealTime270Service realTime270)
     {
         string edi270;
         using (var reader = new System.IO.StreamReader(Request.Body))
@@ -241,111 +240,35 @@ public class EligibilityController : ControllerBase
         if (string.IsNullOrWhiteSpace(edi270))
             return BadRequest("Request body must contain the raw X12 270 EDI string.");
 
-        // Interchange envelope first. A rejected ISA/IEA is answered with the
-        // TA1 alone (400, text/plain): no 271 and no 999 for its contents.
-        InterchangeIntakeResult? envelope = null;
-        InterchangeIntakeRequest? intakeRequest = null;
-        if (_interchangeIntake is not null)
+        var outcome = await realTime270.RespondAsync(TenantId, edi270, HttpContext.RequestAborted);
+
+        if (outcome.AcknowledgmentIds.Count > 0)
+            Response.Headers["X-TA1-Acknowledgment-Id"] = string.Join(",", outcome.AcknowledgmentIds);
+
+        switch (outcome.Kind)
         {
-            // Real time: the duplicate-ISA13 check is off by default for this
-            // path (X12Interchange:DuplicateCheck:270-realtime), so a retry
-            // after a timeout still gets its 271.
-            intakeRequest = new InterchangeIntakeRequest
-            {
-                TenantId = TenantId,
-                Content = edi270,
-                TransactionType = "270",
-                RealTime = true,
-            };
-            envelope = await _interchangeIntake.ReceiveAsync(intakeRequest, HttpContext.RequestAborted);
+            case RealTime270OutcomeKind.EnvelopeRejected:
+                // A rejected ISA/IEA is answered with the TA1 alone (400, text/plain).
+                if (outcome.Edi is null)
+                    return BadRequest("Invalid 270 EDI: " + outcome.Message);
+                return new ContentResult { StatusCode = StatusCodes.Status400BadRequest, Content = outcome.Edi, ContentType = "text/plain" };
 
-            if (envelope.AcknowledgmentIds.Count > 0)
-                Response.Headers["X-TA1-Acknowledgment-Id"] = string.Join(",", envelope.AcknowledgmentIds);
+            case RealTime270OutcomeKind.Invalid:
+                return BadRequest(outcome.Message is not null
+                    ? $"Invalid 270 EDI: {outcome.Message}"
+                    : $"Invalid 270 EDI: the interchange could not be parsed (trace id {ChoProblemResults.TraceId(HttpContext)}).");
 
-            if (envelope.IsRejected)
-            {
-                _logger.LogWarning("EDI 270 rejected at the interchange envelope");
-                if (envelope.Ta1 is null)
-                    return BadRequest("Invalid 270 EDI: " + string.Join("; ", envelope.RejectionReasons));
-                return new ContentResult { StatusCode = StatusCodes.Status400BadRequest, Content = envelope.Ta1, ContentType = "text/plain" };
-            }
-            edi270 = envelope.AcceptedContent!;
+            case RealTime270OutcomeKind.Unavailable:
+                _logger.LogWarning("Coverage verification unavailable (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+                return this.ServerError("Coverage verification temporarily unavailable", StatusCodes.Status503ServiceUnavailable);
+
+            case RealTime270OutcomeKind.Failed:
+                return StatusCode(500, "Error processing eligibility inquiry.");
         }
-
-        try
-        {
-            var answered = await AnswerAccepted270Async(edi270);
-            if (answered is ObjectResult { StatusCode: >= 400 } or StatusCodeResult { StatusCode: >= 400 } && envelope is not null)
-                await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope!, CancellationToken.None);
-            return answered;
-        }
-        catch when (envelope is not null)
-        {
-            await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope, CancellationToken.None);
-            throw;
-        }
-    }
-
-    private async Task<IActionResult> AnswerAccepted270Async(string edi270)
-    {
-
-        Edi270ParseResult parsed;
-        try
-        {
-            parsed = _edi270Parser.Parse(edi270);
-        }
-        catch (Exception ex) when (ex is ArgumentException or FormatException)
-        {
-            // The parser's own validation messages describe the input, not the server.
-            _logger.LogWarning(ex, "Failed to parse 270 EDI");
-            return BadRequest($"Invalid 270 EDI: {ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to parse 270 EDI (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
-            return BadRequest($"Invalid 270 EDI: the interchange could not be parsed (trace id {ChoProblemResults.TraceId(HttpContext)}).");
-        }
-
-        var inquiry = parsed.Inquiry;
-        inquiry.TenantId      = TenantId;
-        inquiry.ControlNumber = string.IsNullOrEmpty(inquiry.ControlNumber)
-            ? GenerateControlNumber()
-            : inquiry.ControlNumber;
-
-        _logger.LogInformation(
-            "Processing EDI 270 for subscriber {SubscriberId}, serviceType={ServiceType}",
-            LogSanitizer.MaskId(inquiry.SubscriberId), inquiry.ServiceTypeCode);
-
-        EligibilityResponse response;
-        try
-        {
-            response = await _eligibilityService.ProcessInquiryAsync(inquiry);
-        }
-        catch (CoverageLookupUnavailableException ex)
-        {
-            _logger.LogWarning(ex, "Coverage verification unavailable (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
-            return this.ServerError("Coverage verification temporarily unavailable", StatusCodes.Status503ServiceUnavailable);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error processing eligibility inquiry from 270 EDI");
-            return StatusCode(500, "Error processing eligibility inquiry.");
-        }
-
-        // Swap ISA sender/receiver so the 271 flows back to the submitter
-        var edi271 = _edi271Generator.Generate(
-            inquiry, response,
-            isaSenderId:   parsed.InterchangeReceiverId, // 270's receiver = 271's sender (payer)
-            isaReceiverId: parsed.InterchangeSenderId);  // 270's sender  = 271's receiver (provider)
-
-        // Sequenced ISA13/GS06/ST02, recorded so the submitter's TA1 can be
-        // matched; a later download of this response reuses them.
-        if (_outboundTracker is not null)
-            edi271 = await _outboundTracker.GetOrRecordSentAsync(TenantId, edi271, "271", response.Id, HttpContext.RequestAborted);
 
         Response.Headers["Content-Disposition"] =
-            $"inline; filename=\"271_{inquiry.SubscriberId}_{DateTime.UtcNow:yyyyMMdd}.edi\"";
-        return Content(edi271, "text/plain");
+            $"inline; filename=\"271_{outcome.Parsed!.Inquiry.SubscriberId}_{DateTime.UtcNow:yyyyMMdd}.edi\"";
+        return Content(outcome.Edi!, "text/plain");
     }
 
     /// <summary>

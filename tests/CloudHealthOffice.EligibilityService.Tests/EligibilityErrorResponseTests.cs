@@ -38,6 +38,9 @@ public class EligibilityErrorResponseTests
         return (controller, service, parser);
     }
 
+    private static IRealTime270Service RealTime(IEligibilityService service, IEdi270Parser parser) =>
+        new RealTime270Service(service, parser, Substitute.For<IEdi271Generator>(), NullLogger<RealTime270Service>.Instance);
+
     [Fact]
     public async Task Inquiry_UnexpectedFailure_IsAProblem_WithoutTheExceptionText()
     {
@@ -87,10 +90,10 @@ public class EligibilityErrorResponseTests
     [Fact]
     public async Task Edi270_UnexpectedParserFailure_Is400_WithoutTheExceptionText()
     {
-        var (controller, _, parser) = Build("ISA*00*...");
+        var (controller, service, parser) = Build("ISA*00*...");
         parser.Parse(Arg.Any<string>()).Throws(new NullReferenceException(Secret));
 
-        var result = await controller.ProcessEdi270();
+        var result = await controller.ProcessEdi270(RealTime(service, parser));
 
         var bad = Assert.IsType<BadRequestObjectResult>(result);
         Assert.DoesNotContain("hunter2", bad.Value!.ToString());
@@ -99,10 +102,10 @@ public class EligibilityErrorResponseTests
     [Fact]
     public async Task Edi270_ParserValidationMessage_StillReachesTheCaller()
     {
-        var (controller, _, parser) = Build("ISA*00*...");
+        var (controller, service, parser) = Build("ISA*00*...");
         parser.Parse(Arg.Any<string>()).Throws(new FormatException("EDI content is too short to contain a valid ISA segment."));
 
-        var result = await controller.ProcessEdi270();
+        var result = await controller.ProcessEdi270(RealTime(service, parser));
 
         var bad = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Contains("too short", bad.Value!.ToString());
