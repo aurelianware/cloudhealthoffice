@@ -94,3 +94,7 @@ artifacts/security-challenge/
 
 # Parity oracle build output (the CMS jars it needs are never committed)
 tools/cms-grouper-parity-oracle/build/
+
+# Demo walkthrough recordings (scripts/demo/walkthrough/record.js)
+scripts/demo/walkthrough/out/
+scripts/demo/walkthrough/node_modules/

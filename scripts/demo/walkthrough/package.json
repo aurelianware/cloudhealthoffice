@@ -1,0 +1,6 @@
+{
+  "name": "cho-demo-walkthrough",
+  "private": true,
+  "type": "module",
+  "description": "Records captioned walkthroughs of the demo portal. Playwright is installed by the workflow, not committed."
+}

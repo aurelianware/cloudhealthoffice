@@ -1,0 +1,68 @@
+name: Record demo walkthrough
+
+# Records a captioned video and per-step screenshots of the demo portal, for
+# prospect follow-ups. Run `cho_demo.py seed-story` against the demo first so
+# the prior-auth steps have their records. Needs an Access service token the
+# demo application's Access policy allows (Service Auth), stored as the
+# DEMO_CF_ACCESS_CLIENT_ID and DEMO_CF_ACCESS_CLIENT_SECRET repository secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      walkthrough:
+        description: "Which walkthrough to record"
+        type: choice
+        options:
+          - prior-auth
+          - full-tour
+        default: prior-auth
+      base_url:
+        description: "Portal URL"
+        required: true
+        default: "https://demo.cloudhealthoffice.com"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: record-demo-walkthrough
+  cancel-in-progress: false
+
+jobs:
+  record:
+    name: Record ${{ inputs.walkthrough }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: scripts/demo/walkthrough
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: Install Playwright and Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.49.1
+          npx playwright install --with-deps chromium
+
+      - name: Record
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          WALKTHROUGH: ${{ inputs.walkthrough }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.DEMO_CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.DEMO_CF_ACCESS_CLIENT_SECRET }}
+        run: node record.js
+
+      - name: Upload video and screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: demo-walkthrough-${{ inputs.walkthrough }}
+          path: scripts/demo/walkthrough/out/
+          if-no-files-found: warn
+          retention-days: 30
