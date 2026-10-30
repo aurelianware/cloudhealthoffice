@@ -207,7 +207,7 @@ public class FhirPractitionerRoleProjectorTests
         var primaryCoding = primary["coding"]!.AsArray()[0]!.AsObject();
         primaryCoding["system"]!.GetValue<string>().Should().Be("http://nucc.org/provider-taxonomy");
         primaryCoding["code"]!.GetValue<string>().Should().Be("207R00000X");
-        primaryCoding["display"]!.GetValue<string>().Should().Be("Internal Medicine");
+        primaryCoding["display"]!.GetValue<string>().Should().Be("Internal Medicine Physician");
 
         var secondary = specialty[1]!.AsObject();
         secondary.ContainsKey("coding").Should().BeFalse();

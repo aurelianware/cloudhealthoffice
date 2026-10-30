@@ -139,6 +139,40 @@ public class FhirPatientProjectorTests
     }
 
     [Fact]
+    public void Project_Communication_DisplayIsTheLanguageName_NotTheTag()
+    {
+        // Inferno run 40979709678: "Wrong Display Name 'en' for urn:ietf:bcp:47#en".
+        var m = BuildMember();
+        m.PreferredLanguage = "en";
+        m.Languages = new List<string> { "en", "es", "en-US" };
+        var comms = new FhirPatientProjector().Project(m)["communication"]!.AsArray();
+        var codings = comms.Select(c => c!["language"]!["coding"]!.AsArray()[0]!).ToList();
+
+        codings[0]!["display"]!.ToString().Should().Be("English");
+        codings[1]!["display"]!.ToString().Should().Be("Spanish");
+        codings[2]!.AsObject().ContainsKey("display").Should().BeFalse("a wrong display fails validation; none does not");
+    }
+
+    [Fact]
+    public void Project_MemberId_FillsCarinBbMemberIdSlice()
+    {
+        var json = new FhirPatientProjector().Project(BuildMember());
+        var memberId = json["identifier"]!.AsArray().Single(i => i!["system"]!.ToString() == "urn:cho:member-id")!;
+        var type = memberId["type"]!["coding"]!.AsArray().Single()!;
+        type["system"]!.ToString().Should().Be("http://terminology.hl7.org/CodeSystem/v2-0203");
+        type["code"]!.ToString().Should().Be("MB");
+    }
+
+    [Fact]
+    public void Project_MetaProfile_DeclaresUsCoreAndVersionedCarinBb()
+    {
+        var json = new FhirPatientProjector().Project(BuildMember());
+        json["meta"]!["profile"]!.AsArray().Select(p => p!.ToString()).Should().Equal(
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient",
+            "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Patient|2.0.0");
+    }
+
+    [Fact]
     public void Project_MaritalStatus_EmitsCodeableConcept()
     {
         var json = new FhirPatientProjector().Project(BuildMember());

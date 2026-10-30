@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using ClaimsService.Models;
+using CloudHealthOffice.Infrastructure.ReferenceData;
 
 namespace ClaimsService.Fhir;
 
@@ -202,7 +203,7 @@ public sealed class ClaimFhirProjector : IClaimFhirProjector
             var coding = new JsonObject
             {
                 ["system"] = Icd10CmSystem,
-                ["code"] = diagnosis.Code,
+                ["code"] = Icd10CmCode.ToFhir(diagnosis.Code),
             };
             if (!string.IsNullOrWhiteSpace(diagnosis.Description)) coding["display"] = diagnosis.Description;
 

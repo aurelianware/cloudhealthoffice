@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.ReferenceData;
 using System.Text.Json.Nodes;
 using ProviderService.Models;
 using static ProviderService.Services.FhirExtensionBuilder;
@@ -99,7 +100,7 @@ public sealed class FhirPractitionerProjector : IFhirPractitionerProjector
             foreach (var lang in provider.LanguagesSpoken)
             {
                 if (string.IsNullOrEmpty(lang)) continue;
-                var display = LanguageDisplayName(lang) ?? lang;
+                var display = Bcp47Language.DisplayName(lang) ?? lang;
                 communication.Add(CodeableConcept(
                     Coding(ChoProviderFhirUrls.Bcp47LanguageSystem, lang, display),
                     text: display));
@@ -195,7 +196,9 @@ public sealed class FhirPractitionerProjector : IFhirPractitionerProjector
                 var coding = Coding(
                     ChoProviderFhirUrls.NuccTaxonomySystem,
                     provider.TaxonomyCode,
-                    string.IsNullOrEmpty(provider.PrimarySpecialty) ? null : provider.PrimarySpecialty);
+                    // The coding's display is NUCC's name for the code; the
+                    // plan's own specialty label stays in text.
+                    PlanNetSpecialties.Display(provider.TaxonomyCode));
                 codeNode = CodeableConcept(coding,
                     text: string.IsNullOrEmpty(provider.PrimarySpecialty) ? provider.TaxonomyCode : provider.PrimarySpecialty);
             }
@@ -261,23 +264,4 @@ public sealed class FhirPractitionerProjector : IFhirPractitionerProjector
     /// terminology service for full coverage. The handful of mappings
     /// here mirrors the LanguagesSpoken comment on Provider.cs.
     /// </summary>
-    private static string? LanguageDisplayName(string code) => code.ToLowerInvariant() switch
-    {
-        "en" => "English",
-        "es" => "Spanish",
-        "zh" => "Chinese",
-        "vi" => "Vietnamese",
-        "tl" => "Tagalog",
-        "ko" => "Korean",
-        "ru" => "Russian",
-        "ar" => "Arabic",
-        "fr" => "French",
-        "de" => "German",
-        "hi" => "Hindi",
-        "ja" => "Japanese",
-        "pt" => "Portuguese",
-        "it" => "Italian",
-        "pl" => "Polish",
-        _ => null
-    };
 }

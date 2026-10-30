@@ -130,6 +130,17 @@ public class ClaimFhirProjectorTests
     }
 
     [Fact]
+    public void A_diagnosis_stored_the_way_the_837_sends_it_is_dotted_for_fhir()
+    {
+        // Inferno run 40979709678 rejected E119 as an unknown ICD-10-CM code.
+        var claim = Claim();
+        claim.DiagnosisCodes = [new DiagnosisCode { Code = "E119", PointerNumber = 1, CodeQualifier = "ABK" }];
+
+        Project(claim)["diagnosis"]![0]!["diagnosisCodeableConcept"]!["coding"]![0]!["code"]!.GetValue<string>()
+            .Should().Be("E11.9");
+    }
+
+    [Fact]
     public void Line_diagnosis_pointers_resolve_to_the_diagnoses_they_were_built_against()
     {
         var claim = Claim();
