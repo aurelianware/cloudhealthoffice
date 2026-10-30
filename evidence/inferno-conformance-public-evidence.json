@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "inferno-conformance",
-  "generatedAtUtc": "2026-10-30T20:32:04Z",
-  "sourceCommit": "beb7bd70999241b7682bcb246b8a22ed26f698ed",
-  "sourceCommitShort": "beb7bd709992",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/beb7bd70999241b7682bcb246b8a22ed26f698ed",
+  "generatedAtUtc": "2026-10-30T21:47:35Z",
+  "sourceCommit": "6457880469dc963d7703d11095d3d920584b2170",
+  "sourceCommitShort": "6457880469dc",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/6457880469dc963d7703d11095d3d920584b2170",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence and of the Da Vinci interoperability snapshot. A kit result never changes a CMS-0057-F scenario status, and no result here is CMS, ONC or HL7 certification.",
   "kits": [
@@ -32,7 +32,7 @@
       ],
       "status": "Failed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-30T20:25:19.2921968+00:00",
+      "testedAtUtc": "2026-10-30T21:36:48.2217211+00:00",
       "tests": {
         "passed": 18,
         "failed": 3,
@@ -139,7 +139,7 @@
       ],
       "status": "Failed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-30T20:18:03.2031509+00:00",
+      "testedAtUtc": "2026-10-30T21:31:11.4274620+00:00",
       "tests": {
         "passed": 25,
         "failed": 3,
@@ -360,10 +360,10 @@
       "groups": [],
       "status": "Failed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-30T20:22:43.0438136+00:00",
+      "testedAtUtc": "2026-10-30T21:34:15.3017856+00:00",
       "tests": {
-        "passed": 160,
-        "failed": 45,
+        "passed": 162,
+        "failed": 43,
         "skipped": 47,
         "omitted": 1,
         "knownKitIssue": 0,
@@ -451,11 +451,6 @@
           "message": "Unable to connect to validator at http://inferno-validator:3500."
         },
         {
-          "test": "davinci_plan_net_v110_include_practitioner_role_practitioner_role_location_search_test",
-          "result": "fail",
-          "message": "PractitionerRole/1999999992-loc did not match the search parameters: * Expected: Location/1888888884-loc * Found: \"1999999992-loc\""
-        },
-        {
           "test": "davinci_plan_net_v110_forward_chain_practitioner_role_organization_name_search_test",
           "result": "fail",
           "message": "No PractitionerRole resources returned"
@@ -469,11 +464,6 @@
           "test": "davinci_plan_net_v110_forward_chain_practitioner_role_organization_type_search_test",
           "result": "fail",
           "message": "No PractitionerRole resources returned"
-        },
-        {
-          "test": "davinci_plan_net_v110_forward_chain_practitioner_role_location_organization_search_test",
-          "result": "fail",
-          "message": "PractitionerRole instance 1888888884-1-20260101-INTEROP-NET-1 references Location/1888888884-loc which does not have organization value Organization/1999999992"
         },
         {
           "test": "davinci_plan_net_v110_forward_chain_practitioner_role_network_name_search_test",
@@ -864,7 +854,7 @@
       ],
       "status": "Failed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-30T20:14:05.1752331+00:00",
+      "testedAtUtc": "2026-10-30T21:27:49.4546794+00:00",
       "tests": {
         "passed": 25,
         "failed": 6,
@@ -951,11 +941,11 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-10-30T20:25:20.4560571+00:00",
+    "generatedAtUtc": "2026-10-30T21:36:49.8717504+00:00",
     "environment": "CI",
-    "choCommit": "beb7bd70999241b7682bcb246b8a22ed26f698ed",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/beb7bd70999241b7682bcb246b8a22ed26f698ed",
-    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41119407678",
+    "choCommit": "6457880469dc963d7703d11095d3d920584b2170",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/6457880469dc963d7703d11095d3d920584b2170",
+    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41125715018",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 0,
