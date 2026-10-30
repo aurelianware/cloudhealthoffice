@@ -83,6 +83,31 @@ public sealed record InfernoResult
     [JsonPropertyName("result")] public string Result { get; init; } = "";
 
     [JsonPropertyName("result_message")] public string? ResultMessage { get; init; }
+
+    /// <summary>
+    /// What the test logged, validator issues included: a profile failure's
+    /// result message only counts resources, and the reasons are here.
+    /// </summary>
+    [JsonPropertyName("messages")] public List<InfernoMessage> Messages { get; init; } = new();
+
+    /// <summary>The requests the test made, in summary (no bodies).</summary>
+    [JsonPropertyName("requests")] public List<InfernoRequestSummary> Requests { get; init; } = new();
+}
+
+/// <summary>One message a test logged: <c>type</c> is error, warning or info.</summary>
+public sealed record InfernoMessage
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = "";
+    [JsonPropertyName("message")] public string Message { get; init; } = "";
+}
+
+/// <summary>A request a test made, as Inferno summarizes it.</summary>
+public sealed record InfernoRequestSummary
+{
+    [JsonPropertyName("id")] public string Id { get; init; } = "";
+    [JsonPropertyName("verb")] public string? Verb { get; init; }
+    [JsonPropertyName("url")] public string? Url { get; init; }
+    [JsonPropertyName("status")] public int? Status { get; init; }
 }
 
 /// <summary>
@@ -317,6 +342,26 @@ public sealed class InfernoRunner
         }
 
         return (inputs, defaulted);
+    }
+
+    /// <summary>
+    /// The response body of one request a test made: what the system under
+    /// test said, such as the OperationOutcome behind a 400.
+    /// </summary>
+    public async Task<string?> ReadResponseBodyAsync(string requestId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetAsync(
+            $"{_apiBaseUrl}/requests/{Uri.EscapeDataString(requestId)}", cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        return document.RootElement.TryGetProperty("response_body", out var body)
+               && body.ValueKind == JsonValueKind.String
+            ? body.GetString()
+            : null;
     }
 
     /// <summary>

@@ -125,7 +125,7 @@ public static class InfernoSuiteScenario
                 }
             }
 
-            RecordResults(run, runs);
+            await RecordResultsAsync(run, runner, runs, cancellationToken);
 
             run.RecordCompatibility(
                 scenario.Protocol,
@@ -326,8 +326,18 @@ public static class InfernoSuiteScenario
     /// names what failed rather than only that something did. A failure is an
     /// Error — it is the kit's verdict on CHO, and the harness has no standing
     /// to downgrade it.
+    ///
+    /// <para>
+    /// A failure carries its reasons, not only its headline: the error
+    /// messages the test logged (a profile failure's headline only counts
+    /// resources; the validator's issues are in its messages) and, for a
+    /// request CHO refused, what CHO answered. Without them every CHO finding
+    /// had to be reproduced by hand before it could be fixed.
+    /// </para>
     /// </summary>
-    private static void RecordResults(InteropScenarioRun run, IReadOnlyList<InfernoTestRun> runs)
+    private static async Task RecordResultsAsync(
+        InteropScenarioRun run, InfernoRunner runner, IReadOnlyList<InfernoTestRun> runs,
+        CancellationToken cancellationToken)
     {
         foreach (var result in runs.SelectMany(r => r.Results))
         {
@@ -338,13 +348,46 @@ public static class InfernoSuiteScenario
             }
 
             var where = result.TestId ?? result.TestGroupId ?? result.TestSuiteId ?? result.Id;
-            var summary = $"Inferno reported '{result.Result}' for {where}: " +
-                          (result.ResultMessage ?? "(no message)");
+            var summary = new System.Text.StringBuilder(
+                $"Inferno reported '{result.Result}' for {where}: {result.ResultMessage ?? "(no message)"}");
+
+            if (status == InteropStatus.Failed && result.TestId is not null)
+            {
+                foreach (var message in result.Messages
+                             .Where(m => m.Type == "error")
+                             .Select(m => m.Message)
+                             .Distinct(StringComparer.Ordinal)
+                             .Take(MaxMessagesPerResult))
+                {
+                    summary.Append(" | ").Append(Clip(message, 400));
+                }
+
+                foreach (var request in result.Requests
+                             .Where(r => r.Status is >= 400)
+                             .Take(MaxRefusedRequestsPerResult))
+                {
+                    var body = await runner.ReadResponseBodyAsync(request.Id, cancellationToken);
+                    summary.Append($" | {request.Verb?.ToUpperInvariant()} {request.Url} -> {request.Status}");
+                    if (!string.IsNullOrWhiteSpace(body))
+                    {
+                        summary.Append(": ").Append(Clip(body, 600));
+                    }
+                }
+            }
 
             run.Record(status == InteropStatus.Failed
-                ? InteropFinding.Error("inferno.result.failed", Redaction.Body(summary))
-                : InteropFinding.Info("inferno.result.notRun", Redaction.Body(summary)));
+                ? InteropFinding.Error("inferno.result.failed", Redaction.Body(summary.ToString()))
+                : InteropFinding.Info("inferno.result.notRun", Redaction.Body(summary.ToString())));
         }
+    }
+
+    private const int MaxMessagesPerResult = 8;
+    private const int MaxRefusedRequestsPerResult = 2;
+
+    private static string Clip(string text, int length)
+    {
+        var flat = text.ReplaceLineEndings(" ");
+        return flat.Length <= length ? flat : flat[..length] + "…";
     }
 
     /// <summary>
