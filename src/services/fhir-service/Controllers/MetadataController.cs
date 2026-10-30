@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using FhirService.Services;
 using FhirService.Services.Cdex;
+using FhirService.Services.ChoNative;
 using FhirService.Services.Clinical;
 using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Mvc;
@@ -77,6 +78,7 @@ public class MetadataController : FhirControllerBase
                             ("identifier",   SearchParamType.Token),
                             ("gender",       SearchParamType.Token)
                         ],
+                        revIncludes: [ChoNativeFhirDataAdapter.ProvenanceRevInclude],
                         // Bulk Data (G-34): a provider's panel as Patient/$export.
                         operations: BulkExportEnabled ? [PatientExportOperation] : null),
                         BuildResource("Coverage",
@@ -121,8 +123,11 @@ public class MetadataController : FhirControllerBase
                             ("patient",      SearchParamType.Reference),
                             ("date",         SearchParamType.Date),
                             ("status",       SearchParamType.Token),
-                            ("type",         SearchParamType.Token)
-                        ]),
+                            ("type",         SearchParamType.Token),
+                            ("identifier",   SearchParamType.Token),
+                            ("class",        SearchParamType.Token)
+                        ],
+                        revIncludes: [ChoNativeFhirDataAdapter.ProvenanceRevInclude]),
                         // Da Vinci PAS operations, both served by PasController:
                         // POST fhir/r4/Claim/$submit and POST fhir/r4/Claim/$inquire.
                         BuildResource("Claim",
@@ -423,7 +428,8 @@ public class MetadataController : FhirControllerBase
         (string Name, SearchParamType Type)[] searchParams,
         CapabilityStatement.TypeRestfulInteraction[]? interactions = null,
         string[]? supportedProfiles = null,
-        (string Name, string Definition)[]? operations = null)
+        (string Name, string Definition)[]? operations = null,
+        string[]? revIncludes = null)
     {
         interactions ??= [
             CapabilityStatement.TypeRestfulInteraction.Read,
@@ -448,6 +454,11 @@ public class MetadataController : FhirControllerBase
         if (supportedProfiles is { Length: > 0 })
         {
             resource.SupportedProfile = [.. supportedProfiles];
+        }
+
+        if (revIncludes is { Length: > 0 })
+        {
+            resource.SearchRevInclude = [.. revIncludes];
         }
 
         // Type-level operations. Advertised ONLY where the route genuinely
