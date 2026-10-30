@@ -158,7 +158,7 @@ public class PlanNetDirectoryProjectorTests
     }
 
     [Fact]
-    public void A_role_names_its_network_in_network_reference_not_organization()
+    public void Without_a_hospital_affiliation_a_role_names_its_network_and_no_organization()
     {
         var role = Single(_projector.ProjectProvider(Individual(), Networks(Network()), AsOf), "PractitionerRole");
 
@@ -168,6 +168,55 @@ public class PlanNetDirectoryProjectorTests
         role["location"]![0]!["reference"]!.GetValue<string>().Should().Be("Location/1234567893-loc");
         role["active"]!.GetValue<bool>().Should().BeTrue();
         Profile(role).Should().Be(PlanNet + "StructureDefinition/plannet-PractitionerRole");
+    }
+
+    private static HospitalAffiliation Affiliation(
+        string npi = "1999999992", string name = "Hartford General Hospital",
+        DateTime? effective = null, DateTime? termination = null) => new()
+    {
+        HospitalNPI = npi,
+        HospitalName = name,
+        AdmittingPrivileges = true,
+        EffectiveDate = effective ?? new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        TerminationDate = termination,
+    };
+
+    [Fact]
+    public void A_role_is_practised_at_the_hospital_of_the_practitioners_affiliation()
+    {
+        var practitioner = Individual();
+        practitioner.HospitalAffiliations = [Affiliation()];
+
+        var role = Single(_projector.ProjectProvider(practitioner, Networks(Network()), AsOf), "PractitionerRole");
+
+        role["organization"]!["reference"]!.GetValue<string>().Should().Be("Organization/1999999992");
+        role["organization"]!["display"]!.GetValue<string>().Should().Be("Hartford General Hospital");
+        role["healthcareService"]!.AsArray().Select(r => r!["reference"]!.GetValue<string>())
+            .Should().Equal("HealthcareService/1999999992-svc");
+        role["location"]!.AsArray().Select(r => r!["reference"]!.GetValue<string>())
+            .Should().Equal("Location/1234567893-loc", "Location/1999999992-loc");
+        Extension(role, PlanNet + "StructureDefinition/network-reference")!["valueReference"]!["reference"]!
+            .GetValue<string>().Should().Be($"Organization/{NetworkId}", "the network stays where Plan-Net puts it");
+    }
+
+    [Fact]
+    public void Only_an_affiliation_in_force_names_the_practice_and_the_earliest_wins()
+    {
+        var practitioner = Individual();
+        practitioner.HospitalAffiliations =
+        [
+            Affiliation("1111111112", "Ended Hospital", termination: new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+            Affiliation("1222222220", "Future Hospital", effective: new DateTime(2027, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+            Affiliation("1333333338", "Later Hospital", effective: new DateTime(2025, 6, 1, 0, 0, 0, DateTimeKind.Utc)),
+            Affiliation("1444444446", "Earlier Hospital", effective: new DateTime(2024, 3, 1, 0, 0, 0, DateTimeKind.Utc)),
+        ];
+
+        PlanNetDirectoryProjector.PracticeAffiliation(practitioner, AsOf)!.HospitalNPI.Should().Be("1444444446");
+
+        practitioner.HospitalAffiliations = [practitioner.HospitalAffiliations[0], practitioner.HospitalAffiliations[1]];
+        var role = Single(_projector.ProjectProvider(practitioner, Networks(Network()), AsOf), "PractitionerRole");
+        role.ContainsKey("organization").Should().BeFalse();
+        role.ContainsKey("healthcareService").Should().BeFalse();
     }
 
     [Fact]

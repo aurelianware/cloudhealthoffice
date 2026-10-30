@@ -293,7 +293,7 @@
     },
     "providers": [
       {
-        "_comment": "Individual. 207R00000X (Internal Medicine) is in Plan-Net's IndividualAndGroupSpecialtiesVS, so the role carries a specialty.",
+        "_comment": "Individual. 207R00000X (Internal Medicine) is in Plan-Net's IndividualAndGroupSpecialtiesVS, so the role carries a specialty. The hospital affiliation makes the seeded hospital the organization the role is practised at (PractitionerRole.organization, with that hospital's HealthcareService and Location).",
         "npi": "1888888884",
         "providerType": "Individual",
         "status": "Active",
@@ -309,6 +309,9 @@
         "phone": "555-0160",
         "acceptingNewPatients": true,
         "handicapAccessible": true,
+        "hospitalAffiliations": [
+          { "hospitalNPI": "1999999992", "hospitalName": "Interop General Hospital (synthetic)", "admittingPrivileges": true, "effectiveDate": "2026-01-01T00:00:00Z" }
+        ],
         "networkParticipations": [
           { "networkId": "INTEROP-NET-1", "lineOfBusiness": "Commercial", "networkTier": "Tier1", "effectiveDate": "2026-01-01T00:00:00Z", "acceptingNewPatients": true }
         ]

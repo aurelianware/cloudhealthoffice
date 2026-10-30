@@ -23,6 +23,17 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Added
 
+- **The public Provider Directory links practitioners, affiliations and
+  endpoints the way Plan-Net expects.** A practitioner's role names the
+  hospital of their hospital affiliation as the organization it is practised
+  at, with that hospital's HealthcareService and Location. Each
+  OrganizationAffiliation names the organization that manages its network as
+  its primary organization, and the payer Organization lists its Endpoints.
+  All three are Plan-Net must-support elements CHO did not publish, and the
+  Inferno Plan-Net kit's forward-chain searches (`PractitionerRole?service.service-category=`,
+  `OrganizationAffiliation?primary-organization.name=` and others) had nothing to
+  follow. A link to a hospital the directory does not publish is dropped.
+
 - **The GKE demo can publish public Provider Directories (G-36).** The
   `PUBLIC_PROVIDER_DIRECTORY` repository variable (or environment variable for
   `scripts/deploy-gke.sh`) is a JSON object keyed by directory id, each entry

@@ -24,7 +24,9 @@ public sealed class PlanNetDirectoryUnavailableException(string message, Excepti
 ///   a time (Practitioner, PractitionerRole, Organization, Location,
 ///   HealthcareService, OrganizationAffiliation);</item>
 ///   <item>benefit-plan-service's InsurancePlan and Endpoint searches;</item>
-///   <item>the plan's own Organization, from configuration.</item>
+///   <item>the plan's own Organization, from configuration;</item>
+///   <item>then the links only the whole directory can make
+///   (<see cref="PlanNetLinking"/>).</item>
 /// </list>
 /// Every upstream body passes through <see cref="PublicDirectoryResponseFilter"/>
 /// first, exactly as the proxied route did, so CHO-internal extensions, tax
@@ -88,6 +90,8 @@ public sealed class PlanNetDirectorySource : IPlanNetDirectorySource
         AddAll((await GetAllPagesAsync(benefitPlanService, "fhir/Endpoint", tenantId, ct))
             .Select(PlanNetShaping.Endpoint)
             .OfType<JsonObject>());
+
+        PlanNetLinking.Link(resources, payerId);
 
         var snapshot = PlanNetDirectorySnapshot.Create(directoryId, resources, DateTimeOffset.UtcNow);
         _logger.LogInformation(
