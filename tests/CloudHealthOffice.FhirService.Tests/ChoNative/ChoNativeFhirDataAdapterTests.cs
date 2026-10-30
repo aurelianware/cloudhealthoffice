@@ -305,4 +305,67 @@ public class ChoNativeFhirDataAdapterTests
 
         await act.Should().ThrowAsync<FhirSearchNotSupportedException>();
     }
+
+    // ── US Core searches (Inferno run 40979709678) ───────────────────────────
+
+    private const string EncounterJson =
+        """{"resourceType":"Encounter","id":"enc-1","status":"finished","class":{"system":"http://terminology.hl7.org/CodeSystem/v3-ActCode","code":"AMB"},"subject":{"reference":"Patient/M-1"}}""";
+
+    [Fact]
+    public async Task Encounter_identifier_and_class_go_upstream_as_control_number_and_class()
+    {
+        var (adapter, upstream) = Create(queryString:
+            "?identifier=urn:cho:encounter-control-number|ENC-9&class=http://terminology.hl7.org/CodeSystem/v3-ActCode|AMB");
+        upstream.Respond = _ => Json(Page(1, EncounterJson));
+
+        var (items, _) = await adapter.SearchEncountersAsync(new EncounterSearchParams(), Tenant, CancellationToken.None);
+
+        items.Should().ContainSingle();
+        upstream.LastPathAndQuery.Should().Be(
+            "/api/encounters/fhir/Encounter?controlNumber=ENC-9&encounterClass=AMB&offset=0&limit=20");
+    }
+
+    [Fact]
+    public async Task An_encounter_identifier_in_another_system_is_refused()
+    {
+        var (adapter, _) = Create(queryString: "?identifier=urn:other|ENC-9");
+
+        var act = () => adapter.SearchEncountersAsync(new EncounterSearchParams(), Tenant, CancellationToken.None);
+
+        await act.Should().ThrowAsync<FhirSearchNotSupportedException>();
+    }
+
+    [Fact]
+    public async Task A_provenance_revinclude_on_patient_is_accepted_and_changes_nothing_upstream()
+    {
+        var (adapter, upstream) = Create(queryString: "?_id=M-1&_revinclude=Provenance:target");
+        upstream.Respond = _ => Json(Page(1, PatientJson));
+
+        var (items, _) = await adapter.SearchPatientsAsync(new PatientSearchParams { Id = "M-1" }, Tenant, CancellationToken.None);
+
+        items.Should().ContainSingle();
+        upstream.LastPathAndQuery.Should().NotContain("revinclude").And.NotContain("Provenance");
+    }
+
+    [Fact]
+    public async Task A_provenance_revinclude_on_encounter_is_accepted_and_changes_nothing_upstream()
+    {
+        var (adapter, upstream) = Create(queryString: "?patient=M-1&_revinclude=Provenance:target");
+        upstream.Respond = _ => Json(Page(1, EncounterJson));
+
+        var (items, _) = await adapter.SearchEncountersAsync(new EncounterSearchParams { Patient = "M-1" }, Tenant, CancellationToken.None);
+
+        items.Should().ContainSingle();
+        upstream.LastPathAndQuery.Should().NotContain("revinclude").And.NotContain("Provenance");
+    }
+
+    [Fact]
+    public async Task Any_other_revinclude_is_refused()
+    {
+        var (adapter, _) = Create(queryString: "?_revinclude=Encounter:subject");
+
+        var act = () => adapter.SearchPatientsAsync(new PatientSearchParams(), Tenant, CancellationToken.None);
+
+        await act.Should().ThrowAsync<FhirSearchNotSupportedException>().WithMessage("*Provenance:target*");
+    }
 }

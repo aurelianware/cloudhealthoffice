@@ -76,6 +76,25 @@ public sealed class EncounterFhirProjector : IEncounterFhirProjector
         ["61"] = ("IMP", "inpatient encounter"),
     };
 
+    /// <summary>The class every place of service outside <see cref="ClassByPlaceOfService"/> gets.</summary>
+    public const string DefaultClass = "AMB";
+
+    /// <summary>
+    /// The places of service that project as <paramref name="classCode"/>, the
+    /// inverse of <see cref="ClassOf"/>. <see cref="DefaultClass"/> returns
+    /// the mapped codes it excludes instead (<c>Excluding</c> true), since
+    /// every other place of service, or none, projects as it. Any other code
+    /// returns null: the projection never emits it.
+    /// </summary>
+    public static (IReadOnlyList<string> PlacesOfService, bool Excluding)? PlacesOfServiceFor(string classCode)
+    {
+        if (string.Equals(classCode, DefaultClass, StringComparison.Ordinal))
+            return (ClassByPlaceOfService.Keys.ToList(), true);
+        var places = ClassByPlaceOfService.Where(p => string.Equals(p.Value.Code, classCode, StringComparison.Ordinal))
+            .Select(p => p.Key).ToList();
+        return places.Count == 0 ? null : (places, false);
+    }
+
     public JsonObject Project(Encounter encounter)
     {
         ArgumentNullException.ThrowIfNull(encounter);
@@ -160,7 +179,7 @@ public sealed class EncounterFhirProjector : IEncounterFhirProjector
         var pos = encounter.PlaceOfServiceCode?.Trim() ?? string.Empty;
         var (code, display) = ClassByPlaceOfService.TryGetValue(pos, out var mapped)
             ? mapped
-            : ("AMB", "ambulatory");
+            : (DefaultClass, "ambulatory");
 
         // Encounter.class is a single Coding, so the place of service it was
         // derived from cannot ride along in it; it is carried verbatim in the

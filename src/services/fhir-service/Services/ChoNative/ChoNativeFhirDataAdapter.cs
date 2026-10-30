@@ -70,6 +70,20 @@ public sealed class ChoNativeFhirDataAdapter
     /// <summary>The code system of Encounter.type in encounter-service's projection.</summary>
     public const string EncounterTypeSystem = "urn:cho:encounter-type";
 
+    /// <summary>The identifier system of Encounter.identifier (the submitter's control number).</summary>
+    public const string EncounterControlNumberSystem = "urn:cho:encounter-control-number";
+
+    /// <summary>The code system of Encounter.class.</summary>
+    public const string ActCodeSystem = "http://terminology.hl7.org/CodeSystem/v3-ActCode";
+
+    /// <summary>
+    /// The one <c>_revinclude</c> accepted: US Core requires a server to take
+    /// <c>Provenance:target</c> on every resource it searches. CHO keeps no
+    /// Provenance resources, so the include it asks for is empty and the
+    /// results are exactly those of the search without it.
+    /// </summary>
+    public const string ProvenanceRevInclude = "Provenance:target";
+
     /// <summary>CHO's 837 transaction variants, as Encounter.type codes.</summary>
     private static readonly string[] EncounterTypes = ["professional", "institutional", "dental"];
 
@@ -123,6 +137,7 @@ public sealed class ChoNativeFhirDataAdapter
     {
         RequireRequestTenant(tenantId);
         RejectUnsupportedParameters(PatientParameters);
+        RejectRevIncludesOtherThanProvenance();
         var q = new QueryBuilder();
 
         // _id and a member-id identifier both name the member; both given must
@@ -231,10 +246,19 @@ public sealed class ChoNativeFhirDataAdapter
     {
         RequireRequestTenant(tenantId);
         RejectUnsupportedParameters(EncounterParameters);
+        RejectRevIncludesOtherThanProvenance();
         var q = new QueryBuilder();
 
         FhirSearchTranslation.Single("_id", Values("_id", search.Id));
         q.Add("encounterId", search.Id);
+
+        if (FhirSearchTranslation.Single("identifier", Values("identifier", null)) is { } identifier)
+            q.Add("controlNumber", FhirSearchTranslation.ParseToken("identifier", identifier, EncounterControlNumberSystem));
+
+        // encounter-service matches the class codes through the place of
+        // service they are derived from; one it never emits matches nothing.
+        foreach (var encounterClass in FhirSearchTranslation.AnyOf("class", Values("class", null)))
+            q.Add("encounterClass", FhirSearchTranslation.ParseToken("class", encounterClass, ActCodeSystem));
 
         // search.Patient may already be the SMART-bound patient the controller
         // pinned; it is what confines the search to one member upstream.
@@ -354,7 +378,7 @@ public sealed class ChoNativeFhirDataAdapter
     private static readonly string[] ControlParameters = ["_count", "_page", "_format", "_pretty"];
 
     private static readonly HashSet<string> PatientParameters = new(
-        ControlParameters.Concat(["_id", "_lastUpdated", "identifier", "family", "given", "name", "gender", "birthdate"]),
+        ControlParameters.Concat(["_id", "_lastUpdated", "identifier", "family", "given", "name", "gender", "birthdate", "_revinclude"]),
         StringComparer.Ordinal);
 
     private static readonly HashSet<string> CoverageParameters = new(
@@ -362,7 +386,7 @@ public sealed class ChoNativeFhirDataAdapter
         StringComparer.Ordinal);
 
     private static readonly HashSet<string> EncounterParameters = new(
-        ControlParameters.Concat(["_id", "_lastUpdated", "patient", "date", "status", "type"]),
+        ControlParameters.Concat(["_id", "_lastUpdated", "patient", "date", "status", "type", "identifier", "class", "_revinclude"]),
         StringComparer.Ordinal);
 
     private static readonly HashSet<string> ClaimParameters = new(
@@ -385,6 +409,25 @@ public sealed class ChoNativeFhirDataAdapter
             throw new FhirSearchNotSupportedException(
                 "Unsupported search parameter(s): " + string.Join(", ", unsupported)
                 + ". Supported: " + string.Join(", ", supported.Except(ControlParameters).OrderBy(k => k, StringComparer.Ordinal)) + ".");
+        }
+    }
+
+    /// <summary>
+    /// Accepts <see cref="ProvenanceRevInclude"/> and refuses any other
+    /// <c>_revinclude</c>, which would ask for resources this server does not
+    /// return.
+    /// </summary>
+    private void RejectRevIncludesOtherThanProvenance()
+    {
+        var query = _http.HttpContext?.Request.Query;
+        if (query is null || !query.TryGetValue("_revinclude", out StringValues values)) return;
+        var other = values.SelectMany(v => (v ?? "").Split(','))
+            .Where(v => !string.Equals(v.Trim(), ProvenanceRevInclude, StringComparison.Ordinal))
+            .ToList();
+        if (other.Count > 0)
+        {
+            throw new FhirSearchNotSupportedException(
+                $"Unsupported _revinclude: {string.Join(", ", other)}. Supported: {ProvenanceRevInclude}.");
         }
     }
 
