@@ -49,6 +49,7 @@ internal static class CarinEobBasis
     internal const string ClaimCareTeamRoleSystem = "http://terminology.hl7.org/CodeSystem/claimcareteamrole";
     internal const string Icd10CmSystem = "http://hl7.org/fhir/sid/icd-10-cm";
     internal const string Cpt4System = "http://www.ama-assn.org/go/cpt";
+    internal const string DataAbsentReasonSystem = "http://terminology.hl7.org/CodeSystem/data-absent-reason";
     internal const string NpiSystem = "http://hl7.org/fhir/sid/us-npi";
     internal const string RevenueCodeSystem = "https://www.nubc.org/CodeSystem/RevenueCodes";
     internal const string TypeOfBillSystem = "https://www.nubc.org/CodeSystem/TypeOfBill";
@@ -434,6 +435,31 @@ internal static class CarinEobBasis
     }
 
     /// <summary>
+    /// CARIN BB binds <c>item.productOrService</c> (required) to value sets of
+    /// CPT and HCPCS codes (and HIPPS for institutional) that also hold
+    /// <c>data-absent-reason#not-applicable</c> for a line with no procedure
+    /// code. A line whose code CHO can only keep under its local system, such
+    /// as an inpatient room-and-board line that has a revenue code and no
+    /// procedure, gets that coding as well, and keeps its own beside it.
+    /// Inferno's CARIN BB kit rejected the local coding alone (run 40979709678).
+    /// </summary>
+    private static JsonObject ProductOrService(ClaimLine line)
+    {
+        var concept = ClaimProcedureCoding.Concept(line);
+        var codings = concept["coding"]!.AsArray();
+        if (codings.Any(c => (string?)c!["system"] == ClaimProcedureCoding.LocalSystem))
+        {
+            codings.Add(new JsonObject
+            {
+                ["system"] = DataAbsentReasonSystem,
+                ["code"] = "not-applicable",
+                ["display"] = "Not Applicable",
+            });
+        }
+        return concept;
+    }
+
+    /// <summary>
     /// The item array. <paramref name="augment"/> is how the financial
     /// projection adds what the Basis profiles forbid — the line's charge, its
     /// unit price and its adjudication amounts — without a second copy of the
@@ -449,7 +475,7 @@ internal static class CarinEobBasis
             var item = new JsonObject
             {
                 ["sequence"] = line.LineNumber,
-                ["productOrService"] = ClaimProcedureCoding.Concept(line),
+                ["productOrService"] = ProductOrService(line),
             };
 
             if (line.Modifiers.Count > 0)

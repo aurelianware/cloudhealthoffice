@@ -188,6 +188,15 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **CARIN BB conformance: CapabilityStatement and line codes.** fhir-service's
+  CapabilityStatement now instantiates CARIN BB's server CapabilityStatement
+  (`.../carin-bb/CapabilityStatement/c4bb`), which the CARIN BB kit checks
+  for. A CARIN ExplanationOfBenefit line whose procedure CHO holds only under
+  its local system, such as an inpatient room-and-board line with a revenue
+  code and no procedure, now also carries `data-absent-reason#not-applicable`
+  in `productOrService`. CARIN BB's required value sets hold that code for
+  exactly this case, and the local coding stays beside it.
+
 - **The interop seed has a second member for Bulk Data.** The Bulk Data kit
   fails an export with fewer than two Patients, and the seed had one.
   `additionalMembers` in `interop/cho-seed.json` adds a member with coverage
