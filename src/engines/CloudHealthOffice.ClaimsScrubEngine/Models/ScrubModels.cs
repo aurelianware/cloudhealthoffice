@@ -352,6 +352,26 @@ public record ServiceLine
 
     /// <summary>2430 — other payers' adjudication of this line.</summary>
     public List<LineOtherPayerAdjudication>? OtherPayerAdjudications { get; init; }
+
+    /// <summary>837D SV304 oral cavity designation codes (up to 5; e.g. 01 maxillary, 10 upper right quadrant).</summary>
+    public List<string>? OralCavityDesignations { get; init; }
+
+    /// <summary>837D SV305 prosthesis, crown or inlay code: I initial placement, R replacement.</summary>
+    public string? ProsthesisCrownInlayCode { get; init; }
+
+    /// <summary>837D 2400 TOO — each tooth this line treats, with its surfaces.</summary>
+    public List<ToothInformation>? Teeth { get; init; }
+}
+
+/// <summary>
+/// 837D 2400 TOO segment: TOO02 tooth code (ADA Universal National Tooth
+/// Designation: 1-32 permanent, A-T primary, 51-82 / AS-TS supernumerary)
+/// and TOO03 surface composite (up to 5 of M, O, D, B, L, I, F).
+/// </summary>
+public record ToothInformation
+{
+    public string ToothCode { get; init; } = default!;
+    public List<string>? Surfaces { get; init; }
 }
 
 // ============================================================================

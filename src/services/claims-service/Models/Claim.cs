@@ -736,6 +736,27 @@ public class ClaimLine
     public int? PriorAuthorizationLineNumber { get; set; }
 
     /// <summary>
+    /// Teeth this dental line treats, each with its surfaces.
+    /// 837D: TOO (2400), one segment per tooth
+    /// </summary>
+    public List<ClaimLineTooth> Teeth { get; set; } = new();
+
+    /// <summary>
+    /// Oral cavity designation codes (area of the mouth, e.g. 01 maxillary
+    /// arch, 10 upper right quadrant) for a dental line.
+    /// 837D: SV304
+    /// </summary>
+    public List<string> OralCavityDesignations { get; set; } = new();
+
+    /// <summary>
+    /// Prosthesis, crown or inlay code for a dental line: I initial
+    /// placement, R replacement.
+    /// 837D: SV305
+    /// </summary>
+    [StringLength(1)]
+    public string? ProsthesisCrownInlayCode { get; set; }
+
+    /// <summary>
     /// MPIP rate multiplier applied to this line's allowed amount during adjudication.
     /// 1.063 if FL SMMC 3.0 enhanced rate applies, null if MPIP was not evaluated.
     /// </summary>
@@ -745,6 +766,24 @@ public class ClaimLine
     /// Adjudication result for this line
     /// </summary>
     public LineAdjudicationResult? AdjudicationResult { get; set; }
+}
+
+/// <summary>
+/// One tooth on a dental claim line (837D 2400 TOO).
+/// </summary>
+[BsonIgnoreExtraElements]
+public class ClaimLineTooth
+{
+    /// <summary>
+    /// ADA Universal National Tooth Designation: 1-32 permanent, A-T
+    /// primary, 51-82 and AS-TS supernumerary. 837D: TOO02
+    /// </summary>
+    [Required]
+    [StringLength(2)]
+    public string ToothCode { get; set; } = string.Empty;
+
+    /// <summary>Tooth surfaces treated (M, O, D, B, L, I, F; up to 5). 837D: TOO03</summary>
+    public List<string> Surfaces { get; set; } = new();
 }
 
 /// <summary>A postal address carried on a claim (837 N3/N4).</summary>

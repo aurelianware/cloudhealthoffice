@@ -62,7 +62,7 @@ public static class ClaimToX12837Mapper
             Subscriber = MapSubscriber(claim, subscriber),
             Patient = MapPatient(claim, subscriber),
             ClaimHeader = MapClaimHeader(claim),
-            ServiceLines = claim.ClaimLines.Select(MapServiceLine).ToList(),
+            ServiceLines = claim.ClaimLines.Select(l => MapServiceLine(l, claim.ClaimType)).ToList(),
             TotalClaimedAmount = claim.TotalChargeAmount,
             ParsedAt = DateTime.UtcNow.ToString("o"),
         };
@@ -208,14 +208,15 @@ public static class ClaimToX12837Mapper
         DrgCode = claim.Institutional?.DrgCode,
     };
 
-    private static EngineModels.ServiceLine MapServiceLine(AdapterClaimLine line) => new()
+    private static EngineModels.ServiceLine MapServiceLine(AdapterClaimLine line, ClaimType claimType) => new()
     {
         LineNumber = line.LineNumber,
         ProcedureCode = line.ProcedureCode ?? string.Empty,
         // Default qualifier — CV002/CV003 use this to pick CPT vs HCPCS
-        // validation. Modifiers field qualifier is left unspecified by
-        // the platform today; the engine tolerates null.
-        ProcedureCodeQualifier = "HC",
+        // validation. A dental line carries CDT under AD (837D SV301-1),
+        // which CV002's CPT check skips. Modifiers field qualifier is left
+        // unspecified by the platform today; the engine tolerates null.
+        ProcedureCodeQualifier = claimType == ClaimType.Dental ? "AD" : "HC",
         Modifiers = line.Modifiers?.Where(m => !string.IsNullOrEmpty(m)).ToList(),
         ServiceDate = line.ServiceDateFrom == default
             ? string.Empty
@@ -233,6 +234,15 @@ public static class ClaimToX12837Mapper
         DrugQuantity = line.DrugQuantity,
         DrugUnitOfMeasure = line.DrugUnitOfMeasure,
         PriorAuthorizationNumber = line.PriorAuthorizationNumber,
+        Teeth = line.Teeth is { Count: > 0 } teeth
+            ? teeth.Select(t => new EngineModels.ToothInformation
+            {
+                ToothCode = t.ToothCode,
+                Surfaces = t.Surfaces is { Count: > 0 } surfaces ? surfaces.ToList() : null,
+            }).ToList()
+            : null,
+        OralCavityDesignations = line.OralCavityDesignations is { Count: > 0 } areas ? areas.ToList() : null,
+        ProsthesisCrownInlayCode = line.ProsthesisCrownInlayCode,
     };
 
     private static string? FormatD8(DateTime? date)

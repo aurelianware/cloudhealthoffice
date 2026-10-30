@@ -42,6 +42,11 @@ public sealed class X12837SnipValidator : ISnip837Validator
 {
     private const string Professional = "005010X222A1";
     private static readonly HashSet<string> Institutional = ["005010X223A2", "005010X223A3"];
+    private const string Dental = "005010X224A2";
+    private const string SupportedVersions = "005010X222A1, 005010X223A2, 005010X224A2";
+
+    private static bool IsSupportedVersion(string? version) =>
+        version is not null && (version == Professional || version == Dental || Institutional.Contains(version));
 
     private static readonly HashSet<string> Known837Segments =
     [
@@ -49,6 +54,8 @@ public sealed class X12837SnipValidator : ISnip837Validator
         "CLM", "DTP", "CL1", "PWK", "CN1", "AMT", "K3", "NTE", "CR1", "CR2", "CRC", "HI", "HCP",
         "CAS", "MOA", "MIA", "OI", "LX", "SV1", "SV2", "SV5", "CR3", "QTY", "MEA", "PS1", "HSD",
         "LIN", "CTP", "SVD", "LQ", "FRM", "TOO", "SE",
+        // 837D: dental service line and 2300 orthodontic / tooth status.
+        "SV3", "DN1", "DN2",
     ];
 
     // X12 base-standard mandatory elements (1-based), independent of the IG.
@@ -64,6 +71,7 @@ public sealed class X12837SnipValidator : ISnip837Validator
         ["LX"] = [1],
         ["SV1"] = [1, 2],
         ["SV2"] = [1],
+        ["SV3"] = [1, 2],
         ["DTP"] = [1, 2, 3],
         ["REF"] = [1],
         ["PAT"] = [],
@@ -254,8 +262,8 @@ public sealed class X12837SnipValidator : ISnip837Validator
                         group.Interchange.FunctionalGroups.Add(group);
                         if (seg.Element(0) != "HC")
                             GroupError(group, "1", "L1-GS01", $"GS01 must be HC for an 837, found '{SafeValue(seg.Element(0))}'.", "GS");
-                        if (seg.Element(7) is not { } gs08 || (gs08 != Professional && !Institutional.Contains(gs08)))
-                            GroupError(group, "2", "L1-GS08", $"GS08 '{SafeValue(seg.Element(7))}' is not a supported 837 version (005010X222A1, 005010X223A2).", "GS");
+                        if (!IsSupportedVersion(seg.Element(7)))
+                            GroupError(group, "2", "L1-GS08", $"GS08 '{SafeValue(seg.Element(7))}' is not a supported 837 version ({SupportedVersions}).", "GS");
                         if (seg.Element(5) is not { } gs06 || !gs06.All(char.IsAsciiDigit) || gs06.Length > 9)
                             GroupError(group, "6", "L1-GS06", "GS06 group control number must be 1-9 digits.", "GS");
                         else if (!groupControlNumbers.Add(gs06))
@@ -500,6 +508,9 @@ public sealed class X12837SnipValidator : ISnip837Validator
         private readonly List<Seg> _header = [];
         private readonly List<HlNode> _hls = [];
         private bool _institutional;
+        // 837D follows the professional rules except where noted: SV3 lines,
+        // CDT procedures (AD), optional diagnoses, SV311 pointers.
+        private bool _dental;
         private string? _bhtDate;
         private readonly FindingBudget _budget;
         private readonly SnipValidationResult _result;
@@ -548,6 +559,7 @@ public sealed class X12837SnipValidator : ISnip837Validator
         {
             var st = _segs[_start];
             _institutional = st.Element(2) is { } st03 && Institutional.Contains(st03);
+            _dental = st.Element(2) == Dental;
 
             var hasSe = _end < _segs.Count && _segs[_end].Id == "SE";
             var last = hasSe ? _end : _end - 1;
@@ -628,7 +640,7 @@ public sealed class X12837SnipValidator : ISnip837Validator
                         if (line is not null)
                         {
                             line.Segs.Add(seg);
-                            if (s.Id is "SV1" or "SV2" && line.Service is null) line.Service = seg;
+                            if (s.Id is "SV1" or "SV2" or "SV3" && line.Service is null) line.Service = seg;
                         }
                         else if (claim is not null) claim.Segs.Add(seg);
                         else if (hl is not null) hl.Segs.Add(seg);
@@ -688,10 +700,10 @@ public sealed class X12837SnipValidator : ISnip837Validator
             }
 
             var st03 = st.E(3);
-            if (st03 != Professional && (st03 is null || !Institutional.Contains(st03)))
+            if (!IsSupportedVersion(st03))
             {
                 _outcome.TransactionSetErrorCodes.Add("I6");
-                Report(SnipLevel.Syntax, "L1-ST03", $"ST03 '{st03}' is not a supported 837 implementation (005010X222A1, 005010X223A2).", st, 3, elemCode: "7", dataRef: "1705", badValue: st03);
+                Report(SnipLevel.Syntax, "L1-ST03", $"ST03 '{st03}' is not a supported 837 implementation ({SupportedVersions}).", st, 3, elemCode: "7", dataRef: "1705", badValue: st03);
             }
             else if (_groupVersion is not null && st03 != _groupVersion)
             {
@@ -1046,12 +1058,14 @@ public sealed class X12837SnipValidator : ISnip837Validator
             // the 2300 HI segments — not necessarily the first HI on an 837I.
             var hiSegs = claim.Own.Where(s => s.Id == "HI").ToList();
             var hasPrincipal = hiSegs.Any(h => Components(h.E(1)) is [ "ABK" or "BK", { Length: > 0 }, ..]);
-            if (hiSegs.Count == 0)
+            // 837D: diagnoses are situational (sent when they affect payment),
+            // so only a claim that sends HI needs the principal one.
+            if (hiSegs.Count == 0 && !_dental)
             {
                 Report(L2, "L2-HI-PRINCIPAL", "The claim needs an HI segment carrying the principal diagnosis (ABK).",
                     null, segmentId: "HI", loop: "2300", position: PositionAfter(claim.Own, Before2300Hi), segCode: "3", claimId: id);
             }
-            else if (!hasPrincipal)
+            else if (hiSegs.Count > 0 && !hasPrincipal)
             {
                 Report(L2, "L2-HI-PRINCIPAL", "No 2300 HI segment carries the principal diagnosis (HI01 qualifier ABK).",
                     hiSegs[0], 1, 1, elemCode: "7", dataRef: "1270", badValue: Components(hiSegs[0].E(1)).FirstOrDefault(), claimId: id);
@@ -1060,8 +1074,9 @@ public sealed class X12837SnipValidator : ISnip837Validator
             if (!_institutional)
             {
                 var dxCount = DiagnosisCodes(claim).Count;
-                if (dxCount > 12)
-                    Report(L2, "L2-HI-MAX", $"An 837P claim carries at most 12 diagnosis codes; found {dxCount}.", hiSegs[0], segCode: "5", claimId: id);
+                var maxDx = _dental ? 4 : 12;
+                if (dxCount > maxDx)
+                    Report(L2, "L2-HI-MAX", $"An {(_dental ? "837D" : "837P")} claim carries at most {maxDx} diagnosis codes; found {dxCount}.", hiSegs[0], segCode: "5", claimId: id);
             }
             else if (!claim.Own.Any(s => s.Id == "DTP" && s.E(1) == "434"))
             {
@@ -1084,7 +1099,7 @@ public sealed class X12837SnipValidator : ISnip837Validator
                 if (line.Lx.E(1) != (i + 1).ToString(CultureInfo.InvariantCulture))
                     Report(L2, "L2-LX01", $"LX01 must number lines 1, 2, 3… within the claim; expected {i + 1}.", line.Lx, 1, elemCode: "7", dataRef: "554", claimId: id);
 
-                var expected = _institutional ? "SV2" : "SV1";
+                var expected = _institutional ? "SV2" : _dental ? "SV3" : "SV1";
                 if (line.Service is null || line.Service.Id != expected)
                 {
                     Report(L2, $"L2-{expected}-MISSING", $"Line {i + 1} needs an {expected} service segment.", line.Lx, segmentId: expected, loop: "2400", position: line.Lx.Pos + 1, segCode: "3", claimId: id);
@@ -1100,6 +1115,22 @@ public sealed class X12837SnipValidator : ISnip837Validator
                     if (sv.E(3) is null) Report(L2, "L2-SV203", "SV203 line charge is required.", sv, 3, elemCode: "1", dataRef: "782", claimId: id);
                     if (sv.E(4) is not ("UN" or "DA")) Report(L2, "L2-SV204", "SV204 must be UN or DA.", sv, 4, elemCode: "7", dataRef: "355", badValue: sv.E(4), claimId: id);
                     if (sv.E(5) is null) Report(L2, "L2-SV205", "SV205 service unit count is required.", sv, 5, elemCode: "1", dataRef: "380", claimId: id);
+                }
+                else if (_dental)
+                {
+                    var proc = Components(sv.E(1));
+                    if (proc.Length < 2 || proc[0] != "AD" || proc[1].Length == 0)
+                        Report(L2, "L2-SV301", "SV301 must carry the AD qualifier and a CDT procedure code.", sv, 1, 1, elemCode: "7", dataRef: "235", badValue: proc.ElementAtOrDefault(0), claimId: id);
+                    if (sv.E(2) is null) Report(L2, "L2-SV302", "SV302 line charge is required.", sv, 2, elemCode: "1", dataRef: "782", claimId: id);
+                    if (sv.E(5) is { } prosthesis && prosthesis is not ("I" or "R"))
+                        Report(L2, "L2-SV305", "SV305 prosthesis, crown or inlay code must be I or R.", sv, 5, elemCode: "7", dataRef: "1358", badValue: prosthesis, claimId: id);
+                    foreach (var too in line.Segs.Where(s => s.Id == "TOO"))
+                    {
+                        if (too.E(1) != "JP")
+                            Report(L2, "L2-TOO01", "TOO01 must be JP (ADA Universal National Tooth Designation).", too, 1, elemCode: "7", dataRef: "1270", badValue: too.E(1), claimId: id);
+                        if (too.E(2) is null)
+                            Report(L2, "L2-TOO02", "TOO02 tooth code is required.", too, 2, elemCode: "1", dataRef: "1271", claimId: id);
+                    }
                 }
                 else
                 {
@@ -1136,7 +1167,7 @@ public sealed class X12837SnipValidator : ISnip837Validator
 
                 if (complete && sum != total)
                 {
-                    var lineField = _institutional ? "SV203" : "SV102";
+                    var lineField = _institutional ? "SV203" : _dental ? "SV302" : "SV102";
                     Report(SnipLevel.Balancing, "L3-CLM-BALANCE",
                         $"CLM02 total charge {total.ToString("0.00", CultureInfo.InvariantCulture)} does not equal the sum of {lineField} line charges {sum.ToString("0.00", CultureInfo.InvariantCulture)}.",
                         claim.Clm, 2, elemCode: "I12", dataRef: "782", claimId: claim.ClaimId);
@@ -1162,7 +1193,7 @@ public sealed class X12837SnipValidator : ISnip837Validator
         private void CheckCobBalancing(ClaimNode claim)
         {
             var chargeElement = _institutional ? 3 : 2;
-            var lineField = _institutional ? "SV203" : "SV102";
+            var lineField = _institutional ? "SV203" : _dental ? "SV302" : "SV102";
 
             // 2430 groups: each SVD with the CAS segments that follow it.
             var svds = new List<(Seg Svd, decimal Paid, decimal Cas, decimal? Charge)>();
@@ -1347,9 +1378,9 @@ public sealed class X12837SnipValidator : ISnip837Validator
                 var dtp472 = line.Segs.FirstOrDefault(s => s.Id == "DTP" && s.E(1) == "472");
                 if (dtp472 is null)
                 {
-                    var expectedAt = PositionAfter(line.Segs.Prepend(line.Lx), "LX", "SV1", "SV2", "SV5", "PWK", "CR1", "CR3", "CRC") ?? line.Lx.Pos + 1;
+                    var expectedAt = PositionAfter(line.Segs.Prepend(line.Lx), "LX", "SV1", "SV2", "SV3", "TOO", "SV5", "PWK", "CR1", "CR3", "CRC") ?? line.Lx.Pos + 1;
                     if (!_institutional)
-                        Report(L4, "L4-DTP472", $"837P service line {SafeValue(line.Lx.E(1))} requires the service date (DTP*472).",
+                        Report(L4, "L4-DTP472", $"{(_dental ? "837D" : "837P")} service line {SafeValue(line.Lx.E(1))} requires the service date (DTP*472).",
                             null, segmentId: "DTP", loop: "2400", segCode: "I6", claimId: id, position: expectedAt);
                     else if (setting != BillSetting.Inpatient && multiDayStatement)
                         Report(L4, "L4-DTP472", $"Outpatient service line {SafeValue(line.Lx.E(1))} requires a service date (DTP*472) because the statement covers more than one day.",
@@ -1375,15 +1406,16 @@ public sealed class X12837SnipValidator : ISnip837Validator
                         Report(L4, "L4-DTP472-FUTURE", $"Service line {line.Lx.E(1)} date is after the transaction creation date (BHT04).", dtp472, 3, elemCode: "8", dataRef: "1251", claimId: id);
                 }
 
-                if (!_institutional && line.Service?.E(7) is { } pointerRaw)
+                var pointerElement = _dental ? 11 : 7;
+                if (!_institutional && line.Service?.E(pointerElement) is { } pointerRaw)
                 {
                     var pointers = Components(pointerRaw);
                     for (var p = 0; p < pointers.Length; p++)
                     {
                         if (pointers[p].Length == 0) continue;
                         if (!int.TryParse(pointers[p], NumberStyles.None, CultureInfo.InvariantCulture, out var pointer) || pointer < 1 || pointer > dxCount)
-                            Report(L4, "L4-SV107-POINTER", $"SV107 diagnosis pointer {pointers[p]} on line {line.Lx.E(1)} does not point to a diagnosis on the claim ({dxCount} present).",
-                                line.Service, 7, p + 1, elemCode: "7", dataRef: "1328", badValue: pointers[p], claimId: id);
+                            Report(L4, _dental ? "L4-SV311-POINTER" : "L4-SV107-POINTER", $"{(_dental ? "SV311" : "SV107")} diagnosis pointer {pointers[p]} on line {line.Lx.E(1)} does not point to a diagnosis on the claim ({dxCount} present).",
+                                line.Service, pointerElement, p + 1, elemCode: "7", dataRef: "1328", badValue: pointers[p], claimId: id);
                     }
                 }
             }
@@ -1456,10 +1488,19 @@ public sealed class X12837SnipValidator : ISnip837Validator
                         }
                     }
 
+                    if (proc.Length >= 2 && proc[0] == "AD" && proc[1].Length > 0 && !SnipCodeSets.IsCdtFormat(proc[1]))
+                        Report(L5, "L5-CDT", $"Dental procedure '{proc[1]}' is not a CDT code (D followed by four digits).", sv, procElement, 2,
+                            elemCode: "7", dataRef: "234", badValue: proc[1], claimId: id);
+
                     if (_institutional)
                     {
                         if (sv.E(1) is { } revenue)
                             CheckCode(SnipCodeSystems.RevenueCode, revenue, SnipCodeSets.IsRevenueCodeFormat(revenue), "revenue code", sv, 1, id, lineDate, null, component: null);
+                    }
+                    else if (_dental)
+                    {
+                        if (sv.E(3) is { } dentalPos)
+                            CheckPos(dentalPos, sv, 3, null, id, lineDate);
                     }
                     else if (sv.E(5) is { } linePos)
                     {
