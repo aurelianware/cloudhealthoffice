@@ -17,6 +17,7 @@ public development signing key, so it is reached only through port-forward.
 | `cho_demo.py claims` | Narrates a paid claim, then a pended claim with the AI examiner's advisory recommendation and its unchanged status |
 | `cho_demo.py seed-auths` | Loads a CMS-0057-F prior-authorization scenario (open requests at every point of the 72-hour and 7-day clocks, recent reviewer and automated decisions, a year of history) for the portal's **Compliance → CMS-0057-F Console**. Re-running refreshes it |
 | `cho_demo.py seed-story` | Loads the five prior authorizations the portal's `/demo` guided tour links to: an automated approval, a partial approval with a reason per line, a denial, a request extended once with its member notice, and an open expedited request. Re-running resets their clocks to now |
+| `cho_demo.py seed-dental` | Loads two Medicaid dental prior authorizations: a crown on tooth 19 sent with a radiograph and approved, and adolescent braces denied because the malocclusion score is below the program's threshold. For dental plan prospects; synthetic data only |
 | `cho_demo.py adapter-status` | Shows which FHIR resources are demo, hybrid or live, and the response headers |
 | `cho_demo.py token` | Prints a development token for the demo tenant (for `scripts/demo/cms-0057-f-demo.sh` as `FHIR_TOKEN`) |
 
@@ -31,6 +32,7 @@ GAR_REPOSITORY=... IMAGE_TAG=... ./scripts/demo/gcp/run-mcc.sh
 python3 scripts/demo/gcp/cho_demo.py claims
 python3 scripts/demo/gcp/cho_demo.py seed-auths   # CMS-0057-F console history
 python3 scripts/demo/gcp/cho_demo.py seed-story   # the /demo guided tour's records
+python3 scripts/demo/gcp/cho_demo.py seed-dental  # two dental prior auths for dental plan prospects
 FHIR_URL=http://localhost:5023 TENANT_ID=demo FHIR_TOKEN="$(python3 scripts/demo/gcp/cho_demo.py token)" \
   ./scripts/demo/cms-0057-f-demo.sh
 ```

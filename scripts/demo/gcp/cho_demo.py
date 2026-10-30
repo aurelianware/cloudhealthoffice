@@ -15,6 +15,9 @@ scripts/demo/gcp/port-forward.sh opens.
                                     portal's CMS-0057-F Console (needs port-forward's 5006)
   cho_demo.py seed-story            Load the five prior authorizations the portal's /demo
                                     guided tour links to (needs port-forward's 5006)
+  cho_demo.py seed-dental           Load two Medicaid dental prior authorizations: a crown
+                                    with a radiograph, approved, and a braces request denied
+                                    on its malocclusion score (needs port-forward's 5006)
 
 The token is signed with the public development key in ChoDevelopmentAuth.
 It is accepted only by Development and Testing hosts, which is how the demo
@@ -420,6 +423,100 @@ def build_story_fixtures(now=None) -> list[dict]:
     return fixtures
 
 
+# ── Dental prior-authorization story ───────────────────────────────────────
+
+DENTAL_STORY_IDS = {
+    "crown": "story-pa-dental-crown",
+    "ortho": "story-pa-dental-ortho",
+}
+
+
+def build_dental_story_fixtures(now=None) -> list[dict]:
+    """Two synthetic Medicaid dental prior authorizations (service type 35).
+
+    A crown on tooth 19 sent with a periapical radiograph and approved by a
+    dental consultant the next day, and comprehensive braces for a teenager
+    denied because the malocclusion score is below the program's threshold.
+    Medicaid dental programs commonly require prior authorization for both.
+    The tooth is named in the line description: authorization lines have no
+    tooth field yet. Members, providers, scores and thresholds are invented.
+    """
+    import datetime as _dt
+    now = now or _dt.datetime.now(_dt.timezone.utc)
+    npi, practice = "1386927451", "Lakeside Family Dental"
+    reviewer = "Dr. Lena Okafor, DDS"
+
+    def record(key, number, member, first, last, dob, submitted, code, text, diagnosis,
+               decided_at, hcr, status, reason, line_hcr, denial_code=None, attachments=()):
+        line = {"lineNumber": 1, "procedureCode": code, "procedureDescription": text, "requestedUnits": 1,
+                "serviceStatus": line_hcr, "approvedUnits": 1 if line_hcr == "A1" else 0}
+        if denial_code:
+            line.update(denialReasonCode=denial_code, denialReason=reason)
+        fx = {
+            "id": DENTAL_STORY_IDS[key], "authorizationNumber": f"STORY-DEN-{number}",
+            "memberId": member, "patientFirstName": first, "patientLastName": last,
+            "patientDateOfBirth": f"{dob}T00:00:00Z",
+            "lineOfBusiness": "Medicaid", "authorizationType": "PreAuthorization",
+            "requestingProviderNPI": npi, "requestingProviderName": practice,
+            "serviceTypeCode": "35", "levelOfService": "E",
+            "requestedServiceDateFrom": _iso(submitted + _dt.timedelta(days=14)),
+            "requestedServices": [line],
+            "diagnosisCodes": [{"code": diagnosis[0], "codeQualifier": "ABK", "description": diagnosis[1]}],
+            "clinicalAttachments": [
+                {"attachmentType": kind, "transmissionCode": "EL", "description": description,
+                 "fileName": file_name, "uploadedDate": _iso(submitted)}
+                for kind, description, file_name in attachments],
+            "status": status, "submittedDate": _iso(submitted), "createdDate": _iso(submitted),
+            "reviewedDate": _iso(decided_at), "reviewDecision": hcr, "reviewerName": reviewer,
+            "statusHistory": [
+                {"status": "Submitted", "changedAt": _iso(submitted), "changedBy": "provider-portal"},
+                {"status": status, "reviewDecision": hcr, "reason": reason, "changedAt": _iso(decided_at),
+                 "changedBy": "dr.okafor", "source": None,
+                 "lineDecisions": [{"lineNumber": 1, "reviewDecision": line_hcr, "approvedUnits": line["approvedUnits"],
+                                    "denialReasonCode": denial_code, "denialReason": reason if denial_code else None}]},
+            ],
+        }
+        if hcr == "A3":
+            fx["denialReason"] = reason
+            fx["denialReasonCode"] = denial_code
+        return fx
+
+    submitted = now - _dt.timedelta(days=3)
+    crown = record(
+        "crown", "01", "STORY-DEN-MBR-01", "Marcus", "Reed", "1984-05-19", submitted,
+        "D2740", "Crown, porcelain/ceramic, tooth 19", ("K02.52", "Dental caries on pit and fissure surface penetrating into dentin"),
+        submitted + _dt.timedelta(hours=26), "A1", "Approved",
+        "Radiograph shows decay under the existing restoration and enough remaining tooth structure for a crown", "A1",
+        attachments=[("RB", "Periapical radiograph, tooth 19", "story-den-01-pa-19.jpg"),
+                     ("OZ", "Intraoral photo and narrative, tooth 19", "story-den-01-narrative.pdf")])
+
+    submitted = now - _dt.timedelta(days=6)
+    ortho = record(
+        "ortho", "02", "STORY-DEN-MBR-02", "Jada", "Nguyen", "2012-02-08", submitted,
+        "D8080", "Comprehensive orthodontic treatment, adolescent dentition", ("M26.212", "Malocclusion, Angle's class II"),
+        submitted + _dt.timedelta(days=4), "A3", "Denied",
+        "Malocclusion index score 18 is below the program's qualifying score of 26", "A3", "N350",
+        attachments=[("DA", "Orthodontic models (digital scan)", "story-den-02-models.stl"),
+                     ("RB", "Panoramic and cephalometric radiographs", "story-den-02-pano-ceph.jpg"),
+                     ("OZ", "Malocclusion index score sheet (score 18)", "story-den-02-index.pdf")])
+    return [crown, ortho]
+
+
+def cmd_seed_dental(_args) -> int:
+    fixtures = build_dental_story_fixtures()
+    status, _, body = request("POST", f"{AUTH_URL}/api/authorizations/dev-seed", mint_token(), {"authorizations": fixtures})
+    if status != 200:
+        print(f"dev-seed returned HTTP {status}: {str(body)[:500]}")
+        if status == 0:
+            print("Is scripts/demo/gcp/port-forward.sh running? It forwards authorization-service to localhost:5006.")
+        return 1
+    print(f"Seeded the {len(fixtures)} dental prior authorizations for tenant '{TENANT}':")
+    for fx in fixtures:
+        print(f"  {fx['authorizationNumber']}  {fx['patientFirstName']} {fx['patientLastName']:<10} "
+              f"{fx['status']:<9} {PORTAL_URL}/authorizations/{fx['id']}")
+    return 0
+
+
 def cmd_seed_story(_args) -> int:
     fixtures = build_story_fixtures()
     token = mint_token()
@@ -508,6 +605,7 @@ def main() -> int:
     sub.add_parser("adapter-status").set_defaults(func=cmd_adapter_status)
     sub.add_parser("seed-auths").set_defaults(func=cmd_seed_auths)
     sub.add_parser("seed-story").set_defaults(func=cmd_seed_story)
+    sub.add_parser("seed-dental").set_defaults(func=cmd_seed_dental)
     args = parser.parse_args()
     return args.func(args)
 
