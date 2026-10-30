@@ -22,6 +22,9 @@ public class MetadataController : FhirControllerBase
         _config = config;
     }
 
+    /// <summary>The CARIN Blue Button server CapabilityStatement that CHO's own instantiates.</summary>
+    public const string CarinBbServerCapabilityStatement = "http://hl7.org/fhir/us/carin-bb/CapabilityStatement/c4bb";
+
     /// <summary>GET /fhir/r4/metadata — FHIR CapabilityStatement</summary>
     [HttpGet("metadata")]
     [ProducesResponseType(typeof(CapabilityStatement), 200)]
@@ -37,6 +40,10 @@ public class MetadataController : FhirControllerBase
             Date = "2025-01-01",
             Kind = CapabilityStatementKind.Instance,
             FhirVersion = FHIRVersion.N4_0_1,
+            // CARIN BB's server CapabilityStatement: CHO serves its
+            // ExplanationOfBenefit profiles (claims-service's CARIN projection)
+            // and Patient, and the CARIN BB kit checks that the server says so.
+            Instantiates = [CarinBbServerCapabilityStatement],
             Format = ["application/fhir+json", "application/json"],
             Software = new CapabilityStatement.SoftwareComponent
             {

@@ -11,10 +11,13 @@ namespace ClaimsService.Fhir;
 /// </summary>
 internal static class ClaimProcedureCoding
 {
+    /// <summary>The system of a procedure code whose shape names no standard system.</summary>
+    public const string LocalSystem = "urn:cho:procedure-code";
+
     public static JsonObject Concept(ClaimLine line)
     {
         var code = line.ProcedureCode.Trim();
-        var system = "urn:cho:procedure-code";
+        var system = LocalSystem;
         if (code.Length == 5)
         {
             var upper = code.ToUpperInvariant();
