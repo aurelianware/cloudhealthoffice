@@ -114,8 +114,13 @@ public class MetadataController : FhirControllerBase
                             ("created",      SearchParamType.Date),
                             ("type",         SearchParamType.Token),
                             ("status",       SearchParamType.Token),
-                            ("use",          SearchParamType.Token)
+                            ("use",          SearchParamType.Token),
+                            ("identifier",   SearchParamType.Token),
+                            ("service-date", SearchParamType.Date),
+                            ("service-start-date",    SearchParamType.Date),
+                            ("billable-period-start", SearchParamType.Date)
                         ],
+                        includes: [.. ExplanationOfBenefitController.AcceptedIncludes.Order(StringComparer.Ordinal)],
                         supportedProfiles:
                         [
                             // What the prior-authorization projection is shaped

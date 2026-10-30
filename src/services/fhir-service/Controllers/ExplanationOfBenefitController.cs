@@ -1,6 +1,7 @@
 using FhirService.Services.Identity;
 using System.Text;
 using FhirService.Services;
+using FhirService.Services.ChoNative;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FhirService.Controllers;
@@ -269,11 +270,64 @@ public class ExplanationOfBenefitController : FhirControllerBase
                 "Provide a patient-scoped token or an explicit patient search parameter."));
         }
 
+        var upstreamQuery = BuildUpstreamQueryString(query, effectivePatient);
+        if (upstreamQuery is null)
+            return Task.FromResult(EmptySearchset());
+
         var searchBase = IsProviderAccessRequest ? ProviderAccessEobPath : ClaimEobPath;
-        var path = searchBase + BuildUpstreamQueryString(query, effectivePatient);
-        return ProxyClaimsServiceAsync("ExplanationOfBenefit", path, ct,
+        return ProxyClaimsServiceAsync("ExplanationOfBenefit", searchBase + upstreamQuery, ct,
             leavesConfinement: leavesConfinement);
     }
+
+    /// <summary>The claim-type code system ExplanationOfBenefit.type is coded in.</summary>
+    internal const string ClaimTypeSystem = "http://terminology.hl7.org/CodeSystem/claim-type";
+
+    /// <summary>The system of the unique-claim-id identifier: the claim number.</summary>
+    internal const string ClaimNumberSystem = "urn:cho:claim-number";
+
+    /// <summary>
+    /// The <c>_include</c> values a claims EOB search accepts: CARIN BB's.
+    /// They are accepted and the matching EOBs returned, but nothing is added
+    /// to the bundle: the referenced resources live in other services, and a
+    /// client resolves them from the references, which are relative to this
+    /// same base.
+    /// </summary>
+    internal static readonly IReadOnlySet<string> AcceptedIncludes = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "ExplanationOfBenefit:patient", "ExplanationOfBenefit:provider", "ExplanationOfBenefit:care-team",
+        "ExplanationOfBenefit:coverage", "ExplanationOfBenefit:insurer", "ExplanationOfBenefit:payee",
+        "ExplanationOfBenefit:*",
+    };
+
+    /// <summary>
+    /// The FHIR search parameters a claims EOB search applies, beyond
+    /// <c>patient</c> and the paging and format controls. Anything else is
+    /// refused rather than ignored, so a caller never receives a broader
+    /// result than the query it sent.
+    /// </summary>
+    internal static readonly IReadOnlySet<string> ClaimSearchParameters = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "patient", "_id", "_count", "_page", "_format", "_pretty", "_include", "use",
+        "_lastUpdated", "created", "status", "type", "identifier",
+        "service-date", "service-start-date", "billable-period-start",
+    };
+
+    /// <summary>CARIN BB's claim types as CHO stores them; pharmacy and vision CHO does not hold.</summary>
+    private static readonly IReadOnlyDictionary<string, string?> ClaimTypes = new Dictionary<string, string?>(StringComparer.Ordinal)
+    {
+        ["professional"] = "Professional",
+        ["institutional"] = "Institutional",
+        ["oral"] = "Dental",
+        ["pharmacy"] = null,
+        ["vision"] = null,
+    };
+
+    private IActionResult EmptySearchset() => new ContentResult
+    {
+        ContentType = "application/fhir+json",
+        Content = """{"resourceType":"Bundle","type":"searchset","total":0}""",
+        StatusCode = 200,
+    };
 
     /// <summary>
     /// True when the search asks for prior authorizations: any <c>use</c> value
@@ -355,46 +409,108 @@ public class ExplanationOfBenefitController : FhirControllerBase
     }
 
     /// <summary>
-    /// Rewrites the inbound query string with the effective (possibly
-    /// auto-injected) patient parameter. Preserves all other params
-    /// verbatim so future search-parameter additions in claims-service
-    /// don't require a fhir-service-side change.
+    /// Translates the inbound FHIR search into claims-service's structured
+    /// filters, with the effective (possibly auto-injected) patient. FHIR
+    /// syntax is parsed here, as the CHO-native adapter does for Patient and
+    /// Coverage (ADR 018); claims-service receives resolved values. Returns
+    /// null when the search cannot match anything CHO holds (a pharmacy or
+    /// vision type, a <c>use</c> other than claim, an empty date window), and
+    /// throws <see cref="FhirSearchNotSupportedException"/> for a parameter or
+    /// value it cannot apply.
     /// </summary>
-    private static string BuildUpstreamQueryString(
-        IQueryCollection inbound, string? effectivePatient)
+    internal static string? BuildUpstreamQueryString(IQueryCollection inbound, string? effectivePatient)
     {
+        var unsupported = inbound.Keys.Where(k => !ClaimSearchParameters.Contains(k))
+            .OrderBy(k => k, StringComparer.Ordinal).ToList();
+        if (unsupported.Count > 0)
+        {
+            throw new FhirSearchNotSupportedException(
+                "Unsupported search parameter(s): " + string.Join(", ", unsupported) + ".");
+        }
+
+        IEnumerable<string?> Values(string name) => inbound[name].AsEnumerable();
+
+        var includes = Values("_include").SelectMany(v => (v ?? "").Split(','))
+            .Select(v => v.Trim()).Where(v => v.Length > 0).ToList();
+        var unknownIncludes = includes.Where(v => !AcceptedIncludes.Contains(v)).ToList();
+        if (unknownIncludes.Count > 0)
+        {
+            throw new FhirSearchNotSupportedException(
+                $"Unsupported _include: {string.Join(", ", unknownIncludes)}.");
+        }
+
+        // Every claim EOB has use = claim.
+        var uses = FhirSearchTranslation.AnyOf("use", Values("use"));
+        if (uses.Count > 0 && !uses.Contains("claim", StringComparer.Ordinal))
+            return null;
+
         var sb = new StringBuilder();
         var first = true;
-        var patientWritten = false;
 
-        foreach (var (key, values) in inbound)
-        {
-            if (string.Equals(key, "patient", StringComparison.OrdinalIgnoreCase))
-            {
-                // Replace with the effective value (may be the original
-                // value or the SMART-bound id).
-                if (!string.IsNullOrEmpty(effectivePatient))
-                {
-                    AppendParam(sb, ref first, "patient", effectivePatient);
-                    patientWritten = true;
-                }
-                continue;
-            }
-
-            foreach (var value in values)
-            {
-                if (value is null) continue;
-                AppendParam(sb, ref first, key, value);
-            }
-        }
-
-        if (!patientWritten && !string.IsNullOrEmpty(effectivePatient))
-        {
+        if (!string.IsNullOrEmpty(effectivePatient))
             AppendParam(sb, ref first, "patient", effectivePatient);
+        if (FhirSearchTranslation.Single("_id", Values("_id")) is { } id)
+            AppendParam(sb, ref first, "_id", id);
+        foreach (var name in new[] { "_count", "_page" })
+        {
+            if (FhirSearchTranslation.Single(name, Values(name)) is { } control)
+                AppendParam(sb, ref first, name, control);
         }
 
-        return sb.Length == 0 ? string.Empty : sb.ToString();
+        var types = FhirSearchTranslation.AnyOf("type", Values("type"))
+            .Select(t => FhirSearchTranslation.ParseToken("type", t, ClaimTypeSystem))
+            .ToList();
+        if (types.Count > 0)
+        {
+            var held = new List<string>();
+            foreach (var code in types)
+            {
+                if (!ClaimTypes.TryGetValue(code, out var choType))
+                    throw new FhirSearchNotSupportedException($"'{code}' is not a CARIN BB claim type.");
+                if (choType is not null) held.Add(choType);
+            }
+            if (held.Count == 0) return null;
+            foreach (var choType in held.Distinct(StringComparer.Ordinal))
+                AppendParam(sb, ref first, "claimType", choType);
+        }
+
+        if (FhirSearchTranslation.Single("identifier", Values("identifier")) is { } identifier)
+            AppendParam(sb, ref first, "claimNumber", FhirSearchTranslation.ParseToken("identifier", identifier, ClaimNumberSystem));
+
+        if (FhirSearchTranslation.Single("status", Values("status")) is { } status)
+        {
+            var code = FhirSearchTranslation.ParseToken("status", status, "http://hl7.org/fhir/explanationofbenefit-status");
+            if (code is not ("active" or "cancelled")) return null;
+            AppendParam(sb, ref first, "status", code);
+        }
+
+        // service-start-date and billable-period-start both name the first day
+        // of service as CHO projects it (billablePeriod.start), so they narrow
+        // one window together.
+        var serviceStart = Intersect(
+            FhirSearchTranslation.ParseDates("service-start-date", Values("service-start-date")),
+            FhirSearchTranslation.ParseDates("billable-period-start", Values("billable-period-start")));
+
+        foreach (var (name, range) in new (string, FhirSearchTranslation.DateRange?)[]
+                 {
+                     ("lastUpdated", FhirSearchTranslation.ParseDates("_lastUpdated", Values("_lastUpdated"))),
+                     ("created", FhirSearchTranslation.ParseDates("created", Values("created"))),
+                     ("service", FhirSearchTranslation.ParseDates("service-date", Values("service-date"))),
+                     ("serviceStart", serviceStart),
+                 })
+        {
+            if (range is not { } r) continue;
+            if (r.IsEmpty) return null;
+            if (r.From is { } from) AppendParam(sb, ref first, name + "From", FhirSearchTranslation.Iso(from));
+            if (r.To is { } to) AppendParam(sb, ref first, name + "To", FhirSearchTranslation.Iso(to));
+        }
+
+        return sb.ToString();
     }
+
+    private static FhirSearchTranslation.DateRange? Intersect(
+        FhirSearchTranslation.DateRange? a, FhirSearchTranslation.DateRange? b)
+        => a is null ? b : b is null ? a : a.Value.Intersect(b.Value);
 
     private static void AppendParam(StringBuilder sb, ref bool first, string key, string value)
     {

@@ -52,6 +52,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
     private readonly IExplanationOfBenefitProjector _projector;
     private readonly ICarinNonFinancialEobProjector _nonFinancialProjector;
     private readonly IClaimDiagnosisMetadataEnricher _diagnosisMetadataEnricher;
+    private readonly IClaimFhirSearchRepository? _search;
     private readonly ILogger<FhirExplanationOfBenefitController> _logger;
 
     public FhirExplanationOfBenefitController(
@@ -59,9 +60,11 @@ public class FhirExplanationOfBenefitController : ControllerBase
         IExplanationOfBenefitProjector projector,
         ICarinNonFinancialEobProjector nonFinancialProjector,
         IClaimDiagnosisMetadataEnricher diagnosisMetadataEnricher,
-        ILogger<FhirExplanationOfBenefitController> logger)
+        ILogger<FhirExplanationOfBenefitController> logger,
+        IClaimFhirSearchRepository? search = null)
     {
         _repository = repository;
+        _search = search;
         _projector = projector;
         _nonFinancialProjector = nonFinancialProjector;
         _diagnosisMetadataEnricher = diagnosisMetadataEnricher;
@@ -170,11 +173,15 @@ public class FhirExplanationOfBenefitController : ControllerBase
     ///   <item><c>_count</c> — page size, default 50, clamped to 200.</item>
     ///   <item><c>_page</c> — 1-based pagination cursor.</item>
     /// </list>
-    /// Other CARIN BB / patient-access search parameters
-    /// (<c>created</c>, <c>provider</c>, <c>status</c>, <c>type</c>,
-    /// <c>identifier</c>, <c>_lastUpdated</c>, <c>_include</c>,
-    /// <c>_revinclude</c>) are deferred to Phase 2 with a repository
-    /// search-seam expansion.
+    /// The CARIN BB search parameters arrive as structured filters that
+    /// fhir-service has already parsed from FHIR syntax (ADR 018), as they do
+    /// for <see cref="FhirClaimController"/>: <c>claimType</c> (repeatable,
+    /// any of), <c>claimNumber</c>, <c>serviceFrom</c>/<c>serviceTo</c>,
+    /// <c>serviceStartFrom</c>/<c>serviceStartTo</c>,
+    /// <c>createdFrom</c>/<c>createdTo</c>, <c>lastUpdatedFrom</c>/<c>lastUpdatedTo</c>
+    /// and <c>status</c>. A search with any of them goes through
+    /// <see cref="IClaimFhirSearchRepository"/>, which applies them in the
+    /// store; a search with none is the member listing it has always been.
     /// </summary>
     [HttpGet("ExplanationOfBenefit")]
     [HttpGet(ProviderAccessSegment + "/ExplanationOfBenefit")]
@@ -185,6 +192,17 @@ public class FhirExplanationOfBenefitController : ControllerBase
         [FromQuery(Name = "_id")] string? id,
         [FromQuery(Name = "_count")] int count = DefaultPageSize,
         [FromQuery(Name = "_page")] int page = 1,
+        [FromQuery] ClaimType[]? claimType = null,
+        [FromQuery] string? claimNumber = null,
+        [FromQuery] DateTime? serviceFrom = null,
+        [FromQuery] DateTime? serviceTo = null,
+        [FromQuery] DateTime? serviceStartFrom = null,
+        [FromQuery] DateTime? serviceStartTo = null,
+        [FromQuery] DateTime? createdFrom = null,
+        [FromQuery] DateTime? createdTo = null,
+        [FromQuery] DateTime? lastUpdatedFrom = null,
+        [FromQuery] DateTime? lastUpdatedTo = null,
+        [FromQuery] string? status = null,
         CancellationToken ct = default)
     {
         var tenantId = TryGetTenantId();
@@ -208,6 +226,73 @@ public class FhirExplanationOfBenefitController : ControllerBase
 
         var pageSize = Math.Clamp(count, 1, MaxPageSize);
         var pageNumber = Math.Max(1, page);
+
+        if (status is not null && !FhirClaimStatusCodes.IsEmitted(status.Trim().ToLowerInvariant()))
+        {
+            return FhirOperationOutcome(400, "invalid",
+                $"status must be {FhirClaimStatusCodes.Active} or {FhirClaimStatusCodes.Cancelled}.");
+        }
+
+        var filtered = claimType is { Length: > 0 } || !string.IsNullOrWhiteSpace(claimNumber)
+            || serviceFrom is not null || serviceTo is not null
+            || serviceStartFrom is not null || serviceStartTo is not null
+            || createdFrom is not null || createdTo is not null
+            || lastUpdatedFrom is not null || lastUpdatedTo is not null
+            || status is not null;
+
+        if (filtered)
+        {
+            if (_search is null)
+            {
+                return FhirOperationOutcome(400, "not-supported",
+                    "ExplanationOfBenefit search filters need the MongoDB claim store.");
+            }
+
+            var offset = (pageNumber - 1) * pageSize;
+            if (offset > ClaimFhirSearchQuery.MaxOffset)
+            {
+                return FhirOperationOutcome(400, "invalid",
+                    $"_page reaches past the {ClaimFhirSearchQuery.MaxOffset}th result.");
+            }
+
+            var query = new ClaimFhirSearchQuery
+            {
+                ClaimVersionId = id,
+                MemberId = normalizedPatient,
+                ClaimTypes = claimType,
+                ClaimNumber = claimNumber,
+                ServiceFrom = serviceFrom,
+                ServiceTo = serviceTo,
+                ServiceStartFrom = serviceStartFrom,
+                ServiceStartTo = serviceStartTo,
+                CreatedFrom = createdFrom,
+                CreatedTo = createdTo,
+                LastUpdatedFrom = lastUpdatedFrom,
+                LastUpdatedTo = lastUpdatedTo,
+                Status = status,
+                Offset = offset,
+                Limit = pageSize,
+            };
+
+            try
+            {
+                var (matches, total) = await _search.SearchAsync(tenantId, query, ct);
+                await _diagnosisMetadataEnricher.EnrichAsync(matches, ct);
+                return BuildBundleResponse(matches, (int)Math.Min(total, int.MaxValue));
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "ExplanationOfBenefit search failed for tenant {TenantId}",
+                    LogSanitizer.Sanitize(tenantId));
+                return FhirOperationOutcome(500, "exception",
+                    "ExplanationOfBenefit search failed.");
+            }
+        }
 
         try
         {

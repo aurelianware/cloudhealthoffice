@@ -69,6 +69,30 @@ public sealed class ClaimFhirSearchRepositoryMongo : IClaimFhirSearchRepository
         if (query.ClaimType is { } claimType)
             filter &= b.Eq(c => c.ClaimType, claimType);
 
+        if (query.ClaimTypes is { Count: > 0 } claimTypes)
+            filter &= b.In(c => c.ClaimType, claimTypes);
+
+        if (!string.IsNullOrWhiteSpace(query.ClaimNumber))
+            filter &= b.Eq(c => c.ClaimNumber, query.ClaimNumber.Trim());
+
+        // Service dates are stored as days. A day overlaps a window when it
+        // starts before the window ends and ends after the window starts, so
+        // the lower bound is compared with the day before it. The claim's last
+        // day is ServiceDateTo, or ServiceDateFrom when the 837 gave no later
+        // one, and "the later of the two" is an Or over both.
+        if (query.ServiceFrom is { } serviceFrom)
+        {
+            var dayBefore = AsUtc(serviceFrom).AddDays(-1);
+            filter &= b.Or(b.Gt(c => c.ServiceDateTo, dayBefore), b.Gt(c => c.ServiceDateFrom, dayBefore));
+        }
+        if (query.ServiceTo is { } serviceTo)
+            filter &= b.Lt(c => c.ServiceDateFrom, AsUtc(serviceTo));
+
+        if (query.ServiceStartFrom is { } startFrom)
+            filter &= b.Gt(c => c.ServiceDateFrom, AsUtc(startFrom).AddDays(-1));
+        if (query.ServiceStartTo is { } startTo)
+            filter &= b.Lt(c => c.ServiceDateFrom, AsUtc(startTo));
+
         if (!string.IsNullOrWhiteSpace(query.Status))
             filter &= StatusFilter(query.Status.Trim().ToLowerInvariant());
 

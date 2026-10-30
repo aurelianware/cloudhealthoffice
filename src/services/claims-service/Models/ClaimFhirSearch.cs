@@ -38,6 +38,36 @@ public sealed class ClaimFhirSearchQuery
     /// <summary>CHO claim type (professional, institutional, dental).</summary>
     public ClaimType? ClaimType { get; init; }
 
+    /// <summary>
+    /// Any of these claim types (the ExplanationOfBenefit <c>type</c> search,
+    /// which can name more than one). Combines with <see cref="ClaimType"/> by
+    /// AND; null or empty does not filter.
+    /// </summary>
+    public IReadOnlyCollection<ClaimType>? ClaimTypes { get; init; }
+
+    /// <summary>Exact claim number, the EOB's unique-claim-id identifier.</summary>
+    public string? ClaimNumber { get; init; }
+
+    /// <summary>
+    /// Inclusive lower bound of a service window the claim's service dates must
+    /// overlap (the EOB <c>service-date</c> search over <c>billablePeriod</c>).
+    /// Service dates are whole days, so a claim whose last service day is the
+    /// day this bound falls in overlaps it.
+    /// </summary>
+    public DateTime? ServiceFrom { get; init; }
+
+    /// <summary>Exclusive upper bound of that window: the first service day must start before it.</summary>
+    public DateTime? ServiceTo { get; init; }
+
+    /// <summary>
+    /// Inclusive lower bound on the first day of service (<c>billablePeriod.start</c>):
+    /// the day matches when any part of it is at or after this bound.
+    /// </summary>
+    public DateTime? ServiceStartFrom { get; init; }
+
+    /// <summary>Exclusive upper bound on the first day of service: the day must start before it.</summary>
+    public DateTime? ServiceStartTo { get; init; }
+
     /// <summary>Inclusive lower bound on the record's last update (UTC).</summary>
     public DateTime? LastUpdatedFrom { get; init; }
 
