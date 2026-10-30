@@ -69,8 +69,13 @@ on:
     # after an upstream change is a finding to triage, not a signal to auto-bump.
     - cron: '17 6 * * *'
 
+# One group per ref AND trigger. A push to main runs only the harness and
+# br-payer jobs, so it must not cancel a workflow_dispatch or nightly run on
+# main, which is the only kind that runs the Inferno kits (2026-10-30: two
+# dispatched runs were cancelled by merges). A newer run of the same trigger on
+# the same ref still replaces the older one.
 concurrency:
-  group: davinci-interop-${{ github.ref }}
+  group: davinci-interop-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
