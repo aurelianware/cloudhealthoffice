@@ -24,6 +24,13 @@ These implementation statements do not assert full PAS/CRD/DTR/SMART conformance
 ## Canonical one-liner
 Cloud Health Office is a source-available, FHIR-native health plan administration platform that runs in a tenant dedicated to each plan, in the plan's own cloud or operated for it, so plans keep control of their data and integrations while connecting to every partner they choose.
 
+## Homepage lead — approved by Mark Phillips, October 30, 2026
+The homepage hero leads with the CMS-0057-F conformance check. Sovereignty stays the category and the reason to choose Cloud Health Office; the check is the reason to engage now.
+**Homepage H1:** Find and close your CMS-0057-F gaps, in your own cloud.
+**Homepage supporting:** We test your Patient Access, Provider Access, Provider Directory and Payer-to-Payer APIs with the ONC Inferno test kits and show you what fails and why. Cloud Health Office can then run the fixes in a tenant your plan controls, alongside QNXT, Facets or HealthEdge, with no core replacement required.
+**Homepage primary CTA:** Run a conformance check (→ /contact?interest=conformance-check). The readiness review becomes the homepage secondary CTA; the nav CTA is unchanged.
+**Conformance check facts:** fixed fee, four weeks, run against the plan's sandbox or test endpoints, no PHI. Kits: US Core, CARIN for Blue Button, Bulk Data with SMART Backend Services, Da Vinci Plan-Net; prior authorization and CMS metrics reviewed by checklist. Never publish the fee. Always say that passing Inferno is not CMS certification or a legal determination of compliance. Never imply Cloud Health Office itself passes a kit unless the published nightly results show it.
+
 ## Executive positioning — approved implementation, October 21, 2026
 **Category:** Payer data sovereignty. Interoperable, source-available administration.
 **Primary:** Sovereign, interoperable health plan administration.
