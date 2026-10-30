@@ -111,6 +111,26 @@ public class PlanNetSearchEngineTests
         => Ids(Search("PractitionerRole", ("_id", "r2,nope"))).Should().Equal("r2");
 
     [Fact]
+    public void Id_search_accepts_a_reference_to_the_type_as_the_inferno_kit_sends_it()
+    {
+        Ids(Search("PractitionerRole", ("_id", "PractitionerRole/r2"))).Should().Equal("r2");
+        Ids(Search("PractitionerRole", ("_id", "https://example.org/fhir/PractitionerRole/r1/_history/3"))).Should().Equal("r1");
+        Ids(Search("PractitionerRole", ("_id", "Location/r2"))).Should().BeEmpty("the reference names a Location");
+    }
+
+    [Fact]
+    public void A_revinclude_on_a_referenced_id_returns_the_resources_pointing_at_it()
+    {
+        // The kit's revinclude tests: _id is the reference it read off a PractitionerRole.
+        var result = Search("Practitioner",
+            ("_id", $"Practitioner/{PlanNetDirectoryFixture.Smith}"),
+            ("_revinclude", "PractitionerRole:practitioner"));
+
+        Ids(result).Should().Equal(PlanNetDirectoryFixture.Smith);
+        result.Included.Select(r => r["resourceType"]!.GetValue<string>()).Should().Contain("PractitionerRole");
+    }
+
+    [Fact]
     public void Missing_modifier_tests_presence()
     {
         Search("PractitionerRole", ("organization:missing", "true")).Total.Should().Be(2);
