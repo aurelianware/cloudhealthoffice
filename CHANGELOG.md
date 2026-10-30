@@ -188,6 +188,15 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **`_lastUpdated` with a fraction of a second matches only that fraction.**
+  A FHIR search date with a time part matched the whole second it named, so
+  `_lastUpdated` set to one resource's `meta.lastUpdated` (which carries
+  fractional seconds) also returned resources updated earlier or later in
+  the same second. The CARIN BB kit's `_lastUpdated` ExplanationOfBenefit
+  search failed on that. An instant now matches the precision it is written
+  to: a minute, a second, or its fractional digits. This applies to every
+  date search parameter the CHO-native FHIR facade translates.
+
 - **DaVinci Interop: known kit issues stop counting against CHO.** A
   conformance scenario can name kit tests that no correct server can pass
   (`infernoKnownKitIssues` in `interop/scenarios.json`, each with a reason).

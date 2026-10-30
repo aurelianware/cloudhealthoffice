@@ -39,6 +39,38 @@ public class FhirSearchTranslationTests
     }
 
     [Theory]
+    [InlineData("2026-03-01T10:15:30.123Z", 1230000, 1240000)]
+    [InlineData("2026-03-01T10:15:30.1230000Z", 1230000, 1230001)]
+    [InlineData("2026-03-01T10:15:30.5+00:00", 5000000, 6000000)]
+    [InlineData("2026-03-01T10:15:30.123", 1230000, 1240000)]
+    public void An_instant_with_a_fraction_matches_only_its_stated_precision(string raw, long fromTicks, long toTicks)
+    {
+        var second = U(2026, 3, 1, 10, 15, 30);
+        FhirSearchTranslation.ParseDate("_lastUpdated", raw)
+            .Should().Be(new FhirSearchTranslation.DateRange(second.AddTicks(fromTicks), second.AddTicks(toTicks)));
+    }
+
+    [Fact]
+    public void A_meta_last_updated_value_does_not_match_another_resource_updated_in_the_same_second()
+    {
+        // meta.lastUpdated is written with the round-trip format; the kit
+        // searches with it verbatim and expects only exact matches back.
+        var mine = U(2026, 3, 1, 10, 15, 30).AddMilliseconds(123);
+        var other = mine.AddMilliseconds(400);
+        var range = FhirSearchTranslation.ParseDate("_lastUpdated", mine.ToString("o"));
+
+        (range.From <= mine && mine < range.To).Should().BeTrue();
+        (range.From <= other && other < range.To).Should().BeFalse();
+    }
+
+    [Fact]
+    public void An_instant_to_the_minute_matches_its_minute()
+    {
+        FhirSearchTranslation.ParseDate("_lastUpdated", "2026-03-01T10:15Z")
+            .Should().Be(new FhirSearchTranslation.DateRange(U(2026, 3, 1, 10, 15), U(2026, 3, 1, 10, 16)));
+    }
+
+    [Theory]
     [InlineData("ne1980")]
     [InlineData("sa1980")]
     [InlineData("ap1980")]
