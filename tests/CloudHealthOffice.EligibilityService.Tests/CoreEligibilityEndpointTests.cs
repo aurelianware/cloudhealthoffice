@@ -29,10 +29,11 @@ public class CoreEligibilityEndpointTests : IClassFixture<EligibilityApiFactory>
 
     public CoreEligibilityEndpointTests(EligibilityApiFactory factory) => _base = factory;
 
-    private WebApplicationFactory<Program> Factory(string budget = "00:00:10", Action<IServiceCollection>? services = null) =>
+    private WebApplicationFactory<Program> Factory(string budget = "00:00:10", Action<IServiceCollection>? services = null,
+        IDictionary<string, string?>? settings = null) =>
         _base.WithWebHostBuilder(b =>
         {
-            b.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(new Dictionary<string, string?>
+            b.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(new Dictionary<string, string?>(settings ?? new Dictionary<string, string?>())
             {
                 ["CoreConnectivity:Enabled"] = "true",
                 ["CoreConnectivity:ResponseBudget"] = budget,
@@ -265,6 +266,48 @@ public class CoreEligibilityEndpointTests : IClassFixture<EligibilityApiFactory>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("AAA*Y**42*R~", Field(ResponseBody(await response.Content.ReadAsStringAsync()), "Payload"));
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5), $"took {watch.Elapsed}");
+    }
+
+    private static Dictionary<string, string?> OutageSinceAnHourAgo() => new()
+    {
+        ["CoreConnectivity:Availability:Windows:0:Kind"] = "Unscheduled",
+        ["CoreConnectivity:Availability:Windows:0:Start"] = DateTimeOffset.UtcNow.AddHours(-1).ToString("O"),
+        ["CoreConnectivity:Availability:Windows:0:Reason"] = "Coverage database failover",
+    };
+
+    [Fact]
+    public async Task DuringPublishedDowntime_A270IsAnsweredWithAaa42_WithoutWaiting()
+    {
+        Covered();
+        using var client = Factory(settings: OutageSinceAnHourAgo()).CreateClient();
+
+        var response = await client.PostAsync("/core/eligibility", Soap(Edi270("000000908")));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = Field(ResponseBody(await response.Content.ReadAsStringAsync()), "Payload");
+        Assert.Contains("AAA*Y**42*R~", payload);
+        Assert.DoesNotContain("EB*1*", payload);
+    }
+
+    [Fact]
+    public async Task TheAvailabilitySchedule_IsPublished_WithoutCredentials()
+    {
+        var settings = OutageSinceAnHourAgo();
+        settings["CoreConnectivity:Availability:Regular:0:Day"] = "Sunday";
+        settings["CoreConnectivity:Availability:Regular:0:Start"] = "06:00:00";
+        settings["CoreConnectivity:Availability:Regular:0:Duration"] = "02:00:00";
+        using var client = Factory(settings: settings).CreateClient();
+
+        var response = await client.GetAsync("/core/eligibility/availability");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = json.RootElement;
+        Assert.Equal("downtime", root.GetProperty("status").GetString());
+        Assert.Equal("unscheduled", root.GetProperty("currentDowntime").GetProperty("kind").GetString());
+        Assert.Equal("Sunday", root.GetProperty("regularDowntime")[0].GetProperty("day").GetString());
+        Assert.Equal(86.0, root.GetProperty("requiredPercent").GetDouble());
+        Assert.True(root.GetProperty("thisWeek").GetProperty("downtimeHours").GetDouble() >= 0.9);
     }
 
     [Fact]

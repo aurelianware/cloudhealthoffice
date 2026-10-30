@@ -179,6 +179,17 @@ public sealed class CoreRealTimeProcessor
             Payload = envelope.Payload!,
         };
 
+        // Inside a published downtime window the plan's systems may be down
+        // on purpose: answer "unable to respond" at once instead of waiting
+        // out the budget.
+        if (CoreAvailabilitySchedule.Current(options.Availability, _time.GetUtcNow()) is { } downtime
+            && handler.UnableToRespond(request) is { } unavailable)
+        {
+            _logger.LogInformation("CORE request answered as unable to respond during {Kind} downtime. PayloadType={PayloadType} PayloadID={PayloadId}",
+                downtime.Kind, envelope.PayloadType, LogSanitizer.Sanitize(envelope.PayloadId));
+            return (Success(envelope, unavailable), "downtime");
+        }
+
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
         budget.CancelAfter(options.ResponseBudget);
 
