@@ -188,6 +188,11 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **Inferno findings now say why.** A failing test's finding carries the
+  error messages it logged (the validator's issues behind a profile failure)
+  and, for a request CHO refused, CHO's response body, so a CHO gap can be
+  fixed from the run rather than reproduced by hand first.
+
 - **The interop stack now runs authorization-service and seeds an
   Encounter.** Bulk Data `$export` jobs read prior-authorization
   ExplanationOfBenefit from authorization-service, which the interop profile

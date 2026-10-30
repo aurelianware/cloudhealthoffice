@@ -212,6 +212,33 @@ public sealed class InfernoRunnerTests
         data.Should().Equal(new Dictionary<string, string> { ["smart_auth_info"] = """{"access_token":"t"}""" });
     }
 
+    [Fact]
+    public async Task A_refused_requests_response_body_is_read_back()
+    {
+        var handler = new Answering(
+            """{"id":"req-1","status":400,"response_body":"{\"resourceType\":\"OperationOutcome\"}"}""");
+        var runner = new InfernoRunner("http://inferno.invalid/api", new HttpClient(handler));
+
+        var body = await runner.ReadResponseBodyAsync("req-1");
+
+        handler.LastUri.Should().Be("http://inferno.invalid/api/requests/req-1");
+        body.Should().Be("""{"resourceType":"OperationOutcome"}""");
+    }
+
+    [Fact]
+    public void A_results_messages_and_requests_are_read_from_the_run()
+    {
+        var result = System.Text.Json.JsonSerializer.Deserialize<InfernoResult>(
+            """
+            {"id":"r1","test_id":"t1","result":"fail","result_message":"1 / 1 Patient resources failed",
+             "messages":[{"type":"error","message":"Patient.name: minimum required = 1"}],
+             "requests":[{"id":"q1","verb":"get","url":"http://cho/fhir/r4/Patient?_id=x","status":400}]}
+            """)!;
+
+        result.Messages.Should().ContainSingle().Which.Message.Should().Contain("Patient.name");
+        result.Requests.Should().ContainSingle().Which.Status.Should().Be(400);
+    }
+
     private sealed class Answering(string body) : HttpMessageHandler
     {
         public string? LastUri { get; private set; }
