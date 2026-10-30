@@ -201,7 +201,7 @@ public class FhirPractitionerProjectorTests
         var coding = primary["coding"]!.AsArray().Single()!.AsObject();
         coding["system"]!.GetValue<string>().Should().Be("http://nucc.org/provider-taxonomy");
         coding["code"]!.GetValue<string>().Should().Be("207R00000X");
-        coding["display"]!.GetValue<string>().Should().Be("Internal Medicine");
+        coding["display"]!.GetValue<string>().Should().Be("Internal Medicine Physician", "the display is NUCC's; the plan's label stays in text");
         primary["text"]!.GetValue<string>().Should().Be("Internal Medicine");
     }
 
