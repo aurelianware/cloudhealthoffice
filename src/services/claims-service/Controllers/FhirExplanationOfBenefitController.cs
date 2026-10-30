@@ -192,6 +192,9 @@ public class FhirExplanationOfBenefitController : ControllerBase
         [FromQuery(Name = "_id")] string? id,
         [FromQuery(Name = "_count")] int count = DefaultPageSize,
         [FromQuery(Name = "_page")] int page = 1,
+        // Before the filters so a caller passing the paging arguments and the
+        // token positionally is not broken by them.
+        CancellationToken ct = default,
         [FromQuery] ClaimType[]? claimType = null,
         [FromQuery] string? claimNumber = null,
         [FromQuery] DateTime? serviceFrom = null,
@@ -202,8 +205,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
         [FromQuery] DateTime? createdTo = null,
         [FromQuery] DateTime? lastUpdatedFrom = null,
         [FromQuery] DateTime? lastUpdatedTo = null,
-        [FromQuery] string? status = null,
-        CancellationToken ct = default)
+        [FromQuery] string? status = null)
     {
         var tenantId = TryGetTenantId();
         if (string.IsNullOrEmpty(tenantId))
