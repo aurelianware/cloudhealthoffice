@@ -368,4 +368,40 @@ public class ChoNativeFhirDataAdapterTests
 
         await act.Should().ThrowAsync<FhirSearchNotSupportedException>().WithMessage("*Provenance:target*");
     }
+
+    // ── Coverage _include (CARIN BB nightly 2026-10-30) ──────────────────────
+
+    [Fact]
+    public async Task A_payor_include_on_coverage_is_accepted_when_the_payor_is_display_only()
+    {
+        var (adapter, upstream) = Create(queryString: "?_id=cov-1&_include=Coverage:payor");
+        upstream.Respond = _ => Json(Page(1, CoverageJson));
+
+        var (items, _) = await adapter.SearchCoverageAsync(new CoverageSearchParams { Id = "cov-1" }, Tenant, CancellationToken.None);
+
+        items.Should().ContainSingle();
+        upstream.LastPathAndQuery.Should().NotContain("include").And.NotContain("payor");
+    }
+
+    [Fact]
+    public async Task A_payor_include_is_refused_when_a_payor_is_a_resource_it_would_have_to_include()
+    {
+        var (adapter, upstream) = Create(queryString: "?_id=cov-1&_include=Coverage:payor");
+        upstream.Respond = _ => Json(Page(1,
+            """{"resourceType":"Coverage","id":"cov-1","status":"active","beneficiary":{"reference":"Patient/M-1"},"payor":[{"reference":"Organization/plan-1"}]}"""));
+
+        var act = () => adapter.SearchCoverageAsync(new CoverageSearchParams { Id = "cov-1" }, Tenant, CancellationToken.None);
+
+        await act.Should().ThrowAsync<FhirSearchNotSupportedException>().WithMessage("*Coverage:payor*");
+    }
+
+    [Fact]
+    public async Task Any_other_coverage_include_is_refused()
+    {
+        var (adapter, _) = Create(queryString: "?_include=Coverage:beneficiary");
+
+        var act = () => adapter.SearchCoverageAsync(new CoverageSearchParams(), Tenant, CancellationToken.None);
+
+        await act.Should().ThrowAsync<FhirSearchNotSupportedException>().WithMessage("*Coverage:payor*");
+    }
 }

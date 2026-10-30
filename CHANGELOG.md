@@ -188,6 +188,38 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **The SMART token response names the patient it is bound to.** A
+  patient launch's token response now carries the `patient` (and
+  `encounter`) launch context SMART App Launch requires; it was only in the
+  access token's claims. The DaVinci Interop CARIN BB suite now runs as the
+  seeded member's own patient app, through enrolment, the Development
+  login, PKCE and consent, because Patient Access answers searches without
+  a `patient` parameter only for a token bound to one member.
+- **ExplanationOfBenefit search applies the CARIN BB search parameters.**
+  `type`, `identifier`, `service-date`, `service-start-date`,
+  `billable-period-start`, `_lastUpdated`, `created` and `status` used to be
+  forwarded to claims-service and ignored, so a filtered search returned
+  every EOB the patient had. fhir-service now parses them into structured
+  filters that claims-service applies in the store, answers a search
+  nothing CHO holds could match (a pharmacy or vision type) with an empty
+  bundle, and refuses a parameter it cannot apply with a 400 instead of
+  ignoring it. CARIN BB's `_include` values are accepted and advertised.
+  They add nothing to the bundle: the referenced resources are read from
+  the same base.
+
+- **CARIN BB conformance: EOB profile version, payee, and Coverage
+  `_include`.** A Patient Access ExplanationOfBenefit now declares its CARIN
+  BB profile twice in `meta.profile`: as before, and with `|2.0.0`, because
+  CARIN BB 2.0.0 makes a versioned canonical an error-level requirement and
+  the Inferno kit checks 2.0.0. It also carries a `payee`: the billing
+  provider, or the pay-to plan on a subrogation demand. A Coverage search
+  accepts `_include=Coverage:payor` (advertised in the CapabilityStatement);
+  CHO's payor is a display-only reference, so nothing is added, and a search
+  whose payor is a resource reference is refused rather than answered
+  without it. The interop seed now gives every claim its Coverage id, so the
+  kit has Coverage resources to test, and an attending physician on the
+  inpatient claim, so its EOB has a care team.
+
 - **CARIN BB conformance: CapabilityStatement and line codes.** fhir-service's
   CapabilityStatement now instantiates CARIN BB's server CapabilityStatement
   (`.../carin-bb/CapabilityStatement/c4bb`), which the CARIN BB kit checks

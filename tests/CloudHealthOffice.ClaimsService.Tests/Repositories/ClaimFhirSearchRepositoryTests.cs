@@ -197,4 +197,50 @@ public sealed class ClaimFhirSearchRepositoryTests(MongoRunnerFixture mongo) : I
         firstPage.Select(c => c.Id).Should().Equal("C7", "C4");
         secondPage.Select(c => c.Id).Should().Equal("C2", "C1");
     }
+
+    // ── ExplanationOfBenefit filters (CARIN BB nightly 2026-10-30) ───────────
+
+    [Fact]
+    public async Task Claim_types_match_any_of_them_and_the_claim_number_matches_exactly()
+    {
+        var dental = Claim("D1", Tenant, Member, Day(7, 1));
+        dental.ClaimType = ClaimType.Dental;
+        await _database.GetCollection<Claim>("Claims").InsertOneAsync(dental);
+
+        (await Ids(new ClaimFhirSearchQuery { MemberId = Member, ClaimTypes = [ClaimType.Dental], Limit = 50 }))
+            .Should().Equal("D1");
+        (await Ids(new ClaimFhirSearchQuery { MemberId = Member, ClaimTypes = [ClaimType.Dental, ClaimType.Institutional], Limit = 50 }))
+            .Should().Equal("D1");
+        (await Ids(new ClaimFhirSearchQuery { MemberId = Member, ClaimNumber = "CLM-C2", Limit = 50 }))
+            .Should().Equal("C2");
+    }
+
+    [Fact]
+    public async Task A_service_window_matches_a_claim_whose_service_days_overlap_it()
+    {
+        var span = Claim("S1", Tenant, Member, Day(8, 1));
+        span.ServiceDateTo = Day(8, 5);
+        await _database.GetCollection<Claim>("Claims").InsertOneAsync(span);
+
+        // A window opening a second into the claim's last day still overlaps it.
+        (await Ids(new ClaimFhirSearchQuery { MemberId = Member, ServiceFrom = Day(8, 5).AddSeconds(1), Limit = 50 }))
+            .Should().Equal("S1");
+        (await Ids(new ClaimFhirSearchQuery { MemberId = Member, ServiceFrom = Day(8, 6), Limit = 50 }))
+            .Should().BeEmpty();
+        (await Ids(new ClaimFhirSearchQuery { MemberId = Member, ServiceFrom = Day(7, 31), ServiceTo = Day(8, 2), Limit = 50 }))
+            .Should().Equal("S1");
+    }
+
+    [Fact]
+    public async Task A_service_start_window_matches_the_first_day_of_service_only()
+    {
+        var span = Claim("S2", Tenant, Member, Day(9, 1));
+        span.ServiceDateTo = Day(9, 5);
+        await _database.GetCollection<Claim>("Claims").InsertOneAsync(span);
+
+        (await Ids(new ClaimFhirSearchQuery { MemberId = Member, ServiceStartFrom = Day(9, 1), ServiceStartTo = Day(9, 2), Limit = 50 }))
+            .Should().Equal("S2");
+        (await Ids(new ClaimFhirSearchQuery { MemberId = Member, ServiceStartFrom = Day(9, 3), Limit = 50 }))
+            .Should().BeEmpty("the claim's service ran to the 5th but started on the 1st");
+    }
 }

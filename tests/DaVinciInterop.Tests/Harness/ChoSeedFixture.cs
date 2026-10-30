@@ -47,6 +47,7 @@ public sealed record ChoSeedFixture
     [JsonPropertyName("auth")] public ChoSeedAuth Auth { get; init; } = new();
     [JsonPropertyName("member")] public ChoSeedMember Member { get; init; } = new();
     [JsonPropertyName("backendClient")] public ChoSeedBackendClient BackendClient { get; init; } = new();
+    [JsonPropertyName("patientApp")] public ChoSeedPatientApp PatientApp { get; init; } = new();
 
     public static ChoSeedFixture Load() => LoadFrom(InteropPaths.ChoSeedFixture);
 
@@ -124,6 +125,22 @@ public sealed record ChoSeedBackendClient
 
     /// <summary>The provider the client acts for: the Group a kit exports.</summary>
     [JsonPropertyName("providerId")] public string ProviderId { get; init; } = "";
+
+    [JsonPropertyName("scopes")] public List<string> Scopes { get; init; } = new();
+}
+
+/// <summary>
+/// The SMART patient app a kit that needs a member-bound token is authorised
+/// as. The harness drives the launch itself (see <c>InfernoPatientApp</c>).
+/// </summary>
+public sealed record ChoSeedPatientApp
+{
+    [JsonPropertyName("clientId")] public string ClientId { get; init; } = "";
+    [JsonPropertyName("displayName")] public string DisplayName { get; init; } = "";
+    [JsonPropertyName("redirectUri")] public string RedirectUri { get; init; } = "";
+
+    /// <summary>The Development login's username the member's identity is bound to.</summary>
+    [JsonPropertyName("username")] public string Username { get; init; } = "";
 
     [JsonPropertyName("scopes")] public List<string> Scopes { get; init; } = new();
 }
