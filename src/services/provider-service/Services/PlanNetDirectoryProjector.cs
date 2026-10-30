@@ -14,8 +14,11 @@ namespace ProviderService.Services;
 ///   <item>A network is a plannet-Network: type <c>OrgTypeCS#ntwk</c>,
 ///   partOf the payer, and no telecom (0..0 in the profile).</item>
 ///   <item>A PractitionerRole names its network in the <c>network-reference</c>
-///   extension, not in <c>organization</c> (which Plan-Net reserves for the
-///   organization the practitioner works for, and CHO does not record).</item>
+///   extension, not in <c>organization</c>, which Plan-Net reserves for the
+///   organization the practitioner works at: CHO names the hospital of the
+///   practitioner's hospital affiliation there (see
+///   <see cref="PracticeAffiliation"/>), with that hospital's
+///   HealthcareService and Location.</item>
 ///   <item>Plan-Net binds <c>specialty</c> and PractitionerRole <c>code</c> as
 ///   required, so only NUCC codes in the Plan-Net value sets are emitted
 ///   (<see cref="PlanNetSpecialties"/>), and the role code comes from
@@ -112,6 +115,8 @@ public sealed class PlanNetDirectoryProjector : IPlanNetDirectoryProjector
         var location = ProjectLocation(provider, managingOrganizationId: null);
         if (location is not null) resources.Add(location);
 
+        var practice = PracticeAffiliation(provider, asOf);
+
         foreach (var (participation, network) in ActiveParticipations(provider, networks, asOf))
         {
             var role = _roles.Project(participation, provider, network);
@@ -133,8 +138,22 @@ public sealed class PlanNetDirectoryProjector : IPlanNetDirectoryProjector
 
             ReplaceSpecialty(role, provider.TaxonomyCode, PlanNetSpecialties.IndividualAndGroup);
 
-            if (location is not null)
-                role["location"] = new JsonArray { Reference("Location", location["id"]!.GetValue<string>()) };
+            var locations = new JsonArray();
+            if (location is not null) locations.Add(Reference("Location", location["id"]!.GetValue<string>()));
+
+            // The hospital the practitioner is affiliated with is where the role
+            // is practised: its Organization, and the HealthcareService and
+            // Location the directory publishes for it under the same NPI. A
+            // hospital the directory does not publish is unlinked again when
+            // the directory is assembled, so no reference dangles.
+            if (practice is not null)
+            {
+                role["organization"] = Reference("Organization", practice.HospitalNPI, practice.HospitalName);
+                role["healthcareService"] = new JsonArray { Reference("HealthcareService", practice.HospitalNPI + HealthcareServiceIdSuffix) };
+                locations.Add(Reference("Location", practice.HospitalNPI + LocationIdSuffix));
+            }
+
+            if (locations.Count > 0) role["location"] = locations;
 
             var extensions = role["extension"] as JsonArray ?? new JsonArray();
             extensions.Add(NewPatients(participation.PanelAccepted ?? participation.AcceptingNewPatients, network.OrganizationId));
@@ -301,6 +320,21 @@ public sealed class PlanNetDirectoryProjector : IPlanNetDirectoryProjector
             yield return (participation, network);
         }
     }
+
+    /// <summary>
+    /// The hospital affiliation in force at <paramref name="asOf"/> that names
+    /// the organization a practitioner's roles are practised at: the earliest
+    /// effective, then the lowest NPI, so the choice is stable. Null when there
+    /// is none, and the roles then name no organization (Plan-Net 0..1).
+    /// </summary>
+    internal static HospitalAffiliation? PracticeAffiliation(Provider provider, DateTime asOf)
+        => provider.HospitalAffiliations
+            .Where(a => !string.IsNullOrWhiteSpace(a.HospitalNPI)
+                        && a.EffectiveDate <= asOf
+                        && (a.TerminationDate is null || a.TerminationDate > asOf))
+            .OrderBy(a => a.EffectiveDate)
+            .ThenBy(a => a.HospitalNPI, StringComparer.Ordinal)
+            .FirstOrDefault();
 
     private static void ReplaceSpecialty(
         JsonObject resource, string? taxonomy, IReadOnlyDictionary<string, string> valueSet)

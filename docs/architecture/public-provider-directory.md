@@ -78,7 +78,11 @@ benefit-plan-service                             ├─> snapshot per directory 
   become `plannet-Network`. An individual provider becomes a Practitioner, a
   Location (`{npi}-loc`, from the provider's address) and one PractitionerRole
   per active network participation, carrying the network-reference and
-  newpatients extensions. An organization provider becomes an Organization, a
+  newpatients extensions. A practitioner with a hospital affiliation in force
+  practises at that hospital: the role's `organization`, `healthcareService`
+  and an extra `location` name the hospital's Organization, `{npi}-svc` and
+  `{npi}-loc` (the earliest-effective affiliation when there are several).
+  An organization provider becomes an Organization, a
   Location, a HealthcareService (`{npi}-svc`) and one OrganizationAffiliation per
   network. Codes come only from Plan-Net's required value sets: the NUCC
   taxonomy is mapped to ProviderRoleCS, OrgTypeCS, HealthcareServiceCategoryCS
@@ -87,7 +91,12 @@ benefit-plan-service                             ├─> snapshot per directory 
   outside them is published without that code rather than with a wrong one.
 * **fhir-service shapes and serves.** It adds the payer Organization, gives each
   InsurancePlan its owner, administrator and a Plan-Net product type, and keeps
-  only active Endpoints, typed as `rest-non-fhir`. Everything passes through the
+  only active Endpoints, typed as `rest-non-fhir`. Then it makes the links only
+  the whole directory can (`PlanNetLinking`): each OrganizationAffiliation's
+  `organization` is the organization that manages its network (the network's
+  `partOf`), the payer lists the Endpoints it manages, and a PractitionerRole
+  link to a hospital the directory does not publish is dropped rather than left
+  dangling. Everything passes through the
   same response filter as before, which strips CHO-internal extensions and tax
   ids.
 * **The snapshot.** The first request for a directory builds it and waits.
