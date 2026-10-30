@@ -188,6 +188,20 @@ public sealed class ScenarioInventoryTests
     }
 
     [Fact]
+    public void Carin_bb_runs_the_eob_group_before_the_groups_that_read_its_references()
+    {
+        // The kit's Coverage, Organization and Practitioner groups take their
+        // instances from the references its EOB searches save; run first, they
+        // skip with "No Coverage resources appear to be available" (run 41087087059).
+        var groups = Inventory.Scenarios.Single(s => s.Id == "INFERNO-C4BB-SERVER-001").InfernoGroups;
+        var eob = groups.IndexOf("c4bb_v200_eob");
+
+        eob.Should().BeGreaterThanOrEqualTo(0);
+        foreach (var dependent in new[] { "c4bb_v200_coverage", "c4bb_v200_organization", "c4bb_v200_practitioner" })
+            groups.IndexOf(dependent).Should().BeGreaterThan(eob, $"{dependent} reads references the EOB group saves");
+    }
+
+    [Fact]
     public void The_carin_bb_mixed_claim_type_validation_tests_are_the_only_known_kit_issues()
     {
         Inventory.Scenarios.SelectMany(s => s.InfernoKnownKitIssues.Select(i => (s.Id, i.Test)))

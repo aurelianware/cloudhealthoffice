@@ -188,6 +188,12 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **DaVinci Interop runs the CARIN BB Coverage group after the EOB group.**
+  The kit's Coverage group reads the Coverage ids its EOB searches saved from
+  `insurance.coverage`. The scenario listed Coverage first, so it skipped
+  with "No Coverage resources appear to be available" every run. The groups
+  now run in the kit's own order.
+
 - **DaVinci Interop: known kit issues stop counting against CHO.** A
   conformance scenario can name kit tests that no correct server can pass
   (`infernoKnownKitIssues` in `interop/scenarios.json`, each with a reason).
