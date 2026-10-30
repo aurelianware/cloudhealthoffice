@@ -3,7 +3,7 @@
 **Release date:** TBD (tagged once the nightly Inferno run is clean)
 **Previous release:** [v6.0.0](./RELEASE_NOTES_v6.0.0.md) (October 28, 2026)
 
-This release covers the pull requests merged since v6.0.0 (#1583 to #1608).
+This release covers the pull requests merged since v6.0.0 (#1583 to #1625).
 It is a minor version: nothing in it requires a configuration change to
 upgrade from 6.0, and everything new that changes behaviour is off until a
 deployment turns it on.
@@ -81,6 +81,33 @@ assertion, and CHO can do the same to other payers.
 - The GKE demo can be put in front of hosted Inferno on public tunnel
   hostnames, opt-in (#1598, #1606). Runbook:
   `docs/deploy/GCP-CONFORMANCE-TESTING.md`.
+- The harness now reaches the kits and reports honestly: sized request bodies
+  instead of chunked ones (#1611), its own faults kept apart from CHO
+  failures (#1612), the kit's own tokens (#1614), authorization-service and an
+  Encounter in the interop stack (#1616), and the validator's reason on each
+  failing test (#1617).
+
+### Fixes from the first Inferno results
+
+The first runs that produced kit results found real CHO defects. Fixed:
+
+- FHIR codings pass terminology validation: dotted ICD-10-CM codes, BCP-47
+  language display names, NUCC display names (#1620).
+- The US Core searches the kit makes no longer answer 400 (#1621), and
+  `POST [type]/_search` is served as the equivalent GET search (#1615).
+- CARIN BB: the CapabilityStatement instantiates C4BB, local line codes are
+  marked not-applicable, EOBs declare the versioned profile and a payee,
+  Coverage supports `_include`, and EOB search applies the CARIN BB search
+  parameters (#1623, #1625).
+- A patient launch's token response now carries the `patient` and
+  `encounter` launch context SMART App Launch requires (#1625).
+- Interop fixture: a second member for Bulk Data, and a Plan-Net network
+  address and plan document URL (#1622, #1624).
+
+### Demo
+
+- The demo portal has a guided tour, a scripted prior-authorization story and
+  a recorded walkthrough, with a prospect-access runbook (#1618, #1619).
 
 The full list, itemized, is in the [changelog](../../CHANGELOG.md).
 
@@ -111,9 +138,10 @@ No steps are required. Things to know:
   Services group, **pass** (2026-10-29). The export groups have not been run
   on hosted Inferno.
 - **Nightly interop job (Inferno kits against the seeded `interop-cho`
-  profile):** _to be filled in from the first clean run (US Core 3.1.1,
-  CARIN BB 2.0.0, Plan-Net, Bulk Data). This release is not tagged until it
-  is clean._
+  profile), 2026-10-30:** Bulk Data 2.0.0 (with its SMART Backend Services
+  group) and US Core 3.1.1 **pass**. CARIN BB 2.0.0 and Plan-Net **fail**;
+  their fixes are in progress. _To be updated from the run this release is
+  tagged on._
 - **Google Cloud (GKE):** the demo is deployed on every merge to `main`.
 - **Azure:** automatic deploys are still paused (`AZURE_DEPLOYMENTS_ENABLED`)
   behind the #1217 deployment checklist. Neither 6.0 nor 6.1 has been deployed
@@ -143,9 +171,9 @@ still off by default too.
 The Patient Access, Provider Access and Payer-to-Payer API requirements take
 effect on January 1, 2027. Still open after 6.1:
 
-- **External verdicts.** Until the nightly run is clean, the US Core, CARIN BB,
-  Plan-Net and Bulk Data export results are not externally verified (G-60).
-  The Bulk Data export groups have not been run on hosted Inferno.
+- **External verdicts.** CARIN BB and Plan-Net do not yet pass the nightly
+  Inferno run (G-60). The Bulk Data export groups have not been run on hosted
+  Inferno.
 - **System-level `$export`** still answers 501; no caller has been approved
   for it.
 - **No X12 278 bridge.** CHO relies on HHS enforcement discretion for
