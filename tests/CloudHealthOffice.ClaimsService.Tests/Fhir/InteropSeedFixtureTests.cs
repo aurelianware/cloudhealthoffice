@@ -32,7 +32,7 @@ public sealed class InteropSeedFixtureTests
     {
         var projector = new CarinNonFinancialEobProjector();
 
-        foreach (var element in Fixture.GetProperty("claims").EnumerateArray())
+        foreach (var element in AllClaims())
         {
             var declared = element.GetProperty("expectProfile").GetString();
             declared.Should().NotBeNullOrWhiteSpace(
@@ -62,14 +62,44 @@ public sealed class InteropSeedFixtureTests
     [Fact]
     public void Every_seeded_claim_names_the_member_the_fixture_seeds()
     {
-        var memberId = Fixture.GetProperty("member").GetProperty("memberId").GetString();
-
-        foreach (var element in Fixture.GetProperty("claims").EnumerateArray())
+        foreach (var (member, claims) in Households())
         {
-            element.GetProperty("memberId").GetString().Should().Be(memberId,
-                "a claim for a member the fixture does not seed is served to nobody");
+            var memberId = member.GetProperty("memberId").GetString();
+            foreach (var element in claims)
+            {
+                element.GetProperty("memberId").GetString().Should().Be(memberId,
+                    "a claim for a member the fixture does not seed is served to nobody");
+            }
         }
     }
+
+    [Fact]
+    public void More_than_one_member_is_in_the_bulk_data_clients_panel()
+    {
+        // The Bulk Data kit fails an export that holds fewer than two Patients
+        // (run 40979709678). The export is the backend client's provider's
+        // panel: the members with a claim from that provider.
+        var provider = Fixture.GetProperty("backendClient").GetProperty("providerId").GetString();
+
+        Households()
+            .Where(h => h.Claims.Any(c => c.GetProperty("billingProviderNPI").GetString() == provider))
+            .Select(h => h.Member.GetProperty("memberId").GetString())
+            .Distinct()
+            .Should().HaveCountGreaterThan(1);
+    }
+
+    /// <summary>The first member and each of <c>additionalMembers</c>, with their claims.</summary>
+    private static IEnumerable<(JsonElement Member, JsonElement[] Claims)> Households()
+    {
+        yield return (Fixture.GetProperty("member"), Fixture.GetProperty("claims").EnumerateArray().ToArray());
+        if (!Fixture.TryGetProperty("additionalMembers", out var additional)) yield break;
+        foreach (var household in additional.EnumerateArray())
+        {
+            yield return (household.GetProperty("member"), household.GetProperty("claims").EnumerateArray().ToArray());
+        }
+    }
+
+    private static IEnumerable<JsonElement> AllClaims() => Households().SelectMany(h => h.Claims);
 
     /// <summary>
     /// Deserializes as the controller's model binder would, minus the keys the

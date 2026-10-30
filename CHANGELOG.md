@@ -197,6 +197,16 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
   in `productOrService`. CARIN BB's required value sets hold that code for
   exactly this case, and the local coding stays beside it.
 
+- **The interop seed has a second member for Bulk Data.** The Bulk Data kit
+  fails an export with fewer than two Patients, and the seed had one.
+  `additionalMembers` in `interop/cho-seed.json` adds a member with coverage
+  and a claim from the same billing provider, so both members are in the
+  panel the kit exports. US Core and CARIN BB still judge the first member.
+  The directory's network now has an address (Plan-Net's Organization tests
+  validate it as a plannet-Organization, which requires one), and the plan
+  document's Endpoint uses a `.invalid` host instead of `example.org`, which
+  the validator refuses.
+
 - **US Core searches the Inferno kit makes no longer answer 400.** Patient
   and Encounter searches accept `_revinclude=Provenance:target`, which US Core
   requires. CHO keeps no Provenance, so the result is the same as the search
