@@ -11,6 +11,10 @@ Current capability status and dated implementation/test evidence: [Capability Re
 [![CMS-0057-F](https://img.shields.io/badge/CMS--0057--F-readiness-0EA5E9.svg)](docs/compliance/CMS-0057-F-READINESS-MATRIX.md)
 [![Tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fci-evidence%2Fbadges%2Ftests.json)](.github/workflows/test-metrics.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fci-evidence%2Fbadges%2Fcoverage.json)](.github/workflows/test-metrics.yml)
+[![Inferno US Core](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fci-evidence%2Fbadges%2Finferno-us-core.json)](https://cloudhealthoffice.com/evidence/inferno-conformance)
+[![Inferno CARIN BB](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fci-evidence%2Fbadges%2Finferno-c4bb.json)](https://cloudhealthoffice.com/evidence/inferno-conformance)
+[![Inferno Plan-Net](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fci-evidence%2Fbadges%2Finferno-plan-net.json)](https://cloudhealthoffice.com/evidence/inferno-conformance)
+[![Inferno Bulk Data](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fci-evidence%2Fbadges%2Finferno-bulk-data.json)](https://cloudhealthoffice.com/evidence/inferno-conformance)
 
 CloudHealthOffice is a source-available, Kubernetes-first healthcare payer
 administration platform. It is built for teams modernizing claims, benefits,

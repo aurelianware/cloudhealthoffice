@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Inferno Test Kits for CMS-0057-F: Which Kit Checks Which API | Cloud Health Office</title>
+  <meta name="description" content="What the ONC Inferno test kits for US Core, CARIN Blue Button, Da Vinci Plan-Net and Bulk Data actually test, which CMS-0057-F and CMS-9115-F payer API each one maps to, and what no kit can check."/>
+  <meta name="keywords" content="Inferno test kit CMS-0057-F, CARIN Blue Button test kit, Plan-Net test kit, Bulk Data test kit, SMART Backend Services, US Core test kit, payer FHIR API conformance, Patient Access API, Provider Directory API, Provider Access API"/>
+  <meta name="author" content="Aurelianware, Inc."/>
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/cms-0057-f/inferno-test-kits-cms-0057-f-apis"/>
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article"/>
+  <meta property="og:site_name" content="Cloud Health Office"/>
+  <meta property="og:title" content="Which Inferno Test Kit Checks Which CMS-0057-F API"/>
+  <meta property="og:description" content="CMS-0057-F names standards, not tests. What each Inferno kit checks, which payer API it maps to, and which requirements no kit can check."/>
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/cms-0057-f/inferno-test-kits-cms-0057-f-apis"/>
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png"/>
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image"/>
+  <meta name="twitter:title" content="Which Inferno Test Kit Checks Which CMS-0057-F API"/>
+  <meta name="twitter:description" content="CMS-0057-F names standards, not tests. What each Inferno kit checks, which payer API it maps to, and which requirements no kit can check."/>
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png"/>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Article",
+      "headline": "Which Inferno Test Kit Checks Which CMS-0057-F API",
+      "description": "What the ONC Inferno test kits for US Core, CARIN Blue Button, Da Vinci Plan-Net and Bulk Data actually test, which CMS-0057-F and CMS-9115-F payer API each one maps to, and what no kit can check.",
+      "url": "https://cloudhealthoffice.com/insights/cms-0057-f/inferno-test-kits-cms-0057-f-apis",
+      "datePublished": "2026-10-30",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc."
+      },
+      "about": [
+        "Inferno test kits",
+        "CMS-0057-F",
+        "CMS-9115-F",
+        "US Core",
+        "CARIN Blue Button",
+        "Da Vinci Plan-Net",
+        "FHIR Bulk Data",
+        "SMART Backend Services"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com/" },
+        { "@type": "ListItem", "position": 2, "name": "Insights", "item": "https://cloudhealthoffice.com/insights" },
+        { "@type": "ListItem", "position": 3, "name": "CMS-0057-F & Payer Modernization", "item": "https://cloudhealthoffice.com/insights/cms-0057-f/" },
+        { "@type": "ListItem", "position": 4, "name": "Which Inferno Kit Checks Which API", "item": "https://cloudhealthoffice.com/insights/cms-0057-f/inferno-test-kits-cms-0057-f-apis" }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --cyan:#0E7490;--green:#0F766E;--blue:#0E7490;
+      --bg:#F5F7FA;--surface:rgba(245, 247, 250, 0.92);--surface-alt:rgba(14, 116, 144, 0.03);
+      --border:rgba(14, 116, 144, 0.12);--border-bright:rgba(14, 116, 144, 0.3);
+      --text:#334155;--text-muted:#334155;--text-dim:#475569;
+      --font:'Outfit',system-ui,sans-serif;--mono:'JetBrains Mono',monospace;--max:1140px;--measure:760px;
+    }
+    html{scroll-behavior:smooth}
+    @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+    body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.8;overflow-x:hidden}
+    a{color:var(--cyan)}
+    .skip-to-main{position:absolute;left:-999px;top:0;background:var(--cyan);color:#FFFFFF;padding:.6rem 1rem;z-index:200}
+    .skip-to-main:focus{left:8px;top:8px}
+
+    body>nav{position:sticky;top:0;z-index:100;background:rgba(255, 255, 255, 0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 2rem}
+    .nav-inner{max-width:var(--max);margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
+    .nav-brand{font-weight:800;font-size:1.05rem;color:#0B1F33;text-decoration:none;display:flex;align-items:center;gap:.6rem}
+    .nav-brand span{opacity:.5;font-weight:400;font-size:.8rem}
+    .nav-links{display:flex;gap:1.8rem;align-items:center}
+    .nav-links a{color:var(--text-muted);text-decoration:none;font-size:.82rem;font-weight:500;transition:color .2s}
+    .nav-links a:hover{color:var(--cyan)}
+    .nav-cta{background:rgba(14, 116, 144, 0.08);border:1px solid rgba(14, 116, 144, 0.25);color:var(--cyan);padding:.35rem .9rem;border-radius:6px;font-size:.78rem;font-weight:600;text-decoration:none;transition:all .25s}
+    .nav-cta:hover{background:rgba(14, 116, 144, 0.15);box-shadow:0 0 20px rgba(14, 116, 144, 0.1)}
+
+    .article-head{padding:3.4rem 2rem 1rem;position:relative;overflow:hidden}
+    .article-head::before{content:'';position:absolute;top:-240px;left:15%;width:760px;height:760px;background:radial-gradient(circle,rgba(14, 116, 144, 0.05) 0%,transparent 70%);pointer-events:none}
+    .wrap{max-width:var(--measure);margin:0 auto}
+    .breadcrumb{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);margin-bottom:1.4rem}
+    .breadcrumb a{color:var(--text-muted);text-decoration:none}
+    .breadcrumb a:hover{color:var(--cyan)}
+    .eyebrow{font-family:var(--mono);font-size:.72rem;font-weight:500;color:var(--cyan);text-transform:uppercase;letter-spacing:3px;margin-bottom:1rem;opacity:.85}
+    h1{font-size:clamp(1.9rem,4.6vw,2.9rem);font-weight:900;color:#0B1F33;line-height:1.18;margin-bottom:1rem}
+    .subtitle{font-size:1.12rem;color:var(--text-muted);line-height:1.75;margin-bottom:1.4rem}
+    .meta{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:.8rem 0;margin:1.4rem 0 0;display:flex;flex-wrap:wrap;gap:1.2rem}
+    .meta strong{color:var(--text-muted);font-weight:500}
+
+    article{padding:1.5rem 2rem 4rem}
+    article h2{font-size:clamp(1.3rem,3vw,1.75rem);font-weight:800;color:#0B1F33;margin:3rem 0 .4rem;line-height:1.3}
+    article h2 .num{font-family:var(--mono);font-size:.85rem;color:var(--cyan);display:block;margin-bottom:.3rem;letter-spacing:2px}
+    article h3{font-size:1.05rem;font-weight:700;color:var(--cyan);margin:1.6rem 0 .3rem;font-family:var(--mono);letter-spacing:.5px}
+    article p{margin:.9rem 0;color:var(--text)}
+    article ul,article ol{margin:1rem 0 1rem 1.3rem;color:var(--text)}
+    article li{margin:.4rem 0}
+    article strong{color:#0B1F33}
+    code{font-family:var(--mono);font-size:.86em;color:var(--green);background:rgba(15, 118, 110, 0.08);padding:.1rem .35rem;border-radius:4px;overflow-wrap:anywhere}
+    .lead{font-size:1.05rem}
+
+    .callout{border-left:3px solid var(--blue);background:rgba(14, 116, 144, 0.06);padding:1.1rem 1.3rem;border-radius:0 8px 8px 0;margin:1.6rem 0}
+    .callout.green{border-left-color:var(--green);background:rgba(15, 118, 110, 0.06)}
+    .callout.amber{border-left-color:#B45309;background:rgba(180, 83, 9, 0.07)}
+    .callout p{margin:.4rem 0;font-size:.95rem;color:var(--text-muted)}
+    .callout strong{color:#0B1F33}
+    .callout .k{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:2px;color:var(--blue);display:block;margin-bottom:.4rem}
+    .callout.green .k{color:var(--green)}
+    .callout.amber .k{color:#B45309}
+
+    /* answer / warning pair under each question */
+    .ans{border:1px solid var(--border);border-radius:10px;background:var(--surface-alt);padding:1.1rem 1.3rem;margin:1.2rem 0}
+    .ans .k{font-family:var(--mono);font-size:.64rem;text-transform:uppercase;letter-spacing:2px;display:block;margin-bottom:.5rem}
+    .ans.good{border-color:rgba(15, 118, 110, 0.28)}
+    .ans.good .k{color:var(--green)}
+    .ans.weak{border-color:rgba(180, 83, 9, 0.28)}
+    .ans.weak .k{color:#B45309}
+    .ans p{margin:.3rem 0;font-size:.93rem;color:var(--text-muted)}
+    .ans strong{color:#0B1F33}
+
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:1rem;margin:1.8rem 0}
+    .stat{border:1px solid var(--border);border-radius:10px;padding:1.1rem;background:var(--surface)}
+    .stat b{display:block;font-family:var(--mono);font-size:1.5rem;color:var(--cyan);line-height:1.2;margin-bottom:.3rem}
+    .stat span{font-size:.84rem;color:var(--text-muted);line-height:1.6;display:block}
+
+    .keyline{border:1px solid var(--border-bright);border-radius:12px;padding:1.4rem 1.6rem;margin:2rem 0;background:linear-gradient(135deg,rgba(14, 116, 144, 0.05),rgba(15, 118, 110, 0.03))}
+    .keyline p{font-size:1.02rem;color:#0B1F33;margin:0}
+
+    .toc{border:1px solid var(--border);border-radius:12px;padding:1.3rem 1.6rem;margin:2rem 0;background:var(--surface)}
+    .toc h2{font-size:.72rem!important;font-family:var(--mono);text-transform:uppercase;letter-spacing:2px;color:var(--cyan);margin:0 0 .7rem!important}
+    .toc ol{margin:0 0 0 1.2rem;font-size:.92rem}
+    .toc li{margin:.25rem 0}
+    .toc a{text-decoration:none;color:var(--text-muted)}
+    .toc a:hover{color:var(--cyan)}
+
+    .related{border-top:1px solid var(--border);margin-top:3rem;padding-top:1.8rem}
+    .related-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:1rem;margin-top:1rem}
+    .rc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.1rem;text-decoration:none;display:block;transition:border-color .3s}
+    .rc:hover{border-color:var(--border-bright)}
+    .rc .k{font-family:var(--mono);font-size:.6rem;color:var(--cyan);text-transform:uppercase;letter-spacing:1.5px;display:block;margin-bottom:.4rem}
+    .rc h4{color:#0B1F33;font-size:.95rem;margin-bottom:.2rem}
+    .rc p{font-size:.8rem;color:var(--text-muted);margin:0}
+
+    .cta-section{text-align:center;padding:4rem 2rem;background:linear-gradient(180deg,transparent,rgba(14, 116, 144, 0.02),transparent);border-top:1px solid var(--border)}
+    .cta-section h2{font-size:clamp(1.4rem,3vw,2rem);color:#0B1F33;margin-bottom:.8rem}
+    .cta-section p{color:var(--text-muted);max-width:560px;margin:0 auto 1.6rem}
+    .btn{display:inline-flex;align-items:center;gap:.4rem;padding:.7rem 1.4rem;border-radius:8px;font-size:.85rem;font-weight:600;text-decoration:none;transition:all .25s}
+    .btn-primary{background:rgba(14, 116, 144, 0.1);border:1px solid rgba(14, 116, 144, 0.3);color:var(--cyan)}
+    .btn-primary:hover{background:rgba(14, 116, 144, 0.18);box-shadow:0 0 30px rgba(14, 116, 144, 0.1)}
+    .btn-ghost{background:transparent;border:1px solid rgba(11, 31, 51, 0.14);color:var(--text-muted)}
+    .btn-ghost:hover{border-color:rgba(11, 31, 51, 0.14);color:#0B1F33}
+    .cta-actions{display:flex;flex-wrap:wrap;gap:.8rem;justify-content:center}
+
+    footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;color:var(--text-dim);font-size:.82rem}
+    footer a{color:#0E7490;text-decoration:none}
+
+    @media(max-width:820px){
+      /* Never hide the primary nav without a way back to it: there is no mobile
+         toggle on these article pages, so the links stack and scroll instead of
+         disappearing. Keyboard and screen-reader users keep full reach. */
+      body>nav{padding:0 1rem}
+      .nav-inner{height:auto;flex-direction:column;align-items:flex-start;gap:.45rem;padding:.55rem 0}
+      .nav-links{width:100%;gap:1.1rem;overflow-x:auto;padding-bottom:.15rem;scrollbar-width:none}
+      .nav-links::-webkit-scrollbar{display:none}
+      .nav-links a,.nav-cta{white-space:nowrap;flex:0 0 auto}
+    }
+    @media(max-width:768px){article,.article-head{padding-left:1.2rem;padding-right:1.2rem}}
+    figure{margin:2.2rem 0}
+    figure img{width:100%;height:auto;display:block;border:1px solid var(--border);border-radius:12px;background:#FFFFFF;padding:.6rem}
+    figcaption{font-size:.8rem;color:var(--text-dim);text-align:center;margin-top:.7rem;line-height:1.6}
+    .tbl { overflow-x: auto; margin: 1.2rem 0 1.4rem; }
+    .tbl table { width: 100%; border-collapse: collapse; font-size: .88rem; min-width: 560px; }
+    .tbl th, .tbl td { text-align: left; vertical-align: top; padding: .6rem .7rem; border-bottom: 1px solid var(--border, #D9E1EA); }
+    .tbl th { font-weight: 700; }
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="https://cloudhealthoffice.com" class="nav-brand">Cloud Health Office <span>Insights</span></a>
+      <div class="nav-links">
+        <a href="/solutions-payers">Solutions</a>
+        <a href="/cms-0057f-compliance">CMS Compliance</a>
+        <a href="/evidence">Evidence</a>
+        <a href="/platform">Platform</a>
+        <a href="/services">Services</a>
+        <a href="/insights/cms-0057-f/">Series</a>
+        <a href="/docs">Docs</a>
+        <a href="/contact" class="nav-cta">Contact →</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main-content">
+    <header class="article-head">
+      <div class="wrap">
+        <nav class="breadcrumb" aria-label="Breadcrumb">
+          <a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/insights/cms-0057-f/">CMS-0057-F &amp; Payer Modernization</a> / <span>Which Inferno kit checks which API</span>
+        </nav>
+        <div class="eyebrow">CMS-0057-F &amp; Payer Modernization</div>
+        <h1>Which Inferno Test Kit Checks Which CMS-0057-F API</h1>
+        <p class="subtitle">CMS-0057-F names standards, not tests. ONC&rsquo;s Inferno kits are the closest thing a payer has to an independent check against those standards. This is what each kit tests, which API and regulation it speaks to, and which requirements no kit can check.</p>
+        <div class="meta">
+          <span><strong>Series:</strong> CMS-0057-F &amp; Payer Modernization</span>
+          <span><strong>Published:</strong> <time datetime="2026-10-30">October 30, 2026</time></span>
+          <span><strong>For:</strong> Payer architects, compliance leads &amp; vendor management</span>
+        </div>
+      </div>
+    </header>
+
+    <article>
+      <div class="wrap">
+
+        <p class="lead">There is no certification program for payer APIs under CMS-0057-F, and no public registry of results. A health plan that wants to know whether a vendor&rsquo;s Patient Access or Provider Directory API actually conforms has two options: take the vendor&rsquo;s word for it, or run a conformance kit and read the findings.</p>
+
+        <p>The kits are free and public, and they are built for the ONC (the Office of the National Coordinator for Health IT). They are also easy to misread. A kit tests one implementation guide, at one version, in the groups you choose to run. It doesn&rsquo;t test the regulation. This article maps the four kits Cloud Health Office runs every night to the APIs and rules they speak to, and is explicit about where the mapping stops.</p>
+
+        <div class="callout green">
+          <span class="k">Our current results</span>
+          <p>The latest published verdict from each kit, with every failing test and every known kit issue, is on the <a href="/evidence/inferno-conformance">Inferno conformance results page</a>. CI updates it after each nightly run, so it stays current when this article doesn&rsquo;t. As of the October 30, 2026 runs, the US Core groups and Bulk Data with SMART Backend Services had passed, and CARIN Blue Button and Plan-Net still had failures we were fixing.</p>
+        </div>
+
+        <div class="toc">
+          <h2>On this page</h2>
+          <ol>
+            <li><a href="#map">The short answer</a></li>
+            <li><a href="#us-core">US Core: the floor under every payer API</a></li>
+            <li><a href="#carin">CARIN Blue Button: Patient Access claims data</a></li>
+            <li><a href="#plan-net">Plan-Net: the public Provider Directory</a></li>
+            <li><a href="#bulk">Bulk Data and SMART Backend Services: Provider Access and Payer-to-Payer</a></li>
+            <li><a href="#gaps">What no kit here checks</a></li>
+            <li><a href="#beyond">The same kits outside CMS-0057-F</a></li>
+            <li><a href="#read">How to read a vendor&rsquo;s results, including ours</a></li>
+          </ol>
+        </div>
+
+        <h2 id="map"><span class="num">01</span>The short answer</h2>
+        <p>CMS-0057-F, the Interoperability and Prior Authorization final rule, builds on CMS-9115-F, the 2020 Interoperability and Patient Access rule. Together they require Medicare Advantage organizations, Medicaid and CHIP programs and managed care plans, and Qualified Health Plan issuers on the federally facilitated exchanges to run FHIR R4 APIs that follow the ONC API standards at 45 CFR 170.215. For what goes inside each API, CMS recommends specific HL7 implementation guides. Each Inferno kit checks one of those guides.</p>
+        <figure>
+          <a href="/graphics/evidence/cho-cms-api-map.svg" title="Open the full-size diagram"><img src="/graphics/evidence/cho-cms-api-map.svg" width="1200" height="840" loading="lazy" alt="Three columns. Who calls: members through apps, the public, in-network providers, other payers, and providers ordering care. The five CMS APIs Cloud Health Office serves: Patient Access (CMS-9115-F, expanded by CMS-0057-F; US Core, CARIN Blue Button, PDex; member-bound SMART token; checked by the US Core and CARIN Blue Button kits), Provider Directory (CMS-9115-F; Plan-Net; public; checked by the Plan-Net kit), Provider Access and Payer-to-Payer (CMS-0057-F, January 1, 2027; Bulk Data with SMART Backend Services; checked by the Bulk Data kit), and Prior Authorization (CMS-0057-F, January 1, 2027; Da Vinci CRD, DTR, PAS; checked by exchanges with the HL7 Da Vinci reference payer). Behind them, the plan's systems: an existing QNXT, Facets or HealthEdge core reached through adapters built per engagement, or Cloud Health Office core modules replacing it one domain at a time, plus clinical and UM data."/></a>
+          <figcaption>Where Cloud Health Office sits: the five CMS APIs between the people and systems that call them and the plan&rsquo;s own systems, with the independent test that checks each one. Select the diagram to open it full size.</figcaption>
+        </figure>
+        <div class="tbl">
+          <table>
+            <thead>
+              <tr><th>API</th><th>From</th><th>Standard or recommended guide</th><th>Inferno kit</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>All payer FHIR APIs</td><td>CMS-9115-F, CMS-0057-F</td><td>FHIR R4, US Core, SMART App Launch (45 CFR 170.215)</td><td>US Core</td></tr>
+              <tr><td>Patient Access: claims and encounters</td><td>CMS-9115-F, expanded by CMS-0057-F</td><td>CARIN Blue Button</td><td>CARIN for Blue Button</td></tr>
+              <tr><td>Provider Directory</td><td>CMS-9115-F</td><td>Da Vinci PDex Plan-Net</td><td>Da Vinci Plan-Net</td></tr>
+              <tr><td>Provider Access</td><td>CMS-0057-F, January 1, 2027</td><td>Bulk Data Access, SMART Backend Services</td><td>Bulk Data</td></tr>
+              <tr><td>Payer-to-Payer</td><td>CMS-0057-F, January 1, 2027</td><td>Bulk Data Access, Da Vinci PDex</td><td>Bulk Data (PDex kit not run yet)</td></tr>
+              <tr><td>Prior Authorization</td><td>CMS-0057-F, January 1, 2027</td><td>Da Vinci CRD, DTR, PAS</td><td>Not run here (see section 06)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Two things follow from that table. First, a kit result is evidence about one API, not about the rule. Second, the rules require the base standards and only <em>recommend</em> the guides, so a payer can be compliant with a different, well-documented design. In practice almost nobody does that, because every app developer, provider system and other payer on the other side of these APIs is building against the recommended guides.</p>
+
+        <h2 id="us-core"><span class="num">02</span>US Core: the floor under every payer API</h2>
+        <p><strong>What the rule asks.</strong> The ONC API standards at 45 CFR 170.215 include the US Core implementation guide, and CMS-0057-F adopts them for payer APIs. US Core 3.1.1 is the floor, and the rules let a payer use a later version that ONC has approved. Every payer API that returns clinical or demographic data rests on it, including Patient Access, Provider Access and Payer-to-Payer.</p>
+        <p><strong>What the kit checks.</strong> The <a href="https://github.com/inferno-framework/us-core-test-kit" target="_blank" rel="noopener noreferrer">US Core test kit</a> reads the server&rsquo;s CapabilityStatement, then for each profile it reads resources by id and runs every search the guide makes mandatory, alone and in the required combinations. It checks that each must-support element appears somewhere in what came back, that references resolve, and it sends every resource it received to the HL7 FHIR validator against the US Core profile it claims.</p>
+        <p><strong>What we run.</strong> Kit v1.1.6, suite <code>us_core_v311</code>, with three groups: the CapabilityStatement, Patient and Encounter. US Core 3.1.1 has groups for roughly thirty clinical resource types, such as Observation, Condition and Immunization, and a payer serves almost none of them from its own systems. Running the whole suite would bury the Patient and Encounter results under failures for resources we never claimed. Naming the groups says exactly what was tested. It doesn&rsquo;t soften the verdict on those groups.</p>
+        <div class="callout">
+          <span class="k">Worth asking any vendor</span>
+          <p>Which US Core groups did you run, at which kit version, and which US Core version? &ldquo;We pass US Core&rdquo; with no groups named usually means a few groups passed. US Core 6.1.0 is the version ONC now certifies EHRs against, and it is the natural next run for payers too.</p>
+        </div>
+
+        <h2 id="carin"><span class="num">03</span>CARIN Blue Button: Patient Access claims data</h2>
+        <p><strong>What the rule asks.</strong> The Patient Access API has been required since CMS-9115-F. It must give members, through the app of their choice, their claims and encounter data, clinical data, and (for plans with drug coverage) formulary information. CMS-0057-F adds prior authorization information by January 1, 2027. CMS recommends the CARIN Consumer Directed Payer Data Exchange guide, usually called CARIN Blue Button, for the claims portion.</p>
+        <p><strong>What the kit checks.</strong> The <a href="https://github.com/inferno-framework/carin-for-blue-button-test-kit" target="_blank" rel="noopener noreferrer">CARIN for Blue Button test kit</a> works through Patient, Coverage, ExplanationOfBenefit, Organization and Practitioner. For ExplanationOfBenefit it runs the searches the guide requires: by patient, by <code>_id</code>, by <code>_lastUpdated</code>, by type, by identifier, by service date and billable period, and with the <code>_include</code> parameters that pull in the patient, provider, care team, coverage and insurer. It then validates each EOB against the CARIN profile for its claim type: inpatient and outpatient institutional, professional, pharmacy, and oral.</p>
+        <p><strong>What we run.</strong> Kit v0.16.3, suite <code>c4bb_v200</code>, with the financial groups for the CapabilityStatement, Patient, Coverage, ExplanationOfBenefit, Organization and Practitioner. The kit runs as a member&rsquo;s SMART patient app, with a token bound to that one member, because that is how a consumer app reaches Patient Access. The RelatedPerson group isn&rsquo;t run, since we publish no RelatedPerson, and the visual inspection group is manual by design.</p>
+        <p><strong>Known kit issues.</strong> Three EOB validation tests (oral, pharmacy and professional non-clinician) can&rsquo;t be passed by any server that holds more than one claim type. In v0.16.3, the latest release, each of them validates every EOB the kit collected against that one claim type&rsquo;s profile. We record their failures and list them, but don&rsquo;t count them. The kit&rsquo;s non-financial suite also isn&rsquo;t run, because it checks profile URLs from a superseded 2023 draft rather than the CARIN BB 2.2.0 profiles we declare. <a href="/insights/cms-0057-f/what-a-conformance-test-kit-proves#cannot">Why we didn&rsquo;t rename our profiles to make it pass</a>.</p>
+
+        <h2 id="plan-net"><span class="num">04</span>Plan-Net: the public Provider Directory</h2>
+        <p><strong>What the rule asks.</strong> CMS-9115-F requires Medicare Advantage organizations, Medicaid and CHIP to publish their provider directory as a FHIR API that anyone can query <em>without authentication</em>. It must include provider names, addresses, phone numbers and specialties, and Medicare Advantage plans with drug coverage must include their pharmacy directory too. CMS recommends the Da Vinci PDex Plan-Net guide.</p>
+        <p><strong>What the kit checks.</strong> The <a href="https://github.com/inferno-framework/davinci-plan-net-test-kit" target="_blank" rel="noopener noreferrer">Da Vinci Plan-Net test kit</a> covers all nine directory resource types: Endpoint, InsurancePlan, Network, Organization, OrganizationAffiliation, Practitioner, PractitionerRole, Location and HealthcareService. For each one it runs the guide&rsquo;s searches, then the forward chains (such as practitioner roles whose organization has a given name), the reverse chains, <code>_include</code> and <code>_revinclude</code>, the must-support check and profile validation. A directory that can list providers but can&rsquo;t answer &ldquo;which in-network locations offer this specialty&rdquo; fails the chained-search tests, and those are the queries a real directory app makes.</p>
+        <p><strong>What we run.</strong> Kit v0.13.4, the whole suite, against the public directory endpoint with no token. The token is left unset on purpose, because a run with a token wouldn&rsquo;t prove the directory is public. One version gap applies: the kit is generated from Plan-Net 1.1.0 and we serve 1.2.0.</p>
+
+        <h2 id="bulk"><span class="num">05</span>Bulk Data and SMART Backend Services: Provider Access and Payer-to-Payer</h2>
+        <p><strong>What the rule asks.</strong> CMS-0057-F adds two system-to-system APIs, due January 1, 2027. Provider Access lets in-network providers retrieve claims, encounter and clinical data (plus prior authorization information) for the members attributed to them. Payer-to-Payer moves a member&rsquo;s data to a new plan when they switch. Both must support FHIR Bulk Data Access, so a provider or payer can export a whole patient group at once. The calling system is authorized with SMART Backend Services, the signed-JWT client credential the Bulk Data guide defines, with no user in the loop.</p>
+        <p><strong>What the kit checks.</strong> The <a href="https://github.com/inferno-framework/bulk-data-test-kit" target="_blank" rel="noopener noreferrer">Bulk Data test kit</a> starts with SMART discovery and the token endpoint. It checks that a bad grant type, a bad assertion type and an invalid JWT are each refused, and that a valid signed assertion gets a properly formed token. Then it runs <code>$export</code> for a Group and for all patients: the kick-off request, status polling, the completion manifest, downloading each NDJSON file with the token the manifest requires, validating the resources inside, cancelling an export, and the <code>_outputFormat</code> and <code>_since</code> parameters.</p>
+        <p><strong>What we run.</strong> Kit v0.13.2, suite <code>bulk_data_v200</code>, with the SMART Backend Services, Group export and Patient export groups. The kit signs in as a backend client we register for the run, bound to one seeded provider, and the group it exports is that provider&rsquo;s attributed patients. So the token, the provider binding and the export are the real Provider Access path. The token-endpoint TLS test is switched off in the nightly, because the test network is plain HTTP. That group passed over real TLS on hosted Inferno against our demo environment on October 29, 2026. The system-level export group isn&rsquo;t run, since we don&rsquo;t serve system-level export.</p>
+        <p><strong>What it doesn&rsquo;t reach.</strong> Payer-to-Payer also needs <code>$member-match</code> and the PDex profiles. The Da Vinci PDex kit covers those. We have it pinned but don&rsquo;t run it yet.</p>
+
+        <h2 id="gaps"><span class="num">06</span>What no kit here checks</h2>
+        <p>This is the part of the mapping that matters most to a compliance lead, because it is where a green dashboard can be misread.</p>
+        <figure>
+          <a href="/graphics/evidence/cms-requirement-to-evidence.svg" title="Open the full-size diagram"><img src="/graphics/evidence/cms-requirement-to-evidence.svg" width="1200" height="732" loading="lazy" alt="Requirement to evidence. ONC API standards for every payer API: Inferno US Core kit. Member claims through apps (Patient Access, CARIN Blue Button): Inferno CARIN BB kit. Public provider directory (Plan-Net): Inferno Plan-Net kit. Bulk export for Provider Access and Payer-to-Payer (Bulk Data, SMART Backend Services): Inferno Bulk Data kit. Prior authorization (CRD, DTR, PAS): Da Vinci reference payer exchanges and CHO acceptance scenarios. Decision timeframes, denial reasons, metrics, attribution and consent: CHO acceptance scenarios; no kit can test them."/></a>
+          <figcaption>From requirement to evidence. The last row is the one a kit can&rsquo;t reach. Select the diagram to open it full size.</figcaption>
+        </figure>
+        <div class="ans weak">
+          <span class="k">Not checked by the four kits</span>
+          <p><strong>The Prior Authorization API.</strong> CRD, DTR and PAS have their own Inferno kits. We don&rsquo;t run them yet. Our prior authorization evidence today is <a href="/evidence/davinci-interoperability">real exchanges with the HL7 Da Vinci reference payer</a> and our own <a href="/evidence/prior-authorization">acceptance scenarios</a>.</p>
+          <p><strong>Patient Access clinical and formulary data.</strong> These are covered by the PDex and US Drug Formulary guides and their kits, which aren&rsquo;t part of this run.</p>
+          <p><strong>Policy and operations.</strong> No kit checks prior authorization decision timeframes (72 hours expedited, 7 calendar days standard), denial reasons, provider attribution, the Provider Access opt-out, Payer-to-Payer opt-in consent, the public prior authorization metrics, or Patient Access usage reporting. These are rule requirements, not interface requirements, and a payer has to evidence them some other way.</p>
+          <p><strong>Production.</strong> A kit run against a sandbox says nothing about uptime, data completeness, or whether production data matches the sandbox.</p>
+        </div>
+
+        <h2 id="beyond"><span class="num">07</span>The same kits outside CMS-0057-F</h2>
+        <p>The US Core, SMART and Bulk Data kits aren&rsquo;t payer-specific. ONC uses them in its Health IT Certification Program, for the standardized API criterion that certified health IT such as EHRs must meet, and the official record of those results is ONC&rsquo;s Certified Health IT Product List. That program certifies EHR technology. Payers and payer platforms aren&rsquo;t in it, which is why no comparable list exists for payer APIs.</p>
+        <p>This has two practical consequences. The provider systems on the other end of Provider Access are being certified against the same standards these kits check, so a payer API that passes them is speaking the same dialect. And when ONC moves the baseline, as it did in moving EHR certification from US Core 3.1.1 to 6.1.0, payers can expect the same versions to follow through the version-advancement process that CMS-0057-F allows.</p>
+        <p>CARIN Blue Button and Plan-Net, by contrast, exist mainly because of the CMS payer rules. Medicaid agencies and their managed care plans reach for them for the same reason, since the federal Patient Access and Provider Directory requirements apply to Medicaid and CHIP as well.</p>
+
+        <h2 id="read"><span class="num">08</span>How to read a vendor&rsquo;s results, including ours</h2>
+        <p>Five questions separate a meaningful conformance claim from a decorative one:</p>
+        <ol>
+          <li><strong>Which kit, which release?</strong> Results change between kit versions. Ours are pinned by release tag and commit.</li>
+          <li><strong>Which groups?</strong> A suite with half its groups skipped can still show a green summary.</li>
+          <li><strong>With what credentials?</strong> A Patient Access test run with an administrator token proves less than one run as a member&rsquo;s app. A directory test run with a token doesn&rsquo;t prove the directory is public.</li>
+          <li><strong>What was excused, and why?</strong> Every kit has rough edges. They should be listed with a reason, not filtered out silently.</li>
+          <li><strong>When, and against what?</strong> A result from a sandbox six months ago describes a different system.</li>
+        </ol>
+        <p>Our <a href="/evidence/inferno-conformance">results page</a> answers all five for every kit, from the snapshot CI publishes after each nightly run. If a result there is red, it is red because the kit said so.</p>
+
+        <h2 id="disclosure"><span class="num">Disclosure</span>Where we sit in this</h2>
+        <p>Cloud Health Office sells payer interoperability software, so read this with that in mind. The harness, the kit pins, the scenario inventory and the known kit issues are all in the <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">public repository</a>. We claim no certification by, affiliation with, or endorsement from CMS, ONC, HL7, CARIN Alliance or the Inferno project. Regulatory summaries here are for orientation. The rule text and your counsel are the authority.</p>
+
+        <div class="related">
+          <div class="eyebrow">Keep reading</div>
+          <div class="related-cards">
+            <a class="rc" href="/evidence/inferno-conformance"><span class="k">Evidence</span><h4>Inferno conformance results</h4><p>The latest published verdict from each kit, failures and known kit issues included.</p></a>
+            <a class="rc" href="/insights/cms-0057-f/what-a-conformance-test-kit-proves"><span class="k">Series</span><h4>What a conformance test kit proves</h4><p>Why we run other people&rsquo;s tests, and what a pass would and would not mean.</p></a>
+            <a class="rc" href="/evidence/davinci-interoperability"><span class="k">Evidence</span><h4>Da Vinci interoperability evidence</h4><p>PAS, CRD and DTR exchanges with a pinned HL7 reference implementation.</p></a>
+            <a class="rc" href="/cms-0057f-compliance"><span class="k">Compliance</span><h4>CMS-0057-F compliance layer</h4><p>Requirement-by-requirement status for the APIs due January 1, 2027.</p></a>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <section class="cta-section">
+      <div class="wrap">
+        <div class="eyebrow" style="text-align:center">Run it yourself</div>
+        <h2>Point a kit at your current APIs</h2>
+        <p>The kits are free. If your plan wants to know where its existing Patient Access, Provider Directory or Provider Access APIs stand before January 2027, we can run the same harness against them with you, using synthetic data only.</p>
+        <div class="cta-actions">
+          <a href="/evidence/inferno-conformance" class="btn btn-primary">See our results →</a>
+          <a href="/contact?interest=conformance" class="btn btn-ghost" data-ga-event="conformance_interest">Talk to an architect</a>
+        </div>
+        <p style="margin-top:1.4rem;font-size:.82rem;color:var(--text-dim)">
+          Please do not send PHI, member data, claim data, production credentials, or other sensitive production information through the contact form.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Cloud Health Office — <a href="https://github.com/aurelianware">Aurelianware, Inc.</a> &nbsp;·&nbsp; Source-available platform (BSL 1.1) &nbsp;·&nbsp; <a href="mailto:licensing@cloudhealthoffice.com">Commercial licensing</a></p>
+    <p style="margin-top:.4rem"><a href="/insights/cms-0057-f/">CMS-0057-F Series</a> &nbsp;·&nbsp; <a href="/cms-0057f-compliance">CMS-0057-F</a> &nbsp;·&nbsp; <a href="/services">Services</a> &nbsp;·&nbsp; <a href="/platform">Platform</a> &nbsp;·&nbsp; <a href="/docs">Docs</a> &nbsp;·&nbsp; <a href="/contact">Contact</a></p>
+  </footer>
+</body>
+</html>

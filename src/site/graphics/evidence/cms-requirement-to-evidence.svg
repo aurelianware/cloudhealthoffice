@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 732" role="img" aria-labelledby="cho-ev-title cho-ev-desc" font-family="IBM Plex Sans, system-ui, -apple-system, Segoe UI, sans-serif">
+<title id="cho-ev-title">From CMS requirement to evidence: what proves each payer API requirement</title>
+<desc id="cho-ev-desc">A table-like flow with four columns: what the rule requires, the API, the standard, and what proves it. Using the ONC API standards from CMS-9115-F and CMS-0057-F applies to every payer API, uses FHIR R4, US Core 3.1.1 or later and SMART App Launch, and is checked by the Inferno US Core kit. Giving members their claims and encounters through apps is the Patient Access API, uses CARIN Blue Button with a member-bound SMART token, and is checked by the Inferno CARIN Blue Button kit. Publishing the provider directory to the public is the Provider Directory API, uses Da Vinci PDex Plan-Net with no authentication, and is checked by the Inferno Plan-Net kit. Letting providers and other payers export member data in bulk is the Provider Access and Payer-to-Payer APIs, due January 1, 2027, uses FHIR Bulk Data and SMART Backend Services, and is checked by the Inferno Bulk Data kit. Electronic prior authorization uses Da Vinci CRD, DTR and PAS and is evidenced by exchanges with the HL7 Da Vinci reference payer and by Cloud Health Office acceptance scenarios. Decision timeframes, denial reasons, metrics, attribution and consent have no interface standard: Cloud Health Office acceptance scenarios cover its behaviour, and no test kit can check them. The kinds of evidence are published separately, never combined into one score, and none is certification.</desc>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#B8C4D2"/></marker></defs>
+<rect width="1200" height="732" fill="#FFFFFF"/>
+<text x="40" y="50" font-size="11" font-weight="600" fill="#475569" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace" letter-spacing="2">WHAT THE RULE REQUIRES</text>
+<text x="380" y="50" font-size="11" font-weight="600" fill="#475569" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace" letter-spacing="2">API</text>
+<text x="620" y="50" font-size="11" font-weight="600" fill="#475569" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace" letter-spacing="2">STANDARD</text>
+<text x="890" y="50" font-size="11" font-weight="600" fill="#475569" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace" letter-spacing="2">WHAT PROVES IT</text>
+<rect x="40" y="70" width="300" height="78" rx="10" fill="#F5F7FA" stroke="#B8C4D2" stroke-width="1.2"/>
+<text x="56" y="94" font-size="13.5" font-weight="600" fill="#0B1F33" text-anchor="start">Use the ONC API standards</text>
+<text x="56" y="112" font-size="13.5" font-weight="600" fill="#0B1F33" text-anchor="start">(45 CFR 170.215)</text>
+<text x="56" y="134" font-size="11.5" font-weight="500" fill="#0E7490" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace">CMS-9115-F, CMS-0057-F</text>
+<rect x="380" y="70" width="200" height="78" rx="10" fill="#FFFFFF" stroke="#0E7490" stroke-width="1.4"/>
+<text x="396" y="100" font-size="14" font-weight="700" fill="#0B1F33" text-anchor="start">Every payer API</text>
+<text x="620" y="94" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="start">FHIR R4</text>
+<text x="620" y="113" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">US Core 3.1.1 or later</text>
+<text x="620" y="132" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">SMART App Launch</text>
+<rect x="890" y="96.0" width="232" height="26" rx="6" fill="#0E7490" fill-opacity="0.09" stroke="#0E7490" stroke-opacity="0.55"/>
+<text x="900" y="113.5" font-size="12" font-weight="600" fill="#0E7490" text-anchor="start">Inferno US Core kit</text>
+<line x1="340" y1="109.0" x2="376" y2="109.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<line x1="580" y1="109.0" x2="610" y2="109.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<line x1="856" y1="109.0" x2="884" y2="109.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<rect x="40" y="162" width="300" height="78" rx="10" fill="#F5F7FA" stroke="#B8C4D2" stroke-width="1.2"/>
+<text x="56" y="186" font-size="13.5" font-weight="600" fill="#0B1F33" text-anchor="start">Give members their claims</text>
+<text x="56" y="204" font-size="13.5" font-weight="600" fill="#0B1F33" text-anchor="start">and encounters through apps</text>
+<text x="56" y="226" font-size="11.5" font-weight="500" fill="#0E7490" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace">CMS-9115-F, CMS-0057-F</text>
+<rect x="380" y="162" width="200" height="78" rx="10" fill="#FFFFFF" stroke="#0E7490" stroke-width="1.4"/>
+<text x="396" y="192" font-size="14" font-weight="700" fill="#0B1F33" text-anchor="start">Patient Access</text>
+<text x="620" y="186" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="start">CARIN Blue Button</text>
+<text x="620" y="205" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">member-bound SMART token</text>
+<rect x="890" y="188.0" width="232" height="26" rx="6" fill="#0E7490" fill-opacity="0.09" stroke="#0E7490" stroke-opacity="0.55"/>
+<text x="900" y="205.5" font-size="12" font-weight="600" fill="#0E7490" text-anchor="start">Inferno CARIN BB kit</text>
+<line x1="340" y1="201.0" x2="376" y2="201.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<line x1="580" y1="201.0" x2="610" y2="201.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<line x1="856" y1="201.0" x2="884" y2="201.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<rect x="40" y="254" width="300" height="78" rx="10" fill="#F5F7FA" stroke="#B8C4D2" stroke-width="1.2"/>
+<text x="56" y="278" font-size="13.5" font-weight="600" fill="#0B1F33" text-anchor="start">Publish the provider directory</text>
+<text x="56" y="296" font-size="13.5" font-weight="600" fill="#0B1F33" text-anchor="start">to the public</text>
+<text x="56" y="318" font-size="11.5" font-weight="500" fill="#0E7490" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace">CMS-9115-F</text>
+<rect x="380" y="254" width="200" height="78" rx="10" fill="#FFFFFF" stroke="#0E7490" stroke-width="1.4"/>
+<text x="396" y="284" font-size="14" font-weight="700" fill="#0B1F33" text-anchor="start">Provider Directory</text>
+<text x="620" y="278" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="start">Da Vinci PDex Plan-Net</text>
+<text x="620" y="297" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">no authentication</text>
+<rect x="890" y="280.0" width="232" height="26" rx="6" fill="#0E7490" fill-opacity="0.09" stroke="#0E7490" stroke-opacity="0.55"/>
+<text x="900" y="297.5" font-size="12" font-weight="600" fill="#0E7490" text-anchor="start">Inferno Plan-Net kit</text>
+<line x1="340" y1="293.0" x2="376" y2="293.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<line x1="580" y1="293.0" x2="610" y2="293.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<line x1="856" y1="293.0" x2="884" y2="293.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<rect x="40" y="346" width="300" height="78" rx="10" fill="#F5F7FA" stroke="#B8C4D2" stroke-width="1.2"/>
+<text x="56" y="370" font-size="13.5" font-weight="600" fill="#0B1F33" text-anchor="start">Let providers and other payers</text>
+<text x="56" y="388" font-size="13.5" font-weight="600" fill="#0B1F33" text-anchor="start">export member data in bulk</text>
+<text x="56" y="410" font-size="11.5" font-weight="500" fill="#0E7490" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace">CMS-0057-F, Jan 1, 2027</text>
+<rect x="380" y="346" width="200" height="78" rx="10" fill="#FFFFFF" stroke="#0E7490" stroke-width="1.4"/>
+<text x="396" y="376" font-size="14" font-weight="700" fill="#0B1F33" text-anchor="start">Provider Access</text>
+<text x="396" y="396" font-size="14" font-weight="700" fill="#0B1F33" text-anchor="start">Payer-to-Payer</text>
+<text x="620" y="370" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="start">FHIR Bulk Data</text>
+<text x="620" y="389" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">SMART Backend Services</text>
+<rect x="890" y="372.0" width="232" height="26" rx="6" fill="#0E7490" fill-opacity="0.09" stroke="#0E7490" stroke-opacity="0.55"/>
+<text x="900" y="389.5" font-size="12" font-weight="600" fill="#0E7490" text-anchor="start">Inferno Bulk Data kit</text>
+<line x1="340" y1="385.0" x2="376" y2="385.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<line x1="580" y1="385.0" x2="610" y2="385.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<line x1="856" y1="385.0" x2="884" y2="385.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<rect x="40" y="438" width="300" height="78" rx="10" fill="#F5F7FA" stroke="#B8C4D2" stroke-width="1.2"/>
+<text x="56" y="462" font-size="13.5" font-weight="600" fill="#0B1F33" text-anchor="start">Electronic prior authorization</text>
+<text x="56" y="480" font-size="13.5" font-weight="600" fill="#0B1F33" text-anchor="start">with documentation rules</text>
+<text x="56" y="502" font-size="11.5" font-weight="500" fill="#0E7490" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace">CMS-0057-F, Jan 1, 2027</text>
+<rect x="380" y="438" width="200" height="78" rx="10" fill="#FFFFFF" stroke="#0E7490" stroke-width="1.4"/>
+<text x="396" y="468" font-size="14" font-weight="700" fill="#0B1F33" text-anchor="start">Prior Authorization</text>
+<text x="620" y="462" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="start">Da Vinci CRD, DTR, PAS</text>
+<rect x="890" y="448.0" width="232" height="26" rx="6" fill="#0F766E" fill-opacity="0.09" stroke="#0F766E" stroke-opacity="0.55"/>
+<text x="900" y="465.5" font-size="12" font-weight="600" fill="#0F766E" text-anchor="start">Da Vinci reference payer</text>
+<rect x="890" y="480.0" width="232" height="26" rx="6" fill="#475569" fill-opacity="0.09" stroke="#475569" stroke-opacity="0.55"/>
+<text x="900" y="497.5" font-size="12" font-weight="600" fill="#475569" text-anchor="start">CHO acceptance scenarios</text>
+<line x1="340" y1="477.0" x2="376" y2="477.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<line x1="580" y1="477.0" x2="610" y2="477.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<line x1="856" y1="477.0" x2="884" y2="477.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<rect x="40" y="530" width="300" height="78" rx="10" fill="#FFF8F1" stroke="#B45309" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="56" y="554" font-size="13.5" font-weight="600" fill="#0B1F33" text-anchor="start">Decision timeframes, denial reasons,</text>
+<text x="56" y="572" font-size="13.5" font-weight="600" fill="#0B1F33" text-anchor="start">metrics, attribution, consent</text>
+<text x="56" y="594" font-size="11.5" font-weight="500" fill="#B45309" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace">CMS-0057-F</text>
+<rect x="380" y="530" width="200" height="78" rx="10" fill="#FFFFFF" stroke="#B8C4D2" stroke-width="1.4"/>
+<text x="396" y="560" font-size="14" font-weight="700" fill="#0B1F33" text-anchor="start">Policy and operations</text>
+<text x="620" y="554" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="start">No interface standard</text>
+<rect x="890" y="540.0" width="232" height="26" rx="6" fill="#475569" fill-opacity="0.09" stroke="#475569" stroke-opacity="0.55"/>
+<text x="900" y="557.5" font-size="12" font-weight="600" fill="#475569" text-anchor="start">CHO acceptance scenarios</text>
+<rect x="890" y="572.0" width="232" height="26" rx="6" fill="#B45309" fill-opacity="0.09" stroke="#B45309" stroke-opacity="0.55"/>
+<text x="900" y="589.5" font-size="12" font-weight="600" fill="#B45309" text-anchor="start">No kit can test this</text>
+<line x1="340" y1="569.0" x2="376" y2="569.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<line x1="580" y1="569.0" x2="610" y2="569.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<line x1="856" y1="569.0" x2="884" y2="569.0" stroke="#B8C4D2" stroke-width="1.6" marker-end="url(#ah)"/>
+<text x="40" y="634" font-size="11" font-weight="600" fill="#475569" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace" letter-spacing="2">KINDS OF EVIDENCE</text>
+<rect x="40" y="648" width="14" height="14" rx="3" fill="#0E7490" fill-opacity="0.15" stroke="#0E7490"/>
+<text x="62" y="660" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="start">Inferno kit</text>
+<text x="62" y="678" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start">an ONC test kit judges CHO’s API, nightly</text>
+<rect x="330" y="648" width="14" height="14" rx="3" fill="#0F766E" fill-opacity="0.15" stroke="#0F766E"/>
+<text x="352" y="660" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="start">Da Vinci reference payer</text>
+<text x="352" y="678" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start">exchanges with HL7 software</text>
+<rect x="620" y="648" width="14" height="14" rx="3" fill="#475569" fill-opacity="0.15" stroke="#475569"/>
+<text x="642" y="660" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="start">CHO acceptance scenarios</text>
+<text x="642" y="678" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start">CHO’s own tests of the rule’s behaviour</text>
+<rect x="910" y="648" width="14" height="14" rx="3" fill="#B45309" fill-opacity="0.15" stroke="#B45309"/>
+<text x="932" y="660" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="start">No kit</text>
+<text x="932" y="678" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start">a rule requirement, evidenced in operations</text>
+<text x="40" y="714" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start">The three kinds of evidence are published separately and never added into one score. None of them is CMS, ONC or HL7 certification.</text>
+</svg>

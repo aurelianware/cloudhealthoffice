@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inferno Conformance Results for Payer FHIR APIs — Cloud Health Office</title>
+  <meta name="description" content="Nightly results from four ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, and Bulk Data with SMART Backend Services. Failures and known kit issues included." />
+  <meta name="author" content="Aurelianware, Inc." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/evidence/inferno-conformance" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/evidence/inferno-conformance" />
+  <meta property="og:title" content="Judged every night by tests we did not write" />
+  <meta property="og:description" content="Nightly results from four ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, and Bulk Data with SMART Backend Services. Failures and known kit issues included." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/evidence/evidence-model.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Judged every night by tests we did not write" />
+  <meta name="twitter:description" content="Nightly results from four ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, and Bulk Data with SMART Backend Services. Failures and known kit issues included." />
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/evidence/evidence-model.svg" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "Inferno conformance results",
+      "description": "Nightly results from four ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, and Bulk Data with SMART Backend Services. Failures and known kit issues included.",
+      "url": "https://cloudhealthoffice.com/evidence/inferno-conformance",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc."
+      },
+      "about": [
+        "Inferno test kits",
+        "FHIR conformance testing",
+        "US Core",
+        "CARIN Blue Button",
+        "Da Vinci Plan-Net",
+        "FHIR Bulk Data",
+        "CMS-0057-F"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Evidence",
+          "item": "https://cloudhealthoffice.com/evidence"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Inferno conformance",
+          "item": "https://cloudhealthoffice.com/evidence/inferno-conformance"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/evidence-hub.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+  <script defer src="/js/evidence-snapshot.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body class="ev">
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/blueprints/google-cloud">Reference architecture</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="/api-explorer">API explorer</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof updateNavigation === 'function') { updateNavigation('#mainNav'); }
+    });
+  </script>
+
+  <main id="main-content">
+
+    <header class="ev-hero">
+      <div class="ev-hero-inner">
+        <nav class="ev-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/evidence">Evidence</a><span>/</span><a href="/evidence/inferno-conformance">Inferno conformance</a></nav>
+        <span class="ev-eyebrow">Conformance kit evidence</span>
+        <h1>Judged every night by <em>tests we did not write</em>.</h1>
+        <p class="ev-lede">Four open-source Inferno test kits run against Cloud Health Office on a nightly schedule: US Core, CARIN Blue Button, Da Vinci Plan-Net, and Bulk Data with SMART Backend Services. The latest results are published below as the kits reported them, including the failures.</p>
+        <div class="ev-badges"><span class="ev-badge ev-badge--cyan">US Core &middot; CARIN BB &middot; Plan-Net &middot; Bulk Data</span>
+          <span class="ev-badge">Kits pinned by release and commit</span>
+          <span class="ev-badge">Synthetic data</span>
+          <span class="ev-badge ev-badge--amber">Not certification</span></div>
+        <p class="ev-rule-definition">
+          <strong>Inferno</strong> is the open-source FHIR conformance testing framework built for the ONC (the
+          Office of the National Coordinator for Health IT). Each test kit encodes one implementation guide's
+          requirements and drives an API the way a real client would. There is no public registry of payer
+          results, so we publish ours here.
+        </p>
+      </div>
+    </header>
+
+    <div class="ev-section ev-section--tight">
+      <nav class="ev-toc" aria-label="On this page">
+        <h2>On this page</h2>
+        <ol>
+            <li><a href="#results">Latest published results</a></li>
+            <li><a href="#kits">What each kit tests, and the requirement behind it</a></li>
+            <li><a href="#known">Known kit issues and version gaps</a></li>
+            <li><a href="#reproduce">How the run works, and how to repeat it</a></li>
+            <li><a href="#limits">What these results do not establish</a></li>
+            <li><a href="#related">Related evidence</a></li>
+        </ol>
+      </nav>
+    </div>
+
+    <section class="ev-section ev-section--alt" id="results">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Live snapshot</span>
+        <h2>Latest published results</h2>
+        <p class="ev-sub">CI writes this snapshot after each nightly run on the main branch. A run that dies before it produces evidence leaves the previous snapshot in place, so a broken night can't wipe out real results. A kit with no result is never shown as passed.</p>
+        <div class="ev-snapshot" data-evidence="inferno" data-src="/insights/cms-0057-f/inferno-conformance-public-evidence.json">
+          <p class="ev-fallback" data-evidence-fallback>
+            Loading the published Inferno conformance evidence. It records each kit's verdict, the pinned kit
+            release, the groups that were run, and every test that did not pass.
+          </p>
+          <div data-evidence-body hidden></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section" id="kits">
+      <div class="ev-container">
+        <span class="ev-eyebrow">What is being judged</span>
+        <h2>What each kit tests, and the requirement behind it</h2>
+        <p class="ev-sub">
+          CMS-0057-F and the earlier CMS-9115-F require payer APIs built on FHIR R4 and the ONC API standards at
+          45 CFR 170.215. For the content of each API, CMS points to specific HL7 implementation guides. Each kit
+          below checks one of those guides.
+        </p>
+
+        <div class="ev-scroll">
+          <table class="ev-table">
+            <thead>
+              <tr><th>Kit</th><th>What it checks</th><th>What Cloud Health Office runs</th><th>Requirement it speaks to</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="ev-what">US Core</span><p><a href="https://github.com/inferno-framework/us-core-test-kit">us-core-test-kit</a> v1.1.6</p></td>
+                <td>The CapabilityStatement; read and the required searches on each profile; must-support elements; references that resolve; every returned resource validated against its US Core profile by the HL7 validator.</td>
+                <td>Suite <code>us_core_v311</code>: the CapabilityStatement, Patient and Encounter groups. Those are the US Core resources a payer serves. The other clinical groups are not run.</td>
+                <td>The ONC API standards that CMS-0057-F adopts by reference. US Core 3.1.1 is the floor, and it underlies Patient Access, Provider Access and Payer-to-Payer.</td>
+              </tr>
+              <tr>
+                <td><span class="ev-what">CARIN Blue Button</span><p><a href="https://github.com/inferno-framework/carin-for-blue-button-test-kit">carin-for-blue-button-test-kit</a> v0.16.3</p></td>
+                <td>Patient, Coverage, ExplanationOfBenefit, Organization and Practitioner reads and searches, including EOB searches by type, identifier, service date and <code>_lastUpdated</code>, the <code>_include</code> parameters, and validation of each EOB against its claim-type profile.</td>
+                <td>Suite <code>c4bb_v200</code> financial groups, run as a member's SMART patient app with a token bound to that member, the way a consumer app reaches Patient Access.</td>
+                <td>The Patient Access API: claims and encounter data for members, required since CMS-9115-F and expanded by CMS-0057-F. CARIN Blue Button is the guide CMS recommends for it.</td>
+              </tr>
+              <tr>
+                <td><span class="ev-what">Da Vinci Plan-Net</span><p><a href="https://github.com/inferno-framework/davinci-plan-net-test-kit">davinci-plan-net-test-kit</a> v0.13.4</p></td>
+                <td>All nine directory resource types: searches, forward and reverse chained searches, <code>_include</code> and <code>_revinclude</code>, must-support elements, and profile validation.</td>
+                <td>The whole suite, against the public Provider Directory with no access token, because the rule says the directory is public.</td>
+                <td>The Provider Directory API, required since CMS-9115-F and open to the public without authentication. Plan-Net is the guide CMS recommends for it.</td>
+              </tr>
+              <tr>
+                <td><span class="ev-what">Bulk Data + SMART Backend Services</span><p><a href="https://github.com/inferno-framework/bulk-data-test-kit">bulk-data-test-kit</a> v0.13.2</p></td>
+                <td>SMART discovery and the Backend Services token endpoint, including refusals of a bad grant type, assertion type or JWT. Group and Patient <code>$export</code>: kick-off, status polling, the manifest, authorized NDJSON download, resource validation, cancel, <code>_outputFormat</code> and <code>_since</code>.</td>
+                <td>Suite <code>bulk_data_v200</code>: the SMART Backend Services, Group export and Patient export groups. The client is a registered backend bound to a seeded provider.</td>
+                <td>The Provider Access and Payer-to-Payer APIs, due January 1, 2027, which must support FHIR Bulk Data with system-to-system authorization.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <figure class="ev-figure">
+          <a href="/graphics/evidence/cms-requirement-to-evidence.svg" title="Open the full-size diagram"><img src="/graphics/evidence/cms-requirement-to-evidence.svg" width="1200" height="732" loading="lazy" alt="Requirement to evidence. ONC API standards for every payer API: Inferno US Core kit. Member claims through apps (Patient Access, CARIN Blue Button): Inferno CARIN BB kit. Public provider directory (Plan-Net): Inferno Plan-Net kit. Bulk export for Provider Access and Payer-to-Payer (Bulk Data, SMART Backend Services): Inferno Bulk Data kit. Prior authorization (CRD, DTR, PAS): Da Vinci reference payer exchanges and CHO acceptance scenarios. Decision timeframes, denial reasons, metrics, attribution and consent: CHO acceptance scenarios; no kit can test them." /></a>
+          <figcaption>Each CMS requirement, the API and standard behind it, and the kind of evidence that checks it. The kinds are published separately and never added into one score.</figcaption>
+        </figure>
+
+        <p>
+          For the full account of each kit, the CMS-0057-F API it maps to, and the requirements no kit can check
+          (prior authorization decision timeframes, attribution, consent, metrics reporting), read
+          <a href="/insights/cms-0057-f/inferno-test-kits-cms-0057-f-apis">Which Inferno test kit checks which CMS-0057-F API</a>.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="known">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Stated up front</span>
+        <h2>Known kit issues and version gaps</h2>
+        <p class="ev-sub">A kit is software with a version, written against a specification that keeps moving. Where a kit can't judge any server, or checks a different version than the one we serve, it is listed here and in the snapshot, with the reason. Nothing is quietly dropped.</p>
+
+        <div class="ev-grid ev-grid--two">
+          <div class="ev-card">
+            <h3>CARIN BB: three EOB claim-type checks</h3>
+            <p>In kit v0.16.3, the latest release, the oral, pharmacy and professional non-clinician validation tests check every EOB the kit collected against that one claim type's profile. A member with both professional and institutional claims therefore fails the pharmacy profile on EOBs that never claimed it. No server with mixed claim types can pass these three tests. Their failures are still recorded, but they don't count against the result. Every other test counts.</p>
+          </div>
+          <div class="ev-card">
+            <h3>CARIN BB: the non-financial suite is not run</h3>
+            <p>The kit's non-financial suite checks the superseded <code>-NonFinancial</code> profile URLs from an April 2023 snapshot. Cloud Health Office declares the current CARIN BB 2.2.0 <code>-Basis</code> profiles, so the suite can't match its EOBs in either direction. We won't rename our profiles to an outdated draft just to turn it green.</p>
+          </div>
+          <div class="ev-card">
+            <h3>Plan-Net: kit 1.1.0, server 1.2.0</h3>
+            <p>The kit is generated from Plan-Net 1.1.0, while Cloud Health Office serves 1.2.0. Most requirements are unchanged between the two. Where they differ, the kit is checking the older version.</p>
+          </div>
+          <div class="ev-card">
+            <h3>Bulk Data: TLS and system export</h3>
+            <p>The nightly runs on a private plain-HTTP network, so the token-endpoint TLS test is switched off with the kit's own setting. That group passed over real TLS on hosted Inferno against our demo environment on October 29, 2026. The system-level export group isn't run, because Cloud Health Office doesn't serve system-level <code>$export</code>.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section" id="reproduce">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Reproducible</span>
+        <h2>How the run works, and how to repeat it</h2>
+        <p>
+          The nightly job starts a Cloud Health Office stack and the four kits together on an isolated network. It
+          seeds synthetic members, claims, coverage and a provider directory, checks that Cloud Health Office
+          answers its own <code>metadata</code> endpoint, and then hands each kit its inputs. Each kit is pinned to
+          a release tag and commit in <code>interop/versions.json</code>. The groups each kit runs, and the known kit
+          issues, are listed in <code>interop/scenarios.json</code>. Changing either one takes a reviewed pull request.
+        </p>
+        <p>
+          You don't have to trust our runner. The same kits are hosted at
+          <a href="https://inferno.healthit.gov/suites/">inferno.healthit.gov</a>, and the harness is in the public
+          repository (<code>./scripts/interop/run.sh inferno all</code>). A health plan can point a kit at a Cloud
+          Health Office sandbox, or at any vendor's sandbox, and read the findings for itself.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="limits">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Stated plainly</span>
+        <h2>What these results do not establish</h2>
+        <div class="ev-limits">
+          <h3>Limitations</h3>
+          <ul>
+            <li><strong>This is not certification.</strong> Running ONC's tool is not ONC, CMS or HL7 approval. CMS-0057-F has no certification program for payer APIs.</li>
+            <li><strong>A pass covers the groups that ran, at that kit version.</strong> It isn't a pass of the whole implementation guide, and it isn't a pass of CMS-0057-F.</li>
+            <li><strong>Synthetic data on a test stack.</strong> No production member data is involved, and no production deployment is claimed.</li>
+            <li><strong>No prior authorization kit runs here yet.</strong> Prior authorization (CRD, DTR, PAS) is evidenced by <a href="/evidence/davinci-interoperability">exchanges with the HL7 Da Vinci reference implementation</a>. The Da Vinci DTR and PDex kits are pinned but not run yet.</li>
+            <li><strong>Kit results and acceptance results stay separate.</strong> A kit result never changes a <a href="/insights/cms-0057-f/acceptance-scenarios">CMS-0057-F acceptance scenario</a> status, and the two are never combined into one score.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section" id="related">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Related evidence</span>
+        <h2>Where to read next</h2>
+        <div class="ev-grid">
+          <a class="ev-card" href="/insights/cms-0057-f/inferno-test-kits-cms-0057-f-apis"><h3>Which kit checks which API</h3><p>Each kit, the CMS-0057-F API it maps to, and what no kit can check.</p></a>
+          <a class="ev-card" href="/insights/cms-0057-f/what-a-conformance-test-kit-proves"><h3>What a conformance test kit proves</h3><p>Why we run other people's tests, why the kits are pinned, and what a pass would mean.</p></a>
+          <a class="ev-card" href="/evidence/davinci-interoperability"><h3>Da Vinci interoperability</h3><p>PAS, CRD and DTR exchanges against a pinned HL7 reference implementation.</p></a>
+          <a class="ev-card" href="/evidence"><h3>Evidence Hub</h3><p>How the separate evidence systems fit together, and what none of them claims.</p></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section">
+      <div class="ev-container">
+        <div class="ev-cta">
+          <h2>Bring your own kit.</h2>
+          <p>The kits are free and public, and so is the harness. If your team wants to run a kit against a Cloud Health Office sandbox, or against the APIs you run today, we'll set it up with you.</p>
+          <div class="ev-actions">
+            <a class="ev-btn" href="/contact?interest=conformance" data-ga-event="conformance_interest">Talk to an architect &rarr;</a>
+            <a class="ev-btn ev-btn--ghost" href="https://github.com/aurelianware/cloudhealthoffice/tree/main/interop">Read the scenario inventory &rarr;</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+
+</body>
+</html>

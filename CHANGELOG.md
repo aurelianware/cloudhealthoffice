@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Website and README: Inferno conformance results page (`/evidence/inferno-conformance`) rendered from a new `inferno-conformance-public-evidence.json` snapshot, and the article "Which Inferno Test Kit Checks Which CMS-0057-F API". The DaVinci Interop workflow's new `publish-inferno` job projects the nightly kit results (`scripts/interop/publish-inferno-evidence.mjs`) to the ci-evidence branch, and the site deploys overlay it. It also publishes one shields.io badge per kit to `ci-evidence/badges/inferno-*.json`, shown in the README. Pages that said no Inferno kit had run now link to the results.
+
 ## [6.1.0] - TBD
 
 "Spartacus."
@@ -194,11 +198,21 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
   with "No Coverage resources appear to be available" every run. The groups
   now run in the kit's own order.
 
+- **`_lastUpdated` with a fraction of a second matches only that fraction.**
+  A FHIR search date with a time part matched the whole second it named, so
+  `_lastUpdated` set to one resource's `meta.lastUpdated` (which carries
+  fractional seconds) also returned resources updated earlier or later in
+  the same second. The CARIN BB kit's `_lastUpdated` ExplanationOfBenefit
+  search failed on that. An instant now matches the precision it is written
+  to: a minute, a second, or its fractional digits. This applies to every
+  date search parameter the CHO-native FHIR facade translates.
+
 - **DaVinci Interop: known kit issues stop counting against CHO.** A
   conformance scenario can name kit tests that no correct server can pass
   (`infernoKnownKitIssues` in `interop/scenarios.json`, each with a reason).
-  Their failures are recorded as findings but don't fail the run. The first
-  three are CARIN BB's oral, pharmacy and professional EOB validation tests:
+  Their failures are recorded as findings but don't fail the run. They are
+  CARIN BB's five EOB subtype validation tests (inpatient, outpatient, oral,
+  pharmacy and professional):
   the pinned kit validates every EOB against each subtype profile, so a
   member with mixed claim types fails them all. See "Known kit issues" in
   `docs/interop/davinci.md`.

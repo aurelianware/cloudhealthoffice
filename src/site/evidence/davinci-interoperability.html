@@ -424,7 +424,7 @@ CHO --$questionnaire-package(&lt;canonical&gt;)---&gt; br-payer
             <li><strong>Cloud Health Office is the client in every executed scenario.</strong> The profile for running Cloud Health Office as the server under test exists but is exercised by no scenario yet.</li>
             <li><strong>No CQL is executed.</strong> A returned Library's structure would be validated; its CQL is not run. This proves package exchange, not rule evaluation.</li>
             <li><strong>FHIR structure is validated; DTR profile conformance is not independently validated.</strong> Resources are parsed and DTR-specific structure is checked by hand, but no IG profile validator is run against the StructureDefinitions. A declared <code>meta.profile</code> is a claim by the sender, and is not treated here as validation.</li>
-            <li><strong>No Inferno conformance suite executes.</strong> The PDex and DTR test kits are pinned and the runner seam exists; no suite has been run, and the inventory reports those scenarios as not executed rather than omitting them.</li>
+            <li><strong>No Inferno DTR or PDex suite executes yet.</strong> Those kits are pinned and the inventory reports their scenarios as not executed rather than omitting them. The US Core, CARIN Blue Button, Plan-Net and Bulk Data kits do run, nightly, and their results are on the <a href="/evidence/inferno-conformance">Inferno conformance page</a>, kept separate from this evidence.</li>
             <li><strong>Synthetic data only</strong>, and no exchange with a real payer's production system is claimed.</li>
           </ul>
         </div>

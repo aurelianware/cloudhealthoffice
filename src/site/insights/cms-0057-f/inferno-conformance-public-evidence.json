@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "inferno-conformance",
+  "generatedAtUtc": "2026-10-30T17:59:51Z",
+  "sourceCommit": "e278d743fba1acc3656b463f4b25714fcbfa18a8",
+  "sourceCommitShort": "e278d743fba1",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/e278d743fba1acc3656b463f4b25714fcbfa18a8",
+  "dataClassification": "synthetic",
+  "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence and of the Da Vinci interoperability snapshot. A kit result never changes a CMS-0057-F scenario status, and no result here is CMS, ONC or HL7 certification.",
+  "kits": [
+    {
+      "scenarioId": "INFERNO-USCORE-SERVER-001",
+      "title": "Inferno US Core 3.1.1 server suite against CHO's Patient and Encounter groups",
+      "protocol": "US Core",
+      "regulatoryContext": "The ONC API standards at 45 CFR 170.215 that CMS-0057-F and CMS-9115-F require payer FHIR APIs to use; US Core is the base profile set the Patient Access, Provider Access and Payer-to-Payer APIs build on.",
+      "kit": {
+        "name": "inferno-framework/us-core-test-kit",
+        "key": "inferno-us-core",
+        "upstreamRepository": "https://github.com/inferno-framework/us-core-test-kit",
+        "tag": "v1.1.6",
+        "commit": "c8701563d36c2a9eaedc976c59fd8dca4303f49a",
+        "reference": "https://github.com/inferno-framework/us-core-test-kit@v1.1.6",
+        "implementationGuides": {
+          "US Core": "3.1.1, 4.0.0, 5.0.1, 6.1.0, 7.0.0 and 8.0.0 suites are generated in this release"
+        }
+      },
+      "suite": "us_core_v311",
+      "groups": [
+        "us_core_v311_capability_statement",
+        "us_core_v311_patient",
+        "us_core_v311_encounter"
+      ],
+      "status": "NotPublished",
+      "statusReason": null,
+      "testedAtUtc": null,
+      "tests": null,
+      "failingTests": [],
+      "notRunTests": [],
+      "knownKitIssues": []
+    },
+    {
+      "scenarioId": "INFERNO-C4BB-SERVER-001",
+      "title": "Inferno CARIN BB v2.0.0 server groups CHO claims to serve",
+      "protocol": "CARIN BB",
+      "regulatoryContext": "The Patient Access API (claims and encounter data) under CMS-9115-F, expanded by CMS-0057-F. CARIN Blue Button is the implementation guide CMS recommends for that data.",
+      "kit": {
+        "name": "inferno-framework/carin-for-blue-button-test-kit",
+        "key": "inferno-c4bb",
+        "upstreamRepository": "https://github.com/inferno-framework/carin-for-blue-button-test-kit",
+        "tag": "v0.16.3",
+        "commit": "386f6a0b024e47cda82d2ed0fd15dc6495557ca8",
+        "reference": "https://github.com/inferno-framework/carin-for-blue-button-test-kit@v0.16.3",
+        "implementationGuides": {
+          "CARIN BB": "1.1.0 and 2.0.0, plus a 2.0.0 development snapshot of the non-financial branch"
+        }
+      },
+      "suite": "c4bb_v200",
+      "groups": [
+        "capability_statement_group",
+        "c4bb_v200_patient",
+        "c4bb_v200_coverage",
+        "c4bb_v200_eob",
+        "c4bb_v200_organization",
+        "c4bb_v200_practitioner"
+      ],
+      "status": "NotPublished",
+      "statusReason": null,
+      "testedAtUtc": null,
+      "tests": null,
+      "failingTests": [],
+      "notRunTests": [],
+      "knownKitIssues": []
+    },
+    {
+      "scenarioId": "INFERNO-PLANNET-SERVER-001",
+      "title": "Inferno Plan-Net server suite against CHO's public Provider Directory",
+      "protocol": "Plan-Net",
+      "regulatoryContext": "The Provider Directory API under CMS-9115-F, which must be publicly accessible without authentication. Da Vinci PDex Plan-Net is the implementation guide CMS recommends.",
+      "kit": {
+        "name": "inferno-framework/davinci-plan-net-test-kit",
+        "key": "inferno-plan-net",
+        "upstreamRepository": "https://github.com/inferno-framework/davinci-plan-net-test-kit",
+        "tag": "v0.13.4",
+        "commit": "c7d67b1c9d9838f3a9eba7d7ed47bb2902d22aec",
+        "reference": "https://github.com/inferno-framework/davinci-plan-net-test-kit@v0.13.4",
+        "implementationGuides": {
+          "Plan-Net": "1.1.0"
+        }
+      },
+      "suite": "davinci_plan_net_server_v110",
+      "groups": [],
+      "status": "NotPublished",
+      "statusReason": null,
+      "testedAtUtc": null,
+      "tests": null,
+      "failingTests": [],
+      "notRunTests": [],
+      "knownKitIssues": []
+    },
+    {
+      "scenarioId": "INFERNO-BULK-SERVER-001",
+      "title": "Inferno Bulk Data 2.0.0 SMART Backend Services, Group and Patient export against CHO",
+      "protocol": "Bulk Data",
+      "regulatoryContext": "The Provider Access and Payer-to-Payer APIs CMS-0057-F requires by January 1, 2027, which must support FHIR Bulk Data Access, with the calling system authorized by SMART Backend Services.",
+      "kit": {
+        "name": "inferno-framework/bulk-data-test-kit",
+        "key": "inferno-bulk-data",
+        "upstreamRepository": "https://github.com/inferno-framework/bulk-data-test-kit",
+        "tag": "v0.13.2",
+        "commit": "4d46b69a31dc3464cb6275864f25e9dae699ab9c",
+        "reference": "https://github.com/inferno-framework/bulk-data-test-kit@v0.13.2",
+        "implementationGuides": {
+          "Bulk Data": "1.0.1 and 2.0.0"
+        }
+      },
+      "suite": "bulk_data_v200",
+      "groups": [
+        "bulk_data_smart_backend_services_v200",
+        "bulk_data_group_export_v200",
+        "bulk_data_patient_export_v200"
+      ],
+      "status": "NotPublished",
+      "statusReason": null,
+      "testedAtUtc": null,
+      "tests": null,
+      "failingTests": [],
+      "notRunTests": [],
+      "knownKitIssues": []
+    }
+  ],
+  "latestRun": null,
+  "disclaimers": [
+    "An Inferno test kit encodes its authors’ reading of an implementation guide at one release. A pass means the API met the requirements that kit version tests, in the groups that were run, at the named source revision. It is not certification by CMS, ONC, HL7 or the Inferno project.",
+    "Every run uses synthetic data against a Cloud Health Office stack started for the run. No production member data is involved.",
+    "A known kit issue is a test that cannot judge any server as the kit is written. It is listed with its reason, its failure is still recorded, and it is not counted against the result."
+  ]
+}
