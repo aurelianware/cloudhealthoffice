@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using ClaimsService.Models;
+using CloudHealthOffice.Infrastructure.ReferenceData;
 
 namespace ClaimsService.Fhir;
 
@@ -400,7 +401,7 @@ internal static class CarinEobBasis
             {
                 ["sequence"] = sequence,
                 ["diagnosisCodeableConcept"] =
-                    Concept(Icd10CmSystem, diagnosis.Code, diagnosis.Description),
+                    Concept(Icd10CmSystem, Icd10CmCode.ToFhir(diagnosis.Code), diagnosis.Description),
                 ["type"] = new JsonArray { type },
             });
             ordinal++;

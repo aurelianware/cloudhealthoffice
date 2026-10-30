@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.ReferenceData;
 using System.Text.Json.Nodes;
 using MemberService.Controllers;
 using MemberService.Models;
@@ -18,6 +19,9 @@ namespace MemberService.Services;
 public sealed class FhirPatientProjector : IFhirPatientProjector
 {
     private const string NpiSystem = "http://hl7.org/fhir/sid/us-npi";
+    private const string V2IdentifierTypeSystem = "http://terminology.hl7.org/CodeSystem/v2-0203";
+    public const string UsCorePatientProfile = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient";
+    public const string CarinBbPatientProfile = "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Patient|2.0.0";
 
     public JsonObject Project(Member member) => Project(member, null);
 
@@ -81,6 +85,12 @@ public sealed class FhirPatientProjector : IFhirPatientProjector
             new JsonObject
             {
                 ["use"] = "official",
+                // MB marks the member id, which CARIN BB's identifier:memberid
+                // slice requires.
+                ["type"] = new JsonObject
+                {
+                    ["coding"] = new JsonArray(Coding(V2IdentifierTypeSystem, "MB", "Member Number"))
+                },
                 ["system"] = FhirIdentifierSystems.MemberId,
                 ["value"] = member.MemberId
             }
@@ -182,7 +192,7 @@ public sealed class FhirPatientProjector : IFhirPatientProjector
                 ["language"] = new JsonObject
                 {
                     ["coding"] = new JsonArray(Coding(
-                        "urn:ietf:bcp:47", member.PreferredLanguage, member.PreferredLanguage))
+                        Bcp47Language.System, member.PreferredLanguage, Bcp47Language.DisplayName(member.PreferredLanguage)))
                 },
                 ["preferred"] = true
             });
@@ -195,7 +205,7 @@ public sealed class FhirPatientProjector : IFhirPatientProjector
             {
                 ["language"] = new JsonObject
                 {
-                    ["coding"] = new JsonArray(Coding("urn:ietf:bcp:47", lang, lang))
+                    ["coding"] = new JsonArray(Coding(Bcp47Language.System, lang, Bcp47Language.DisplayName(lang)))
                 },
                 ["preferred"] = false
             });
@@ -229,7 +239,9 @@ public sealed class FhirPatientProjector : IFhirPatientProjector
         patient["meta"] = new JsonObject
         {
             ["lastUpdated"] = member.LastUpdatedDate.ToString("o"),
-            ["profile"] = new JsonArray("http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient")
+            // CARIN BB's patient-meta-profile-version invariant requires its
+            // profile with a major.minor version; US Core sets no such rule.
+            ["profile"] = new JsonArray(UsCorePatientProfile, CarinBbPatientProfile)
         };
 
         return patient;
