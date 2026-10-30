@@ -294,6 +294,24 @@ jobs:
           CHO_INTEROP_ENVIRONMENT: CI
         run: ./scripts/interop/run.sh inferno all
 
+      # Every kit validates through the inferno-validator sidecar, and when it
+      # answers with anything but 200 the kits report "Unable to connect to
+      # validator" for every validation test, which says nothing about why. The
+      # harness saves the validator's log tail with the evidence of a run that
+      # did not pass; printing it here puts the reason in the job log, where it
+      # can be read without downloading the artifact.
+      - name: Show the validator's log
+        if: always()
+        run: |
+          LOG=artifacts/interop/service-logs/inferno-validator.log
+          if [ -f "$LOG" ]; then
+            echo "::group::inferno-validator (last 200 lines)"
+            tail -n 200 "$LOG"
+            echo "::endgroup::"
+          else
+            echo "No validator log was captured (a run that passes keeps none)."
+          fi
+
       - name: Job summary
         if: always()
         run: |
