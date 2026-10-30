@@ -196,6 +196,8 @@ public sealed class ScenarioInventoryTests
                 ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_oral_validation_test"),
                 ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_pharmacy_validation_test"),
                 ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_professional_non_clinician_validation_test"),
+                ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_inpatient_institutional_validation_test"),
+                ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_outpatient_institutional_validation_test"),
             }, "adding one is a change of claim, so it should be seen here too");
     }
 

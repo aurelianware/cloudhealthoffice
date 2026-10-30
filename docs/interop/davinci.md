@@ -392,13 +392,18 @@ There is one today, agreed on 2026-10-30:
 
 * **CARIN BB subtype validation with mixed claim types** (`c4bb_v200_eob_oral_validation_test`,
   `c4bb_v200_eob_pharmacy_validation_test`,
-  `c4bb_v200_eob_professional_non_clinician_validation_test`).
+  `c4bb_v200_eob_professional_non_clinician_validation_test`,
+  `c4bb_v200_eob_inpatient_institutional_validation_test`,
+  `c4bb_v200_eob_outpatient_institutional_validation_test`).
   * In carin-for-blue-button-test-kit `v0.16.3`, the latest release, each EOB
     subtype validation test validates *every* EOB the kit collected against
     that one profile (`perform_validation_test(scratch_resources[:all], ...)`
     in `generated/v2.0.0/eob_*/validation_test.rb`).
   * A member with a professional and an institutional claim therefore fails
-    the oral and pharmacy profiles on EOBs that never claimed them.
+    the oral and pharmacy profiles on EOBs that never claimed them. In run
+    41087087059 the inpatient test failed only on the professional EOB and the
+    outpatient test only on the professional and inpatient EOBs; the seeded
+    inpatient EOB passed its own profile.
   * Each EOB is still judged against its own profile by the HL7 validator on
     the conformance goldens.
   * A kit release that validates each EOB only against the profile it
