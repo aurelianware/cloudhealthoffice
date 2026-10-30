@@ -339,6 +339,24 @@ public sealed class InfernoRunnerTests
         => OralIssue[0].Matches(testId).Should().Be(matches);
 
     [Fact]
+    public void Test_counts_are_per_test_in_infernos_vocabulary()
+    {
+        var run = GroupRun(
+            ("c4bb_v200_eob_read_test", "pass"),
+            ("c4bb_v200_eob__lastUpdated_search_test", "fail"),
+            ("c4bb_v200_eob_type_search_test", "error"),
+            ("c4bb_v200_eob_oral_validation_test", "fail"),
+            ("c4bb_v200_eob_identifier_search_test", "skip"),
+            ("c4bb_v200_eob_wait_test", "wait"),
+            ("c4bb_v200_eob_tls_test", "omit"));
+
+        InfernoTestCounts.From([run], OralIssue).Should().BeEquivalentTo(new InfernoTestCounts
+        {
+            Passed = 1, Failed = 2, KnownKitIssue = 1, Skipped = 2, Omitted = 1, Total = 7,
+        }, "the failing group row is not a test, and the oral failure is a known kit issue");
+    }
+
+    [Fact]
     public void A_suite_with_no_results_is_NotRun()
     {
         InfernoRunner.RollUp(new InfernoTestRun()).Should().Be(InteropStatus.NotRun);

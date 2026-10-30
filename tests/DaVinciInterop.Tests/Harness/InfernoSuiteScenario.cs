@@ -148,7 +148,10 @@ public static class InfernoSuiteScenario
             result = run.Complete(
                 RollUp(runs, scenario.InfernoKnownKitIssues),
                 client.Interactions,
-                externalRole: "conformance-runner");
+                externalRole: "conformance-runner") with
+            {
+                InfernoTests = InfernoTestCounts.From(runs, scenario.InfernoKnownKitIssues),
+            };
         }
         catch (Exception ex)
         {
