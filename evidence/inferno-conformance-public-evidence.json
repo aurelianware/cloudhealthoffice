@@ -1,0 +1,973 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "inferno-conformance",
+  "generatedAtUtc": "2026-10-30T20:32:04Z",
+  "sourceCommit": "beb7bd70999241b7682bcb246b8a22ed26f698ed",
+  "sourceCommitShort": "beb7bd709992",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/beb7bd70999241b7682bcb246b8a22ed26f698ed",
+  "dataClassification": "synthetic",
+  "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence and of the Da Vinci interoperability snapshot. A kit result never changes a CMS-0057-F scenario status, and no result here is CMS, ONC or HL7 certification.",
+  "kits": [
+    {
+      "scenarioId": "INFERNO-USCORE-SERVER-001",
+      "title": "Inferno US Core 3.1.1 server suite against CHO's Patient and Encounter groups",
+      "protocol": "US Core",
+      "regulatoryContext": "The ONC API standards at 45 CFR 170.215 that CMS-0057-F and CMS-9115-F require payer FHIR APIs to use; US Core is the base profile set the Patient Access, Provider Access and Payer-to-Payer APIs build on.",
+      "kit": {
+        "name": "inferno-framework/us-core-test-kit",
+        "key": "inferno-us-core",
+        "upstreamRepository": "https://github.com/inferno-framework/us-core-test-kit",
+        "tag": "v1.1.6",
+        "commit": "c8701563d36c2a9eaedc976c59fd8dca4303f49a",
+        "reference": "https://github.com/inferno-framework/us-core-test-kit@v1.1.6",
+        "implementationGuides": {
+          "US Core": "3.1.1, 4.0.0, 5.0.1, 6.1.0, 7.0.0 and 8.0.0 suites are generated in this release"
+        }
+      },
+      "suite": "us_core_v311",
+      "groups": [
+        "us_core_v311_capability_statement",
+        "us_core_v311_patient",
+        "us_core_v311_encounter"
+      ],
+      "status": "Failed",
+      "statusReason": null,
+      "testedAtUtc": "2026-10-30T20:25:19.2921968+00:00",
+      "tests": {
+        "passed": 18,
+        "failed": 3,
+        "skipped": 6,
+        "omitted": 1,
+        "knownKitIssue": 0,
+        "total": 28
+      },
+      "failingTests": [
+        {
+          "test": "us_core_conformance_support",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "us_core_v311_capability_statement",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "us_core_v311_patient_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "us_core_v311_patient",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "us_core_v311_encounter_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "us_core_v311_encounter",
+          "result": "error",
+          "message": "(no message)"
+        }
+      ],
+      "notRunTests": [
+        {
+          "test": "standalone_auth_tls",
+          "result": "omit",
+          "message": "This test is disabled because INFERNO_DISABLE_TLS_TEST is present in env."
+        },
+        {
+          "test": "us_core_v311_patient_provenance_revinclude_search_test",
+          "result": "skip",
+          "message": "No Provenance resources appear to be available. Please use patients with more information"
+        },
+        {
+          "test": "us_core_v311_patient_must_support_test",
+          "result": "skip",
+          "message": "Could not find address.period.end, name.period.end, name.use:old, address.use:old, Patient.extension:race, Patient.extension:ethnicity in the 1 provided resource(s)"
+        },
+        {
+          "test": "us_core_v311_encounter_read_test",
+          "result": "skip",
+          "message": "No Encounter resources appear to be available. Please use patients with more information."
+        },
+        {
+          "test": "us_core_v311_encounter_provenance_revinclude_search_test",
+          "result": "skip",
+          "message": "No Provenance resources appear to be available. Please use patients with more information"
+        },
+        {
+          "test": "us_core_v311_encounter_must_support_test",
+          "result": "skip",
+          "message": "Could not find participant.period, hospitalization, hospitalization.dischargeDisposition, location, location.location in the 1 provided resource(s)"
+        },
+        {
+          "test": "us_core_v311_encounter_reference_resolution_test",
+          "result": "skip",
+          "message": "Could not resolve and validate any Must Support references for participant.individual element: Reference"
+        }
+      ],
+      "knownKitIssues": []
+    },
+    {
+      "scenarioId": "INFERNO-C4BB-SERVER-001",
+      "title": "Inferno CARIN BB v2.0.0 server groups CHO claims to serve",
+      "protocol": "CARIN BB",
+      "regulatoryContext": "The Patient Access API (claims and encounter data) under CMS-9115-F, expanded by CMS-0057-F. CARIN Blue Button is the implementation guide CMS recommends for that data.",
+      "kit": {
+        "name": "inferno-framework/carin-for-blue-button-test-kit",
+        "key": "inferno-c4bb",
+        "upstreamRepository": "https://github.com/inferno-framework/carin-for-blue-button-test-kit",
+        "tag": "v0.16.3",
+        "commit": "386f6a0b024e47cda82d2ed0fd15dc6495557ca8",
+        "reference": "https://github.com/inferno-framework/carin-for-blue-button-test-kit@v0.16.3",
+        "implementationGuides": {
+          "CARIN BB": "1.1.0 and 2.0.0, plus a 2.0.0 development snapshot of the non-financial branch"
+        }
+      },
+      "suite": "c4bb_v200",
+      "groups": [
+        "capability_statement_group",
+        "c4bb_v200_patient",
+        "c4bb_v200_eob",
+        "c4bb_v200_coverage",
+        "c4bb_v200_organization",
+        "c4bb_v200_practitioner"
+      ],
+      "status": "Failed",
+      "statusReason": null,
+      "testedAtUtc": "2026-10-30T20:18:03.2031509+00:00",
+      "tests": {
+        "passed": 25,
+        "failed": 3,
+        "skipped": 23,
+        "omitted": 0,
+        "knownKitIssue": 5,
+        "total": 56
+      },
+      "failingTests": [
+        {
+          "test": "carin_bb_conformance_support",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "capability_statement_group",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "c4bb_v200_patient_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "c4bb_v200_patient",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "c4bb_v200_eob_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "c4bb_v200_eob",
+          "result": "error",
+          "message": "(no message)"
+        }
+      ],
+      "notRunTests": [
+        {
+          "test": "c4bb_v200_patient_must_support_test",
+          "result": "skip",
+          "message": "Could not find identifier:uniquememberid.system, identifier:uniquememberid.value, deceased[x], address.country, address.period, Patient.identifier:uniquememberid, Patient.extension:race, Patient.extension:ethnicity in the 2 provided resource(s)"
+        },
+        {
+          "test": "c4bb_v200_eob__lastUpdated_search_test",
+          "result": "skip",
+          "message": "No ExplanationOfBenefit resources appear to be available. Please use patients with more information"
+        },
+        {
+          "test": "c4bb_v200_eob_must_support_test",
+          "result": "skip",
+          "message": "Could not find related, related.relationship, related.reference, item.noteNumber, payment, payment.type, processNote in the 2 provided resource(s)"
+        },
+        {
+          "test": "c4bb_v200_eob_inpatient_institutional_must_support_test",
+          "result": "skip",
+          "message": "Could not find related, related.relationship, related.reference, supportingInfo:pointoforigin.category, supportingInfo:pointoforigin.code, supportingInfo:admtype.category, supportingInfo:admtype.code, supportingInfo:discharge-status.category, supportingInfo:discharge-status.code,…"
+        },
+        {
+          "test": "c4bb_v200_eob_outpatient_institutional_must_support_test",
+          "result": "skip",
+          "message": "Could not find subType.coding.code:outpatient, related, related.relationship, related.reference, supportingInfo:pointoforigin.category, supportingInfo:pointoforigin.code, supportingInfo:admtype.category, supportingInfo:admtype.code, supportingInfo:discharge-status.category, suppo…"
+        },
+        {
+          "test": "c4bb_v200_eob_oral_must_support_test",
+          "result": "skip",
+          "message": "Could not find type.coding.code:oral, related, related.relationship, related.reference, careTeam.qualification, supportingInfo:servicefacility.category, supportingInfo:orthodontics.category, supportingInfo:orthodontics.value[x], supportingInfo:prosthesis.category, supportingInfo:…"
+        },
+        {
+          "test": "c4bb_v200_eob_pharmacy_must_support_test",
+          "result": "skip",
+          "message": "Could not find type.coding.code:pharmacy, related, related.relationship, related.reference, supportingInfo:dayssupply.category, supportingInfo:dayssupply.value[x], supportingInfo:dawcode.category, supportingInfo:dawcode.code, supportingInfo:refillNum.category, supportingInfo:refi…"
+        },
+        {
+          "test": "c4bb_v200_eob_professional_non_clinician_must_support_test",
+          "result": "skip",
+          "message": "Could not find related, related.relationship, related.reference, careTeam.qualification, supportingInfo:servicefacility.category, item.modifier, item.noteNumber, item.adjudication:adjustmentreason.category, item.adjudication:adjustmentreason.reason, item.adjudication:allowedunits…"
+        },
+        {
+          "test": "c4bb_v200_coverage__id_search_test",
+          "result": "skip",
+          "message": "No Coverage resources appear to be available. Please use patients with more information"
+        },
+        {
+          "test": "c4bb_v200_coverage__lastUpdated_search_test",
+          "result": "skip",
+          "message": "No Coverage resources appear to be available. Please use patients with more information"
+        },
+        {
+          "test": "c4bb_v200_coverage_read_test",
+          "result": "skip",
+          "message": "No Coverage resources appear to be available. Please use patients with more information."
+        },
+        {
+          "test": "c4bb_v200_coverage_validation_test",
+          "result": "skip",
+          "message": "No Coverage resources conforming to the http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Coverage profile were returned"
+        },
+        {
+          "test": "c4bb_v200_coverage_must_support_test",
+          "result": "skip",
+          "message": "No Coverage resources were found"
+        },
+        {
+          "test": "c4bb_v200_coverage",
+          "result": "skip",
+          "message": "(no message)"
+        },
+        {
+          "test": "c4bb_v200_organization__id_search_test",
+          "result": "skip",
+          "message": "No Organization resources appear to be available. Please use patients with more information"
+        },
+        {
+          "test": "c4bb_v200_organization__lastUpdated_search_test",
+          "result": "skip",
+          "message": "No Organization resources appear to be available. Please use patients with more information"
+        },
+        {
+          "test": "c4bb_v200_organization_read_test",
+          "result": "skip",
+          "message": "No Organization resources appear to be available. Please use patients with more information."
+        },
+        {
+          "test": "c4bb_v200_organization_validation_test",
+          "result": "skip",
+          "message": "No Organization resources conforming to the http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Organization profile were returned"
+        },
+        {
+          "test": "c4bb_v200_organization_must_support_test",
+          "result": "skip",
+          "message": "No Organization resources were found"
+        },
+        {
+          "test": "c4bb_v200_organization",
+          "result": "skip",
+          "message": "(no message)"
+        },
+        {
+          "test": "c4bb_v200_practitioner__id_search_test",
+          "result": "skip",
+          "message": "No Practitioner resources appear to be available. Please use patients with more information"
+        },
+        {
+          "test": "c4bb_v200_practitioner__lastUpdated_search_test",
+          "result": "skip",
+          "message": "No Practitioner resources appear to be available. Please use patients with more information"
+        },
+        {
+          "test": "c4bb_v200_practitioner_read_test",
+          "result": "skip",
+          "message": "No Practitioner resources appear to be available. Please use patients with more information."
+        },
+        {
+          "test": "c4bb_v200_practitioner_validation_test",
+          "result": "skip",
+          "message": "No Practitioner resources conforming to the http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Practitioner profile were returned"
+        },
+        {
+          "test": "c4bb_v200_practitioner_must_support_test",
+          "result": "skip",
+          "message": "No Practitioner resources were found"
+        },
+        {
+          "test": "c4bb_v200_practitioner",
+          "result": "skip",
+          "message": "(no message)"
+        }
+      ],
+      "knownKitIssues": [
+        {
+          "test": "c4bb_v200_eob_inpatient_institutional_validation_test",
+          "reason": "In carin-for-blue-button-test-kit v0.16.3 (the latest release) each ExplanationOfBenefit subtype validation test validates every EOB the kit collected against that one subtype's profile (perform_validation_test(scratch_resources[:all], ...) in generated/v2.0.0/eob_*/validation_test.rb), so a member with both professional and institutional claims fails the Inpatient-Institutional profile on EOBs that never claimed it. Each EOB is still judged against its own profile by the HL7 validator on the conformance goldens.",
+          "failedThisRun": true
+        },
+        {
+          "test": "c4bb_v200_eob_outpatient_institutional_validation_test",
+          "reason": "In carin-for-blue-button-test-kit v0.16.3 (the latest release) each ExplanationOfBenefit subtype validation test validates every EOB the kit collected against that one subtype's profile (perform_validation_test(scratch_resources[:all], ...) in generated/v2.0.0/eob_*/validation_test.rb), so a member with both professional and institutional claims fails the Outpatient-Institutional profile on EOBs that never claimed it. Each EOB is still judged against its own profile by the HL7 validator on the conformance goldens.",
+          "failedThisRun": true
+        },
+        {
+          "test": "c4bb_v200_eob_oral_validation_test",
+          "reason": "In carin-for-blue-button-test-kit v0.16.3 (the latest release) each ExplanationOfBenefit subtype validation test validates every EOB the kit collected against that one subtype's profile (perform_validation_test(scratch_resources[:all], ...) in generated/v2.0.0/eob_*/validation_test.rb), so a member with both professional and institutional claims fails the Oral profile on EOBs that never claimed it. Each EOB is still judged against its own profile by the HL7 validator on the conformance goldens.",
+          "failedThisRun": true
+        },
+        {
+          "test": "c4bb_v200_eob_pharmacy_validation_test",
+          "reason": "In carin-for-blue-button-test-kit v0.16.3 (the latest release) each ExplanationOfBenefit subtype validation test validates every EOB the kit collected against that one subtype's profile (perform_validation_test(scratch_resources[:all], ...) in generated/v2.0.0/eob_*/validation_test.rb), so a member with both professional and institutional claims fails the Pharmacy profile on EOBs that never claimed it. Each EOB is still judged against its own profile by the HL7 validator on the conformance goldens.",
+          "failedThisRun": true
+        },
+        {
+          "test": "c4bb_v200_eob_professional_non_clinician_validation_test",
+          "reason": "In carin-for-blue-button-test-kit v0.16.3 (the latest release) each ExplanationOfBenefit subtype validation test validates every EOB the kit collected against that one subtype's profile (perform_validation_test(scratch_resources[:all], ...) in generated/v2.0.0/eob_*/validation_test.rb), so a member with both professional and institutional claims fails the Professional-NonClinician profile on EOBs that never claimed it. Each EOB is still judged against its own profile by the HL7 validator on the conformance goldens.",
+          "failedThisRun": true
+        }
+      ]
+    },
+    {
+      "scenarioId": "INFERNO-PLANNET-SERVER-001",
+      "title": "Inferno Plan-Net server suite against CHO's public Provider Directory",
+      "protocol": "Plan-Net",
+      "regulatoryContext": "The Provider Directory API under CMS-9115-F, which must be publicly accessible without authentication. Da Vinci PDex Plan-Net is the implementation guide CMS recommends.",
+      "kit": {
+        "name": "inferno-framework/davinci-plan-net-test-kit",
+        "key": "inferno-plan-net",
+        "upstreamRepository": "https://github.com/inferno-framework/davinci-plan-net-test-kit",
+        "tag": "v0.13.4",
+        "commit": "c7d67b1c9d9838f3a9eba7d7ed47bb2902d22aec",
+        "reference": "https://github.com/inferno-framework/davinci-plan-net-test-kit@v0.13.4",
+        "implementationGuides": {
+          "Plan-Net": "1.1.0"
+        }
+      },
+      "suite": "davinci_plan_net_server_v110",
+      "groups": [],
+      "status": "Failed",
+      "statusReason": null,
+      "testedAtUtc": "2026-10-30T20:22:43.0438136+00:00",
+      "tests": {
+        "passed": 160,
+        "failed": 45,
+        "skipped": 47,
+        "omitted": 1,
+        "knownKitIssue": 0,
+        "total": 253
+      },
+      "failingTests": [
+        {
+          "test": "davinci_plan_net_conformance_support",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_endpoint_organization_partof_search_test",
+          "result": "fail",
+          "message": "No Endpoint resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_endpoint_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_endpoint_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_insurance_plan_administered_by_partof_search_test",
+          "result": "fail",
+          "message": "No InsurancePlan resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_insurance_plan_owned_by_partof_search_test",
+          "result": "fail",
+          "message": "No InsurancePlan resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_insurance_plan_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_insurance_plan_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_org_affil_primary_organization_partof_search_test",
+          "result": "fail",
+          "message": "No OrganizationAffiliation resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_org_affil_participating_organization_type_search_test",
+          "result": "fail",
+          "message": "No OrganizationAffiliation resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_org_affil_participating_organization_name_search_test",
+          "result": "fail",
+          "message": "No OrganizationAffiliation resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_org_affil_participating_organization_partof_search_test",
+          "result": "fail",
+          "message": "No OrganizationAffiliation resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_org_affil_network_name_search_test",
+          "result": "fail",
+          "message": "No OrganizationAffiliation resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_org_affil_endpoint_organization_search_test",
+          "result": "fail",
+          "message": "No OrganizationAffiliation resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_org_affil_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_org_affil_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_include_practitioner_role_practitioner_role_location_search_test",
+          "result": "fail",
+          "message": "PractitionerRole/1999999992-loc did not match the search parameters: * Expected: Location/1888888884-loc * Found: \"1999999992-loc\""
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_practitioner_role_organization_name_search_test",
+          "result": "fail",
+          "message": "No PractitionerRole resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_practitioner_role_organization_partof_search_test",
+          "result": "fail",
+          "message": "No PractitionerRole resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_practitioner_role_organization_type_search_test",
+          "result": "fail",
+          "message": "No PractitionerRole resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_practitioner_role_location_organization_search_test",
+          "result": "fail",
+          "message": "PractitionerRole instance 1888888884-1-20260101-INTEROP-NET-1 references Location/1888888884-loc which does not have organization value Organization/1999999992"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_practitioner_role_network_name_search_test",
+          "result": "fail",
+          "message": "No PractitionerRole resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_practitioner_role_network_type_search_test",
+          "result": "fail",
+          "message": "No PractitionerRole resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_practitioner_role_endpoint_organization_search_test",
+          "result": "fail",
+          "message": "No PractitionerRole resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_practitioner_role_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_practitioner_role_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_practitioner_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_healthcare_service_organization_name_search_test",
+          "result": "fail",
+          "message": "No HealthcareService resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_healthcare_service_organization_partof_search_test",
+          "result": "fail",
+          "message": "No HealthcareService resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_healthcare_service_organization_type_search_test",
+          "result": "fail",
+          "message": "No HealthcareService resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_healthcare_service_endpoint_organization_search_test",
+          "result": "fail",
+          "message": "No HealthcareService resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_healthcare_service_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_healthcare_service_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_location_partof_address_search_test",
+          "result": "fail",
+          "message": "No Location resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_location_partof_organization_search_test",
+          "result": "fail",
+          "message": "No Location resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_location_organization_name_search_test",
+          "result": "fail",
+          "message": "No Location resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_location_organization_partof_search_test",
+          "result": "fail",
+          "message": "No Location resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_location_organization_type_search_test",
+          "result": "fail",
+          "message": "No Location resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_location_endpoint_organization_search_test",
+          "result": "fail",
+          "message": "No Location resources returned"
+        },
+        {
+          "test": "davinci_plan_net_v110_location_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_location_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_network_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_network_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_organization_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_organization_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        }
+      ],
+      "notRunTests": [
+        {
+          "test": "standalone_auth_tls",
+          "result": "omit",
+          "message": "This test is disabled because INFERNO_DISABLE_TLS_TEST is present in env."
+        },
+        {
+          "test": "davinci_plan_net_v110_endpoint_must_support_test",
+          "result": "skip",
+          "message": "Could not find contact, contact.system, contact.value, Endpoint.extension:endpoint-usecase in the 1 provided resource(s)"
+        },
+        {
+          "test": "davinci_plan_net_v110_insurance_plan_coverage_area_search_test",
+          "result": "skip",
+          "message": "Could not find values for all search params `coverage-area`"
+        },
+        {
+          "test": "davinci_plan_net_v110_insurance_plan_plan_type_search_test",
+          "result": "skip",
+          "message": "Could not find values for all search params `plan-type`"
+        },
+        {
+          "test": "davinci_plan_net_v110_include_insurance_plan_insurance_plan_coverage_area_search_test",
+          "result": "skip",
+          "message": "Unable to find any InsurancePlan with the coverage-area field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_insurance_plan_must_support_test",
+          "result": "skip",
+          "message": "Could not find identifier.type, identifier.assigner, alias, coverageArea, contact, contact.name, contact.name.text, contact.telecom, contact.telecom.system, contact.telecom.value, plan.coverageArea in the 1 provided resource(s)"
+        },
+        {
+          "test": "davinci_plan_net_v110_org_affil_endpoint_search_test",
+          "result": "skip",
+          "message": "Could not find values for all search params `endpoint`"
+        },
+        {
+          "test": "davinci_plan_net_v110_include_org_affil_organization_affiliation_endpoint_search_test",
+          "result": "skip",
+          "message": "Unable to find any OrganizationAffiliation with the endpoint field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_org_affil_location_type_search_test",
+          "result": "skip",
+          "message": "Unable to find any previously returned Location instances with the type field populated."
+        },
+        {
+          "test": "davinci_plan_net_v110_org_affil_must_support_test",
+          "result": "skip",
+          "message": "Could not find identifier.type, identifier.value, telecom.rank, endpoint in the 1 provided resource(s)"
+        },
+        {
+          "test": "davinci_plan_net_v110_practitioner_role_endpoint_search_test",
+          "result": "skip",
+          "message": "Could not find values for all search params `endpoint`"
+        },
+        {
+          "test": "davinci_plan_net_v110_include_practitioner_role_practitioner_role_endpoint_search_test",
+          "result": "skip",
+          "message": "Unable to find any PractitionerRole with the endpoint field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_practitioner_role_location_type_search_test",
+          "result": "skip",
+          "message": "Unable to find any previously returned Location instances with the type field populated."
+        },
+        {
+          "test": "davinci_plan_net_v110_practitioner_role_must_support_test",
+          "result": "skip",
+          "message": "Could not find identifier.type, identifier.value, telecom.rank, availableTime, availableTime.daysOfWeek, availableTime.allDay, availableTime.availableStartTime, availableTime.availableEndTime, notAvailable, notAvailable.description, notAvailable.during, endpoint, PractitionerRole…"
+        },
+        {
+          "test": "davinci_plan_net_v110_practitioner_must_support_test",
+          "result": "skip",
+          "message": "Could not find identifier.type, name.text, qualification.identifier, qualification.period, qualification.issuer, Practitioner.address.extension:geolocation, Practitioner.qualification.extension:practitioner-qualification, Practitioner.communication.extension:communication-profici…"
+        },
+        {
+          "test": "davinci_plan_net_v110_healthcare_service_coverage_area_search_test",
+          "result": "skip",
+          "message": "Could not find values for all search params `coverage-area`"
+        },
+        {
+          "test": "davinci_plan_net_v110_healthcare_service_endpoint_search_test",
+          "result": "skip",
+          "message": "Could not find values for all search params `endpoint`"
+        },
+        {
+          "test": "davinci_plan_net_v110_healthcare_service_service_type_search_test",
+          "result": "skip",
+          "message": "Could not find values for all search params `service-type`"
+        },
+        {
+          "test": "davinci_plan_net_v110_include_healthcare_service_healthcare_service_coverage_area_search_test",
+          "result": "skip",
+          "message": "Unable to find any HealthcareService with the coverage-area field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_include_healthcare_service_healthcare_service_endpoint_search_test",
+          "result": "skip",
+          "message": "Unable to find any HealthcareService with the endpoint field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_revinclude_healthcare_service_organization_affiliation_service_search_test",
+          "result": "skip",
+          "message": "Unable to find any OrganizationAffiliation with the service field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_healthcare_service_location_type_search_test",
+          "result": "skip",
+          "message": "Unable to find any previously returned Location instances with the type field populated."
+        },
+        {
+          "test": "davinci_plan_net_v110_healthcare_service_combination_list_specialty_covered_by_network_search_test",
+          "result": "skip",
+          "message": "Unable to find any previously returned OrganizationAffiliation instances with both network and service fields populated. Please \"Run All Tests\" from suite level or provide specific field values."
+        },
+        {
+          "test": "davinci_plan_net_v110_healthcare_service_must_support_test",
+          "result": "skip",
+          "message": "Could not find identifier.type, identifier.value, type, comment, coverageArea, appointmentRequired, availableTime, availableTime.daysOfWeek, availableTime.allDay, availableTime.availableStartTime, availableTime.availableEndTime, notAvailable, notAvailable.description, notAvailabl…"
+        },
+        {
+          "test": "davinci_plan_net_v110_location_partof_search_test",
+          "result": "skip",
+          "message": "Could not find values for all search params `partof`"
+        },
+        {
+          "test": "davinci_plan_net_v110_location_endpoint_search_test",
+          "result": "skip",
+          "message": "Could not find values for all search params `endpoint`"
+        },
+        {
+          "test": "davinci_plan_net_v110_location_type_search_test",
+          "result": "skip",
+          "message": "Could not find values for all search params `type`"
+        },
+        {
+          "test": "davinci_plan_net_v110_include_location_location_endpoint_search_test",
+          "result": "skip",
+          "message": "Unable to find any Location with the endpoint field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_include_location_location_partof_search_test",
+          "result": "skip",
+          "message": "Unable to find any Location with the partof field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_revinclude_location_insurance_plan_coverage_area_search_test",
+          "result": "skip",
+          "message": "Unable to find any InsurancePlan with the coverage-area field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_revinclude_location_organization_affiliation_location_search_test",
+          "result": "skip",
+          "message": "Unable to find any OrganizationAffiliation with the location field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_forward_chain_location_partof_type_search_test",
+          "result": "skip",
+          "message": "Unable to find any previously returned Location instances with the type field populated."
+        },
+        {
+          "test": "davinci_plan_net_v110_location_reverse_chain_insurance_plan_coverage_area_owned_by_search_test",
+          "result": "skip",
+          "message": "Unable to find any previously returned InsurancePlan instances with both owned-by and coverage-area fields populated. Please \"Run All Tests\" from suite level or provide specific field values."
+        },
+        {
+          "test": "davinci_plan_net_v110_location_must_support_test",
+          "result": "skip",
+          "message": "Could not find identifier.type, identifier.value, alias, description, type, position, partOf, hoursOfOperation, hoursOfOperation.daysOfWeek, hoursOfOperation.allDay, hoursOfOperation.openingTime, hoursOfOperation.closingTime, availabilityExceptions, endpoint, Location.extension:n…"
+        },
+        {
+          "test": "davinci_plan_net_v110_network_endpoint_search_test",
+          "result": "skip",
+          "message": "Could not find values for all search params `endpoint`"
+        },
+        {
+          "test": "davinci_plan_net_v110_network_coverage_area_search_test",
+          "result": "skip",
+          "message": "Could not find values for all search params `coverage-area`"
+        },
+        {
+          "test": "davinci_plan_net_v110_include_network_organization_endpoint_search_test",
+          "result": "skip",
+          "message": "Unable to find any Organization with the endpoint field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_include_network_organization_coverage_area_search_test",
+          "result": "skip",
+          "message": "Unable to find any Organization with the coverage-area field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_network_must_support_test",
+          "result": "skip",
+          "message": "Could not find identifier.type, telecom, address.country, endpoint, Organization.extension:location-reference in the 1 provided resource(s)"
+        },
+        {
+          "test": "davinci_plan_net_v110_organization_coverage_area_search_test",
+          "result": "skip",
+          "message": "Could not find values for all search params `coverage-area`"
+        },
+        {
+          "test": "davinci_plan_net_v110_include_organization_organization_coverage_area_search_test",
+          "result": "skip",
+          "message": "Unable to find any Organization with the coverage-area field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_revinclude_organization_organization_affiliation_primary_organization_search_test",
+          "result": "skip",
+          "message": "Unable to find any OrganizationAffiliation with the primary-organization field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_revinclude_organization_organization_affiliation_participating_organization_search_test",
+          "result": "skip",
+          "message": "Unable to find any OrganizationAffiliation with the participating-organization field populated from previously gathered resources. Please return more resources or provide a base id."
+        },
+        {
+          "test": "davinci_plan_net_v110_organization_reverse_chain_org_affil_participating_organization_location_search_test",
+          "result": "skip",
+          "message": "Unable to find any previously returned OrganizationAffiliation instances with both location and participating-organization fields populated. Please \"Run All Tests\" from suite level or provide specific field values."
+        },
+        {
+          "test": "davinci_plan_net_v110_organization_reverse_chain_org_affil_participating_organization_network_search_test",
+          "result": "skip",
+          "message": "Unable to find any previously returned OrganizationAffiliation instances with both network and participating-organization fields populated. Please \"Run All Tests\" from suite level or provide specific field values."
+        },
+        {
+          "test": "davinci_plan_net_v110_organization_reverse_chain_org_affil_participating_organization_specialty_search_test",
+          "result": "skip",
+          "message": "Unable to find any previously returned OrganizationAffiliation instances with both specialty and participating-organization fields populated. Please \"Run All Tests\" from suite level or provide specific field values."
+        },
+        {
+          "test": "davinci_plan_net_v110_organization_reverse_chain_insurance_plan_owned_by_coverage_area_search_test",
+          "result": "skip",
+          "message": "Unable to find any previously returned InsurancePlan instances with both coverage-area and owned-by fields populated. Please \"Run All Tests\" from suite level or provide specific field values."
+        },
+        {
+          "test": "davinci_plan_net_v110_organization_must_support_test",
+          "result": "skip",
+          "message": "Could not find identifier.type, telecom.rank, address.type, address.text, address.country, Organization.extension:qualification, Organization.extension:org-description, Organization.telecom.extension:contactpoint-availabletime, Organization.telecom.extension:via-intermediary, Org…"
+        }
+      ],
+      "knownKitIssues": []
+    },
+    {
+      "scenarioId": "INFERNO-BULK-SERVER-001",
+      "title": "Inferno Bulk Data 2.0.0 SMART Backend Services, Group and Patient export against CHO",
+      "protocol": "Bulk Data",
+      "regulatoryContext": "The Provider Access and Payer-to-Payer APIs CMS-0057-F requires by January 1, 2027, which must support FHIR Bulk Data Access, with the calling system authorized by SMART Backend Services.",
+      "kit": {
+        "name": "inferno-framework/bulk-data-test-kit",
+        "key": "inferno-bulk-data",
+        "upstreamRepository": "https://github.com/inferno-framework/bulk-data-test-kit",
+        "tag": "v0.13.2",
+        "commit": "4d46b69a31dc3464cb6275864f25e9dae699ab9c",
+        "reference": "https://github.com/inferno-framework/bulk-data-test-kit@v0.13.2",
+        "implementationGuides": {
+          "Bulk Data": "1.0.1 and 2.0.0"
+        }
+      },
+      "suite": "bulk_data_v200",
+      "groups": [
+        "bulk_data_smart_backend_services_v200",
+        "bulk_data_group_export_v200",
+        "bulk_data_patient_export_v200"
+      ],
+      "status": "Failed",
+      "statusReason": null,
+      "testedAtUtc": "2026-10-30T20:14:05.1752331+00:00",
+      "tests": {
+        "passed": 25,
+        "failed": 6,
+        "skipped": 0,
+        "omitted": 3,
+        "knownKitIssue": 0,
+        "total": 34
+      },
+      "failingTests": [
+        {
+          "test": "bulk_data_group_valid_resources",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "bulk_data_group_multiple_patients",
+          "result": "fail",
+          "message": "Bulk data export did not have multiple Patient resources."
+        },
+        {
+          "test": "bulk_data_group_export_validation_stu2",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "bulk_data_group_export_cancel_stu2",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "bulk_data_group_export_cancel_group_stu2",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "bulk_data_group_export_v200",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "bulk_data_patient_valid_resources",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "bulk_data_patient_multiple_patients",
+          "result": "fail",
+          "message": "Bulk data export did not have multiple Patient resources."
+        },
+        {
+          "test": "bulk_data_patient_export_validation_stu2",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "bulk_data_patient_export_cancel_stu2",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "bulk_data_patient_export_cancel_group_stu2",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "bulk_data_patient_export_v200",
+          "result": "error",
+          "message": "(no message)"
+        }
+      ],
+      "notRunTests": [
+        {
+          "test": "smart_backend_services_token_tls_version",
+          "result": "omit",
+          "message": "This test is disabled because INFERNO_DISABLE_TLS_TEST is present in env."
+        },
+        {
+          "test": "bulk_file_server_tls_version",
+          "result": "omit",
+          "message": "This test is disabled because INFERNO_DISABLE_TLS_TEST is present in env."
+        }
+      ],
+      "knownKitIssues": []
+    }
+  ],
+  "latestRun": {
+    "generatedAtUtc": "2026-10-30T20:25:20.4560571+00:00",
+    "environment": "CI",
+    "choCommit": "beb7bd70999241b7682bcb246b8a22ed26f698ed",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/beb7bd70999241b7682bcb246b8a22ed26f698ed",
+    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41119407678",
+    "dataClassification": "synthetic",
+    "summary": {
+      "passed": 0,
+      "failed": 4,
+      "skipped": 0,
+      "notRun": 0,
+      "total": 4
+    }
+  },
+  "disclaimers": [
+    "An Inferno test kit encodes its authors’ reading of an implementation guide at one release. A pass means the API met the requirements that kit version tests, in the groups that were run, at the named source revision. It is not certification by CMS, ONC, HL7 or the Inferno project.",
+    "Every run uses synthetic data against a Cloud Health Office stack started for the run. No production member data is involved.",
+    "A known kit issue is a test that cannot judge any server as the kit is written. It is listed with its reason, its failure is still recorded, and it is not counted against the result."
+  ]
+}
