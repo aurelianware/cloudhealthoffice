@@ -107,6 +107,23 @@ public class SmartTenancyTests
     }
 
     [Fact]
+    public async Task TheTokenResponse_NamesThePatientTheTokenIsBoundTo()
+    {
+        // SMART App Launch returns the launch context beside the token: an app
+        // is not meant to read its access token to learn whose record it has.
+        var tenant = SmartAuthDriver.NewTenant();
+        var (app, _) = await _smart.RegisterClientAsync(tenant, "patient-app", "launch/patient", "patient/*.read");
+        var browser = await _smart.LinkedMemberAsync(tenant, "mbr-2112");
+
+        var outcome = await SmartAuthDriver.AuthorizeAsync(browser, app, "launch/patient patient/*.read");
+        var (status, body) = await _smart.ExchangeCodeAsync(app, outcome);
+
+        status.Should().Be(HttpStatusCode.OK, body.ToString());
+        body.GetProperty("patient").GetString().Should().Be("mbr-2112");
+        body.TryGetProperty("encounter", out _).Should().BeFalse("the token is bound to no encounter");
+    }
+
+    [Fact]
     public async Task LaunchRequest_CannotSetAMembersPatient()
     {
         var tenant = SmartAuthDriver.NewTenant();

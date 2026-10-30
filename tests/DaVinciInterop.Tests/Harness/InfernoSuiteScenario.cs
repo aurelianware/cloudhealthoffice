@@ -86,7 +86,18 @@ public static class InfernoSuiteScenario
                         kit.ApiBaseUrl, scenario.RequiredInfernoSuite, fixture, cancellationToken)));
             }
 
-            var inputs = BuildInputs(scenario, fixture);
+            string? patientToken = null;
+            if (scenario.InfernoAuth == InfernoAuthModes.PatientApp)
+            {
+                var (accessToken, patient) = await InfernoPatientApp.ObtainAsync(fixture, cancellationToken);
+                patientToken = accessToken;
+                run.Record(InteropFinding.Info(
+                    "inferno.auth.patientApp",
+                    $"patient app '{fixture.PatientApp.ClientId}' authorised by the member through a SMART " +
+                    $"patient launch; smart-auth-service bound the token to Patient/{patient}"));
+            }
+
+            var inputs = BuildInputs(scenario, fixture, patientToken);
 
             var suiteId = scenario.RequiredInfernoSuite;
             var sessionId = await runner.CreateSessionAsync(suiteId, cancellationToken);
@@ -216,9 +227,12 @@ public static class InfernoSuiteScenario
     /// declares them under.
     /// </summary>
     public static List<InfernoInput> BuildInputs(
-        InteropScenarioDefinition scenario, ChoSeedFixture fixture)
+        InteropScenarioDefinition scenario, ChoSeedFixture fixture, string? patientToken = null)
     {
-        var token = fixture.DevelopmentToken();
+        var token = scenario.InfernoAuth == InfernoAuthModes.PatientApp
+            ? patientToken ?? throw new InteropEnvironmentException(
+                $"Scenario '{scenario.Id}' authenticates as the patient app, and no patient token was obtained.")
+            : fixture.DevelopmentToken();
 
         return scenario.InfernoInputs.Select(name => name switch
         {
@@ -297,7 +311,7 @@ public static class InfernoSuiteScenario
     private static InfernoInput SmartAuthInfo(InteropScenarioDefinition scenario, ChoSeedFixture fixture, string token)
         => scenario.InfernoAuth switch
         {
-            InfernoAuthModes.ChoToken => InfernoInput.AccessToken("smart_auth_info", token),
+            InfernoAuthModes.ChoToken or InfernoAuthModes.PatientApp => InfernoInput.AccessToken("smart_auth_info", token),
             InfernoAuthModes.BackendServices => InfernoInput.BackendServices(
                 "smart_auth_info",
                 ChoUnderTest.ContainerTokenUrl,
@@ -305,7 +319,8 @@ public static class InfernoSuiteScenario
                 string.Join(' ', fixture.BackendClient.Scopes)),
             _ => throw new InteropEnvironmentException(
                 $"Scenario '{scenario.Id}' declares infernoAuth '{scenario.InfernoAuth}', which the harness " +
-                $"does not know. Known: {InfernoAuthModes.ChoToken}, {InfernoAuthModes.BackendServices}."),
+                $"does not know. Known: {InfernoAuthModes.ChoToken}, {InfernoAuthModes.BackendServices}, " +
+                $"{InfernoAuthModes.PatientApp}."),
         };
 
     private static async Task<InfernoTestRun> ExecuteAsync(

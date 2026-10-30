@@ -33,6 +33,17 @@
     "providerId": "1234567893",
     "scopes": ["system/*.read"]
   },
+  "patientApp": {
+    "_comment": "The SMART patient app the CARIN BB scenario (INFERNO-C4BB-SERVER-001) authenticates the kit as. CARIN BB searches ExplanationOfBenefit by type, identifier and date without naming a patient, which CMS-0057-F Patient Access answers only for a token bound to one member. The harness registers this public client through smart-auth-service's admin API, issues a member enrolment for member.memberId, signs in with the Development login as username (honoured only on a Development host), redeems the code, approves the app, and exchanges the code with PKCE. The redirect URI is never fetched: the harness reads the code off the redirect.",
+    "clientId": "inferno-carin-bb",
+    "displayName": "Inferno CARIN BB test kit (interop)",
+    "redirectUri": "https://inferno-carin-bb.invalid/callback",
+    "username": "interop-member-1",
+    "scopes": [
+      "launch/patient",
+      "patient/*.read"
+    ]
+  },
   "member": {
     "memberId": "INTEROP-MEM-1",
     "groupNumber": "INTEROP-GRP-1",

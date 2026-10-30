@@ -58,9 +58,12 @@ public sealed record InteropScenarioDefinition
 
     /// <summary>
     /// How the kit authenticates to CHO, for the <c>smart_auth_info</c> input:
-    /// <c>choToken</c> (the default; an already-issued development token) or
+    /// <c>choToken</c> (the default; an already-issued development token),
     /// <c>backendServices</c> (the kit runs SMART Backend Services itself,
-    /// against cho-smart-auth-service, as a client the harness registers).
+    /// against cho-smart-auth-service, as a client the harness registers) or
+    /// <c>patientApp</c> (a member-bound token the harness obtains through a
+    /// SMART patient launch, as a member's app would; see
+    /// <see cref="InfernoPatientApp"/>).
     /// </summary>
     [JsonPropertyName("infernoAuth")] public string InfernoAuth { get; init; } = InfernoAuthModes.ChoToken;
 
@@ -86,6 +89,7 @@ public static class InfernoAuthModes
 {
     public const string ChoToken = "choToken";
     public const string BackendServices = "backendServices";
+    public const string PatientApp = "patientApp";
 }
 
 /// <summary>The scenario inventory as loaded from interop/scenarios.json.</summary>

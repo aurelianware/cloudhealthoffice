@@ -188,6 +188,13 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **The SMART token response names the patient it is bound to.** A
+  patient launch's token response now carries the `patient` (and
+  `encounter`) launch context SMART App Launch requires; it was only in the
+  access token's claims. The DaVinci Interop CARIN BB suite now runs as the
+  seeded member's own patient app, through enrolment, the Development
+  login, PKCE and consent, because Patient Access answers searches without
+  a `patient` parameter only for a token bound to one member.
 - **ExplanationOfBenefit search applies the CARIN BB search parameters.**
   `type`, `identifier`, `service-date`, `service-start-date`,
   `billable-period-start`, `_lastUpdated`, `created` and `status` used to be
