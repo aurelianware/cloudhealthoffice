@@ -190,6 +190,9 @@
       .nav-links a,.nav-cta{white-space:nowrap;flex:0 0 auto}
     }
     @media(max-width:768px){article,.article-head{padding-left:1.2rem;padding-right:1.2rem}}
+    figure{margin:2.2rem 0}
+    figure img{width:100%;height:auto;display:block;border:1px solid var(--border);border-radius:12px;background:#FFFFFF;padding:.6rem}
+    figcaption{font-size:.8rem;color:var(--text-dim);text-align:center;margin-top:.7rem;line-height:1.6}
     .tbl { overflow-x: auto; margin: 1.2rem 0 1.4rem; }
     .tbl table { width: 100%; border-collapse: collapse; font-size: .88rem; min-width: 560px; }
     .tbl th, .tbl td { text-align: left; vertical-align: top; padding: .6rem .7rem; border-bottom: 1px solid var(--border, #D9E1EA); }
@@ -260,6 +263,10 @@
 
         <h2 id="map"><span class="num">01</span>The short answer</h2>
         <p>CMS-0057-F, the Interoperability and Prior Authorization final rule, builds on CMS-9115-F, the 2020 Interoperability and Patient Access rule. Together they require Medicare Advantage organizations, Medicaid and CHIP programs and managed care plans, and Qualified Health Plan issuers on the federally facilitated exchanges to run FHIR R4 APIs that follow the ONC API standards at 45 CFR 170.215. For what goes inside each API, CMS recommends specific HL7 implementation guides. Each Inferno kit checks one of those guides.</p>
+        <figure>
+          <a href="/graphics/evidence/cho-cms-api-map.svg" title="Open the full-size diagram"><img src="/graphics/evidence/cho-cms-api-map.svg" width="1200" height="840" loading="lazy" alt="Three columns. Who calls: members through apps, the public, in-network providers, other payers, and providers ordering care. The five CMS APIs Cloud Health Office serves: Patient Access (CMS-9115-F, expanded by CMS-0057-F; US Core, CARIN Blue Button, PDex; member-bound SMART token; checked by the US Core and CARIN Blue Button kits), Provider Directory (CMS-9115-F; Plan-Net; public; checked by the Plan-Net kit), Provider Access and Payer-to-Payer (CMS-0057-F, January 1, 2027; Bulk Data with SMART Backend Services; checked by the Bulk Data kit), and Prior Authorization (CMS-0057-F, January 1, 2027; Da Vinci CRD, DTR, PAS; checked by exchanges with the HL7 Da Vinci reference payer). Behind them, the plan's systems: an existing QNXT, Facets or HealthEdge core reached through adapters built per engagement, or Cloud Health Office core modules replacing it one domain at a time, plus clinical and UM data."/></a>
+          <figcaption>Where Cloud Health Office sits: the five CMS APIs between the people and systems that call them and the plan&rsquo;s own systems, with the independent test that checks each one. Select the diagram to open it full size.</figcaption>
+        </figure>
         <div class="tbl">
           <table>
             <thead>
@@ -305,6 +312,10 @@
 
         <h2 id="gaps"><span class="num">06</span>What no kit here checks</h2>
         <p>This is the part of the mapping that matters most to a compliance lead, because it is where a green dashboard can be misread.</p>
+        <figure>
+          <a href="/graphics/evidence/cms-requirement-to-evidence.svg" title="Open the full-size diagram"><img src="/graphics/evidence/cms-requirement-to-evidence.svg" width="1200" height="732" loading="lazy" alt="Requirement to evidence. ONC API standards for every payer API: Inferno US Core kit. Member claims through apps (Patient Access, CARIN Blue Button): Inferno CARIN BB kit. Public provider directory (Plan-Net): Inferno Plan-Net kit. Bulk export for Provider Access and Payer-to-Payer (Bulk Data, SMART Backend Services): Inferno Bulk Data kit. Prior authorization (CRD, DTR, PAS): Da Vinci reference payer exchanges and CHO acceptance scenarios. Decision timeframes, denial reasons, metrics, attribution and consent: CHO acceptance scenarios; no kit can test them."/></a>
+          <figcaption>From requirement to evidence. The last row is the one a kit can&rsquo;t reach. Select the diagram to open it full size.</figcaption>
+        </figure>
         <div class="ans weak">
           <span class="k">Not checked by the four kits</span>
           <p><strong>The Prior Authorization API.</strong> CRD, DTR and PAS have their own Inferno kits. We don&rsquo;t run them yet. Our prior authorization evidence today is <a href="/evidence/davinci-interoperability">real exchanges with the HL7 Da Vinci reference payer</a> and our own <a href="/evidence/prior-authorization">acceptance scenarios</a>.</p>

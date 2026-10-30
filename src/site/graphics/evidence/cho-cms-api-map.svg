@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 840" role="img" aria-labelledby="cho-map-title cho-map-desc" font-family="IBM Plex Sans, system-ui, -apple-system, Segoe UI, sans-serif">
+<title id="cho-map-title">Where Cloud Health Office plugs into payer infrastructure and the CMS interoperability APIs</title>
+<desc id="cho-map-desc">Three columns. On the left, who calls a health plan's APIs: members through apps, the public, in-network providers, other payers, and providers ordering care. In the middle, the five CMS APIs Cloud Health Office serves. Patient Access, required by CMS-9115-F with prior authorization data added by CMS-0057-F, uses US Core, CARIN Blue Button and PDex with a member-bound SMART token and is checked by the US Core and CARIN Blue Button Inferno kits. Provider Directory, required by CMS-9115-F, uses Da Vinci Plan-Net, is public without authentication, and is checked by the Plan-Net kit. Provider Access and Payer-to-Payer, required by CMS-0057-F from January 1, 2027, use FHIR Bulk Data with SMART Backend Services and are checked by the Bulk Data kit. Prior Authorization, required by CMS-0057-F from January 1, 2027, uses Da Vinci CRD, DTR and PAS and is checked by exchanges with the HL7 Da Vinci reference payer. Shared underneath every API: FHIR R4, consent and attribution, audit, and tenant isolation. On the right, the plan's systems: an existing core such as QNXT, Facets or HealthEdge reached through adapters built per engagement, or Cloud Health Office core modules replacing the system of record one domain at a time, plus clinical and utilization management data.</desc>
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#0E7490"/></marker>
+<marker id="ahs" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M10 0 L0 5 L10 10 z" fill="#0E7490"/></marker>
+</defs>
+<rect width="1200" height="840" fill="#FFFFFF"/>
+<text x="40" y="50" font-size="11" font-weight="600" fill="#475569" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace" letter-spacing="2">WHO CALLS</text>
+<text x="330" y="50" font-size="11" font-weight="600" fill="#0E7490" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace" letter-spacing="2">CLOUD HEALTH OFFICE: THE CMS API LAYER</text>
+<text x="900" y="50" font-size="11" font-weight="600" fill="#475569" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace" letter-spacing="2">THE PLAN’S SYSTEMS</text>
+<rect x="40" y="94" width="220" height="68" rx="10" fill="#F5F7FA" stroke="#B8C4D2" stroke-width="1.2"/>
+<text x="56" y="122" font-size="15" font-weight="600" fill="#0B1F33" text-anchor="start">Members</text>
+<text x="56" y="144" font-size="12" font-weight="400" fill="#475569" text-anchor="start">through the app they choose</text>
+<rect x="330" y="72" width="470" height="112" rx="12" fill="#FFFFFF" stroke="#0E7490" stroke-width="1.6"/>
+<text x="350" y="100" font-size="17" font-weight="700" fill="#0B1F33" text-anchor="start">Patient Access</text>
+<text x="780" y="100" font-size="11.5" font-weight="500" fill="#0E7490" text-anchor="end">CMS-9115-F, expanded by CMS-0057-F</text>
+<text x="350" y="124" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">Guide: US Core · CARIN BB · PDex</text>
+<text x="350" y="144" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">Auth: SMART App Launch, member-bound token</text>
+<line x1="350" y1="156" x2="780" y2="156" stroke="#D9E1EA"/>
+<text x="350" y="174" font-size="12" font-weight="600" fill="#0E7490" text-anchor="start">Checked by: US Core + CARIN BB kits</text>
+<path d="M260 128 C294.0 128, 294.0 128, 328 128" fill="none" stroke="#0E7490" stroke-width="1.6" marker-end="url(#ah)"/>
+<rect x="40" y="220" width="220" height="68" rx="10" fill="#F5F7FA" stroke="#B8C4D2" stroke-width="1.2"/>
+<text x="56" y="248" font-size="15" font-weight="600" fill="#0B1F33" text-anchor="start">Anyone</text>
+<text x="56" y="270" font-size="12" font-weight="400" fill="#475569" text-anchor="start">directory apps, the public</text>
+<rect x="330" y="198" width="470" height="112" rx="12" fill="#FFFFFF" stroke="#0E7490" stroke-width="1.6"/>
+<text x="350" y="226" font-size="17" font-weight="700" fill="#0B1F33" text-anchor="start">Provider Directory</text>
+<text x="780" y="226" font-size="11.5" font-weight="500" fill="#0E7490" text-anchor="end">CMS-9115-F (in force since 2021)</text>
+<text x="350" y="250" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">Guide: Da Vinci PDex Plan-Net</text>
+<text x="350" y="270" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">Auth: Public, no authentication</text>
+<line x1="350" y1="282" x2="780" y2="282" stroke="#D9E1EA"/>
+<text x="350" y="300" font-size="12" font-weight="600" fill="#0E7490" text-anchor="start">Checked by: Plan-Net kit</text>
+<path d="M260 254 C294.0 254, 294.0 254, 328 254" fill="none" stroke="#0E7490" stroke-width="1.6" marker-end="url(#ah)"/>
+<rect x="40" y="346" width="220" height="68" rx="10" fill="#F5F7FA" stroke="#B8C4D2" stroke-width="1.2"/>
+<text x="56" y="374" font-size="15" font-weight="600" fill="#0B1F33" text-anchor="start">In-network providers</text>
+<text x="56" y="396" font-size="12" font-weight="400" fill="#475569" text-anchor="start">EHRs, for attributed patients</text>
+<rect x="330" y="324" width="470" height="112" rx="12" fill="#FFFFFF" stroke="#0E7490" stroke-width="1.6"/>
+<text x="350" y="352" font-size="17" font-weight="700" fill="#0B1F33" text-anchor="start">Provider Access</text>
+<text x="780" y="352" font-size="11.5" font-weight="500" fill="#0E7490" text-anchor="end">CMS-0057-F, Jan 1, 2027</text>
+<text x="350" y="376" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">Guide: Bulk Data · US Core · CARIN BB</text>
+<text x="350" y="396" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">Auth: SMART Backend Services</text>
+<line x1="350" y1="408" x2="780" y2="408" stroke="#D9E1EA"/>
+<text x="350" y="426" font-size="12" font-weight="600" fill="#0E7490" text-anchor="start">Checked by: Bulk Data + SMART kit</text>
+<path d="M260 380 C294.0 380, 294.0 380, 328 380" fill="none" stroke="#0E7490" stroke-width="1.6" marker-end="url(#ah)"/>
+<rect x="40" y="472" width="220" height="68" rx="10" fill="#F5F7FA" stroke="#B8C4D2" stroke-width="1.2"/>
+<text x="56" y="500" font-size="15" font-weight="600" fill="#0B1F33" text-anchor="start">Other payers</text>
+<text x="56" y="522" font-size="12" font-weight="400" fill="#475569" text-anchor="start">when a member changes plans</text>
+<rect x="330" y="450" width="470" height="112" rx="12" fill="#FFFFFF" stroke="#0E7490" stroke-width="1.6"/>
+<text x="350" y="478" font-size="17" font-weight="700" fill="#0B1F33" text-anchor="start">Payer-to-Payer</text>
+<text x="780" y="478" font-size="11.5" font-weight="500" fill="#0E7490" text-anchor="end">CMS-0057-F, Jan 1, 2027</text>
+<text x="350" y="502" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">Guide: Bulk Data · PDex $member-match</text>
+<text x="350" y="522" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">Auth: SMART Backend Services, opt-in consent</text>
+<line x1="350" y1="534" x2="780" y2="534" stroke="#D9E1EA"/>
+<text x="350" y="552" font-size="12" font-weight="600" fill="#0E7490" text-anchor="start">Checked by: Bulk Data kit (PDex kit not run yet)</text>
+<path d="M260 506 C294.0 506, 294.0 506, 328 506" fill="none" stroke="#0E7490" stroke-width="1.6" marker-end="url(#ah)"/>
+<rect x="40" y="598" width="220" height="68" rx="10" fill="#F5F7FA" stroke="#B8C4D2" stroke-width="1.2"/>
+<text x="56" y="626" font-size="15" font-weight="600" fill="#0B1F33" text-anchor="start">Providers ordering care</text>
+<text x="56" y="648" font-size="12" font-weight="400" fill="#475569" text-anchor="start">EHR at order entry</text>
+<rect x="330" y="576" width="470" height="112" rx="12" fill="#FFFFFF" stroke="#0E7490" stroke-width="1.6"/>
+<text x="350" y="604" font-size="17" font-weight="700" fill="#0B1F33" text-anchor="start">Prior Authorization</text>
+<text x="780" y="604" font-size="11.5" font-weight="500" fill="#0E7490" text-anchor="end">CMS-0057-F, Jan 1, 2027</text>
+<text x="350" y="628" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">Guide: Da Vinci CRD · DTR · PAS</text>
+<text x="350" y="648" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">Auth: CDS Hooks and SMART</text>
+<line x1="350" y1="660" x2="780" y2="660" stroke="#D9E1EA"/>
+<text x="350" y="678" font-size="12" font-weight="600" fill="#0E7490" text-anchor="start">Checked by: Da Vinci reference payer exchanges</text>
+<path d="M260 632 C294.0 632, 294.0 632, 328 632" fill="none" stroke="#0E7490" stroke-width="1.6" marker-end="url(#ah)"/>
+<rect x="330" y="702" width="470" height="58" rx="10" fill="#E6F2F5" stroke="#0E7490" stroke-width="1.2"/>
+<text x="565" y="726" font-size="12.5" font-weight="700" fill="#0B1F33" text-anchor="middle">Shared underneath every API</text>
+<text x="565" y="746" font-size="12" font-weight="400" fill="#334155" text-anchor="middle">FHIR R4 · consent and attribution · audit · tenant isolation</text>
+<rect x="900" y="100" width="260" height="190" rx="10" fill="#F5F7FA" stroke="#B8C4D2" stroke-width="1.2"/>
+<text x="918" y="128" font-size="15" font-weight="700" fill="#0B1F33" text-anchor="start">Existing core admin</text>
+<text x="918" y="150" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">QNXT · Facets · HealthEdge</text>
+<rect x="918" y="166" width="224" height="104" rx="8" fill="#FFFFFF" stroke="#D9E1EA" stroke-width="1"/>
+<text x="932" y="188" font-size="10.5" font-weight="600" fill="#475569" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace" letter-spacing="1.5">AUGMENT</text>
+<text x="932" y="208" font-size="12" font-weight="400" fill="#334155" text-anchor="start">CHO reads members, claims</text>
+<text x="932" y="226" font-size="12" font-weight="400" fill="#334155" text-anchor="start">and authorizations through</text>
+<text x="932" y="244" font-size="12" font-weight="400" fill="#334155" text-anchor="start">adapters built per engagement</text>
+<text x="1030" y="320" font-size="13" font-weight="500" fill="#475569" text-anchor="middle">or</text>
+<rect x="900" y="340" width="260" height="170" rx="10" fill="#F5F7FA" stroke="#B8C4D2" stroke-width="1.2"/>
+<text x="918" y="368" font-size="15" font-weight="700" fill="#0B1F33" text-anchor="start">CHO core modules</text>
+<text x="918" y="390" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">claims · benefits · enrollment</text>
+<rect x="918" y="406" width="224" height="84" rx="8" fill="#FFFFFF" stroke="#D9E1EA" stroke-width="1"/>
+<text x="932" y="428" font-size="10.5" font-weight="600" fill="#475569" text-anchor="start" font-family="IBM Plex Mono, ui-monospace, monospace" letter-spacing="1.5">REPLACE</text>
+<text x="932" y="448" font-size="12" font-weight="400" fill="#334155" text-anchor="start">CHO becomes the system of</text>
+<text x="932" y="466" font-size="12" font-weight="400" fill="#334155" text-anchor="start">record, one domain at a time</text>
+<rect x="900" y="540" width="260" height="96" rx="10" fill="#F5F7FA" stroke="#B8C4D2" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="918" y="568" font-size="15" font-weight="700" fill="#0B1F33" text-anchor="start">Clinical and UM data</text>
+<text x="918" y="590" font-size="12" font-weight="400" fill="#334155" text-anchor="start">prior payers via Payer-to-Payer,</text>
+<text x="918" y="608" font-size="12" font-weight="400" fill="#334155" text-anchor="start">UM and documentation content</text>
+<line x1="800" y1="128" x2="830" y2="128" stroke="#0E7490" stroke-width="1.6"/>
+<line x1="800" y1="254" x2="830" y2="254" stroke="#0E7490" stroke-width="1.6"/>
+<line x1="800" y1="380" x2="830" y2="380" stroke="#0E7490" stroke-width="1.6"/>
+<line x1="800" y1="506" x2="830" y2="506" stroke="#0E7490" stroke-width="1.6"/>
+<line x1="800" y1="632" x2="830" y2="632" stroke="#0E7490" stroke-width="1.6"/>
+<line x1="830" y1="128" x2="830" y2="632" stroke="#0E7490" stroke-width="2.4"/>
+<path d="M830 195 L898 195" stroke="#0E7490" stroke-width="1.6" marker-end="url(#ah)" marker-start="url(#ahs)"/>
+<path d="M830 425 L898 425" stroke="#0E7490" stroke-width="1.6" marker-end="url(#ah)" marker-start="url(#ahs)"/>
+<path d="M830 588 L898 588" stroke="#0E7490" stroke-width="1.6" marker-end="url(#ah)" marker-start="url(#ahs)"/>
+<text x="40" y="796" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start">CMS-0057-F and CMS-9115-F apply to Medicare Advantage, Medicaid and CHIP, and QHP issuers on the federal exchanges (the Provider Directory API excludes QHPs).</text>
+<text x="40" y="816" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start">“Checked by” names the independent test run against each API. Kit results are not certification. Live results: cloudhealthoffice.com/evidence/inferno-conformance</text>
+</svg>
