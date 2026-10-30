@@ -119,6 +119,16 @@ public class EncounterFhirProjectorTests
     }
 
     [Fact]
+    public void A_diagnosis_stored_the_way_the_837_sends_it_is_dotted_for_fhir()
+    {
+        // Inferno run 40979709678 rejected J189 as an unknown ICD-10-CM code.
+        var encounter = Encounter();
+        encounter.DiagnosisCodes = [new EncounterDiagnosis { Code = "J189", PointerNumber = 1 }];
+
+        Project(encounter)["reasonCode"]![0]!["coding"]![0]!["code"]!.GetValue<string>().Should().Be("J18.9");
+    }
+
+    [Fact]
     public void The_rendering_provider_is_an_npi_identifier_not_a_reference_that_would_not_resolve()
     {
         var encounter = Encounter();

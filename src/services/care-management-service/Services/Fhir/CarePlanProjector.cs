@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using CareManagementService.Models;
+using CloudHealthOffice.Infrastructure.ReferenceData;
 
 namespace CareManagementService.Services.Fhir;
 
@@ -100,7 +101,7 @@ public static class CarePlanProjector
                                 new JsonObject
                                 {
                                     ["system"] = "http://hl7.org/fhir/sid/icd-10-cm",
-                                    ["code"] = code,
+                                    ["code"] = Icd10CmCode.ToFhir(code),
                                 },
                             }
                             : null,

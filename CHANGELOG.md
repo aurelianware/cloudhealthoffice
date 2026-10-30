@@ -197,6 +197,17 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
   in `productOrService`. CARIN BB's required value sets hold that code for
   exactly this case, and the local coding stays beside it.
 
+- **FHIR codings now pass terminology validation.** ICD-10-CM codes are
+  dotted when projected to FHIR (`J189` becomes `J18.9`) on ExplanationOfBenefit,
+  Claim, Encounter, the prior-authorization EOB and CarePlan; X12 keeps the
+  undotted form. Patient and Practitioner languages carry the language's name
+  as the display (`English`, not `en`), or no display for a tag CHO doesn't
+  know. Practitioner and PractitionerRole NUCC codings use NUCC's display
+  (`Internal Medicine Physician`) and keep the plan's specialty label in text.
+  The Patient's member id is typed `MB` (CARIN BB's `identifier:memberid`
+  slice) and `meta.profile` adds `C4BB-Patient|2.0.0`. Inferno's US Core,
+  CARIN BB, Plan-Net and Bulk Data kits all reported these.
+
 - **Inferno findings now say why.** A failing test's finding carries the
   error messages it logged (the validator's issues behind a profile failure)
   and, for a request CHO refused, CHO's response body, so a CHO gap can be

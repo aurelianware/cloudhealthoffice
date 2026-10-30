@@ -64,6 +64,19 @@ public class ExplanationOfBenefitProjectorTests
     }
 
     [Fact]
+    public void Project_dots_a_diagnosis_stored_the_way_the_837_sends_it()
+    {
+        // Inferno run 40979709678 rejected J189 as an unknown ICD-10-CM code.
+        var claim = MinimalClaim();
+        claim.DiagnosisCodes.Add(new DiagnosisCode { Code = "J189", PointerNumber = 1, CodeQualifier = "ABK" });
+
+        var json = _projector.Project(claim);
+
+        json["diagnosis"]![0]!["diagnosisCodeableConcept"]!["coding"]![0]!["code"]!.GetValue<string>()
+            .Should().Be("J18.9");
+    }
+
+    [Fact]
     public void Project_falls_back_to_per_row_Id_when_ClaimVersionId_empty()
     {
         var claim = MinimalClaim();

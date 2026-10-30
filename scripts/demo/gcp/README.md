@@ -3,7 +3,7 @@
 Scripts for running the demo against the GKE environment from
 `infrastructure/gcp` (Terraform) and `.github/workflows/deploy-gcp-gke.yml`.
 The full runbook, including the 25-minute walkthrough and teardown, is
-[docs/deploy/GCP-DEMO.md](../../../docs/deploy/GCP-DEMO.md).
+[docs/deploy/GCP-DEMO.md](../../../docs/deploy/GCP-DEMO.md). To give a prospect their own login and record the walkthrough video, see [docs/deploy/PROSPECT-DEMO-ACCESS.md](../../../docs/deploy/PROSPECT-DEMO-ACCESS.md).
 
 All data is synthetic. The cluster has no public ingress and trusts the
 public development signing key, so it is reached only through port-forward.
