@@ -64,6 +64,9 @@ public static partial class SnipCodeSets
     /// <summary>HCPCS Level II: a letter A–V followed by four digits.</summary>
     public static bool IsHcpcsFormat(string code) => HcpcsRegex().IsMatch(code);
 
+    /// <summary>CDT (ADA dental procedure): D followed by four digits. Format only; the code set is ADA-licensed.</summary>
+    public static bool IsCdtFormat(string code) => CdtRegex().IsMatch(code);
+
     public static bool IsModifierFormat(string code) => ModifierRegex().IsMatch(code);
 
     /// <summary>NUBC revenue code: four digits.</summary>
@@ -106,6 +109,9 @@ public static partial class SnipCodeSets
 
     [GeneratedRegex(@"^[A-V][0-9]{4}$")]
     private static partial Regex HcpcsRegex();
+
+    [GeneratedRegex(@"^D[0-9]{4}$")]
+    private static partial Regex CdtRegex();
 
     [GeneratedRegex(@"^[A-Z0-9]{2}$")]
     private static partial Regex ModifierRegex();

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Claims intake accepts dental claims (837D, 005010X224A2). The 837 parser reads SV3 service lines (CDT procedure, charge, place of service, oral cavity, prosthesis code, quantity, diagnosis pointers) and the TOO tooth and surface segments; claim lines now keep `teeth`, `oralCavityDesignations` and `prosthesisCrownInlayCode`, and dental lines reach the scrub engine as CDT (`AD`) with their teeth. SNIP validation recognises the 837D version and checks SV3, TOO, CLM02 balancing against SV302, SV311 pointers and CDT format; diagnoses are optional on 837D as the implementation guide allows. Before this, a dental file was rejected at GS08 and, if parsed, lost every service line.
 - Website and README: Inferno conformance results page (`/evidence/inferno-conformance`) rendered from a new `inferno-conformance-public-evidence.json` snapshot, and the article "Which Inferno Test Kit Checks Which CMS-0057-F API". The DaVinci Interop workflow's new `publish-inferno` job projects the nightly kit results (`scripts/interop/publish-inferno-evidence.mjs`) to the ci-evidence branch, and the site deploys overlay it. It also publishes one shields.io badge per kit to `ci-evidence/badges/inferno-*.json`, shown in the README. Pages that said no Inferno kit had run now link to the results.
 
 ## [6.1.0] - TBD

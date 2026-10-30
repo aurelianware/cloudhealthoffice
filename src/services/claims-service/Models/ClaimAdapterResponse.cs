@@ -375,6 +375,15 @@ public class AdapterClaimLine
     /// <summary>837 2400 REF*G1; see <see cref="ClaimLine.PriorAuthorizationNumber"/>.</summary>
     public string? PriorAuthorizationNumber { get; set; }
     public int? PriorAuthorizationLineNumber { get; set; }
+
+    /// <summary>837D TOO; see <see cref="ClaimLine.Teeth"/>.</summary>
+    public List<AdapterClaimLineTooth> Teeth { get; set; } = new();
+
+    /// <summary>837D SV304; see <see cref="ClaimLine.OralCavityDesignations"/>.</summary>
+    public List<string> OralCavityDesignations { get; set; } = new();
+
+    /// <summary>837D SV305; see <see cref="ClaimLine.ProsthesisCrownInlayCode"/>.</summary>
+    public string? ProsthesisCrownInlayCode { get; set; }
     public decimal? MpipMultiplierApplied { get; set; }
     public AdapterLineAdjudicationResult? AdjudicationResult { get; set; }
 
@@ -397,6 +406,9 @@ public class AdapterClaimLine
         DrugUnitOfMeasure = src.DrugUnitOfMeasure,
         PriorAuthorizationNumber = src.PriorAuthorizationNumber,
         PriorAuthorizationLineNumber = src.PriorAuthorizationLineNumber,
+        Teeth = (src.Teeth ?? []).Select(AdapterClaimLineTooth.From).ToList(),
+        OralCavityDesignations = (src.OralCavityDesignations ?? []).ToList(),
+        ProsthesisCrownInlayCode = src.ProsthesisCrownInlayCode,
         MpipMultiplierApplied = src.MpipMultiplierApplied,
         AdjudicationResult = src.AdjudicationResult is null
             ? null
@@ -422,8 +434,30 @@ public class AdapterClaimLine
         DrugUnitOfMeasure = DrugUnitOfMeasure,
         PriorAuthorizationNumber = PriorAuthorizationNumber,
         PriorAuthorizationLineNumber = PriorAuthorizationLineNumber,
+        Teeth = (Teeth ?? []).Select(t => t.ToClaimLineTooth()).ToList(),
+        OralCavityDesignations = (OralCavityDesignations ?? []).ToList(),
+        ProsthesisCrownInlayCode = ProsthesisCrownInlayCode,
         MpipMultiplierApplied = MpipMultiplierApplied,
         AdjudicationResult = AdjudicationResult?.ToLineAdjudicationResult(),
+    };
+}
+
+/// <summary>Vendor-neutral tooth DTO mirroring <see cref="ClaimLineTooth"/>.</summary>
+public class AdapterClaimLineTooth
+{
+    public string ToothCode { get; set; } = string.Empty;
+    public List<string> Surfaces { get; set; } = new();
+
+    public static AdapterClaimLineTooth From(ClaimLineTooth src) => new()
+    {
+        ToothCode = src.ToothCode,
+        Surfaces = (src.Surfaces ?? []).ToList(),
+    };
+
+    public ClaimLineTooth ToClaimLineTooth() => new()
+    {
+        ToothCode = ToothCode,
+        Surfaces = (Surfaces ?? []).ToList(),
     };
 }
 

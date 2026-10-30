@@ -4,7 +4,7 @@ using CloudHealthOffice.ClaimsScrubEngine.Models;
 namespace ClaimsService.EDI.Inbound;
 
 /// <summary>
-/// Parses raw X12 837 (Professional/Institutional) EDI text into the same
+/// Parses raw X12 837 (Professional/Institutional/Dental) EDI text into the same
 /// <see cref="X12837Claim"/> shape <c>ClaimToX12837Mapper</c> already
 /// produces for outbound submission — so the inbound and outbound paths
 /// share one domain model instead of inventing a second one.
@@ -172,6 +172,8 @@ public static class X12837Parser
             case "LX": if (s.ClaimOpen) Parse2400LineNumber(s, seg); break;
             case "SV1": if (s.ClaimOpen) Parse2400ProfessionalService(s, seg); break;
             case "SV2": if (s.ClaimOpen) Parse2400InstitutionalService(s, seg); break;
+            case "SV3": if (s.ClaimOpen) Parse2400DentalService(s, seg); break;
+            case "TOO": if (s.ClaimOpen && s.CurrentLine is not null) Parse2400ToothInformation(s, seg); break;
             case "DTP": RouteDtp(s, seg); break;
             case "LIN": if (s.ClaimOpen && s.CurrentLine is not null && seg.Element(1) == "N4") Parse2410DrugIdentification(s, seg); break;
             case "CTP": if (s.ClaimOpen && s.CurrentLine is { NationalDrugCode: not null }) Parse2410DrugQuantity(s, seg); break;
@@ -778,6 +780,55 @@ public static class X12837Parser
             Units = sv2Units,
             DiagnosisPointers = sv2Pointers is { Count: > 0 } ? sv2Pointers : null
         };
+    }
+
+    private static void Parse2400DentalService(ParseState s, X12Segment seg)
+    {
+        // Dental service line (837D, 005010X224A2):
+        // SV3*AD:{CDT}{:mods}*{charge}*{facility}*{oral cavity composite}*{I|R}*{quantity}*****{pointer composite}
+        // SV303 (place of service) is situational; SV306 procedure count
+        // defaults to 1 when absent; SV311 is the diagnosis pointer composite.
+        s.CurrentLine ??= new ServiceLine { LineNumber = s.ServiceLines.Count + 1, ProcedureCode = string.Empty, ServiceDate = string.Empty, Units = 1 };
+        var sv3Proc = seg.Element(0) is { } c0 ? X12Tokenizer.SplitComponents(c0, s.ComponentSep) : [];
+        decimal.TryParse(seg.Element(1), NumberStyles.Number, CultureInfo.InvariantCulture, out var sv3Charge);
+        var sv3Units = decimal.TryParse(seg.Element(5), NumberStyles.Number, CultureInfo.InvariantCulture, out var count) && count > 0
+            ? count
+            : 1;
+        var oralCavity = seg.Element(3) is { } c3
+            ? X12Tokenizer.SplitComponents(c3, s.ComponentSep).Where(a => a.Length > 0).ToList()
+            : null;
+        var sv3Pointers = seg.Element(10) is { } c10
+            ? X12Tokenizer.SplitComponents(c10, s.ComponentSep)
+                .Select(p => int.TryParse(p, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : (int?)null)
+                .Where(n => n.HasValue)
+                .Select(n => n!.Value)
+                .ToList()
+            : null;
+
+        s.CurrentLine = s.CurrentLine with
+        {
+            ProcedureCodeQualifier = sv3Proc.Length > 0 && sv3Proc[0].Length > 0 ? sv3Proc[0] : null,
+            ProcedureCode = sv3Proc.Length > 1 ? sv3Proc[1] : string.Empty,
+            Modifiers = sv3Proc.Length > 2 ? [.. sv3Proc[2..].Where(m => m.Length > 0)] : null,
+            ChargeAmount = sv3Charge,
+            UnitType = "UN",
+            Units = sv3Units,
+            PlaceOfService = seg.Element(2) is { Length: > 0 } pos ? pos : null,
+            OralCavityDesignations = oralCavity is { Count: > 0 } ? oralCavity : null,
+            ProsthesisCrownInlayCode = seg.Element(4) is { Length: > 0 } pci ? pci : null,
+            DiagnosisPointers = sv3Pointers is { Count: > 0 } ? sv3Pointers : null
+        };
+    }
+
+    private static void Parse2400ToothInformation(ParseState s, X12Segment seg)
+    {
+        // TOO*JP*{tooth}*{surface composite} — repeats once per tooth (max 32).
+        if (seg.Element(1)?.Trim() is not { Length: > 0 } toothCode) return;
+        var surfaces = seg.Element(2) is { } c2
+            ? X12Tokenizer.SplitComponents(c2, s.ComponentSep).Where(x => x.Length > 0).ToList()
+            : null;
+        var tooth = new ToothInformation { ToothCode = toothCode, Surfaces = surfaces is { Count: > 0 } ? surfaces : null };
+        s.CurrentLine = s.CurrentLine! with { Teeth = [.. s.CurrentLine.Teeth ?? [], tooth] };
     }
 
     private static void Parse2400PriorAuthorization(ParseState s, X12Segment seg)

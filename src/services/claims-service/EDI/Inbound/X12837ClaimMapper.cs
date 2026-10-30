@@ -272,6 +272,11 @@ public static class X12837ClaimMapper
             PriorAuthorizationNumber = string.IsNullOrWhiteSpace(line.PriorAuthorizationNumber)
                 ? null
                 : line.PriorAuthorizationNumber.Trim(),
+            Teeth = (line.Teeth ?? [])
+                .Select(t => new AdapterClaimLineTooth { ToothCode = t.ToothCode, Surfaces = (t.Surfaces ?? []).ToList() })
+                .ToList(),
+            OralCavityDesignations = line.OralCavityDesignations ?? [],
+            ProsthesisCrownInlayCode = line.ProsthesisCrownInlayCode,
         };
     }
 
