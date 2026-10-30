@@ -276,7 +276,7 @@
       "status": "Active",
       "effectiveDate": "2026-01-01T00:00:00Z",
       "identifiers": [{ "system": "urn:cho:interop:network", "value": "INTEROP-NET-1" }],
-      "contactInfo": { "primaryContactName": "Network Services (synthetic)", "phone": "555-0150" }
+      "contactInfo": { "primaryContactName": "Network Services (synthetic)", "phone": "555-0150", "address": "30 Synthetic Way", "city": "Springfield", "state": "FL", "zipCode": "32401" }
     },
     "providers": [
       {
@@ -332,7 +332,7 @@
         { "tierName": "In-Network", "tierLevel": 1, "networkId": "INTEROP-NET-1" }
       ],
       "documents": [
-        { "docType": "SBC", "location": "https://example.org/interop/sbc.pdf", "contentType": "application/pdf", "displayName": "Summary of Benefits and Coverage (synthetic)" }
+        { "docType": "SBC", "location": "https://plan-documents.invalid/interop/sbc.pdf", "contentType": "application/pdf", "displayName": "Summary of Benefits and Coverage (synthetic)" }
       ]
     }
   }
