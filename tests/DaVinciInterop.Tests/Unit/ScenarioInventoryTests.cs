@@ -306,6 +306,32 @@ public sealed class ScenarioInventoryTests
         }
     }
 
+    /// <summary>
+    /// benefit-plan-service refuses a plan document on a host it doesn't
+    /// allow, which stops the seed and with it every kit (run 40993987533,
+    /// after the fixture's host changed and the compose allowlist did not).
+    /// </summary>
+    [Fact]
+    public void Every_seeded_plan_document_is_on_a_host_benefit_plan_service_allows()
+    {
+        var compose = File.ReadAllText(InteropPaths.ComposeFile);
+        var allowed = Regex.Matches(compose, @"BenefitPlan__AllowedDocumentHosts__\d+: (?<host>\S+)")
+            .Select(m => m.Groups["host"].Value)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        using var fixture = System.Text.Json.JsonDocument.Parse(File.ReadAllText(InteropPaths.ChoSeedFixture));
+        var documents = fixture.RootElement.GetProperty("directory").GetProperty("plan")
+            .GetProperty("documents").EnumerateArray().ToList();
+
+        documents.Should().NotBeEmpty();
+        foreach (var document in documents)
+        {
+            var location = document.GetProperty("location").GetString()!;
+            allowed.Should().Contain(new Uri(location).Host,
+                "{0} must be on BenefitPlan:AllowedDocumentHosts in the compose file", location);
+        }
+    }
+
     [Fact]
     public void Every_scenario_names_a_known_auth_mode()
     {

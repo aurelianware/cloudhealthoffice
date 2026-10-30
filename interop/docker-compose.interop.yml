@@ -313,8 +313,10 @@ services:
       Services__ClaimsServiceUrl: http://cho-claims-service:8080/
       Services__ProviderServiceUrl: http://cho-provider-service:8080/
       # The seeded plan's document link (published as a Plan-Net Endpoint) is
-      # an https URL on this host; nothing ever fetches it.
-      BenefitPlan__AllowedDocumentHosts__0: example.org
+      # an https URL on this host; nothing ever fetches it. A reserved .invalid
+      # host rather than example.org, which the HL7 validator refuses in an
+      # Endpoint address. Must match the location in interop/cho-seed.json.
+      BenefitPlan__AllowedDocumentHosts__0: plan-documents.invalid
     depends_on:
       interop-mongo:
         condition: service_healthy
