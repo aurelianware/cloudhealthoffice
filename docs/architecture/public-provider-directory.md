@@ -80,8 +80,10 @@ benefit-plan-service                             ├─> snapshot per directory 
   per active network participation, carrying the network-reference and
   newpatients extensions. A practitioner with a hospital affiliation in force
   practises at that hospital: the role's `organization`, `healthcareService`
-  and an extra `location` name the hospital's Organization, `{npi}-svc` and
-  `{npi}-loc` (the earliest-effective affiliation when there are several).
+  and `location` name the hospital's Organization, `{npi}-svc` and `{npi}-loc`
+  (the earliest-effective affiliation when there are several). The
+  practitioner's own Location stays published, and is the role's location only
+  when the hospital is not in the directory.
   An organization provider becomes an Organization, a
   Location, a HealthcareService (`{npi}-svc`) and one OrganizationAffiliation per
   network. Codes come only from Plan-Net's required value sets: the NUCC
