@@ -91,7 +91,7 @@ internal static class CarinEobBasis
             ["meta"] = new JsonObject
             {
                 ["lastUpdated"] = AsUtc(claim.LastUpdatedDate).ToString("o"),
-                ["profile"] = new JsonArray { shape.Profile },
+                ["profile"] = MetaProfiles(shape),
             },
             // identifier:uniqueclaimid — the slice C4BB requires, discriminated
             // on type. "uc" is C4BB's "unique claim identifier".
@@ -201,8 +201,29 @@ internal static class CarinEobBasis
 
     private const string BasisSuffix = "-Basis";
 
+    /// <summary>
+    /// The version a financial EOB also declares its profile at. CARIN BB 2.0.0
+    /// makes each financial EOB profile's <c>meta-profile-version</c> invariant
+    /// an error: <c>meta.profile</c> must hold the canonical followed by
+    /// <c>|2.0.</c>, which is what the Inferno kit checks. Later releases demote
+    /// the invariant to information, and C4BB-Patient declares the same
+    /// version. The Basis profiles are first published in 2.1.0 and have no 2.0
+    /// version to name.
+    /// </summary>
+    internal const string FinancialProfileVersion = "2.0.0";
+
     private static string Canonical(string basisProfile, bool financial) =>
         financial ? basisProfile[..^BasisSuffix.Length] : basisProfile;
+
+    /// <summary>
+    /// <c>meta.profile</c> for a shape: the canonical, and for a financial EOB
+    /// the 2.0 versioned canonical too. The unversioned one stays so a
+    /// validator loaded with the current release still resolves a profile to
+    /// check the instance against.
+    /// </summary>
+    internal static JsonArray MetaProfiles(ProfileShape shape) => shape.Financial
+        ? new JsonArray { shape.Profile, $"{shape.Profile}|{FinancialProfileVersion}" }
+        : new JsonArray { shape.Profile };
 
     /// <summary>
     /// Whether an institutional claim is inpatient, from the UB-04 type of

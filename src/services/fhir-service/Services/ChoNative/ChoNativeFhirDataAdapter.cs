@@ -84,6 +84,16 @@ public sealed class ChoNativeFhirDataAdapter
     /// </summary>
     public const string ProvenanceRevInclude = "Provenance:target";
 
+    /// <summary>
+    /// The one <c>_include</c> a Coverage search accepts, which CARIN BB
+    /// requires. Nothing is added for it unless a payor is a literal
+    /// reference: coverage-service names the payor by display unless a
+    /// deployment configures <c>Fhir:Coverage:PayorReference</c>, and a payor
+    /// with no reference has no resource to include. A search whose results do
+    /// carry one is refused rather than answered without what it asked for.
+    /// </summary>
+    public const string CoveragePayorInclude = "Coverage:payor";
+
     /// <summary>CHO's 837 transaction variants, as Encounter.type codes.</summary>
     private static readonly string[] EncounterTypes = ["professional", "institutional", "dental"];
 
@@ -190,6 +200,7 @@ public sealed class ChoNativeFhirDataAdapter
     {
         RequireRequestTenant(tenantId);
         RejectUnsupportedParameters(CoverageParameters);
+        var includesPayor = RejectIncludesOtherThan(CoveragePayorInclude);
         var q = new QueryBuilder();
         FhirSearchTranslation.Single("_id", Values("_id", search.Id));
         q.Add("coverageId", search.Id);
@@ -227,7 +238,13 @@ public sealed class ChoNativeFhirDataAdapter
             return (Array.Empty<Coverage>(), 0);
 
         q.AddPage(search.Page, search.Count);
-        return await SearchAsync<Coverage>(CoverageServiceClient, "Coverage", CoverageSearchRoute, CoverageSearchRoute + q, ct);
+        var result = await SearchAsync<Coverage>(CoverageServiceClient, "Coverage", CoverageSearchRoute, CoverageSearchRoute + q, ct);
+        if (includesPayor && result.Items.Any(c => c.Payor.Any(p => !string.IsNullOrEmpty(p.Reference))))
+        {
+            throw new FhirSearchNotSupportedException(
+                $"_include={CoveragePayorInclude} is not supported when the payor is a resource reference.");
+        }
+        return result;
     }
 
 
@@ -382,7 +399,7 @@ public sealed class ChoNativeFhirDataAdapter
         StringComparer.Ordinal);
 
     private static readonly HashSet<string> CoverageParameters = new(
-        ControlParameters.Concat(["_id", "_lastUpdated", "patient", "beneficiary", "status", "type"]),
+        ControlParameters.Concat(["_id", "_lastUpdated", "patient", "beneficiary", "status", "type", "_include"]),
         StringComparer.Ordinal);
 
     private static readonly HashSet<string> EncounterParameters = new(
@@ -429,6 +446,24 @@ public sealed class ChoNativeFhirDataAdapter
             throw new FhirSearchNotSupportedException(
                 $"Unsupported _revinclude: {string.Join(", ", other)}. Supported: {ProvenanceRevInclude}.");
         }
+    }
+
+    /// <summary>
+    /// Accepts only <paramref name="accepted"/> as an <c>_include</c> and
+    /// refuses any other. True when the request asked for it.
+    /// </summary>
+    private bool RejectIncludesOtherThan(string accepted)
+    {
+        var query = _http.HttpContext?.Request.Query;
+        if (query is null || !query.TryGetValue("_include", out StringValues values)) return false;
+        var requested = values.SelectMany(v => (v ?? "").Split(',')).Select(v => v.Trim()).ToList();
+        var other = requested.Where(v => !string.Equals(v, accepted, StringComparison.Ordinal)).ToList();
+        if (other.Count > 0)
+        {
+            throw new FhirSearchNotSupportedException(
+                $"Unsupported _include: {string.Join(", ", other)}. Supported: {accepted}.");
+        }
+        return requested.Count > 0;
     }
 
     /// <summary>

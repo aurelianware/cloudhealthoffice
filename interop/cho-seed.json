@@ -99,7 +99,7 @@
       ]
     },
     {
-      "_comment": "Institutional (claimType 2), inpatient by the bill-classification digit of the type of bill.",
+      "_comment": "Institutional (claimType 2), inpatient by the bill-classification digit of the type of bill. The rendering provider is the attending physician: without one the EOB has no careTeam, and the CARIN BB kit runs its _include=ExplanationOfBenefit:care-team and :* searches against this EOB.",
       "expectProfile": "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Inpatient-Institutional-Basis",
       "claimNumber": "INTEROP-CLM-INST-1",
       "memberId": "INTEROP-MEM-1",
@@ -110,6 +110,8 @@
       "lineOfBusiness": 1,
       "billingProviderNPI": "1234567893",
       "billingProviderName": "Interop Hospital A (synthetic)",
+      "renderingProviderNPI": "1679576722",
+      "renderingProviderName": "Interop Rendering B (synthetic)",
       "facilityNPI": "1234567893",
       "facilityName": "Interop Hospital A (synthetic)",
       "placeOfServiceCode": "21",

@@ -188,6 +188,19 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **CARIN BB conformance: EOB profile version, payee, and Coverage
+  `_include`.** A Patient Access ExplanationOfBenefit now declares its CARIN
+  BB profile twice in `meta.profile`: as before, and with `|2.0.0`, because
+  CARIN BB 2.0.0 makes a versioned canonical an error-level requirement and
+  the Inferno kit checks 2.0.0. It also carries a `payee`: the billing
+  provider, or the pay-to plan on a subrogation demand. A Coverage search
+  accepts `_include=Coverage:payor` (advertised in the CapabilityStatement);
+  CHO's payor is a display-only reference, so nothing is added, and a search
+  whose payor is a resource reference is refused rather than answered
+  without it. The interop seed now gives every claim its Coverage id, so the
+  kit has Coverage resources to test, and an attending physician on the
+  inpatient claim, so its EOB has a care team.
+
 - **CARIN BB conformance: CapabilityStatement and line codes.** fhir-service's
   CapabilityStatement now instantiates CARIN BB's server CapabilityStatement
   (`.../carin-bb/CapabilityStatement/c4bb`), which the CARIN BB kit checks

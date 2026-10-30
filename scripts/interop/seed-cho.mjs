@@ -163,14 +163,16 @@ async function seedHousehold({ member, coverage, claims }, token) {
   console.log(`==> coverage-service ${SERVICES.coverage}`);
   // coverage-service answers 201 to a second identical POST rather than 409, so
   // a re-run would stack duplicate coverage on the member. Ask first.
-  const existing = await call(
+  const history = () => call(
     'GET', `${SERVICES.coverage}/api/v1/coverage/member/${coverage.memberId}/history`, token);
+  const existing = await history();
   const alreadyCovered = existing.status === 200 && JSON.parse(existing.text).length > 0;
   if (alreadyCovered) {
     console.log('    coverage: already present');
   } else {
     await put('coverage', 'POST', `${SERVICES.coverage}/api/v1/coverage`, token, asPayload(coverage));
   }
+  const coverageId = await seededCoverageId(await history(), coverage.memberId);
 
   console.log(`==> claims-service ${SERVICES.claims}`);
   for (const claim of claims) {
@@ -189,8 +191,25 @@ async function seedHousehold({ member, coverage, claims }, token) {
         `already seeded is unknown. Refusing to submit rather than risk a duplicate.\n` +
         existing.text.slice(0, 2000));
     }
-    await put(claim.claimNumber, 'POST', `${SERVICES.claims}/api/v1/claims`, token, asPayload(claim));
+    // The claim names the coverage it was paid under, so its EOB's
+    // insurance.coverage is a literal Coverage reference. The CARIN BB kit
+    // reads that Coverage to compare its payor with the EOB's insurer, and an
+    // EOB that names its coverage only by display gives it nothing to read.
+    await put(claim.claimNumber, 'POST', `${SERVICES.claims}/api/v1/claims`, token,
+      { ...asPayload(claim), coverageId });
   }
+}
+
+/** The id coverage-service gave the member's coverage, read back from its history. */
+async function seededCoverageId(history, memberId) {
+  if (history.status !== 200) {
+    throw new Error(`coverage history for ${memberId} answered ${history.status}\n${history.text.slice(0, 2000)}`);
+  }
+  const [first] = JSON.parse(history.text);
+  if (!first?.id) {
+    throw new Error(`coverage history for ${memberId} returned no coverage with an id.`);
+  }
+  return first.id;
 }
 
 /**

@@ -162,7 +162,8 @@ public class PatientAccessClaimsTests
         eob.GetProperty("meta").GetProperty("profile").EnumerateArray()
             .Select(p => p.GetString())
             .Should().Equal(
-                "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Professional-NonClinician");
+                "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Professional-NonClinician",
+                "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Professional-NonClinician|2.0.0");
 
         // Two elements the profile requires and the earlier projection did not
         // carry, read off the served resource rather than the projector: a

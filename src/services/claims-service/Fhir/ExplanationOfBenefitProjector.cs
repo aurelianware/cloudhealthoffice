@@ -136,6 +136,8 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
         // nothing about money at all would not be a conformant instance.
         eob["total"] = Totals(claim);
 
+        eob["payee"] = Payee(claim);
+
         if (claim.AdjudicationResult?.PaymentDate is { } paymentDate)
         {
             eob["payment"] = new JsonObject
@@ -146,6 +148,40 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
         }
 
         return eob;
+    }
+
+    // ── payee ────────────────────────────────────────────────────────────────
+
+    private const string PayeeTypeSystem = "http://terminology.hl7.org/CodeSystem/payeetype";
+
+    /// <summary>
+    /// Who the plan pays. In 5010 the billing provider is the pay-to provider
+    /// (Loop 2010AB carries an address only), so that is the payee unless the
+    /// 837 named a pay-to plan (Loop 2010AC, a subrogation demand), when the
+    /// plan is. C4BB requires a party whenever the type is <c>other</c>; the
+    /// pay-to plan has no CHO resource to point at, so it goes by name and
+    /// identifier, as the billing provider does on <c>provider</c>.
+    /// </summary>
+    internal static JsonObject Payee(Claim claim)
+    {
+        if (claim.PayToPlan is { } plan && !string.IsNullOrWhiteSpace(plan.Name))
+        {
+            var party = new JsonObject { ["display"] = plan.Name };
+            if (!string.IsNullOrWhiteSpace(plan.Identifier))
+                party["identifier"] = new JsonObject { ["value"] = plan.Identifier };
+
+            return new JsonObject
+            {
+                ["type"] = CarinEobBasis.Concept(PayeeTypeSystem, "other", "Other"),
+                ["party"] = party,
+            };
+        }
+
+        return new JsonObject
+        {
+            ["type"] = CarinEobBasis.Concept(PayeeTypeSystem, "provider", "Provider"),
+            ["party"] = CarinEobBasis.ProviderReference(claim.BillingProviderNPI, claim.BillingProviderName),
+        };
     }
 
     // ── item money ───────────────────────────────────────────────────────────
