@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "davinci-interoperability",
-  "generatedAtUtc": "2026-10-30T15:53:30Z",
-  "sourceCommit": "43ce9ad36a56e05244cd2ac22611045ca851756d",
-  "sourceCommitShort": "43ce9ad36a56",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/43ce9ad36a56e05244cd2ac22611045ca851756d",
+  "generatedAtUtc": "2026-10-30T20:58:14Z",
+  "sourceCommit": "08c11d5bca9e551aeffc953f310abdaeff162150",
+  "sourceCommitShort": "08c11d5bca9e",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/08c11d5bca9e551aeffc953f310abdaeff162150",
   "inventoryReviewedUtc": "2026-10-23T00:00:00Z",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence. External interoperability results never change a CMS-0057-F scenario status, and CMS acceptance statuses never imply an interoperability result. See docs/interop/davinci.md and docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md.",
@@ -303,7 +303,7 @@
       "externalTarget": "inferno-c4bb",
       "implemented": true,
       "linkedFromScenario": null,
-      "description": "Run the carin-for-blue-button-test-kit c4bb_v200 (financial) groups against the seeded interop-cho profile: the CapabilityStatement, and the Patient, Coverage, ExplanationOfBenefit, Organization and Practitioner groups. The RelatedPerson group is not run because CHO publishes no RelatedPerson; the SMART launch group is not run because the harness supplies an already-issued token rather than having the kit drive a launch; and the visual inspection and attestation group is manual by construction. That token is a member-bound one (infernoAuth patientApp): the harness authorises a SMART patient app as the seeded member against cho-smart-auth-service, because CARIN BB searches ExplanationOfBenefit by type, identifier and date without naming a patient, and CMS-0057-F Patient Access answers those only for a token bound to one member. The kit's c4bb_v200devnonfinancial suite is NOT run at the current pin: it checks the superseded '-NonFinancial' canonicals from the April 2023 branch snapshot it bundles, while CHO declares the CARIN BB 2.2.0 '-Basis' profiles, so it could not match CHO's EOBs in either direction. See knownMismatches for inferno-c4bb in interop/versions.json.",
+      "description": "Run the carin-for-blue-button-test-kit c4bb_v200 (financial) groups against the seeded interop-cho profile: the CapabilityStatement, and the Patient, ExplanationOfBenefit, Coverage, Organization and Practitioner groups, in the kit's own order: the Coverage, Organization and Practitioner groups find their instances through the references the ExplanationOfBenefit searches saved (insurance.coverage, insurer, provider, careTeam), so run before them they skip with nothing to read. The RelatedPerson group is not run because CHO publishes no RelatedPerson; the SMART launch group is not run because the harness supplies an already-issued token rather than having the kit drive a launch; and the visual inspection and attestation group is manual by construction. That token is a member-bound one (infernoAuth patientApp): the harness authorises a SMART patient app as the seeded member against cho-smart-auth-service, because CARIN BB searches ExplanationOfBenefit by type, identifier and date without naming a patient, and CMS-0057-F Patient Access answers those only for a token bound to one member. The kit's c4bb_v200devnonfinancial suite is NOT run at the current pin: it checks the superseded '-NonFinancial' canonicals from the April 2023 branch snapshot it bundles, while CHO declares the CARIN BB 2.2.0 '-Basis' profiles, so it could not match CHO's EOBs in either direction. See knownMismatches for inferno-c4bb in interop/versions.json.",
       "status": "NotRun",
       "linkedArtifact": null,
       "testedVersion": null
@@ -349,10 +349,10 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-10-30T15:52:30.3357905+00:00",
+    "generatedAtUtc": "2026-10-30T20:50:32.3729589+00:00",
     "environment": "CI",
-    "choCommit": "43ce9ad36a56e05244cd2ac22611045ca851756d",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/43ce9ad36a56e05244cd2ac22611045ca851756d",
+    "choCommit": "08c11d5bca9e551aeffc953f310abdaeff162150",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/08c11d5bca9e551aeffc953f310abdaeff162150",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 3,
