@@ -25,12 +25,12 @@ public sealed class X12InterchangeOptions
     /// Per intake path, whether the duplicate check runs (keyed by
     /// <see cref="InterchangeIntakeRequest.DuplicateCheckKey"/>: the
     /// transaction type, e.g. <c>837</c>, or <c>{type}-realtime</c> for a
-    /// real-time call). Paths not listed are checked. Real-time 270s are off by
-    /// default (<c>270-realtime</c>): a timeout retry, or a submitter that
+    /// real-time call). Paths not listed are checked. Real-time 270s and 276s are
+    /// off by default (<c>270-realtime</c>, <c>276-realtime</c>): a timeout retry, or a submitter that
     /// reuses one ISA13 on every real-time call, must still get its 271. When
     /// off, no receipt is written.
     /// </summary>
-    public Dictionary<string, bool> DuplicateCheck { get; set; } = new(StringComparer.OrdinalIgnoreCase) { ["270-realtime"] = false };
+    public Dictionary<string, bool> DuplicateCheck { get; set; } = new(StringComparer.OrdinalIgnoreCase) { ["270-realtime"] = false, ["276-realtime"] = false };
 
     /// <summary>
     /// What to do with a test interchange (ISA15 = T). Reject answers TA1 R

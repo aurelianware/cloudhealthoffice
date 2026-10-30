@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Core;
 using CloudHealthOffice.Infrastructure.Edi.Files;
 using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using CloudHealthOffice.Infrastructure.Configuration;
@@ -114,6 +115,13 @@ builder.Services.AddScoped<IClaimAcknowledgmentService, ClaimAcknowledgmentServi
 // X12 interchange control: ISA/IEA validation, TA1 generation/storage,
 // duplicate ISA13 detection and outbound TA1 tracking (shared library).
 builder.Services.AddChoX12Interchange(builder.Configuration);
+
+// Real-time 276 → 277 claim status for CAQH CORE (/core/claimstatus, mapped
+// only when CoreConnectivity:Enabled).
+builder.Services.AddScoped<ClaimsService.EDI.ClaimStatusInquiry.ClaimStatusLookup>();
+builder.Services.AddScoped<ClaimsService.EDI.ClaimStatusInquiry.RealTime276Service>();
+builder.Services.AddChoCoreConnectivity(builder.Configuration);
+builder.Services.AddScoped<ICoreRealTimeHandler, ClaimsService.EDI.ClaimStatusInquiry.Core276Handler>();
 builder.Services.AddScoped<IDiagnosisDescriptionLookup, DiagnosisDescriptionLookup>();
 builder.Services.AddScoped<IClaimDiagnosisMetadataEnricher, ClaimDiagnosisMetadataEnricher>();
 
@@ -545,6 +553,8 @@ app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingM
 app.MapControllers();
 app.MapChoX12InterchangeEndpoints("api/v1/claims/interchange");
 app.MapChoEdiFileEndpoints("api/v1/claims/edi");
+if (app.Configuration.GetValue<bool>("CoreConnectivity:Enabled"))
+    app.MapChoCoreConnectivity("core/claimstatus", "claims:read");
 
 app.Run();
 
