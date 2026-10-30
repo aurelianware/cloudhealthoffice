@@ -62,6 +62,39 @@ public class AuthorizationRecordTests : TestContext
     }
 
     [Fact]
+    public void Services_tab_lists_each_line_with_its_decision_and_reason()
+    {
+        _auths.Setup(a => a.GetAuthorizationByIdAsync("PA-78")).ReturnsAsync(new AuthorizationDetails
+        {
+            AuthorizationNumber = "PA-78", MemberId = "M2", PatientFirstName = "Daniel", PatientLastName = "Brooks",
+            SubmittedDate = DateTime.UtcNow.AddDays(-4),
+            DiagnosisCodes = { new AuthorizationDiagnosisView { Code = "S83.241A", Description = "Medial meniscus tear" } },
+            RequestedServices =
+            {
+                new AuthorizationLineView
+                {
+                    LineNumber = 1, ProcedureCode = "97110", ProcedureDescription = "Therapeutic exercise", RequestedUnits = 12,
+                    ApprovedUnits = 6, ServiceStatus = "A2", DenialReasonCode = "N115", DenialReason = "Reassess after six visits",
+                },
+                new AuthorizationLineView
+                {
+                    LineNumber = 2, ProcedureCode = "97140", ProcedureDescription = "Manual therapy", RequestedUnits = 12,
+                    ApprovedUnits = 0, ServiceStatus = "A3", DenialReasonCode = "N350", DenialReason = "Not supported by the notes",
+                },
+            },
+        });
+
+        var cut = RenderComponent<AuthorizationRecordView>(p => p
+            .Add(x => x.AuthorizationId, "PA-78").Add(x => x.Tab, "services").Add(x => x.BaseHref, "/authorizations/PA-78"));
+
+        cut.WaitForAssertion(() => cut.FindAll("[data-testid=authorization-line]").Should().HaveCount(2));
+        var lines = cut.FindAll("[data-testid=authorization-line]").Select(r => r.TextContent).ToList();
+        lines[0].Should().Contain("97110").And.Contain("Modified").And.Contain("N115: Reassess after six visits");
+        lines[1].Should().Contain("97140").And.Contain("Denied").And.Contain("N350: Not supported by the notes");
+        cut.Markup.Should().Contain("S83.241A Medial meniscus tear");
+    }
+
+    [Fact]
     public void The_claims_auth_chip_links_to_the_authorization()
     {
         _claims.Setup(c => c.GetClaimByIdAsync("C1")).ReturnsAsync(new ClaimDetails
