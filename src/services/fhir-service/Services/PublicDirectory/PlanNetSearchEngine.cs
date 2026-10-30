@@ -125,7 +125,12 @@ public static class PlanNetSearchEngine
         var values = SplitOr(value);
 
         if (name == "_id")
-            return r => values.Contains(r["id"]?.GetValue<string>() ?? string.Empty, StringComparer.Ordinal);
+        {
+            // A reference to this type names an id too: the Inferno Plan-Net
+            // kit searches _id=Practitioner/123 with the reference it found.
+            var ids = values.Select(v => IdOf(resourceType, v)).ToHashSet(StringComparer.Ordinal);
+            return r => ids.Contains(r["id"]?.GetValue<string>() ?? string.Empty);
+        }
 
         if (name == "_lastUpdated")
         {
@@ -394,6 +399,16 @@ public static class PlanNetSearchEngine
             return null;
         var normalized = NormalizeReference(reference);
         return normalized.Contains('/') ? normalized : null;
+    }
+
+    /// <summary>The id an <c>_id</c> value names: itself, or the id of a reference to <paramref name="resourceType"/>.</summary>
+    private static string IdOf(string resourceType, string value)
+    {
+        if (!value.Contains('/')) return value;
+        var reference = NormalizeReference(value);
+        var slash = reference.IndexOf('/');
+        // A reference to another type names nothing of this type.
+        return reference[..slash] == resourceType ? reference[(slash + 1)..] : string.Empty;
     }
 
     /// <summary><c>Type/id</c> from a relative, absolute or versioned reference; a bare id unchanged.</summary>

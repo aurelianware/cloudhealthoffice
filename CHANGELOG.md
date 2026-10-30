@@ -188,6 +188,12 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **Public directory `_id` search accepts a reference.** `_id=Practitioner/123`
+  (relative, absolute or versioned) now finds Practitioner 123, and a
+  reference to another type finds nothing. The Inferno Plan-Net kit sends
+  the reference it read off a resource as the `_id` of its `_revinclude`
+  tests, so all ten of them failed with "no resources appear to be
+  available".
 - **The SMART token response names the patient it is bound to.** A
   patient launch's token response now carries the `patient` (and
   `encounter`) launch context SMART App Launch requires; it was only in the
