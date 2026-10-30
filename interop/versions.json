@@ -172,7 +172,8 @@
       },
       "igVersionProvenance": "Read from package.json inside the IG packages the kit bundles at the pinned tag. The non-financial package (igs/carin4bb-200-dev-nonfinancial-fixed) self-identifies as hl7.fhir.us.carin-bb 2.0.0 dated 2023-04-24.",
       "knownMismatches": [
-        "CHO's non-financial ExplanationOfBenefit declares the CARIN BB 2.2.0 '-Basis' profiles (C4BB-ExplanationOfBenefit-Inpatient-Institutional-Basis and its siblings). The c4bb_v200devnonfinancial suite at this pin checks the earlier '-NonFinancial' canonicals from the April 2023 branch snapshot it bundles. The canonical URLs differ, so that suite cannot judge CHO's EOBs as they stand. The resolution is a later kit release regenerated against CARIN BB 2.2.0, never renaming CHO's profiles to match a superseded draft."
+        "CHO's non-financial ExplanationOfBenefit declares the CARIN BB 2.2.0 '-Basis' profiles (C4BB-ExplanationOfBenefit-Inpatient-Institutional-Basis and its siblings). The c4bb_v200devnonfinancial suite at this pin checks the earlier '-NonFinancial' canonicals from the April 2023 branch snapshot it bundles. The canonical URLs differ, so that suite cannot judge CHO's EOBs as they stand. The resolution is a later kit release regenerated against CARIN BB 2.2.0, never renaming CHO's profiles to match a superseded draft.",
+        "Each c4bb_v200 ExplanationOfBenefit subtype validation test validates every EOB the kit collected against that one subtype's profile (perform_validation_test(scratch_resources[:all], ...) in generated/v2.0.0/eob_*/validation_test.rb), so the oral, pharmacy and professional tests fail for any member with mixed claim types. They are listed as infernoKnownKitIssues on INFERNO-C4BB-SERVER-001 and do not fail the scenario. Re-check at the next pin bump."
       ],
       "requiredEgress": [
         "https://github.com — the kit is fetched at the pinned tag during explicit setup",

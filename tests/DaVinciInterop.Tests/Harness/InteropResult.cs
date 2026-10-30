@@ -208,5 +208,54 @@ public sealed record InteropResult
     [JsonPropertyName("compatibility")] public Dictionary<string, ProtocolCompatibility> Compatibility { get; init; } = new();
     [JsonPropertyName("environment")] public InteropEnvironmentMetadata Environment { get; init; } = new();
 
+    /// <summary>
+    /// For an Inferno conformance scenario, its test-level results counted by
+    /// Inferno's own outcome (group and suite rows are not counted). Null for
+    /// any other scenario, and for one that never reached the kit.
+    /// </summary>
+    [JsonPropertyName("infernoTests")] public InfernoTestCounts? InfernoTests { get; init; }
+
     [JsonIgnore] public InteropStatus ParsedStatus => Enum.Parse<InteropStatus>(Status);
+}
+
+/// <summary>
+/// An Inferno run's test results, counted per test (not per group), in
+/// Inferno's vocabulary: a published page can show what the kit actually
+/// reported rather than only the scenario's rolled-up status.
+/// </summary>
+public sealed record InfernoTestCounts
+{
+    [JsonPropertyName("passed")] public int Passed { get; init; }
+
+    /// <summary>fail and error, except tests named as known kit issues.</summary>
+    [JsonPropertyName("failed")] public int Failed { get; init; }
+
+    /// <summary>skip, plus wait and cancel (a test that needed an interaction that never came).</summary>
+    [JsonPropertyName("skipped")] public int Skipped { get; init; }
+
+    [JsonPropertyName("omitted")] public int Omitted { get; init; }
+
+    /// <summary>Failed tests the scenario names in infernoKnownKitIssues; not counted against CHO.</summary>
+    [JsonPropertyName("knownKitIssue")] public int KnownKitIssue { get; init; }
+
+    /// <summary>Every test result, including any still running or in an outcome Inferno added later.</summary>
+    [JsonPropertyName("total")] public int Total { get; init; }
+
+    public static InfernoTestCounts From(
+        IEnumerable<InfernoTestRun> runs, IReadOnlyList<InfernoKnownKitIssue> knownKitIssues)
+    {
+        var tests = runs.SelectMany(r => r.Results).Where(r => r.TestId is not null).ToList();
+        bool Known(InfernoResult r) => InfernoKnownKitIssue.Excuses(knownKitIssues, r.TestId);
+        bool IsFailure(InfernoResult r) => r.Result is "fail" or "error";
+
+        return new InfernoTestCounts
+        {
+            Passed = tests.Count(r => r.Result == "pass"),
+            Failed = tests.Count(r => IsFailure(r) && !Known(r)),
+            KnownKitIssue = tests.Count(r => IsFailure(r) && Known(r)),
+            Skipped = tests.Count(r => r.Result is "skip" or "wait" or "cancel"),
+            Omitted = tests.Count(r => r.Result == "omit"),
+            Total = tests.Count,
+        };
+    }
 }
