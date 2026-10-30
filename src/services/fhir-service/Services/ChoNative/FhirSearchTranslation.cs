@@ -99,14 +99,33 @@ public static class FhirSearchTranslation
             return (Utc(day), Utc(day).AddDays(1));
         if (value.Length > 10 && DateTimeOffset.TryParseExact(value, InstantFormats, inv, DateTimeStyles.AssumeUniversal, out var instant))
         {
+            // An instant matches the span its precision names (FHIR search
+            // precision): a minute, a second, or as many fractional digits as
+            // it gives. A millisecond value read off meta.lastUpdated matches
+            // only that millisecond, not the rest of its second.
             var utc = instant.UtcDateTime;
-            // An instant matches the second it names (FHIR precision of the value).
-            var second = new DateTime(utc.Ticks - utc.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
-            return (second, second.AddSeconds(1));
+            var unit = InstantPrecisionTicks(value);
+            var start = new DateTime(utc.Ticks - utc.Ticks % unit, DateTimeKind.Utc);
+            return (start, start.AddTicks(unit));
         }
 
         throw new FhirSearchNotSupportedException(
             $"'{value}' is not a valid {parameter} value (expected YYYY, YYYY-MM, YYYY-MM-DD or an instant).");
+    }
+
+    /// <summary>The span an instant value names, in ticks: its last stated time unit.</summary>
+    private static long InstantPrecisionTicks(string value)
+    {
+        var time = value[11..];
+        var zone = time.IndexOfAny(['Z', 'z', '+', '-']);
+        if (zone >= 0) time = time[..zone];
+        if (time.Length == 5) return TimeSpan.TicksPerMinute; // HH:mm
+        var dot = time.IndexOf('.');
+        if (dot < 0) return TimeSpan.TicksPerSecond;
+        var digits = Math.Min(time.Length - dot - 1, 7);
+        var ticks = 1L;
+        for (var i = digits; i < 7; i++) ticks *= 10;
+        return ticks;
     }
 
     private static DateTime Utc(DateTime value) => DateTime.SpecifyKind(value, DateTimeKind.Utc);
