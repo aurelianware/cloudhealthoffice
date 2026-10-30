@@ -55,7 +55,9 @@ public sealed class EncounterFhirSearchRepositoryTests(MongoRunnerFixture mongo)
     private static IEnumerable<Encounter> Seed()
     {
         yield return Encounter("E1", Tenant, Member, Day(1, 10), Day(1, 12));
-        yield return Encounter("E2", Tenant, Member, Day(3, 1), Day(3, 1), EncounterType.Institutional);
+        var inpatient = Encounter("E2", Tenant, Member, Day(3, 1), Day(3, 1), EncounterType.Institutional);
+        inpatient.PlaceOfServiceCode = "21";
+        yield return inpatient;
         yield return Encounter("E3", Tenant, "MEM-2", Day(3, 1), Day(3, 1));
 
         var voidedBySubmissionType = Encounter("E4", Tenant, Member, Day(4, 1), Day(4, 1));
@@ -196,5 +198,49 @@ public sealed class EncounterFhirSearchRepositoryTests(MongoRunnerFixture mongo)
 
         items.Should().BeEmpty();
         total.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task An_identifier_filter_selects_the_encounter_with_that_control_number()
+    {
+        var ids = await Ids(new EncounterFhirSearchQuery { ControlNumber = "ECN-E1", Limit = 50 });
+
+        ids.Should().Equal("E1");
+    }
+
+    [Fact]
+    public async Task A_class_filter_selects_by_the_place_of_service_the_class_is_derived_from()
+    {
+        (await Ids(new EncounterFhirSearchQuery { MemberId = Member, Classes = ["IMP"], Limit = 50 }))
+            .Should().Equal("E2");
+        (await Ids(new EncounterFhirSearchQuery { MemberId = Member, Classes = ["AMB"], Limit = 50 }))
+            .Should().BeEquivalentTo(["E1", "E4", "E5", "E6"]);
+        (await Ids(new EncounterFhirSearchQuery { MemberId = Member, Classes = ["AMB", "IMP"], Limit = 50 }))
+            .Should().HaveCount(5, "class codes OR");
+    }
+
+    [Fact]
+    public async Task The_class_filter_is_the_exact_inverse_of_what_the_projection_emits()
+    {
+        var projector = new EncounterFhirProjector();
+        foreach (var code in new[] { "AMB", "IMP" })
+        {
+            var (items, _) = await _repository.SearchAsync(
+                Tenant, new EncounterFhirSearchQuery { Classes = [code], Limit = 50 });
+
+            items.Should().NotBeEmpty();
+            items.Select(e => projector.Project(e)["class"]!["code"]!.GetValue<string>())
+                .Should().AllBe(code, $"every record the filter returned for {code} must project as it");
+        }
+    }
+
+    [Fact]
+    public async Task A_class_the_projection_never_emits_matches_nothing()
+    {
+        var (items, total) = await _repository.SearchAsync(
+            Tenant, new EncounterFhirSearchQuery { Classes = ["VR"], Limit = 50 });
+
+        items.Should().BeEmpty();
+        total.Should().Be(0);
     }
 }
