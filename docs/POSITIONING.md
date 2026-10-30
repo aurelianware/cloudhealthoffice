@@ -205,7 +205,7 @@ Everything ships as a Helm chart into an existing Kubernetes cluster or Azure AK
 
 #### Who enters here
 
-A payer locked into QNXT, HealthEdge, Facets, or a comparable legacy core, staring down the CMS-0057-F deadline, who needs a compliance surface that can be stood up in weeks without a platform-rebuild project. The decision-maker is typically an IT leader or compliance officer. The critical constraint is "zero change to how claims are adjudicated today."
+A payer locked into QNXT, HealthEdge, Facets, or a comparable legacy core, staring down the CMS-0057-F deadline, who wants a compliance surface beside the core without a platform-rebuild project. The decision-maker is typically an IT leader or compliance officer. The critical constraint is "zero change to how claims are adjudicated today."
 
 #### What Layer 1 deliberately does NOT do
 
