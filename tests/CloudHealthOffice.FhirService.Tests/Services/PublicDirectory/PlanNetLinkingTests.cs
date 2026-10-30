@@ -62,18 +62,24 @@ public class PlanNetLinkingTests
     }
 
     [Fact]
-    public void A_role_keeps_the_practice_links_the_directory_publishes()
+    public void A_role_keeps_the_practice_links_the_directory_publishes_and_only_the_practice_locations()
     {
         var role = Role("1999999992");
 
+        var hospitalLocation = Resource("Location", "1999999992-loc");
+        hospitalLocation["managingOrganization"] = new JsonObject { ["reference"] = "Organization/1999999992" };
+
         PlanNetLinking.Link(
             [Payer(), Hospital(), role, Resource("HealthcareService", "1999999992-svc"),
-             Resource("Location", "1999999992-loc"), Resource("Location", "1234567893-loc")],
+             hospitalLocation, Resource("Location", "1234567893-loc")],
             "payer");
 
         role["organization"]!["reference"]!.GetValue<string>().Should().Be("Organization/1999999992");
         role["healthcareService"]!.AsArray().Should().ContainSingle();
-        role["location"]!.AsArray().Should().HaveCount(2);
+        role["location"]!.AsArray().Select(l => l!["reference"]!.GetValue<string>())
+            .Should().Equal(new[] { "Location/1999999992-loc" },
+                "a role practised at the hospital lists the hospital's locations only; the Inferno Plan-Net " +
+                "kit reads the first location of a role and expects every included one to be it");
     }
 
     [Fact]

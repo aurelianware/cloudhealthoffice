@@ -18,7 +18,8 @@ namespace FhirService.Services.PublicDirectory;
 ///   and <c>location</c> that name something the directory does not publish
 ///   are removed. provider-service names a practitioner's affiliated hospital
 ///   by NPI whether or not that hospital is in the directory; a reference a
-///   client cannot resolve is worse than none.</item>
+///   client cannot resolve is worse than none. A role whose practice is
+///   published then lists only that practice's locations.</item>
 /// </list>
 /// </summary>
 public static class PlanNetLinking
@@ -48,6 +49,7 @@ public static class PlanNetLinking
                     PruneReference(resource, "organization", published);
                     PruneReferences(resource, "healthcareService", published);
                     PruneReferences(resource, "location", published);
+                    KeepPracticeLocations(resource, byKey);
                     break;
                 case "Endpoint" when ReferenceOf(resource["managingOrganization"]) == payerKey && Key(resource) is { } endpointKey:
                     payerEndpoints.Add(new JsonObject { ["reference"] = endpointKey });
@@ -72,6 +74,28 @@ public static class PlanNetLinking
             affiliation["organization"] = organization;
             return;
         }
+    }
+
+    /// <summary>
+    /// A role practised at an organization lists that organization's
+    /// locations, not the practitioner's own address as well: the role is
+    /// where the practitioner sees patients for it. When the practice is not
+    /// published the role keeps the practitioner's own location.
+    /// </summary>
+    private static void KeepPracticeLocations(JsonObject role, Dictionary<string, JsonObject> byKey)
+    {
+        if (ReferenceOf(role["organization"]) is not { } practice) return;
+        if (role["location"] is not JsonArray locations) return;
+
+        var atPractice = locations
+            .OfType<JsonObject>()
+            .Where(l => ReferenceOf(l) is { } key && byKey.TryGetValue(key, out var location)
+                        && ReferenceOf(location["managingOrganization"]) == practice)
+            .ToList();
+        if (atPractice.Count == 0) return;
+
+        foreach (var other in locations.OfType<JsonObject>().Except(atPractice).ToList())
+            locations.Remove(other);
     }
 
     private static void PruneReference(JsonObject resource, string element, HashSet<string> published)
