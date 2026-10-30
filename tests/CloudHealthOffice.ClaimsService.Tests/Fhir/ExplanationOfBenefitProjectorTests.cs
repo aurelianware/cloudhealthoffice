@@ -52,6 +52,43 @@ public class ExplanationOfBenefitProjectorTests
     }
 
     [Fact]
+    public void Project_declares_the_financial_profile_with_and_without_the_2_0_version()
+    {
+        // CARIN BB 2.0.0's EOB-*-meta-profile-version invariants are errors and
+        // want the canonical followed by "|2.0." (nightly 2026-10-30).
+        var json = _projector.Project(MinimalClaim());
+
+        json["meta"]!["profile"]!.AsArray().Select(p => p!.GetValue<string>()).Should().Equal(
+            "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Professional-NonClinician",
+            "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Professional-NonClinician|2.0.0");
+    }
+
+    [Fact]
+    public void Project_pays_the_billing_provider_when_the_837_names_no_pay_to_plan()
+    {
+        var json = _projector.Project(MinimalClaim());
+
+        json["payee"]!["type"]!["coding"]![0]!["code"]!.GetValue<string>().Should().Be("provider");
+        json["payee"]!["type"]!["coding"]![0]!["system"]!.GetValue<string>()
+            .Should().Be("http://terminology.hl7.org/CodeSystem/payeetype");
+        json["payee"]!["party"]!["identifier"]!["value"]!.GetValue<string>().Should().Be("1234567890");
+    }
+
+    [Fact]
+    public void Project_pays_the_pay_to_plan_on_a_subrogation_demand()
+    {
+        var claim = MinimalClaim();
+        claim.PayToPlan = new ClaimPayToPlan { Name = "Subrogation Plan", Identifier = "PLAN-9" };
+
+        var json = _projector.Project(claim);
+
+        json["payee"]!["type"]!["coding"]![0]!["code"]!.GetValue<string>().Should().Be("other");
+        json["payee"]!["party"]!["display"]!.GetValue<string>().Should().Be("Subrogation Plan",
+            "C4BB requires a party when the payee type is other");
+        json["payee"]!["party"]!["identifier"]!["value"]!.GetValue<string>().Should().Be("PLAN-9");
+    }
+
+    [Fact]
     public void Project_uses_ClaimVersionId_for_FHIR_id_when_present()
     {
         var claim = MinimalClaim();

@@ -97,11 +97,16 @@ for file in "${FILES[@]}"; do
 
   # The instance names its own profile, and the manifest names the packages the
   # validator loads to resolve it. Neither is guessed from the file name.
+  # A versioned canonical (url|version) whose unversioned url is also declared
+  # is skipped: -profile cannot parse the "|" (the validator dies with a URI
+  # error), and the loaded package resolves the unversioned url anyway. CARIN
+  # BB 2.0.0 requires financial EOBs to declare both.
   PROFILES=()
   while IFS= read -r line; do [[ -n "$line" ]] && PROFILES+=("$line"); done < <(
     python3 -c '
 import json, sys
-print("\n".join(json.load(open(sys.argv[1])).get("meta", {}).get("profile", [])))' "$file")
+declared = json.load(open(sys.argv[1])).get("meta", {}).get("profile", [])
+print("\n".join(p for p in declared if p.split("|", 1)[0] == p or p.split("|", 1)[0] not in declared))' "$file")
 
   IGS=()
   while IFS= read -r line; do [[ -n "$line" ]] && IGS+=("$line"); done < <(

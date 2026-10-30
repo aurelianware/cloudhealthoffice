@@ -96,7 +96,8 @@ public class MetadataController : FhirControllerBase
                             ("beneficiary",  SearchParamType.Reference),
                             ("status",       SearchParamType.Token),
                             ("type",         SearchParamType.Token)
-                        ]),
+                        ],
+                        includes: [ChoNativeFhirDataAdapter.CoveragePayorInclude]),
                         // Two projections share this resource type. Without `use`
                         // the search returns claims (claims-service's
                         // projection); `use=preauthorization` returns prior
@@ -113,8 +114,13 @@ public class MetadataController : FhirControllerBase
                             ("created",      SearchParamType.Date),
                             ("type",         SearchParamType.Token),
                             ("status",       SearchParamType.Token),
-                            ("use",          SearchParamType.Token)
+                            ("use",          SearchParamType.Token),
+                            ("identifier",   SearchParamType.Token),
+                            ("service-date", SearchParamType.Date),
+                            ("service-start-date",    SearchParamType.Date),
+                            ("billable-period-start", SearchParamType.Date)
                         ],
+                        includes: [.. ExplanationOfBenefitController.AcceptedIncludes.Order(StringComparer.Ordinal)],
                         supportedProfiles:
                         [
                             // What the prior-authorization projection is shaped
@@ -436,7 +442,8 @@ public class MetadataController : FhirControllerBase
         CapabilityStatement.TypeRestfulInteraction[]? interactions = null,
         string[]? supportedProfiles = null,
         (string Name, string Definition)[]? operations = null,
-        string[]? revIncludes = null)
+        string[]? revIncludes = null,
+        string[]? includes = null)
     {
         interactions ??= [
             CapabilityStatement.TypeRestfulInteraction.Read,
@@ -461,6 +468,11 @@ public class MetadataController : FhirControllerBase
         if (supportedProfiles is { Length: > 0 })
         {
             resource.SupportedProfile = [.. supportedProfiles];
+        }
+
+        if (includes is { Length: > 0 })
+        {
+            resource.SearchInclude = [.. includes];
         }
 
         if (revIncludes is { Length: > 0 })

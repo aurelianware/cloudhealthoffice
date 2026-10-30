@@ -170,11 +170,13 @@ public sealed class ScenarioInventoryTests
 
         foreach (var scenario in Inventory.Scenarios.Where(s => s.InfernoSuite is not null))
         {
-            var act = () => InfernoSuiteScenario.BuildInputs(scenario, fixture);
+            // A patient-app suite is given the token the launch obtains; any value stands in here.
+            var patientToken = scenario.InfernoAuth == InfernoAuthModes.PatientApp ? "patient-app-token" : null;
+            var act = () => InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken);
 
             act.Should().NotThrow($"'{scenario.Id}' declares inputs [{string.Join(", ", scenario.InfernoInputs)}]");
 
-            InfernoSuiteScenario.BuildInputs(scenario, fixture)
+            InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken)
                 .Select(input => input.Name)
                 .Should().BeEquivalentTo(scenario.InfernoInputs);
         }
@@ -332,12 +334,50 @@ public sealed class ScenarioInventoryTests
         }
     }
 
+    /// <summary>
+    /// CARIN BB searches ExplanationOfBenefit without naming a patient, which
+    /// CHO answers only for a member-bound token (nightly 2026-10-30), so the
+    /// suite runs with the token the patient launch obtains, and smart-auth-service
+    /// must be running to obtain it.
+    /// </summary>
+    [Fact]
+    public void The_carin_bb_suite_authenticates_as_the_members_patient_app()
+    {
+        var scenario = Inventory.Scenario("INFERNO-C4BB-SERVER-001");
+        var fixture = ChoSeedFixture.Load();
+
+        scenario.InfernoAuth.Should().Be(InfernoAuthModes.PatientApp);
+        scenario.RequiredServices.Should().Contain("cho-smart-auth-service");
+
+        var inputs = InfernoSuiteScenario.BuildInputs(scenario, fixture, "patient-token").ToDictionary(i => i.Name);
+        var auth = System.Text.Json.JsonDocument.Parse(inputs["smart_auth_info"].Value).RootElement;
+        auth.GetProperty("access_token").GetString().Should().Be("patient-token");
+        inputs["patient_ids"].Value.Should().Be(fixture.Member.MemberId);
+
+        var act = () => InfernoSuiteScenario.BuildInputs(scenario, fixture);
+        act.Should().Throw<InteropEnvironmentException>("a run must never fall back to a token bound to nobody");
+    }
+
+    [Fact]
+    public void The_patient_app_asks_only_for_what_a_patient_app_may_hold()
+    {
+        var app = ChoSeedFixture.Load().PatientApp;
+
+        app.ClientId.Should().NotBeNullOrWhiteSpace();
+        app.Username.Should().NotBeNullOrWhiteSpace();
+        new Uri(app.RedirectUri).Scheme.Should().Be("https", "smart-auth-service accepts only HTTPS redirects outside loopback");
+        app.Scopes.Should().Contain("launch/patient")
+            .And.OnlyContain(scope => scope == "launch/patient" || scope.StartsWith("patient/"));
+        InfernoPatientApp.RegistrationBody(app)["kind"]!.GetValue<string>().Should().Be("patient-app");
+    }
+
     [Fact]
     public void Every_scenario_names_a_known_auth_mode()
     {
         foreach (var scenario in Inventory.Scenarios)
         {
-            scenario.InfernoAuth.Should().BeOneOf(InfernoAuthModes.ChoToken, InfernoAuthModes.BackendServices);
+            scenario.InfernoAuth.Should().BeOneOf(
+                InfernoAuthModes.ChoToken, InfernoAuthModes.BackendServices, InfernoAuthModes.PatientApp);
         }
     }
 

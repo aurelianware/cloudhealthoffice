@@ -27,4 +27,15 @@ public class MetadataInstantiatesTests : IClassFixture<FhirTestWebAppFactory>
         Parser.Parse<CapabilityStatement>(await response.Content.ReadAsStringAsync())
             .Instantiates.Should().Contain("http://hl7.org/fhir/us/carin-bb/CapabilityStatement/c4bb");
     }
+
+    [Fact]
+    public async Task Coverage_advertises_the_payor_include_carin_bb_requires()
+    {
+        using var client = _factory.CreateClient();
+        var response = await client.GetAsync("/fhir/r4/metadata");
+
+        Parser.Parse<CapabilityStatement>(await response.Content.ReadAsStringAsync())
+            .Rest.Single().Resource.Single(r => r.Type == "Coverage")
+            .SearchInclude.Should().Equal("Coverage:payor");
+    }
 }
