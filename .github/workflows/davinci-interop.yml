@@ -336,6 +336,73 @@ jobs:
             echo "No interop containers remain."
           fi
 
+  # The kits' verdicts go to their own snapshot, published only from a run
+  # whose inferno job left evidence. The push-triggered publish above never
+  # writes it, so a push cannot replace the last nightly's results with
+  # "not run". A manual dispatch on main publishes too, because that is how
+  # a fix is confirmed before the next nightly.
+  publish-inferno:
+    name: Publish latest Inferno conformance evidence
+    runs-on: ubuntu-latest
+    needs: inferno
+    if: >-
+      always() && needs.inferno.result != 'skipped' && needs.inferno.result != 'cancelled'
+      && github.ref == 'refs/heads/main'
+      && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: write
+      actions: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Download the conformance evidence
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: inferno-conformance-evidence-${{ github.sha }}
+          path: artifacts/interop
+
+      # No run.json means the job died before writing evidence. Publishing then
+      # would replace real verdicts with "no run", so the last snapshot stands.
+      - name: Check for a run document
+        id: evidence
+        run: |
+          if [ -f artifacts/interop/run.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::The inferno job left no run.json; keeping the last published conformance snapshot."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Project the public snapshot
+        if: steps.evidence.outputs.present == 'true'
+        run: node scripts/interop/publish-inferno-evidence.mjs --run artifacts/interop/run.json
+
+      - name: Publish the snapshot to ci-evidence
+        id: publish
+        if: steps.evidence.outputs.present == 'true'
+        env:
+          IGNORE_FIELD: generatedAtUtc
+        run: >-
+          bash scripts/ci/publish-evidence.sh "interop: Inferno conformance evidence from ${{ github.sha }}"
+          src/site/insights/cms-0057-f/inferno-conformance-public-evidence.json:evidence/inferno-conformance-public-evidence.json
+
+      - name: Redeploy the site
+        if: steps.publish.outputs.published == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run deploy-pages.yml --ref main
+          gh workflow run deploy-cloudflare-pages.yml --ref main
+
   publish:
     name: Publish latest interoperability evidence
     runs-on: ubuntu-latest

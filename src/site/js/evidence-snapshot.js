@@ -6,6 +6,9 @@
  *                                         (PASSABLE / PARTIAL / GAP / N/A)
  *   davinci-interop-public-evidence.json  external Da Vinci interoperability
  *                                         (Passed / Failed / Skipped / NotRun)
+ *   inferno-conformance-public-evidence.json
+ *                                         Inferno conformance kits judging CHO
+ *                                         (same vocabulary, separate document)
  *
  * The two are rendered by separate functions with separate vocabularies and are
  * never summed, cross-referenced or rolled into a single score. That separation
@@ -22,6 +25,7 @@
  *   <div data-evidence="cms0057" data-src="…json" data-view="scenarios"
  *        data-capability="PayerToPayer">
  *   <div data-evidence="interop" data-src="…json">
+ *   <div data-evidence="inferno" data-src="…json">
  *
  * Each block must contain [data-evidence-fallback] (visible prose) and
  * [data-evidence-body] (hidden until the render succeeds).
@@ -353,9 +357,141 @@
     return true;
   }
 
+  /* ── Inferno conformance kits ─────────────────────────────────────────── */
+
+  // One card per kit. Status, counts, failing tests and known kit issues all
+  // come from the document; the page supplies none of them.
+  function renderInferno(root, body, data) {
+    var run = data.latestRun;
+
+    var head = el('div', 'ev-snapshot__head');
+    head.appendChild(el('h3', null, 'Latest published Inferno run'));
+    head.appendChild(
+      run
+        ? el('span', 'ev-badge ev-badge--green', 'Published · ' + String(run.generatedAtUtc || '').slice(0, 10))
+        : el('span', 'ev-badge ev-badge--amber', 'No run published yet')
+    );
+    body.appendChild(head);
+
+    var meta = el('div', 'ev-meta');
+    if (run && run.choCommit) {
+      metaItem(meta, 'Tested revision:', shaNode(run.choCommit.slice(0, 12), run.choCommitUrl));
+    } else if (data.sourceCommitShort) {
+      metaItem(meta, 'Inventory revision:', shaNode(data.sourceCommitShort, data.sourceCommitUrl));
+    }
+    if (run) {
+      var s = run.summary || {};
+      metaItem(
+        meta,
+        'Kits:',
+        el('span', null, (s.passed || 0) + ' passed / ' + (s.failed || 0) + ' failed / ' + (s.notRun || 0) + ' not run, of ' + (s.total || 0))
+      );
+      if (run.workflowRunUrl) metaItem(meta, 'CI run:', link(run.workflowRunUrl, 'workflow log'));
+    }
+    metaItem(meta, 'Data:', el('span', null, data.dataClassification || 'synthetic'));
+    body.appendChild(meta);
+
+    if (!run) {
+      body.appendChild(
+        el(
+          'p',
+          'ev-fallback',
+          'The kits run nightly against the main branch. Their results are published here after the next run ' +
+            'that produces evidence. Until then no kit is shown as passed or failed.'
+        )
+      );
+    }
+
+    var testLabels = [
+      ['passed', 'passed'],
+      ['failed', 'failed'],
+      ['skipped', 'skipped'],
+      ['omitted', 'omitted'],
+      ['knownKitIssue', 'known kit issues']
+    ];
+
+    var grid = el('div', 'ev-kits');
+    (data.kits || []).forEach(function (kit) {
+      var card = el('article', 'ev-kit');
+      card.id = 'kit-' + String(kit.scenarioId || '').toLowerCase();
+
+      var top = el('div', 'ev-kit__head');
+      top.appendChild(el('h3', null, kit.protocol));
+      top.appendChild(pill(INTEROP_STATUS, kit.status));
+      card.appendChild(top);
+
+      var k = kit.kit || {};
+      var kitLine = el('p', 'ev-kit__kit');
+      kitLine.appendChild(k.upstreamRepository ? link(k.upstreamRepository, k.name) : el('span', null, k.name));
+      if (k.tag) kitLine.appendChild(document.createTextNode(' ' + k.tag));
+      if (kit.suite) {
+        kitLine.appendChild(document.createTextNode(' · suite '));
+        kitLine.appendChild(el('code', null, kit.suite));
+      }
+      card.appendChild(kitLine);
+
+      if (kit.regulatoryContext) card.appendChild(el('p', null, kit.regulatoryContext));
+
+      var groups = kit.groups || [];
+      card.appendChild(
+        el('p', 'ev-kit__scope', groups.length ? 'Groups run: ' + groups.join(', ') : 'Whole suite run')
+      );
+
+      if (kit.tests) {
+        card.appendChild(tallies(kit.tests, testLabels));
+        card.appendChild(el('p', 'ev-kit__scope', (kit.tests.total || 0) + ' tests in this run'));
+      }
+      if (kit.statusReason) {
+        card.appendChild(el('p', 'ev-kit__reason', kit.statusReason));
+      }
+      if (kit.testedAtUtc) {
+        card.appendChild(el('p', 'ev-kit__scope', 'Finished ' + String(kit.testedAtUtc).slice(0, 16).replace('T', ' ') + ' UTC'));
+      }
+
+      var failing = kit.failingTests || [];
+      if (failing.length) {
+        var fd = el('details', 'ev-kit__list');
+        fd.appendChild(el('summary', null, failing.length + (failing.length === 1 ? ' failing test' : ' failing tests')));
+        var ul = el('ul');
+        failing.forEach(function (t) {
+          var li = el('li');
+          li.appendChild(el('code', null, t.test));
+          if (t.message) li.appendChild(document.createTextNode(' — ' + t.message));
+          ul.appendChild(li);
+        });
+        fd.appendChild(ul);
+        card.appendChild(fd);
+      }
+
+      var known = kit.knownKitIssues || [];
+      if (known.length) {
+        var kd = el('details', 'ev-kit__list');
+        kd.appendChild(el('summary', null, known.length + (known.length === 1 ? ' known kit issue' : ' known kit issues') + ', not counted'));
+        var kul = el('ul');
+        known.forEach(function (t) {
+          var li = el('li');
+          li.appendChild(el('code', null, t.test));
+          li.appendChild(document.createTextNode((t.failedThisRun ? ' (failed this run) — ' : ' — ') + (t.reason || '')));
+          kul.appendChild(li);
+        });
+        kd.appendChild(kul);
+        card.appendChild(kd);
+      }
+
+      grid.appendChild(card);
+    });
+    body.appendChild(grid);
+
+    var disclaimers = data.disclaimers || [];
+    if (disclaimers.length) {
+      body.appendChild(el('p', 'ev-fallback', disclaimers.join(' ')));
+    }
+    return true;
+  }
+
   /* ── Wiring ───────────────────────────────────────────────────────────── */
 
-  var RENDERERS = { cms0057: renderCms0057, interop: renderInterop };
+  var RENDERERS = { cms0057: renderCms0057, interop: renderInterop, inferno: renderInferno };
 
   function hydrate(root) {
     var kind = root.getAttribute('data-evidence');

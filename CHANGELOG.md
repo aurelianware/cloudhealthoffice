@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Website: Inferno conformance results page (`/evidence/inferno-conformance`) rendered from a new `inferno-conformance-public-evidence.json` snapshot, and the article "Which Inferno Test Kit Checks Which CMS-0057-F API". The DaVinci Interop workflow's new `publish-inferno` job projects the nightly kit results (`scripts/interop/publish-inferno-evidence.mjs`) to the ci-evidence branch, and the site deploys overlay it. Pages that said no Inferno kit had run now link to the results.
+
 ## [6.1.0] - TBD
 
 "Spartacus."
