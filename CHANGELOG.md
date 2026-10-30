@@ -188,6 +188,12 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **The interop seed has a second member for Bulk Data.** The Bulk Data kit
+  fails an export with fewer than two Patients, and the seed had one.
+  `additionalMembers` in `interop/cho-seed.json` adds a member with coverage
+  and a claim from the same billing provider, so both members are in the
+  panel the kit exports. US Core and CARIN BB still judge the first member.
+
 - **Inferno findings now say why.** A failing test's finding carries the
   error messages it logged (the validator's issues behind a profile failure)
   and, for a request CHO refused, CHO's response body, so a CHO gap can be

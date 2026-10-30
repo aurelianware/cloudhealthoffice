@@ -145,6 +145,76 @@
       ]
     }
   ],
+  "additionalMembers": [
+    {
+      "_comment": "A second member with a claim from the same billing provider. The Bulk Data kit requires an export to hold more than one Patient, and the provider's panel (the Group the kit exports) is the members with claims from that provider. US Core and CARIN BB judge the first member only.",
+      "member": {
+        "memberId": "INTEROP-MEM-2",
+        "groupNumber": "INTEROP-GRP-1",
+        "isSubscriber": true,
+        "firstName": "Secondcase",
+        "lastName": "Interop",
+        "dateOfBirth": "1985-06-15T00:00:00Z",
+        "gender": "M",
+        "birthSex": "M",
+        "address": "2 Synthetic Way",
+        "city": "Springfield",
+        "state": "FL",
+        "zipCode": "32401",
+        "phone": "555-0101",
+        "email": "secondcase.interop@example.invalid",
+        "preferredLanguage": "en",
+        "effectiveDate": "2026-01-01T00:00:00Z"
+      },
+      "coverage": {
+        "memberId": "INTEROP-MEM-2",
+        "groupNumber": "INTEROP-GRP-1",
+        "planId": "INTEROP-PLAN-1",
+        "coverageLevel": "EMP",
+        "insuranceLineCode": "HM",
+        "effectiveDate": "2026-01-01T00:00:00Z"
+      },
+      "claims": [
+        {
+          "expectProfile": "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Professional-NonClinician-Basis",
+          "claimNumber": "INTEROP-CLM-PROF-2",
+          "memberId": "INTEROP-MEM-2",
+          "subscriberId": "INTEROP-MEM-2",
+          "patientFirstName": "Secondcase",
+          "patientLastName": "Interop",
+          "patientRelationship": "18",
+          "lineOfBusiness": 1,
+          "billingProviderNPI": "1234567893",
+          "billingProviderName": "Interop Provider A (synthetic)",
+          "renderingProviderNPI": "1679576722",
+          "renderingProviderName": "Interop Rendering B (synthetic)",
+          "placeOfServiceCode": "11",
+          "claimType": 1,
+          "claimFrequencyCode": "1",
+          "totalChargeAmount": 180.00,
+          "serviceDateFrom": "2026-05-11T00:00:00Z",
+          "serviceDateTo": "2026-05-11T00:00:00Z",
+          "diagnosisCodes": [
+            { "code": "I10", "codeQualifier": "ABK", "pointerNumber": 1, "description": "Essential (primary) hypertension" }
+          ],
+          "claimLines": [
+            {
+              "lineNumber": 1,
+              "procedureCode": "99213",
+              "procedureDescription": "Office or other outpatient visit, established patient",
+              "diagnosisPointers": [1],
+              "serviceDateFrom": "2026-05-11T00:00:00Z",
+              "serviceDateTo": "2026-05-11T00:00:00Z",
+              "units": 1,
+              "chargeAmount": 180.00,
+              "placeOfServiceCode": "11",
+              "renderingProviderNPI": "1679576722"
+            }
+          ]
+        }
+      ]
+    }
+  ],
   "encounters": [
     {
       "_comment": "The visit behind INTEROP-CLM-PROF-1, as an encounter record (837P). Unlike claims-service, encounter-service reads its enums as names (Commercial, Professional, Original), not numbers. fhir-service serves it as FHIR Encounter, which INTEROP-USCORE-SERVER-001 judges; without one the kit had no Encounter to test.",

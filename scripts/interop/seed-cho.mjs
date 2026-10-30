@@ -124,24 +124,56 @@ async function put(label, method, url, token, body) {
   console.log(`    ${label}: ${status}`);
 }
 
+/**
+ * The first member with its coverage and claims, then each of
+ * additionalMembers. Suites judge the first; the others exist for checks
+ * that need more than one patient (the Bulk Data kit's export).
+ */
+function households(fixture) {
+  return [
+    { member: fixture.member, coverage: fixture.coverage, claims: fixture.claims },
+    ...(fixture.additionalMembers ?? []),
+  ];
+}
+
 async function seed(fixture, token) {
-  console.log(`==> member-service ${SERVICES.member}`);
-  await put('member', 'POST', `${SERVICES.member}/api/v1/members`, token, asPayload(fixture.member));
+  for (const household of households(fixture)) {
+    await seedHousehold(household, token);
+  }
+
+  console.log(`==> encounter-service ${SERVICES.encounter}`);
+  // Encounter submission assigns a new id on every POST, so a re-run would
+  // stack a second encounter on the member. Ask by control number first.
+  for (const encounter of fixture.encounters) {
+    await createUnlessPresent(
+      encounter.encounterControlNumber,
+      `${SERVICES.encounter}/api/encounters/control-number/${encounter.encounterControlNumber}`,
+      `${SERVICES.encounter}/api/encounters`,
+      token,
+      asPayload(encounter));
+  }
+
+  await seedDirectory(fixture.directory, token);
+}
+
+async function seedHousehold({ member, coverage, claims }, token) {
+  console.log(`==> member-service ${SERVICES.member} (${member.memberId})`);
+  await put('member', 'POST', `${SERVICES.member}/api/v1/members`, token, asPayload(member));
 
   console.log(`==> coverage-service ${SERVICES.coverage}`);
   // coverage-service answers 201 to a second identical POST rather than 409, so
   // a re-run would stack duplicate coverage on the member. Ask first.
   const existing = await call(
-    'GET', `${SERVICES.coverage}/api/v1/coverage/member/${fixture.coverage.memberId}/history`, token);
+    'GET', `${SERVICES.coverage}/api/v1/coverage/member/${coverage.memberId}/history`, token);
   const alreadyCovered = existing.status === 200 && JSON.parse(existing.text).length > 0;
   if (alreadyCovered) {
     console.log('    coverage: already present');
   } else {
-    await put('coverage', 'POST', `${SERVICES.coverage}/api/v1/coverage`, token, asPayload(fixture.coverage));
+    await put('coverage', 'POST', `${SERVICES.coverage}/api/v1/coverage`, token, asPayload(coverage));
   }
 
   console.log(`==> claims-service ${SERVICES.claims}`);
-  for (const claim of fixture.claims) {
+  for (const claim of claims) {
     // Claim submission is not idempotent either — a second POST of the same
     // claim number is a legitimate resubmission and gets its own claim — so a
     // re-run would double the EOBs a suite reads. Ask by claim number first.
@@ -159,20 +191,6 @@ async function seed(fixture, token) {
     }
     await put(claim.claimNumber, 'POST', `${SERVICES.claims}/api/v1/claims`, token, asPayload(claim));
   }
-
-  console.log(`==> encounter-service ${SERVICES.encounter}`);
-  // Encounter submission assigns a new id on every POST, so a re-run would
-  // stack a second encounter on the member. Ask by control number first.
-  for (const encounter of fixture.encounters) {
-    await createUnlessPresent(
-      encounter.encounterControlNumber,
-      `${SERVICES.encounter}/api/encounters/control-number/${encounter.encounterControlNumber}`,
-      `${SERVICES.encounter}/api/encounters`,
-      token,
-      asPayload(encounter));
-  }
-
-  await seedDirectory(fixture.directory, token);
 }
 
 /**
@@ -232,31 +250,8 @@ async function seedDirectory(directory, token) {
  * path serves it, and it certainly does not mean it serves the right profile.
  */
 async function verify(fixture, token) {
-  const patientUrl = `${SERVICES.fhir}/fhir/r4/Patient/${fixture.member.memberId}`;
-  console.log(`==> verifying through fhir-service ${patientUrl}`);
-  const patient = await readFhir(patientUrl, token, 'the seeded member');
-  expectProfile(
-    patient, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient', 'Patient');
-  console.log(`    Patient/${patient.id} — us-core-patient`);
-
-  // The Provider Access payload itself. A claim that lands on the wrong CARIN
-  // profile is a silently weaker answer, not an error — the projector falls to
-  // the outpatient profile for any institutional claim it cannot read as
-  // inpatient — so each claim names the profile it must produce.
-  const eobUrl =
-    `${SERVICES.claims}/fhir/ProviderAccess/ExplanationOfBenefit?patient=${fixture.member.memberId}`;
-  console.log(`==> verifying the Provider Access EOBs ${eobUrl}`);
-  const bundle = await readFhir(eobUrl, token, 'the Provider Access EOB search');
-  const served = (bundle.entry ?? []).flatMap((e) => e.resource?.meta?.profile ?? []);
-
-  for (const claim of fixture.claims) {
-    if (!claim.expectProfile) continue;
-    if (!served.includes(claim.expectProfile)) {
-      throw new Error(
-        `${claim.claimNumber} should project to ${claim.expectProfile}, but the search ` +
-        `returned ${served.length ? served.join(', ') : 'nothing'}.`);
-    }
-    console.log(`    ${claim.claimNumber} — ${claim.expectProfile.split('/').pop()}`);
+  for (const household of households(fixture)) {
+    await verifyHousehold(household, token);
   }
 
   // The encounters as the US Core kit will find them: by patient, through
@@ -278,6 +273,35 @@ async function verify(fixture, token) {
   }
 
   await verifyDirectory(fixture.directory);
+}
+
+async function verifyHousehold({ member, claims }, token) {
+  const patientUrl = `${SERVICES.fhir}/fhir/r4/Patient/${member.memberId}`;
+  console.log(`==> verifying through fhir-service ${patientUrl}`);
+  const patient = await readFhir(patientUrl, token, 'the seeded member');
+  expectProfile(
+    patient, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient', 'Patient');
+  console.log(`    Patient/${patient.id} — us-core-patient`);
+
+  // The Provider Access payload itself. A claim that lands on the wrong CARIN
+  // profile is a silently weaker answer, not an error — the projector falls to
+  // the outpatient profile for any institutional claim it cannot read as
+  // inpatient — so each claim names the profile it must produce.
+  const eobUrl =
+    `${SERVICES.claims}/fhir/ProviderAccess/ExplanationOfBenefit?patient=${member.memberId}`;
+  console.log(`==> verifying the Provider Access EOBs ${eobUrl}`);
+  const bundle = await readFhir(eobUrl, token, 'the Provider Access EOB search');
+  const served = (bundle.entry ?? []).flatMap((e) => e.resource?.meta?.profile ?? []);
+
+  for (const claim of claims) {
+    if (!claim.expectProfile) continue;
+    if (!served.includes(claim.expectProfile)) {
+      throw new Error(
+        `${claim.claimNumber} should project to ${claim.expectProfile}, but the search ` +
+        `returned ${served.length ? served.join(', ') : 'nothing'}.`);
+    }
+    console.log(`    ${claim.claimNumber} — ${claim.expectProfile.split('/').pop()}`);
+  }
 }
 
 /**
