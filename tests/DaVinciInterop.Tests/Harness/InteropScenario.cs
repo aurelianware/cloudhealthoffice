@@ -44,6 +44,14 @@ public sealed record InteropScenarioDefinition
     /// </summary>
     [JsonPropertyName("infernoGroups")] public List<string> InfernoGroups { get; init; } = new();
 
+    /// <summary>
+    /// Kit tests that cannot judge CHO as the kit is written, each with its
+    /// reason. Their failures are recorded as findings but do not fail the
+    /// scenario. This is a claim about the kit, so it lives here beside the
+    /// groups, where a reader can check it, and each entry names one test.
+    /// </summary>
+    [JsonPropertyName("infernoKnownKitIssues")] public List<InfernoKnownKitIssue> InfernoKnownKitIssues { get; init; } = new();
+
     /// <summary>The suite inputs the harness supplies, by the names the suite declares.</summary>
     [JsonPropertyName("infernoInputs")] public List<string> InfernoInputs { get; init; } = new();
 

@@ -163,6 +163,42 @@ public sealed class ScenarioInventoryTests
     /// suite simply tests something other than what the scenario claims, which
     /// is the outcome this inventory exists to make impossible.
     /// </summary>
+    /// <summary>
+    /// A known kit issue stops a failure counting against CHO, so each one must
+    /// say why, name a single test in a group the scenario runs, and appear
+    /// once. Anything looser would let a real CHO failure be waved through.
+    /// </summary>
+    [Fact]
+    public void Every_known_kit_issue_names_one_test_the_scenario_runs_and_says_why()
+    {
+        foreach (var scenario in Inventory.Scenarios)
+        {
+            foreach (var issue in scenario.InfernoKnownKitIssues)
+            {
+                issue.Test.Should().NotBeNullOrWhiteSpace($"'{scenario.Id}' lists a known kit issue with no test");
+                issue.Test.Should().NotContain(",").And.NotContain("*", "a known kit issue names exactly one test");
+                issue.Reason.Length.Should().BeGreaterThan(40, $"'{issue.Test}' needs its reason written down");
+                scenario.InfernoGroups.Should().Contain(
+                    group => issue.Test.StartsWith(group + "_", StringComparison.Ordinal),
+                    $"'{issue.Test}' must belong to a group '{scenario.Id}' runs");
+            }
+
+            scenario.InfernoKnownKitIssues.Select(i => i.Test).Should().OnlyHaveUniqueItems();
+        }
+    }
+
+    [Fact]
+    public void The_carin_bb_mixed_claim_type_validation_tests_are_the_only_known_kit_issues()
+    {
+        Inventory.Scenarios.SelectMany(s => s.InfernoKnownKitIssues.Select(i => (s.Id, i.Test)))
+            .Should().BeEquivalentTo(new[]
+            {
+                ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_oral_validation_test"),
+                ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_pharmacy_validation_test"),
+                ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_professional_non_clinician_validation_test"),
+            }, "adding one is a change of claim, so it should be seen here too");
+    }
+
     [Fact]
     public void Every_inferno_scenario_declares_only_inputs_the_harness_can_supply()
     {

@@ -285,6 +285,59 @@ public sealed class InfernoRunnerTests
         InfernoRunner.RollUp(run).Should().Be(InteropStatus.Skipped);
     }
 
+    private static readonly IReadOnlyList<InfernoKnownKitIssue> OralIssue =
+    [
+        new() { Test = "c4bb_v200_eob_oral_validation_test", Reason = "validates every EOB against the oral profile" },
+    ];
+
+    private static InfernoTestRun GroupRun(params (string TestId, string Result)[] tests) => new()
+    {
+        Status = "done",
+        Results =
+        [
+            .. tests.Select(t => new InfernoResult { TestId = $"c4bb_v200-Group02-c4bb_v200_eob-{t.TestId}", Result = t.Result }),
+            new InfernoResult { TestGroupId = "c4bb_v200-Group02-c4bb_v200_eob", Result = tests.Any(t => t.Result == "fail") ? "fail" : "pass" },
+        ],
+    };
+
+    [Fact]
+    public void A_known_kit_issue_does_not_fail_the_run_nor_does_the_group_row_it_fails()
+    {
+        var run = GroupRun(("c4bb_v200_eob_read_test", "pass"), ("c4bb_v200_eob_oral_validation_test", "fail"));
+
+        InfernoRunner.RollUp(run).Should().Be(InteropStatus.Failed, "without the issue named, the failure counts");
+        InfernoRunner.RollUp(run, OralIssue).Should().Be(InteropStatus.Passed);
+    }
+
+    [Fact]
+    public void A_known_kit_issue_excuses_only_its_own_test()
+    {
+        var run = GroupRun(
+            ("c4bb_v200_eob_oral_validation_test", "fail"),
+            ("c4bb_v200_eob__lastUpdated_search_test", "fail"));
+
+        InfernoRunner.RollUp(run, OralIssue).Should().Be(InteropStatus.Failed);
+    }
+
+    [Fact]
+    public void Only_tests_count_as_passes_once_an_issue_is_excused()
+    {
+        // The group row passing proves nothing beyond its tests; with every test
+        // excused or skipped, the run has proven nothing.
+        var run = GroupRun(("c4bb_v200_eob_oral_validation_test", "fail"), ("c4bb_v200_eob_read_test", "skip"));
+
+        InfernoRunner.RollUp(run, OralIssue).Should().Be(InteropStatus.Skipped);
+    }
+
+    [Theory]
+    [InlineData("c4bb_v200_eob_oral_validation_test", true)]
+    [InlineData("c4bb_v200-Group02-c4bb_v200_eob-c4bb_v200_eob_oral_validation_test", true)]
+    [InlineData("c4bb_v200-Group02-c4bb_v200_eob-xc4bb_v200_eob_oral_validation_test", false)]
+    [InlineData("c4bb_v200_eob_oral_validation_test_2", false)]
+    [InlineData(null, false)]
+    public void A_known_kit_issue_names_one_test_by_its_declared_id(string? testId, bool matches)
+        => OralIssue[0].Matches(testId).Should().Be(matches);
+
     [Fact]
     public void A_suite_with_no_results_is_NotRun()
     {

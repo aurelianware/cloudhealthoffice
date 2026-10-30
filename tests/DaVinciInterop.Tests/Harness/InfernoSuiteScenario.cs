@@ -136,7 +136,7 @@ public static class InfernoSuiteScenario
                 }
             }
 
-            await RecordResultsAsync(run, runner, runs, cancellationToken);
+            await RecordResultsAsync(run, runner, runs, scenario.InfernoKnownKitIssues, cancellationToken);
 
             run.RecordCompatibility(
                 scenario.Protocol,
@@ -146,7 +146,7 @@ public static class InfernoSuiteScenario
                       "suite was generated from is recorded in interop/versions.json.");
 
             result = run.Complete(
-                RollUp(runs),
+                RollUp(runs, scenario.InfernoKnownKitIssues),
                 client.Interactions,
                 externalRole: "conformance-runner");
         }
@@ -352,13 +352,34 @@ public static class InfernoSuiteScenario
     /// </summary>
     private static async Task RecordResultsAsync(
         InteropScenarioRun run, InfernoRunner runner, IReadOnlyList<InfernoTestRun> runs,
-        CancellationToken cancellationToken)
+        IReadOnlyList<InfernoKnownKitIssue> knownKitIssues, CancellationToken cancellationToken)
     {
-        foreach (var result in runs.SelectMany(r => r.Results))
+        foreach (var (groupRun, result) in runs.SelectMany(r => r.Results.Select(result => (r, result))))
         {
             var status = InfernoRunner.MapStatus(result.Result);
             if (status == InteropStatus.Passed)
             {
+                continue;
+            }
+
+            if (status == InteropStatus.Failed
+                && knownKitIssues.FirstOrDefault(issue => issue.Matches(result.TestId)) is { } issue)
+            {
+                run.Record(InteropFinding.Info(
+                    "inferno.result.knownKitIssue",
+                    Redaction.Body($"Inferno reported '{result.Result}' for {result.TestId}, a known kit issue " +
+                                   $"not counted against CHO: {issue.Reason}")));
+                continue;
+            }
+
+            if (status == InteropStatus.Failed && result.TestId is null
+                && InfernoRunner.RollUp(groupRun, knownKitIssues) != InteropStatus.Failed)
+            {
+                // A group or suite row failed only by the excused tests under it.
+                run.Record(InteropFinding.Info(
+                    "inferno.result.failedByKnownKitIssue",
+                    $"Inferno reported '{result.Result}' for {result.TestGroupId ?? result.TestSuiteId ?? result.Id}, " +
+                    "only because of a known kit issue under it."));
                 continue;
             }
 
@@ -410,14 +431,14 @@ public static class InfernoSuiteScenario
     /// fails the scenario, and a set of runs that produced no pass at all is
     /// never reported as one.
     /// </summary>
-    private static InteropStatus RollUp(IReadOnlyList<InfernoTestRun> runs)
+    private static InteropStatus RollUp(IReadOnlyList<InfernoTestRun> runs, IReadOnlyList<InfernoKnownKitIssue> knownKitIssues)
     {
         if (runs.Count == 0)
         {
             return InteropStatus.NotRun;
         }
 
-        var statuses = runs.Select(InfernoRunner.RollUp).ToList();
+        var statuses = runs.Select(r => InfernoRunner.RollUp(r, knownKitIssues)).ToList();
 
         if (statuses.Any(s => s == InteropStatus.Failed))
         {

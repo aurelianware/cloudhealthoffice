@@ -376,6 +376,34 @@ serves, so it belongs where a reader can check it against the scenario's
 description rather than buried in a test method, where narrowing a run would
 look like a refactor instead of a change of claim.
 
+### Known kit issues
+
+A test the kit cannot pass against any correct server is named in the
+scenario's `infernoKnownKitIssues` in
+[`interop/scenarios.json`](../../interop/scenarios.json), one test per entry,
+each with its reason. Its failure is still recorded, as an
+`inferno.result.knownKitIssue` finding in the run's evidence, but it does not
+fail the scenario. The scenario then passes or fails on every other test. A
+group row that failed only because of an excused test under it is recorded the
+same way. A unit test pins the list, so adding an entry shows up in review as
+the change of claim it is.
+
+There is one today, agreed on 2026-10-30:
+
+* **CARIN BB subtype validation with mixed claim types** (`c4bb_v200_eob_oral_validation_test`,
+  `c4bb_v200_eob_pharmacy_validation_test`,
+  `c4bb_v200_eob_professional_non_clinician_validation_test`).
+  * In carin-for-blue-button-test-kit `v0.16.3`, the latest release, each EOB
+    subtype validation test validates *every* EOB the kit collected against
+    that one profile (`perform_validation_test(scratch_resources[:all], ...)`
+    in `generated/v2.0.0/eob_*/validation_test.rb`).
+  * A member with a professional and an institutional claim therefore fails
+    the oral and pharmacy profiles on EOBs that never claimed them.
+  * Each EOB is still judged against its own profile by the HL7 validator on
+    the conformance goldens.
+  * A kit release that validates each EOB only against the profile it
+    declares removes the need for these entries. Re-check at every pin bump.
+
 What is deliberately not run, and why:
 
 * `c4bb_v200devnonfinancial` — it checks the superseded `-NonFinancial`

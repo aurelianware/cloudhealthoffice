@@ -188,6 +188,14 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **DaVinci Interop: known kit issues stop counting against CHO.** A
+  conformance scenario can name kit tests that no correct server can pass
+  (`infernoKnownKitIssues` in `interop/scenarios.json`, each with a reason).
+  Their failures are recorded as findings but don't fail the run. The first
+  three are CARIN BB's oral, pharmacy and professional EOB validation tests:
+  the pinned kit validates every EOB against each subtype profile, so a
+  member with mixed claim types fails them all. See "Known kit issues" in
+  `docs/interop/davinci.md`.
 - **Public directory `_id` search accepts a reference.** `_id=Practitioner/123`
   (relative, absolute or versioned) now finds Practitioner 123, and a
   reference to another type finds nothing. The Inferno Plan-Net kit sends

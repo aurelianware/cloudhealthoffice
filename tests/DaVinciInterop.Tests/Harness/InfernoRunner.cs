@@ -71,6 +71,26 @@ public sealed record InfernoInput
     };
 }
 
+/// <summary>
+/// A kit test that cannot judge CHO as the kit is written, named in
+/// interop/scenarios.json with the reason. Its failure is recorded, not
+/// counted: the scenario passes or fails on every other test.
+/// </summary>
+public sealed record InfernoKnownKitIssue
+{
+    /// <summary>The test id as the kit's source declares it (the last segment of Inferno's full id).</summary>
+    [JsonPropertyName("test")] public string Test { get; init; } = "";
+
+    [JsonPropertyName("reason")] public string Reason { get; init; } = "";
+
+    public bool Matches(string? testId)
+        => testId is not null && Test.Length > 0
+           && (testId == Test || testId.EndsWith("-" + Test, StringComparison.Ordinal));
+
+    public static bool Excuses(IReadOnlyList<InfernoKnownKitIssue> issues, string? testId)
+        => issues.Any(issue => issue.Matches(testId));
+}
+
 /// <summary>One result row Inferno reports for a test, group or suite.</summary>
 public sealed record InfernoResult
 {
@@ -542,9 +562,19 @@ public sealed class InfernoRunner
     /// fails the scenario; otherwise at least one pass is required, because a suite
     /// that skipped everything has proven nothing.
     /// </summary>
-    public static InteropStatus RollUp(InfernoTestRun run)
+    public static InteropStatus RollUp(InfernoTestRun run, IReadOnlyList<InfernoKnownKitIssue>? knownKitIssues = null)
     {
-        var statuses = run.Results.Select(r => MapStatus(r.Result)).ToList();
+        var results = run.Results;
+        if (knownKitIssues is { Count: > 0 }
+            && results.Any(r => MapStatus(r.Result) == InteropStatus.Failed && InfernoKnownKitIssue.Excuses(knownKitIssues, r.TestId)))
+        {
+            // A group's or suite's own row is failed by the excused test under it,
+            // so once one is excused the run is judged from its tests alone. Any
+            // other failing test still fails it.
+            results = results.Where(r => r.TestId is not null && !InfernoKnownKitIssue.Excuses(knownKitIssues, r.TestId)).ToList();
+        }
+
+        var statuses = results.Select(r => MapStatus(r.Result)).ToList();
         if (statuses.Count == 0)
         {
             return InteropStatus.NotRun;
