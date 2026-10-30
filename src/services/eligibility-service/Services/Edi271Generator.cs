@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using EligibilityService.Models;
 using CloudHealthOffice.Infrastructure.Logging;
@@ -103,9 +104,12 @@ public class Edi271Generator : IEdi271Generator
         sb.Append(Seg(ref segmentCount, true, "ST*271*0001*005010X279A1~"));
 
         // ── BHT — BHT02=11 (response), BHT06=11 (response) ───────────
-        var bhtRef = response.ControlNumber.Length > 0
-            ? response.ControlNumber[..Math.Min(10, response.ControlNumber.Length)]
-            : inquiry.Id[..Math.Min(10, inquiry.Id.Length)];
+        // BHT03 echoes the 270's reference when it sent one.
+        var bhtRef = !string.IsNullOrEmpty(inquiry.ReferenceId)
+            ? Esc(inquiry.ReferenceId)
+            : response.ControlNumber.Length > 0
+                ? response.ControlNumber[..Math.Min(10, response.ControlNumber.Length)]
+                : inquiry.Id[..Math.Min(10, inquiry.Id.Length)];
         sb.Append(Seg(ref segmentCount, true,
             $"BHT*0022*11*{bhtRef}*{now:yyyyMMdd}*{now:HHmm}~"));
 
@@ -153,9 +157,21 @@ public class Edi271Generator : IEdi271Generator
                 $"DMG*D8*{inquiry.SubscriberDOB:yyyyMMdd}*{gender}~"));
         }
 
-        // TRN — Trace number (echo back subscriber trace from 270)
-        sb.Append(Seg(ref segmentCount, true,
-            $"TRN*2*{response.ControlNumber}*{payerId}~"));
+        // TRN*2 — the 270's TRN*1 trace numbers, echoed so the submitter
+        // can match the response (CORE requires the echo).
+        if (inquiry.TraceNumbers.Count > 0)
+        {
+            foreach (var trace in inquiry.TraceNumbers)
+            {
+                sb.Append(Seg(ref segmentCount, true,
+                    Join("TRN", "2", Esc(trace.Number), Esc(trace.Originator), Esc(trace.Supplemental)) + "~"));
+            }
+        }
+        else if (response.ControlNumber.Length > 0)
+        {
+            sb.Append(Seg(ref segmentCount, true,
+                $"TRN*2*{Esc(response.ControlNumber)}*{payerId}~"));
+        }
 
         // ── Coverage dates ─────────────────────────────────────────────
         if (response.CoverageBeginDate.HasValue)
@@ -172,49 +188,66 @@ public class Edi271Generator : IEdi271Generator
         // ── EB segments — Eligibility/Benefit information ──────────────
         if (response.IsCovered)
         {
-            // Active coverage — general
             var coverageLevel = string.IsNullOrEmpty(response.CoverageLevel)
                 ? "IND" : response.CoverageLevel;
-            var planDesc = Esc(response.InsurancePlanName).Replace(" ", "_")[..Math.Min(50, Esc(response.InsurancePlanName).Length)];
+            var planDesc = Esc(response.InsurancePlanName);
+            planDesc = planDesc[..Math.Min(50, planDesc.Length)];
+            var planAuthRequired = response.Benefits.Any(b =>
+                b.AuthorizationRequired == "Y" && X12ServiceTypes.FromCategory(b.ServiceTypeCode) == X12ServiceTypes.HealthBenefitPlanCoverage);
             sb.Append(Seg(ref segmentCount, true,
-                $"EB*1*{coverageLevel}*30**{planDesc}~"));
+                Eb(("01", "1"), ("02", coverageLevel), ("03", X12ServiceTypes.HealthBenefitPlanCoverage), ("05", planDesc),
+                   ("11", planAuthRequired ? "Y" : "")) + "~"));
 
-            // Group number
             if (!string.IsNullOrEmpty(response.GroupNumber))
             {
                 sb.Append(Seg(ref segmentCount, true,
                     $"REF*1L*{Esc(response.GroupNumber)}~"));
             }
 
-            // Deductible
+            // Plan-level deductible and out-of-pocket (CORE: base and remaining deductible).
             if (response.Deductible != null)
             {
                 AppendDeductibleSegments(sb, ref segmentCount, response.Deductible);
             }
-
-            // Out-of-pocket maximum
             if (response.OutOfPocket != null)
             {
                 AppendOutOfPocketSegments(sb, ref segmentCount, response.OutOfPocket);
             }
 
-            // Per-benefit EB segments (copay, coinsurance, service-specific coverage)
-            foreach (var benefit in response.Benefits)
+            // Service-type answers: for a generic (30) inquiry, the CORE
+            // service types the plan covers; otherwise the types asked for.
+            var requested = inquiry.ServiceTypeCodes.Count > 0
+                ? inquiry.ServiceTypeCodes
+                : new List<string> { string.IsNullOrEmpty(inquiry.ServiceTypeCode) ? X12ServiceTypes.HealthBenefitPlanCoverage : inquiry.ServiceTypeCode };
+            var serviceTypes = requested.Contains(X12ServiceTypes.HealthBenefitPlanCoverage)
+                ? X12ServiceTypes.CoreGeneric.Concat(requested.Where(c => c != X12ServiceTypes.HealthBenefitPlanCoverage)).Distinct().ToList()
+                : requested.Distinct().ToList();
+
+            var byServiceType = response.Benefits
+                .Select(b => (Code: X12ServiceTypes.FromCategory(b.ServiceTypeCode), Benefit: b))
+                .Where(x => x.Code is not null)
+                .GroupBy(x => x.Code!)
+                .ToDictionary(g => g.Key, g => g.Select(x => x.Benefit).ToList());
+
+            // Plan-wide cost sharing (category 30) goes under 30, after the
+            // plan's own EB*1, so it is not repeated as a service type.
+            if (byServiceType.TryGetValue(X12ServiceTypes.HealthBenefitPlanCoverage, out var planBenefits))
+                AppendServiceTypeSegments(sb, ref segmentCount, coverageLevel, X12ServiceTypes.HealthBenefitPlanCoverage, planBenefits, activeCoverage: false);
+
+            foreach (var serviceType in serviceTypes)
             {
-                AppendBenefitSegments(sb, ref segmentCount, benefit);
+                if (serviceType == X12ServiceTypes.HealthBenefitPlanCoverage || !byServiceType.TryGetValue(serviceType, out var benefits))
+                    continue;
+                AppendServiceTypeSegments(sb, ref segmentCount, coverageLevel, serviceType, benefits, activeCoverage: true);
             }
         }
         else
         {
-            // Inactive coverage
+            // Inactive coverage: EB*6 alone. (AAA in 2100C is for a request
+            // CHO could not process, such as a subscriber it cannot find; 42
+            // would tell the submitter to try again later.)
             sb.Append(Seg(ref segmentCount, true, $"EB*6**30~"));
 
-            // AAA — Rejection code
-            // AAA01=Y (subscriber is covered by another plan), AAA03=42 (No active coverage)
-            // AAA04=Y (dependent flag)
-            sb.Append(Seg(ref segmentCount, true, "AAA*N**42*Y~"));
-
-            // MSG — Free-text rejection reason
             if (!string.IsNullOrEmpty(response.RejectionReason))
             {
                 var msg = Esc(response.RejectionReason)[..Math.Min(264, Esc(response.RejectionReason).Length)];
@@ -255,138 +288,108 @@ public class Edi271Generator : IEdi271Generator
         return sb.ToString();
     }
 
-    // ── Deductible EB segments ────────────────────────────────────────
+    // ── Deductible / out-of-pocket EB segments ────────────────────────
+    //
+    // EB06 time period: 23 = calendar year (22 = service year) for the plan
+    // amount, 24 = year to date for the amount met, 29 = remaining. The
+    // amount is EB07. Remaining is sent even when it is zero (deductible met).
+
+    private static string PlanPeriod(string? timePeriod) =>
+        timePeriod is not null && timePeriod.Contains("Service", StringComparison.OrdinalIgnoreCase) ? "22" : "23";
 
     private static void AppendDeductibleSegments(StringBuilder sb, ref int segmentCount, DeductibleInfo ded)
     {
-        // EB*C = Deductible, EB06=23 = Contract/Plan Year
-        if (ded.IndividualDeductible > 0)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"EB*C*IND*30***23**{ded.IndividualDeductible:F2}~"));
-        }
-        if (ded.IndividualDeductibleMet > 0)
-        {
-            // Qualifier 29 = Remaining is not met; use 26 = Exceeded for amount consumed
-            sb.Append(Seg(ref segmentCount, true,
-                $"EB*C*IND*30***26**{ded.IndividualDeductibleMet:F2}~"));
-        }
-        if (ded.IndividualDeductibleRemaining > 0)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"EB*C*IND*30***27**{ded.IndividualDeductibleRemaining:F2}~"));
-        }
-        if (ded.FamilyDeductible > 0)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"EB*C*FAM*30***23**{ded.FamilyDeductible:F2}~"));
-        }
-        if (ded.FamilyDeductibleMet > 0)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"EB*C*FAM*30***26**{ded.FamilyDeductibleMet:F2}~"));
-        }
-        if (ded.FamilyDeductibleRemaining > 0)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"EB*C*FAM*30***27**{ded.FamilyDeductibleRemaining:F2}~"));
-        }
+        var period = PlanPeriod(ded.TimePeriod);
+        AppendAccumulator(sb, ref segmentCount, "C", "IND", period, ded.IndividualDeductible, ded.IndividualDeductibleMet, ded.IndividualDeductibleRemaining);
+        AppendAccumulator(sb, ref segmentCount, "C", "FAM", period, ded.FamilyDeductible, ded.FamilyDeductibleMet, ded.FamilyDeductibleRemaining);
     }
-
-    // ── Out-of-pocket EB segments ─────────────────────────────────────
 
     private static void AppendOutOfPocketSegments(StringBuilder sb, ref int segmentCount, OutOfPocketInfo oop)
     {
-        // EB*G = Out-of-Pocket (Stop Loss)
-        if (oop.IndividualOOPMax > 0)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"EB*G*IND*30***23**{oop.IndividualOOPMax:F2}~"));
-        }
-        if (oop.IndividualOOPMet > 0)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"EB*G*IND*30***26**{oop.IndividualOOPMet:F2}~"));
-        }
-        if (oop.IndividualOOPRemaining > 0)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"EB*G*IND*30***27**{oop.IndividualOOPRemaining:F2}~"));
-        }
-        if (oop.FamilyOOPMax > 0)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"EB*G*FAM*30***23**{oop.FamilyOOPMax:F2}~"));
-        }
-        if (oop.FamilyOOPMet > 0)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"EB*G*FAM*30***26**{oop.FamilyOOPMet:F2}~"));
-        }
-        if (oop.FamilyOOPRemaining > 0)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"EB*G*FAM*30***27**{oop.FamilyOOPRemaining:F2}~"));
-        }
+        AppendAccumulator(sb, ref segmentCount, "G", "IND", "23", oop.IndividualOOPMax, oop.IndividualOOPMet, oop.IndividualOOPRemaining);
+        AppendAccumulator(sb, ref segmentCount, "G", "FAM", "23", oop.FamilyOOPMax, oop.FamilyOOPMet, oop.FamilyOOPRemaining);
     }
 
-    // ── Per-benefit EB segments ───────────────────────────────────────
-
-    private static void AppendBenefitSegments(StringBuilder sb, ref int segmentCount, EligibilityBenefit benefit)
+    private static void AppendAccumulator(StringBuilder sb, ref int segmentCount, string eb01, string level, string period,
+        decimal amount, decimal met, decimal remaining)
     {
-        // Determine EB01 from benefit type + insurance type hint
-        // Most benefits from the service already have ServiceTypeCode and amounts
-        // We emit one EB segment per benefit entry using the data as-is.
-        var eb01 = benefit.InsuranceType switch
-        {
-            "B" => "B", // Co-payment
-            "A" => "A", // Co-insurance
-            "F" => "F", // Limitation (visit limits)
-            _   => "1", // Default: Active coverage for this service type
-        };
+        if (amount <= 0)
+            return;
+        sb.Append(Seg(ref segmentCount, true, Eb(("01", eb01), ("02", level), ("03", "30"), ("06", period), ("07", Money(amount)), ("12", "Y")) + "~"));
+        if (met > 0)
+            sb.Append(Seg(ref segmentCount, true, Eb(("01", eb01), ("02", level), ("03", "30"), ("06", "24"), ("07", Money(met)), ("12", "Y")) + "~"));
+        sb.Append(Seg(ref segmentCount, true, Eb(("01", eb01), ("02", level), ("03", "30"), ("06", "29"), ("07", Money(Math.Max(0, remaining))), ("12", "Y")) + "~"));
+    }
 
-        // If monetary amount and percent both absent, treat as general coverage flag
-        var coverageLevel = string.IsNullOrEmpty(benefit.CoverageLevel) ? "IND" : benefit.CoverageLevel;
-        var svcType       = string.IsNullOrEmpty(benefit.ServiceTypeCode) ? "30" : benefit.ServiceTypeCode;
-        var timePeriod    = string.IsNullOrEmpty(benefit.TimePeriodQualifier) ? string.Empty : benefit.TimePeriodQualifier;
-        var network       = benefit.NetworkIndicator == "N" ? "W" : "Y"; // W=out-of-network, Y=in-network
+    // ── Per-service-type EB segments ──────────────────────────────────
 
-        string eb;
-        if (benefit.MonetaryAmount.HasValue)
+    /// <summary>
+    /// Active coverage for one service type (EB*1, EB11 = Y when prior
+    /// authorization is required), then the patient's share: co-payment
+    /// (EB*B, EB07, per visit), co-insurance (EB*A, EB08 as a decimal) and
+    /// visit limits (EB*F, EB09 VS / EB10). EB12 says in or out of network.
+    /// </summary>
+    private static void AppendServiceTypeSegments(StringBuilder sb, ref int segmentCount, string level, string serviceType,
+        List<EligibilityBenefit> benefits, bool activeCoverage)
+    {
+        if (activeCoverage)
         {
-            eb = $"EB*{eb01}*{coverageLevel}*{svcType}***{timePeriod}**{benefit.MonetaryAmount.Value:F2}****{network}~";
-        }
-        else if (benefit.Percentage.HasValue)
-        {
-            var pct = benefit.Percentage.Value / 100m; // convert to decimal (20% → 0.20)
-            eb = $"EB*{eb01}*{coverageLevel}*{svcType}***{timePeriod}***{pct:F2}***{network}~";
-        }
-        else
-        {
-            eb = $"EB*{eb01}*{coverageLevel}*{svcType}~";
-        }
-
-        sb.Append(Seg(ref segmentCount, true, eb));
-
-        // Auth requirement message
-        if (benefit.AuthorizationRequired == "Y")
-        {
+            var authRequired = benefits.Any(b => b.AuthorizationRequired == "Y");
             sb.Append(Seg(ref segmentCount, true,
-                $"MSG*Prior authorization required for {Esc(benefit.ServiceTypeName)}~"));
+                Eb(("01", "1"), ("02", level), ("03", serviceType), ("11", authRequired ? "Y" : "")) + "~"));
         }
 
-        // Benefit dates
-        if (benefit.BenefitBeginDate.HasValue)
+        foreach (var benefit in benefits)
         {
-            sb.Append(Seg(ref segmentCount, true,
-                $"DTP*348*D8*{benefit.BenefitBeginDate.Value:yyyyMMdd}~"));
-        }
-        if (benefit.BenefitEndDate.HasValue)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"DTP*349*D8*{benefit.BenefitEndDate.Value:yyyyMMdd}~"));
+            var benefitLevel = string.IsNullOrEmpty(benefit.CoverageLevel) ? level : benefit.CoverageLevel;
+            var network = benefit.NetworkIndicator == "N" ? "N" : "Y";
+            if (benefit.MonetaryAmount is { } copay)
+            {
+                sb.Append(Seg(ref segmentCount, true,
+                    Eb(("01", "B"), ("02", benefitLevel), ("03", serviceType), ("06", "27"), ("07", Money(copay)), ("12", network)) + "~"));
+            }
+            if (benefit.Percentage is { } percent)
+            {
+                // Plans store 20 for 20%; X12 wants 0.2.
+                var ratio = percent / 100m;
+                sb.Append(Seg(ref segmentCount, true,
+                    Eb(("01", "A"), ("02", benefitLevel), ("03", serviceType), ("08", ratio.ToString("0.###", CultureInfo.InvariantCulture)), ("12", network)) + "~"));
+            }
+            if (benefit.Quantity is { } visits && visits > 0)
+            {
+                sb.Append(Seg(ref segmentCount, true,
+                    Eb(("01", "F"), ("02", benefitLevel), ("03", serviceType), ("06", "23"), ("09", "VS"), ("10", visits.ToString("0", CultureInfo.InvariantCulture)), ("12", network)) + "~"));
+            }
+            if (benefit.BenefitBeginDate.HasValue)
+            {
+                sb.Append(Seg(ref segmentCount, true,
+                    $"DTP*348*D8*{benefit.BenefitBeginDate.Value:yyyyMMdd}~"));
+            }
+            if (benefit.BenefitEndDate.HasValue)
+            {
+                sb.Append(Seg(ref segmentCount, true,
+                    $"DTP*349*D8*{benefit.BenefitEndDate.Value:yyyyMMdd}~"));
+            }
         }
     }
+
+    /// <summary>An EB segment from (position, value) pairs, positions "01".."13"; trailing empties dropped.</summary>
+    private static string Eb(params (string Position, string Value)[] elements)
+    {
+        var e = new string[13];
+        foreach (var (position, value) in elements)
+            e[int.Parse(position, CultureInfo.InvariantCulture) - 1] = value;
+        return Join(new[] { "EB" }.Concat(e.Select(v => v ?? string.Empty)).ToArray());
+    }
+
+    private static string Join(params string?[] elements)
+    {
+        var last = elements.Length - 1;
+        while (last > 0 && string.IsNullOrEmpty(elements[last])) last--;
+        return string.Join("*", elements.Take(last + 1).Select(v => v ?? string.Empty));
+    }
+
+    private static string Money(decimal amount) => amount.ToString("0.00", CultureInfo.InvariantCulture);
 
     // ── Helpers ───────────────────────────────────────────────────────
 

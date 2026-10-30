@@ -35,6 +35,19 @@ public class EligibilityInquiry
     
     // Inquiry Details (2110C/D)
     public string ServiceTypeCode { get; set; } = "30";  // EB01: 30=Health Benefit Plan Coverage
+
+    /// <summary>
+    /// Every service type the 270 asked about (EQ01, including repeats), in
+    /// order. <see cref="ServiceTypeCode"/> is the first. Empty for inquiries
+    /// not read from a 270.
+    /// </summary>
+    public List<string> ServiceTypeCodes { get; set; } = new();
+
+    /// <summary>The 270's TRN*1 trace numbers, echoed on the 271 as TRN*2.</summary>
+    public List<EligibilityTraceNumber> TraceNumbers { get; set; } = new();
+
+    /// <summary>BHT03 of the 270, echoed as the 271's BHT03.</summary>
+    public string? ReferenceId { get; set; }
     public DateTime? ServiceDateFrom { get; set; }
     public DateTime? ServiceDateTo { get; set; }
     
@@ -56,6 +69,14 @@ public class EligibilityInquiry
 /// <summary>
 /// 271 Eligibility Response
 /// </summary>
+/// <summary>A 270 TRN (trace number, originator, optional supplemental id).</summary>
+public class EligibilityTraceNumber
+{
+    public string Number { get; set; } = string.Empty;       // TRN02
+    public string Originator { get; set; } = string.Empty;   // TRN03
+    public string? Supplemental { get; set; }                 // TRN04
+}
+
 public class EligibilityResponse
 {
     [JsonPropertyName("id")]

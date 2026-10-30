@@ -23,7 +23,8 @@ open.
 | "Unable to respond" 271 (AAA 42) at the response budget | Done |
 | Response-time metric and audit log line | Done |
 | Real-time 276 → 277 at `/core/claimstatus` | Done (claims-service: `EDI/ClaimStatusInquiry`) |
-| 271 data content rules (service types, patient financials, AAA codes, name normalisation) | Later PR, gaps listed below |
+| 271 data content rules: every requested service type, CORE generic service types, patient financials, TRN echo | Done |
+| 271 subscriber-not-found AAA codes and name normalisation | Later PR, see below |
 | System availability (86% per week) reporting and published downtime schedule | Later PR |
 | CORE certification test (CORE-authorised testing vendor) | Not started; optional |
 
@@ -220,22 +221,39 @@ The SHA-256 lets an investigator match the line with the submitter's copy of
 the 270. The 270 itself is stored the same way as on the API path (the
 eligibility inquiry record and the X12 interchange records).
 
-## Known gaps (271 data content)
+## 271 data content
 
-The 271 comes from the existing generator, which predates the CORE content
-rules. A later PR fixes these:
+The 271 generator follows the CORE eligibility data content rule:
 
-- The parser reads one `EQ` service type; a 270 may ask for several, and CORE
-  requires an answer for each.
-- For an inquiry on service type 30, CORE requires active-coverage answers for
-  the CORE service types (1, 33, 35, 47, 86, 88, 98, AL, MH, UC) and patient
-  financial responsibility (co-pay, coinsurance, deductible) for each, plus
-  the base deductible and remaining deductible.
-- `TRN` trace numbers are not echoed from the 270.
-- Inactive coverage is answered with `AAA*N**42*Y`; 42 means "unable to
-  respond at current time". It should be `EB*6` alone, and the subscriber
-  search errors should use the CORE AAA codes (72, 73, 75, 76) with the
-  normalised-name matching rule.
+- **Service types.** The parser reads every `EQ` segment and every repeat
+  in `EQ01`. For a generic inquiry (`EQ*30`) the 271 answers the CORE
+  service types (1, 33, 35, 47, 86, 88, 98, AL, MH, UC) the plan covers,
+  plus any other type asked for; otherwise it answers the types asked for.
+  Each answered type gets `EB*1` (EB11 = Y when it needs prior
+  authorization) and its patient share.
+- **Plan categories to codes.** Benefit plans keep free-text categories
+  ("Office Visit", "Urgent Care"). `X12ServiceTypes.FromCategory` maps a
+  category that already is a code, or a common label, to its X12 code. A
+  benefit whose category maps to nothing is left out of the 271, because EB03
+  may only carry a code. Plan-wide benefits (category 30) go under 30.
+- **Patient financials.** Deductible (`EB*C`) and out-of-pocket (`EB*G`) give
+  the plan amount in EB07 for the calendar year (EB06 23, or 22 for a service
+  year), the amount met year to date (24) when there is one, and the
+  remaining amount (29) always, zero included. Co-payment is `EB*B` with
+  EB06 27 (per visit) and EB07; co-insurance is `EB*A` with EB08 as a
+  decimal (20% is 0.2); visit limits are `EB*F` with EB09 VS and EB10. EB12
+  says in network (Y) or out (N).
+- **Trace numbers.** Each `TRN*1` in the 270 comes back as `TRN*2` with the
+  same number, originator and supplemental ID; BHT03 echoes the 270's
+  reference. A 270 without a trace gets CHO's own `TRN*2`.
+- **Inactive coverage.** `EB*6` and the reason in `MSG`, with no `AAA`.
+  Before this, CHO sent `AAA*N**42*Y`, which tells the submitter to try again
+  later.
+
+Still to do: when CHO cannot find the subscriber, the 271 should carry the
+CORE AAA codes (72, 73, 75, 76) and apply the normalised-name matching rule.
+The eligibility check returns "not covered" for an unknown member today, with
+no separate "not found" signal to map from.
 
 ## To check against the licensed rule text
 

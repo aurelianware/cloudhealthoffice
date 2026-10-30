@@ -56,6 +56,9 @@ public class Edi270Parser : IEdi270Parser
 
         char elemSep   = edi270[3];
         char segTerm   = edi270[105];
+        // ISA11 is the repetition separator in 00501 (EQ01 may repeat).
+        // ISA11 is 'U' (a standards id, not a separator) in 00401.
+        char repSep    = char.IsLetterOrDigit(edi270[82]) ? '\0' : edi270[82];
 
         // ── Split into segments ──────────────────────────────────────────
         var segments = edi270
@@ -182,11 +185,37 @@ public class Edi270Parser : IEdi270Parser
                     break;
                 }
 
+                case "BHT":
+                    inquiry.ReferenceId = seg.ElementAtOrDefault(3);
+                    break;
+
+                // ── TRN — subscriber / dependent trace numbers ──────────
+                case "TRN" when currentHlLevel is "22" or "23":
+                    if (!string.IsNullOrEmpty(seg.ElementAtOrDefault(2)))
+                    {
+                        inquiry.TraceNumbers.Add(new EligibilityTraceNumber
+                        {
+                            Number = seg[2],
+                            Originator = seg.ElementAtOrDefault(3) ?? string.Empty,
+                            Supplemental = string.IsNullOrEmpty(seg.ElementAtOrDefault(4)) ? null : seg[4],
+                        });
+                    }
+                    break;
+
                 // ── EQ — Eligibility/Benefit Inquiry ────────────────────
                 case "EQ":
-                    // EQ01 = service type code (30=Health Benefit Plan Coverage)
-                    inquiry.ServiceTypeCode = seg.ElementAtOrDefault(1) ?? "30";
+                {
+                    // EQ01 = service type code (30=Health Benefit Plan Coverage);
+                    // a 270 may repeat EQ01 or send several EQ segments.
+                    var codes = (seg.ElementAtOrDefault(1) ?? string.Empty)
+                        .Split(repSep, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    foreach (var code in codes)
+                        if (!inquiry.ServiceTypeCodes.Contains(code))
+                            inquiry.ServiceTypeCodes.Add(code);
+                    if (inquiry.ServiceTypeCodes.Count > 0)
+                        inquiry.ServiceTypeCode = inquiry.ServiceTypeCodes[0];
                     break;
+                }
 
                 // ── INS — Dependent relationship ─────────────────────────
                 case "INS":
