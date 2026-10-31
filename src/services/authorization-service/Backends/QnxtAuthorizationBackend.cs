@@ -20,8 +20,9 @@ namespace AuthorizationService.Backends;
 /// from this engagement's implementation and deployed acceptance.
 /// </summary>
 /// <remarks>
-/// TODO(qnxt-authorization): integrate with the QNXT authorization transaction
-/// API (AUTH_INQ / AUTH_CREATE on the QNXT UM stack). Future sibling backends
+/// TODO(qnxt-authorization): integrate with the payer's licensed QNXT UM
+/// interface (operation names come from that specification, not from this
+/// comment; see docs/integration/CORE-ADAPTER-IMPLEMENTER-GUIDE.md). Future sibling backends
 /// (FacetsAuthorizationBackend, HealthEdgeAuthorizationBackend) implement this
 /// same interface; do not create empty classes for them until an engagement
 /// needs one.
@@ -32,8 +33,8 @@ public sealed class QnxtAuthorizationBackend : IAuthorizationBackend
 
     private const string Todo =
         "QNXT authorization backend not yet implemented. " +
-        "TODO(qnxt-authorization): integrate with the QNXT authorization " +
-        "transaction API (AUTH_INQ / AUTH_CREATE). This is per-engagement " +
+        "TODO(qnxt-authorization): integrate with the payer's licensed QNXT " +
+        "authorization interface. This is per-engagement " +
         "integration work; Cloud Health Office Replace mode serves the same " +
         "workflow natively via ChoAuthorizationBackend.";
 

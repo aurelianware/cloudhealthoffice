@@ -15,8 +15,9 @@ namespace ProviderService.Adapters;
 /// until the payer-specific QNXT connector is implemented and accepted.
 /// </summary>
 /// <remarks>
-/// TODO(qnxt-organization): integrate with the QNXT network configuration
-/// surface (NETWORK_INQ on the QNXT network stack). Reference doc:
+/// TODO(qnxt-organization): integrate with the payer's licensed QNXT interface
+/// (operation names come from that specification, not from this comment).
+/// Reference docs: docs/integration/CORE-ADAPTER-IMPLEMENTER-GUIDE.md,
 /// docs/architecture/network-as-organization.md.
 /// </remarks>
 public class QnxtOrganizationAdapter : IOrganizationAdapter

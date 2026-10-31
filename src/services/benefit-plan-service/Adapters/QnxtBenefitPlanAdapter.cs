@@ -14,8 +14,9 @@ namespace BenefitPlanService.Adapters;
 /// with a clear migration TODO until the payer-specific QNXT connector is implemented and accepted.
 /// </summary>
 /// <remarks>
-/// TODO(qnxt-benefit-plan): integrate with the QNXT plan inquiry API
-/// (BENEFIT_PLAN_INQ on the QNXT benefits stack). Reference doc:
+/// TODO(qnxt-benefit-plan): integrate with the payer's licensed QNXT interface
+/// (operation names come from that specification, not from this comment).
+/// Reference docs: docs/integration/CORE-ADAPTER-IMPLEMENTER-GUIDE.md,
 /// docs/architecture/benefit-plan-adapter-pattern.md.
 /// </remarks>
 public class QnxtBenefitPlanAdapter : IBenefitPlanAdapter

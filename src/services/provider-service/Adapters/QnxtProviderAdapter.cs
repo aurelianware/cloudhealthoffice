@@ -14,8 +14,9 @@ namespace ProviderService.Adapters;
 /// with a clear migration TODO until the payer-specific QNXT connector is implemented and accepted.
 /// </summary>
 /// <remarks>
-/// TODO(qnxt-provider): integrate with the QNXT provider directory API
-/// (PROVIDER_INQ on the QNXT provider stack). Reference doc:
+/// TODO(qnxt-provider): integrate with the payer's licensed QNXT interface
+/// (operation names come from that specification, not from this comment).
+/// Reference docs: docs/integration/CORE-ADAPTER-IMPLEMENTER-GUIDE.md,
 /// docs/architecture/provider-adapter-pattern.md.
 /// </remarks>
 public class QnxtProviderAdapter : IProviderAdapter

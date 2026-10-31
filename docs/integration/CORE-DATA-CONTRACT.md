@@ -29,6 +29,8 @@ not require an incumbent connector.
 
 Paths below are actual repository seams; their DTOs and executing callers are the
 code contract. This guide adds acceptance requirements, not runtime behavior.
+Method-level semantics, the CMS-0057-F data path and the conformance suites are in
+the [core adapter implementer guide](CORE-ADAPTER-IMPLEMENTER-GUIDE.md).
 
 | Integration point | Existing code | Actual operations / boundary |
 | --- | --- | --- |
