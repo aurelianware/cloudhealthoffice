@@ -1,0 +1,297 @@
+{
+  "templateId": "fl-mma-child",
+  "state": "FL",
+  "program": "SMMC MMA",
+  "planName": "Florida SMMC Managed Medical Assistance (under 21)",
+  "population": "Children and youth under 21 in Medicaid managed care (MMA), including MediKids (ages 1 to 4, premium of $15 or $20 per month, Medicaid benefits)",
+  "ageRange": [
+    0,
+    20
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2025-02-01",
+  "notes": "No member cost sharing for children.",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits; no copayments."
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    }
+  ],
+  "carveOuts": [
+    {
+      "service": "Dental",
+      "to": "Statewide Medicaid dental plan (SMMC Dental), separate contract",
+      "status": "verify"
+    },
+    {
+      "service": "Long-term care (nursing facility and home and community-based services) for those eligible",
+      "to": "SMMC Long-Term Care plan (often the same company as the member's MMA plan)",
+      "status": "verify"
+    }
+  ],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "Set by each plan within state rules; load as prior-auth rules per plan.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added or in-lieu-of services",
+      "why": "Plan-specific extras approved by the state; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Member copayments",
+      "why": "Recipients under 21 are exempt from Florida Medicaid copayments.",
+      "source": "fl-59g-1-056",
+      "status": "sourced"
+    },
+    {
+      "item": "MediKids premiums",
+      "why": "Premium billing, not a claim cost share.",
+      "status": "verify"
+    },
+    {
+      "item": "Specialty plans (Children's Medical Services, child welfare, SMI, HIV/AIDS)",
+      "why": "Same Medicaid benefit with plan-specific care coordination; use this template and record the specialty on the program.",
+      "status": "verify"
+    },
+    {
+      "item": "Formulary",
+      "why": "MMA plans administer pharmacy using the AHCA preferred drug list; CHO has no formulary resolution yet.",
+      "status": "verify"
+    }
+  ],
+  "sources": {
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval; applies to every state)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    },
+    "fl-59g-1-056": {
+      "title": "Florida Administrative Code 59G-1.056, Copayments and Coinsurance (s. 409.9081, F.S.)",
+      "url": "https://www.law.cornell.edu/regulations/florida/Fla-Admin-Code-Ann-R-59G-1-056",
+      "accessed": "2026-10-31"
+    }
+  }
+}

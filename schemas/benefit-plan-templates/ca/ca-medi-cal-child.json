@@ -1,0 +1,335 @@
+{
+  "templateId": "ca-medi-cal-child",
+  "state": "CA",
+  "program": "Medi-Cal",
+  "planName": "California Medi-Cal managed care (under 21)",
+  "population": "Children and youth under 21 in Medi-Cal managed care, including the CHIP-funded targeted low-income children (California runs CHIP as a Medi-Cal expansion)",
+  "ageRange": [
+    0,
+    20
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2024-01-01",
+  "notes": "Medi-Cal managed care has no deductible or coinsurance. County plan model (COHS, two-plan, single plan, GMC, regional) decides which plan a member is in, not what it covers; record it on the tenant-service program.",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cencal-other-agencies",
+      "status": "sourced",
+      "limitations": "Non-specialty (mild to moderate) mental health only. Specialty mental health is the county mental health plan; substance use treatment is the county DMC or DMC-ODS program."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Medi-Cal for Kids and Teens) covers medically necessary services beyond adult limits."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-medi-cal-rx-scope",
+      "status": "sourced",
+      "limitations": "Only drugs billed on medical or institutional claims (physician-administered drugs, infusion). Pharmacy-claim drugs are Medi-Cal Rx."
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-medi-cal-rx-scope",
+      "status": "sourced",
+      "limitations": "Pharmacy-claim drugs are covered by Medi-Cal Rx, not the plan."
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-medi-cal-rx-scope",
+      "status": "sourced",
+      "limitations": "Pharmacy-claim drugs are covered by Medi-Cal Rx, not the plan."
+    }
+  ],
+  "carveOuts": [
+    {
+      "service": "Outpatient pharmacy (drugs billed on pharmacy claims)",
+      "to": "Medi-Cal Rx (DHCS fee-for-service); drugs and supplies billed on medical or institutional claims stay with the plan",
+      "source": "dhcs-medi-cal-rx-scope",
+      "status": "sourced"
+    },
+    {
+      "service": "Specialty mental health services",
+      "to": "County mental health plan (MHP); the managed care plan covers non-specialty mental health",
+      "source": "cencal-other-agencies",
+      "status": "sourced"
+    },
+    {
+      "service": "Substance use disorder treatment",
+      "to": "County Drug Medi-Cal / DMC-ODS program",
+      "source": "cencal-other-agencies",
+      "status": "sourced"
+    },
+    {
+      "service": "Dental",
+      "to": "Medi-Cal Dental (fee-for-service; dental managed care in some counties)",
+      "source": "cencal-other-agencies",
+      "status": "sourced"
+    },
+    {
+      "service": "Developmental disability services",
+      "to": "Regional center",
+      "source": "cencal-other-agencies",
+      "status": "sourced"
+    },
+    {
+      "service": "California Children's Services (CCS) eligible conditions",
+      "to": "County CCS program, except in Whole Child Model counties where the plan covers them",
+      "status": "verify"
+    }
+  ],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "Set by each plan within state rules; load as prior-auth rules per plan.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added or in-lieu-of services",
+      "why": "Plan-specific extras approved by the state; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Member copayments",
+      "why": "Persons 18 and younger are exempt from Medi-Cal copayments under W&I \u00a714134; set to $0.",
+      "source": "ca-wic-14134",
+      "status": "sourced"
+    },
+    {
+      "item": "Enhanced Care Management and Community Supports (CalAIM)",
+      "why": "Care management and plan-elected housing, food and respite supports; no CHO service category.",
+      "status": "verify"
+    },
+    {
+      "item": "Local Education Agency services",
+      "why": "Schools bill IEP/IFSP services; the plan stays responsible for medically necessary EPSDT services.",
+      "source": "cencal-other-agencies",
+      "status": "sourced"
+    }
+  ],
+  "sources": {
+    "ca-wic-14134": {
+      "title": "California Welfare and Institutions Code \u00a714134 (Medi-Cal copayments and exemptions)",
+      "url": "https://california.public.law/codes/ca_welf_and_inst_code_section_14134",
+      "accessed": "2026-10-31"
+    },
+    "cencal-other-agencies": {
+      "title": "CenCal Health provider manual Section F, Services Covered by Other Agencies (2024): dental, specialty mental health, SUD, regional center, LEA, pharmacy",
+      "url": "https://wwwqa.cencalhealth.org/wp-content/uploads/2023/12/Section-F-Services-Covered-by-Other-Agencies-2024.pdf",
+      "accessed": "2026-10-31"
+    },
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval; applies to every state)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    },
+    "dhcs-boilerplate": {
+      "title": "DHCS Medi-Cal managed care boilerplate contracts (controlling covered-services language; not yet reviewed line by line)",
+      "url": "https://www.dhcs.ca.gov/providers-partners/medi-cal-managed-care-boilerplate-contracts/",
+      "accessed": "2026-10-31"
+    },
+    "dhcs-medi-cal-rx-scope": {
+      "title": "DHCS, Medi-Cal Rx scope (pharmacy-claim benefits moved from managed care plans to Medi-Cal Rx)",
+      "url": "https://www.dhcs.ca.gov/provgovpart/pharmacy/Documents/Medi-Cal-Rx-Scope.pdf",
+      "accessed": "2026-10-31"
+    }
+  }
+}

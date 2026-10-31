@@ -1,0 +1,315 @@
+{
+  "templateId": "fl-healthy-kids",
+  "state": "FL",
+  "program": "Florida Healthy Kids",
+  "planName": "Florida Healthy Kids (CHIP, ages 5 to 18)",
+  "population": "Children 5 to 18; subsidized at 133% to 200% FPL ($15 or $20 per month), full-pay above that",
+  "ageRange": [
+    5,
+    18
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2026-10-31",
+  "notes": "Florida KidCare's CHIP for ages 5 to 18. No deductible or coinsurance; flat copays.",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": 5,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced",
+      "limitations": "Sick or injury visit; well-child visits have no copay."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": 5,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced",
+      "limitations": "PCP referral required."
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced",
+      "limitations": "Well-child visits, routine vision and hearing screening by the PCP."
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": 5,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "verify",
+      "limitations": "Not listed on the Florida Healthy Kids benefits page; the office visit copay is assumed."
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": 10,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced",
+      "limitations": "Waived if the PCP authorized the visit or the child is admitted."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": 10,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced",
+      "priorAuthRequired": true,
+      "limitations": "Semi-private room; pre-authorization required; includes up to 15 days of rehabilitation for non-acute confinement."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "verify",
+      "limitations": "Not listed on the Florida Healthy Kids benefits page; $0 assumed, as for other hospital services."
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "verify",
+      "limitations": "Not listed on the Florida Healthy Kids benefits page; $0 assumed, as for other hospital services."
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced",
+      "limitations": "Outpatient and inpatient mental health and substance use."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced",
+      "limitations": "Prenatal care and delivery; inpatient up to 3 days."
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced",
+      "limitations": "Up to 100 days per contract year; skilled care criteria required."
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": 5,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced",
+      "limitations": "Skilled care criteria required."
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": 5,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced",
+      "limitations": "Skilled care criteria required."
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": 5,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced",
+      "limitations": "Physical, occupational, respiratory and speech therapy: up to 24 sessions within 60 days per episode or injury."
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced",
+      "priorAuthRequired": true
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": 5,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced",
+      "limitations": "Refraction $5; corrective lenses or frames $10 after a failed PCP screening, one pair every 2 years."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": 5,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced",
+      "limitations": "$5 per fill, up to a 31-day supply; Florida Medicaid drug list, brand only when no generic exists."
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": true,
+      "copay": 5,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": true,
+      "copay": 5,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fhk-medical-benefits",
+      "status": "sourced"
+    }
+  ],
+  "carveOuts": [
+    {
+      "service": "Dental",
+      "to": "Florida Healthy Kids dental plan, separate contract",
+      "status": "verify"
+    }
+  ],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "Set by each plan within state rules; load as prior-auth rules per plan.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added or in-lieu-of services",
+      "why": "Plan-specific extras approved by the state; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Monthly premiums (subsidized $15 or $20; full-pay at full cost)",
+      "why": "Premium billing, not a claim cost share. Benefits are the same for both; confirm with the plan contract.",
+      "source": "fhk-subsidized",
+      "status": "sourced"
+    },
+    {
+      "item": "ER copay waiver",
+      "why": "The $10 ER copay is waived when the PCP authorized the visit or the child is admitted; CHO cannot condition a copay on authorization or admission.",
+      "source": "fhk-medical-benefits",
+      "status": "sourced"
+    },
+    {
+      "item": "Visit and session limits",
+      "why": "Therapy (24 sessions per 60 days per episode), skilled nursing (100 days per contract year), chiropractic (24 visits per year) and podiatry (2 per month) are kept as text: CHO counts every claim in a category against a visit limit.",
+      "source": "fhk-medical-benefits",
+      "status": "sourced"
+    },
+    {
+      "item": "Chiropractic ($5, 24 visits per year) and podiatry ($5)",
+      "why": "No CHO service category.",
+      "source": "fhk-medical-benefits",
+      "status": "sourced"
+    },
+    {
+      "item": "Eyewear copay ($10)",
+      "why": "The Vision category carries the $5 refraction copay; CHO cannot give eyewear its own copay within the category.",
+      "source": "fhk-medical-benefits",
+      "status": "sourced"
+    },
+    {
+      "item": "Full-pay coverage",
+      "why": "Uses this benefit design at unsubsidized premium.",
+      "source": "fhk-fullpay",
+      "status": "verify"
+    }
+  ],
+  "sources": {
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval; applies to every state)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    },
+    "fhk-fullpay": {
+      "title": "Florida Healthy Kids, full-pay coverage",
+      "url": "https://healthykids.org/cost/fullpay/index.php",
+      "accessed": "2026-10-31"
+    },
+    "fhk-medical-benefits": {
+      "title": "Florida Healthy Kids, medical benefits and copays",
+      "url": "https://healthykids.org/benefits/medical",
+      "accessed": "2026-10-31"
+    },
+    "fhk-subsidized": {
+      "title": "Florida Healthy Kids, subsidized coverage cost ($15 or $20 per month, 133% to 200% FPL)",
+      "url": "https://healthykids.org/cost/subsidized",
+      "accessed": "2026-10-31"
+    }
+  }
+}

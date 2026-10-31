@@ -1,0 +1,288 @@
+{
+  "templateId": "fl-mma-adult",
+  "state": "FL",
+  "program": "SMMC MMA",
+  "planName": "Florida SMMC Managed Medical Assistance (21 and over)",
+  "population": "Adults in Medicaid managed care (MMA)",
+  "ageRange": [
+    21,
+    null
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2025-02-01",
+  "notes": "No deductible or coinsurance.",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fl-59g-1-056",
+      "status": "verify",
+      "limitations": "Florida Medicaid fee-for-service copay is $2 per provider per day (59G-1.056); whether the MMA plan collects it depends on the plan contract. This template uses $0."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fl-59g-1-056",
+      "status": "verify",
+      "limitations": "Florida Medicaid fee-for-service copay is $2 per provider per day (59G-1.056); whether the MMA plan collects it depends on the plan contract. This template uses $0."
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fl-59g-1-056",
+      "status": "verify",
+      "limitations": "Fee-for-service coinsurance for non-emergency ER use is 5% of the first $300 of the Medicaid payment, max $15; emergencies are exempt. This template uses $0."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fl-59g-1-056",
+      "status": "verify",
+      "limitations": "Florida Medicaid fee-for-service copay is $3 per provider per day (59G-1.056); whether the MMA plan collects it depends on the plan contract. This template uses $0."
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fl-59g-1-056",
+      "status": "verify",
+      "limitations": "Florida Medicaid fee-for-service copay is $3 per provider per day (59G-1.056); whether the MMA plan collects it depends on the plan contract. This template uses $0."
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fl-59g-1-056",
+      "status": "verify",
+      "limitations": "Florida Medicaid fee-for-service copay is $1 per provider per day (59G-1.056); whether the MMA plan collects it depends on the plan contract. This template uses $0."
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fl-59g-1-056",
+      "status": "verify",
+      "limitations": "Florida Medicaid fee-for-service copay is $2 per provider per day (59G-1.056); whether the MMA plan collects it depends on the plan contract. This template uses $0."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fl-59g-1-056",
+      "status": "sourced",
+      "limitations": "Pregnancy-related services are exempt from copayments through six weeks after the pregnancy ends."
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fl-59g-1-056",
+      "status": "verify",
+      "limitations": "Florida Medicaid fee-for-service copay is $2 per provider per day (59G-1.056); whether the MMA plan collects it depends on the plan contract. This template uses $0."
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "fl-59g-1-056",
+      "status": "verify",
+      "limitations": "Florida Medicaid fee-for-service copay is $2 per provider per day (59G-1.056); whether the MMA plan collects it depends on the plan contract. This template uses $0."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    }
+  ],
+  "carveOuts": [
+    {
+      "service": "Dental",
+      "to": "Statewide Medicaid dental plan (SMMC Dental), separate contract",
+      "status": "verify"
+    },
+    {
+      "service": "Long-term care (nursing facility and home and community-based services) for those eligible",
+      "to": "SMMC Long-Term Care plan (often the same company as the member's MMA plan)",
+      "status": "verify"
+    }
+  ],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "Set by each plan within state rules; load as prior-auth rules per plan.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added or in-lieu-of services",
+      "why": "Plan-specific extras approved by the state; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Fee-for-service copayments ($1 to $3 per provider per day)",
+      "why": "State schedule with exemptions (pregnancy-related, emergency, family planning, institutional residents); many MMA plans waive them. Left at $0; set per plan if the contract applies them. CHO also has no per-provider-per-day copay.",
+      "source": "fl-59g-1-056",
+      "status": "verify"
+    },
+    {
+      "item": "Non-emergency ER coinsurance (5% of the first $300, max $15)",
+      "why": "Percent of the Medicaid payment with a cap, and CHO cannot tell an emergent ER visit from a non-emergent one.",
+      "source": "fl-59g-1-056",
+      "status": "sourced"
+    },
+    {
+      "item": "Formulary",
+      "why": "MMA plans administer pharmacy using the AHCA preferred drug list; CHO has no formulary resolution yet.",
+      "status": "verify"
+    },
+    {
+      "item": "Dual eligibles",
+      "why": "Medicare pays first; handled through coordination of benefits.",
+      "status": "verify"
+    }
+  ],
+  "sources": {
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval; applies to every state)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    },
+    "fl-59g-1-056": {
+      "title": "Florida Administrative Code 59G-1.056, Copayments and Coinsurance (s. 409.9081, F.S.)",
+      "url": "https://www.law.cornell.edu/regulations/florida/Fla-Admin-Code-Ann-R-59G-1-056",
+      "accessed": "2026-10-31"
+    }
+  }
+}
