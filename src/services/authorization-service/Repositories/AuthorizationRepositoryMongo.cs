@@ -234,6 +234,7 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         var builder = Builders<Authorization>.Filter;
         var filter = builder.And(
             builder.Eq(x => x.TenantId, effectiveTenantId),
+            builder.Eq(x => x.ExternalSource, null),
             builder.In(x => x.Status, new[]
             {
                 AuthorizationStatus.Submitted,
@@ -504,6 +505,7 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         if (string.IsNullOrWhiteSpace(tenantId)) throw new ArgumentException("Tenant is required for expiry.");
         var b = Builders<Authorization>.Filter;
         return b.Eq(a => a.TenantId, tenantId)
+            & b.Eq(a => a.ExternalSource, null)
             & b.In(a => a.Status, new[] { AuthorizationStatus.Approved, AuthorizationStatus.Modified })
             & b.Or(b.Ne(a => a.ExpirationDate, null) & b.Lt(a => a.ExpirationDate, cutoffDateUtc.Date),
                 b.Ne(a => a.ApprovedServiceDateTo, null) & b.Lt(a => a.ApprovedServiceDateTo, cutoffDateUtc.Date));
