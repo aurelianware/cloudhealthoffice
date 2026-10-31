@@ -1,0 +1,43 @@
+{
+  "resourceType": "Library",
+  "id": "ChoImagingMriPrepopulation",
+  "meta": {
+    "lastUpdated": "2026-10-31T00:00:00Z"
+  },
+  "url": "https://cloudhealthoffice.com/fhir/Library/ChoImagingMriPrepopulation",
+  "version": "1.0.0",
+  "name": "ChoImagingMriPrepopulation",
+  "title": "CHO MRI imaging prepopulation",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/library-type",
+        "code": "logic-library"
+      }
+    ]
+  },
+  "date": "2026-10-31",
+  "publisher": "Cloud Health Office",
+  "description": "CQL that prepopulates the CHO MRI prior authorization questionnaire from the patient's conditions and procedures. The text/cql and application/elm+json content are attached at load time from ChoImagingMriPrepopulation.cql and its compiled ELM.",
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "display": "Radiculopathy diagnoses",
+      "resource": "https://cloudhealthoffice.com/fhir/ValueSet/dtr-radiculopathy|1.0.0"
+    },
+    {
+      "type": "depends-on",
+      "display": "Physical therapy procedures",
+      "resource": "https://cloudhealthoffice.com/fhir/ValueSet/dtr-physical-therapy|1.0.0"
+    }
+  ],
+  "dataRequirement": [
+    {
+      "type": "Condition"
+    },
+    {
+      "type": "Procedure"
+    }
+  ]
+}

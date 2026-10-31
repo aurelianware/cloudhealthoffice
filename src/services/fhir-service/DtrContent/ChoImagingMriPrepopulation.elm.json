@@ -1,0 +1,932 @@
+{
+   "library" : {
+      "annotation" : [ {
+         "translatorVersion" : "3.29.0",
+         "translatorOptions" : "EnableResultTypes,EnableDetailedErrors",
+         "signatureLevel" : "None",
+         "type" : "CqlToElmInfo"
+      } ],
+      "identifier" : {
+         "id" : "ChoImagingMriPrepopulation",
+         "version" : "1.0.0"
+      },
+      "schemaIdentifier" : {
+         "id" : "urn:hl7-org:elm",
+         "version" : "r1"
+      },
+      "usings" : {
+         "def" : [ {
+            "localIdentifier" : "System",
+            "uri" : "urn:hl7-org:elm-types:r1",
+            "annotation" : [ ]
+         }, {
+            "localIdentifier" : "FHIR",
+            "uri" : "http://hl7.org/fhir",
+            "version" : "4.0.1",
+            "annotation" : [ ]
+         } ]
+      },
+      "valueSets" : {
+         "def" : [ {
+            "resultTypeName" : "{urn:hl7-org:elm-types:r1}ValueSet",
+            "name" : "Radiculopathy",
+            "id" : "https://cloudhealthoffice.com/fhir/ValueSet/dtr-radiculopathy",
+            "version" : "1.0.0",
+            "accessLevel" : "Public",
+            "annotation" : [ ],
+            "codeSystem" : [ ]
+         }, {
+            "resultTypeName" : "{urn:hl7-org:elm-types:r1}ValueSet",
+            "name" : "Physical Therapy Procedures",
+            "id" : "https://cloudhealthoffice.com/fhir/ValueSet/dtr-physical-therapy",
+            "version" : "1.0.0",
+            "accessLevel" : "Public",
+            "annotation" : [ ],
+            "codeSystem" : [ ]
+         } ]
+      },
+      "contexts" : {
+         "def" : [ {
+            "name" : "Patient",
+            "annotation" : [ ]
+         } ]
+      },
+      "statements" : {
+         "def" : [ {
+            "name" : "Patient",
+            "context" : "Patient",
+            "annotation" : [ ],
+            "expression" : {
+               "type" : "SingletonFrom",
+               "annotation" : [ ],
+               "signature" : [ ],
+               "operand" : {
+                  "dataType" : "{http://hl7.org/fhir}Patient",
+                  "templateId" : "http://hl7.org/fhir/StructureDefinition/Patient",
+                  "type" : "Retrieve",
+                  "annotation" : [ ],
+                  "include" : [ ],
+                  "codeFilter" : [ ],
+                  "dateFilter" : [ ],
+                  "otherFilter" : [ ]
+               }
+            }
+         }, {
+            "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+            "name" : "CodingIn",
+            "context" : "Patient",
+            "accessLevel" : "Public",
+            "type" : "FunctionDef",
+            "annotation" : [ ],
+            "expression" : {
+               "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+               "type" : "Exists",
+               "annotation" : [ ],
+               "signature" : [ ],
+               "operand" : {
+                  "type" : "Query",
+                  "annotation" : [ ],
+                  "resultTypeSpecifier" : {
+                     "type" : "ListTypeSpecifier",
+                     "annotation" : [ ],
+                     "elementType" : {
+                        "name" : "{http://hl7.org/fhir}Coding",
+                        "type" : "NamedTypeSpecifier",
+                        "annotation" : [ ]
+                     }
+                  },
+                  "source" : [ {
+                     "alias" : "X",
+                     "annotation" : [ ],
+                     "resultTypeSpecifier" : {
+                        "type" : "ListTypeSpecifier",
+                        "annotation" : [ ],
+                        "elementType" : {
+                           "name" : "{http://hl7.org/fhir}Coding",
+                           "type" : "NamedTypeSpecifier",
+                           "annotation" : [ ]
+                        }
+                     },
+                     "expression" : {
+                        "path" : "coding",
+                        "type" : "Property",
+                        "annotation" : [ ],
+                        "resultTypeSpecifier" : {
+                           "type" : "ListTypeSpecifier",
+                           "annotation" : [ ],
+                           "elementType" : {
+                              "name" : "{http://hl7.org/fhir}Coding",
+                              "type" : "NamedTypeSpecifier",
+                              "annotation" : [ ]
+                           }
+                        },
+                        "source" : {
+                           "name" : "concept",
+                           "type" : "OperandRef",
+                           "annotation" : [ ]
+                        }
+                     }
+                  } ],
+                  "let" : [ ],
+                  "relationship" : [ ],
+                  "where" : {
+                     "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                     "type" : "InValueSet",
+                     "annotation" : [ ],
+                     "signature" : [ ],
+                     "code" : {
+                        "resultTypeName" : "{urn:hl7-org:elm-types:r1}Code",
+                        "classType" : "{urn:hl7-org:elm-types:r1}Code",
+                        "type" : "Instance",
+                        "annotation" : [ ],
+                        "element" : [ {
+                           "name" : "code",
+                           "value" : {
+                              "resultTypeName" : "{urn:hl7-org:elm-types:r1}String",
+                              "path" : "value",
+                              "type" : "Property",
+                              "annotation" : [ ],
+                              "source" : {
+                                 "resultTypeName" : "{http://hl7.org/fhir}code",
+                                 "path" : "code",
+                                 "scope" : "X",
+                                 "type" : "Property",
+                                 "annotation" : [ ]
+                              }
+                           }
+                        }, {
+                           "name" : "system",
+                           "value" : {
+                              "resultTypeName" : "{urn:hl7-org:elm-types:r1}String",
+                              "path" : "value",
+                              "type" : "Property",
+                              "annotation" : [ ],
+                              "source" : {
+                                 "resultTypeName" : "{http://hl7.org/fhir}uri",
+                                 "path" : "system",
+                                 "scope" : "X",
+                                 "type" : "Property",
+                                 "annotation" : [ ]
+                              }
+                           }
+                        } ]
+                     },
+                     "valuesetExpression" : {
+                        "resultTypeName" : "{urn:hl7-org:elm-types:r1}ValueSet",
+                        "name" : "codes",
+                        "type" : "OperandRef",
+                        "annotation" : [ ]
+                     }
+                  }
+               }
+            },
+            "operand" : [ {
+               "name" : "concept",
+               "annotation" : [ ],
+               "operandTypeSpecifier" : {
+                  "resultTypeName" : "{http://hl7.org/fhir}CodeableConcept",
+                  "name" : "{http://hl7.org/fhir}CodeableConcept",
+                  "type" : "NamedTypeSpecifier",
+                  "annotation" : [ ]
+               }
+            }, {
+               "name" : "codes",
+               "annotation" : [ ],
+               "operandTypeSpecifier" : {
+                  "resultTypeName" : "{urn:hl7-org:elm-types:r1}ValueSet",
+                  "name" : "{urn:hl7-org:elm-types:r1}ValueSet",
+                  "type" : "NamedTypeSpecifier",
+                  "annotation" : [ ]
+               }
+            } ]
+         }, {
+            "name" : "RadiculopathyConditions",
+            "context" : "Patient",
+            "accessLevel" : "Public",
+            "annotation" : [ ],
+            "resultTypeSpecifier" : {
+               "type" : "ListTypeSpecifier",
+               "annotation" : [ ],
+               "elementType" : {
+                  "name" : "{http://hl7.org/fhir}Condition",
+                  "type" : "NamedTypeSpecifier",
+                  "annotation" : [ ]
+               }
+            },
+            "expression" : {
+               "type" : "Query",
+               "annotation" : [ ],
+               "resultTypeSpecifier" : {
+                  "type" : "ListTypeSpecifier",
+                  "annotation" : [ ],
+                  "elementType" : {
+                     "name" : "{http://hl7.org/fhir}Condition",
+                     "type" : "NamedTypeSpecifier",
+                     "annotation" : [ ]
+                  }
+               },
+               "source" : [ {
+                  "alias" : "C",
+                  "annotation" : [ ],
+                  "resultTypeSpecifier" : {
+                     "type" : "ListTypeSpecifier",
+                     "annotation" : [ ],
+                     "elementType" : {
+                        "name" : "{http://hl7.org/fhir}Condition",
+                        "type" : "NamedTypeSpecifier",
+                        "annotation" : [ ]
+                     }
+                  },
+                  "expression" : {
+                     "dataType" : "{http://hl7.org/fhir}Condition",
+                     "templateId" : "http://hl7.org/fhir/StructureDefinition/Condition",
+                     "type" : "Retrieve",
+                     "annotation" : [ ],
+                     "resultTypeSpecifier" : {
+                        "type" : "ListTypeSpecifier",
+                        "annotation" : [ ],
+                        "elementType" : {
+                           "name" : "{http://hl7.org/fhir}Condition",
+                           "type" : "NamedTypeSpecifier",
+                           "annotation" : [ ]
+                        }
+                     },
+                     "include" : [ ],
+                     "codeFilter" : [ ],
+                     "dateFilter" : [ ],
+                     "otherFilter" : [ ]
+                  }
+               } ],
+               "let" : [ ],
+               "relationship" : [ ],
+               "where" : {
+                  "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                  "type" : "And",
+                  "annotation" : [ ],
+                  "signature" : [ ],
+                  "operand" : [ {
+                     "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                     "name" : "CodingIn",
+                     "type" : "FunctionRef",
+                     "annotation" : [ ],
+                     "signature" : [ ],
+                     "operand" : [ {
+                        "resultTypeName" : "{http://hl7.org/fhir}CodeableConcept",
+                        "path" : "code",
+                        "scope" : "C",
+                        "type" : "Property",
+                        "annotation" : [ ]
+                     }, {
+                        "resultTypeName" : "{urn:hl7-org:elm-types:r1}ValueSet",
+                        "name" : "Radiculopathy",
+                        "preserve" : true,
+                        "type" : "ValueSetRef",
+                        "annotation" : [ ]
+                     } ]
+                  }, {
+                     "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                     "type" : "Not",
+                     "annotation" : [ ],
+                     "signature" : [ ],
+                     "operand" : {
+                        "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                        "type" : "Exists",
+                        "annotation" : [ ],
+                        "signature" : [ ],
+                        "operand" : {
+                           "type" : "Query",
+                           "annotation" : [ ],
+                           "resultTypeSpecifier" : {
+                              "type" : "ListTypeSpecifier",
+                              "annotation" : [ ],
+                              "elementType" : {
+                                 "name" : "{http://hl7.org/fhir}Coding",
+                                 "type" : "NamedTypeSpecifier",
+                                 "annotation" : [ ]
+                              }
+                           },
+                           "source" : [ {
+                              "alias" : "V",
+                              "annotation" : [ ],
+                              "resultTypeSpecifier" : {
+                                 "type" : "ListTypeSpecifier",
+                                 "annotation" : [ ],
+                                 "elementType" : {
+                                    "name" : "{http://hl7.org/fhir}Coding",
+                                    "type" : "NamedTypeSpecifier",
+                                    "annotation" : [ ]
+                                 }
+                              },
+                              "expression" : {
+                                 "path" : "coding",
+                                 "type" : "Property",
+                                 "annotation" : [ ],
+                                 "resultTypeSpecifier" : {
+                                    "type" : "ListTypeSpecifier",
+                                    "annotation" : [ ],
+                                    "elementType" : {
+                                       "name" : "{http://hl7.org/fhir}Coding",
+                                       "type" : "NamedTypeSpecifier",
+                                       "annotation" : [ ]
+                                    }
+                                 },
+                                 "source" : {
+                                    "path" : "verificationStatus",
+                                    "scope" : "C",
+                                    "type" : "Property",
+                                    "annotation" : [ ]
+                                 }
+                              }
+                           } ],
+                           "let" : [ ],
+                           "relationship" : [ ],
+                           "where" : {
+                              "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                              "type" : "In",
+                              "annotation" : [ ],
+                              "signature" : [ ],
+                              "operand" : [ {
+                                 "resultTypeName" : "{urn:hl7-org:elm-types:r1}String",
+                                 "path" : "value",
+                                 "type" : "Property",
+                                 "annotation" : [ ],
+                                 "source" : {
+                                    "resultTypeName" : "{http://hl7.org/fhir}code",
+                                    "path" : "code",
+                                    "scope" : "V",
+                                    "type" : "Property",
+                                    "annotation" : [ ]
+                                 }
+                              }, {
+                                 "type" : "List",
+                                 "annotation" : [ ],
+                                 "resultTypeSpecifier" : {
+                                    "type" : "ListTypeSpecifier",
+                                    "annotation" : [ ],
+                                    "elementType" : {
+                                       "name" : "{urn:hl7-org:elm-types:r1}String",
+                                       "type" : "NamedTypeSpecifier",
+                                       "annotation" : [ ]
+                                    }
+                                 },
+                                 "element" : [ {
+                                    "resultTypeName" : "{urn:hl7-org:elm-types:r1}String",
+                                    "valueType" : "{urn:hl7-org:elm-types:r1}String",
+                                    "value" : "refuted",
+                                    "type" : "Literal",
+                                    "annotation" : [ ]
+                                 }, {
+                                    "resultTypeName" : "{urn:hl7-org:elm-types:r1}String",
+                                    "valueType" : "{urn:hl7-org:elm-types:r1}String",
+                                    "value" : "entered-in-error",
+                                    "type" : "Literal",
+                                    "annotation" : [ ]
+                                 } ]
+                              } ]
+                           }
+                        }
+                     }
+                  } ]
+               }
+            }
+         }, {
+            "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+            "name" : "HasRadiculopathy",
+            "context" : "Patient",
+            "accessLevel" : "Public",
+            "annotation" : [ ],
+            "expression" : {
+               "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+               "type" : "If",
+               "annotation" : [ ],
+               "condition" : {
+                  "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                  "type" : "Exists",
+                  "annotation" : [ ],
+                  "signature" : [ ],
+                  "operand" : {
+                     "name" : "RadiculopathyConditions",
+                     "type" : "ExpressionRef",
+                     "annotation" : [ ],
+                     "resultTypeSpecifier" : {
+                        "type" : "ListTypeSpecifier",
+                        "annotation" : [ ],
+                        "elementType" : {
+                           "name" : "{http://hl7.org/fhir}Condition",
+                           "type" : "NamedTypeSpecifier",
+                           "annotation" : [ ]
+                        }
+                     }
+                  }
+               },
+               "then" : {
+                  "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                  "valueType" : "{urn:hl7-org:elm-types:r1}Boolean",
+                  "value" : "true",
+                  "type" : "Literal",
+                  "annotation" : [ ]
+               },
+               "else" : {
+                  "asType" : "{urn:hl7-org:elm-types:r1}Boolean",
+                  "type" : "As",
+                  "annotation" : [ ],
+                  "signature" : [ ],
+                  "operand" : {
+                     "resultTypeName" : "{urn:hl7-org:elm-types:r1}Any",
+                     "type" : "Null",
+                     "annotation" : [ ]
+                  }
+               }
+            }
+         }, {
+            "resultTypeName" : "{urn:hl7-org:elm-types:r1}Date",
+            "name" : "SymptomOnsetDate",
+            "context" : "Patient",
+            "accessLevel" : "Public",
+            "annotation" : [ ],
+            "expression" : {
+               "resultTypeName" : "{urn:hl7-org:elm-types:r1}Date",
+               "type" : "Min",
+               "annotation" : [ ],
+               "signature" : [ ],
+               "source" : {
+                  "type" : "Query",
+                  "annotation" : [ ],
+                  "resultTypeSpecifier" : {
+                     "type" : "ListTypeSpecifier",
+                     "annotation" : [ ],
+                     "elementType" : {
+                        "name" : "{urn:hl7-org:elm-types:r1}Date",
+                        "type" : "NamedTypeSpecifier",
+                        "annotation" : [ ]
+                     }
+                  },
+                  "source" : [ {
+                     "alias" : "C",
+                     "annotation" : [ ],
+                     "resultTypeSpecifier" : {
+                        "type" : "ListTypeSpecifier",
+                        "annotation" : [ ],
+                        "elementType" : {
+                           "name" : "{http://hl7.org/fhir}Condition",
+                           "type" : "NamedTypeSpecifier",
+                           "annotation" : [ ]
+                        }
+                     },
+                     "expression" : {
+                        "name" : "RadiculopathyConditions",
+                        "type" : "ExpressionRef",
+                        "annotation" : [ ],
+                        "resultTypeSpecifier" : {
+                           "type" : "ListTypeSpecifier",
+                           "annotation" : [ ],
+                           "elementType" : {
+                              "name" : "{http://hl7.org/fhir}Condition",
+                              "type" : "NamedTypeSpecifier",
+                              "annotation" : [ ]
+                           }
+                        }
+                     }
+                  } ],
+                  "let" : [ ],
+                  "relationship" : [ ],
+                  "where" : {
+                     "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                     "type" : "Is",
+                     "annotation" : [ ],
+                     "signature" : [ ],
+                     "operand" : {
+                        "path" : "onset",
+                        "scope" : "C",
+                        "type" : "Property",
+                        "annotation" : [ ],
+                        "resultTypeSpecifier" : {
+                           "type" : "ChoiceTypeSpecifier",
+                           "annotation" : [ ],
+                           "choice" : [ {
+                              "name" : "{http://hl7.org/fhir}dateTime",
+                              "type" : "NamedTypeSpecifier",
+                              "annotation" : [ ]
+                           }, {
+                              "name" : "{http://hl7.org/fhir}Age",
+                              "type" : "NamedTypeSpecifier",
+                              "annotation" : [ ]
+                           }, {
+                              "name" : "{http://hl7.org/fhir}Period",
+                              "type" : "NamedTypeSpecifier",
+                              "annotation" : [ ]
+                           }, {
+                              "name" : "{http://hl7.org/fhir}Range",
+                              "type" : "NamedTypeSpecifier",
+                              "annotation" : [ ]
+                           }, {
+                              "name" : "{http://hl7.org/fhir}string",
+                              "type" : "NamedTypeSpecifier",
+                              "annotation" : [ ]
+                           } ]
+                        }
+                     },
+                     "isTypeSpecifier" : {
+                        "resultTypeName" : "{http://hl7.org/fhir}dateTime",
+                        "name" : "{http://hl7.org/fhir}dateTime",
+                        "type" : "NamedTypeSpecifier",
+                        "annotation" : [ ]
+                     }
+                  },
+                  "return" : {
+                     "annotation" : [ ],
+                     "resultTypeSpecifier" : {
+                        "type" : "ListTypeSpecifier",
+                        "annotation" : [ ],
+                        "elementType" : {
+                           "name" : "{urn:hl7-org:elm-types:r1}Date",
+                           "type" : "NamedTypeSpecifier",
+                           "annotation" : [ ]
+                        }
+                     },
+                     "expression" : {
+                        "resultTypeName" : "{urn:hl7-org:elm-types:r1}Date",
+                        "type" : "DateFrom",
+                        "annotation" : [ ],
+                        "signature" : [ ],
+                        "operand" : {
+                           "resultTypeName" : "{urn:hl7-org:elm-types:r1}DateTime",
+                           "path" : "value",
+                           "type" : "Property",
+                           "annotation" : [ ],
+                           "source" : {
+                              "resultTypeName" : "{http://hl7.org/fhir}dateTime",
+                              "strict" : false,
+                              "type" : "As",
+                              "annotation" : [ ],
+                              "signature" : [ ],
+                              "operand" : {
+                                 "path" : "onset",
+                                 "scope" : "C",
+                                 "type" : "Property",
+                                 "annotation" : [ ],
+                                 "resultTypeSpecifier" : {
+                                    "type" : "ChoiceTypeSpecifier",
+                                    "annotation" : [ ],
+                                    "choice" : [ {
+                                       "name" : "{http://hl7.org/fhir}dateTime",
+                                       "type" : "NamedTypeSpecifier",
+                                       "annotation" : [ ]
+                                    }, {
+                                       "name" : "{http://hl7.org/fhir}Age",
+                                       "type" : "NamedTypeSpecifier",
+                                       "annotation" : [ ]
+                                    }, {
+                                       "name" : "{http://hl7.org/fhir}Period",
+                                       "type" : "NamedTypeSpecifier",
+                                       "annotation" : [ ]
+                                    }, {
+                                       "name" : "{http://hl7.org/fhir}Range",
+                                       "type" : "NamedTypeSpecifier",
+                                       "annotation" : [ ]
+                                    }, {
+                                       "name" : "{http://hl7.org/fhir}string",
+                                       "type" : "NamedTypeSpecifier",
+                                       "annotation" : [ ]
+                                    } ]
+                                 }
+                              },
+                              "asTypeSpecifier" : {
+                                 "resultTypeName" : "{http://hl7.org/fhir}dateTime",
+                                 "name" : "{http://hl7.org/fhir}dateTime",
+                                 "type" : "NamedTypeSpecifier",
+                                 "annotation" : [ ]
+                              }
+                           }
+                        }
+                     }
+                  }
+               }
+            }
+         }, {
+            "name" : "RecentPhysicalTherapy",
+            "context" : "Patient",
+            "accessLevel" : "Public",
+            "annotation" : [ ],
+            "resultTypeSpecifier" : {
+               "type" : "ListTypeSpecifier",
+               "annotation" : [ ],
+               "elementType" : {
+                  "name" : "{http://hl7.org/fhir}Procedure",
+                  "type" : "NamedTypeSpecifier",
+                  "annotation" : [ ]
+               }
+            },
+            "expression" : {
+               "type" : "Query",
+               "annotation" : [ ],
+               "resultTypeSpecifier" : {
+                  "type" : "ListTypeSpecifier",
+                  "annotation" : [ ],
+                  "elementType" : {
+                     "name" : "{http://hl7.org/fhir}Procedure",
+                     "type" : "NamedTypeSpecifier",
+                     "annotation" : [ ]
+                  }
+               },
+               "source" : [ {
+                  "alias" : "P",
+                  "annotation" : [ ],
+                  "resultTypeSpecifier" : {
+                     "type" : "ListTypeSpecifier",
+                     "annotation" : [ ],
+                     "elementType" : {
+                        "name" : "{http://hl7.org/fhir}Procedure",
+                        "type" : "NamedTypeSpecifier",
+                        "annotation" : [ ]
+                     }
+                  },
+                  "expression" : {
+                     "dataType" : "{http://hl7.org/fhir}Procedure",
+                     "templateId" : "http://hl7.org/fhir/StructureDefinition/Procedure",
+                     "type" : "Retrieve",
+                     "annotation" : [ ],
+                     "resultTypeSpecifier" : {
+                        "type" : "ListTypeSpecifier",
+                        "annotation" : [ ],
+                        "elementType" : {
+                           "name" : "{http://hl7.org/fhir}Procedure",
+                           "type" : "NamedTypeSpecifier",
+                           "annotation" : [ ]
+                        }
+                     },
+                     "include" : [ ],
+                     "codeFilter" : [ ],
+                     "dateFilter" : [ ],
+                     "otherFilter" : [ ]
+                  }
+               } ],
+               "let" : [ ],
+               "relationship" : [ ],
+               "where" : {
+                  "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                  "type" : "And",
+                  "annotation" : [ ],
+                  "signature" : [ ],
+                  "operand" : [ {
+                     "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                     "type" : "And",
+                     "annotation" : [ ],
+                     "signature" : [ ],
+                     "operand" : [ {
+                        "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                        "name" : "CodingIn",
+                        "type" : "FunctionRef",
+                        "annotation" : [ ],
+                        "signature" : [ ],
+                        "operand" : [ {
+                           "resultTypeName" : "{http://hl7.org/fhir}CodeableConcept",
+                           "path" : "code",
+                           "scope" : "P",
+                           "type" : "Property",
+                           "annotation" : [ ]
+                        }, {
+                           "resultTypeName" : "{urn:hl7-org:elm-types:r1}ValueSet",
+                           "name" : "Physical Therapy Procedures",
+                           "preserve" : true,
+                           "type" : "ValueSetRef",
+                           "annotation" : [ ]
+                        } ]
+                     }, {
+                        "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                        "type" : "Equal",
+                        "annotation" : [ ],
+                        "signature" : [ ],
+                        "operand" : [ {
+                           "resultTypeName" : "{urn:hl7-org:elm-types:r1}String",
+                           "path" : "value",
+                           "type" : "Property",
+                           "annotation" : [ ],
+                           "source" : {
+                              "resultTypeName" : "{http://hl7.org/fhir}ProcedureStatus",
+                              "path" : "status",
+                              "scope" : "P",
+                              "type" : "Property",
+                              "annotation" : [ ]
+                           }
+                        }, {
+                           "resultTypeName" : "{urn:hl7-org:elm-types:r1}String",
+                           "valueType" : "{urn:hl7-org:elm-types:r1}String",
+                           "value" : "completed",
+                           "type" : "Literal",
+                           "annotation" : [ ]
+                        } ]
+                     } ]
+                  }, {
+                     "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                     "type" : "Or",
+                     "annotation" : [ ],
+                     "signature" : [ ],
+                     "operand" : [ {
+                        "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                        "type" : "GreaterOrEqual",
+                        "annotation" : [ ],
+                        "signature" : [ ],
+                        "operand" : [ {
+                           "resultTypeName" : "{urn:hl7-org:elm-types:r1}DateTime",
+                           "path" : "value",
+                           "type" : "Property",
+                           "annotation" : [ ],
+                           "source" : {
+                              "resultTypeName" : "{http://hl7.org/fhir}dateTime",
+                              "strict" : false,
+                              "type" : "As",
+                              "annotation" : [ ],
+                              "signature" : [ ],
+                              "operand" : {
+                                 "path" : "performed",
+                                 "scope" : "P",
+                                 "type" : "Property",
+                                 "annotation" : [ ],
+                                 "resultTypeSpecifier" : {
+                                    "type" : "ChoiceTypeSpecifier",
+                                    "annotation" : [ ],
+                                    "choice" : [ {
+                                       "name" : "{http://hl7.org/fhir}dateTime",
+                                       "type" : "NamedTypeSpecifier",
+                                       "annotation" : [ ]
+                                    }, {
+                                       "name" : "{http://hl7.org/fhir}Period",
+                                       "type" : "NamedTypeSpecifier",
+                                       "annotation" : [ ]
+                                    }, {
+                                       "name" : "{http://hl7.org/fhir}string",
+                                       "type" : "NamedTypeSpecifier",
+                                       "annotation" : [ ]
+                                    }, {
+                                       "name" : "{http://hl7.org/fhir}Age",
+                                       "type" : "NamedTypeSpecifier",
+                                       "annotation" : [ ]
+                                    }, {
+                                       "name" : "{http://hl7.org/fhir}Range",
+                                       "type" : "NamedTypeSpecifier",
+                                       "annotation" : [ ]
+                                    } ]
+                                 }
+                              },
+                              "asTypeSpecifier" : {
+                                 "resultTypeName" : "{http://hl7.org/fhir}dateTime",
+                                 "name" : "{http://hl7.org/fhir}dateTime",
+                                 "type" : "NamedTypeSpecifier",
+                                 "annotation" : [ ]
+                              }
+                           }
+                        }, {
+                           "resultTypeName" : "{urn:hl7-org:elm-types:r1}DateTime",
+                           "type" : "Subtract",
+                           "annotation" : [ ],
+                           "signature" : [ ],
+                           "operand" : [ {
+                              "resultTypeName" : "{urn:hl7-org:elm-types:r1}DateTime",
+                              "type" : "Now",
+                              "annotation" : [ ],
+                              "signature" : [ ]
+                           }, {
+                              "resultTypeName" : "{urn:hl7-org:elm-types:r1}Quantity",
+                              "value" : 1,
+                              "unit" : "year",
+                              "type" : "Quantity",
+                              "annotation" : [ ]
+                           } ]
+                        } ]
+                     }, {
+                        "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                        "type" : "GreaterOrEqual",
+                        "annotation" : [ ],
+                        "signature" : [ ],
+                        "operand" : [ {
+                           "resultTypeName" : "{urn:hl7-org:elm-types:r1}DateTime",
+                           "path" : "value",
+                           "type" : "Property",
+                           "annotation" : [ ],
+                           "source" : {
+                              "resultTypeName" : "{http://hl7.org/fhir}dateTime",
+                              "path" : "start",
+                              "type" : "Property",
+                              "annotation" : [ ],
+                              "source" : {
+                                 "resultTypeName" : "{http://hl7.org/fhir}Period",
+                                 "strict" : false,
+                                 "type" : "As",
+                                 "annotation" : [ ],
+                                 "signature" : [ ],
+                                 "operand" : {
+                                    "path" : "performed",
+                                    "scope" : "P",
+                                    "type" : "Property",
+                                    "annotation" : [ ],
+                                    "resultTypeSpecifier" : {
+                                       "type" : "ChoiceTypeSpecifier",
+                                       "annotation" : [ ],
+                                       "choice" : [ {
+                                          "name" : "{http://hl7.org/fhir}dateTime",
+                                          "type" : "NamedTypeSpecifier",
+                                          "annotation" : [ ]
+                                       }, {
+                                          "name" : "{http://hl7.org/fhir}Period",
+                                          "type" : "NamedTypeSpecifier",
+                                          "annotation" : [ ]
+                                       }, {
+                                          "name" : "{http://hl7.org/fhir}string",
+                                          "type" : "NamedTypeSpecifier",
+                                          "annotation" : [ ]
+                                       }, {
+                                          "name" : "{http://hl7.org/fhir}Age",
+                                          "type" : "NamedTypeSpecifier",
+                                          "annotation" : [ ]
+                                       }, {
+                                          "name" : "{http://hl7.org/fhir}Range",
+                                          "type" : "NamedTypeSpecifier",
+                                          "annotation" : [ ]
+                                       } ]
+                                    }
+                                 },
+                                 "asTypeSpecifier" : {
+                                    "resultTypeName" : "{http://hl7.org/fhir}Period",
+                                    "name" : "{http://hl7.org/fhir}Period",
+                                    "type" : "NamedTypeSpecifier",
+                                    "annotation" : [ ]
+                                 }
+                              }
+                           }
+                        }, {
+                           "resultTypeName" : "{urn:hl7-org:elm-types:r1}DateTime",
+                           "type" : "Subtract",
+                           "annotation" : [ ],
+                           "signature" : [ ],
+                           "operand" : [ {
+                              "resultTypeName" : "{urn:hl7-org:elm-types:r1}DateTime",
+                              "type" : "Now",
+                              "annotation" : [ ],
+                              "signature" : [ ]
+                           }, {
+                              "resultTypeName" : "{urn:hl7-org:elm-types:r1}Quantity",
+                              "value" : 1,
+                              "unit" : "year",
+                              "type" : "Quantity",
+                              "annotation" : [ ]
+                           } ]
+                        } ]
+                     } ]
+                  } ]
+               }
+            }
+         }, {
+            "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+            "name" : "ConservativeTreatmentAttempted",
+            "context" : "Patient",
+            "accessLevel" : "Public",
+            "annotation" : [ ],
+            "expression" : {
+               "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+               "type" : "If",
+               "annotation" : [ ],
+               "condition" : {
+                  "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                  "type" : "Exists",
+                  "annotation" : [ ],
+                  "signature" : [ ],
+                  "operand" : {
+                     "name" : "RecentPhysicalTherapy",
+                     "type" : "ExpressionRef",
+                     "annotation" : [ ],
+                     "resultTypeSpecifier" : {
+                        "type" : "ListTypeSpecifier",
+                        "annotation" : [ ],
+                        "elementType" : {
+                           "name" : "{http://hl7.org/fhir}Procedure",
+                           "type" : "NamedTypeSpecifier",
+                           "annotation" : [ ]
+                        }
+                     }
+                  }
+               },
+               "then" : {
+                  "resultTypeName" : "{urn:hl7-org:elm-types:r1}Boolean",
+                  "valueType" : "{urn:hl7-org:elm-types:r1}Boolean",
+                  "value" : "true",
+                  "type" : "Literal",
+                  "annotation" : [ ]
+               },
+               "else" : {
+                  "asType" : "{urn:hl7-org:elm-types:r1}Boolean",
+                  "type" : "As",
+                  "annotation" : [ ],
+                  "signature" : [ ],
+                  "operand" : {
+                     "resultTypeName" : "{urn:hl7-org:elm-types:r1}Any",
+                     "type" : "Null",
+                     "annotation" : [ ]
+                  }
+               }
+            }
+         } ]
+      }
+   }
+}
+

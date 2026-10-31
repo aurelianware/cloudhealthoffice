@@ -78,7 +78,7 @@ test first.
 |---|---|---|
 | **Da Vinci PAS** | **Implemented core; conformance unverified here** | Submit persists before responding, inquire reads stored outcomes, and service-line decisions are projected (CAP-01/02). Full profile/response conformance and production readiness are separate. |
 | **Da Vinci CRD** | **Partially Implemented** | Discovery/cards and explicit uncertainty handling are implemented (CAP-03). Unknown/failed evaluations do not establish no-PA-needed; full member-context and structured coverage conformance remain separate. |
-| **Da Vinci DTR** | **Partially Implemented** | Mongo-backed creation, conditional updates, reads, existence checks and searches work across service instances. Complete answer validation, canonical resolution and package semantics remain open (CAP-04/15). |
+| **Da Vinci DTR** | **Partially Implemented** | Mongo-backed creation, conditional updates, reads, existence checks and searches work across service instances. `$questionnaire-package` follows DTR 2.2.0 (Parameters with package Bundles holding the Questionnaire, a draft response, CQL Libraries with ELM and expanded ValueSets), and questionnaires resolve by canonical. One form (MRI) carries CQL prepopulation; the other four are still plain forms. Answer validation and CRD naming the questionnaire remain open (CAP-04/15, G-55, G-44).
 | **CMS-0057-F timeframes** | **Partial** | Receipt-based UTC targets are persisted and used by tenant-scoped watchdog escalation; PAS urgency is mapped and RFAI does not restart the clock. Updated 2026-10-28: the one lawful 14-day extension (Medicare Advantage and Medicaid only) is recorded on the authorization, shown in the console and noticed to the member through correspondence-service (PRs #1568, #1577; the `PA-DECISION-EXTENSION` letter template is plan-authored). Tighter state rules, alert delivery and tenant-database background support remain open. |
 | **CMS-0057-F denial reasons** | **Partial** | Required and persisted for CHO full/partial adverse decisions, with line projections in PAS. X12 `reviewAction.reasonCode` semantics, 278 HCR encoding and notices remain. |
 | **CMS-0057-F public metrics** | **Partially Implemented** | Standard/expedited counts, rates, mean/median and timeliness exist. Updated 2026-10-28: extended-then-approved (PR #1568) and approved-after-appeal, sourced from appeals-service decisions written to the reporting ledger (PR #1575), are computed; a draft list of PA-required items and services, drugs excluded, is generated from the rule set (PR #1576). A refused appeal fact cannot yet be re-queued, policies outside the rule engine are not in the list, and public publication remains the plan's step (CAP-06). |
@@ -268,13 +268,13 @@ CAP-linked entries summarize reconciled behavior. Other entries retain the dated
 | Requirement | Class | Evidence | Gap |
 |---|---|---|---|
 | Questionnaire storage and serving | P | Mongo-backed creation, conditional updates, reads, existence checks and tenant/default search across instances (CAP-04). Full validation/canonical semantics remain separate. | G-53 |
-| SDC / DTR Questionnaire profiles (canonical url, version, cqf-library, launchContext, variables) | S | 5 hand-written seeds that only claim the profile (`DtrService.cs:332-751`). | G-55 |
-| `$questionnaire-package` (inputs: coverage + order; output: Parameters with PackageBundle containing Questionnaire, Library, ValueSet) | P | Takes an id; returns a collection Bundle with the Questionnaire only; undeclared. | G-54 |
-| CQL Library resources | M | — | G-55 |
-| Prepopulation (`initialExpression`, `cqf-expression`) | M | — | G-55 |
+| SDC / DTR Questionnaire profiles (canonical url, version, cqf-library, launchContext, variables) | P | The MRI form (`DtrContent/Questionnaire-pa-imaging-mri.json`) has a canonical url and version, `cqf-library`, a patient `launchContext`, and a `focus` use context listing the CPT codes it applies to. The four other seeds are still hand-written forms without canonicals; the package publishes them under the server's base at their stored version. | G-55 |
+| `$questionnaire-package` (inputs: coverage + order; output: Parameters with PackageBundle containing Questionnaire, Library, ValueSet) | I+T | DTR 2.2.0 inputs (`coverage`, `order`, `questionnaire`, `context`, `changedsince`, dtr-1) and output (`dtr-qpackage-output-parameters`, one `DTR-QPackageBundle` per form: Questionnaire first, draft QuestionnaireResponse with `qr-coverage`/`qr-context`/`intendedUse`, Libraries recursively, ValueSets expanded). Missing forms are warnings (oper-9); unusable source data is 4xx (spec-130). Declared in the CapabilityStatement. Not yet: resolving a CRD context id (none is persisted, G-44), checking the Coverage against CHO's members, tenant-authored Libraries/ValueSets (`QuestionnairePackageTests`, `DtrQuestionnairePackageHttpTests`). | G-54 |
+| CQL Library resources | P | `ChoImagingMriPrepopulation` (CQL plus ELM compiled by the HL7 translator with `scripts/dtr/compile-cql.sh`; a hash test fails if the CQL changes without a recompile), served in the package. One library so far. | G-55 |
+| Prepopulation (`initialExpression`, `cqf-expression`) | P | Three MRI items prepopulate via `initialExpression` (`text/cql-identifier`, each with its ELM `alternativeExpression`). Other forms have none. | G-55 |
 | Adaptive forms (`$next-question`) | M | — | G-57 |
 | CQL engine (for a CHO-hosted DTR app, if built) | M | — | G-56 (decision) |
-| QuestionnaireResponse storage | P | Submission, id reads and tenant/patient-filtered searches use durable store inputs across instances (CAP-04). | G-53 |
+| QuestionnaireResponse storage | P | Submission, id reads and tenant/patient-filtered searches use durable store inputs across instances (CAP-04). Submission resolves `questionnaire` by canonical, so a response naming the `url\|version` from a package is accepted. Answer validation against the form is still open. | G-53 |
 | QuestionnaireResponse linked to the PAS request | M | — | G-16 |
 | DTR SMART app launch (`fhirContext`, `appContext`) | M | `LaunchContext` has patient/encounter only. | G-40, G-56 |
 | Native EHR DTR support | P | Raw forms only. | G-54, G-55 |
@@ -672,9 +672,9 @@ The wave order, effort and dependencies below preserve the original planning rec
 
 | Order | ID | Gap | Sev | Effort | Deps |
 |---|---|---|---|---|---|
-| 42 | G-53 | **Partial:** DTR create, conditional update, reads, search and existence durability implemented and real-Mongo tested. Complete answer validation and canonical URL/version resolution remain; package work is G-54/G-55 (CAP-04/15). | Medium | Partial | Q-5 |
-| 43 | G-54 | `$questionnaire-package` per STU2 (coverage + order inputs; Parameters with PackageBundle), declared in the CapabilityStatement. | High | M | G-53 |
-| 44 | G-55 | SDC/DTR-conformant questionnaire content plus CQL Libraries and ValueSets (content, not engine). CQL tested in CI. | High | L | Q-6, G-54 |
+| 42 | G-53 | **Partial:** DTR create, conditional update, reads, search and existence durability implemented and real-Mongo tested; canonical URL/version resolution implemented (2026-10-31). Complete answer validation remains (CAP-04/15). | Medium | Partial | Q-5 |
+| 43 | G-54 | **Done (2026-10-31)** for DTR 2.2.0 inputs and outputs, declared in the CapabilityStatement. Remaining: CRD context id resolution (needs the persisted `coverage-assertion-id`, G-44) and checking the Coverage against CHO membership (spec-130). | High | M | G-53 |
+| 44 | G-55 | **Partial (2026-10-31):** the MRI form is DTR content with a CQL Library (CQL + ELM) and two expanded ValueSets, compiled by `scripts/dtr/compile-cql.sh` and checked by `DtrContentLibraryTests`. Remaining: the DME, ortho surgery, referral and medication forms, and running the CQL against test patients in CI. | High | L | Q-6, G-54 |
 | 45 | G-56 | DTR launch link with `appContext` to an **external** DTR app (no CHO app). | Medium | S | G-40, G-55, Q-6 |
 | 46 | G-57 | Adaptive forms (`$next-question`). | Low | L | G-55 |
 

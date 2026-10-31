@@ -60,9 +60,22 @@ public sealed class MongoDtrResourceStore : IDtrResourceStore
 
     public void SeedDefaultQuestionnaire(Questionnaire questionnaire)
     {
-        // Insert-only with the unique tenant/id index: concurrent pods never replace
-        // an existing library entry and a seeding race is harmless.
-        TryInsertQuestionnaireAsync(questionnaire, DtrService.DefaultLibraryTenant).GetAwaiter().GetResult();
+        // Insert with the unique tenant/id index, so concurrent pods never write
+        // the same library entry twice and a seeding race is harmless.
+        if (TryInsertQuestionnaireAsync(questionnaire, DtrService.DefaultLibraryTenant).GetAwaiter().GetResult())
+            return;
+
+        // Already there: upgrade it only when this build ships a newer revision
+        // (a higher meta.versionId). The default library is read-only through the
+        // API, so the stored copy is only ever an older seed. The replace is
+        // fenced on the version read, so of two pods upgrading at once one wins
+        // and the other's write is a no-op.
+        var stored = FindQuestionnaireAsync(DtrService.DefaultLibraryTenant, questionnaire.Id).GetAwaiter().GetResult();
+        if (DtrService.IsNewerSeed(questionnaire, stored))
+        {
+            TryReplaceQuestionnaireAsync(questionnaire, DtrService.DefaultLibraryTenant, stored!.Meta?.VersionId)
+                .GetAwaiter().GetResult();
+        }
     }
 
     public async Task<Questionnaire?> FindQuestionnaireAsync(string tenantId, string id, CancellationToken ct = default)

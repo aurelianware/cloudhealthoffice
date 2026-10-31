@@ -1,6 +1,7 @@
 using CloudHealthOffice.Testing.FhirService;
 using FhirService.Models;
 using FhirService.Services;
+using FhirService.Services.Dtr;
 using Hl7.Fhir.Model;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -151,24 +152,32 @@ public class DtrServiceTests
     // ── $questionnaire-package ───────────────────────────────────────────────
 
     [Fact]
-    public async Task QuestionnairePackage_ReturnsBundleWithQuestionnaire()
+    public async Task QuestionnairePackage_ReturnsPackageBundleWithQuestionnaireFirst()
     {
-        var bundle = await _service.GetQuestionnairePackageAsync(
-            "q-imaging-mri", null, "test-tenant");
+        var request = new QuestionnairePackageRequest(
+            new Coverage { Id = "cov-1", Beneficiary = new ResourceReference("Patient/pat-1") },
+            Array.Empty<Resource>(), new[] { "q-imaging-mri" }, null, null);
 
-        bundle.Should().NotBeNull();
+        var result = await _service.GetQuestionnairePackageAsync(request, "test-tenant", "https://test.example.com/fhir/r4");
+
+        result.Package.Should().NotBeNull();
+        var bundle = result.Package!.Parameter.Single(p => p.Name == "packagebundle").Resource as Bundle;
         bundle!.Type.Should().Be(Bundle.BundleType.Collection);
-        bundle.Entry.Should().Contain(e => e.Resource is Questionnaire);
-        var q = bundle.Entry[0].Resource as Questionnaire;
-        q!.Id.Should().Be("q-imaging-mri");
+        bundle.Entry[0].Resource.Should().BeOfType<Questionnaire>().Which.Id.Should().Be("q-imaging-mri");
     }
 
     [Fact]
-    public async Task QuestionnairePackage_UnknownId_ReturnsNull()
+    public async Task QuestionnairePackage_UnknownQuestionnaire_WarnsInsteadOfFailing()
     {
-        var bundle = await _service.GetQuestionnairePackageAsync(
-            "nonexistent", null, "test-tenant");
+        var request = new QuestionnairePackageRequest(
+            new Coverage { Id = "cov-1", Beneficiary = new ResourceReference("Patient/pat-1") },
+            Array.Empty<Resource>(), new[] { "nonexistent" }, null, null);
 
-        bundle.Should().BeNull();
+        var result = await _service.GetQuestionnairePackageAsync(request, "test-tenant", "https://test.example.com/fhir/r4");
+
+        result.Package!.Parameter.Should().NotContain(p => p.Name == "packagebundle");
+        var outcome = result.Package.Parameter.Single(p => p.Name == "outcome").Resource as OperationOutcome;
+        outcome!.Issue.Should().ContainSingle(i => i.Severity == OperationOutcome.IssueSeverity.Warning
+                                                  && i.Code == OperationOutcome.IssueType.NotFound);
     }
 }

@@ -1,6 +1,7 @@
 using CloudHealthOffice.Testing.Mongo;
 using FhirService.Models;
 using FhirService.Services;
+using FhirService.Services.Dtr;
 using FluentAssertions;
 using Hl7.Fhir.Model;
 using Microsoft.Extensions.Configuration;
@@ -191,8 +192,50 @@ public sealed class MongoDtrResourceStoreTests : IAsyncLifetime
         result.Total.Should().Be(1);
         result.Items.Should().ContainSingle().Which.Title.Should().Be("Updated after restart");
         (await writer.GetQuestionnaireAsync("q-live", Tenant))!.Meta.VersionId.Should().Be("2");
-        (await NewService().GetQuestionnairePackageAsync("q-live", null, Tenant))!
-            .Entry.Single().Resource.Should().BeOfType<Questionnaire>().Which.Title.Should().Be("Updated after restart");
+        var package = await NewService().GetQuestionnairePackageAsync(
+            new QuestionnairePackageRequest(
+                new Coverage { Id = "cov-1", Beneficiary = new ResourceReference("Patient/pat-1") },
+                Array.Empty<Resource>(), new[] { "q-live" }, null, null),
+            Tenant, "https://test.example.com/fhir/r4");
+        ((Bundle)package.Package!.Parameter.Single(p => p.Name == "packagebundle").Resource)
+            .Entry[0].Resource.Should().BeOfType<Questionnaire>().Which.Title.Should().Be("Updated after restart");
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task A_newer_shipped_seed_upgrades_the_stored_default_and_an_older_one_does_not()
+    {
+        var store = NewStore();
+        NewService(); // seeds the shipped MRI form (versionId 2)
+        var shipped = await store.FindQuestionnaireAsync(DtrService.DefaultLibraryTenant, "q-imaging-mri");
+        var shippedVersion = shipped!.Meta.VersionId;
+
+        // Simulate a deployment seeded by an older build.
+        var old = new Questionnaire
+        {
+            Id = "q-imaging-mri",
+            Meta = new Meta { VersionId = "1" },
+            Title = "old MRI form",
+            Status = PublicationStatus.Active,
+        };
+        (await store.TryReplaceQuestionnaireAsync(old, DtrService.DefaultLibraryTenant, shippedVersion)).Should().BeTrue();
+
+        NewService();
+        var upgraded = await store.FindQuestionnaireAsync(DtrService.DefaultLibraryTenant, "q-imaging-mri");
+        upgraded!.Meta.VersionId.Should().Be(shippedVersion);
+        upgraded.Url.Should().Be("https://cloudhealthoffice.com/fhir/Questionnaire/pa-imaging-mri");
+
+        // A stored copy newer than the build is left alone.
+        var future = new Questionnaire
+        {
+            Id = "q-imaging-mri",
+            Meta = new Meta { VersionId = "99" },
+            Title = "future MRI form",
+            Status = PublicationStatus.Active,
+        };
+        (await store.TryReplaceQuestionnaireAsync(future, DtrService.DefaultLibraryTenant, shippedVersion)).Should().BeTrue();
+        NewService();
+        (await store.FindQuestionnaireAsync(DtrService.DefaultLibraryTenant, "q-imaging-mri"))!
+            .Title.Should().Be("future MRI form");
     }
 
     [Fact]

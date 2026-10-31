@@ -2,6 +2,7 @@ using FhirService.Services.Identity;
 using Hl7.Fhir.Model;
 using FhirService.Models;
 using FhirService.Services;
+using FhirService.Services.Dtr;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CloudHealthOffice.Infrastructure.Logging;
@@ -203,7 +204,9 @@ public class DtrController : FhirControllerBase
         if (string.IsNullOrEmpty(response.Questionnaire))
             return FhirBadRequest("QuestionnaireResponse.questionnaire reference is required");
 
-        if (!await _dtrService.QuestionnaireExistsAsync(response.Questionnaire, TenantId, ct))
+        // Resolved as a canonical too: a DTR client answers the url|version the
+        // package named, not a local id.
+        if (!await _dtrService.QuestionnaireExistsAsync(response.Questionnaire, TenantId, FhirBaseUrl, ct))
             return FhirBadRequest(
                 $"Referenced Questionnaire '{response.Questionnaire}' does not exist");
 
@@ -238,41 +241,35 @@ public class DtrController : FhirControllerBase
 
     // ── $questionnaire-package ───────────────────────────────────────────────
 
-    /// <summary>POST /fhir/r4/Questionnaire/$questionnaire-package</summary>
+    /// <summary>
+    /// POST /fhir/r4/Questionnaire/$questionnaire-package — DTR 2.2.0.
+    ///
+    /// Takes the member's Coverage plus the order(s), questionnaire canonical(s)
+    /// or CRD context the documentation is for, and answers with a Parameters
+    /// holding one package Bundle per questionnaire: the Questionnaire, a draft
+    /// QuestionnaireResponse, and the CQL Libraries and ValueSets the DTR client
+    /// needs to prepopulate it. Requested questionnaires that do not exist are
+    /// warnings in the outcome (oper-9), not failures; unusable source data is
+    /// a 4xx with an OperationOutcome (spec-130).
+    /// </summary>
     [HttpPost("Questionnaire/$questionnaire-package")]
     [FhirAccess(smart: true, cho: "authorizations:read")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
-    [ProducesResponseType(typeof(Bundle), 200)]
+    [ProducesResponseType(typeof(Parameters), 200)]
     [ProducesResponseType(typeof(OperationOutcome), 400)]
-    [ProducesResponseType(typeof(OperationOutcome), 404)]
+    [ProducesResponseType(typeof(OperationOutcome), 422)]
     public async Task<IActionResult> QuestionnairePackage(
         [FromBody] Parameters parameters, CancellationToken ct)
     {
-        // Extract questionnaire ID from Parameters resource
-        var questionnaireParam = parameters.Parameter
-            .FirstOrDefault(p => p.Name == "questionnaire");
-        var questionnaireId = (questionnaireParam?.Value as FhirUri)?.Value
-            ?? (questionnaireParam?.Value as FhirString)?.Value;
+        var (request, error) = QuestionnairePackageRequest.Parse(parameters);
+        if (request is null)
+            return FhirBadRequest(error!);
 
-        if (string.IsNullOrEmpty(questionnaireId))
-            return FhirBadRequest("Parameter 'questionnaire' (URI or string) is required");
-
-        // Strip "Questionnaire/" prefix if present
-        if (questionnaireId.StartsWith("Questionnaire/", StringComparison.Ordinal))
-            questionnaireId = questionnaireId["Questionnaire/".Length..];
-
-        var patientParam = parameters.Parameter
-            .FirstOrDefault(p => p.Name == "patient");
-        var patientId = (patientParam?.Value as FhirString)?.Value;
-
-        var bundle = await _dtrService.GetQuestionnairePackageAsync(
-            questionnaireId, patientId, TenantId, ct);
-
-        if (bundle == null)
-            return FhirNotFound("Questionnaire", questionnaireId);
-
-        return Ok(bundle);
+        var result = await _dtrService.GetQuestionnairePackageAsync(request, TenantId, FhirBaseUrl, ct);
+        return result.Package is { } package
+            ? Ok(package)
+            : StatusCode(result.Status, result.Rejection);
     }
 
     // ── Validation helpers ───────────────────────────────────────────────────

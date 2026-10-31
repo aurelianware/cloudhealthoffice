@@ -216,7 +216,31 @@ public class DtrControllerTests
     // ── $questionnaire-package ───────────────────────────────────────────────
 
     [Fact]
-    public async Task QuestionnairePackage_ExistingId_ReturnsBundleWithQuestionnaire()
+    public async Task QuestionnairePackage_ExistingId_ReturnsParametersWithPackageBundle()
+    {
+        var parameters = new Parameters();
+        parameters.Parameter.Add(new Parameters.ParameterComponent
+        {
+            Name = "coverage",
+            Resource = new Coverage { Id = "cov-1", Beneficiary = new ResourceReference("Patient/456") },
+        });
+        parameters.Parameter.Add(new Parameters.ParameterComponent
+        {
+            Name = "questionnaire",
+            Value = new FhirString("q-imaging-mri"),
+        });
+
+        var result = await _controller.QuestionnairePackage(parameters, CancellationToken.None);
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        var output = okResult.Value.Should().BeOfType<Parameters>().Subject;
+        var bundle = output.Parameter.Single(p => p.Name == "packagebundle").Resource as Bundle;
+        bundle!.Type.Should().Be(Bundle.BundleType.Collection);
+        bundle.Entry[0].Resource.Should().BeOfType<Questionnaire>();
+    }
+
+    [Fact]
+    public async Task QuestionnairePackage_WithoutCoverage_Returns400()
     {
         var parameters = new Parameters();
         parameters.Parameter.Add(new Parameters.ParameterComponent
@@ -227,10 +251,18 @@ public class DtrControllerTests
 
         var result = await _controller.QuestionnairePackage(parameters, CancellationToken.None);
 
-        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-        var bundle = okResult.Value.Should().BeOfType<Bundle>().Subject;
-        bundle.Type.Should().Be(Bundle.BundleType.Collection);
-        bundle.Entry.Should().Contain(e => e.Resource is Questionnaire);
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task SubmitResponse_ByCanonical_IsAccepted()
+    {
+        var response = CreateValidResponse();
+        response.Questionnaire = "https://cloudhealthoffice.com/fhir/Questionnaire/pa-imaging-mri|1.0.0";
+
+        var result = await _controller.SubmitQuestionnaireResponse(response, CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(201);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

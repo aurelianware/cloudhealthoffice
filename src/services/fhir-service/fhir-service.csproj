@@ -27,6 +27,20 @@
                       LogicalName="FhirArtifacts.%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <!--
+    DTR content (questionnaires, CQL Libraries with their compiled ELM, and
+    ValueSets) served by $questionnaire-package. DtrContentLibrary reads them
+    under the logical-name prefix `DtrContent.`. The .cql.sha256 sidecars are
+    test inputs only and are not embedded.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="DtrContent\*.json;DtrContent\*.cql"
+                      LogicalName="DtrContent.%(Filename)%(Extension)" />
+    <!-- Embedded only: keep the Web SDK from also publishing them as content. -->
+    <Content Remove="DtrContent\**" />
+    <None Remove="DtrContent\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="CloudHealthOffice.FhirService.Tests" />
   </ItemGroup>
