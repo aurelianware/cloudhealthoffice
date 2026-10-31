@@ -10,11 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Nightly conformance: the Inferno PDex payer-server kit (`davinci-pdex-test-kit` v0.13.2) judges CHO's HRex `Patient/$member-match` as `INFERNO-PDEX-SERVER-001`: the member-match group and the no-match case. The kit authenticates as a requesting payer (SMART Backend Services, `system/PayerToPayer.read`, registered payer) and sends HRex requests built from the seed with a consent naming its payer. The interop profile binds Payer-to-Payer to CHO's own services. The result is published with the other kits, with an `inferno-pdex` badge on ci-evidence.
+## [6.1.1] - 2026-10-31
+
+"Spartacus," patch.
+
+Fixes a CARIN BB regression in the published v6.1.0 tag. That tag was placed
+on #1654 rather than on the commit the Inferno gate tested, and #1654 broke
+`Coverage?_include=Coverage:payor`. This release adds #1655, which fixes it,
+plus website and documentation updates (#1652 to #1657). No configuration
+changes. Release notes: `docs/releases/RELEASE_NOTES_v6.1.1.md`.
 
 ### Fixed
 
 - CARIN BB `Coverage?_include=Coverage:payor` answers again. Once the interop Coverage named the plan's Organization as its payor (`Fhir:Coverage:PayorReference`), the search was refused with a 400 because fhir-service could not include a referenced payor. A payor that references the plan's own Organization (`Fhir:PlanOrganization`) is now included in the searchset (`search.mode` include); any other referenced payor is still refused.
 - CARIN BB's Organization tests and most must-support checks have data to judge. The plan's own Organization is served as a C4BB-Organization at `Organization/{Fhir:PlanOrganization:Id}` (payer id, NAIC code, address; read, `_id` and `_lastUpdated` search), and the EOB insurer (claims-service `Fhir:Insurer:Reference`) and Coverage payor (`Fhir:Coverage:PayorReference`) reference it. A claim keeps its billing provider's 837 entity type (NM102, `billingProviderEntityType`), so the EOB's provider is `Organization/{npi}` or `Practitioner/{npi}` when the 837 said which; provider-service's provider Organizations declare C4BB-Organization 2.0.0 with a US address, and its Organization search takes `_id` and `_lastUpdated`. Coverage carries the member id as its MB identifier and, when recorded, the group and plan names (new optional `groupName`/`planName` on coverage create). Patient adds the member id as CARIN BB's unique member id (`um`) and states `deceasedBoolean` false for a living member; member create accepts `race` and `ethnicity`. The interop seed and compose wire all of this.
+
+### Documentation
+
+- Website: the Inferno results page, badges and article show the excused known kit issues and match the all-green run (#1657); the architecture page is refreshed for v6.0 (#1656); new answers on pended versus pending prior authorizations (#1652).
 
 ## [6.1.0] - 2026-10-31
 
