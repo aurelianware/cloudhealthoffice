@@ -236,7 +236,7 @@
               <tr>
                 <td><span class="ev-what">CARIN Blue Button</span><p><a href="https://github.com/inferno-framework/carin-for-blue-button-test-kit">carin-for-blue-button-test-kit</a> v0.16.3</p></td>
                 <td>Patient, Coverage, ExplanationOfBenefit, Organization and Practitioner reads and searches, including EOB searches by type, identifier, service date and <code>_lastUpdated</code>, the <code>_include</code> parameters, and validation of each EOB against its claim-type profile.</td>
-                <td>Suite <code>c4bb_v200</code> financial groups, run as a member's SMART patient app with a token bound to that member, the way a consumer app reaches Patient Access.</td>
+                <td>Suite <code>c4bb_v200</code>, the financial API test group in one run, as a member's SMART patient app with a token bound to that member, the way a consumer app reaches Patient Access.</td>
                 <td>The Patient Access API: claims and encounter data for members, required since CMS-9115-F and expanded by CMS-0057-F. CARIN Blue Button is the guide CMS recommends for it.</td>
               </tr>
               <tr>
@@ -276,16 +276,16 @@
 
         <div class="ev-grid ev-grid--two">
           <div class="ev-card">
-            <h3>CARIN BB: three EOB claim-type checks</h3>
-            <p>In kit v0.16.3, the latest release, the oral, pharmacy and professional non-clinician validation tests check every EOB the kit collected against that one claim type's profile. A member with both professional and institutional claims therefore fails the pharmacy profile on EOBs that never claimed it. No server with mixed claim types can pass these three tests. Their failures are still recorded, but they don't count against the result. Every other test counts.</p>
+            <h3>CARIN BB: the five EOB claim-type checks</h3>
+            <p>In kit v0.16.3, the latest release, each claim-type validation test (inpatient, outpatient, professional non-clinician, pharmacy and oral) checks every EOB the kit collected against that one claim type's profile. A member with both professional and institutional claims therefore fails the pharmacy profile on EOBs that never claimed it. No server with mixed claim types can pass these tests. Their failures are still recorded, but they don't count against the result. Each EOB is still validated against its own profile by the HL7 validator in our own test suite.</p>
           </div>
           <div class="ev-card">
             <h3>CARIN BB: the non-financial suite is not run</h3>
             <p>The kit's non-financial suite checks the superseded <code>-NonFinancial</code> profile URLs from an April 2023 snapshot. Cloud Health Office declares the current CARIN BB 2.2.0 <code>-Basis</code> profiles, so the suite can't match its EOBs in either direction. We won't rename our profiles to an outdated draft just to turn it green.</p>
           </div>
           <div class="ev-card">
-            <h3>Plan-Net: kit 1.1.0, server 1.2.0</h3>
-            <p>The kit is generated from Plan-Net 1.1.0, while Cloud Health Office serves 1.2.0. Most requirements are unchanged between the two. Where they differ, the kit is checking the older version.</p>
+            <h3>Plan-Net: 25 forward-chain searches, and kit 1.1.0</h3>
+            <p>In kit v0.13.4, the latest release, a forward-chain test takes its search value from the first resource of that type the kit happened to collect, usually the payer's own Organization. It fails if nothing points at that one resource, even when the directory links every practitioner, location and service correctly to the practice that runs it. Those 25 tests are recorded and not counted. The forward chains whose first value is referenced pass, and our own tests cover chained search directly. Separately, the kit is generated from Plan-Net 1.1.0, while Cloud Health Office serves 1.2.0, so where the two versions differ the kit checks the older one.</p>
           </div>
           <div class="ev-card">
             <h3>Bulk Data: TLS and system export</h3>

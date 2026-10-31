@@ -99,6 +99,13 @@ const REGULATORY_CONTEXT = {
     'FHIR Bulk Data Access, with the calling system authorized by SMART Backend Services.'
 };
 
+// Groups the kit declares without an id are named by the runnable id Inferno
+// gives them, which means nothing to a reader. Publish what they contain.
+const GROUP_LABELS = {
+  'c4bb_v200-Group02':
+    'C4BB FHIR API Tests (CapabilityStatement, Patient, ExplanationOfBenefit, Coverage, Organization, Practitioner, RelatedPerson)'
+};
+
 // ── Inferno test identity ──────────────────────────────────────────────────
 // Inferno ids are suite-group-test. A finding names a test, a group or the
 // suite; only tests are counted, because a group's row fails whenever any test
@@ -197,7 +204,7 @@ const kits = kitScenarios.map((s) => {
     },
     suite: s.infernoSuite,
     // An empty list means the whole suite was run.
-    groups: s.infernoGroups || [],
+    groups: (s.infernoGroups || []).map((g) => GROUP_LABELS[g] || g),
     // NotPublished: no kit run has been published. NotRun: a run was, and it
     // carried no result for this kit.
     status: hit ? hit.result.status : run ? 'NotRun' : 'NotPublished',
@@ -269,7 +276,10 @@ const BADGE_LABELS = {
 function badgeFor(kit) {
   const t = kit.tests;
   if (kit.status === 'Passed') {
-    return { message: t ? `passed ${t.passed}/${t.passed + t.failed}` : 'passed', color: 'brightgreen' };
+    // Excused tests stay visible on the badge, so a pass never reads as more
+    // than the kit actually judged.
+    const excused = t?.knownKitIssue ? ` · ${t.knownKitIssue} kit issues excused` : '';
+    return { message: t ? `passed ${t.passed}/${t.passed + t.failed}${excused}` : 'passed', color: 'brightgreen' };
   }
   if (kit.status === 'Failed') {
     return {
