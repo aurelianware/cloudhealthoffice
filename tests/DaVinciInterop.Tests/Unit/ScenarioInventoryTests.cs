@@ -181,8 +181,11 @@ public sealed class ScenarioInventoryTests
                 // A scenario that runs the whole suite (no groups named) runs every test.
                 if (scenario.InfernoGroups.Count > 0)
                 {
+                    // A group the kit declares without an id is named by its runnable
+                    // id (c4bb_v200-Group02); its tests carry the suite's prefix.
                     scenario.InfernoGroups.Should().Contain(
-                        group => issue.Test.StartsWith(group + "_", StringComparison.Ordinal),
+                        group => issue.Test.StartsWith(group + "_", StringComparison.Ordinal)
+                                 || (group.Contains('-') && issue.Test.StartsWith(group.Substring(0, group.IndexOf('-')) + "_", StringComparison.Ordinal)),
                         $"'{issue.Test}' must belong to a group '{scenario.Id}' runs");
                 }
             }
@@ -192,17 +195,14 @@ public sealed class ScenarioInventoryTests
     }
 
     [Fact]
-    public void Carin_bb_runs_the_eob_group_before_the_groups_that_read_its_references()
+    public void Carin_bb_runs_its_fhir_api_groups_in_one_run()
     {
         // The kit's Coverage, Organization and Practitioner groups take their
-        // instances from the references its EOB searches save; run first, they
-        // skip with "No Coverage resources appear to be available" (run 41087087059).
-        var groups = Inventory.Scenarios.Single(s => s.Id == "INFERNO-C4BB-SERVER-001").InfernoGroups;
-        var eob = groups.IndexOf("c4bb_v200_eob");
-
-        eob.Should().BeGreaterThanOrEqualTo(0);
-        foreach (var dependent in new[] { "c4bb_v200_coverage", "c4bb_v200_organization", "c4bb_v200_practitioner" })
-            groups.IndexOf(dependent).Should().BeGreaterThan(eob, $"{dependent} reads references the EOB group saves");
+        // instances from the references its EOB searches save in scratch, which
+        // lasts one Inferno run; run as separate groups they skip with "No
+        // Coverage resources appear to be available" (run 41133414552).
+        Inventory.Scenarios.Single(s => s.Id == "INFERNO-C4BB-SERVER-001").InfernoGroups
+            .Should().Equal("c4bb_v200-Group02");
     }
 
     [Fact]

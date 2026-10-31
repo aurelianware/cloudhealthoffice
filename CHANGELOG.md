@@ -222,6 +222,12 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
   usually the payer, whether or not anything references it. The 25 forward-chain
   tests that still fail after #1636 and #1639 are listed in
   `infernoKnownKitIssues` with that reason (see `docs/interop/davinci.md`).
+- **DaVinci Interop runs the CARIN BB FHIR API group as one Inferno run.**
+  The Coverage, Organization and Practitioner groups read the references the
+  EOB searches save in Inferno's scratch, which lasts one run, so run as
+  separate groups they skipped with nothing to read, even in the kit's order.
+  The scenario now runs their parent group (`c4bb_v200-Group02`), which also
+  runs the RelatedPerson group (it skips: CHO publishes no RelatedPerson).
 - **The interop stack has 15 minutes to start.** `docker compose up --build`
   for the first scenario builds every CHO and kit image, and took over the old
   5-minute limit in run 41133414552, so the Bulk Data scenario never ran.

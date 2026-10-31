@@ -332,10 +332,10 @@ public sealed class InfernoRunnerTests
     [Fact]
     public void A_parent_group_row_failed_by_an_earlier_group_run_does_not_fail_a_later_one()
     {
-        // The scenario runs c4bb_v200_eob, then c4bb_v200_coverage, in one
-        // session. Inferno's row for their parent Group02 in the coverage run
-        // rolls up the EOB group's excused failure; the coverage run's own
-        // tests only skipped.
+        // Groups run one at a time in one session (as run 41133414552 ran
+        // c4bb_v200_eob, then c4bb_v200_coverage): Inferno's row for their
+        // parent Group02 in the coverage run rolls up the EOB group's excused
+        // failure, while the coverage run's own tests passed or skipped.
         var coverage = new InfernoTestRun
         {
             Status = "done",
