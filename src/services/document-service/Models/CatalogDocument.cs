@@ -110,7 +110,9 @@ public enum DocumentLinkKind
     Call,
     Provider,
     RfaiRequest,
-    PaymentRun
+    PaymentRun,
+    /// <summary>A file-drop import run (claims-service <c>CpcdsDropRuns</c>): the source extracts it loaded.</summary>
+    ImportRun
 }
 
 public sealed class DocumentRetention
@@ -179,6 +181,13 @@ public enum ScanStatus
 /// <summary>The built-in document type taxonomy (§3). A tenant may use others.</summary>
 public static class DocumentTypes
 {
+    /// <summary>
+    /// A file a plan's core or UM system sent CHO (a CPCDS extract, an X12
+    /// 278, ...), kept as received. The only type that may be CSV or X12, and
+    /// the only one with its own size cap (<see cref="Services.DocumentUploadPolicy"/>).
+    /// </summary>
+    public const string SourceExtract = "SourceExtract";
+
     public static readonly IReadOnlySet<string> BuiltIn = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         // Clinical
@@ -195,6 +204,8 @@ public static class DocumentTypes
         "IdCard", "EnrollmentForm", "ConsentForm", "CoverageNotice",
         // Service
         "CallRecording", "CallTranscript", "CallSummary",
+        // Data a plan's other systems sent (a core's CPCDS or X12 extract), as received
+        SourceExtract,
         // Anything not yet classified
         "Other"
     };
@@ -232,9 +243,12 @@ public static class DocumentChannels
     public const string Call = "Call";
     public const string Generated = "Generated";
 
+    /// <summary>A file the plan's system delivered by SFTP to the file drop.</summary>
+    public const string Sftp = "SFTP";
+
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        Upload, X12_275, Fhir, Fax, Mail, Call, Generated
+        Upload, X12_275, Fhir, Fax, Mail, Call, Generated, Sftp
     };
 }
 

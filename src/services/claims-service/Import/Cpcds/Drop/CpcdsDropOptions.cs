@@ -31,6 +31,9 @@ public sealed class CpcdsDropOptions
 
     public CpcdsDropGcsOptions Gcs { get; set; } = new();
 
+    /// <summary>Keep every loaded file in document-service (see <see cref="ICpcdsDropArchive"/>).</summary>
+    public CpcdsDropArchiveOptions Archive { get; set; } = new();
+
     /// <summary>How often the worker looks for files.</summary>
     public TimeSpan Interval { get; set; } = TimeSpan.FromMinutes(5);
 

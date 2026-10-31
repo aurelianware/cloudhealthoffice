@@ -527,6 +527,10 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             set_env(container, "CpcdsDrop__Enabled", "true")
             set_env(container, "CpcdsDrop__Store", "Gcs")
             set_env(container, "CpcdsDrop__Gcs__Bucket", args.cpcds_drop_bucket)
+            # Every file a run loads is kept, as received, in document-service
+            # (SourceExtract, ten-year retention); the bucket is transit only.
+            set_env(container, "CpcdsDrop__Archive__Enabled", "true")
+            set_env(container, "Services__DocumentService", "http://document-service")
         if name == "appeals-service" and args.appeals_secrets_project:
             spec["serviceAccountName"] = "appeals-service"
             set_env(container, "SecretProvider__Provider", "GoogleSecretManager")

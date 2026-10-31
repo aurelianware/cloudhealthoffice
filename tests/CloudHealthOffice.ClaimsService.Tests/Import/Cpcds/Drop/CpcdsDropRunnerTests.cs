@@ -344,10 +344,14 @@ public sealed class CpcdsDropRunnerTests : IDisposable
     {
         public HttpRequestMessage? Request { get; private set; }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        /// <summary>The request body as sent (the request is disposed once the call returns).</summary>
+        public string? Body { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             Request = request;
-            return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+            Body = request.Content is null ? null : await request.Content.ReadAsStringAsync(ct);
+            return new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
         }
     }
 
@@ -391,6 +395,74 @@ public sealed class CpcdsDropRunnerTests : IDisposable
         step.Status.Should().Be(CpcdsDropStepStatus.Failed);
         step.HttpStatus.Should().Be(422);
         step.Errors.Should().Equal("No provider NPI column found");
+    }
+
+    [Fact]
+    public async Task Every_file_is_archived_before_it_loads_and_the_run_keeps_the_document_ids()
+    {
+        _options.Archive.Enabled = true;
+        var archive = Substitute.For<ICpcdsDropArchive>();
+        archive.ArchiveAsync(Tenant, Arg.Any<string>(), Arg.Any<CpcdsDropFile>(), Arg.Any<string>(), "qnxt", Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var name = ci.ArgAt<CpcdsDropFile>(2).Name;
+                _calls.Add("archive:" + name);
+                return name.Contains("Members")
+                    ? new CpcdsDropArchiveResult(null, "document-service answered 503")
+                    : new CpcdsDropArchiveResult("doc-" + name, null);
+            });
+        Drop("CPCDS_Members.csv");
+        Drop("CPCDS_Claims.csv");
+
+        var run = await new CpcdsDropRunner(
+            new FolderCpcdsDropStore(_root), _claims, _upstream, _runs, [_handler], _tenantContext,
+            Options.Create(_options), Tenants(), NullLogger<CpcdsDropRunner>.Instance, new Clock(Now), archive).RunAsync(Tenant, default);
+
+        _calls.Take(2).Should().BeEquivalentTo("archive:CPCDS_Members.csv", "archive:CPCDS_Claims.csv");
+        _calls.Skip(2).Should().Contain(c => c.StartsWith("members:")).And.Contain(c => c.StartsWith("claims:"),
+            "a file that could not be archived still loads");
+        run!.Files.Single(f => f.Name == "CPCDS_Claims.csv").DocumentId.Should().Be("doc-CPCDS_Claims.csv");
+        run.Files.Single(f => f.Name == "CPCDS_Members.csv").DocumentId.Should().BeNull();
+        var step = run.Steps.Single(s => s.Name == "archive");
+        step.Status.Should().Be(CpcdsDropStepStatus.CompletedWithErrors);
+        step.Errors.Should().ContainSingle().Which.Should().Contain("CPCDS_Members.csv").And.Contain("503");
+        Directory.GetFiles(Path.Combine(_root, Tenant, "processed"), "*", SearchOption.AllDirectories).Should().HaveCount(2,
+            "an archive failure never sends the files to failed/");
+    }
+
+    [Fact]
+    public async Task A_file_is_archived_as_a_source_extract_linked_to_its_run()
+    {
+        var (_, handler) = Upstream(HttpStatusCode.Created, """{ "id": "doc-1" }""");
+        var factory = Substitute.For<IHttpClientFactory>();
+        factory.CreateClient(Arg.Any<string>()).Returns(_ => new HttpClient(handler) { BaseAddress = new Uri("http://svc/") });
+        var archive = new HttpCpcdsDropArchive(factory, Options.Create(_options));
+
+        var result = await archive.ArchiveAsync(Tenant, "run-1", File_("um_278.x12"), "ISA*00*...~", "jiva", default);
+
+        result.Should().Be(new CpcdsDropArchiveResult("doc-1", null));
+        handler.Request!.RequestUri!.AbsolutePath.Should().Be("/api/v1/documents");
+        handler.Request.Headers.GetValues("X-Tenant-ID").Should().Equal(Tenant);
+        var body = handler.Body!;
+        body.Should().MatchRegex("name=\"?Type\"?\\r\\n\\r\\nSourceExtract")
+            .And.MatchRegex("name=\"?Links\"?\\r\\n\\r\\nImportRun:run-1")
+            .And.MatchRegex("name=\"?SourceChannel\"?\\r\\n\\r\\nSFTP")
+            .And.Contain("DropRun=run-1").And.Contain("SourceSystem=jiva")
+            .And.Contain("Content-Type: application/edi-x12");
+    }
+
+    [Fact]
+    public async Task A_refused_archive_says_why()
+    {
+        var (_, handler) = Upstream(HttpStatusCode.UnsupportedMediaType, "The file content is not application/edi-x12.");
+        var factory = Substitute.For<IHttpClientFactory>();
+        factory.CreateClient(Arg.Any<string>()).Returns(_ => new HttpClient(handler) { BaseAddress = new Uri("http://svc/") });
+
+        var result = await new HttpCpcdsDropArchive(factory, Options.Create(_options))
+            .ArchiveAsync(Tenant, "run-1", File_("claims.csv"), "a,b\n", null, default);
+
+        result.DocumentId.Should().BeNull();
+        result.Error.Should().Contain("415").And.Contain("not application/edi-x12");
     }
 
     [Fact]
