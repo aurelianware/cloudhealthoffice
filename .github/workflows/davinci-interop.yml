@@ -249,6 +249,9 @@ jobs:
   #                              (TLS test omitted), Group and Patient export,
   #                              files downloaded and validated; the kit
   #                              authenticates with SMART Backend Services
+  #   INFERNO-PDEX-SERVER-001    PDex 2.0.0 payer server — HRex $member-match
+  #                              and its no-match case; the kit is a requesting
+  #                              payer authenticating with SMART Backend Services
   #
   # The kits publish no upstream image, so each is fetched at the tag pinned in
   # interop/versions.json and built locally. The fetch script refuses a checkout
@@ -264,12 +267,12 @@ jobs:
   # secret, no Docker socket mounted, host ports bound to 127.0.0.1, all data
   # synthetic.
   inferno:
-    name: Inferno conformance kits judging CHO (US Core, CARIN BB, Plan-Net, Bulk Data)
+    name: Inferno conformance kits judging CHO (US Core, CARIN BB, Plan-Net, Bulk Data, PDex)
     runs-on: ubuntu-latest
     needs: harness
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     continue-on-error: true
-    # Four kit builds, eight CHO service builds, and four suites that validate
+    # Five kit builds, eight CHO service builds, and five suites that validate
     # every resource they read. The outer bound, not an expectation.
     timeout-minutes: 120
     steps:
@@ -299,7 +302,7 @@ jobs:
           df -h /
 
       - name: Fetch the pinned conformance kits
-        run: ./scripts/interop/fetch-inferno.sh us-core c4bb plan-net bulk-data
+        run: ./scripts/interop/fetch-inferno.sh us-core c4bb plan-net bulk-data pdex
 
       - name: Run the conformance kits against CHO
         env:
@@ -435,6 +438,7 @@ jobs:
           artifacts/interop/badges/inferno-c4bb.json:badges/inferno-c4bb.json
           artifacts/interop/badges/inferno-plan-net.json:badges/inferno-plan-net.json
           artifacts/interop/badges/inferno-bulk-data.json:badges/inferno-bulk-data.json
+          artifacts/interop/badges/inferno-pdex.json:badges/inferno-pdex.json
 
       - name: Redeploy the site
         if: steps.publish.outputs.published == 'true'

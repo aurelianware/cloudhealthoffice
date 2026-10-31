@@ -46,7 +46,7 @@ the machine-readable source of truth.
 | --- | --- | --- | --- | --- |
 | [HL7-DaVinci/br-payer](https://github.com/HL7-DaVinci/br-payer) | External server | CRD, DTR, PAS | Apache-2.0 | **Executed** — PAS `$submit`, CRD CDS Hooks and DTR `$questionnaire-package` scenarios run against it |
 | [HL7-DaVinci/br-provider](https://github.com/HL7-DaVinci/br-provider) | External client | CRD, DTR, PAS | MIT | Pinned and defined; no scenario yet |
-| [inferno-framework/davinci-pdex-test-kit](https://github.com/inferno-framework/davinci-pdex-test-kit) | Conformance runner | PDex | Apache-2.0 | Runner seam only — see §11 |
+| [inferno-framework/davinci-pdex-test-kit](https://github.com/inferno-framework/davinci-pdex-test-kit) | Conformance runner | PDex | Apache-2.0 | `INFERNO-PDEX-SERVER-001` ($member-match) |
 | [inferno-framework/davinci-dtr-test-kit](https://github.com/inferno-framework/davinci-dtr-test-kit) | Conformance runner | DTR | Apache-2.0 | Runner seam only — see §11 |
 | [HL7-DaVinci/CDS-Library](https://github.com/HL7-DaVinci/CDS-Library) | Content source | CRD/DTR/PAS rule content | See note below | Pinned for future use; not consumed yet |
 
@@ -333,8 +333,8 @@ What the runner can now do that it could not before:
 
 ### The conformance scenarios
 
-All four are in [`interop/scenarios.json`](../../interop/scenarios.json) and
-all four run:
+All five are in [`interop/scenarios.json`](../../interop/scenarios.json) and
+all five run:
 
 | Scenario | Suite | Groups | What it judges |
 | --- | --- | --- | --- |
@@ -342,6 +342,7 @@ all four run:
 | `INFERNO-C4BB-SERVER-001` | `c4bb_v200` (financial) | `capability_statement_group`, `patient`, `coverage`, `eob`, `organization`, `practitioner` | Patient, Coverage, Organization, Practitioner and the adjudicated EOB |
 | `INFERNO-PLANNET-SERVER-001` | `davinci_plan_net_server_v110` | all | The public Provider Directory (G-36), with no token |
 | `INFERNO-BULK-SERVER-001` | `bulk_data_v200` | `bulk_data_smart_backend_services_v200`, `bulk_data_group_export_v200`, `bulk_data_patient_export_v200` | The SMART Backend Services token endpoint (its TLS test omitted on plain HTTP; passed on hosted Inferno), and Group and Patient `$export` (G-60), the files included |
+| `INFERNO-PDEX-SERVER-001` | `pdex_payer_server` | `pdex_workflow_member_match`, `pdex_no_member_matches` | HRex `Patient/$member-match` as the prior payer of a Payer-to-Payer exchange (G-35): the CapabilityStatement declaration, the request and response profiles, the Patient found by the returned identifier, and 422 for no match |
 
 `INFERNO-PLANNET-SERVER-001` is the one scenario pointed somewhere other than
 the authenticated FHIR base: its `choSurface` is `publicDirectory`, so the kit's
@@ -370,6 +371,23 @@ bundled issuer serve `interop-tenant` (`SmartAuth__Tenants__0`). The issuer is
 plain HTTP on the interop network, so smart-auth-service drops OpenIddict's
 HTTPS requirement for an http issuer, which `SmartIssuer.Resolve` only accepts
 in Development.
+
+`INFERNO-PDEX-SERVER-001` authenticates the same way, as a requesting payer
+rather than a provider (`infernoAuth: payerBackendServices`): the harness
+registers the kit as `payerBackendClient` from `interop/cho-seed.json`, with
+`system/PayerToPayer.read` and a registered payer, which is the payer CHO binds
+the request to (D-13). The kit's `member_match_request` and
+`no_member_match_request` inputs are HRex Parameters the harness builds from
+the seed (`Harness/PdexMemberMatchRequest.cs`): the seeded member's
+demographics, `CoverageToMatch` with the member id as `subscriberId`, and an
+HRex Consent from CHO's payer to the kit's, naming the member by a local
+reference to `MemberPatient` as the kit requires (ADR 022). The profile binds
+Payer-to-Payer to CHO's own services (`FhirAdapters__Sources__PayerToPayer`).
+The kit is generated from PDex 2.0.0, whose Payer-to-Payer workflow then reads
+the member's data by query and `$everything` with the requesting payer's token.
+CHO's data path is the PDex 2.1 bulk exchange (`$davinci-data-export`), so
+those groups, and the PDex and US Core search groups that need a member-bound
+token, are not run.
 
 Which groups run is **inventory data, not code**. It is a claim about what CHO
 serves, so it belongs where a reader can check it against the scenario's
@@ -751,10 +769,11 @@ Known at the current pins:
 
 ## 13. Limitations
 
-* Seven scenarios execute today: `BR-PAS-SUBMIT-001` (PAS), `BR-CRD-001` (CRD),
+* Eight scenarios execute today: `BR-PAS-SUBMIT-001` (PAS), `BR-CRD-001` (CRD),
   `BR-DTR-001` (DTR), `INFERNO-USCORE-SERVER-001` (US Core),
   `INFERNO-C4BB-SERVER-001` (CARIN BB), `INFERNO-PLANNET-SERVER-001`
-  (Plan-Net) and `INFERNO-BULK-SERVER-001` (Bulk Data). Everything else in the inventory is
+  (Plan-Net), `INFERNO-BULK-SERVER-001` (Bulk Data) and
+  `INFERNO-PDEX-SERVER-001` (PDex `$member-match`). Everything else in the inventory is
   `NotRun` — deliberately, because a placeholder must never look like a result.
 * CHO participates in the three br-payer scenarios as the **client**, through its
   real production code (`MetadataController` for PAS, `CrdController` for CRD);
@@ -773,9 +792,9 @@ Known at the current pins:
   for it; it has not shown they stay conformant across a population. Widening
   the fixture is the obvious next move, and the kits will say so loudly when it
   happens.
-* `INFERNO-PDEX-SERVER-001`, `INFERNO-PDEX-CLIENT-001` and
-  `INFERNO-DTR-PAYER-001` remain unimplemented. Their kits are pinned; nothing
-  drives them.
+* `INFERNO-PDEX-CLIENT-001` and `INFERNO-DTR-PAYER-001` remain unimplemented.
+  Their kits are pinned; nothing drives them. `INFERNO-PDEX-SERVER-001` runs
+  only the `$member-match` groups (see above).
 * The CARIN BB kit's non-financial suite cannot judge CHO's EOBs at the current
   pin — see "CARIN BB non-financial: `-Basis` against `-NonFinancial`" below. US
   Core has no such gap.

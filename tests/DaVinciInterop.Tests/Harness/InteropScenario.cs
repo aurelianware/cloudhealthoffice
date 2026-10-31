@@ -97,6 +97,12 @@ public static class InfernoAuthModes
 {
     public const string ChoToken = "choToken";
     public const string BackendServices = "backendServices";
+
+    /// <summary>
+    /// SMART Backend Services as a requesting payer: the kit is registered as
+    /// the seed's <c>payerBackendClient</c>, bound to a payer rather than a provider.
+    /// </summary>
+    public const string PayerBackendServices = "payerBackendServices";
     public const string PatientApp = "patientApp";
 }
 

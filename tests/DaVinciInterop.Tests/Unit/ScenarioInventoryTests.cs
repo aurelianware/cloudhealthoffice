@@ -42,7 +42,7 @@ public sealed class ScenarioInventoryTests
             .Should().BeEquivalentTo([
                 "BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001",
                 "INFERNO-USCORE-SERVER-001", "INFERNO-C4BB-SERVER-001",
-                "INFERNO-PLANNET-SERVER-001", "INFERNO-BULK-SERVER-001",
+                "INFERNO-PLANNET-SERVER-001", "INFERNO-BULK-SERVER-001", "INFERNO-PDEX-SERVER-001",
             ]);
     }
 
@@ -336,6 +336,55 @@ public sealed class ScenarioInventoryTests
     }
 
     /// <summary>
+    /// The PDex kit is the requesting payer of a Payer-to-Payer exchange. It
+    /// must authenticate as a payer-bound client holding only the Payer-to-Payer
+    /// scope, and send member-match requests that name the seeded member and a
+    /// consent naming its own payer, or the run would test the refusal rather
+    /// than the match.
+    /// </summary>
+    [Fact]
+    public void The_pdex_suite_matches_the_seeded_member_as_a_payer_bound_backend_client()
+    {
+        var scenario = Inventory.Scenario("INFERNO-PDEX-SERVER-001");
+        var fixture = ChoSeedFixture.Load();
+        var inputs = InfernoSuiteScenario.BuildInputs(scenario, fixture).ToDictionary(i => i.Name);
+
+        scenario.InfernoAuth.Should().Be(InfernoAuthModes.PayerBackendServices);
+        fixture.PayerBackendClient.PayerId.Should().NotBeEmpty();
+        fixture.PayerBackendClient.ProviderId.Should().BeEmpty("a requesting payer acts for no provider");
+        fixture.PayerBackendClient.Scopes.Should().Equal("system/PayerToPayer.read");
+
+        var auth = System.Text.Json.JsonDocument.Parse(inputs["smart_auth_info"].Value).RootElement;
+        auth.GetProperty("auth_type").GetString().Should().Be("backend_services");
+        auth.GetProperty("client_id").GetString().Should().Be(fixture.PayerBackendClient.ClientId);
+        auth.GetProperty("requested_scopes").GetString().Should().Be("system/PayerToPayer.read");
+
+        var match = System.Text.Json.Nodes.JsonNode.Parse(inputs["member_match_request"].Value)!.AsObject();
+        match["resourceType"]!.GetValue<string>().Should().Be("Parameters");
+        var parts = match["parameter"]!.AsArray().ToDictionary(p => p!["name"]!.GetValue<string>(), p => p!["resource"]!);
+        parts.Keys.Should().BeEquivalentTo(["MemberPatient", "CoverageToMatch", "Consent"]);
+        parts["CoverageToMatch"]["subscriberId"]!.GetValue<string>().Should().Be(fixture.Member.MemberId);
+        parts["MemberPatient"]["birthDate"]!.GetValue<string>().Should().Be(fixture.Member.DateOfBirth[..10]);
+
+        var consent = parts["Consent"];
+        consent["patient"]!["reference"]!.GetValue<string>().Should().Be(
+            $"Patient/{parts["MemberPatient"]["id"]!.GetValue<string>()}",
+            "the kit requires the consent to name the member by a local reference");
+        consent["provision"]!["actor"]!.AsArray()
+            .Select(a => (a!["role"]!["coding"]![0]!["code"]!.GetValue<string>(),
+                          a["reference"]!["identifier"]!["value"]!.GetValue<string>()))
+            .Should().BeEquivalentTo(new[]
+            {
+                ("PERF", PdexMemberMatchRequest.ChoPayerId),
+                ("IRCP", fixture.PayerBackendClient.PayerId),
+            });
+
+        var noMatch = System.Text.Json.Nodes.JsonNode.Parse(inputs["no_member_match_request"].Value)!.AsObject();
+        noMatch["parameter"]!.AsArray().Single(p => p!["name"]!.GetValue<string>() == "CoverageToMatch")!
+            ["resource"]!["subscriberId"]!.GetValue<string>().Should().Be(PdexMemberMatchRequest.UnknownSubscriberId);
+    }
+
+    /// <summary>
     /// System-level export is not served (501 by design), and the server TLS
     /// group cannot pass on the plain-HTTP interop network. Running either
     /// would put a known, explained failure in every nightly result. The SMART
@@ -449,7 +498,8 @@ public sealed class ScenarioInventoryTests
         foreach (var scenario in Inventory.Scenarios)
         {
             scenario.InfernoAuth.Should().BeOneOf(
-                InfernoAuthModes.ChoToken, InfernoAuthModes.BackendServices, InfernoAuthModes.PatientApp);
+                InfernoAuthModes.ChoToken, InfernoAuthModes.BackendServices, InfernoAuthModes.PayerBackendServices,
+                InfernoAuthModes.PatientApp);
         }
     }
 

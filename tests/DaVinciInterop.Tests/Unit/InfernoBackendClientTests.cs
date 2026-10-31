@@ -40,6 +40,19 @@ public sealed class InfernoBackendClientTests
     }
 
     [Fact]
+    public void The_payer_registration_is_payer_bound_and_names_no_provider()
+    {
+        var client = ChoSeedFixture.Load().PayerBackendClient;
+        var body = InfernoBackendClient.RegistrationBody(client, new JsonObject { ["keys"] = new JsonArray() });
+
+        body["kind"]!.GetValue<string>().Should().Be("backend");
+        body["clientId"]!.GetValue<string>().Should().Be(client.ClientId).And.MatchRegex("^[a-z0-9-]{3,64}$");
+        body["payerId"]!.GetValue<string>().Should().Be(client.PayerId).And.MatchRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$");
+        body.ContainsKey("providerId").Should().BeFalse();
+        body["scopes"]!.AsArray().Select(s => s!.GetValue<string>()).Should().BeEquivalentTo(["system/PayerToPayer.read"]);
+    }
+
+    [Fact]
     public void The_registration_is_a_provider_bound_backend_client()
     {
         var client = ChoSeedFixture.Load().BackendClient;
@@ -48,6 +61,7 @@ public sealed class InfernoBackendClientTests
         body["kind"]!.GetValue<string>().Should().Be("backend");
         body["clientId"]!.GetValue<string>().Should().Be(client.ClientId).And.MatchRegex("^[a-z0-9-]{3,64}$");
         body["providerId"]!.GetValue<string>().Should().Be(client.ProviderId).And.NotBeEmpty();
+        body.ContainsKey("payerId").Should().BeFalse();
         body["scopes"]!.AsArray().Select(s => s!.GetValue<string>()).Should().BeEquivalentTo(["system/*.read"]);
     }
 }
