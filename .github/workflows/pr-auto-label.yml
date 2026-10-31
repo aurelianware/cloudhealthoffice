@@ -8,6 +8,12 @@ permissions:
   pull-requests: write
   contents: read
 
+# A newer push to the same pull request replaces a queued or running check
+# of the older commit; pushes to main and other events are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   label-pr:
     name: Auto-Label PR
