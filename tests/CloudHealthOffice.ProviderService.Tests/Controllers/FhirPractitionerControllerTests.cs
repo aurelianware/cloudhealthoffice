@@ -169,6 +169,72 @@ public class FhirPractitionerControllerTests
     }
 
     [Fact]
+    public async Task SearchPractitioners_lastUpdated_returns_only_the_practitioner_updated_then()
+    {
+        // What the Inferno CARIN BB kit does: read a Practitioner, then search
+        // _lastUpdated with its meta.lastUpdated exactly as served.
+        var earlier = IndividualProvider("1234567890", "Jane", "Doe");
+        earlier.LastUpdatedDate = new DateTime(2026, 10, 31, 3, 40, 1, 123, DateTimeKind.Utc).AddTicks(4567);
+        var later = IndividualProvider("1679576722", "John", "Roe");
+        later.LastUpdatedDate = earlier.LastUpdatedDate.AddSeconds(2);
+        await _repository.CreateAsync(earlier);
+        await _repository.CreateAsync(later);
+        var served = ParseFhirContent(await _controller.ReadPractitioner("1679576722", CancellationToken.None))
+            ["meta"]!["lastUpdated"]!.GetValue<string>();
+
+        var bundle = ParseFhirContent(await _controller.SearchPractitioners(
+            npi: null, identifier: null, given: null, family: null,
+            city: null, state: null, postalCode: null, specialty: null, lastUpdated: [served]));
+
+        bundle["entry"]!.AsArray().Single()!["resource"]!["id"]!.GetValue<string>().Should().Be("1679576722");
+    }
+
+    [Theory]
+    [InlineData("2026-10-31", 2)]
+    [InlineData("gt2026-10-31T03:40:02Z", 1)]
+    [InlineData("lt2026-10-31T03:40:02Z", 1)]
+    [InlineData("2026-11-01", 0)]
+    public async Task SearchPractitioners_lastUpdated_honours_precision_and_prefixes(string value, int expected)
+    {
+        var earlier = IndividualProvider("1234567890", "Jane", "Doe");
+        earlier.LastUpdatedDate = new DateTime(2026, 10, 31, 3, 40, 1, DateTimeKind.Utc);
+        var later = IndividualProvider("1679576722", "John", "Roe");
+        later.LastUpdatedDate = new DateTime(2026, 10, 31, 3, 40, 3, DateTimeKind.Utc);
+        await _repository.CreateAsync(earlier);
+        await _repository.CreateAsync(later);
+
+        var bundle = ParseFhirContent(await _controller.SearchPractitioners(
+            npi: null, identifier: null, given: null, family: null,
+            city: null, state: null, postalCode: null, specialty: null, lastUpdated: [value]));
+
+        bundle["total"]!.GetValue<int>().Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task SearchPractitioners_lastUpdated_also_filters_an_NPI_lookup()
+    {
+        var provider = IndividualProvider("1679576722", "John", "Roe");
+        provider.LastUpdatedDate = new DateTime(2026, 10, 31, 3, 40, 1, DateTimeKind.Utc);
+        await _repository.CreateAsync(provider);
+
+        var bundle = ParseFhirContent(await _controller.SearchPractitioners(
+            npi: null, identifier: null, id: "1679576722", given: null, family: null,
+            city: null, state: null, postalCode: null, specialty: null, lastUpdated: ["2026-10-30"]));
+
+        bundle["total"]!.GetValue<int>().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SearchPractitioners_lastUpdated_that_is_not_a_date_is_a_400()
+    {
+        var result = await _controller.SearchPractitioners(
+            npi: null, identifier: null, given: null, family: null,
+            city: null, state: null, postalCode: null, specialty: null, lastUpdated: ["yesterday"]);
+
+        result.Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
     public async Task SearchPractitioners_NPI_for_organization_returns_empty_bundle()
     {
         await _repository.CreateAsync(OrganizationProvider("1111111111"));

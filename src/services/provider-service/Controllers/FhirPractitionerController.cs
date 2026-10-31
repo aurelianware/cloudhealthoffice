@@ -88,7 +88,7 @@ public class FhirPractitionerController : ControllerBase
 
     /// <summary>
     /// FHIR Practitioner search. Honors FHIR R4 search parameter names
-    /// (<c>_id</c>, <c>given</c>, <c>family</c>, <c>city</c>, <c>state</c>,
+    /// (<c>_id</c>, <c>_lastUpdated</c>, <c>given</c>, <c>family</c>, <c>city</c>, <c>state</c>,
     /// <c>postal-code</c>, <c>specialty</c>, <c>identifier</c>) plus the
     /// shorthand <c>npi</c> alias the existing fhir-service controller
     /// uses. Returns a FHIR <c>Bundle</c> of type <c>searchset</c>.
@@ -105,12 +105,26 @@ public class FhirPractitionerController : ControllerBase
         [FromQuery(Name = "postal-code")] string? postalCode,
         [FromQuery] string? specialty,
         [FromQuery(Name = "_id")] string? id = null,
+        [FromQuery(Name = "_lastUpdated")] string[]? lastUpdated = null,
         [FromQuery] int _count = DefaultPageSize,
         [FromQuery] int _page = 1,
         CancellationToken ct = default)
     {
         var pageSize = Math.Clamp(_count, 1, MaxPageSize);
         var page = Math.Max(1, _page);
+
+        // _lastUpdated is applied to each page the repository returns, so a
+        // page can hold fewer matches than _count; it never holds a
+        // practitioner that does not match.
+        FhirLastUpdatedFilter? lastUpdatedFilter;
+        try
+        {
+            lastUpdatedFilter = FhirLastUpdatedFilter.Parse(lastUpdated);
+        }
+        catch (FormatException ex)
+        {
+            return FhirOperationOutcome(400, "invalid", $"_lastUpdated: {StripLineBreaks(ex.Message)}");
+        }
 
         // Resolve identifier=NPI:value or identifier=value to the npi
         // shortcut. FHIR token parameters use system|value or value alone.
@@ -148,7 +162,8 @@ public class FhirPractitionerController : ControllerBase
 
             var single = await _repository.GetByNPIAsync(resolvedNpi);
             var bundleEntries = new JsonArray();
-            if (single != null && single.ProviderType == ProviderType.Individual)
+            if (single != null && single.ProviderType == ProviderType.Individual
+                && (lastUpdatedFilter is null || lastUpdatedFilter.Matches(single.LastUpdatedDate)))
             {
                 var integrity = ProviderIntegrityProjection.FromProvider(single);
                 var projected = _projector.Project(single, integrity);
@@ -185,6 +200,7 @@ public class FhirPractitionerController : ControllerBase
         foreach (var provider in results)
         {
             if (provider.ProviderType != ProviderType.Individual) continue;
+            if (lastUpdatedFilter is not null && !lastUpdatedFilter.Matches(provider.LastUpdatedDate)) continue;
             var integrity = ProviderIntegrityProjection.FromProvider(provider);
             var projected = _projector.Project(provider, integrity);
             if (projected != null) entries.Add(WrapEntry(projected));
