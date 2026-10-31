@@ -358,24 +358,34 @@ public sealed class ScenarioInventoryTests
         auth.GetProperty("auth_type").GetString().Should().Be("backend_services");
         auth.GetProperty("client_id").GetString().Should().Be(fixture.PayerBackendClient.ClientId);
         auth.GetProperty("requested_scopes").GetString().Should().Be("system/PayerToPayer.read");
+        // The PDex suite has no auth tests: an already-expired placeholder makes
+        // inferno_core fetch a real token on the kit's first request.
+        auth.GetProperty("access_token").GetString().Should().Be(InfernoInput.ExpiredPlaceholderToken);
+        auth.GetProperty("expires_in").GetString().Should().Be("0");
 
         var match = System.Text.Json.Nodes.JsonNode.Parse(inputs["member_match_request"].Value)!.AsObject();
         match["resourceType"]!.GetValue<string>().Should().Be("Parameters");
         var parts = match["parameter"]!.AsArray().ToDictionary(p => p!["name"]!.GetValue<string>(), p => p!["resource"]!);
-        parts.Keys.Should().BeEquivalentTo(["MemberPatient", "CoverageToMatch", "Consent"]);
+        parts.Keys.Should().BeEquivalentTo(["MemberPatient", "CoverageToMatch", "CoverageToLink", "Consent"]);
         parts["CoverageToMatch"]["subscriberId"]!.GetValue<string>().Should().Be(fixture.Member.MemberId);
         parts["MemberPatient"]["birthDate"]!.GetValue<string>().Should().Be(fixture.Member.DateOfBirth[..10]);
+        // US Core Patient needs an identifier; it must not be typed MB, which CHO
+        // would read as its own member id instead of CoverageToMatch.subscriberId.
+        parts["MemberPatient"]["identifier"]![0]!["type"]!["coding"]![0]!["code"]!.GetValue<string>().Should().Be("UMB");
+        parts["CoverageToLink"]["subscriberId"]!.GetValue<string>().Should().Be(PdexMemberMatchRequest.NewPayerMemberId);
 
         var consent = parts["Consent"];
         consent["patient"]!["reference"]!.GetValue<string>().Should().Be(
             $"Patient/{parts["MemberPatient"]["id"]!.GetValue<string>()}",
             "the kit requires the consent to name the member by a local reference");
+        consent["sourceReference"].Should().NotBeNull("hrex-consent requires source[x]");
+        consent["provision"]!["period"]!["end"]!.GetValue<string>().Should().Be(PdexMemberMatchRequest.End);
         consent["provision"]!["actor"]!.AsArray()
             .Select(a => (a!["role"]!["coding"]![0]!["code"]!.GetValue<string>(),
                           a["reference"]!["identifier"]!["value"]!.GetValue<string>()))
             .Should().BeEquivalentTo(new[]
             {
-                ("PERF", PdexMemberMatchRequest.ChoPayerId),
+                ("performer", PdexMemberMatchRequest.ChoPayerId),
                 ("IRCP", fixture.PayerBackendClient.PayerId),
             });
 

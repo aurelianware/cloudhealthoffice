@@ -53,22 +53,49 @@ public sealed record InfernoInput
     /// URL is given rather than discovered, so the run does not depend on the
     /// kit reaching discovery before it can authenticate; discovery is
     /// CHO's own claim and its own tests cover it.
+    ///
+    /// <para>
+    /// A suite with no authentication tests of its own (PDex) never asks for a
+    /// first token: inferno_core 1.4.3 refreshes a backend services auth_info
+    /// only once it holds an access token (<c>AuthInfo#need_to_refresh?</c>),
+    /// so its requests went out unauthenticated (401). With
+    /// <paramref name="startExpired"/> the input carries a placeholder token
+    /// that has already expired, so the kit's first request makes it sign an
+    /// assertion and fetch a real token from CHO. The placeholder is never sent:
+    /// the refresh replaces it before the request goes out.
+    /// </para>
     /// </summary>
     public static InfernoInput BackendServices(
-        string name, string tokenUrl, string clientId, string requestedScopes) => new()
+        string name, string tokenUrl, string clientId, string requestedScopes, bool startExpired = false) => new()
     {
         Name = name,
         Type = "auth_info",
-        Value = JsonSerializer.Serialize(new
-        {
-            auth_type = "backend_services",
-            use_discovery = "false",
-            token_url = tokenUrl,
-            client_id = clientId,
-            requested_scopes = requestedScopes,
-            encryption_algorithm = "ES384",
-        }),
+        Value = startExpired
+            ? JsonSerializer.Serialize(new
+            {
+                auth_type = "backend_services",
+                use_discovery = "false",
+                token_url = tokenUrl,
+                client_id = clientId,
+                requested_scopes = requestedScopes,
+                encryption_algorithm = "ES384",
+                access_token = ExpiredPlaceholderToken,
+                issue_time = "2000-01-01T00:00:00Z",
+                expires_in = "0",
+            })
+            : JsonSerializer.Serialize(new
+            {
+                auth_type = "backend_services",
+                use_discovery = "false",
+                token_url = tokenUrl,
+                client_id = clientId,
+                requested_scopes = requestedScopes,
+                encryption_algorithm = "ES384",
+            }),
     };
+
+    /// <summary>The expired placeholder <see cref="BackendServices"/> starts a self-authenticating suite with.</summary>
+    public const string ExpiredPlaceholderToken = "expired-placeholder-refresh-on-first-request";
 }
 
 /// <summary>
