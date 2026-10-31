@@ -18,6 +18,10 @@ public class CrdService : ICrdService
     private readonly ICrdClassificationStore _classificationStore;
     private readonly ICrdContextResolver _contextResolver;
     private readonly ILogger<CrdService> _logger;
+    private readonly IDtrService? _dtrService;
+    private readonly ICrdAssertionStore? _assertionStore;
+    private readonly string? _dtrLaunchUrl;
+    private readonly TimeSpan _assertionRetention;
 
     public CrdService(
         IHttpClientFactory httpClientFactory,
@@ -25,7 +29,10 @@ public class CrdService : ICrdService
         IOptions<CrdConfig> config,
         ICrdClassificationStore classificationStore,
         ICrdContextResolver contextResolver,
-        ILogger<CrdService> logger)
+        ILogger<CrdService> logger,
+        IDtrService? dtrService = null,
+        ICrdAssertionStore? assertionStore = null,
+        IOptions<DtrConfig>? dtrConfig = null)
     {
         _terminologyClient = httpClientFactory.CreateClient("TerminologyService");
         _priorAuthRuleEngine = priorAuthRuleEngine;
@@ -33,6 +40,14 @@ public class CrdService : ICrdService
         _classificationStore = classificationStore;
         _contextResolver = contextResolver;
         _logger = logger;
+        // Optional so a host without DTR still answers CRD: then no form is
+        // named, no assertion is kept and no app is offered, exactly as before.
+        _dtrService = dtrService;
+        _assertionStore = assertionStore;
+        _dtrLaunchUrl = string.IsNullOrWhiteSpace(dtrConfig?.Value.DtrLaunchUrl)
+            ? null
+            : dtrConfig.Value.DtrLaunchUrl.Trim();
+        _assertionRetention = TimeSpan.FromDays(Math.Max(1, config.Value.AssertionRetentionDays));
     }
 
     public async Task<CrdEvaluationResult> EvaluateCoverageRequirementsAsync(
@@ -70,8 +85,7 @@ public class CrdService : ICrdService
         // 4. Evaluate each code against benefit configuration (O(1) HashSet lookup)
         var classification = GetClassification(tenantId);
         var cards = new List<CrdCard>();
-        var assertions = new List<(int EntryIndex, CrdDetermination Determination,
-            CrdIndeterminateReason? Reason, CrdCoding Coding)>();
+        var assertions = new List<CrdAssertionDraft>();
 
         foreach (var tc in translated)
         {
@@ -85,7 +99,7 @@ public class CrdService : ICrdService
                 var outcome = await EvaluateCodeAsync(
                     context, tenantId, classification, effectiveCode, display, ct);
                 cards.Add(outcome.Card);
-                assertions.Add((entryIndex, outcome.Determination, outcome.Reason, coding));
+                assertions.Add(new(entryIndex, outcome.Determination, outcome.Reason, coding, display, cards.Count - 1));
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -98,8 +112,8 @@ public class CrdService : ICrdService
                 _logger.LogWarning(ex, "CRD evaluation failed for code {Code}; answering unknown",
                     LogSanitizer.Sanitize(effectiveCode, 256));
                 cards.Add(BuildRequirementsUnknownCard(display));
-                assertions.Add((entryIndex, CrdDetermination.Indeterminate,
-                    CrdIndeterminateReason.Technical, coding));
+                assertions.Add(new(entryIndex, CrdDetermination.Indeterminate,
+                    CrdIndeterminateReason.Technical, coding, display, cards.Count - 1));
             }
         }
 
@@ -110,15 +124,29 @@ public class CrdService : ICrdService
         foreach (var (entryIndex, label) in UncodedOrderEntries(request))
         {
             cards.Add(BuildRequirementsUnknownCard($"{label} order (no coded service)"));
-            assertions.Add((entryIndex, CrdDetermination.Indeterminate,
-                CrdIndeterminateReason.NoCodedService, Coding: new CrdCoding()));
+            assertions.Add(new(entryIndex, CrdDetermination.Indeterminate,
+                CrdIndeterminateReason.NoCodedService, new CrdCoding(), label, cards.Count - 1));
+        }
+
+        // 5. Documentation-required answers name the DTR forms that collect the
+        //    documentation (resp-38), and their cards say how to complete them.
+        var questionnaires = await QuestionnairesForAsync(assertions, tenantId, ct);
+        var (systemActions, issued) = BuildSystemActions(request, tenantId, assertions, questionnaires);
+        await RememberAsync(issued, tenantId, ct);
+
+        foreach (var assertion in assertions.Where(a => a.Determination == CrdDetermination.DocumentationRequired))
+        {
+            var forms = questionnaires.TryGetValue(assertion, out var q) ? q : [];
+            var record = issued.FirstOrDefault(i => ReferenceEquals(i.Draft, assertion)).Record;
+            cards[assertion.CardIndex] = BuildDocumentationRequiredCard(
+                assertion.Display, forms, record, _dtrLaunchUrl);
         }
 
         sw.Stop();
         return new CrdEvaluationResult
         {
             Cards = cards,
-            SystemActions = BuildSystemActions(request, assertions),
+            SystemActions = systemActions,
             CodesEvaluated = codes.Count,
             TranslationsPerformed = translated.Count(t => t.WasTranslated),
             ElapsedMs = sw.ElapsedMilliseconds,
@@ -137,24 +165,28 @@ public class CrdService : ICrdService
     /// the determination in that case, exactly as before.
     /// </para>
     /// </summary>
-    private static List<CdsHooksSystemAction> BuildSystemActions(
+    private static (List<CdsHooksSystemAction> Actions,
+        List<(CrdAssertionDraft Draft, CrdCoverageAssertion Record)> Issued) BuildSystemActions(
         CrdHookRequest request,
-        IReadOnlyList<(int EntryIndex, CrdDetermination Determination,
-            CrdIndeterminateReason? Reason, CrdCoding Coding)> assertions)
+        string tenantId,
+        IReadOnlyList<CrdAssertionDraft> assertions,
+        IReadOnlyDictionary<CrdAssertionDraft, IReadOnlyList<string>> questionnaires)
     {
+        var issued = new List<(CrdAssertionDraft, CrdCoverageAssertion)>();
         var coverageReference = CrdPrefetch.ActiveCoverageReference(request);
         if (coverageReference is null)
         {
-            return [];
+            return ([], issued);
         }
 
         var entries = request.Context?.DraftOrders?.Entry;
         if (entries is null)
         {
-            return [];
+            return ([], issued);
         }
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var now = DateTimeOffset.UtcNow;
+        var today = DateOnly.FromDateTime(now.UtcDateTime);
         var actions = new List<CdsHooksSystemAction>();
 
         foreach (var group in assertions
@@ -167,23 +199,41 @@ public class CrdService : ICrdService
                 continue;
             }
 
-            var extensions = group.Select(assertion => new CrdCoverageInformation
+            var orderReference = OrderReference(resource);
+            var extensions = new List<Dictionary<string, object?>>();
+            foreach (var assertion in group)
             {
-                CoverageReference = coverageReference,
-                // Unique per assertion, as the extension requires. CHO does not
-                // persist it yet, so it identifies the assertion within this
-                // response and cannot be resolved later — a limitation recorded
-                // in the gap matrix rather than papered over with a value that
-                // looks durable.
-                CoverageAssertionId = Guid.NewGuid().ToString(),
-                Date = today,
-                Determination = assertion.Determination,
-                Reason = assertion.Reason,
-                BillingCodeSystem = string.IsNullOrWhiteSpace(assertion.Coding.Code)
-                    ? null
-                    : assertion.Coding.System,
-                BillingCode = string.IsNullOrWhiteSpace(assertion.Coding.Code) ? null : assertion.Coding.Code,
-            }.ToExtension()).ToList();
+                var hasCode = !string.IsNullOrWhiteSpace(assertion.Coding.Code);
+                var forms = questionnaires.TryGetValue(assertion, out var q) ? q : [];
+                var info = new CrdCoverageInformation
+                {
+                    CoverageReference = coverageReference,
+                    // Unique per assertion, and kept (ICrdAssertionStore), so a
+                    // DTR client can quote it back as the $questionnaire-package
+                    // context (DTR spec-107).
+                    CoverageAssertionId = Guid.NewGuid().ToString(),
+                    Date = today,
+                    Determination = assertion.Determination,
+                    Reason = assertion.Reason,
+                    BillingCodeSystem = hasCode ? assertion.Coding.System : null,
+                    BillingCode = hasCode ? assertion.Coding.Code : null,
+                    Questionnaires = forms,
+                };
+                extensions.Add(info.ToExtension());
+                issued.Add((assertion, new CrdCoverageAssertion
+                {
+                    TenantId = tenantId,
+                    AssertionId = info.CoverageAssertionId,
+                    CoverageReference = coverageReference,
+                    OrderReference = orderReference,
+                    BillingCodeSystem = info.BillingCodeSystem,
+                    BillingCode = info.BillingCode,
+                    Determination = assertion.Determination,
+                    Questionnaires = info.Determination == CrdDetermination.DocumentationRequired ? forms : [],
+                    AssertedAt = now,
+                    ExpiresAt = now, // set when stored, from the configured retention
+                }));
+            }
 
             actions.Add(new CdsHooksSystemAction
             {
@@ -193,8 +243,95 @@ public class CrdService : ICrdService
             });
         }
 
-        return actions;
+        return (actions, issued);
     }
+
+    /// <summary><c>{resourceType}/{id}</c> of the draft order, when it carries an id.</summary>
+    private static string? OrderReference(JsonElement resource)
+        => resource.TryGetProperty("resourceType", out var type) && type.ValueKind == JsonValueKind.String
+           && resource.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String
+           && !string.IsNullOrWhiteSpace(id.GetString())
+            ? $"{type.GetString()}/{id.GetString()}"
+            : null;
+
+    /// <summary>
+    /// The DTR forms for each documentation-required answer: the tenant's
+    /// active questionnaires whose focus use context lists the evaluated code,
+    /// the same rule <c>$questionnaire-package</c> applies to the order. A lookup
+    /// failure names no form rather than failing the hook: the answer is still
+    /// "documentation required", and the order still selects the form in DTR.
+    /// </summary>
+    private async Task<Dictionary<CrdAssertionDraft, IReadOnlyList<string>>> QuestionnairesForAsync(
+        IReadOnlyList<CrdAssertionDraft> assertions, string tenantId, CancellationToken ct)
+    {
+        var result = new Dictionary<CrdAssertionDraft, IReadOnlyList<string>>(ReferenceEqualityComparer.Instance);
+        if (_dtrService is null)
+        {
+            return result;
+        }
+
+        foreach (var assertion in assertions.Where(a => a.Determination == CrdDetermination.DocumentationRequired))
+        {
+            if (string.IsNullOrWhiteSpace(assertion.Coding.Code) || string.IsNullOrWhiteSpace(assertion.Coding.System))
+            {
+                continue;
+            }
+
+            try
+            {
+                result[assertion] = await _dtrService.FindQuestionnaireCanonicalsAsync(
+                    [new Hl7.Fhir.Model.Coding(assertion.Coding.System, assertion.Coding.Code)], tenantId, null, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "CRD could not look up DTR questionnaires for code {Code}",
+                    LogSanitizer.Sanitize(assertion.Coding.Code, 256));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Keeps the assertions CHO just issued, so their ids resolve in DTR. A
+    /// store failure is logged and the hook still answers: the determination is
+    /// right either way, and the order and named canonicals still select the
+    /// forms in DTR, only the context id would not resolve.
+    /// </summary>
+    private async Task RememberAsync(
+        IReadOnlyList<(CrdAssertionDraft Draft, CrdCoverageAssertion Record)> issued,
+        string tenantId, CancellationToken ct)
+    {
+        if (_assertionStore is null || issued.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await _assertionStore.SaveAsync(
+                issued.Select(i => i.Record with { ExpiresAt = i.Record.AssertedAt + _assertionRetention }).ToList(), ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "CRD could not store {Count} coverage assertion(s) for tenant {TenantId}; their ids will not resolve in DTR",
+                issued.Count, LogSanitizer.Sanitize(tenantId));
+        }
+    }
+
+    /// <summary>One code's answer, before it becomes a system action and a stored assertion.</summary>
+    private sealed record CrdAssertionDraft(
+        int EntryIndex, CrdDetermination Determination, CrdIndeterminateReason? Reason,
+        CrdCoding Coding, string Display, int CardIndex);
 
     /// <summary>
     /// The EHR's resource with the given extensions appended to its own, and
@@ -331,7 +468,7 @@ public class CrdService : ICrdService
         if (classification.AuthRequiredCodes.Contains(effectiveCode))
             return new(BuildAuthRequiredCard(display), CrdDetermination.AuthorizationRequired, null);
         if (classification.DocumentationRequiredCodes.Contains(effectiveCode))
-            return new(BuildDocumentationRequiredCard(display),
+            return new(BuildDocumentationRequiredCard(display, [], null, null),
                 CrdDetermination.DocumentationRequired,
                 CrdIndeterminateReason.DocumentationOnlyClassification);
         if (classification.AutoApprovedCodes.Contains(effectiveCode))
@@ -564,40 +701,88 @@ public class CrdService : ICrdService
         },
     };
 
-    private static CrdCard BuildDocumentationRequiredCard(string serviceDisplay) => new()
+    /// <summary>
+    /// The documentation-required card. CHO ships no DTR app (decision Q-6): the
+    /// provider completes the form in the EHR's own DTR client, which CRD
+    /// resp-40 requires the EHR to offer when coverage-information says
+    /// doc-needed. So by default this is an instructions card, with no link and
+    /// no suggestion, that names the forms.
+    ///
+    /// <para>
+    /// When a tenant does run a DTR SMART app and configures its launch URL
+    /// (<c>Cms0057:Dtr:DtrLaunchUrl</c>), the card becomes a launch-SMART card
+    /// (CRDHooksResponse-launchSMART: a smart link and a suggestion with no
+    /// actions). Its <c>appContext</c> carries what the app needs to call
+    /// <c>$questionnaire-package</c>: the questionnaire canonicals, the
+    /// <c>coverage-assertion-id</c> as <c>context</c> (DTR spec-107), and the
+    /// order and Coverage references. The order and Coverage also reach the app
+    /// through the EHR's SMART <c>fhirContext</c> (DTR spec-113); appContext is
+    /// for what only CRD knows.
+    /// </para>
+    /// </summary>
+    internal static CrdCard BuildDocumentationRequiredCard(
+        string serviceDisplay,
+        IReadOnlyList<string> questionnaires,
+        CrdCoverageAssertion? assertion,
+        string? dtrLaunchUrl)
     {
-        Uuid = Guid.NewGuid().ToString(),
-        Summary = $"Documentation required for {serviceDisplay}",
-        Detail = "Additional clinical documentation is needed. Launch DTR to complete required forms.",
-        Indicator = "warning",
-        Source = new CrdCardSource
+        var card = new CrdCard
         {
-            Topic = new CrdCoding
+            Uuid = Guid.NewGuid().ToString(),
+            Summary = $"Documentation required for {serviceDisplay}",
+            Detail = "Additional clinical documentation is needed for this service. "
+                     + "Complete the payer's documentation in your DTR application."
+                     + (assertion is not null && questionnaires.Count > 0
+                         ? " The order's coverage information names the form to use."
+                         : string.Empty),
+            Indicator = "warning",
+            Source = new CrdCardSource
             {
-                System = "http://hl7.org/fhir/us/davinci-crd/CodeSystem/temp",
-                Code = "doc-required",
-                Display = "Documentation Required",
+                Topic = new CrdCoding
+                {
+                    System = "http://hl7.org/fhir/us/davinci-crd/CodeSystem/temp",
+                    Code = "doc-required",
+                    Display = "Documentation Required",
+                },
             },
-        },
-        Suggestions = new List<CrdCardSuggestion>
+        };
+
+        if (dtrLaunchUrl is not null)
         {
-            new()
+            card.Suggestions.Add(new CrdCardSuggestion
             {
                 Label = "Launch DTR to complete documentation",
                 Uuid = Guid.NewGuid().ToString(),
                 IsRecommended = true,
-            },
-        },
-        Links = new List<CrdCardLink>
-        {
-            new()
+            });
+            card.Links.Add(new CrdCardLink
             {
-                Label = "Launch DTR Smart App",
-                Url = "https://cloudhealthoffice.com/dtr/launch",
+                Label = "Complete documentation in DTR",
+                Url = dtrLaunchUrl,
                 Type = "smart",
-            },
-        },
-    };
+                AppContext = DtrAppContext(questionnaires, assertion),
+            });
+        }
+
+        return card;
+    }
+
+    /// <summary>
+    /// The launch link's <c>appContext</c>: a JSON object, sent as the string
+    /// CDS Hooks requires. Members are omitted when unknown.
+    /// </summary>
+    internal static string DtrAppContext(IReadOnlyList<string> questionnaires, CrdCoverageAssertion? assertion)
+    {
+        var context = new Dictionary<string, object>();
+        if (questionnaires.Count > 0) context["questionnaire"] = questionnaires;
+        if (assertion is not null)
+        {
+            context["context"] = assertion.AssertionId;
+            context["coverage"] = assertion.CoverageReference;
+            if (assertion.OrderReference is not null) context["order"] = assertion.OrderReference;
+        }
+        return JsonSerializer.Serialize(context);
+    }
 
     /// <summary>
     /// The ONLY "not required" card: issued when the tenant's classification

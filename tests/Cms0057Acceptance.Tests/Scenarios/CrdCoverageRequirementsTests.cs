@@ -3,6 +3,7 @@ using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using FhirService.Controllers;
 using FhirService.Models;
 using FhirService.Services;
+using CloudHealthOffice.Testing.FhirService;
 using FhirService.Services.ChoNative;
 using Hl7.Fhir.Model;
 using FluentAssertions;
@@ -39,7 +40,19 @@ public class CrdCoverageRequirementsTests
 {
     private const string CptSystem = "http://www.ama-assn.org/go/cpt";
 
-    private static CrdController BuildController(bool memberKnown = true)
+    private const string MriQuestionnaire = "https://cloudhealthoffice.com/fhir/Questionnaire/pa-imaging-mri|1.0.0";
+
+    /// <summary>The coverage assertions CRD keeps, shared with the DTR service below.</summary>
+    private readonly InMemoryCrdAssertionStore _assertions = new();
+
+    private DtrService? _dtr;
+
+    /// <summary>DTR over the same assertions, so a CRD context id resolves in it.</summary>
+    private DtrService Dtr => _dtr ??= new DtrService(
+        Options.Create(new DtrConfig { Enabled = true }), new InMemoryDtrResourceStore(),
+        AcceptanceContext.Logger<DtrService>(), _assertions);
+
+    private CrdController BuildController(bool memberKnown = true)
     {
         var config = Options.Create(new CrdConfig
         {
@@ -63,7 +76,9 @@ public class CrdCoverageRequirementsTests
             new CrdClassificationStore(new MemoryCache(new MemoryCacheOptions())),
             new CrdContextResolver(
                 new StubMemberStore(memberKnown), AcceptanceContext.Logger<CrdContextResolver>()),
-            AcceptanceContext.Logger<CrdService>());
+            AcceptanceContext.Logger<CrdService>(),
+            Dtr,
+            _assertions);
 
         return new CrdController(service, config, AcceptanceContext.Logger<CrdController>())
             .WithTenant();
@@ -213,21 +228,41 @@ public class CrdCoverageRequirementsTests
 
     [Fact]
     [Trait("Scenario", "PAS-01")]
-    public async Task PAS01_DocumentationRequiredService_LaunchesDtr()
+    public async Task PAS01_DocumentationRequiredService_NamesTheDtrQuestionnaire()
     {
-        // The CRD → DTR bridge: a documentation-required code returns a card
-        // that offers a DTR launch (this is what PAS-02 picks up).
+        // The CRD → DTR bridge: a documentation-required code names the DTR form
+        // in coverage-information (CRD resp-38), and its coverage-assertion-id
+        // alone is enough for DTR to return that form's package (DTR spec-107).
+        // This is what PAS-02 picks up.
         var controller = BuildController();
 
         var result = await controller.ExecuteHook(
             "cho-order-select", HookRequest("order-select", "72148"), CancellationToken.None);
 
-        var card = result.Should().BeOfType<OkObjectResult>().Subject
-            .Value.Should().BeOfType<CrdCardResponse>().Subject
-            .Cards.Should().ContainSingle().Subject;
+        var response = result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<CrdCardResponse>().Subject;
+        response.Cards.Should().ContainSingle().Which.Summary.Should().Contain("Documentation required");
 
-        card.Summary.Should().Contain("Documentation required");
-        card.Links.Should().Contain(l => l.Type == "smart");
+        var parts = response.SystemActions.Should().ContainSingle().Subject.Resource!.Value
+            .GetProperty("extension").EnumerateArray()
+            .Single(e => e.GetProperty("url").GetString() == CrdCoverageInformation.ExtensionUrl)
+            .GetProperty("extension").EnumerateArray().ToList();
+        Value(parts, "doc-needed").Should().Be("clinical");
+        parts.Single(p => p.GetProperty("url").GetString() == "questionnaire")
+            .GetProperty("valueCanonical").GetString().Should().Be(MriQuestionnaire);
+        var assertionId = parts.Single(p => p.GetProperty("url").GetString() == "coverage-assertion-id")
+            .GetProperty("valueString").GetString()!;
+
+        var package = await Dtr.GetQuestionnairePackageAsync(
+            new FhirService.Services.Dtr.QuestionnairePackageRequest(
+                new Coverage { Id = "cov-001", Beneficiary = new ResourceReference("Patient/pat-001") },
+                [], [], assertionId, null),
+            AcceptanceContext.TenantId, "https://payer.example.com/fhir/r4");
+
+        package.Status.Should().Be(200);
+        var questionnaire = ((Bundle)package.Package!.Parameter.Single(p => p.Name == "packagebundle").Resource)
+            .Entry[0].Resource.Should().BeOfType<Questionnaire>().Subject;
+        $"{questionnaire.Url}|{questionnaire.Version}".Should().Be(MriQuestionnaire);
     }
 
     [Fact]

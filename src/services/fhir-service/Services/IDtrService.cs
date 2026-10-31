@@ -23,6 +23,10 @@ public interface IDtrService
     Task<Questionnaire?> ResolveQuestionnaireAsync(string reference, string tenantId, string? fhirBaseUrl = null, CancellationToken ct = default);
     Task<bool> QuestionnaireExistsAsync(string questionnaireRef, string tenantId, string? fhirBaseUrl = null, CancellationToken ct = default);
 
+    // CRD: canonicals (url|version) of the active forms whose focus use context lists one of these codes
+    Task<IReadOnlyList<string>> FindQuestionnaireCanonicalsAsync(
+        IReadOnlyList<Coding> codes, string tenantId, string? fhirBaseUrl = null, CancellationToken ct = default);
+
     // $questionnaire-package (DTR 2.2.0)
     Task<QuestionnairePackageResult> GetQuestionnairePackageAsync(
         QuestionnairePackageRequest request, string tenantId, string fhirBaseUrl, CancellationToken ct = default);

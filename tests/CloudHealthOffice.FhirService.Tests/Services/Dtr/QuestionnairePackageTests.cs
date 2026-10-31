@@ -254,12 +254,14 @@ public class QuestionnairePackageTests
     }
 
     [Fact]
-    public async Task A_context_id_with_an_order_is_noted_and_the_order_decides()
+    public async Task An_unknown_context_id_is_refused_even_with_an_order()
     {
+        // spec-130: "the context id can't be found" is a 4xx, whatever else the
+        // request carries. CrdDtrLinkTests covers ids CRD issued.
         var result = await Package(orders: [LumbarMri()], context: "crd-assertion-123");
 
-        Bundles(result).Should().ContainSingle();
-        Outcome(result)!.Issue.Should().ContainSingle(i => i.Severity == OperationOutcome.IssueSeverity.Information);
+        result.Status.Should().Be(422);
+        result.Rejection!.Issue.Should().ContainSingle(i => i.Code == OperationOutcome.IssueType.NotFound);
     }
 
     [Fact]

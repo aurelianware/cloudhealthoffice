@@ -72,6 +72,10 @@ public static class FhirServiceTestDatabase
             services.RemoveAll<IDtrResourceStore>();
             services.AddSingleton<IDtrResourceStore, InMemoryDtrResourceStore>();
 
+            // CRD's coverage assertions, which DTR resolves context ids from.
+            services.RemoveAll<ICrdAssertionStore>();
+            services.AddSingleton<ICrdAssertionStore, InMemoryCrdAssertionStore>();
+
             // Payer-to-Payer consents accepted from requesting payers (ADR 022).
             services.RemoveAll<global::FhirService.Services.PayerToPayer.IPayerToPayerConsentAttestationStore>();
             services.AddSingleton<global::FhirService.Services.PayerToPayer.IPayerToPayerConsentAttestationStore,

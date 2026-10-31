@@ -254,6 +254,14 @@ public class CrdCardLink
 
     [JsonPropertyName("type")]
     public string Type { get; set; } = "absolute";
+
+    /// <summary>
+    /// CDS Hooks <c>appContext</c>: an opaque string the EHR passes to the SMART
+    /// app it launches. Only on <c>smart</c> links; absent otherwise.
+    /// </summary>
+    [JsonPropertyName("appContext")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AppContext { get; set; }
 }
 
 // ── Code Classification (dynamic benefit lookup) ────────────────────────────
