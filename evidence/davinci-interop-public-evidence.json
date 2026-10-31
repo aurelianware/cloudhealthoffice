@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "davinci-interoperability",
-  "generatedAtUtc": "2026-10-31T14:51:23Z",
-  "sourceCommit": "da7eb30ab35b872f24020cb73fb9700d59958b3c",
-  "sourceCommitShort": "da7eb30ab35b",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/da7eb30ab35b872f24020cb73fb9700d59958b3c",
+  "generatedAtUtc": "2026-10-31T16:37:19Z",
+  "sourceCommit": "259d3852b70cb1f6b348dd63758d76be4d66a9bb",
+  "sourceCommitShort": "259d3852b70c",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/259d3852b70cb1f6b348dd63758d76be4d66a9bb",
   "inventoryReviewedUtc": "2026-10-23T00:00:00Z",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence. External interoperability results never change a CMS-0057-F scenario status, and CMS acceptance statuses never imply an interoperability result. See docs/interop/davinci.md and docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md.",
@@ -73,10 +73,12 @@
         "sourceCommit": "bc3a769f5ae9e4b1d6bdcd67d3b1b0eeab348da8"
       },
       "implementationGuides": {
-        "PDex": "see kit release notes for v0.13.2"
+        "PDex": "2.0.0",
+        "HRex": "1.0.0",
+        "US Core": "3.1.1"
       },
-      "igVersionProvenance": null,
-      "exercised": false
+      "igVersionProvenance": "Read from lib/davinci_pdex_test_kit/pdex_payer_server_suite.rb at the pinned tag (fhir_resource_validator igs 'hl7.fhir.us.davinci-pdex#2.0.0', HRex 1.0.0 as its dependency) and the bundled igs/davinci-pdex-2.0.0.tgz.",
+      "exercised": true
     },
     {
       "name": "inferno-framework/davinci-dtr-test-kit",
@@ -271,13 +273,13 @@
     },
     {
       "id": "INFERNO-PDEX-SERVER-001",
-      "title": "Inferno PDex payer-server suite against CHO",
+      "title": "Inferno PDex 2.0.0 payer-server $member-match against CHO",
       "protocol": "PDex",
       "choRole": "Server",
       "externalTarget": "inferno-pdex",
-      "implemented": false,
+      "implemented": true,
       "linkedFromScenario": null,
-      "description": "Run the davinci-pdex-test-kit pdex_payer_server suite with CHO's FHIR base as the suite input.",
+      "description": "Run the davinci-pdex-test-kit pdex_payer_server $member-match group and its no-match failure case against the interop-cho profile with Payer-to-Payer bound to CHO's own services (G-35, G-60). The kit is the new payer: it authenticates itself with SMART Backend Services (private_key_jwt) as a backend client the harness registers with system/PayerToPayer.read and a registered payer, so the token, the payer binding (D-13) and the consent check (ADR 022) are the real path. The requests are HRex Parameters built from the seed (tests/DaVinciInterop.Tests/Harness/PdexMemberMatchRequest.cs): the seeded member's demographics, CoverageToMatch with the member id as subscriberId and CHO's payer as payor, and an HRex Consent naming the kit's payer as information recipient and the member by local reference to MemberPatient. The group checks the CapabilityStatement declares member-match, validates the request, posts it, validates the HRex member-match-out response and finds the Patient by the returned MemberIdentifier; the failure case expects 422 for a consented request matching no one. Not run: the multiple-match case (the seed holds no two members one request can match), and the PDex 2.0 clinical-data, $everything and $export workflow groups and the PDex/US Core search groups, which read a member's data with the requesting payer's token by query; CHO's Payer-to-Payer data path is the PDex 2.1 bulk exchange ($davinci-data-export), see the gap matrix (G-35).",
       "status": "NotRun",
       "linkedArtifact": null,
       "testedVersion": null
@@ -349,10 +351,10 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-10-31T14:49:52.9308087+00:00",
+    "generatedAtUtc": "2026-10-31T16:36:37.3567973+00:00",
     "environment": "CI",
-    "choCommit": "da7eb30ab35b872f24020cb73fb9700d59958b3c",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/da7eb30ab35b872f24020cb73fb9700d59958b3c",
+    "choCommit": "259d3852b70cb1f6b348dd63758d76be4d66a9bb",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/259d3852b70cb1f6b348dd63758d76be4d66a9bb",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 3,
