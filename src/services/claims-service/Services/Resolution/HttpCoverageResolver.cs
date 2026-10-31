@@ -95,7 +95,8 @@ public class HttpCoverageResolver : ICoverageResolver
             return new CoverageResolution(
                 planId,
                 NullIfBlank(coverage.GroupNumber),
-                NullIfBlank(coverage.SponsorPolicyNumber));
+                NullIfBlank(coverage.SponsorPolicyNumber),
+                NullIfBlank(coverage.Id));
         }
         catch (Exception ex) when (ex is HttpRequestException
                                     or TaskCanceledException
@@ -113,6 +114,9 @@ public class HttpCoverageResolver : ICoverageResolver
 
     private sealed class CoverageSummaryDto
     {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
         [JsonPropertyName("planId")]
         public string? PlanId { get; set; }
 

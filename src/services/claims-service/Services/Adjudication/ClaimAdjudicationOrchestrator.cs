@@ -824,7 +824,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     /// Institutional both mean medical (HLT) — the distinction is
     /// place-of-care, not benefit line.
     /// </summary>
-    private static string? MapInsuranceLineCode(ClaimType claimType) => claimType switch
+    internal static string? MapInsuranceLineCode(ClaimType claimType) => claimType switch
     {
         ClaimType.Professional or ClaimType.Institutional => "HLT",
         ClaimType.Dental => "DEN",

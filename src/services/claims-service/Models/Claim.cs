@@ -826,6 +826,9 @@ public class ClaimExternalSource
     [StringLength(100)]
     public string? SourceMemberId { get; set; }
 
+    /// <summary>The coverage id the core sent, kept for tracing. <see cref="Claim.CoverageId"/> holds the CHO coverage it resolved to, if any.</summary>
+    public string? SourceCoverageId { get; set; }
+
     /// <summary>
     /// SHA-256 of the source rows that produced this version (and the member
     /// id they resolved to). A reload with the same hash is a no-op; a

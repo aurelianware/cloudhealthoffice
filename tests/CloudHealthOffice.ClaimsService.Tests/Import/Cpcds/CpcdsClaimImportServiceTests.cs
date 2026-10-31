@@ -1,6 +1,7 @@
 using ClaimsService.Import.Cpcds;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
+using ClaimsService.Services.Resolution;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -20,6 +21,7 @@ public class CpcdsClaimImportServiceTests
     private readonly IClaimRepository _claims = Substitute.For<IClaimRepository>();
     private readonly IClaimImportTransactionRepository _transactionRepo = Substitute.For<IClaimImportTransactionRepository>();
     private ICoreMemberCrosswalk _crosswalk = new PassThroughMemberCrosswalk();
+    private ICoverageResolver? _coverage;
 
     public CpcdsClaimImportServiceTests()
     {
@@ -53,7 +55,7 @@ public class CpcdsClaimImportServiceTests
     }
 
     private CpcdsClaimImportService Service() =>
-        new(_claims, _transactionRepo, _crosswalk, NullLogger<CpcdsClaimImportService>.Instance);
+        new(_claims, _transactionRepo, _crosswalk, NullLogger<CpcdsClaimImportService>.Instance, coverage: _coverage);
 
     private Task<CpcdsImportResult> Import(string content, CpcdsImportOptions? options = null) =>
         Service().ImportAsync(Tenant, content, options ?? new CpcdsImportOptions { SourceSystem = "qnxt", FileName = "claims.csv" }, "importer");
@@ -259,5 +261,45 @@ public class CpcdsClaimImportServiceTests
     {
         CpcdsClaimImportService.ChainId("a", "C-1").Should().NotBe(CpcdsClaimImportService.ChainId("b", "C-1"));
         CpcdsClaimImportService.ChainId("a", "C-1").Should().Be(CpcdsClaimImportService.ChainId("a", "C-1"));
+    }
+
+    [Fact]
+    public async Task The_EOB_names_the_CHO_coverage_the_member_held_that_day_not_the_cores_id()
+    {
+        var coverage = Substitute.For<ICoverageResolver>();
+        coverage.ResolveCoverageAsync(Tenant, "M100", new DateTime(2026, 3, 2), "HLT", Arg.Any<CancellationToken>())
+            .Returns(new CoverageResolution("plan-gold", "GRP-ACME", CoverageId: "cov-cho-100"));
+        _coverage = coverage;
+
+        await Import(CpcdsTestFiles.Sample());
+
+        var claim = _store.Single(c => c.ClaimNumber == "PRO-1001");
+        claim.CoverageId.Should().Be("cov-cho-100");
+        claim.ExternalSource!.SourceCoverageId.Should().Be("COV-M100");
+        await coverage.Received().ResolveCoverageAsync(
+            Tenant, "M300", Arg.Any<DateTime>(), "DEN", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Without_CHO_coverage_the_claim_loads_unlinked_and_a_reload_after_coverage_links_it()
+    {
+        var coverage = Substitute.For<ICoverageResolver>();
+        _coverage = coverage;
+
+        var first = await Import(CpcdsTestFiles.SampleClaim("PRO-1001"));
+
+        first.Created.Should().Be(1);
+        _store.Single().CoverageId.Should().BeNull();
+        first.Claims.Single().Warnings.Should().Contain(w => w.Contains("No CHO coverage") && w.Contains("M100"));
+
+        coverage.ResolveCoverageAsync(Tenant, "M100", Arg.Any<DateTime>(), "HLT", Arg.Any<CancellationToken>())
+            .Returns(new CoverageResolution("plan-gold", CoverageId: "cov-cho-100"));
+        var second = await Import(CpcdsTestFiles.SampleClaim("PRO-1001"));
+
+        second.Updated.Should().Be(1);
+        Current.Single().CoverageId.Should().Be("cov-cho-100");
+
+        var third = await Import(CpcdsTestFiles.SampleClaim("PRO-1001"));
+        third.Unchanged.Should().Be(1);
     }
 }
