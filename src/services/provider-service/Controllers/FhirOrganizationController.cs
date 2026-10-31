@@ -95,34 +95,36 @@ public class FhirOrganizationController : ControllerBase
     [Produces(FhirContentType)]
     public async Task<IActionResult> ReadOrganization(string id, CancellationToken ct)
     {
+        var resource = await ProjectByIdAsync(id);
+        return resource != null
+            ? FhirContent(resource)
+            : FhirOperationOutcome(404, "not-found", $"Organization/{StripLineBreaks(id)} not found.");
+    }
+
+    /// <summary>
+    /// The Organization an id names: a 10-digit id is an NPI and only ever a
+    /// Provider-as-Org (NPI wins per Decision 6, even over a 10-digit
+    /// OrganizationId); anything else is an Organization entity's chain key.
+    /// </summary>
+    private async Task<JsonObject?> ProjectByIdAsync(string id)
+    {
         if (NpiPattern.IsMatch(id))
         {
-            // Try Provider-as-Org path first.
             var provider = await _providerRepository.GetByNPIAsync(id);
-            if (provider != null && provider.ProviderType == ProviderType.Organization)
-            {
-                var resource = _projector.Project(provider);
-                if (resource != null)
-                {
-                    return FhirContent(resource);
-                }
-            }
-            // 10-digit id matched NPI pattern but no qualifying provider
-            // found; fall through to 404 rather than retrying as an
-            // OrganizationId (NPI wins per Decision 6).
-            return FhirOperationOutcome(404, "not-found", $"Organization/{StripLineBreaks(id)} not found.");
+            return provider != null && provider.ProviderType == ProviderType.Organization
+                ? _projector.Project(provider)
+                : null;
         }
 
-        // Non-NPI id → try Organization entity chain key.
         var network = await _organizationRepository.GetByIdAsync(id);
-        if (network != null)
-        {
-            var resource = _projector.Project(network);
-            if (resource != null) return FhirContent(resource);
-        }
-
-        return FhirOperationOutcome(404, "not-found", $"Organization/{StripLineBreaks(id)} not found.");
+        return network != null ? _projector.Project(network) : null;
     }
+
+    private static DateTime LastUpdatedOf(JsonObject resource)
+        => DateTime.Parse(
+            resource["meta"]!["lastUpdated"]!.GetValue<string>(),
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal);
 
     /// <summary>
     /// FHIR Organization search (Decision 7 — Option 7a). Parameter
@@ -138,6 +140,10 @@ public class FhirOrganizationController : ControllerBase
     ///   the Bundle.</item>
     ///   <item><c>type=prov|ins</c> — when supplied, restricts the search
     ///   to only that source entity type.</item>
+    ///   <item><c>_id</c> — one or more ids, each resolved as
+    ///   <see cref="ReadOrganization"/> resolves it.</item>
+    ///   <item><c>_lastUpdated</c> — narrows any of the above by
+    ///   <c>meta.lastUpdated</c> (<see cref="FhirLastUpdatedFilter"/>).</item>
     /// </list>
     /// Returns a FHIR <c>Bundle</c> of type <c>searchset</c>.
     /// </summary>
@@ -151,6 +157,8 @@ public class FhirOrganizationController : ControllerBase
         [FromQuery] string? state,
         [FromQuery(Name = "postal-code")] string? postalCode,
         [FromQuery] string? type,
+        [FromQuery(Name = "_id")] string? id = null,
+        [FromQuery(Name = "_lastUpdated")] string[]? lastUpdated = null,
         [FromQuery] int _count = DefaultPageSize,
         [FromQuery] int _page = 1,
         CancellationToken ct = default)
@@ -160,8 +168,39 @@ public class FhirOrganizationController : ControllerBase
 
         var entries = new JsonArray();
 
+        // _lastUpdated narrows whichever path below answers; like every
+        // filter here it is applied to the page found, never ignored.
+        FhirLastUpdatedFilter? lastUpdatedFilter;
         try
         {
+            lastUpdatedFilter = FhirLastUpdatedFilter.Parse(lastUpdated);
+        }
+        catch (FormatException ex)
+        {
+            return FhirOperationOutcome(400, "invalid", $"_lastUpdated: {StripLineBreaks(ex.Message)}");
+        }
+
+        IActionResult Result(JsonArray found) => BundleResult(lastUpdatedFilter is null
+            ? found
+            : new JsonArray(found
+                .Where(e => lastUpdatedFilter.Matches(LastUpdatedOf(e!["resource"]!.AsObject())))
+                .Select(e => e!.DeepClone())
+                .ToArray()));
+
+        try
+        {
+            // ── _id path: each id read the way ReadOrganization reads it ──
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                foreach (var one in id.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var projected = await ProjectByIdAsync(one);
+                    if (projected != null) entries.Add(WrapEntry(projected));
+                }
+
+                return Result(entries);
+            }
+
             // ── NPI-specific path ─────────────────────────────────────
             if (!string.IsNullOrEmpty(npi))
             {
@@ -178,7 +217,7 @@ public class FhirOrganizationController : ControllerBase
                     if (projected != null) entries.Add(WrapEntry(projected));
                 }
 
-                return BundleResult(entries);
+                return Result(entries);
             }
 
             // ── identifier=ORG:{orgId} path ───────────────────────────
@@ -192,7 +231,7 @@ public class FhirOrganizationController : ControllerBase
                     if (projected != null) entries.Add(WrapEntry(projected));
                 }
 
-                return BundleResult(entries);
+                return Result(entries);
             }
 
             // ── merged search across both source entities ─────────────
@@ -209,7 +248,7 @@ public class FhirOrganizationController : ControllerBase
                 // Caller supplied an unrecognized type value — return empty
                 // Bundle; FHIR search unknown-type behavior per FHIR spec is
                 // an empty result (not an error).
-                return BundleResult(entries);
+                return Result(entries);
             }
 
             if (wantProv)
@@ -309,7 +348,7 @@ public class FhirOrganizationController : ControllerBase
             return FhirOperationOutcome(500, "exception", "Organization search failed.");
         }
 
-        return BundleResult(entries);
+        return Result(entries);
     }
 
     // ── helpers ────────────────────────────────────────────────────────────

@@ -98,6 +98,8 @@ public class AdapterClaim
 
     public string BillingProviderNPI { get; set; } = string.Empty;
     public string? BillingProviderName { get; set; }
+    /// <summary>837 NM102 (2010AA): "1" person, "2" organization; see <see cref="Claim.BillingProviderEntityType"/>.</summary>
+    public string? BillingProviderEntityType { get; set; }
     /// <summary>837 Loop 2010AB pay-to address; see <see cref="Claim.PayToAddress"/>.</summary>
     public ClaimAddress? PayToAddress { get; set; }
     /// <summary>837 Loop 2010AC pay-to plan; see <see cref="Claim.PayToPlan"/>.</summary>
@@ -198,6 +200,7 @@ public class AdapterClaim
         LineOfBusiness = src.LineOfBusiness,
         BillingProviderNPI = src.BillingProviderNPI,
         BillingProviderName = src.BillingProviderName,
+        BillingProviderEntityType = src.BillingProviderEntityType,
         PayToAddress = src.PayToAddress,
         PayToPlan = src.PayToPlan,
         RenderingProviderNPI = src.RenderingProviderNPI,
@@ -268,6 +271,7 @@ public class AdapterClaim
         LineOfBusiness = LineOfBusiness,
         BillingProviderNPI = BillingProviderNPI,
         BillingProviderName = BillingProviderName,
+        BillingProviderEntityType = BillingProviderEntityType,
         PayToAddress = PayToAddress,
         PayToPlan = PayToPlan,
         RenderingProviderNPI = RenderingProviderNPI,

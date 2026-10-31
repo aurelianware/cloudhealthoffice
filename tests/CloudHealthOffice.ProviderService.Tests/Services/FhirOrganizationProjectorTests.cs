@@ -352,6 +352,19 @@ public class FhirOrganizationProjectorTests
     }
 
     [Fact]
+    public void ProviderAsOrg_Declares_carin_bb_organization_at_2_0_0_and_a_us_address()
+    {
+        var result = _projector.Project(BuildOrgProvider());
+
+        result!["meta"]!["profile"]!.AsArray().Select(n => n!.GetValue<string>()).Should().Contain(new[]
+        {
+            "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Organization",
+            "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Organization|2.0.0",
+        });
+        result["address"]![0]!["country"]!.GetValue<string>().Should().Be("US");
+    }
+
+    [Fact]
     public void ProviderAsOrg_Returns_null_for_Individual_provider()
     {
         var provider = BuildOrgProvider();

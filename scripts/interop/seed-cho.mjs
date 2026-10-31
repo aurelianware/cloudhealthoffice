@@ -158,8 +158,9 @@ async function seed(fixture, token) {
 }
 
 /**
- * The practitioners the claims name by literal reference (the EOB's
- * careTeam), so a suite that follows the reference finds the Practitioner.
+ * The providers the claims name by literal reference (the EOB's careTeam
+ * practitioner and billing organization), so a suite that follows the
+ * reference finds them.
  */
 async function seedClaimsProviders(claimsProviders, token) {
   console.log(`==> provider-service ${SERVICES.provider} (claims providers)`);
@@ -307,12 +308,14 @@ async function verify(fixture, token) {
     console.log(`    Encounter ${encounter.encounterControlNumber}`);
   }
 
+  // The providers the EOBs reference, as CARIN BB will follow them: an
+  // individual as a C4BB-Practitioner, an organization as a C4BB-Organization.
   for (const provider of fixture.claimsProviders.providers) {
-    const practitionerUrl = `${SERVICES.fhir}/fhir/r4/Practitioner/${provider.npi}`;
-    console.log(`==> verifying the claims' practitioner ${practitionerUrl}`);
-    const practitioner = await readFhir(practitionerUrl, token, `the claims' practitioner ${provider.npi}`);
-    expectProfile(
-      practitioner, 'http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Practitioner', 'Practitioner');
+    const type = provider.providerType === 'Organization' ? 'Organization' : 'Practitioner';
+    const url = `${SERVICES.fhir}/fhir/r4/${type}/${provider.npi}`;
+    console.log(`==> verifying the claims' ${type} ${url}`);
+    const resource = await readFhir(url, token, `the claims' ${type} ${provider.npi}`);
+    expectProfile(resource, `http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-${type}`, type);
   }
 
   await verifyDirectory(fixture.directory);

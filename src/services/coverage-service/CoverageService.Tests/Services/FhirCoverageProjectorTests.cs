@@ -45,6 +45,30 @@ public class FhirCoverageProjectorTests
         classes.Should().OnlyContain(c => c!["type"]!["coding"]![0]!["system"]!.ToString() == FhirCoverageProjector.CoverageClassSystem);
     }
 
+    [Fact]
+    public void Class_names_are_published_when_the_record_has_them()
+    {
+        var coverage = Sample();
+        coverage.GroupName = "Acme Corp";
+        coverage.PlanName = "Acme Gold PPO";
+
+        var classes = new FhirCoverageProjector().Project(coverage)["class"]!.AsArray();
+
+        classes.Select(c => c!["name"]!.ToString()).Should().Equal("Acme Corp", "Acme Gold PPO");
+        new FhirCoverageProjector().Project(Sample())["class"]!.AsArray()
+            .Should().OnlyContain(c => c!["name"] == null, "a name the record does not hold is not invented");
+    }
+
+    [Fact]
+    public void The_member_id_is_the_carin_bb_memberid_identifier()
+    {
+        var identifier = new FhirCoverageProjector().Project(Sample())["identifier"]!.AsArray().Single()!;
+
+        identifier["type"]!["coding"]![0]!["code"]!.ToString().Should().Be("MB");
+        identifier["system"]!.ToString().Should().Be("urn:cho:member-id");
+        identifier["value"]!.ToString().Should().Be(Sample().MemberId);
+    }
+
     [Theory]
     [InlineData(CoverageStatus.Active, "active")]
     [InlineData(CoverageStatus.COBRA, "active")]

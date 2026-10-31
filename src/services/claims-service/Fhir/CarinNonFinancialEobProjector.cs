@@ -65,6 +65,13 @@ public sealed class CarinNonFinancialEobProjector : ICarinNonFinancialEobProject
     public const string OutpatientInstitutionalBasisProfile = CarinEobBasis.OutpatientInstitutionalBasisProfile;
     public const string OralBasisProfile = CarinEobBasis.OralBasisProfile;
 
+    private readonly CarinEobInsurerOptions? _insurer;
+
+    public CarinNonFinancialEobProjector(CarinEobInsurerOptions? insurer = null)
+    {
+        _insurer = insurer;
+    }
+
     /// <summary>
     /// The shaping is <see cref="CarinEobBasis"/>'s, shared with the financial
     /// projection. This projector's whole contribution is to ask for it with no
@@ -75,6 +82,6 @@ public sealed class CarinNonFinancialEobProjector : ICarinNonFinancialEobProject
     {
         ArgumentNullException.ThrowIfNull(claim);
 
-        return CarinEobBasis.Scaffold(claim, CarinEobBasis.Shape(claim, financial: false));
+        return CarinEobBasis.Scaffold(claim, CarinEobBasis.Shape(claim, financial: false), insurer: _insurer);
     }
 }

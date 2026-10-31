@@ -74,6 +74,10 @@ builder.Services.AddFhirAccessPolicies();
 
 // ── Public Provider Directory (CMS-9115-F, D-29) ─────────────────────────────
 // Directories are published per plan in configuration; none by default.
+// The plan's own Organization (C4BB-Organization), served at
+// Organization/{Fhir:PlanOrganization:Id}: the EOB insurer and Coverage payor.
+builder.Services.Configure<FhirService.Services.PlanOrganization.PlanOrganizationOptions>(
+    builder.Configuration.GetSection(FhirService.Services.PlanOrganization.PlanOrganizationOptions.SectionName));
 builder.Services.Configure<FhirService.Services.PublicDirectory.PublicProviderDirectoryOptions>(
     builder.Configuration.GetSection(FhirService.Services.PublicDirectory.PublicProviderDirectoryOptions.SectionName));
 // Each published directory is served from an in-memory Plan-Net snapshot

@@ -596,6 +596,7 @@ suite means. It serves CHO's **real** path:
 | `FhirAdapters:Sources:Claim` = `ChoNative` | `cho-claims-service` |
 | `FhirAdapters:Resources:Practitioner` (Hybrid, proxied) | `cho-provider-service` |
 | `PublicProviderDirectory:Directories:interop` (public Plan-Net directory) | `cho-provider-service` (networks, providers) and `cho-benefit-plan-service` (InsurancePlan, Endpoint; with its own `interop-redis`) |
+| `Fhir:PlanOrganization` (`Organization/interop-plan`, C4BB-Organization) | fhir-service itself, from configuration. claims-service's `Fhir:Insurer:Reference` and coverage-service's `Fhir:Coverage:PayorReference` point the EOB insurer and Coverage payor at it |
 
 `FhirAdapters:Mode` is `Hybrid`, not `Demo`, because that is what the bindings
 make true — `Demo` is the honest label only while `MockFhirDataAdapter` serves

@@ -63,6 +63,7 @@ public static class X12837ClaimMapper
 
             BillingProviderNPI = source.BillingProvider.Npi,
             BillingProviderName = source.BillingProvider.Name,
+            BillingProviderEntityType = source.BillingProvider.EntityType is "1" or "2" ? source.BillingProvider.EntityType : null,
             PayToAddress = MapAddress(source.PayToAddress),
             PayToPlan = source.PayToPlan is { } plan
                 ? new ClaimPayToPlan

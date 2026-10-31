@@ -29,7 +29,8 @@ public interface IFhirCoverageProjector
 /// in the same style as member-service's Patient projector (no Hl7.Fhir
 /// dependency). Populates status, the CHO status as an extension, type (line
 /// of business), beneficiary as <c>Patient/{memberId}</c> — the id every CHO
-/// resource uses for a patient — period, payor and the group and plan classes.
+/// resource uses for a patient — period, payor, the member id (typed MB) and
+/// the group and plan classes, with their names when the record has them.
 ///
 /// Not populated, because coverage-service does not hold them: subscriber,
 /// subscriberId, relationship and dependent (they live on the member record).
@@ -40,6 +41,8 @@ public sealed class FhirCoverageProjector : IFhirCoverageProjector
     public const string CoverageStatusExtension = CanonicalBase + "StructureDefinition/cho-coverage-status";
     public const string LineOfBusinessSystem = CanonicalBase + "CodeSystem/cho-line-of-business";
     public const string CoverageClassSystem = "http://terminology.hl7.org/CodeSystem/coverage-class";
+    public const string V2IdentifierTypeSystem = "http://terminology.hl7.org/CodeSystem/v2-0203";
+    public const string MemberIdSystem = "urn:cho:member-id";
 
     private readonly FhirCoverageProjectionOptions _options;
 
@@ -62,6 +65,23 @@ public sealed class FhirCoverageProjector : IFhirCoverageProjector
                 ["url"] = CoverageStatusExtension,
                 ["valueCode"] = coverage.Status.ToString(),
             }),
+            // The member's id under this coverage, typed MB: CARIN BB's
+            // identifier:memberid slice. Same system and value as the
+            // Patient's member id.
+            ["identifier"] = new JsonArray(new JsonObject
+            {
+                ["type"] = new JsonObject
+                {
+                    ["coding"] = new JsonArray(new JsonObject
+                    {
+                        ["system"] = V2IdentifierTypeSystem,
+                        ["code"] = "MB",
+                        ["display"] = "Member Number",
+                    }),
+                },
+                ["system"] = MemberIdSystem,
+                ["value"] = coverage.MemberId,
+            }),
             ["status"] = FhirStatus(coverage.Status),
             ["type"] = new JsonObject
             {
@@ -79,9 +99,9 @@ public sealed class FhirCoverageProjector : IFhirCoverageProjector
 
         var classes = new JsonArray();
         if (!string.IsNullOrWhiteSpace(coverage.GroupNumber))
-            classes.Add(CoverageClass("group", "Group", coverage.GroupNumber));
+            classes.Add(CoverageClass("group", "Group", coverage.GroupNumber, coverage.GroupName));
         if (!string.IsNullOrWhiteSpace(coverage.PlanId))
-            classes.Add(CoverageClass("plan", "Plan", coverage.PlanId));
+            classes.Add(CoverageClass("plan", "Plan", coverage.PlanId, coverage.PlanName));
         if (classes.Count > 0)
             resource["class"] = classes;
 
@@ -128,6 +148,13 @@ public sealed class FhirCoverageProjector : IFhirCoverageProjector
         if (!string.IsNullOrWhiteSpace(_options.PayorReference))
             payor["reference"] = _options.PayorReference.Trim();
         return payor;
+    }
+
+    private static JsonObject CoverageClass(string code, string display, string value, string? name)
+    {
+        var node = CoverageClass(code, display, value);
+        if (!string.IsNullOrWhiteSpace(name)) node["name"] = name.Trim();
+        return node;
     }
 
     private static JsonObject CoverageClass(string code, string display, string value) => new()

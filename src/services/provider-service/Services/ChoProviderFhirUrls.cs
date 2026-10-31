@@ -50,6 +50,13 @@ internal static class ChoProviderFhirUrls
         "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Practitioner";
 
     /// <summary>
+    /// CARIN BB's Organization, which an EOB's billing provider resolves to
+    /// when the 837 named an organization. Declared at 2.0.0 as well.
+    /// </summary>
+    public const string CarinBbOrganizationProfile =
+        "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Organization";
+
+    /// <summary>
     /// CARIN BB 2.0.0 makes each profile's <c>meta-profile-version</c>
     /// invariant an error: meta.profile must hold the canonical followed by
     /// <c>|2.0.</c>, as claims-service's EOBs and fhir-service's Coverage do.

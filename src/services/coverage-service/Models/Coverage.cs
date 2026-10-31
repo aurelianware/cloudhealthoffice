@@ -45,11 +45,25 @@ public class Coverage
     public string GroupNumber { get; set; } = string.Empty;
 
     /// <summary>
+    /// The group's name as members know it (the employer or sponsor), when
+    /// the source supplied one. Published as the FHIR group class's name.
+    /// </summary>
+    [StringLength(200)]
+    public string? GroupName { get; set; }
+
+    /// <summary>
     /// Benefit Plan ID from Benefit Plan Service
     /// </summary>
     [Required]
     [StringLength(50)]
     public string PlanId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The plan's name as members know it, when the source supplied one.
+    /// Published as the FHIR plan class's name.
+    /// </summary>
+    [StringLength(200)]
+    public string? PlanName { get; set; }
 
     /// <summary>
     /// The sponsor policy this coverage is held under (834 REF*1L, when the
