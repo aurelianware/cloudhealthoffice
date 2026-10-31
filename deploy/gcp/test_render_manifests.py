@@ -291,6 +291,34 @@ def test_production_keeps_the_managed_store_identity(tmp_path):
     assert env(fhir)["ManagedFhirStore__Provider"] == "GcpHealthcare"
 
 
+def test_claims_service_keeps_the_folder_drop_without_a_bucket():
+    claims = deployments(render())["claims-service"]
+    assert "CpcdsDrop__Store" not in env(claims)
+
+
+def test_claims_service_reads_the_cpcds_drop_bucket_through_workload_identity():
+    gsa = "cho-cpcds-drop@demo-project.iam.gserviceaccount.com"
+    docs = render("--cpcds-drop-bucket", "demo-project-cho-cpcds-drops",
+                  "--cpcds-drop-service-account", gsa)
+    claims = deployments(docs)["claims-service"]
+    assert claims["spec"]["template"]["spec"]["serviceAccountName"] == "claims-service"
+    assert env(claims)["CpcdsDrop__Enabled"] == "true"
+    assert env(claims)["CpcdsDrop__Store"] == "Gcs"
+    assert env(claims)["CpcdsDrop__Gcs__Bucket"] == "demo-project-cho-cpcds-drops"
+    accounts = [d for d in docs if d["kind"] == "ServiceAccount" and d["metadata"]["name"] == "claims-service"]
+    assert len(accounts) == 1
+    assert accounts[0]["metadata"]["annotations"]["iam.gke.io/gcp-service-account"] == gsa
+
+
+def test_cpcds_drop_bucket_needs_its_service_account():
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--registry", REGISTRY, "--cpcds-drop-bucket", "b"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert "go together" in result.stderr
+
+
 def test_document_bucket_needs_its_service_account():
     result = subprocess.run(
         [sys.executable, str(SCRIPT), "--registry", REGISTRY, "--documents-bucket", "b"],

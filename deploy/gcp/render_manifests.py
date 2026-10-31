@@ -54,6 +54,11 @@ What it changes:
     account infrastructure/gcp creates (Workload Identity), and
     DocumentStore__Provider=Gcs with the bucket. Without them they keep the
     manifests' Azure Blob settings.
+  - With --cpcds-drop-bucket and --cpcds-drop-service-account, claims-service
+    loads the hosted CPCDS file drop from that bucket (CpcdsDrop__Store=Gcs),
+    running as its own Kubernetes service account bound to the Google one
+    (Workload Identity). Which tenants load is each tenant's saved drop
+    settings. SFTPGo (deploy/gcp/sftpgo) writes plans' uploads there.
   - With --managed-fhir-store and --managed-fhir-store-service-account,
     fhir-service publishes finalized claims' ExplanationOfBenefit to that
     Cloud Healthcare API FHIR store (ADR 023): its service account is bound
@@ -187,6 +192,9 @@ MANAGED_SECRETS = {
 # var.document_service_accounts in infrastructure/gcp: each name is both the
 # Deployment and the Kubernetes service account Workload Identity trusts.
 DOCUMENT_SERVICES = ("document-service",)
+# claims-service's Kubernetes service account when it reads the CPCDS drop
+# bucket, bound to the drop's Google service account (Workload Identity).
+CPCDS_DROP_ACCOUNT = "claims-service"
 WORKLOAD_IDENTITY_ANNOTATION = "iam.gke.io/gcp-service-account"
 # fhir-service's Kubernetes service account (its manifest defines it), bound
 # to the managed FHIR store's Google service account when publishing is on.
@@ -512,6 +520,13 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             spec["serviceAccountName"] = name
             set_env(container, "DocumentStore__Provider", "Gcs")
             set_env(container, "DocumentStore__Gcs__Bucket", args.documents_bucket)
+        if name == "claims-service" and args.cpcds_drop_bucket:
+            # The hosted CPCDS drop: plans' SFTP uploads land in this bucket
+            # (SFTPGo, deploy/gcp/sftpgo) and claims-service loads them.
+            spec["serviceAccountName"] = CPCDS_DROP_ACCOUNT
+            set_env(container, "CpcdsDrop__Enabled", "true")
+            set_env(container, "CpcdsDrop__Store", "Gcs")
+            set_env(container, "CpcdsDrop__Gcs__Bucket", args.cpcds_drop_bucket)
         if name == "appeals-service" and args.appeals_secrets_project:
             spec["serviceAccountName"] = "appeals-service"
             set_env(container, "SecretProvider__Provider", "GoogleSecretManager")
@@ -861,6 +876,10 @@ def main() -> int:
                         help="Google Cloud Storage bucket for Bulk Data $export files (terraform output bulk_export_bucket)")
     parser.add_argument("--fhir-service-google-account", default="",
                         help="Google service account fhir-service acts as (terraform output fhir_service_google_account)")
+    parser.add_argument("--cpcds-drop-bucket", default="",
+                        help="Cloud Storage bucket of the hosted CPCDS file drop (terraform output cpcds_drop_bucket)")
+    parser.add_argument("--cpcds-drop-service-account", default="",
+                        help="Google service account claims-service reads the drop as (terraform output cpcds_drop_service_account)")
     parser.add_argument("--appeals-secrets-project", default="", help="Project containing appeal-body-encryption-key-v1")
     parser.add_argument("--appeals-secrets-service-account", default="", help="Secret-reading Google service account for appeals-service")
     parser.add_argument("--list-images", action="store_true", help="Print 'name dockerfile' for each image to build, then exit")
@@ -902,6 +921,8 @@ def main() -> int:
         return 0
     if not args.registry:
         parser.error("--registry is required")
+    if bool(args.cpcds_drop_bucket) != bool(args.cpcds_drop_service_account):
+        parser.error("--cpcds-drop-bucket and --cpcds-drop-service-account go together")
     if bool(args.appeals_secrets_project) != bool(args.appeals_secrets_service_account):
         parser.error("--appeals-secrets-project and --appeals-secrets-service-account go together")
     if bool(args.documents_bucket) != bool(args.documents_service_account):
@@ -950,6 +971,10 @@ def main() -> int:
         validate_production_args(parser, args)
 
     rendered = document_service_accounts(args) if args.documents_bucket else []
+    if args.cpcds_drop_bucket:
+        rendered.append({"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {
+            "name": CPCDS_DROP_ACCOUNT, "namespace": NAMESPACE,
+            "annotations": {WORKLOAD_IDENTITY_ANNOTATION: args.cpcds_drop_service_account}}})
     if args.appeals_secrets_project:
         rendered.append({"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {
             "name": "appeals-service", "namespace": NAMESPACE,

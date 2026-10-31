@@ -1,0 +1,211 @@
+# SFTPGo: the hosted CPCDS drop's SFTP server on GKE
+# (docs/integration/CPCDS-SFTP-DROP-GCP.md).
+#
+# Each plan gets one SFTP user, created through SFTPGo's REST API, whose
+# filesystem is the drop bucket under its own {tenant}/ prefix. Uploads land
+# straight in Cloud Storage, where claims-service's drop worker loads them;
+# nothing on this pod's disk holds plan data. The disk holds only SFTPGo's
+# user database (SQLite) and its SSH host keys, which must survive restarts
+# because plans pin them.
+#
+# Applied by deploy/gcp/sftpgo/apply.sh, which fills in the values marked
+# with ${...} from the Terraform outputs (infrastructure/gcp/cpcds-drops.tf).
+#
+# Exposure: port 22 on the static address, limited to the source ranges the
+# plans give us (loadBalancerSourceRanges). The REST API is cluster-internal,
+# reachable only from tenant-service (NetworkPolicy); the web admin and web
+# client are off.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cho-sftp
+  labels:
+    app: cloudhealthoffice
+    component: cpcds-sftp
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sftpgo
+  namespace: cho-sftp
+  annotations:
+    iam.gke.io/gcp-service-account: ${SFTPGO_GOOGLE_ACCOUNT}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sftpgo-state
+  namespace: cho-sftp
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ${STORAGE_CLASS}
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sftpgo
+  namespace: cho-sftp
+  labels:
+    app: sftpgo
+spec:
+  # One replica: the user database is SQLite on a ReadWriteOnce disk.
+  # Uploads are in Cloud Storage, so a restart loses no plan data.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: sftpgo
+  template:
+    metadata:
+      labels:
+        app: sftpgo
+    spec:
+      serviceAccountName: sftpgo
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sftpgo
+          # Pin by digest before production (scripts check images the same way).
+          image: ${SFTPGO_IMAGE}
+          ports:
+            - name: sftp
+              containerPort: 2022
+            - name: api
+              containerPort: 8080
+          env:
+            - name: SFTPGO_SFTPD__BINDINGS__0__PORT
+              value: "2022"
+            # Keys only: plans register SSH public keys; no passwords exist.
+            - name: SFTPGO_SFTPD__KEYBOARD_INTERACTIVE_AUTHENTICATION
+              value: "false"
+            - name: SFTPGO_HTTPD__BINDINGS__0__PORT
+              value: "8080"
+            - name: SFTPGO_HTTPD__BINDINGS__0__ENABLE_WEB_ADMIN
+              value: "false"
+            - name: SFTPGO_HTTPD__BINDINGS__0__ENABLE_WEB_CLIENT
+              value: "false"
+            - name: SFTPGO_HTTPD__BINDINGS__0__ENABLE_REST_API
+              value: "true"
+            - name: SFTPGO_DATA_PROVIDER__DRIVER
+              value: sqlite
+            - name: SFTPGO_DATA_PROVIDER__NAME
+              value: /var/lib/sftpgo/sftpgo.db
+            - name: SFTPGO_DATA_PROVIDER__CREATE_DEFAULT_ADMIN
+              value: "true"
+            - name: SFTPGO_DEFAULT_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: sftpgo-admin
+                  key: username
+            - name: SFTPGO_DEFAULT_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sftpgo-admin
+                  key: password
+            # Ban sources that keep failing to authenticate.
+            - name: SFTPGO_COMMON__DEFENDER__ENABLED
+              value: "true"
+            - name: SFTPGO_LOG_LEVEL
+              value: info
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/sftpgo
+            # The root filesystem is read-only; SFTPGo's temporary files go here.
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          readinessProbe:
+            tcpSocket:
+              port: sftp
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: sftp
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: sftpgo-state
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+# Plans connect here: port 22 on the static address, from their own ranges only.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sftpgo-sftp
+  namespace: cho-sftp
+spec:
+  type: LoadBalancer
+  loadBalancerIP: ${SFTP_ADDRESS}
+  loadBalancerSourceRanges: ${SFTP_SOURCE_RANGES}
+  externalTrafficPolicy: Local
+  selector:
+    app: sftpgo
+  ports:
+    - name: sftp
+      port: 22
+      targetPort: sftp
+---
+# tenant-service creates and updates plans' SFTP users here. Never exposed.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sftpgo-api
+  namespace: cho-sftp
+spec:
+  type: ClusterIP
+  selector:
+    app: sftpgo
+  ports:
+    - name: api
+      port: 8080
+      targetPort: api
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sftpgo-api-from-tenant-service
+  namespace: cho-sftp
+spec:
+  podSelector:
+    matchLabels:
+      app: sftpgo
+  policyTypes: [Ingress]
+  ingress:
+    # SFTP from anywhere the load balancer admits (its source ranges apply).
+    - ports:
+        - port: 2022
+    # The REST API from tenant-service only.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cloudhealthoffice
+          podSelector:
+            matchLabels:
+              app: tenant-service
+      ports:
+        - port: 8080
