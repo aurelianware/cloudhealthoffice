@@ -1,6 +1,10 @@
 using FhirService.Services.Identity;
 using FhirService.Models.PayerToPayer;
 using FhirService.Services.PayerToPayer;
+using FhirService.Services.PayerToPayer.BulkMemberMatch;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
@@ -41,66 +45,119 @@ public sealed class PayerToPayerMemberMatchController : FhirControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// POST /fhir/r4/Patient/$member-match. Two request forms, told apart by
+    /// the body: a FHIR <c>Parameters</c> is the HRex/PDex form every other
+    /// payer sends (<c>MemberPatient</c>, <c>CoverageToMatch</c>, optional
+    /// <c>CoverageToLink</c>, <c>Consent</c>) and is answered with the HRex
+    /// <c>MemberIdentifier</c> Parameters; anything else is CHO's own JSON form
+    /// (<see cref="MemberMatchRequestDto"/>), answered with a Bundle as before.
+    /// Both run the same matcher, consent check and refusals.
+    /// </summary>
     [HttpPost("Patient/$member-match")]
-    public async Task<IActionResult> MemberMatch(
-        [FromBody] MemberMatchRequestDto? body, CancellationToken ct)
+    public async Task<IActionResult> MemberMatch([FromBody] JsonObject? body, CancellationToken ct)
     {
         // D-13: member-match is payer-to-payer (backend) only. Refused before
         // the body is read, so the answer does not depend on the member named.
         if (!IsBackendSystemCaller)
             return FhirForbidden(PayerToPayerController.BackendOnlyMessage);
 
+        var hrex = body is not null && body["resourceType"] is JsonValue type
+                   && type.TryGetValue<string>(out var resourceType) && resourceType == "Parameters";
+
+        MemberMatchRequestDto? dto = null;
+        BulkMemberMatchEntry? entry = null;
+        if (!hrex && body is not null)
+        {
+            try
+            {
+                dto = body.Deserialize<MemberMatchRequestDto>(DtoJson);
+            }
+            catch (JsonException)
+            {
+                return FhirBadRequest("The member-match request body could not be read.");
+            }
+        }
+
         // D-13: HRex/PDex $member-match carries no receiving-payer parameter;
         // the receiving payer is the one the authenticated client is
         // registered to. A client with no registered payer, or a body naming
         // another payer, gets one fixed refusal before any member is looked at.
-        if (!TryBindReceivingPayer(body?.ReceivingPayerId, _logger, "member-match", out var receivingPayerId))
+        if (!TryBindReceivingPayer(dto?.ReceivingPayerId, _logger, "member-match", out var receivingPayerId))
             return FhirForbidden(PayerToPayerController.PayerBindingMessage);
 
         if (body is null)
             return FhirBadRequest("A member-match request body is required.");
 
-        var request = new MemberMatchRequest
-        {
-            TenantId = TenantId,                 // from the authenticated context, not the body
-            ReceivingPayerId = receivingPayerId,
-            InitiatedBy = $"client:{AuthenticatedActorId ?? "unknown"}",
-            FamilyName = body.FamilyName,
-            GivenName = body.GivenName,
-            BirthDate = body.BirthDate,
-            Gender = body.Gender,
-            MemberId = body.MemberId,
-            Ssn = body.Ssn,
-            PostalCode = body.PostalCode,
-            Phone = body.Phone,
-            Email = body.Email,
-            RequestedPayerId = body.RequestedPayerId,
-            RequestedSubscriberId = body.RequestedSubscriberId,
-            AsOfDate = body.AsOfDate,
-            Consent = body.Consent,
-        };
+        if (hrex && !BulkMemberMatchRequestReader.TryReadSingle(body, out entry, out var shapeError))
+            return FhirBadRequest(shapeError!);
+
+        var request = entry is not null
+            ? new MemberMatchRequest
+            {
+                TenantId = TenantId,
+                ReceivingPayerId = receivingPayerId,
+                InitiatedBy = $"client:{AuthenticatedActorId ?? "unknown"}",
+                FamilyName = entry.FamilyName,
+                GivenName = entry.GivenName,
+                BirthDate = entry.BirthDate,
+                Gender = entry.Gender,
+                MemberId = entry.MemberId,
+                PostalCode = entry.PostalCode,
+                Phone = entry.Phone,
+                Email = entry.Email,
+                AsOfDate = entry.AsOfDate,
+                Consent = entry.Consent,
+            }
+            : new MemberMatchRequest
+            {
+                TenantId = TenantId,                 // from the authenticated context, not the body
+                ReceivingPayerId = receivingPayerId,
+                InitiatedBy = $"client:{AuthenticatedActorId ?? "unknown"}",
+                FamilyName = dto!.FamilyName,
+                GivenName = dto.GivenName,
+                BirthDate = dto.BirthDate,
+                Gender = dto.Gender,
+                MemberId = dto.MemberId,
+                Ssn = dto.Ssn,
+                PostalCode = dto.PostalCode,
+                Phone = dto.Phone,
+                Email = dto.Email,
+                RequestedPayerId = dto.RequestedPayerId,
+                RequestedSubscriberId = dto.RequestedSubscriberId,
+                AsOfDate = dto.AsOfDate,
+                Consent = dto.Consent,
+            };
 
         var result = await _matcher.MatchAsync(request, ct);
+
         return result.Outcome switch
         {
+            MemberMatchOutcome.Matched when hrex => new ContentResult
+            {
+                Content = PayerToPayerMemberMatchResponseBuilder.BuildParameters(result.Member!).ToJsonString(),
+                ContentType = "application/fhir+json",
+                StatusCode = StatusCodes.Status200OK,
+            },
             MemberMatchOutcome.Matched =>
                 Ok(PayerToPayerMemberMatchResponseBuilder.Build(result.Member!, result.Coverage)),
-
             // Decided before any member is looked at, so it reveals nothing
             // about membership (PDex answers an unusable consent with 422).
             MemberMatchOutcome.ConsentNotAccepted => FhirUnprocessable(ConsentNotAcceptedMessage),
-
             MemberMatchOutcome.InsufficientCriteria => FhirBadRequest(
                 "Insufficient identifying criteria: supply a member or subscriber id, or a family name with a birth date."),
-
             // No-match, ambiguous identity, ambiguous coverage, and cross-tenant all
             // collapse to one generic 422 so the endpoint cannot reveal whether a
             // given identity exists, how many candidates matched, or that another
-            // tenant holds the member.
+            // tenant holds the member. HRex asks for 422 on no match and on more
+            // than one.
             _ => FhirUnprocessable(
                 "The supplied identifiers did not resolve to a single member and coverage; no data returned."),
         };
     }
+
+    /// <summary>How CHO's own JSON form is read: the web defaults MVC binds request bodies with.</summary>
+    private static readonly JsonSerializerOptions DtoJson = new(JsonSerializerDefaults.Web);
 
     internal const string ConsentNotAcceptedMessage =
         "A Payer-to-Payer member-match requires the member's consent: an active HRex Consent (scope patient-privacy, "

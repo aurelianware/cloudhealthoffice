@@ -89,14 +89,46 @@ public static class BulkMemberMatchRequestReader
                 error = $"MemberBundle {i + 1} must carry a MemberPatient (Patient) and a CoverageToMatch (Coverage).";
                 return false;
             }
-            read.Add(Entry(patient, coverage, Part(parts, "Consent", "Consent")));
+            read.Add(Member(patient, coverage, Part(parts, "Consent", "Consent")));
         }
 
         entries = read;
         return true;
     }
 
-    private static BulkMemberMatchEntry Entry(JsonObject patient, JsonObject coverage, JsonObject? consent)
+    /// <summary>
+    /// Reads the single-member HRex <c>Patient/$member-match</c> input
+    /// (<c>hrex-parameters-member-match-in</c>): the same <c>MemberPatient</c>,
+    /// <c>CoverageToMatch</c>, optional <c>CoverageToLink</c> and
+    /// <c>Consent</c> parameters a <c>MemberBundle</c> carries, at the top
+    /// level of the Parameters. Read exactly as one bundle of the bulk form is,
+    /// so the two operations cannot match the same member differently.
+    /// </summary>
+    public static bool TryReadSingle(JsonObject? body, out BulkMemberMatchEntry? entry, out string? error)
+    {
+        entry = null;
+        error = null;
+
+        if (body is null || Str(body["resourceType"]) != "Parameters")
+        {
+            error = "The request body must be a FHIR Parameters resource.";
+            return false;
+        }
+
+        var parts = (body["parameter"] as JsonArray ?? []).OfType<JsonObject>().ToList();
+        var patient = Part(parts, "MemberPatient", "Patient");
+        var coverage = Part(parts, "CoverageToMatch", "Coverage");
+        if (patient is null || coverage is null)
+        {
+            error = "A member-match request must carry a MemberPatient (Patient) and a CoverageToMatch (Coverage).";
+            return false;
+        }
+
+        entry = Member(patient, coverage, Part(parts, "Consent", "Consent"));
+        return true;
+    }
+
+    private static BulkMemberMatchEntry Member(JsonObject patient, JsonObject coverage, JsonObject? consent)
     {
         var name = Names(patient).FirstOrDefault(n => Str(n["use"]) == "official") ?? Names(patient).FirstOrDefault();
         var subscriberId = Str(coverage["subscriberId"]);

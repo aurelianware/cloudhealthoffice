@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Patient/$member-match` accepts the HRex/PDex request form. A FHIR `Parameters` body (`MemberPatient`, `CoverageToMatch`, optional `CoverageToLink`, `Consent`; `hrex-parameters-member-match-in`) is read exactly as one `MemberBundle` of `Group/$bulk-member-match` is, and a match is answered with the HRex `MemberIdentifier` Parameters (v2-0203 `MB`, system `urn:cho:member-id`, which `Patient?identifier=` finds). The consent check, payer binding and refusals are unchanged: no consent is 422, no match or more than one is 422, a request without `MemberPatient` or `CoverageToMatch` is 400. Before this, only CHO's own JSON shape was understood, so another payer's conforming request was refused as having insufficient criteria. CHO's JSON form still works and still answers with a Bundle. The CapabilityStatement now declares `member-match` on Patient with the HRex canonical (G-36).
+
 ### Fixed
 
 - CARIN BB `Coverage?_include=Coverage:payor` answers again. Once the interop Coverage named the plan's Organization as its payor (`Fhir:Coverage:PayorReference`), the search was refused with a 400 because fhir-service could not include a referenced payor. A payor that references the plan's own Organization (`Fhir:PlanOrganization`) is now included in the searchset (`search.mode` include); any other referenced payor is still refused.
