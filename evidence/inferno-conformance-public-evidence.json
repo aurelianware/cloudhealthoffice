@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "inferno-conformance",
-  "generatedAtUtc": "2026-10-31T06:44:36Z",
-  "sourceCommit": "abceffd109219a32ace7c1ca784d6e0d9ea48683",
-  "sourceCommitShort": "abceffd10921",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/abceffd109219a32ace7c1ca784d6e0d9ea48683",
+  "generatedAtUtc": "2026-10-31T14:14:23Z",
+  "sourceCommit": "5d5e87d4eabaa2d085eabefa41d944284177b49e",
+  "sourceCommitShort": "5d5e87d4eaba",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/5d5e87d4eabaa2d085eabefa41d944284177b49e",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence and of the Da Vinci interoperability snapshot. A kit result never changes a CMS-0057-F scenario status, and no result here is CMS, ONC or HL7 certification.",
   "kits": [
@@ -32,7 +32,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T06:44:01.5457228+00:00",
+      "testedAtUtc": "2026-10-31T14:13:34.7446545+00:00",
       "tests": {
         "passed": 21,
         "failed": 0,
@@ -111,34 +111,18 @@
       "groups": [
         "c4bb_v200-Group02"
       ],
-      "status": "Failed",
+      "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T06:40:25.3266926+00:00",
+      "testedAtUtc": "2026-10-31T14:08:26.6836686+00:00",
       "tests": {
-        "passed": 40,
-        "failed": 1,
+        "passed": 41,
+        "failed": 0,
         "skipped": 15,
         "omitted": 0,
         "knownKitIssue": 5,
         "total": 61
       },
-      "failingTests": [
-        {
-          "test": "c4bb_v200_eob",
-          "result": "fail",
-          "message": "(no message)"
-        },
-        {
-          "test": "c4bb_v200_coverage_include_Coverage_payor_search_test",
-          "result": "fail",
-          "message": "Unexpected response status: expected 200, but received 400"
-        },
-        {
-          "test": "c4bb_v200_coverage",
-          "result": "fail",
-          "message": "(no message)"
-        }
-      ],
+      "failingTests": [],
       "notRunTests": [
         {
           "test": "c4bb_v200_patient_must_support_test",
@@ -284,7 +268,7 @@
       "groups": [],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T06:42:01.7902928+00:00",
+      "testedAtUtc": "2026-10-31T14:10:47.4879768+00:00",
       "tests": {
         "passed": 180,
         "failed": 0,
@@ -688,7 +672,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T06:38:05.3428726+00:00",
+      "testedAtUtc": "2026-10-31T14:05:19.5522764+00:00",
       "tests": {
         "passed": 31,
         "failed": 0,
@@ -714,15 +698,15 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-10-31T06:44:01.5471667+00:00",
+    "generatedAtUtc": "2026-10-31T14:13:34.7463173+00:00",
     "environment": "CI",
-    "choCommit": "abceffd109219a32ace7c1ca784d6e0d9ea48683",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/abceffd109219a32ace7c1ca784d6e0d9ea48683",
-    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41176543906",
+    "choCommit": "5d5e87d4eabaa2d085eabefa41d944284177b49e",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/5d5e87d4eabaa2d085eabefa41d944284177b49e",
+    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41207410008",
     "dataClassification": "synthetic",
     "summary": {
-      "passed": 3,
-      "failed": 1,
+      "passed": 4,
+      "failed": 0,
       "skipped": 0,
       "notRun": 0,
       "total": 4
