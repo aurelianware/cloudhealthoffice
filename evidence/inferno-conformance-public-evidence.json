@@ -1,13 +1,44 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "inferno-conformance",
-  "generatedAtUtc": "2026-10-31T14:14:23Z",
-  "sourceCommit": "5d5e87d4eabaa2d085eabefa41d944284177b49e",
-  "sourceCommitShort": "5d5e87d4eaba",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/5d5e87d4eabaa2d085eabefa41d944284177b49e",
+  "generatedAtUtc": "2026-10-31T16:58:02Z",
+  "sourceCommit": "259d3852b70cb1f6b348dd63758d76be4d66a9bb",
+  "sourceCommitShort": "259d3852b70c",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/259d3852b70cb1f6b348dd63758d76be4d66a9bb",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence and of the Da Vinci interoperability snapshot. A kit result never changes a CMS-0057-F scenario status, and no result here is CMS, ONC or HL7 certification.",
   "kits": [
+    {
+      "scenarioId": "INFERNO-PDEX-SERVER-001",
+      "title": "Inferno PDex 2.0.0 payer-server $member-match against CHO",
+      "protocol": "PDex",
+      "regulatoryContext": "The Payer-to-Payer API CMS-0057-F requires by January 1, 2027: a new payer finds a member at the prior payer with the HRex $member-match operation, under the member's consent. Da Vinci PDex is the implementation guide CMS recommends.",
+      "kit": {
+        "name": "inferno-framework/davinci-pdex-test-kit",
+        "key": "inferno-pdex",
+        "upstreamRepository": "https://github.com/inferno-framework/davinci-pdex-test-kit",
+        "tag": "v0.13.2",
+        "commit": "bc3a769f5ae9e4b1d6bdcd67d3b1b0eeab348da8",
+        "reference": "https://github.com/inferno-framework/davinci-pdex-test-kit@v0.13.2",
+        "implementationGuides": {
+          "PDex": "2.0.0",
+          "HRex": "1.0.0",
+          "US Core": "3.1.1"
+        }
+      },
+      "suite": "pdex_payer_server",
+      "groups": [
+        "pdex_workflow_member_match",
+        "pdex_no_member_matches"
+      ],
+      "status": "Failed",
+      "statusReason": "HttpRequestException: Response status code does not indicate success: 404 (Not Found).",
+      "testedAtUtc": "2026-10-31T16:52:10.6681035+00:00",
+      "tests": null,
+      "failingTests": [],
+      "notRunTests": [],
+      "knownKitIssues": []
+    },
     {
       "scenarioId": "INFERNO-USCORE-SERVER-001",
       "title": "Inferno US Core 3.1.1 server suite against CHO's Patient and Encounter groups",
@@ -32,7 +63,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T14:13:34.7446545+00:00",
+      "testedAtUtc": "2026-10-31T16:57:27.5561843+00:00",
       "tests": {
         "passed": 21,
         "failed": 0,
@@ -109,11 +140,11 @@
       },
       "suite": "c4bb_v200",
       "groups": [
-        "c4bb_v200-Group02"
+        "C4BB FHIR API Tests (CapabilityStatement, Patient, ExplanationOfBenefit, Coverage, Organization, Practitioner, RelatedPerson)"
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T14:08:26.6836686+00:00",
+      "testedAtUtc": "2026-10-31T16:50:01.8876886+00:00",
       "tests": {
         "passed": 41,
         "failed": 0,
@@ -268,7 +299,7 @@
       "groups": [],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T14:10:47.4879768+00:00",
+      "testedAtUtc": "2026-10-31T16:54:40.2601855+00:00",
       "tests": {
         "passed": 180,
         "failed": 0,
@@ -672,7 +703,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T14:05:19.5522764+00:00",
+      "testedAtUtc": "2026-10-31T16:47:14.5638933+00:00",
       "tests": {
         "passed": 31,
         "failed": 0,
@@ -698,18 +729,18 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-10-31T14:13:34.7463173+00:00",
+    "generatedAtUtc": "2026-10-31T16:57:27.5577933+00:00",
     "environment": "CI",
-    "choCommit": "5d5e87d4eabaa2d085eabefa41d944284177b49e",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/5d5e87d4eabaa2d085eabefa41d944284177b49e",
-    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41207410008",
+    "choCommit": "259d3852b70cb1f6b348dd63758d76be4d66a9bb",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/259d3852b70cb1f6b348dd63758d76be4d66a9bb",
+    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41219553414",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 4,
-      "failed": 0,
+      "failed": 1,
       "skipped": 0,
       "notRun": 0,
-      "total": 4
+      "total": 5
     }
   },
   "disclaimers": [
