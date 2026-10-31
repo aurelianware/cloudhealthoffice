@@ -28,6 +28,35 @@ public class PdexConsentValidatorTests
         return consent;
     }
 
+    /// <summary>
+    /// The consent CHO sends as the new payer matches hrex-consent's slices: the
+    /// prior payer is the source actor (provenance performer, not v3 PERF), the
+    /// member is the performer, and the authorizing registry consent is the
+    /// source document. It still passes CHO's own check.
+    /// </summary>
+    [Fact]
+    public void The_outbound_consent_follows_hrex_consent_and_is_still_accepted()
+    {
+        var consent = PdexConsentBuilder.Build("m-1", Requesting, Local, Now.AddDays(-1) + PdexConsentValidator.StartSkew,
+            null, "Lee", "1980-02-03", sourceConsentId: "consent-42");
+
+        var actors = consent["provision"]!["actor"]!.AsArray()
+            .Select(a => (a!["role"]!["coding"]![0]!["system"]!.GetValue<string>(),
+                          a["role"]!["coding"]![0]!["code"]!.GetValue<string>(),
+                          a["reference"]!["identifier"]!["value"]!.GetValue<string>()))
+            .ToList();
+        actors.Should().Equal(
+            ("http://terminology.hl7.org/CodeSystem/provenance-participant-type", "performer", Local),
+            ("http://terminology.hl7.org/CodeSystem/v3-ParticipationType", "IRCP", Requesting));
+        consent["performer"]![0]!["reference"]!.GetValue<string>().Should().Be("#member");
+        consent["sourceReference"]!["identifier"]!["value"]!.GetValue<string>().Should().Be("consent-42");
+        consent["sourceReference"]!["type"]!.GetValue<string>().Should().Be("DocumentReference");
+
+        Check(consent).Valid.Should().BeTrue();
+        PdexConsentBuilder.Build("m-1", Requesting, Local, Now, null).ContainsKey("sourceReference")
+            .Should().BeFalse("no registry consent id, no source to name");
+    }
+
     [Fact]
     public void A_consent_naming_the_requesting_payer_is_accepted_with_its_period_and_a_fingerprint()
     {

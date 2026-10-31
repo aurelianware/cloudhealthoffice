@@ -310,10 +310,19 @@ public static class PdexConsentBuilder
     /// the recipient's counterpart (when known), family name and birth date, so the
     /// peer can bind it to the member it matches. The start is backdated by the
     /// tolerated clock skew.
+    ///
+    /// <para>
+    /// Shaped to HRex 1.0.0 <c>hrex-consent</c>: the member is the performer,
+    /// the prior payer's actor role is <c>provenance-participant-type#performer</c>
+    /// (the profile's source slice; v3 <c>PERF</c> matches no slice), and, when
+    /// CHO's registry names the consent that authorized the exchange
+    /// (<paramref name="sourceConsentId"/>), <c>sourceReference</c> points at it
+    /// by identifier.
+    /// </para>
     /// </summary>
     public static JsonObject Build(
         string? patientIdentifier, string recipientPayerId, string sourcePayerId, DateTime startUtc, DateTime? endUtc,
-        string? family = null, string? birthDate = null)
+        string? family = null, string? birthDate = null, string? sourceConsentId = null)
     {
         var start = startUtc - PdexConsentValidator.StartSkew;
         var period = new JsonObject { ["start"] = start.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture) };
@@ -326,7 +335,7 @@ public static class PdexConsentBuilder
             patient["name"] = new JsonArray(new JsonObject { ["family"] = family });
         if (!string.IsNullOrWhiteSpace(birthDate)) patient["birthDate"] = birthDate;
 
-        return new JsonObject
+        var consent = new JsonObject
         {
             ["resourceType"] = "Consent",
             ["contained"] = new JsonArray(patient),
@@ -334,25 +343,45 @@ public static class PdexConsentBuilder
             ["scope"] = Concept("http://terminology.hl7.org/CodeSystem/consentscope", "patient-privacy"),
             ["category"] = new JsonArray(Concept("http://terminology.hl7.org/CodeSystem/v3-ActCode", "IDSCL")),
             ["patient"] = new JsonObject { ["reference"] = "#member" },
+            ["performer"] = new JsonArray(new JsonObject { ["reference"] = "#member" }),
             ["policy"] = new JsonArray(new JsonObject { ["uri"] = PdexConsentValidator.SensitivePolicy }),
             ["provision"] = new JsonObject
             {
                 ["type"] = "permit",
                 ["period"] = period,
                 ["actor"] = new JsonArray(
-                    Actor("PERF", sourcePayerId),
-                    Actor(PdexConsentValidator.InformationRecipientRole, recipientPayerId)),
+                    Actor(SourceRoleSystem, SourceRole, sourcePayerId),
+                    Actor(ParticipationSystem, PdexConsentValidator.InformationRecipientRole, recipientPayerId)),
                 ["action"] = new JsonArray(Concept("http://terminology.hl7.org/CodeSystem/consentaction", "disclose")),
             },
         };
+        if (!string.IsNullOrWhiteSpace(sourceConsentId))
+        {
+            consent["sourceReference"] = new JsonObject
+            {
+                ["type"] = "DocumentReference",
+                ["identifier"] = new JsonObject { ["system"] = ConsentRecordSystem, ["value"] = sourceConsentId },
+                ["display"] = "The member's Payer-to-Payer opt-in recorded by Cloud Health Office",
+            };
+        }
+        return consent;
     }
+
+    /// <summary>The hrex-consent source actor's role (<c>actor:source</c>).</summary>
+    public const string SourceRoleSystem = "http://terminology.hl7.org/CodeSystem/provenance-participant-type";
+    public const string SourceRole = "performer";
+
+    /// <summary>The identifier system of a consent record in CHO's registry.</summary>
+    public const string ConsentRecordSystem = "urn:cho:consent-id";
+
+    private const string ParticipationSystem = "http://terminology.hl7.org/CodeSystem/v3-ParticipationType";
 
     private static JsonObject Concept(string system, string code) =>
         new() { ["coding"] = new JsonArray(new JsonObject { ["system"] = system, ["code"] = code }) };
 
-    private static JsonObject Actor(string role, string payerId) => new()
+    private static JsonObject Actor(string roleSystem, string role, string payerId) => new()
     {
-        ["role"] = Concept("http://terminology.hl7.org/CodeSystem/v3-ParticipationType", role),
+        ["role"] = Concept(roleSystem, role),
         ["reference"] = new JsonObject { ["identifier"] = new JsonObject { ["value"] = payerId } },
     };
 }

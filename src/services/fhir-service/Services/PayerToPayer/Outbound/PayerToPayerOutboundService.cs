@@ -163,7 +163,8 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         var priorPayerMemberId = coverage.Coverage?.SubscriberId;
         var consent = PdexConsentBuilder.Build(
             priorPayerMemberId, _directory.Value.LocalPayerId, endpoint.PayerId,
-            authorization.EvaluatedAtUtc, endUtc: null, family: member.LastName, birthDate: member.Dob);
+            authorization.EvaluatedAtUtc, endUtc: null, family: member.LastName, birthDate: member.Dob,
+            sourceConsentId: authorization.ConsentId);
         var matched = await MatchWithRemoteAsync(request, exchange, endpoint, member, priorPayerMemberId, consent, ct);
         if (matched.Failure is { } matchFailure)
             return await FailAsync(request, exchange, matchFailure.Status, matchFailure.Failure, ct);
