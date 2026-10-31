@@ -735,6 +735,10 @@ builder.Services.AddSingleton<ICrdClassificationStore, CrdClassificationStore>()
 // program code for a member's benefit plan from one program record.
 builder.Services.AddProgramDirectoryClient(builder.Configuration);
 builder.Services.AddScoped<ICrdContextResolver, CrdContextResolver>();
+// The coverage assertions CRD returns, so a DTR $questionnaire-package can
+// resolve a coverage-assertion-id context (DTR spec-107). Singleton: the store
+// ensures its indexes at construction.
+builder.Services.AddSingleton<ICrdAssertionStore, MongoCrdAssertionStore>();
 builder.Services.AddScoped<ICrdService, CrdService>();
 builder.Services.Configure<DtrConfig>(builder.Configuration.GetSection("Cms0057:Dtr"));
 // Singleton: the store ensures its indexes at construction.

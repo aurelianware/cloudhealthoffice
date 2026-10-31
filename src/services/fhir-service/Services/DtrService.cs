@@ -19,15 +19,25 @@ public class DtrService : IDtrService
     private readonly IDtrResourceStore _store;
     private readonly DtrConfig _config;
     private readonly ILogger<DtrService> _logger;
+    private readonly ICrdAssertionStore? _assertions;
 
     private const string DtrProfile =
         "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-std-questionnaire";
 
-    public DtrService(IOptions<DtrConfig> config, IDtrResourceStore store, ILogger<DtrService> logger)
+    /// <param name="assertions">
+    /// The coverage assertions CRD returned, which resolve a <c>context</c> id.
+    /// Without it (hosts that do not run CRD) a context id is never found.
+    /// </param>
+    public DtrService(
+        IOptions<DtrConfig> config,
+        IDtrResourceStore store,
+        ILogger<DtrService> logger,
+        ICrdAssertionStore? assertions = null)
     {
         _config = config.Value;
         _store = store;
         _logger = logger;
+        _assertions = assertions;
 
         LoadSeedData();
     }
@@ -198,18 +208,31 @@ public class DtrService : IDtrService
             return QuestionnairePackageResult.Reject(400, OperationOutcome.IssueType.Required,
                 "coverage.beneficiary must reference the member: it is the draft QuestionnaireResponse's subject.");
 
-        // CHO does not keep CRD context ids yet (G-44: the coverage-assertion-id
-        // is not persisted), so a context alone cannot be resolved.
-        if (request.Context is not null && request.Orders.Count == 0 && request.Questionnaires.Count == 0)
-            return QuestionnairePackageResult.Reject(422, OperationOutcome.IssueType.NotFound,
-                $"Context id '{request.Context}' cannot be resolved by this server. " +
-                "Send the order(s) the documentation is for, or the questionnaire canonical(s) CRD named.");
-
         var issues = new List<OperationOutcome.IssueComponent>();
+
+        // A context id is CRD's coverage-assertion-id (spec-107). It names the
+        // questionnaires CRD asked for, so it is enough on its own. One CHO
+        // cannot find, or that belongs to another Coverage, is source data the
+        // operation cannot use (spec-130), and one whose assertion asked for no
+        // documentation is refused as spec-108 allows. A PAS TRN context
+        // (spec-109) is not resolved yet and is refused the same way (spec-110).
+        CrdCoverageAssertion? assertion = null;
         if (request.Context is not null)
         {
-            issues.Add(QuestionnairePackageBuilder.Information(
-                "The context id was not used: questionnaires were chosen from the orders and canonicals in the request."));
+            assertion = _assertions is null
+                ? null
+                : await _assertions.FindAsync(tenantId, request.Context, DateTimeOffset.UtcNow, ct);
+            if (assertion is null)
+                return QuestionnairePackageResult.Reject(422, OperationOutcome.IssueType.NotFound,
+                    $"Context id '{request.Context}' is not a coverage-assertion-id this server issued, or it has expired. " +
+                    "Send the order(s) the documentation is for, or the questionnaire canonical(s) CRD named.");
+            if (!SameCoverage(assertion.CoverageReference, request.Coverage.Id))
+                return QuestionnairePackageResult.Reject(422, OperationOutcome.IssueType.BusinessRule,
+                    $"Context id '{request.Context}' was issued for a different Coverage than the one in this request.");
+            if (!assertion.DocumentationNeeded)
+                return QuestionnairePackageResult.Reject(422, OperationOutcome.IssueType.BusinessRule,
+                    $"Context id '{request.Context}' did not indicate that documentation is needed, " +
+                    "so there is no questionnaire to complete for it.");
         }
 
         var visible = await VisibleWithCanonicalsAsync(tenantId, fhirBaseUrl, ct);
@@ -218,7 +241,10 @@ public class DtrService : IDtrService
         var selected = new Dictionary<string, (Questionnaire Q, List<Resource> Orders)>(StringComparer.Ordinal);
         var selectionOrder = new List<string>();
 
-        foreach (var reference in request.Questionnaires)
+        // The context's questionnaires first: they are what CRD told the
+        // provider to complete. Then those the caller named.
+        var references = (assertion?.Questionnaires ?? []).Concat(request.Questionnaires);
+        foreach (var reference in references)
         {
             var q = Resolve(visible, reference, fhirBaseUrl);
             if (q is null)
@@ -273,6 +299,15 @@ public class DtrService : IDtrService
             issues.Add(QuestionnairePackageBuilder.Information(
                 "No questionnaire package has changed since the requested time."));
         }
+        else if (bundles.Count == 0 && assertion is not null)
+        {
+            // oper-8: CRD said documentation is needed and DTR has no form for
+            // it, so say how else to provide it.
+            issues.Add(QuestionnairePackageBuilder.Warning(OperationOutcome.IssueType.NotFound,
+                "Cloud Health Office indicated that documentation is needed for this order but has no " +
+                "questionnaire for it. Attach the supporting clinical documentation to the prior " +
+                "authorization request (PAS) or contact the payer for its documentation requirements."));
+        }
         else if (bundles.Count == 0 && issues.Count == 0)
         {
             // The output profile needs at least one parameter; say why it is empty.
@@ -284,6 +319,27 @@ public class DtrService : IDtrService
             LogSanitizer.Sanitize(tenantId), bundles.Count, issues.Count);
 
         return QuestionnairePackageResult.Ok(QuestionnairePackageBuilder.Wrap(bundles, issues));
+    }
+
+    // ── CRD: which forms collect an order's documentation ───────────────────
+
+    /// <summary>
+    /// The versioned canonicals (<c>url|version</c>) of the tenant's active
+    /// questionnaires that declare one of these codes as a <c>focus</c> use
+    /// context: the forms CRD names in <c>coverage-information</c> (resp-38) and
+    /// that <c>$questionnaire-package</c> returns for the same order.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> FindQuestionnaireCanonicalsAsync(
+        IReadOnlyList<Coding> codes, string tenantId, string? fhirBaseUrl = null, CancellationToken ct = default)
+    {
+        var usable = codes.Where(c => !string.IsNullOrEmpty(c.System) && !string.IsNullOrEmpty(c.Code)).ToList();
+        if (usable.Count == 0) return [];
+
+        return (await VisibleWithCanonicalsAsync(tenantId, fhirBaseUrl, ct))
+            .Where(q => q.Status == PublicationStatus.Active && !string.IsNullOrEmpty(q.Url) && Covers(q, usable))
+            .Select(QuestionnairePackageBuilder.Canonical)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
     }
 
     // ── Canonical resolution ─────────────────────────────────────────────────
@@ -388,6 +444,18 @@ public class DtrService : IDtrService
             .Any(f => codes.Any(c => c.System == f.System && c.Code == f.Code));
 
     private const string UsageContextTypeSystem = "http://terminology.hl7.org/CodeSystem/usage-context-type";
+
+    /// <summary>
+    /// True when the Coverage reference CRD answered against names the Coverage
+    /// with this id: <c>Coverage/{id}</c>, possibly absolute or versioned.
+    /// </summary>
+    internal static bool SameCoverage(string coverageReference, string? coverageId)
+    {
+        if (string.IsNullOrEmpty(coverageId)) return false;
+        var reference = coverageReference.Split("/_history/")[0].TrimEnd('/');
+        return string.Equals(reference, $"Coverage/{coverageId}", StringComparison.Ordinal)
+               || reference.EndsWith($"/Coverage/{coverageId}", StringComparison.Ordinal);
+    }
 
     private static string OrderLabel(Resource order)
         => string.IsNullOrEmpty(order.Id) ? $"the {order.TypeName} order" : $"{order.TypeName}/{order.Id}";

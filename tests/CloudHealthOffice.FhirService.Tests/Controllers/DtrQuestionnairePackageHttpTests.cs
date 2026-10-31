@@ -6,6 +6,7 @@ using FhirService.Services.Dtr;
 using FluentAssertions;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CloudHealthOffice.FhirService.Tests.Controllers;
 
@@ -101,5 +102,74 @@ public class DtrQuestionnairePackageHttpTests : IClassFixture<FhirTestWebAppFact
             && o.Definition == "http://hl7.org/fhir/us/davinci-dtr/OperationDefinition/questionnaire-package");
         questionnaire.SupportedProfile.Should().Contain(
             "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-std-questionnaire");
+    }
+
+    [Fact]
+    public async Task A_crd_assertion_id_alone_selects_the_package_crd_named()
+    {
+        // The whole CRD to DTR path through the host's own wiring: CRD names the
+        // MRI form and keeps the assertion; DTR resolves its id as the context.
+        var host = _factory.WithWebHostBuilder(b => b.ConfigureServices(services =>
+            services.PostConfigure<global::FhirService.Models.CrdConfig>(c => c.DocumentationRequiredCodes = ["72148"])));
+        using var client = host.CreateClient();
+        var token = _factory.IssueToken("user/*.read");
+
+        using var hook = new HttpRequestMessage(HttpMethod.Post, "/cds-services/cho-order-sign")
+        {
+            Content = new StringContent("""
+                {
+                  "hookInstance": "h-dtr-1",
+                  "hook": "order-sign",
+                  "context": {
+                    "userId": "Practitioner/p1",
+                    "patientId": "pat-1",
+                    "draftOrders": { "resourceType": "Bundle", "entry": [ { "resource": {
+                      "resourceType": "ServiceRequest", "id": "sr-1", "status": "draft", "intent": "order",
+                      "code": { "coding": [ { "system": "http://www.ama-assn.org/go/cpt", "code": "72148" } ] },
+                      "subject": { "reference": "Patient/pat-1" } } } ] }
+                  },
+                  "prefetch": { "coverage": { "resourceType": "Bundle", "type": "searchset", "entry": [
+                    { "resource": { "resourceType": "Coverage", "id": "cov-1", "status": "active" } } ] } }
+                }
+                """, Encoding.UTF8, "application/json"),
+        };
+        hook.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var hookResponse = await client.SendAsync(hook);
+        hookResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var cds = JsonDocument.Parse(await hookResponse.Content.ReadAsStringAsync());
+        var parts = cds.RootElement.GetProperty("systemActions")[0].GetProperty("resource").GetProperty("extension")
+            .EnumerateArray().Single(e => e.GetProperty("url").GetString()!.EndsWith("ext-coverage-information"))
+            .GetProperty("extension").EnumerateArray().ToList();
+        parts.Single(p => p.GetProperty("url").GetString() == "questionnaire").GetProperty("valueCanonical")
+            .GetString().Should().Be("https://cloudhealthoffice.com/fhir/Questionnaire/pa-imaging-mri|1.0.0");
+        var assertionId = parts.Single(p => p.GetProperty("url").GetString() == "coverage-assertion-id")
+            .GetProperty("valueString").GetString()!;
+
+        var parameters = new Parameters();
+        parameters.Parameter.Add(new Parameters.ParameterComponent
+        {
+            Name = "coverage",
+            Resource = new Coverage
+            {
+                Id = "cov-1",
+                Status = FinancialResourceStatusCodes.Active,
+                Beneficiary = new ResourceReference("Patient/pat-1"),
+                Payor = [new ResourceReference("Organization/payer-1")],
+            },
+        });
+        parameters.Add("context", new FhirString(assertionId));
+        using var package = new HttpRequestMessage(HttpMethod.Post, "/fhir/r4/Questionnaire/$questionnaire-package")
+        {
+            Content = new StringContent(JsonSerializer.Serialize(parameters, FhirJson), Encoding.UTF8, "application/fhir+json"),
+        };
+        package.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var packageResponse = await client.SendAsync(package);
+
+        packageResponse.StatusCode.Should().Be(HttpStatusCode.OK, await packageResponse.Content.ReadAsStringAsync());
+        var output = new FhirJsonParser().Parse<Parameters>(await packageResponse.Content.ReadAsStringAsync());
+        var questionnaire = output.Parameter.Single(p => p.Name == "packagebundle").Resource.Should().BeOfType<Bundle>()
+            .Subject.Entry[0].Resource.Should().BeOfType<Questionnaire>().Subject;
+        questionnaire.Url.Should().Be("https://cloudhealthoffice.com/fhir/Questionnaire/pa-imaging-mri");
     }
 }

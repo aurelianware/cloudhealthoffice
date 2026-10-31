@@ -150,16 +150,19 @@ public class CrdServiceTests
     // ── Documentation required ───────────────────────────────────────────────
 
     [Fact]
-    public async Task EvaluateAsync_DocumentationRequired_ReturnsLaunchSmartAppSuggestion()
+    public async Task EvaluateAsync_DocumentationRequired_WithoutADtrApp_ReturnsInstructionsCard()
     {
+        // CHO ships no DTR app (Q-6): the old card linked to a launch URL that
+        // served nothing. Without a configured app it is an instructions card;
+        // CrdDtrLinkTests covers the launch card a configured app gets.
         var request = CreateHookRequest("http://www.ama-assn.org/go/cpt", "72148", "Lumbar MRI");
         var result = await _service.EvaluateCoverageRequirementsAsync(request, "test-tenant");
 
         result.Cards.Should().HaveCount(1);
         result.Cards[0].Indicator.Should().Be("warning");
         result.Cards[0].Summary.Should().Contain("Documentation required");
-        result.Cards[0].Suggestions.Should().NotBeEmpty();
-        result.Cards[0].Links.Should().Contain(l => l.Type == "smart");
+        result.Cards[0].Suggestions.Should().BeEmpty();
+        result.Cards[0].Links.Should().BeEmpty();
     }
 
     // ── Batch translation ────────────────────────────────────────────────────
