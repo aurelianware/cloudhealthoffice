@@ -1,0 +1,298 @@
+{
+  "templateId": "az-ahcccs-child",
+  "state": "AZ",
+  "program": "AHCCCS Complete Care",
+  "planName": "Arizona AHCCCS Complete Care (under 21)",
+  "population": "Children and youth under 21 in AHCCCS Complete Care (ACC) plans",
+  "ageRange": [
+    0,
+    20
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2024-10-01",
+  "notes": "AHCCCS contract year runs October 1 to September 30. Physical and behavioral health are integrated in ACC plans; Children's Rehabilitative Services conditions are covered by the ACC plan.",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "bcbsaz-hca-ch2",
+      "status": "sourced",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "bcbsaz-hca-ch2",
+      "status": "sourced",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT covers medically necessary services beyond adult limits, including dental, eyeglasses and hearing aids."
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    }
+  ],
+  "carveOuts": [
+    {
+      "service": "American Indian and Alaska Native members who choose it",
+      "to": "American Indian Health Program (AIHP, AHCCCS fee-for-service) or a Tribal ALTCS program",
+      "status": "verify"
+    },
+    {
+      "service": "Members with developmental disabilities",
+      "to": "DES Division of Developmental Disabilities (ALTCS-DD), which subcontracts physical and behavioral health",
+      "status": "verify"
+    }
+  ],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "Set by each plan within state rules; load as prior-auth rules per plan.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added or in-lieu-of services",
+      "why": "Plan-specific extras approved by the state; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Member copayments",
+      "why": "Members under 19 are exempt from AHCCCS copayments; 19 and 20 year olds may owe optional copays by eligibility group. Template uses $0.",
+      "source": "ahcccs-copayments",
+      "status": "sourced"
+    },
+    {
+      "item": "Dental",
+      "why": "EPSDT dental is covered by the ACC plan, but CHO has no dental service category; route to the dental benefit.",
+      "source": "bcbsaz-hca-ch2",
+      "status": "sourced"
+    },
+    {
+      "item": "Formulary",
+      "why": "AHCCCS drug list; CHO has no formulary resolution yet.",
+      "status": "verify"
+    }
+  ],
+  "sources": {
+    "ahcccs-copayments": {
+      "title": "AHCCCS, Copayments (optional and required copay amounts, 5% of household income per quarter limit, exempt members and services)",
+      "url": "https://www.azahcccs.gov/PlansProviders/RatesAndBilling/copayments.html",
+      "accessed": "2026-10-31"
+    },
+    "bcbsaz-hca-ch2": {
+      "title": "Blue Cross Blue Shield of Arizona Health Choice (AHCCCS Complete Care) provider manual, Chapter 2, Member Eligibility and Member Services (rev. 2024-07): adult service limits and under-21 coverage",
+      "url": "https://assets.azblue.com/m/4b1f3cc754867708/original/Chapter_02_Member-Eligibility-and-Member-Services_HCA_final_07-24-24.pdf",
+      "accessed": "2026-10-31"
+    },
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval; applies to every state)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    }
+  }
+}

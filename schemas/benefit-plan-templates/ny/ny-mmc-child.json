@@ -1,0 +1,295 @@
+{
+  "templateId": "ny-mmc-child",
+  "state": "NY",
+  "program": "Medicaid Managed Care",
+  "planName": "New York Medicaid Managed Care (under 21)",
+  "population": "Children and youth under 21 in mainstream Medicaid managed care",
+  "ageRange": [
+    0,
+    20
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2023-04-01",
+  "notes": "No deductible, coinsurance or plan copayments.",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Mental health and substance use services are in the plan's benefit."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: EPSDT (Child/Teen Health Program) covers medically necessary services; no copayments."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "nyrx-consumers",
+      "status": "sourced",
+      "limitations": "Pharmacy-claim drugs are NYRx (fee-for-service); the plan covers drugs billed on medical claims only."
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "nyrx-consumers",
+      "status": "sourced",
+      "limitations": "Pharmacy-claim drugs are covered by NYRx, not the plan."
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "nyrx-consumers",
+      "status": "sourced",
+      "limitations": "Pharmacy-claim drugs are covered by NYRx, not the plan."
+    }
+  ],
+  "carveOuts": [
+    {
+      "service": "Outpatient pharmacy",
+      "to": "NYRx (Medicaid fee-for-service pharmacy) since 2023-04-01; drugs billed on medical claims stay with the plan",
+      "source": "nyrx-consumers",
+      "status": "sourced"
+    }
+  ],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "Set by each plan within state rules; load as prior-auth rules per plan.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added or in-lieu-of services",
+      "why": "Plan-specific extras approved by the state; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Member copayments",
+      "why": "Under 21 is exempt from Medicaid copayments.",
+      "source": "ny-gis-05ma026",
+      "status": "sourced"
+    },
+    {
+      "item": "Children's HCBS and Children and Family Treatment and Support Services",
+      "why": "Authorized through a plan of care; no CHO categories.",
+      "status": "verify"
+    },
+    {
+      "item": "Dental",
+      "why": "Mainstream managed care covers dental, but CHO has no dental service category; route to the plan's dental benefit.",
+      "status": "verify"
+    }
+  ],
+  "sources": {
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval; applies to every state)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    },
+    "ny-gis-05ma026": {
+      "title": "NYS DOH GIS 05 MA/026 attachment, Medicaid pharmacy copayments ($1 generic, $3 brand) and exemptions",
+      "url": "https://healthweb-back.health.ny.gov/health_care/medicaid/publications/docs/gis/05ma026att1.pdf",
+      "accessed": "2026-10-31"
+    },
+    "nyrx-consumers": {
+      "title": "NYS DOH, NYRx Information for Medicaid Members (pharmacy moved from managed care to NYRx fee-for-service 2023-04-01 for mainstream, HARP and HIV-SNP; MLTC and Essential Plan excluded)",
+      "url": "https://healthweb-back.health.ny.gov/health_care/medicaid/redesign/mrt2/pharmacy_transition/consumers/index.htm",
+      "accessed": "2026-10-31"
+    }
+  }
+}

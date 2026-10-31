@@ -1,0 +1,284 @@
+{
+  "templateId": "ny-mmc-adult",
+  "state": "NY",
+  "program": "Medicaid Managed Care",
+  "planName": "New York Medicaid Managed Care (21 and over)",
+  "population": "Adults 21+ in mainstream Medicaid managed care",
+  "ageRange": [
+    21,
+    null
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2023-04-01",
+  "notes": "No deductible or coinsurance. Pharmacy copayments are charged by NYRx.",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Mental health and substance use services are in the plan's benefit."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Adult PT, OT and speech therapy visits are limited per year by state policy; kept as text because CHO counts every claim in the category. Confirm the current limit in the model contract."
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Adults: eye exam and eyeglasses generally once every 24 months; confirm in the model contract."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "nyrx-consumers",
+      "status": "sourced",
+      "limitations": "Pharmacy-claim drugs are NYRx (fee-for-service); the plan covers drugs billed on medical claims only."
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "nyrx-consumers",
+      "status": "sourced",
+      "limitations": "Pharmacy-claim drugs are covered by NYRx, not the plan."
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "nyrx-consumers",
+      "status": "sourced",
+      "limitations": "Pharmacy-claim drugs are covered by NYRx, not the plan."
+    }
+  ],
+  "carveOuts": [
+    {
+      "service": "Outpatient pharmacy",
+      "to": "NYRx (Medicaid fee-for-service pharmacy) since 2023-04-01; drugs billed on medical claims stay with the plan",
+      "source": "nyrx-consumers",
+      "status": "sourced"
+    }
+  ],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "Set by each plan within state rules; load as prior-auth rules per plan.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added or in-lieu-of services",
+      "why": "Plan-specific extras approved by the state; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "NYRx pharmacy copayments ($1 generic, $3 brand, $50 per quarter maximum)",
+      "why": "Charged by NYRx, not the plan; exempt: under 21, pregnant and postpartum members, nursing home and certain residential and waiver enrollees, psychotropic, TB and family planning drugs.",
+      "source": "ny-gis-05ma026",
+      "status": "sourced"
+    },
+    {
+      "item": "Non-pharmacy Medicaid copayments",
+      "why": "State fee-for-service schedule (clinic, lab, imaging, non-urgent ER); whether a managed care plan applies any is set by the model contract. Template uses $0.",
+      "status": "verify"
+    },
+    {
+      "item": "Dental",
+      "why": "Mainstream managed care covers dental, but CHO has no dental service category; route to the plan's dental benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Dual eligibles",
+      "why": "Medicare pays first; duals are usually in MLTC, MAP or D-SNP products rather than mainstream managed care.",
+      "status": "verify"
+    }
+  ],
+  "sources": {
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval; applies to every state)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    },
+    "ny-gis-05ma026": {
+      "title": "NYS DOH GIS 05 MA/026 attachment, Medicaid pharmacy copayments ($1 generic, $3 brand) and exemptions",
+      "url": "https://healthweb-back.health.ny.gov/health_care/medicaid/publications/docs/gis/05ma026att1.pdf",
+      "accessed": "2026-10-31"
+    },
+    "nyrx-consumers": {
+      "title": "NYS DOH, NYRx Information for Medicaid Members (pharmacy moved from managed care to NYRx fee-for-service 2023-04-01 for mainstream, HARP and HIV-SNP; MLTC and Essential Plan excluded)",
+      "url": "https://healthweb-back.health.ny.gov/health_care/medicaid/redesign/mrt2/pharmacy_transition/consumers/index.htm",
+      "accessed": "2026-10-31"
+    }
+  }
+}

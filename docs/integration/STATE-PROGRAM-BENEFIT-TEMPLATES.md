@@ -2,7 +2,7 @@
 
 Medicaid and CHIP benefits are set by the state, per program, not by the plan,
 so one template per state program and population gives every MCO in that state
-the same starting plan. Texas, California and Florida are done.
+the same starting plan. Texas, California, Florida, Arizona and New York are done.
 
 - Templates: `schemas/benefit-plan-templates/{state}/*.json`, copied into the
   benefit-plan-service image and loaded at startup by `BenefitPlanTemplateCatalog`
@@ -119,6 +119,38 @@ boilerplate contract has not been reviewed line by line, so most values are `ver
 Dental is a separate SMMC dental plan, and Healthy Kids has its own dental plan.
 Urgent care and outpatient surgery copays are not on the Healthy Kids benefits
 page, so they are marked `verify`.
+
+## Arizona
+
+| Template | Program and population | Member cost sharing | Main differences |
+|---|---|---|---|
+| `az-ahcccs-child` | AHCCCS Complete Care (ACC), under 21 | None; under 19 exempt | EPSDT, including dental, eyeglasses and hearing aids |
+| `az-ahcccs-adult` | ACC, 21+ (Adult Group, parents, SSI without long-term care) | $0 in the template; optional copays ($3.40 office, $2.30 Rx and therapy) or required copays for Transitional Medical Assistance ($4.00 office, $2.30 Rx, $3.00 therapy and non-emergency outpatient surgery), capped at 5% of income per quarter | PT and OT 15 visits per contract year to restore plus 15 to maintain (kept as text); emergency dental $1,000; no adult hearing aids or cochlear implants |
+| `az-altcs-epd` | ALTCS Elderly and Physically Disabled, nursing facility level of care | None (ALTCS is exempt) | Fully integrated: acute, behavioral and long-term care; HCBS and share of cost not modeled |
+| `az-kidscare` | KidsCare (CHIP), under 19 | None | Premiums are suspended until further notice; same benefits as AHCCCS children (marked verify) |
+
+Physical and behavioral health are integrated in ACC plans, and members with a
+serious mental illness go to the regional ACC-RBHA plan. Copays depend on the
+member's eligibility group, which a plan cannot hold, so they are left at $0 and
+described in `notModeled`. American Indian and Alaska Native members can choose
+the AIHP fee-for-service program, and members with developmental disabilities
+are served by DES/DDD. The AHCCCS contract year runs October 1 to September 30.
+
+## New York
+
+| Template | Program and population | Member cost sharing | Main differences |
+|---|---|---|---|
+| `ny-mmc-child` | Mainstream Medicaid managed care, under 21 | None | EPSDT; pharmacy carved out to NYRx |
+| `ny-mmc-adult` | Mainstream Medicaid managed care, 21+ | None from the plan; NYRx charges $1 generic and $3 brand, up to $50 a quarter | Pharmacy carved out to NYRx since April 1, 2023 |
+| `ny-harp` | Health and Recovery Plan, 21+ meeting behavioral health high-risk criteria | Same as adult | Adds BH HCBS and CORE services (not modeled) with Health Home care management |
+| `ny-mltc` | Partial capitation Managed Long Term Care, 21+ needing more than 120 days of community care | None (spenddown is set by the county) | Covers only nursing home, home care, therapies, equipment, optometry and non-emergency transport; medical care is Medicare or fee-for-service |
+| `ny-child-health-plus` | Child Health Plus (CHIP), under 19 | None; premiums $0 to $60 per child per month | Pharmacy stays with the plan; dental and vision included |
+
+The Essential Plan (New York's Basic Health Program) is not included. Its
+eligibility and cost-sharing tiers are changing in 2026, and published plan
+pages do not yet show a full tier table. MAP and PACE products are also not
+included. The model contract has not been reviewed line by line, so most
+mainstream covered-service values are `verify`.
 
 ## Adding a state
 
