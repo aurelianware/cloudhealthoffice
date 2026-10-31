@@ -21,7 +21,7 @@
     "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
     "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
     "datePublished": "2026-07-30",
-    "dateModified": "2026-07-31",
+    "dateModified": "2026-10-31",
     "proficiencyLevel": "Intermediate",
     "about": ["Claims examination", "Pended claims", "NCCI edits", "Human-in-the-loop AI"],
     "breadcrumb": {
@@ -162,6 +162,8 @@
           <div class="docs-sidebar-section">
             <div class="docs-sidebar-section-title">On This Page</div>
             <ul class="toc-sub">
+              <li><a href="#pended-vs-pending">Pended vs. Pending</a></li>
+              <li><a href="#pended-prior-authorization">Pended Prior Auth</a></li>
               <li><a href="#operating-model">Operating Model</a></li>
               <li><a href="#exception-journey">Exception Journey</a></li>
               <li><a href="#routing">Queue Routing</a></li>
@@ -197,6 +199,18 @@
           <div class="callout-title">Pended is not denied</div>
           <p>A pended claim has stopped at a human-review gate. The underlying edit evidence remains authoritative until an examiner deliberately approves or denies the claim.</p>
         </div>
+
+        <h2 id="pended-vs-pending">Pended vs. pending vs. denied</h2>
+        <p>The words sound alike but mean different things to a claims team:</p>
+        <ul>
+          <li><strong>Pending</strong> is a general status. The claim has been received and is still being processed, whether or not anyone has to touch it.</li>
+          <li><strong>Pended</strong> means the system deliberately stopped the claim and put it in a work queue, because an edit or rule needs a human decision before it can pay or deny.</li>
+          <li><strong>Denied</strong> is a final decision not to pay all or part of the claim. It comes with adjustment reason codes and can be appealed.</li>
+        </ul>
+
+        <h2 id="pended-prior-authorization">What does pended mean on a prior authorization?</h2>
+        <p>A <strong>pended prior authorization</strong> is a request the payer has received but not yet approved or denied, usually because a utilization management reviewer needs more clinical information or the request needs a clinician's review. It is not a denial. The payer can still approve it once the missing documentation arrives.</p>
+        <p>Prior authorization status also affects claims. If a service needed an authorization and no matching approved authorization is found, the claim is often pended to a <em>Missing Prior Auth</em> queue rather than denied outright, so an examiner can check for an authorization recorded elsewhere or a pending request. For how authorization requests flow under CMS-0057-F, see the <a href="/docs/prior-auth-guide">prior authorization guide</a>.</p>
 
         <h2 id="operating-model">How Pended Claims Move Through the Platform</h2>
         <p>Cloud Health Office separates deterministic adjudication from discretionary review. A rules stage records structured evidence and places the claim in <strong>Pended</strong> status. The queue exposes that evidence to an examiner, who makes the final disposition through a dedicated resolution action.</p>
