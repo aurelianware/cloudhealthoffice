@@ -67,8 +67,13 @@ public sealed class MemberFhirSearchQuery
 /// One search result: the member id, the projected Patient, and the member's
 /// subscriber, which a Patient does not carry. It is null for a subscriber (a
 /// subscriber has no subscriber of their own) and for a member with none recorded.
+/// <see cref="RelationshipCode"/> is the member's relationship to that subscriber
+/// as the 834 sent it (INS02: 18 self, 01 spouse, 19 child, ...): 18 for a
+/// subscriber, the recorded code for a dependent, null when none was recorded.
+/// fhir-service reads both for Coverage.subscriberId and Coverage.relationship.
 /// </summary>
-public sealed record MemberFhirSearchEntry(string MemberId, JsonObject Resource, string? SubscriberMemberId = null);
+public sealed record MemberFhirSearchEntry(
+    string MemberId, JsonObject Resource, string? SubscriberMemberId = null, string? RelationshipCode = null);
 
 /// <summary>
 /// A page of projected Patients. <see cref="Items"/> carries <c>MemberId</c> on

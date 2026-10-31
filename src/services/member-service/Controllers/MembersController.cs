@@ -656,7 +656,9 @@ public class MembersController : ControllerBase
         var (members, total) = await search.SearchAsync(TenantId, query, HttpContext.RequestAborted);
         var subscribers = await search.SubscribersAsync(TenantId, members, HttpContext.RequestAborted);
         var items = members
-            .Select(m => new MemberFhirSearchEntry(m.MemberId, _fhirProjector.Project(m), subscribers.GetValueOrDefault(m.MemberId)))
+            .Select(m => new MemberFhirSearchEntry(
+                m.MemberId, _fhirProjector.Project(m), subscribers.GetValueOrDefault(m.MemberId),
+                m.IsSubscriber ? RelationshipCodes.Self : (string.IsNullOrWhiteSpace(m.RelationshipCode) ? null : m.RelationshipCode.Trim())))
             .ToList();
         return Ok(new MemberFhirSearchResponse(total, items, anyIdentifierForm ? true : null));
     }

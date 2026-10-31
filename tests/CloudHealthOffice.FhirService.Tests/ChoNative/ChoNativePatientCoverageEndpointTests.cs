@@ -142,7 +142,7 @@ public class ChoNativePatientCoverageEndpointTests : IClassFixture<ChoNativePati
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         (await Body(response))["total"]!.GetValue<int>().Should().Be(1);
-        _host.Upstream.Calls.Should().ContainSingle()
+        _host.Upstream.Calls.Where(c => c.PathAndQuery.StartsWith("/api/v1/coverage/")).Should().ContainSingle()
             .Which.PathAndQuery.Should().StartWith("/api/v1/coverage/fhir/Coverage?memberId=pat-001&status=active");
     }
 

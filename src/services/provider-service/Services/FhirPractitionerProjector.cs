@@ -35,11 +35,21 @@ public sealed class FhirPractitionerProjector : IFhirPractitionerProjector
         };
 
         // ── Identifier (NPI) ─────────────────────────────────────────
+        // Typed NPI as well as by system: C4BB-Practitioner's NPI slice and
+        // its Practitioner-identifier invariant match on the v2-0203 type.
         practitioner["identifier"] = new JsonArray
         {
             new JsonObject
             {
                 ["use"] = "official",
+                ["type"] = new JsonObject
+                {
+                    ["coding"] = new JsonArray(new JsonObject
+                    {
+                        ["system"] = ChoProviderFhirUrls.V2IdentifierTypeSystem,
+                        ["code"] = "NPI",
+                    }),
+                },
                 ["system"] = ChoProviderFhirUrls.NpiSystem,
                 ["value"] = provider.NPI
             }
@@ -144,7 +154,9 @@ public sealed class FhirPractitionerProjector : IFhirPractitionerProjector
             ["lastUpdated"] = DateTime.SpecifyKind(provider.LastUpdatedDate, DateTimeKind.Utc).ToString("o"),
             ["profile"] = new JsonArray(
                 ChoProviderFhirUrls.UsCorePractitionerProfile,
-                ChoProviderFhirUrls.PlanNetPractitionerProfile)
+                ChoProviderFhirUrls.PlanNetPractitionerProfile,
+                ChoProviderFhirUrls.CarinBbPractitionerProfile,
+                $"{ChoProviderFhirUrls.CarinBbPractitionerProfile}|{ChoProviderFhirUrls.CarinBbProfileVersion}")
         };
 
         return practitioner;

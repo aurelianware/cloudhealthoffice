@@ -83,6 +83,18 @@ public class FhirPractitionerProjectorTests
         identifier["system"]!.GetValue<string>().Should().Be("http://hl7.org/fhir/sid/us-npi");
         identifier["value"]!.GetValue<string>().Should().Be("1234567890");
         identifier["use"]!.GetValue<string>().Should().Be("official");
+        var type = identifier["type"]!["coding"]!.AsArray().Single()!;
+        type["system"]!.GetValue<string>().Should().Be("http://terminology.hl7.org/CodeSystem/v2-0203");
+        type["code"]!.GetValue<string>().Should().Be("NPI", "C4BB-Practitioner's NPI slice matches on the type");
+    }
+
+    [Fact]
+    public void Declares_carin_bb_practitioner_at_the_version_its_invariant_requires()
+    {
+        var profiles = _projector.Project(BuildIndividualProvider())!["meta"]!["profile"]!.AsArray()
+            .Select(n => n!.GetValue<string>()).ToList();
+
+        profiles.Should().Contain("http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Practitioner|2.0.0");
     }
 
     [Fact]

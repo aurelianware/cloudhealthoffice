@@ -106,6 +106,26 @@ public class MemberFhirPatientSearchPipelineTests : IClassFixture<MemberFhirSmok
     }
 
     [Fact]
+    public async Task Search_returns_each_members_relationship_to_its_subscriber()
+    {
+        var spouse = Member("FS-004", "Delta");
+        spouse.IsSubscriber = false;
+        spouse.RelationshipCode = "01";
+        var unrecorded = Member("FS-005", "Echo");
+        unrecorded.IsSubscriber = false;
+        _search.Members.Add(spouse);
+        _search.Members.Add(unrecorded);
+
+        var response = await As(ChoRolePermissions.MemberServices).GetAsync("/api/v1/members/fhir/Patient?limit=50");
+
+        var items = (await Json(response))["items"]!.AsArray();
+        string? Relationship(string id) => items.Single(i => i!["memberId"]!.ToString() == id)!["relationshipCode"]?.ToString();
+        Relationship("FS-001").Should().Be("18", "a subscriber is its own subscriber");
+        Relationship("FS-004").Should().Be("01");
+        Relationship("FS-005").Should().BeNull("no relationship was recorded");
+    }
+
+    [Fact]
     public async Task An_any_form_search_is_passed_through_and_echoed_so_callers_can_tell_it_was_applied()
     {
         var client = As(ChoRolePermissions.MemberServices);

@@ -89,7 +89,71 @@ public class ChoNativeFhirDataAdapterTests
         var coverage = await adapter.GetCoverageAsync("cov-1", Tenant, CancellationToken.None);
 
         coverage!.Beneficiary.Reference.Should().Be("Patient/M-1");
-        upstream.Requests.Single().RequestUri!.AbsoluteUri.Should().Be("http://coverage-service/api/v1/coverage/cov-1/fhir");
+        upstream.Requests.First().RequestUri!.AbsoluteUri.Should().Be("http://coverage-service/api/v1/coverage/cov-1/fhir");
+    }
+
+    private const string MemberPage =
+        """{"total":1,"items":[{"memberId":"M-1","subscriberMemberId":"M-0","relationshipCode":"01","resource":{"resourceType":"Patient","id":"M-1"}}]}""";
+
+    [Fact]
+    public async Task Coverage_carries_the_subscriber_member_service_records_and_then_claims_c4bb()
+    {
+        var (adapter, upstream) = Create();
+        upstream.Respond = r => r.RequestUri!.AbsolutePath.StartsWith("/api/v1/members/") ? Json(MemberPage) : Json(CoverageJson);
+
+        var coverage = (await adapter.GetCoverageAsync("cov-1", Tenant, CancellationToken.None))!;
+
+        upstream.Requests.Last().RequestUri!.PathAndQuery.Should().Be("/api/v1/members/fhir/Patient?memberId=M-1&offset=0&limit=1");
+        coverage.SubscriberId.Should().Be("M-0");
+        coverage.Subscriber.Reference.Should().Be("Patient/M-0");
+        coverage.Relationship.Coding.Single().Code.Should().Be("spouse");
+        coverage.Relationship.Coding.Single().System.Should().Be(ChoNativeFhirDataAdapter.SubscriberRelationshipSystem);
+        coverage.Meta.Profile.Should().Equal(
+            ChoNativeFhirDataAdapter.C4bbCoverageProfile, ChoNativeFhirDataAdapter.C4bbCoverageProfile + "|2.0.0");
+    }
+
+    [Fact]
+    public async Task Coverage_without_a_member_record_is_left_as_projected_and_claims_nothing()
+    {
+        var (adapter, upstream) = Create();
+        upstream.Respond = r => r.RequestUri!.AbsolutePath.StartsWith("/api/v1/members/")
+            ? Json("""{"total":0,"items":[]}""")
+            : Json(CoverageJson);
+
+        var coverage = (await adapter.GetCoverageAsync("cov-1", Tenant, CancellationToken.None))!;
+
+        coverage.SubscriberId.Should().BeNull();
+        coverage.Relationship.Should().BeNull();
+        (coverage.Meta?.Profile ?? []).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("18", null, "self", "M-1")]
+    [InlineData("20", null, "self", "M-1")]
+    [InlineData("19", "M-0", "child", "M-0")]
+    [InlineData("53", "M-0", "common", "M-0")]
+    [InlineData("G8", "M-0", "other", "M-0")]
+    public void A_recorded_relationship_names_the_subscriber(string ins02, string? subscriber, string code, string subscriberId)
+    {
+        var coverage = new Hl7.Fhir.Model.Coverage { Beneficiary = new Hl7.Fhir.Model.ResourceReference("Patient/M-1") };
+
+        ChoNativeFhirDataAdapter.ApplySubscriber(coverage, "M-1", subscriber, ins02);
+
+        coverage.Relationship.Coding.Single().Code.Should().Be(code);
+        coverage.SubscriberId.Should().Be(subscriberId);
+    }
+
+    [Theory]
+    [InlineData(null, "M-0")]
+    [InlineData("19", null)]
+    public void Without_a_relationship_or_a_dependents_subscriber_nothing_is_claimed(string? ins02, string? subscriber)
+    {
+        var coverage = new Hl7.Fhir.Model.Coverage { Beneficiary = new Hl7.Fhir.Model.ResourceReference("Patient/M-1") };
+
+        ChoNativeFhirDataAdapter.ApplySubscriber(coverage, "M-1", subscriber, ins02);
+
+        coverage.SubscriberId.Should().BeNull();
+        coverage.Meta.Should().BeNull();
     }
 
     [Fact]
@@ -278,7 +342,7 @@ public class ChoNativeFhirDataAdapterTests
 
         total.Should().Be(2);
         items.Should().ContainSingle().Which.Id.Should().Be("cov-1");
-        upstream.LastPathAndQuery.Should().Be(
+        Uri.UnescapeDataString(upstream.Requests.First().RequestUri!.PathAndQuery).Should().Be(
             "/api/v1/coverage/fhir/Coverage?memberId=M-1&status=active&status=cancelled&lineOfBusiness=Medicaid&offset=0&limit=5");
     }
 
