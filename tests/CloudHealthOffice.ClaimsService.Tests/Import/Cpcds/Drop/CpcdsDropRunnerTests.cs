@@ -206,14 +206,14 @@ public sealed class CpcdsDropRunnerTests : IDisposable
     }
 
     [Fact]
-    public void A_file_another_run_already_took_is_not_loaded_twice()
+    public async Task A_file_another_run_already_took_is_not_loaded_twice()
     {
         var path = Drop("claims.csv");
         var store = new FolderCpcdsDropStore(_root);
-        var ready = store.ListReady(Tenant, TimeSpan.Zero, Now).Single();
+        var ready = (await store.ListReadyAsync(Tenant, TimeSpan.Zero, Now, default)).Single();
 
-        store.Claim(Tenant, "run-1", ready).Should().NotBeNull();
-        store.Claim(Tenant, "run-2", ready).Should().BeNull();
+        (await store.ClaimAsync(Tenant, "run-1", ready, default)).Should().NotBeNull();
+        (await store.ClaimAsync(Tenant, "run-2", ready, default)).Should().BeNull();
         File.Exists(path).Should().BeFalse();
     }
 
@@ -242,11 +242,11 @@ public sealed class CpcdsDropRunnerTests : IDisposable
         => CpcdsDropFileKinds.Classify(name).Should().Be(kind);
 
     [Fact]
-    public void A_tenant_id_that_is_not_a_safe_folder_name_is_refused()
+    public async Task A_tenant_id_that_is_not_a_safe_folder_name_is_refused()
     {
         var store = new FolderCpcdsDropStore(_root);
-        var act = () => store.ListReady("../other", TimeSpan.Zero, Now);
-        act.Should().Throw<ArgumentException>();
+        var act = () => store.ListReadyAsync("../other", TimeSpan.Zero, Now, default);
+        await act.Should().ThrowAsync<ArgumentException>();
     }
 
     // ── shadow adjudication after import ────────────────────────────────

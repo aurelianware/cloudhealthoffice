@@ -250,6 +250,18 @@ Configuration (claims-service):
 }
 ```
 
+On GCP the drop can be a Cloud Storage bucket instead of a mounted folder:
+set `"Store": "Gcs"` and `"Gcs": { "Bucket": "<bucket>" }`. The layout is the
+same, as object name prefixes (`{tenant}/inbound/`, `{tenant}/processing/{run}/`,
+`{tenant}/processed/{run}/`, `{tenant}/failed/{run}/`), and claims-service
+reads it with its own Google identity (Workload Identity on GKE). A bucket has
+no atomic rename, so a run takes a file by copying it into its run prefix and
+then deleting the inbound object only if it is still the generation that was
+listed: only one run's delete can succeed, and the loser removes its copy. A
+file rewritten after it was listed waits for the next poll. This is the
+hosted drop: the SFTP server writes each plan's uploads straight into the
+bucket.
+
 Only the tenants listed are loaded; a folder for any other tenant is
 ignored. `Services:EnrollmentImportService` and `Services:ProviderService`
 name the upstream services.

@@ -54,7 +54,7 @@ public sealed class CpcdsDropRunner
             return null;
 
         var now = _clock.GetUtcNow().UtcDateTime;
-        var ready = _store.ListReady(tenantId, _options.QuietPeriod, now);
+        var ready = await _store.ListReadyAsync(tenantId, _options.QuietPeriod, now, ct);
         var notes = new List<string>();
 
         var members = ready.FirstOrDefault(f => CpcdsDropFileKinds.Classify(f.Name) == CpcdsDropFileKind.Members);
@@ -91,7 +91,7 @@ public sealed class CpcdsDropRunner
         var taken = new Dictionary<CpcdsDropFile, CpcdsDropFile>();
         foreach (var file in picked)
         {
-            if (_store.Claim(tenantId, run.Id, file) is { } claimed)
+            if (await _store.ClaimAsync(tenantId, run.Id, file, ct) is { } claimed)
                 taken[file] = claimed;
         }
         if (taken.Count == 0)
@@ -151,7 +151,8 @@ public sealed class CpcdsDropRunner
         }
 
         run.Status = Overall(run.Steps);
-        run.ArchivedTo = _store.Complete(tenantId, run.Id, succeeded: run.Steps.All(s => s.Status != CpcdsDropStepStatus.Failed));
+        run.ArchivedTo = await _store.CompleteAsync(
+            tenantId, run.Id, succeeded: run.Steps.All(s => s.Status != CpcdsDropStepStatus.Failed), CancellationToken.None);
         run.CompletedAt = _clock.GetUtcNow().UtcDateTime;
         await _runs.SaveAsync(run, ct);
 
