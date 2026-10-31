@@ -55,12 +55,17 @@ public static class InfernoSuiteScenario
             "interop/scenarios.json names a suite the pinned kit does not ship; suites at this pin: [{0}]",
             string.Join(", ", kit.Suites));
 
+        // A deployed CHO (ChoRemoteTarget) is judged in place of the local
+        // stack. Refuse what it cannot run before a container starts.
+        var remote = ChoRemoteTarget.FromEnvironment();
+        remote?.EnsureCanRun(scenario);
+
         var run = new InteropScenarioRun(scenario, target);
         var writer = new InteropEvidenceWriter();
         var runs = new List<InfernoTestRun>();
 
         await using var environment = InteropEnvironment.For(
-            [scenario.ExternalTarget], [ChoUnderTest.Profile]);
+            [scenario.ExternalTarget], remote is null ? [ChoUnderTest.Profile] : []);
         using var client = new InteropHttpClient(target.Name, InteropSettings.Timeouts.ProtocolCall);
 
         InteropResult result;
@@ -72,13 +77,27 @@ public static class InfernoSuiteScenario
             // case where the harness builds rather than pulls a pin.
             await environment.StartAsync(ReadinessStage.HttpReachable, buildImages: true, cancellationToken);
 
-            await SeedAsync(run, cancellationToken);
-            await PreflightAsync(run, client, scenario.ChoSurface, cancellationToken);
+            if (remote is null)
+            {
+                await SeedAsync(run, cancellationToken);
+            }
+            else
+            {
+                run.Record(InteropFinding.Info(
+                    "inferno.target.remote",
+                    $"The kit judged a deployed CHO, {remote.Describe()}. Nothing was seeded: the run reads the " +
+                    "data the deployment holds."));
+            }
+
+            await PreflightAsync(
+                run, client, remote?.BaseUrl(scenario.ChoSurface) ?? ChoUnderTest.HostBaseUrl(scenario.ChoSurface),
+                cancellationToken);
 
             var runner = new InfernoRunner(kit.ApiBaseUrl);
             var fixture = ChoSeedFixture.Load();
 
-            if (scenario.InfernoAuth is InfernoAuthModes.BackendServices or InfernoAuthModes.PayerBackendServices)
+            if (remote is null
+                && scenario.InfernoAuth is InfernoAuthModes.BackendServices or InfernoAuthModes.PayerBackendServices)
             {
                 run.Record(InteropFinding.Info(
                     "inferno.auth.backendClient",
@@ -88,7 +107,7 @@ public static class InfernoSuiteScenario
             }
 
             string? patientToken = null;
-            if (scenario.InfernoAuth == InfernoAuthModes.PatientApp)
+            if (remote is null && scenario.InfernoAuth == InfernoAuthModes.PatientApp)
             {
                 var (accessToken, patient) = await InfernoPatientApp.ObtainAsync(fixture, cancellationToken);
                 patientToken = accessToken;
@@ -98,7 +117,7 @@ public static class InfernoSuiteScenario
                     $"patient launch; smart-auth-service bound the token to Patient/{patient}"));
             }
 
-            var inputs = BuildInputs(scenario, fixture, patientToken);
+            var inputs = remote?.BuildInputs(scenario) ?? BuildInputs(scenario, fixture, patientToken);
 
             var suiteId = scenario.RequiredInfernoSuite;
             var sessionId = await runner.CreateSessionAsync(suiteId, cancellationToken);
@@ -205,9 +224,8 @@ public static class InfernoSuiteScenario
     /// </para>
     /// </summary>
     private static async Task PreflightAsync(
-        InteropScenarioRun run, InteropHttpClient client, string surface, CancellationToken cancellationToken)
+        InteropScenarioRun run, InteropHttpClient client, string baseUrl, CancellationToken cancellationToken)
     {
-        var baseUrl = ChoUnderTest.HostBaseUrl(surface);
         var response = await client.GetFhirAsync($"{baseUrl}/metadata", cancellationToken);
 
         if (response.StatusCode != System.Net.HttpStatusCode.OK)

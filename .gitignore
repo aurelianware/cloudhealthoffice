@@ -83,6 +83,7 @@ tmppm-data/
 # Da Vinci external interoperability harness
 # Run evidence is produced per-run and uploaded as a CI artifact, never committed.
 artifacts/interop/
+artifacts/deployment-validation/
 # Upstream Inferno test kits fetched at their pinned tag by
 # scripts/interop/fetch-inferno.sh. Third-party sources are referenced, not vendored.
 interop/.external/
