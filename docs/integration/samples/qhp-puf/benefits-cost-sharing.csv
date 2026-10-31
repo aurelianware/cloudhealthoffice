@@ -1,0 +1,63 @@
+BusinessYear,StateCode,IssuerId,StandardComponentId,PlanId,BenefitName,CopayInnTier1,CopayInnTier2,CopayOutofNet,CoinsInnTier1,CoinsInnTier2,CoinsOutofNet,IsEHB,IsCovered,QuantLimitOnSvc,LimitQty,LimitUnit,Exclusions,Explanation,IsExclFromInnMOOP,IsExclFromOonMOOP
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Primary Care Visit to Treat an Injury or Illness,$30,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Specialist Visit,$60,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Preventive Care/Screening/Immunization,No Charge,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Urgent Care Centers or Facilities,$60,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Emergency Room Services,No Charge,,No Charge,30% Coinsurance after deductible,,30% Coinsurance after deductible,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Emergency Transportation/Ambulance,No Charge,,No Charge,30% Coinsurance after deductible,,30% Coinsurance after deductible,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,"Inpatient Hospital Services (e.g., Hospital Stay)",No Charge,,Not Applicable,30% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,"Outpatient Facility Fee (e.g., Ambulatory Surgery Center)",No Charge,,Not Applicable,30% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Outpatient Surgery Physician/Surgical Services,No Charge,,Not Applicable,30% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Laboratory Outpatient and Professional Services,$40,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,X-rays and Diagnostic Imaging,$75,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,"Imaging (CT/PET Scans, MRIs)",No Charge,,Not Applicable,30% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Mental/Behavioral Health Outpatient Services,$30,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Delivery and All Inpatient Services for Maternity Care,No Charge,,Not Applicable,30% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Prenatal and Postnatal Care,No Charge,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Skilled Nursing Facility,$150 Copay per Day after deductible,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Home Health Care Services,No Charge,,Not Applicable,30% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Hospice Services,No Charge,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Outpatient Rehabilitation Services,$60,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,Yes,30,Visits per Year,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Durable Medical Equipment,No Charge,,Not Applicable,30% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Routine Eye Exam for Children,No Charge,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Generic Drugs,$15,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Preferred Brand Drugs,$50 Copay after deductible,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Non-Preferred Brand Drugs,No Charge,,Not Applicable,40% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Specialty Drugs,No Charge,,Not Applicable,40% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Bariatric Surgery,,,,,,,Yes,Not Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-01,Chiropractic Care,$30,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,Yes,20,Visits per Year,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Primary Care Visit to Treat an Injury or Illness,$10,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Specialist Visit,$20,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Preventive Care/Screening/Immunization,No Charge,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Urgent Care Centers or Facilities,$20,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Emergency Room Services,No Charge,,No Charge,10% Coinsurance after deductible,,10% Coinsurance after deductible,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Emergency Transportation/Ambulance,No Charge,,No Charge,10% Coinsurance after deductible,,10% Coinsurance after deductible,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,"Inpatient Hospital Services (e.g., Hospital Stay)",No Charge,,Not Applicable,10% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,"Outpatient Facility Fee (e.g., Ambulatory Surgery Center)",No Charge,,Not Applicable,10% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Outpatient Surgery Physician/Surgical Services,No Charge,,Not Applicable,10% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Laboratory Outpatient and Professional Services,$40,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,X-rays and Diagnostic Imaging,$75,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,"Imaging (CT/PET Scans, MRIs)",No Charge,,Not Applicable,10% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Mental/Behavioral Health Outpatient Services,$10,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Delivery and All Inpatient Services for Maternity Care,No Charge,,Not Applicable,10% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Prenatal and Postnatal Care,No Charge,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Skilled Nursing Facility,$150 Copay per Day after deductible,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Home Health Care Services,No Charge,,Not Applicable,10% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Hospice Services,No Charge,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Outpatient Rehabilitation Services,$20,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,Yes,30,Visits per Year,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Durable Medical Equipment,No Charge,,Not Applicable,10% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Routine Eye Exam for Children,No Charge,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Generic Drugs,$15,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Preferred Brand Drugs,$50 Copay after deductible,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Non-Preferred Brand Drugs,No Charge,,Not Applicable,40% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Specialty Drugs,No Charge,,Not Applicable,40% Coinsurance after deductible,,Not Applicable,Yes,Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Bariatric Surgery,,,,,,,Yes,Not Covered,No,,,,,No,No
+2027,ZZ,99901,99901ZZ0010001,99901ZZ0010001-06,Chiropractic Care,$10,,Not Applicable,No Charge,,Not Applicable,Yes,Covered,Yes,20,Visits per Year,,,No,No
+2027,ZZ,99902,99902ZZ0020001,99902ZZ0020001-00,Primary Care Visit to Treat an Injury or Illness,No Charge after deductible,,No Charge,No Charge after deductible,,50% Coinsurance after deductible,Yes,Covered,No,,,,,No,No
+2027,ZZ,99902,99902ZZ0020001,99902ZZ0020001-00,Specialist Visit,No Charge after deductible,,No Charge,20% Coinsurance after deductible,,50% Coinsurance after deductible,Yes,Covered,No,,,,,No,No
+2027,ZZ,99902,99902ZZ0020001,99902ZZ0020001-00,Preventive Care/Screening/Immunization,No Charge,,No Charge,No Charge,,50% Coinsurance after deductible,Yes,Covered,No,,,,,No,No
+2027,ZZ,99902,99902ZZ0020001,99902ZZ0020001-00,Emergency Room Services,No Charge,,No Charge,20% Coinsurance after deductible,,20% Coinsurance after deductible,Yes,Covered,No,,,,,No,No
+2027,ZZ,99902,99902ZZ0020001,99902ZZ0020001-00,"Inpatient Hospital Services (e.g., Hospital Stay)",No Charge,,No Charge,20% Coinsurance after deductible,,50% Coinsurance after deductible,Yes,Covered,No,,,,,No,No
+2027,ZZ,99902,99902ZZ0020001,99902ZZ0020001-00,Generic Drugs,$10 Copay after deductible,,No Charge,No Charge,,50% Coinsurance after deductible,Yes,Covered,No,,,,,No,No
+2027,ZZ,99902,99902ZZ0020001,99902ZZ0020001-00,Acupuncture,,,,,,,Yes,Not Covered,No,,,,,No,No
+2027,ZZ,99903,99903ZZ0030001,99903ZZ0030001-00,Dental Check-Up for Children,No Charge,,No Charge,No Charge,,20%,Yes,Covered,No,,,,,No,No

@@ -109,6 +109,8 @@ builder.Services.AddChoCaching(builder.Configuration, builder.Environment);
 
 // ── Benefit Engine ────────────────────────────────────────────────────────────
 builder.Services.AddScoped<IBenefitPlanService, BenefitPlanServiceImpl>();
+// QHP PUF benefit plan importer (docs/integration/QHP-PUF-BENEFIT-PLAN-IMPORTER.md).
+builder.Services.AddScoped<BenefitPlanService.Import.QhpPuf.IQhpPufImportService, BenefitPlanService.Import.QhpPuf.QhpPufImportService>();
 builder.Services.AddScoped<IBenefitViewService, BenefitViewService>();
 builder.Services.AddHttpContextAccessor();
 
