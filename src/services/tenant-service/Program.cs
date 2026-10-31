@@ -71,6 +71,13 @@ builder.Services.AddScoped<ITenantService, TenantManagementService>();
 builder.Services.AddScoped<ITenantUserService, TenantUserManagementService>();
 builder.Services.AddScoped<IStripeService, StripeService>();
 builder.Services.AddScoped<ISftpProvisioningService, SftpProvisioningService>();
+// The hosted CPCDS drop's SFTP logins (SFTPGo's REST API; off unless CpcdsSftp:Enabled).
+// A plain client: SFTPGo is not a CHO host, so no CHO token is attached to it.
+builder.Services.Configure<TenantService.CpcdsSftp.CpcdsSftpOptions>(
+    builder.Configuration.GetSection(TenantService.CpcdsSftp.CpcdsSftpOptions.SectionName));
+builder.Services.AddHttpClient(TenantService.CpcdsSftp.SftpGoCpcdsSftpAccounts.HttpClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddScoped<TenantService.CpcdsSftp.ICpcdsSftpAccounts, TenantService.CpcdsSftp.SftpGoCpcdsSftpAccounts>();
 // Identity lookups for token-service (Controllers/InternalIdentityController.cs).
 builder.Services.AddScoped<IIdentityDirectory, IdentityDirectory>();
 // Subscription records (portal PlatformTenants and self-service signup) are written here only.
