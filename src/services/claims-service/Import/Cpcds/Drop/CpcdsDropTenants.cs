@@ -78,6 +78,7 @@ public sealed class InMemoryCpcdsDropTenantSettingsRepository : ICpcdsDropTenant
 }
 
 /// <summary>Where a tenant's effective drop settings came from.</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
 public enum CpcdsDropSettingsSource
 {
     /// <summary>Neither configured nor saved: the tenant has no drop.</summary>

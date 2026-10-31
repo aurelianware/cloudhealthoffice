@@ -149,6 +149,10 @@ errors, and the files move to `processed` or `failed`.
 - **Staying current:** `GET /api/v1/claims/import/cpcds/drops/report` reports
   whether the data is fresh (Fresh, Stale, Failing or NeverLoaded) and
   reconciles the counts and amounts loaded against the files.
+- **Watching it:** the portal's **Imports & EDI** page shows the freshness,
+  each run and its files, the drop settings and the SFTP login, and can load
+  what is waiting now. See
+  [CPCDS-FILE-DROP-IMPORTER.md](CPCDS-FILE-DROP-IMPORTER.md#in-the-portal).
 
 Authorization and roster files will join the drop when their imports do.
 

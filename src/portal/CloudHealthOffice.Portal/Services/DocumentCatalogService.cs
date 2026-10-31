@@ -21,6 +21,9 @@ public enum DocumentSubjectKind
     Provider,
     RfaiRequest,
     PaymentRun,
+
+    /// <summary>A file-drop run (claims-service); its documents are the files it loaded, as received.</summary>
+    ImportRun,
 }
 
 /// <summary>One link the caller is allowed to see, as the catalog returns it.</summary>

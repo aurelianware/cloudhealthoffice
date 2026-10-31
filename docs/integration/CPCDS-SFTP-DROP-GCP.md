@@ -57,9 +57,12 @@ loaded only after it has stopped changing for `CpcdsDrop:QuietPeriod`.
    ranges, the REST API cluster-internal and open to tenant-service only, the
    web admin and web client off.
 4. **Each plan**: its drop settings (`PUT /api/v1/claims/import/cpcds/drops/settings`)
-   and its SFTP user. tenant-service creates the user through SFTPGo's REST
-   API (next step of this work); until then an operator can create it with
-   the same request:
+   and its SFTP user. Both are on the portal's **Imports & EDI** page, under
+   **Setup**: the plan's administrator pastes the core's SSH public key and
+   tenant-service creates the user through SFTPGo's REST API
+   (`PUT /api/v1/tenants/{tenantId}/cpcds-sftp`; see
+   [Hosted SFTP logins](CPCDS-FILE-DROP-IMPORTER.md#hosted-sftp-logins)). This
+   is the shape of the user it creates, which an operator can also create by hand:
 
 ```json
 POST /api/v2/users

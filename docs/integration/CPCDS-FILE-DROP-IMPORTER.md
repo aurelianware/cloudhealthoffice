@@ -400,6 +400,25 @@ up? It reads the drop runs.
 Set `ExpectedEvery` per tenant to the core's extract cadence (a weekly core:
 `"ExpectedEvery": "7.00:00:00"`).
 
+## In the portal
+
+**Imports & EDI** (`/edi-transactions`) shows all of this without calling the
+API:
+
+- **Daily drop** (`claims:import`). The freshness status and the last 30 days'
+  reconciliation, totals for each import (members and coverage, providers on
+  claims, claims, authorizations), and each run with its files, step counts
+  and errors. Each file the run archived links to its copy as received in the
+  document repository. **Load now** loads what is waiting instead of waiting
+  for the next poll.
+- **Setup.** The drop settings (`claims:import`): on or off, source system,
+  line of business, extract cadence, shadow adjudication and column map. When
+  Aurelianware hosts CHO, the plan's SFTP login (`settings:manage`): host,
+  username, folders and key fingerprints, adding or replacing the core's SSH
+  keys, and turning the login off.
+- **834 Enrollment** and **837 Claims.** Every enrollment and claim file loaded
+  outside the drop, accepted or rejected.
+
 ## Member crosswalk
 
 `ICoreMemberCrosswalk` turns the core's member id into the CHO member id the

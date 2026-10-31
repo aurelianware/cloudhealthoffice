@@ -22,6 +22,8 @@ public sealed class CpcdsDropSettingsRequest
     /// <summary>The core the extracts come from, e.g. <c>qnxt</c>, <c>facets</c>; recorded on each claim.</summary>
     public string? SourceSystem { get; set; }
 
+    /// <summary>Commercial, Medicare, Medicaid, Exchange, TRICARE or VA (a name; a number is also accepted).</summary>
+    [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
     public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
 
     /// <summary>CPCDS column name to the extract's header, for extracts that name columns differently.</summary>

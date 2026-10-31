@@ -288,6 +288,7 @@ builder.Services.AddScoped<ICoverageService, CoverageService>();
 builder.Services.AddScoped<IClaimsService, ClaimsService>();
 builder.Services.AddScoped<GlobalSearch>();
 builder.Services.AddScoped<IEdiTransactionsService, EdiTransactionsService>();
+builder.Services.AddScoped<IDataDropService, DataDropService>();
 builder.Services.AddScoped<IEligibilityService, EligibilityService>();
 builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
 builder.Services.AddScoped<ICms0057Service, Cms0057Service>();
