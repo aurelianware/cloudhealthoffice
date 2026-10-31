@@ -22,6 +22,7 @@ public sealed class CpcdsDropRunner
     private readonly IEnumerable<ICpcdsImportBatchCompletedHandler> _handlers;
     private readonly IAdjudicationTenantContext _tenantContext;
     private readonly CpcdsDropOptions _options;
+    private readonly CpcdsDropTenants _tenants;
     private readonly ILogger<CpcdsDropRunner> _logger;
     private readonly TimeProvider _clock;
 
@@ -33,6 +34,7 @@ public sealed class CpcdsDropRunner
         IEnumerable<ICpcdsImportBatchCompletedHandler> handlers,
         IAdjudicationTenantContext tenantContext,
         IOptions<CpcdsDropOptions> options,
+        CpcdsDropTenants tenants,
         ILogger<CpcdsDropRunner> logger,
         TimeProvider? clock = null)
     {
@@ -43,6 +45,7 @@ public sealed class CpcdsDropRunner
         _handlers = handlers;
         _tenantContext = tenantContext;
         _options = options.Value;
+        _tenants = tenants;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
     }
@@ -50,7 +53,7 @@ public sealed class CpcdsDropRunner
     /// <summary>The run, or null when the tenant has no drop configured or nothing is ready.</summary>
     public async Task<CpcdsDropRun?> RunAsync(string tenantId, CancellationToken ct)
     {
-        if (!_options.Tenants.TryGetValue(tenantId, out var tenant))
+        if (await _tenants.ResolveAsync(tenantId, ct) is not { } tenant)
             return null;
 
         var now = _clock.GetUtcNow().UtcDateTime;

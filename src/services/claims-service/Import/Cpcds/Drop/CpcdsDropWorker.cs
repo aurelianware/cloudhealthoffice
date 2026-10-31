@@ -23,16 +23,30 @@ public sealed class CpcdsDropWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_options.Enabled || _options.Tenants.Count == 0)
+        if (!_options.Enabled)
             return;
 
-        _logger.LogInformation("CPCDS drop worker watching {Count} tenants under {Root} every {Interval}",
-            _options.Tenants.Count, LogSanitizer.Sanitize(_options.Root), _options.Interval);
+        // Tenants are read each tick, not once: a tenant that saves its drop
+        // settings (the portal, onboarding) is picked up without a restart.
+        _logger.LogInformation("CPCDS drop worker watching {Root} every {Interval}",
+            LogSanitizer.Sanitize(_options.Root), _options.Interval);
 
         using var timer = new PeriodicTimer(_options.Interval);
         do
         {
-            foreach (var tenantId in _options.Tenants.Keys)
+            IReadOnlyList<string> tenantIds;
+            try
+            {
+                using var listScope = _scopes.CreateScope();
+                tenantIds = await listScope.ServiceProvider.GetRequiredService<CpcdsDropTenants>().ListAsync(stoppingToken);
+            }
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+            {
+                _logger.LogError(ex, "CPCDS drop worker could not list tenants; retrying next tick");
+                continue;
+            }
+
+            foreach (var tenantId in tenantIds)
             {
                 if (stoppingToken.IsCancellationRequested) return;
                 try

@@ -240,6 +240,8 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             // So is the CPCDS drop run store.
             services.AddSingleton<global::ClaimsService.Import.Cpcds.Drop.ICpcdsDropRunRepository>(
                 new global::ClaimsService.Import.Cpcds.Drop.InMemoryCpcdsDropRunRepository());
+            services.AddSingleton<global::ClaimsService.Import.Cpcds.Drop.ICpcdsDropTenantSettingsRepository>(
+                new global::ClaimsService.Import.Cpcds.Drop.InMemoryCpcdsDropTenantSettingsRepository());
             services.AddSingleton(AttributionRepository);
 
             // 5.7 — NcciEngine's repository implementation got removed by
