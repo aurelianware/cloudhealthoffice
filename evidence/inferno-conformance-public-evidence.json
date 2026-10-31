@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "inferno-conformance",
-  "generatedAtUtc": "2026-10-31T04:44:04Z",
-  "sourceCommit": "9037501aa39965358c3203e133a4faf06a8ea41e",
-  "sourceCommitShort": "9037501aa399",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/9037501aa39965358c3203e133a4faf06a8ea41e",
+  "generatedAtUtc": "2026-10-31T06:30:07Z",
+  "sourceCommit": "abceffd109219a32ace7c1ca784d6e0d9ea48683",
+  "sourceCommitShort": "abceffd10921",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/abceffd109219a32ace7c1ca784d6e0d9ea48683",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence and of the Da Vinci interoperability snapshot. A kit result never changes a CMS-0057-F scenario status, and no result here is CMS, ONC or HL7 certification.",
   "kits": [
@@ -32,7 +32,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T04:43:33.1600361+00:00",
+      "testedAtUtc": "2026-10-31T06:29:24.0590384+00:00",
       "tests": {
         "passed": 21,
         "failed": 0,
@@ -56,7 +56,7 @@
         {
           "test": "us_core_v311_patient_must_support_test",
           "result": "skip",
-          "message": "Could not find address.period.end, name.period.end, name.use:old, address.use:old, Patient.extension:race, Patient.extension:ethnicity in the 1 provided resource(s)"
+          "message": "Could not find address.period.end, name.period.end, name.use:old, address.use:old in the 1 provided resource(s)"
         },
         {
           "test": "us_core_v311_patient",
@@ -111,23 +111,39 @@
       "groups": [
         "c4bb_v200-Group02"
       ],
-      "status": "Passed",
+      "status": "Failed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T04:38:39.3945846+00:00",
+      "testedAtUtc": "2026-10-31T06:24:08.4687761+00:00",
       "tests": {
-        "passed": 36,
-        "failed": 0,
-        "skipped": 20,
+        "passed": 40,
+        "failed": 1,
+        "skipped": 15,
         "omitted": 0,
         "knownKitIssue": 5,
         "total": 61
       },
-      "failingTests": [],
+      "failingTests": [
+        {
+          "test": "c4bb_v200_eob",
+          "result": "fail",
+          "message": "(no message)"
+        },
+        {
+          "test": "c4bb_v200_coverage_include_Coverage_payor_search_test",
+          "result": "fail",
+          "message": "Unexpected response status: expected 200, but received 400"
+        },
+        {
+          "test": "c4bb_v200_coverage",
+          "result": "fail",
+          "message": "(no message)"
+        }
+      ],
       "notRunTests": [
         {
           "test": "c4bb_v200_patient_must_support_test",
           "result": "skip",
-          "message": "Could not find identifier:uniquememberid.system, identifier:uniquememberid.value, deceased[x], address.country, address.period, Patient.identifier:uniquememberid, Patient.extension:race, Patient.extension:ethnicity in the 2 provided resource(s)"
+          "message": "Could not find address.country, address.period in the 2 provided resource(s)"
         },
         {
           "test": "c4bb_v200_patient",
@@ -170,39 +186,9 @@
           "message": "Could not find related, related.relationship, related.reference, careTeam.qualification, supportingInfo:servicefacility.category, item.modifier, item.noteNumber, item.adjudication:adjustmentreason.category, item.adjudication:adjustmentreason.reason, item.adjudication:allowedunits…"
         },
         {
-          "test": "c4bb_v200_coverage_must_support_test",
-          "result": "skip",
-          "message": "Could not find identifier, class:group.name, class:plan.name in the 1 provided resource(s)"
-        },
-        {
-          "test": "c4bb_v200_coverage",
-          "result": "skip",
-          "message": "(no message)"
-        },
-        {
-          "test": "c4bb_v200_organization__id_search_test",
-          "result": "skip",
-          "message": "No Organization resources appear to be available. Please use patients with more information"
-        },
-        {
-          "test": "c4bb_v200_organization__lastUpdated_search_test",
-          "result": "skip",
-          "message": "No Organization resources appear to be available. Please use patients with more information"
-        },
-        {
-          "test": "c4bb_v200_organization_read_test",
-          "result": "skip",
-          "message": "No Organization resources appear to be available. Please use patients with more information."
-        },
-        {
-          "test": "c4bb_v200_organization_validation_test",
-          "result": "skip",
-          "message": "No Organization resources conforming to the http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Organization profile were returned"
-        },
-        {
           "test": "c4bb_v200_organization_must_support_test",
           "result": "skip",
-          "message": "No Organization resources were found"
+          "message": "Could not find Organization.identifier:NPI, Organization.identifier:tax, Organization.identifier:payerid in the 1 provided resource(s)"
         },
         {
           "test": "c4bb_v200_organization",
@@ -298,7 +284,7 @@
       "groups": [],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T04:41:00.9043093+00:00",
+      "testedAtUtc": "2026-10-31T06:26:30.1885265+00:00",
       "tests": {
         "passed": 180,
         "failed": 0,
@@ -547,7 +533,7 @@
         {
           "test": "davinci_plan_net_v110_organization_must_support_test",
           "result": "skip",
-          "message": "Could not find identifier.type, telecom.rank, address.type, address.text, address.country, Organization.extension:qualification, Organization.extension:org-description, Organization.telecom.extension:contactpoint-availabletime, Organization.telecom.extension:via-intermediary, Org…"
+          "message": "Could not find identifier.type, telecom.rank, address.type, address.text, Organization.extension:qualification, Organization.extension:org-description, Organization.telecom.extension:contactpoint-availabletime, Organization.telecom.extension:via-intermediary, Organization.address…"
         }
       ],
       "knownKitIssues": [
@@ -702,7 +688,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T04:36:08.0782742+00:00",
+      "testedAtUtc": "2026-10-31T06:21:05.6316610+00:00",
       "tests": {
         "passed": 31,
         "failed": 0,
@@ -728,15 +714,15 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-10-31T04:43:33.1649916+00:00",
+    "generatedAtUtc": "2026-10-31T06:29:24.0609082+00:00",
     "environment": "CI",
-    "choCommit": "9037501aa39965358c3203e133a4faf06a8ea41e",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/9037501aa39965358c3203e133a4faf06a8ea41e",
-    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41168269450",
+    "choCommit": "abceffd109219a32ace7c1ca784d6e0d9ea48683",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/abceffd109219a32ace7c1ca784d6e0d9ea48683",
+    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41175316418",
     "dataClassification": "synthetic",
     "summary": {
-      "passed": 4,
-      "failed": 0,
+      "passed": 3,
+      "failed": 1,
       "skipped": 0,
       "notRun": 0,
       "total": 4
