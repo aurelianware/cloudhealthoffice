@@ -181,6 +181,17 @@ public class Provider
     public List<NetworkParticipation> NetworkParticipations { get; set; } = new();
 
     /// <summary>
+    /// A provider CHO knows only because a loaded claim names it (a CPCDS
+    /// claim extract from the plan's core): its NPI, with name, type,
+    /// taxonomy and address from NPPES. It exists so the EOB's
+    /// <c>Practitioner/{npi}</c> and <c>Organization/{npi}</c> references
+    /// resolve on Patient Access. It is not a network provider and is never
+    /// published in the public Provider Directory. Set false (PUT) when the
+    /// plan's roster or contracting makes it a directory provider.
+    /// </summary>
+    public bool ReferenceOnly { get; set; }
+
+    /// <summary>
     /// Credentialing status. Projection of the credentialing event chain
     /// (capability 5.6) — written via
     /// <see cref="Repositories.IProviderRepository.UpdateCredentialingProjectionAsync"/>,

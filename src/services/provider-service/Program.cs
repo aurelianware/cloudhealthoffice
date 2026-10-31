@@ -102,6 +102,17 @@ builder.Services.AddHostedService<CredentialingEventIndexInitializer>();
 
 // Provider versioning service (5.1 — provider identity & versioning)
 builder.Services.AddScoped<IProviderVersioningService, ProviderVersioningService>();
+// CPCDS claim extracts: providers named on a core's claims become
+// reference-only providers described from NPPES (provider-verification-service).
+builder.Services.AddHttpClient<ProviderService.Services.INppesLookupClient, ProviderService.Services.HttpNppesLookupClient>(client =>
+{
+    var baseUrl = builder.Configuration["ProviderVerification:BaseUrl"]
+        ?? "http://provider-verification-service";
+    client.BaseAddress = new Uri(baseUrl.EndsWith("/") ? baseUrl : baseUrl + "/");
+    client.Timeout = TimeSpan.FromSeconds(
+        builder.Configuration.GetValue("ProviderVerification:TimeoutSeconds", 30));
+});
+builder.Services.AddScoped<ProviderService.Services.Cpcds.CpcdsReferencedProviderImporter>();
 // Bank-account dual control: a change is pending until a second user with
 // payments:approve approves it; payments read only the approved account.
 builder.Services.AddScoped<IProviderBankAccountChangeService, ProviderBankAccountChangeService>();
