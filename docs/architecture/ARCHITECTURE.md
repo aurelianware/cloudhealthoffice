@@ -4,7 +4,7 @@
 **Last updated:** October 2026 (v6.0 "Paths of Glory")
 **Audience:** engineering, implementation partners, technical evaluators, and diligence reviewers
 
-Cloud Health Office (CHO) is an open, Kubernetes-native, multi-tenant platform for health plan operations. It covers claims administration, CMS-0057-F interoperability APIs, and HIPAA X12 transactions. Payers can adopt it in four ways:
+Cloud Health Office (CHO) is a source-available, Kubernetes-native, multi-tenant platform for health plan operations. It covers claims administration, CMS-0057-F interoperability APIs, and HIPAA X12 transactions. Payers can adopt it in four ways:
 
 - public tools and transactional APIs
 - managed healthcare data services

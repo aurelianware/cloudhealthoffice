@@ -4,16 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Payer Platform Architecture | Cloud Health Office</title>
-  <meta name="description" content="Kubernetes-native payer architecture: claims, eligibility, prior auth, FHIR APIs, and adapters to QNXT, Facets, and HealthEdge." />
-  <meta name="keywords" content="healthcare payer platform architecture, Kubernetes healthcare, multi-tenant claims processing, Argo Workflows EDI, FHIR R4 architecture, healthcare microservices, claims adjudication pipeline" />
+  <meta name="description" content="Kubernetes-native payer platform architecture: claims adjudication, CMS-0057-F FHIR APIs, SMART auth, bulk export, CAQH CORE real-time X12, and adapters to QNXT, Facets, and HealthEdge." />
+  <meta name="keywords" content="healthcare payer platform architecture, CMS-0057-F architecture, FHIR R4 payer APIs, SMART on FHIR, CAQH CORE real-time, multi-tenant claims processing, claims adjudication pipeline" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/architecture" />
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://cloudhealthoffice.com/docs/architecture" />
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/claims-evidence-pipeline.jpg" />
   <meta property="og:title" content="Payer Platform Architecture | Cloud Health Office" />
-  <meta property="og:description" content="Kubernetes-native payer architecture: claims, eligibility, prior auth, FHIR APIs, and adapters to QNXT, Facets, and HealthEdge." />
+  <meta property="og:description" content="Kubernetes-native payer platform architecture: claims adjudication, CMS-0057-F FHIR APIs, SMART auth, bulk export, CAQH CORE real-time X12, and adapters to QNXT, Facets, and HealthEdge." />
   <script type="application/ld+json">
-  {"@context":"https://schema.org","@type":"TechArticle","headline":"Payer Platform Architecture | Cloud Health Office","description":"Cloud-native, multi-tenant architecture for healthcare payer integration. Kubernetes-native with Argo Workflows.","url":"https://cloudhealthoffice.com/docs/architecture","author":{"@type":"Organization","name":"Aurelianware, Inc."},"datePublished":"2026-03-24","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://cloudhealthoffice.com"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://cloudhealthoffice.com/docs"},{"@type":"ListItem","position":3,"name":"Architecture","item":"https://cloudhealthoffice.com/docs/architecture"}]}}
+  {"@context":"https://schema.org","@type":"TechArticle","headline":"Payer Platform Architecture | Cloud Health Office","description":"Kubernetes-native payer platform architecture: claims adjudication, CMS-0057-F FHIR APIs, SMART auth, bulk export, CAQH CORE real-time X12, and adapters to QNXT, Facets, and HealthEdge.","url":"https://cloudhealthoffice.com/docs/architecture","author":{"@type":"Organization","name":"Aurelianware, Inc."},"datePublished":"2026-03-24","dateModified":"2026-10-31","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://cloudhealthoffice.com"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://cloudhealthoffice.com/docs"},{"@type":"ListItem","position":3,"name":"Architecture","item":"https://cloudhealthoffice.com/docs/architecture"}]}}
   </script>
   <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
@@ -98,48 +98,86 @@
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Guides</div><ul><li><a href="/docs/compliance">CMS-0057-F Compliance</a></li><li><a href="/docs/architecture" class="active">Architecture</a></li><li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment">Deployment</a></li><li><a href="/docs/configure-tenant-security">Tenant Security</a></li></ul></div>
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">User Guides</div><ul><li><a href="/docs/finance-guide">Finance Guide</a></li><li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li><li><a href="/docs/claims-guide">Claims Adjudication</a></li><li><a href="/docs/prior-auth-guide">Prior Authorization</a></li><li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li><li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li><li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li><li><a href="/docs/provider-verification-guide">Provider Verification</a></li><li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li></ul></div>
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">State Compliance</div><ul><li><a href="/docs/texas-compliance">Texas (STAR / STAR+PLUS)</a></li><li><a href="/docs/florida-compliance">Florida AHCA (SMMC 3.0)</a></li></ul></div>
-        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#overview">Overview</a></li><li><a href="#platform">Platform Components</a></li><li><a href="#adjudication">Claims Adjudication</a></li><li><a href="#multi-tenant">Multi-Tenant Design</a></li><li><a href="#infrastructure">Infrastructure</a></li><li><a href="#security">HIPAA Security</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#overview">At a Glance</a></li><li><a href="#platform">Platform Components</a></li><li><a href="#interoperability">CMS-0057-F APIs</a></li><li><a href="#realtime">Real-Time X12</a></li><li><a href="#adjudication">Claims Adjudication</a></li><li><a href="#multi-tenant">Multi-Tenant Design</a></li><li><a href="#evidence">Conformance Evidence</a></li><li><a href="#infrastructure">Infrastructure</a></li><li><a href="#security">HIPAA Security</a></li></ul></div>
       </div></aside>
 
       <div class="docs-content">
         <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">Architecture</span></div>
 
         <h1>Architecture</h1>
-        <p class="docs-subtitle">Cloud Health Office is a cloud-native, multi-tenant platform that processes healthcare EDI transactions for health plans. Each plan runs in a tenant dedicated to it, in the plan's own cloud or operated for it. Configuration-driven, backend-agnostic, and deployable to any Kubernetes cluster.</p>
+        <p class="docs-subtitle">Cloud Health Office is a Kubernetes-native, multi-tenant platform for health plan operations: claims administration, the CMS-0057-F interoperability APIs, and HIPAA X12 transactions. It runs beside an existing core admin system or progressively replaces it, in the plan's own cloud or operated for it.</p>
 
-        <figure class="docs-diagram">
-          <img src="/graphics/platform-overview.svg" alt="Cloud Health Office platform overview showing 36 microservices, 9 adjudication engines, 5 FHIR R4 APIs, 60 portal pages, and multi-cloud deployment" />
-          <figcaption>Platform overview — 36 microservices, 9 engines, 5 parsers, 5 FHIR APIs, 17 Argo Workflows, 60 portal pages</figcaption>
-        </figure>
+        <h2 id="overview">At a Glance</h2>
+        <table>
+          <thead><tr><th>Area</th><th>What Cloud Health Office provides</th></tr></thead>
+          <tbody>
+            <tr><td>Claims administration</td><td>A staged adjudication pipeline: eligibility, provider, prior auth, benefits, NCCI/MUE edits, pricing, cost sharing, payment, and 835 remittance</td></tr>
+            <tr><td>CMS-0057-F APIs</td><td>Patient Access, Provider Access, Payer-to-Payer, Prior Authorization (PAS/CRD/DTR), and a public Provider Directory, served as FHIR R4</td></tr>
+            <tr><td>Authorization</td><td>SMART App Launch for members and providers, SMART Backend Services for systems, from CHO's authorization server or the plan's own identity provider</td></tr>
+            <tr><td>Bulk data</td><td>FHIR Bulk Data <code>$export</code> for Provider Access and Payer-to-Payer</td></tr>
+            <tr><td>Real-time X12</td><td>CAQH CORE Connectivity endpoints for 270/271 eligibility and 276/277 claim status</td></tr>
+            <tr><td>Core admin integration</td><td>Per-domain adapter contracts for QNXT, Facets, HealthEdge, or custom systems</td></tr>
+            <tr><td>Conformance evidence</td><td>Nightly ONC Inferno test kits and Da Vinci scenario tests in CI, with <a href="/evidence/inferno-conformance">published results</a></td></tr>
+          </tbody>
+        </table>
 
-        <h2 id="overview">Overview</h2>
-        <p>The platform runs on Kubernetes (AKS, EKS, or GKE) with Argo Workflows for orchestration. Payer-specific logic is configuration-first, with tenant-aware deployment and integration steps sized to the customer's security review, core admin integration, and operating model.</p>
-
-        <h3>Key Design Objectives</h3>
+        <h3>Design Principles</h3>
         <table>
           <thead><tr><th>Principle</th><th>Implementation</th></tr></thead>
           <tbody>
-            <tr><td>Multi-Tenant</td><td>Single codebase serves multiple payers, with per-tenant query filtering on <code>TenantId</code></td></tr>
-            <tr><td>Configuration-First Onboarding</td><td>Add new payers through tenant-aware configuration and implementation-specific validation</td></tr>
-            <tr><td>Backend Agnostic</td><td>Adapter interfaces per core system (QNXT, Facets, HealthEdge, custom); integrations built per engagement</td></tr>
-            <tr><td>Cloud Agnostic</td><td>Deploy to Azure, AWS, GCP, or on-premises with Kubernetes and Helm charts</td></tr>
-            <tr><td>Standards-Based</td><td>X12 EDI (270/275/277/278/834/835/837), FHIR R4, Da Vinci IGs, HL7, USCDI</td></tr>
+            <tr><td>Multi-tenant by default</td><td>The tenant comes from a claim in a validated access token, never from a header alone. Data, configuration, and audit records are tenant-scoped.</td></tr>
+            <tr><td>Backend agnostic</td><td>Adapter contracts per domain (claims, benefit plans, providers, organizations, ID cards, eligibility). Vendor connectors are built per engagement.</td></tr>
+            <tr><td>Cloud agnostic</td><td>Deploy to Azure AKS, AWS EKS, Google GKE, or on-premises Kubernetes</td></tr>
+            <tr><td>Standards-based</td><td>X12 270/271/275/276/277/278/820/834/835/837, CAQH CORE, FHIR R4, US Core, CARIN Blue Button, Da Vinci PAS/CRD/DTR/PDex/Plan-Net/CDex, SMART on FHIR, Bulk Data</td></tr>
+            <tr><td>Evidence-led</td><td>Conformance kits and benchmark runs separate platform failures from valid business outcomes, and the results are published</td></tr>
           </tbody>
         </table>
 
         <h2 id="platform">Platform Components</h2>
 
-        <h3>Microservices (36)</h3>
-        <p>Member, Coverage, Claims, Eligibility, Authorization, Provider, Benefit Plan, Reference Data, Sponsor, Claims Scrubbing, Capitation, Payment, Pricing API, Terminology Service, Provider Verification, and more. Each service owns its domain data and communicates via Azure Service Bus messaging. The Terminology Service provides FHIR <code>ConceptMap/$translate</code> for SNOMED CT &harr; CPT/ICD-10-CM crosswalk — required for Da Vinci CRD, DTR, and PAS workflows. The Provider Verification Service aggregates NPPES, OIG/LEIE, PECOS, CMS Open Payments, and FSMB data into a composite integrity score per NPI.</p>
+        <h3>Services</h3>
+        <p>More than 40 .NET 8 services, each owning its domain data and deployed as its own container.</p>
+        <table>
+          <thead><tr><th>Domain</th><th>Responsibilities</th></tr></thead>
+          <tbody>
+            <tr><td>Claims</td><td>Submission, adjudication, edits, pends, versioning, encounters, real-time claim status</td></tr>
+            <tr><td>Benefit plan</td><td>Declarative benefit rules, plan versioning, cost sharing, accumulators</td></tr>
+            <tr><td>Member and coverage</td><td>Enrollment (834), eligibility windows, COB, ID cards, personal representatives, consent</td></tr>
+            <tr><td>Provider and network</td><td>NPI, network participation, contracts, credentialing, integrity checks across NPPES, OIG/LEIE, and PECOS</td></tr>
+            <tr><td>Authorization</td><td>Prior authorization, attachments, requests for additional information</td></tr>
+            <tr><td>Interoperability</td><td>All FHIR R4 and CMS-0057-F APIs, CDS Hooks, bulk export, the public Provider Directory</td></tr>
+            <tr><td>Identity and access</td><td>SMART authorization server, service-to-service tokens, tenant and trading partner registries</td></tr>
+            <tr><td>Pricing and reference data</td><td>Fee schedules and repricing, terminology <code>ConceptMap/$translate</code>, NCCI/MUE tables</td></tr>
+            <tr><td>Payment and finance</td><td>Payment runs, 835 remittance, receivables, premium billing, capitation</td></tr>
+            <tr><td>Operations</td><td>Work queues, appeals and grievances, care management, correspondence, risk adjustment</td></tr>
+          </tbody>
+        </table>
 
-        <h3>Calculation Engines (9)</h3>
+        <h3>Calculation Engines</h3>
         <p>Benefit Engine (HDHP/HSA, aggregate family accumulators, DRG inpatient), <a href="/docs/fee-schedule-engine">Fee Schedule Engine</a> (DRG lookup, Medicaid cross-schedule, multiple procedure ranking), NCCI Engine, COB Engine, Risk Adjustment Engine, Encounter Engine, Claims Scrub Engine, Capitation Engine, and Operating Mode Engine.</p>
 
-        <h3>X12 Parsers (4) + Encoder</h3>
-        <p>Four inbound parsers — 837 Claims, 835 Remittance, 834 Enrollment, and 276/277 Claim Status — plus a shared X12 Encoder for outbound generation. All written in C# (.NET 8) with zero external dependencies. An X12 278 Prior Auth parser and encoder are planned, following the same pattern.</p>
+        <h3>X12 Processing</h3>
+        <p>Inbound parsers for 837 claims, 834 enrollment, 820 premium payment, 270 eligibility, and 276 claim status. Outbound builders for 271, 277, 835, 834, 999, and TA1. All written in C# with no third-party EDI library. Batch files arrive over SFTP and are orchestrated with Argo Events and Argo Workflows.</p>
+
+        <h2 id="interoperability">CMS-0057-F Interoperability APIs</h2>
+        <p>The FHIR service serves the CMS Interoperability and Prior Authorization Final Rule APIs, and the CMS-9115-F APIs they build on, as FHIR R4.</p>
+        <table>
+          <thead><tr><th>API</th><th>What it serves</th><th>Implementation guides</th></tr></thead>
+          <tbody>
+            <tr><td>Patient Access</td><td>Claims, encounters, clinical data, coverage, and prior authorization decisions for a member's own app</td><td>US Core 3.1.1, CARIN Blue Button 2.0.0, PDex</td></tr>
+            <tr><td>Provider Access</td><td>The same data for in-network providers, scoped to their attributed members, with member opt-out</td><td>PDex, Bulk Data, SMART Backend Services</td></tr>
+            <tr><td>Payer-to-Payer</td><td>Member match and data exchange with a member's previous or concurrent payer, one member or in bulk</td><td>PDex Payer-to-Payer, HRex member match, Bulk Data</td></tr>
+            <tr><td>Prior Authorization</td><td>Coverage requirements discovery, documentation templates, and PA submission and status</td><td>Da Vinci CRD (CDS Hooks), DTR, PAS 2.2.1</td></tr>
+            <tr><td>Provider Directory</td><td>The plan's networks, practitioners, locations, and plans, with no login</td><td>Da Vinci PDex Plan-Net 1.2.0</td></tr>
+          </tbody>
+        </table>
+        <p>The FHIR service also computes the Patient Access usage metrics plans report to CMS. Bulk export jobs are durable, their files expire after 24 hours, and the feature is enabled per deployment. The public Provider Directory is the one unauthenticated route: it ignores any credential on the request, serves only directory resources, and exists only for plans that have published a directory. See the <a href="/docs/compliance">CMS-0057-F compliance guide</a> for requirement-by-requirement coverage.</p>
+
+        <h2 id="realtime">Real-Time Eligibility and Claim Status</h2>
+        <p>Trading partners and clearinghouses send real-time 270 eligibility and 276 claim status inquiries over CAQH CORE Connectivity (SOAP 1.2 and MIME) to <code>/core/eligibility</code> and <code>/core/claimstatus</code>. Submitters authenticate with an X.509 certificate, username and password, or OAuth, and each is registered to one tenant. The shared processor handles TA1 and 999 rejections, response time budgets, and published downtime schedules.</p>
 
         <h2 id="adjudication">Claims Adjudication Pipeline</h2>
-        <p>The 10-step claims adjudication pipeline processes an 837 from SFTP ingestion through Argo Workflows to adjudication with full benefit calculation.</p>
+        <p>The 10-step pipeline takes an 837 from ingestion to a final, explainable outcome with full benefit calculation.</p>
 
         <figure class="docs-diagram">
           <img src="/graphics/claims-adjudication-flow.svg" alt="837 claims adjudication pipeline showing 10-step flow from SFTP ingestion through Kafka, claims service API, benefit engine, to approved or denied outcome" />
@@ -147,34 +185,42 @@
         </figure>
 
         <h3>Pipeline Steps</h3>
-        <p>The pipeline executes: get claim, validate codes, verify coverage, validate provider, check prior auth, get benefits, apply NCCI/MUE edits, calculate allowed amount, calculate cost-sharing (copay/coinsurance/deductible), and update claim status. Each step is individually testable and observable.</p>
+        <p>The pipeline executes: get claim, validate codes, verify coverage, validate provider, check prior auth, get benefits, apply NCCI/MUE edits, calculate allowed amount, calculate cost-sharing (copay/coinsurance/deductible), and update claim status. Each step is individually testable and observable. A claim can correctly finish as paid, denied for a valid business reason, or pended for review, and the platform keeps those outcomes separate from platform errors.</p>
 
         <h2 id="multi-tenant">Multi-Tenant Design</h2>
-        <p>Every API request carries an <code>X-Tenant-ID</code> header that determines data isolation, configuration routing, and audit logging. The configuration-driven approach means no code changes are required to onboard new payers — only a JSON configuration file defining clearinghouse mappings, benefit rules, and EDI trading partner details.</p>
+        <p>Every authenticated request carries an access token whose signature, issuer, audience, and lifetime are validated before anything else runs. The tenant comes from a claim in that token, and it drives data isolation, configuration routing, and audit logging. An <code>X-Tenant-ID</code> header is accepted only when it matches the token's tenant, so a caller cannot reach another plan's data by changing a header.</p>
 
         <figure class="docs-diagram">
-          <img src="/graphics/multi-tenant-routing.svg" alt="Multi-tenant request routing: payers each send an X-Tenant-ID header through a shared tenant context gateway handling authentication, rate limiting, configuration routing, and audit logging, which fans out to isolated per-tenant lanes for config, database partition, message-bus topic, and audit log." />
-          <figcaption>Multi-tenant routing — one deployment, per-tenant isolation resolved from the <code>X-Tenant-ID</code> header</figcaption>
+          <img src="/graphics/multi-tenant-routing.svg" alt="Multi-tenant request routing: payers each send an access token carrying a tenant claim through a shared tenant context gateway handling authentication, rate limiting, configuration routing, and audit logging, which fans out to isolated per-tenant lanes for config, database partition, message-bus topic, and audit log." />
+          <figcaption>Multi-tenant routing — one deployment, per-tenant isolation resolved from the validated token</figcaption>
         </figure>
 
-        <p>The <strong>Config-to-Workflow Generator</strong> takes a payer's configuration file and generates complete Argo Workflow YAML and Bicep infrastructure definitions, enabling automated environment provisioning.</p>
+        <h3>Identity and access</h3>
+        <p>CHO's SMART authorization server supports SMART App Launch for member and provider apps and SMART Backend Services (<code>client_credentials</code> with signed JWT client assertions) for systems such as Provider Access and Payer-to-Payer exchange. A token service issues scoped service-to-service tokens, and plans that already run an identity provider such as Entra ID can federate it.</p>
+
+        <h3>Core admin adapters</h3>
+        <p>A plan does not have to replace its core admin system. Each domain has its own adapter contract, and the tenant's configuration selects the implementation. CHO-native implementations are complete. QNXT, Facets, and HealthEdge connectors are contracts that are built per engagement under the plan's own vendor license, guided by a published <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/integration/CORE-ADAPTER-IMPLEMENTER-GUIDE.md" target="_blank" rel="noopener noreferrer">implementer guide</a> and conformance tests.</p>
+
+        <h2 id="evidence">Conformance Evidence</h2>
+        <p>Every night, CI starts the full stack and runs the ONC Inferno test kits for US Core 3.1.1, CARIN Blue Button 2.0.0, Da Vinci Plan-Net, and Bulk Data 2.0.0 with SMART Backend Services, plus Da Vinci scenario tests for PAS, CRD, and DTR against reference implementations. Results are published on the <a href="/evidence/inferno-conformance">Inferno conformance evidence</a> page. An Inferno pass is evidence, not CMS certification. The <a href="/docs/million-claim-challenge">Million Claim Challenge</a> does the same for claims correctness and throughput.</p>
 
         <h2 id="infrastructure">Infrastructure</h2>
         <figure class="docs-diagram">
-          <img src="/graphics/infrastructure-topology.svg" alt="Infrastructure topology: a Kubernetes cluster on AKS, EKS, or GKE running Argo Events triggers into Argo Workflows orchestration, driving 36 .NET 8 microservices over Azure Service Bus or Kafka, backed by MongoDB or Cosmos DB, Redis, and Azure Storage Gen2, with cross-cutting rails for secrets management and observability." />
+          <img src="/graphics/infrastructure-topology.svg" alt="Infrastructure topology: a Kubernetes cluster on AKS, EKS, or GKE running Argo Events triggers into Argo Workflows orchestration, driving more than 40 .NET 8 microservices over Azure Service Bus or Kafka, backed by MongoDB or Cosmos DB, Redis, and Azure Storage Gen2, with cross-cutting rails for secrets management and observability." />
           <figcaption>Infrastructure topology — event-driven orchestration on Kubernetes with cross-cutting secrets and observability</figcaption>
         </figure>
         <table>
           <thead><tr><th>Component</th><th>Technology</th><th>Purpose</th></tr></thead>
           <tbody>
-            <tr><td>Orchestration</td><td>Argo Workflows</td><td>Kubernetes-native DAG workflow execution</td></tr>
-            <tr><td>Event Triggers</td><td>Argo Events</td><td>SFTP, webhook, and schedule-based triggers</td></tr>
-            <tr><td>Messaging</td><td>Azure Service Bus / Kafka</td><td>Async inter-service communication</td></tr>
-            <tr><td>Storage</td><td>Azure Storage Gen2</td><td>EDI file data lake with security controls for HIPAA validation</td></tr>
+            <tr><td>Runtime</td><td>Kubernetes (AKS, EKS, GKE, on-premises)</td><td>Containerized services with per-service deployments</td></tr>
+            <tr><td>EDI orchestration</td><td>Argo Events + Argo Workflows</td><td>SFTP, webhook, and schedule-triggered batch EDI workflows</td></tr>
+            <tr><td>Messaging</td><td>Azure Service Bus / Kafka</td><td>Async inter-service events, with a transactional outbox for claims and appeals</td></tr>
+            <tr><td>Database</td><td>MongoDB-compatible (MongoDB, Azure Cosmos DB for MongoDB)</td><td>Document store with tenant partitioning</td></tr>
+            <tr><td>Reference data</td><td>PostgreSQL</td><td>Reference code sets only</td></tr>
+            <tr><td>Cache</td><td>Redis</td><td>Accumulators and low-latency lookups</td></tr>
+            <tr><td>Object storage</td><td>Azure Storage Gen2 or equivalent</td><td>EDI files, bulk export output, audit artifacts</td></tr>
             <tr><td>Secrets</td><td>Key Vault / HashiCorp Vault</td><td>Secrets management, automated rotation</td></tr>
             <tr><td>Monitoring</td><td>Prometheus + Grafana, App Insights</td><td>Metrics, dashboards, PHI-safe logging</td></tr>
-            <tr><td>Database</td><td>MongoDB-compatible (MongoDB, Azure DocumentDB)</td><td>Document store with tenant partitioning</td></tr>
-            <tr><td>Cache</td><td>Redis</td><td>Accumulator service, session cache</td></tr>
           </tbody>
         </table>
 
@@ -196,7 +242,7 @@
 
         <div class="callout callout-info">
           <div class="callout-title">Canonical architecture document</div>
-          <p>For the current platform architecture overview, claims adjudication architecture, benchmark evidence model, tenant routing, deployment modes, and related deep-dive links, see the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer">ARCHITECTURE.md</a> on GitHub.</p>
+          <p>For the full engineering overview, service-by-service breakdown, deployment modes, current gaps, and links to every deep-dive design document, see the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer">ARCHITECTURE.md</a> on GitHub.</p>
         </div>
 
         <div class="docs-pager">

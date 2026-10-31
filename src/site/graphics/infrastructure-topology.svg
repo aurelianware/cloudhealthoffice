@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="it-title it-desc">
   <title id="it-title">Infrastructure topology</title>
-  <desc id="it-desc">A Kubernetes cluster deployable to AKS, EKS, or GKE. Argo Events triggers (SFTP, webhook, schedule) feed Argo Workflows orchestration, which drives 36 .NET 8 microservices communicating over Azure Service Bus or Kafka, backed by a persistence layer of MongoDB or Cosmos DB, Redis, and Azure Storage Gen2. Cross-cutting rails provide secrets management via Key Vault or HashiCorp Vault and observability via Prometheus, Grafana, and Application Insights with PHI-safe logging.</desc>
+  <desc id="it-desc">A Kubernetes cluster deployable to AKS, EKS, or GKE. Argo Events triggers (SFTP, webhook, schedule) feed Argo Workflows orchestration, which drives 40+ .NET 8 microservices communicating over Azure Service Bus or Kafka, backed by a persistence layer of MongoDB or Cosmos DB, Redis, and Azure Storage Gen2. Cross-cutting rails provide secrets management via Key Vault or HashiCorp Vault and observability via Prometheus, Grafana, and Application Insights with PHI-safe logging.</desc>
   <defs>
     <filter id="itGlow"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     <marker id="itArr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0 0 L9 3.5 L0 7" fill="#00ffff" opacity="0.75"/></marker>
@@ -50,7 +50,7 @@
     <!-- L3 Microservices -->
     <g transform="translate(95,329)">
       <rect width="735" height="64" rx="9" fill="rgba(0,255,136,0.05)" stroke="rgba(0,255,136,0.4)" stroke-width="1"/>
-      <text x="20" y="26" font-size="15" font-weight="700" fill="#00ff88">36 Microservices</text>
+      <text x="20" y="26" font-size="15" font-weight="700" fill="#00ff88">40+ Microservices</text>
       <text x="20" y="45" font-size="11.5" fill="#b0b0b0">C# / .NET 8 &#183; each owns its domain data</text>
       <g font-size="10.5" fill="#e6e6e6">
         <rect x="300" y="20" width="66" height="22" rx="6" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.14)"/><text x="333" y="35" text-anchor="middle">Claims</text>
