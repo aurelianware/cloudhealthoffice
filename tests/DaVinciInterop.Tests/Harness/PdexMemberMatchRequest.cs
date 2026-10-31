@@ -138,7 +138,8 @@ public static class PdexMemberMatchRequest
             }),
             ["subscriberId"] = NewPayerMemberId,
             ["beneficiary"] = new JsonObject { ["reference"] = "Patient/1" },
-            ["period"] = new JsonObject { ["start"] = Start },
+            // No period: HRex asks for only must-support elements here, and the
+            // kit's minimal-data test fails a CoverageToLink that carries one.
             ["payor"] = new JsonArray(new JsonObject
             {
                 ["identifier"] = new JsonObject { ["value"] = requestingPayerId },
