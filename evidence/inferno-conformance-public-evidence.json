@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "inferno-conformance",
-  "generatedAtUtc": "2026-10-31T16:58:02Z",
-  "sourceCommit": "259d3852b70cb1f6b348dd63758d76be4d66a9bb",
-  "sourceCommitShort": "259d3852b70c",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/259d3852b70cb1f6b348dd63758d76be4d66a9bb",
+  "generatedAtUtc": "2026-10-31T17:40:41Z",
+  "sourceCommit": "4f080cd784fa818e374bfdc9133dfe0bbec15175",
+  "sourceCommitShort": "4f080cd784fa",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/4f080cd784fa818e374bfdc9133dfe0bbec15175",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence and of the Da Vinci interoperability snapshot. A kit result never changes a CMS-0057-F scenario status, and no result here is CMS, ONC or HL7 certification.",
   "kits": [
@@ -32,11 +32,70 @@
         "pdex_no_member_matches"
       ],
       "status": "Failed",
-      "statusReason": "HttpRequestException: Response status code does not indicate success: 404 (Not Found).",
-      "testedAtUtc": "2026-10-31T16:52:10.6681035+00:00",
-      "tests": null,
-      "failingTests": [],
-      "notRunTests": [],
+      "statusReason": null,
+      "testedAtUtc": "2026-10-31T17:29:38.0916560+00:00",
+      "tests": {
+        "passed": 3,
+        "failed": 7,
+        "skipped": 3,
+        "omitted": 0,
+        "knownKitIssue": 0,
+        "total": 13
+      },
+      "failingTests": [
+        {
+          "test": "pdex_one_match_profile_validation",
+          "result": "fail",
+          "message": "Resource does not conform to the profile: http://hl7.org/fhir/us/davinci-hrex/StructureDefinition/hrex-parameters-member-match-in"
+        },
+        {
+          "test": "pdex_coverage_to_link_ms_validation",
+          "result": "fail",
+          "message": "No CoverageToLink parameter provided."
+        },
+        {
+          "test": "pdex_member_match_on_server",
+          "result": "fail",
+          "message": "Unexpected response status: expected 200, but received 401"
+        },
+        {
+          "test": "pdex_member_match_response_profile",
+          "result": "fail",
+          "message": "Unexpected resource type: expected Parameters, but received OperationOutcome"
+        },
+        {
+          "test": "pdex_workflow_member_match",
+          "result": "fail",
+          "message": "(no message)"
+        },
+        {
+          "test": "pdex_no_match_profile_validation",
+          "result": "fail",
+          "message": "Resource does not conform to the profile: http://hl7.org/fhir/us/davinci-hrex/StructureDefinition/hrex-parameters-member-match-in"
+        },
+        {
+          "test": "pdex_member_match_has_no_matches",
+          "result": "fail",
+          "message": "Unexpected response status: expected 422, but received 401"
+        },
+        {
+          "test": "pdex_no_member_matches",
+          "result": "fail",
+          "message": "(no message)"
+        }
+      ],
+      "notRunTests": [
+        {
+          "test": "pdex_coverage_to_link_minimal_validation",
+          "result": "skip",
+          "message": "No CoverageToLink parameter provided"
+        },
+        {
+          "test": "pdex_member_match_identifier_to_id",
+          "result": "skip",
+          "message": "Input 'member_identifier' is nil, skipping test."
+        }
+      ],
       "knownKitIssues": []
     },
     {
@@ -63,7 +122,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T16:57:27.5561843+00:00",
+      "testedAtUtc": "2026-10-31T17:34:56.5441659+00:00",
       "tests": {
         "passed": 21,
         "failed": 0,
@@ -144,7 +203,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T16:50:01.8876886+00:00",
+      "testedAtUtc": "2026-10-31T17:26:18.7335741+00:00",
       "tests": {
         "passed": 41,
         "failed": 0,
@@ -299,7 +358,7 @@
       "groups": [],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T16:54:40.2601855+00:00",
+      "testedAtUtc": "2026-10-31T17:32:09.2223685+00:00",
       "tests": {
         "passed": 180,
         "failed": 0,
@@ -703,7 +762,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T16:47:14.5638933+00:00",
+      "testedAtUtc": "2026-10-31T17:23:21.5332447+00:00",
       "tests": {
         "passed": 31,
         "failed": 0,
@@ -729,11 +788,11 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-10-31T16:57:27.5577933+00:00",
+    "generatedAtUtc": "2026-10-31T17:34:56.5453941+00:00",
     "environment": "CI",
-    "choCommit": "259d3852b70cb1f6b348dd63758d76be4d66a9bb",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/259d3852b70cb1f6b348dd63758d76be4d66a9bb",
-    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41219553414",
+    "choCommit": "4f080cd784fa818e374bfdc9133dfe0bbec15175",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/4f080cd784fa818e374bfdc9133dfe0bbec15175",
+    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41223044257",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 4,
