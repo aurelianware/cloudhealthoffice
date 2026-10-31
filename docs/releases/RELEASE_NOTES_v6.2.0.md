@@ -3,7 +3,7 @@
 **Release date:** TBD
 **Previous release:** [v6.1.1](./RELEASE_NOTES_v6.1.1.md) (October 31, 2026)
 
-This release covers the pull requests merged since v6.1.1 (#1659 to #1691).
+This release covers the pull requests merged since v6.1.1 (#1659 to #1695).
 It is a minor version. Two APIs that were new or partial in 6.1 changed
 shape (see [Upgrading from 6.1](#upgrading-from-61)), and everything new that
 changes behaviour is off until a deployment or a tenant turns it on.
@@ -90,6 +90,7 @@ input; contracts, accumulators and benefit design are still missing.
 - **The Inferno PDex payer-server kit** runs nightly (#1660, #1662, #1663,
   #1669, #1687). It authenticates itself with SMART Backend Services as a
   registered requesting payer and judges the one-match and no-match cases.
+  All 13 of its tests pass (run 41249013496).
 
 ### DTR `$questionnaire-package` (DTR 2.2.0), a CQL-prepopulated form and the CRD link (#1690, #1693)
 
@@ -147,18 +148,24 @@ No configuration change is required, except to keep a CRD DTR launch link (below
 
 ## Where this release has been validated
 
-- **Inferno kits against the seeded `interop-cho` profile:** US Core 3.1.1,
-  CARIN BB 2.0.0, Da Vinci Plan-Net and Bulk Data 2.0.0 all **pass**, apart
-  from the known kit issues listed in the
-  [v6.1.0 notes](./RELEASE_NOTES_v6.1.0.md#where-this-release-has-been-validated)
-  (DaVinci Interop run
-  [41230716146](https://github.com/aurelianware/cloudhealthoffice/actions/runs/41230716146),
-  `main` at f750c75).
-- **Inferno PDex payer-server kit** (`davinci-pdex-test-kit` v0.13.2):
-  TBD. In run 41230716146, CHO's `$member-match` answers passed (one match,
-  and 422 for no match). The only failure was a minimal-data check on the
-  harness's own request, fixed in #1687. To be filled in from the run on
-  this release's commit.
+- **Inferno kits against the seeded `interop-cho` profile**, DaVinci Interop run
+  [41249013496](https://github.com/aurelianware/cloudhealthoffice/actions/runs/41249013496)
+  on `main` at fb1ea0b: all five kits **pass**, with no failing tests.
+
+  | Kit | Version | Passed | Failed | Known kit issues |
+  |---|---|---|---|---|
+  | Da Vinci PDex payer server (PDex 2.0.0, HRex 1.0.0) | v0.13.2 | 13 of 13 | 0 | 0 |
+  | US Core 3.1.1 | v1.1.6 | 21 | 0 | 0 |
+  | CARIN BB 2.0.0 | v0.16.3 | 41 | 0 | 5 |
+  | Da Vinci Plan-Net 1.1.0 | v0.13.4 | 180 | 0 | 25 |
+  | Bulk Data 2.0.0 | v0.13.2 | 31 | 0 | 0 |
+
+  PDex is new in this release: the kit authenticates as a registered
+  requesting payer with SMART Backend Services and judges `$member-match`
+  for one match and for no match (422). The CARIN BB and Plan-Net known kit
+  issues are the ones listed in the
+  [v6.1.0 notes](./RELEASE_NOTES_v6.1.0.md#where-this-release-has-been-validated).
+  Skipped tests are groups the profile does not seed data for.
 - **Google Cloud (GKE):** the demo is deployed on every merge to `main`. The
   hosted CPCDS drop's Terraform (`enable_cpcds_drops`) has not been applied
   to it.

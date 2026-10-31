@@ -10,7 +10,7 @@ This directory contains comprehensive release documentation for CloudHealthOffic
 
 Loading a plan's data from its core admin system through a daily CPCDS file drop (members,
 coverage, claims, providers and prior authorizations), shadow adjudication, benefit plans from
-public data, and Payer-to-Payer `$member-match` judged by the Inferno PDex kit. Off by default.
+public data, and Payer-to-Payer `$member-match` passing the Inferno PDex kit (13 of 13). Off by default.
 
 | Document | Description |
 |----------|-------------|
