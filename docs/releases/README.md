@@ -4,6 +4,21 @@ This directory contains comprehensive release documentation for CloudHealthOffic
 
 ---
 
+## Next Release (in preparation)
+
+### v6.2.0 — Dr. Strangelove (date TBD)
+
+Loading a plan's data from its core admin system through a daily CPCDS file drop (members,
+coverage, claims, providers and prior authorizations), shadow adjudication, benefit plans from
+public data, and Payer-to-Payer `$member-match` judged by the Inferno PDex kit. Off by default.
+
+| Document | Description |
+|----------|-------------|
+| [v6.2.0 Release Notes](./RELEASE_NOTES_v6.2.0.md) | Draft: highlights, upgrading from 6.1, what is off by default |
+| [Changelog](../../CHANGELOG.md) | Itemized changes (Unreleased) |
+
+---
+
 ## Current Release
 
 ### v6.1.1 — Spartacus, patch (October 2026)
