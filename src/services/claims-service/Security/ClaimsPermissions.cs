@@ -22,6 +22,15 @@ public static class ClaimsPermissions
     public const string WorkQueueAssign = "workqueue:assign";
 
     /// <summary>
+    /// Load claims another system adjudicated (a CPCDS extract from the plan's
+    /// core). Those claims go straight to members' Patient Access apps with no
+    /// CHO adjudication in between, so no claims role holds it: TenantAdmin
+    /// does through <c>*:*</c>, and a file-drop job gets it as a service
+    /// identity.
+    /// </summary>
+    public const string Import = "claims:import";
+
+    /// <summary>
     /// Resolve (approve / deny) a pended claim, and override its edits.
     ///
     /// <para>This is <c>claims:work</c>, not <c>workqueue:work</c>. It was

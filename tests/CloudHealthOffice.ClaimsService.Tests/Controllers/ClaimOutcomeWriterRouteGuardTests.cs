@@ -43,6 +43,9 @@ public class ClaimOutcomeWriterRouteGuardTests
             ["POST api/claims/admin/accumulators/prior-auth-unavailable-pends/rerun"] = (Kind.StatusOrOutcomeWriter, "prior-auth pend re-run through the pipeline"),
             ["POST api/v1/claims/{predecessorClaimId}/adjustments"] = (Kind.StatusOrOutcomeWriter, "adjustment: new version supersedes the predecessor"),
             ["POST api/claims/admin/lifecycle/deny-backfill"] = (Kind.StatusOrOutcomeWriter, "one-time opt-in backfill: unremitted legacy Denied -> Deny (same adjudicated outcome, non-final phase)"),
+            ["POST api/v1/claims/import/cpcds"] = (Kind.StatusOrOutcomeWriter,
+                "CPCDS import (claims:import): stores outcomes the plan's core adjudicated, never a CHO-adjudicated claim; " +
+                "only claims carrying ExternalSource, a changed source claim is a new version superseding the old"),
 
             // ── No status / outcome change ──────────────────────────────
             ["POST api/claims"] = (Kind.NoStatusChange, "legacy submission: creates a Submitted claim; the pipeline adjudicates it"),
@@ -84,7 +87,8 @@ public class ClaimOutcomeWriterRouteGuardTests
                 "POST api/claims/admin/accumulators/accumulator-commit-pends/rerun",
                 "POST api/claims/admin/accumulators/prior-auth-unavailable-pends/rerun",
                 "POST api/v1/claims/{predecessorClaimId}/adjustments",
-                "POST api/claims/admin/lifecycle/deny-backfill");
+                "POST api/claims/admin/lifecycle/deny-backfill",
+                "POST api/v1/claims/import/cpcds");
     }
 
     [Theory]
