@@ -480,6 +480,11 @@ Run them with:
 ./scripts/interop/run.sh inferno all
 ```
 
+To run the same kits against a deployed CHO and the plan data it holds,
+rather than the local stack and its seed, see
+[VALIDATE-A-DEPLOYMENT.md](../integration/VALIDATE-A-DEPLOYMENT.md)
+(`./scripts/interop/run.sh deployment`).
+
 In CI they are the `inferno` job in
 [`davinci-interop.yml`](../../.github/workflows/davinci-interop.yml): nightly
 and `workflow_dispatch` only, and `continue-on-error`. Both choices are
