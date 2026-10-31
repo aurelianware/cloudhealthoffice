@@ -57,6 +57,12 @@ plan's provider contracts, fee schedules or accumulators, and the comparison
 names the missing input. Off unless `Adjudication:Shadow:Enabled`; a tenant
 can run it after each drop (`ShadowAfterImport`).
 
+Fee schedules can now be loaded (#1694): `POST /api/v1/fee-schedules/import/csv`
+takes a state Medicaid fee schedule or a plan's contracted rate sheet as CSV
+and stores it where adjudication prices from, as a plan's default schedule or
+one a contract term names. It is a dry run by default. This supplies the rates
+input; contracts, accumulators and benefit design are still missing.
+
 ### Benefit plans from public data (#1671 to #1673, #1678)
 
 - **QHP importer:** reads the CMS Exchange QHP public use files. It is a dry
@@ -85,13 +91,20 @@ can run it after each drop (`ShadowAfterImport`).
   #1669, #1687). It authenticates itself with SMART Backend Services as a
   registered requesting payer and judges the one-match and no-match cases.
 
-### DTR `$questionnaire-package` (DTR 2.2.0) and a CQL-prepopulated form (#1690)
+### DTR `$questionnaire-package` (DTR 2.2.0), a CQL-prepopulated form and the CRD link (#1690, #1693)
 
 `Questionnaire/$questionnaire-package` now follows DTR 2.2.0: it takes the
 member's `coverage` and answers with the DTR package Parameters (the
 Questionnaire, a draft QuestionnaireResponse, CQL Libraries with ELM and
 expanded ValueSets). The MRI prior authorization form is the first with CQL
 prepopulation.
+
+CRD and DTR are now linked (#1693): a documentation-required CRD answer names
+the DTR questionnaire for the ordered code, and `$questionnaire-package` with
+only CRD's `coverage-assertion-id` returns those forms. CHO keeps each
+assertion for 90 days. CRD cards no longer link to a CHO DTR app (CHO ships
+none): without `Cms0057:Dtr:DtrLaunchUrl` the card gives instructions for the
+EHR's own DTR client, and with it the card launches that app.
 
 ### CapabilityStatement
 
@@ -111,13 +124,18 @@ authorization on ExplanationOfBenefit.
 
 ## Upgrading from 6.1
 
-No configuration change is required. Things to know:
+No configuration change is required, except to keep a CRD DTR launch link (below). Things to know:
 
 - **`$questionnaire-package` changed shape (DTR 2.2.0).** It now requires a
   `coverage` parameter and answers with Parameters (`packagebundle`,
   `outcome`) instead of a bare Bundle. A questionnaire that is not found is a
   warning in a 200, not a 404. A caller that sends only `questionnaire` gets
   a 400 naming the missing coverage.
+- **CRD documentation cards no longer default to a DTR launch link.** The
+  old default, `https://cloudhealthoffice.com/dtr/launch`, served nothing.
+  Set `Cms0057:Dtr:DtrLaunchUrl` to your DTR app to get a launch card;
+  without it the card gives instructions only. A `$questionnaire-package`
+  `context` CHO cannot resolve is now 422, even beside an order.
 - **`Patient/$member-match` still accepts CHO's JSON form** and answers it
   with a Bundle, as before. The HRex `Parameters` form is answered with
   `Parameters`.
