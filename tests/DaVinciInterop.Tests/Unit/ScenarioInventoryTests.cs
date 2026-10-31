@@ -373,6 +373,9 @@ public sealed class ScenarioInventoryTests
         // would read as its own member id instead of CoverageToMatch.subscriberId.
         parts["MemberPatient"]["identifier"]![0]!["type"]!["coding"]![0]!["code"]!.GetValue<string>().Should().Be("UMB");
         parts["CoverageToLink"]["subscriberId"]!.GetValue<string>().Should().Be(PdexMemberMatchRequest.NewPayerMemberId);
+        parts["CoverageToLink"].AsObject().Select(p => p.Key).Should().BeSubsetOf(
+            ["resourceType", "id", "meta", "status", "identifier", "subscriberId", "beneficiary", "payor"],
+            "the kit's CoverageToLink minimal-data test fails any element HRex doesn't mark must-support (period, type, ...)");
 
         var consent = parts["Consent"];
         consent["patient"]!["reference"]!.GetValue<string>().Should().Be(
