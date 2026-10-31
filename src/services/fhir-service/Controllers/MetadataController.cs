@@ -249,6 +249,8 @@ public class MetadataController : FhirControllerBase
                             ("status",          SearchParamType.Token),
                             ("connection-type", SearchParamType.Token)
                         ]),
+                        // Da Vinci DTR: questionnaire storage plus the DTR 2.2.0
+                        // $questionnaire-package operation (DtrController).
                         BuildResource("Questionnaire",
                         [
                             ("_id",          SearchParamType.Token),
@@ -261,7 +263,12 @@ public class MetadataController : FhirControllerBase
                             CapabilityStatement.TypeRestfulInteraction.SearchType,
                             CapabilityStatement.TypeRestfulInteraction.Create,
                             CapabilityStatement.TypeRestfulInteraction.Update,
-                        ]),
+                        ],
+                        supportedProfiles:
+                        [
+                            "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-std-questionnaire"
+                        ],
+                        operations: [QuestionnairePackageOperation]),
                         BuildResource("QuestionnaireResponse",
                         [
                             ("_id",            SearchParamType.Token),
@@ -427,6 +434,10 @@ public class MetadataController : FhirControllerBase
     /// </summary>
     internal static readonly (string Name, string Definition) MemberMatchOperation =
         ("member-match", "http://hl7.org/fhir/us/davinci-hrex/OperationDefinition/member-match");
+
+    /// <summary>DTR <c>$questionnaire-package</c>, the canonical the DTR payer-server kit looks for.</summary>
+    internal static readonly (string Name, string Definition) QuestionnairePackageOperation =
+        ("questionnaire-package", "http://hl7.org/fhir/us/davinci-dtr/OperationDefinition/questionnaire-package");
 
     private static readonly (string Name, string Definition) PatientExportOperation =
         ("export", "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/patient-export");

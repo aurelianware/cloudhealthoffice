@@ -12,7 +12,7 @@ namespace CloudHealthOffice.Testing.FhirService;
 /// <summary>
 /// In-process <see cref="IDtrResourceStore"/> with the semantics of
 /// <see cref="MongoDtrResourceStore"/>: one entry per (tenant id, resource id),
-/// conditional writes never overwrite a newer version, seeds never overwrite, and each read returns a fresh
+/// conditional writes never overwrite a newer version, seeds overwrite only an older seed revision, and each read returns a fresh
 /// copy parsed from the stored FHIR JSON rather than the object that was written.
 /// </summary>
 public sealed class InMemoryDtrResourceStore : IDtrResourceStore
@@ -24,8 +24,16 @@ public sealed class InMemoryDtrResourceStore : IDtrResourceStore
     private readonly ConcurrentDictionary<(string TenantId, string Id), string> _responses = new();
 
     public void SeedDefaultQuestionnaire(Questionnaire questionnaire)
-        => _questionnaires.TryAdd(
-            (DtrService.DefaultLibraryTenant, questionnaire.Id), Serializer.SerializeToString(questionnaire));
+    {
+        var key = (DtrService.DefaultLibraryTenant, questionnaire.Id);
+        var json = Serializer.SerializeToString(questionnaire);
+        if (_questionnaires.TryAdd(key, json)) return;
+        if (_questionnaires.TryGetValue(key, out var storedJson)
+            && DtrService.IsNewerSeed(questionnaire, Parser.Parse<Questionnaire>(storedJson)))
+        {
+            _questionnaires.TryUpdate(key, json, storedJson);
+        }
+    }
 
     public System.Threading.Tasks.Task<Questionnaire?> FindQuestionnaireAsync(string tenantId, string id, CancellationToken ct = default)
         => System.Threading.Tasks.Task.FromResult(_questionnaires.TryGetValue((tenantId, id), out var json)

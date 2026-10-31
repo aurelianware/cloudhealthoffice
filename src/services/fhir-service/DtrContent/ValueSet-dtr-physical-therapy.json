@@ -1,0 +1,57 @@
+{
+  "resourceType": "ValueSet",
+  "id": "dtr-physical-therapy",
+  "meta": {
+    "lastUpdated": "2026-10-31T00:00:00Z"
+  },
+  "url": "https://cloudhealthoffice.com/fhir/ValueSet/dtr-physical-therapy",
+  "version": "1.0.0",
+  "name": "DtrPhysicalTherapy",
+  "title": "Physical therapy procedures",
+  "status": "active",
+  "date": "2026-10-31",
+  "publisher": "Cloud Health Office",
+  "description": "Procedures that show conservative treatment for the MRI questionnaire. Expanded in every $questionnaire-package response.",
+  "compose": {
+    "include": [
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "concept": [
+          {
+            "code": "97110",
+            "display": "Therapeutic exercises"
+          },
+          {
+            "code": "97140",
+            "display": "Manual therapy techniques"
+          },
+          {
+            "code": "97161",
+            "display": "Physical therapy evaluation, low complexity"
+          },
+          {
+            "code": "97162",
+            "display": "Physical therapy evaluation, moderate complexity"
+          },
+          {
+            "code": "97163",
+            "display": "Physical therapy evaluation, high complexity"
+          },
+          {
+            "code": "97530",
+            "display": "Therapeutic activities"
+          }
+        ]
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "concept": [
+          {
+            "code": "91251008",
+            "display": "Physical therapy procedure"
+          }
+        ]
+      }
+    ]
+  }
+}

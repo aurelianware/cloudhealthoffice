@@ -575,7 +575,7 @@
 
         <ul>
           <li><strong>External DTR apps</strong> &mdash; CHO does not ship its own DTR app. The plan is to serve DTR questionnaire packages to external and EHR-native DTR apps</li>
-          <li><strong>Questionnaire package (in development)</strong> &mdash; <code>Questionnaire/$questionnaire-package</code> exists today but returns the Questionnaire only. CQL Libraries, ValueSets and pre-fill (CQL expressions that query the EHR&rsquo;s FHIR server) are not yet built</li>
+          <li><strong>Questionnaire package (in development)</strong> &mdash; <code>Questionnaire/$questionnaire-package</code> follows DTR 2.2.0: given the member&rsquo;s coverage and the order, it returns the questionnaire, a draft response, and the CQL Libraries and ValueSets a DTR app needs to pre-fill it from the EHR&rsquo;s FHIR server. The MRI form pre-fills today; the other forms do not yet</li>
           <li><strong>Provider review</strong> &mdash; The provider reviews pre-filled answers, corrects any inaccuracies, and submits the completed questionnaire</li>
           <li><strong>Attachment to auth request (planned)</strong> &mdash; Linking the completed QuestionnaireResponse to the prior auth request, so the decision engine can use it, is not yet built</li>
         </ul>
@@ -599,7 +599,7 @@
           </thead>
           <tbody>
             <tr><td><strong>Da Vinci CRD</strong></td><td>CDS Hooks (<code>order-sign</code>, <code>order-select</code>)</td><td><code>/cds-services/cho-order-sign</code>, <code>/cds-services/cho-order-select</code></td><td>&#x1F7E1; In development</td></tr>
-            <tr><td><strong>Da Vinci DTR</strong></td><td>Questionnaire/$questionnaire-package (Questionnaire only)</td><td><code>/fhir/r4/Questionnaire/$questionnaire-package</code></td><td>&#x1F7E1; In development</td></tr>
+            <tr><td><strong>Da Vinci DTR</strong></td><td>Questionnaire/$questionnaire-package (DTR 2.2.0 packages; CQL pre-fill on the MRI form)</td><td><code>/fhir/r4/Questionnaire/$questionnaire-package</code></td><td>&#x1F7E1; In development</td></tr>
             <tr><td><strong>Da Vinci PAS</strong></td><td>Claim/$submit, Claim/$inquire</td><td><code>/fhir/r4/Claim/$submit</code>, <code>/fhir/r4/Claim/$inquire</code></td><td>&#x1F7E1; In development</td></tr>
           </tbody>
         </table>

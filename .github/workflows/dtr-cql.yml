@@ -1,0 +1,50 @@
+name: DTR CQL
+
+# Recompiles the DTR CQL libraries in src/services/fhir-service/DtrContent/
+# with the pinned HL7 CQL-to-ELM translator and fails if the committed ELM is
+# not what the CQL compiles to, or if the translator reports any error or
+# warning.
+#
+# CHO never runs this CQL (decision Q-6): the provider's DTR client does. The
+# committed ELM is what $questionnaire-package serves, so it has to be the
+# translator's output for the committed CQL. DtrContentLibraryTests catches a
+# CQL edit without a recompile by hash in seconds; this job is the slower,
+# authoritative check that the ELM itself is current.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'src/services/fhir-service/DtrContent/**'
+      - 'scripts/dtr/**'
+      - '.github/workflows/dtr-cql.yml'
+  pull_request:
+    branches: ["main"]
+    paths:
+      - 'src/services/fhir-service/DtrContent/**'
+      - 'scripts/dtr/**'
+      - '.github/workflows/dtr-cql.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: dtr-cql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    name: ELM matches the CQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Recompile and compare
+        run: ./scripts/dtr/compile-cql.sh --check

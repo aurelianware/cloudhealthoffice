@@ -15,9 +15,11 @@ namespace FhirService.Services;
 public interface IDtrResourceStore
 {
     /// <summary>
-    /// Stores <paramref name="questionnaire"/> in the default library unless a
-    /// questionnaire with its id is already there. Synchronous because
-    /// <see cref="DtrService"/> seeds the library from its constructor.
+    /// Stores <paramref name="questionnaire"/> in the default library. When a
+    /// questionnaire with its id is already there, replaces it only if the seed
+    /// is a newer revision (<see cref="DtrService.IsNewerSeed"/>), so a release
+    /// that improves a shipped form reaches existing deployments. Synchronous
+    /// because <see cref="DtrService"/> seeds the library from its constructor.
     /// </summary>
     void SeedDefaultQuestionnaire(Questionnaire questionnaire);
 

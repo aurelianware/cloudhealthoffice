@@ -59,18 +59,37 @@ public class DtrDocumentationTests
 
     [Fact]
     [Trait("Scenario", "PAS-02")]
-    public async Task PAS02_QuestionnairePackage_ReturnsBundleWithQuestionnaire()
+    public async Task PAS02_QuestionnairePackage_ForOrder_ReturnsDtrPackage()
     {
         var controller = BuildController();
 
+        // DTR 2.2.0 input: the member's Coverage plus the order the
+        // documentation is for (a lumbar spine MRI, CPT 72148).
         var parameters = new Parameters();
-        parameters.Add("questionnaire", new FhirString("q-imaging-mri"));
+        parameters.Parameter.Add(new Parameters.ParameterComponent
+        {
+            Name = "coverage",
+            Resource = new Coverage { Id = "cov-001", Beneficiary = new ResourceReference("Patient/pat-001") },
+        });
+        parameters.Parameter.Add(new Parameters.ParameterComponent
+        {
+            Name = "order",
+            Resource = new ServiceRequest
+            {
+                Id = "sr-001",
+                Code = new CodeableConcept("http://www.ama-assn.org/go/cpt", "72148"),
+                Subject = new ResourceReference("Patient/pat-001"),
+            },
+        });
 
         var result = await controller.QuestionnairePackage(parameters, CancellationToken.None);
 
-        var bundle = result.Should().BeOfType<OkObjectResult>().Subject
-            .Value.Should().BeOfType<Bundle>().Subject;
-        bundle.Entry.Should().Contain(e => e.Resource is Questionnaire);
+        var output = result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<Parameters>().Subject;
+        var bundle = output.Parameter.Single(p => p.Name == "packagebundle").Resource as Bundle;
+        bundle!.Entry[0].Resource.Should().BeOfType<Questionnaire>().Which.Id.Should().Be("q-imaging-mri");
+        bundle.Entry.Should().Contain(e => e.Resource is Library);
+        bundle.Entry.Should().Contain(e => e.Resource is QuestionnaireResponse);
     }
 
     [Fact]

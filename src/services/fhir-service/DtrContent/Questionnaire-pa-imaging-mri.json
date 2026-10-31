@@ -1,0 +1,257 @@
+{
+  "resourceType": "Questionnaire",
+  "id": "q-imaging-mri",
+  "meta": {
+    "versionId": "2",
+    "lastUpdated": "2026-10-31T00:00:00Z",
+    "profile": [
+      "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-std-questionnaire"
+    ]
+  },
+  "text": {
+    "status": "generated",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Prior authorization documentation for MRI imaging: clinical indication, body region, radiculopathy (spine), prior conservative treatment, ordering provider and symptom onset. Radiculopathy, conservative treatment and onset date prepopulate from the patient record through the ChoImagingMriPrepopulation library.</p></div>"
+  },
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-library",
+      "valueCanonical": "https://cloudhealthoffice.com/fhir/Library/ChoImagingMriPrepopulation|1.0.0"
+    },
+    {
+      "url": "http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-launchContext",
+      "extension": [
+        {
+          "url": "name",
+          "valueCoding": {
+            "system": "http://hl7.org/fhir/uv/sdc/CodeSystem/launchContext",
+            "code": "patient",
+            "display": "Patient"
+          }
+        },
+        {
+          "url": "type",
+          "valueCode": "Patient"
+        },
+        {
+          "url": "description",
+          "valueString": "The patient the MRI is ordered for"
+        }
+      ]
+    }
+  ],
+  "url": "https://cloudhealthoffice.com/fhir/Questionnaire/pa-imaging-mri",
+  "version": "1.0.0",
+  "name": "PaImagingMri",
+  "title": "Prior Authorization: MRI Imaging",
+  "status": "active",
+  "subjectType": [
+    "Patient"
+  ],
+  "date": "2026-10-31",
+  "publisher": "Cloud Health Office",
+  "description": "Questionnaire for prior authorization of MRI imaging services. Three answers prepopulate from the EHR with CQL; the rest are entered by the ordering clinician.",
+  "useContext": [
+    {
+      "code": {
+        "system": "http://terminology.hl7.org/CodeSystem/usage-context-type",
+        "code": "focus"
+      },
+      "valueCodeableConcept": {
+        "coding": [
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "70551",
+            "display": "MRI brain without contrast"
+          },
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "70552",
+            "display": "MRI brain with contrast"
+          },
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "70553",
+            "display": "MRI brain without and with contrast"
+          },
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "72141",
+            "display": "MRI cervical spine without contrast"
+          },
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "72146",
+            "display": "MRI thoracic spine without contrast"
+          },
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "72148",
+            "display": "MRI lumbar spine without contrast"
+          },
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "72156",
+            "display": "MRI cervical spine without and with contrast"
+          },
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "72157",
+            "display": "MRI thoracic spine without and with contrast"
+          },
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "72158",
+            "display": "MRI lumbar spine without and with contrast"
+          },
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "73221",
+            "display": "MRI upper extremity joint without contrast"
+          },
+          {
+            "system": "http://www.ama-assn.org/go/cpt",
+            "code": "73721",
+            "display": "MRI lower extremity joint without contrast"
+          }
+        ],
+        "text": "MRI services this documentation template applies to"
+      }
+    }
+  ],
+  "item": [
+    {
+      "linkId": "1",
+      "text": "Clinical indication for MRI",
+      "type": "string",
+      "required": true
+    },
+    {
+      "linkId": "2",
+      "text": "Body region",
+      "type": "choice",
+      "required": true,
+      "answerOption": [
+        {
+          "valueCoding": {
+            "system": "http://snomed.info/sct",
+            "code": "122495006",
+            "display": "Head"
+          }
+        },
+        {
+          "valueCoding": {
+            "system": "http://snomed.info/sct",
+            "code": "421060004",
+            "display": "Spine"
+          }
+        },
+        {
+          "valueCoding": {
+            "system": "http://snomed.info/sct",
+            "code": "72696002",
+            "display": "Knee"
+          }
+        },
+        {
+          "valueCoding": {
+            "system": "http://snomed.info/sct",
+            "code": "16982005",
+            "display": "Shoulder"
+          }
+        }
+      ]
+    },
+    {
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-initialExpression",
+          "valueExpression": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/alternativeExpression",
+                "valueExpression": {
+                  "language": "application/elm+json",
+                  "expression": "{\"type\":\"ExpressionRef\",\"libraryName\":\"ChoImagingMriPrepopulation\",\"name\":\"HasRadiculopathy\"}"
+                }
+              }
+            ],
+            "description": "Radiculopathy recorded in the patient's conditions",
+            "language": "text/cql-identifier",
+            "expression": "\"ChoImagingMriPrepopulation\".HasRadiculopathy"
+          }
+        }
+      ],
+      "linkId": "2a",
+      "text": "Does the patient have radiculopathy symptoms?",
+      "type": "boolean",
+      "required": true,
+      "enableWhen": [
+        {
+          "question": "2",
+          "operator": "=",
+          "answerCoding": {
+            "system": "http://snomed.info/sct",
+            "code": "421060004",
+            "display": "Spine"
+          }
+        }
+      ]
+    },
+    {
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-initialExpression",
+          "valueExpression": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/alternativeExpression",
+                "valueExpression": {
+                  "language": "application/elm+json",
+                  "expression": "{\"type\":\"ExpressionRef\",\"libraryName\":\"ChoImagingMriPrepopulation\",\"name\":\"ConservativeTreatmentAttempted\"}"
+                }
+              }
+            ],
+            "description": "Completed physical therapy within the last year",
+            "language": "text/cql-identifier",
+            "expression": "\"ChoImagingMriPrepopulation\".ConservativeTreatmentAttempted"
+          }
+        }
+      ],
+      "linkId": "3",
+      "text": "Prior conservative treatment attempted",
+      "type": "boolean",
+      "required": true
+    },
+    {
+      "linkId": "4",
+      "text": "Ordering provider NPI",
+      "type": "string",
+      "required": true
+    },
+    {
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-initialExpression",
+          "valueExpression": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/alternativeExpression",
+                "valueExpression": {
+                  "language": "application/elm+json",
+                  "expression": "{\"type\":\"ExpressionRef\",\"libraryName\":\"ChoImagingMriPrepopulation\",\"name\":\"SymptomOnsetDate\"}"
+                }
+              }
+            ],
+            "description": "Earliest recorded onset of radiculopathy",
+            "language": "text/cql-identifier",
+            "expression": "\"ChoImagingMriPrepopulation\".SymptomOnsetDate"
+          }
+        }
+      ],
+      "linkId": "5",
+      "text": "Date of onset of symptoms",
+      "type": "date",
+      "required": false
+    }
+  ]
+}
