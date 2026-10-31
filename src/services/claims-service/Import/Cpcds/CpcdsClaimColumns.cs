@@ -1,3 +1,5 @@
+using CloudHealthOffice.Infrastructure.Import.Cpcds;
+
 namespace ClaimsService.Import.Cpcds;
 
 /// <summary>
@@ -212,17 +214,7 @@ public static class CpcdsClaimColumns
     /// "Service (from) date", "SERVICE_FROM_DATE" and "service from date" all
     /// match.
     /// </summary>
-    public static string Normalize(string header)
-    {
-        Span<char> buffer = stackalloc char[header.Length];
-        var n = 0;
-        foreach (var ch in header)
-        {
-            if (char.IsLetterOrDigit(ch))
-                buffer[n++] = char.ToLowerInvariant(ch);
-        }
-        return new string(buffer[..n]);
-    }
+    public static string Normalize(string header) => CpcdsHeaders.Normalize(header);
 
     /// <summary>
     /// Resolves the file's header row to column positions. A column map entry

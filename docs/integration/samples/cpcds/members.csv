@@ -1,0 +1,5 @@
+Member id,First name,Last name,Middle name,Date of birth,Gender code,Home_Address line,Home_City,Home_State,Home_Zip code,Subscriber id,Relationship to subscriber
+M100,Avery,Lopez,J,1971-04-12,F,12 Elm St,Springfield,OR,97477,M100,self
+M101,Jordan,Lopez,,2009-09-30,M,12 Elm St,Springfield,OR,97477,M100,child
+M200,Harper,Nguyen,,1958-01-22,F,400 Pine Ave,Eugene,OR,97401,M200,self
+M300,Riley,Patel,,1990-07-04,U,9 Oak Ct,Salem,OR,97301,M300,self

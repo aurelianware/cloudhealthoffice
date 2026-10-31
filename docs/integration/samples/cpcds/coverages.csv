@@ -1,0 +1,5 @@
+Coverage id,Member id,Subscriber id,Dependent number,Coverage type,Coverage status,Start date,End date,Group id,Group name,Plan identifier,Plan name,Payer identifier,Relationship to subscriber
+COV-M100,M100,M100,00,PPO,active,2026-01-01,,GRP-ACME,Acme Manufacturing,PPO-GOLD,Gold PPO,PAYER-1,self
+COV-M101,M101,M100,01,PPO,active,2026-01-01,,GRP-ACME,Acme Manufacturing,PPO-GOLD,Gold PPO,PAYER-1,child
+COV-M200,M200,M200,00,HMO,active,2025-07-01,2026-12-31,GRP-CITY,City of Eugene,HMO-SILVER,Silver HMO,PAYER-1,self
+COV-M300D,M300,M300,00,Dental PPO,active,2026-01-01,,GRP-CITY,City of Eugene,DEN-BASIC,Basic Dental,PAYER-1,self
