@@ -30,9 +30,18 @@ public static class InfernoBackendClient
     /// <summary>JWK members that carry private key material (RFC 7518 §6.2.2, §6.3.2).</summary>
     private static readonly string[] PrivateMembers = ["d", "p", "q", "dp", "dq", "qi", "oth", "k"];
 
-    /// <summary>Where a kit publishes the keys it signs assertions with.</summary>
-    public static string JwksUrl(string kitApiBaseUrl, string suiteId)
-        => $"{kitApiBaseUrl.TrimEnd('/').RemoveSuffix("/api")}/custom/{suiteId}/.well-known/jwks.json";
+    /// <summary>
+    /// Where a kit publishes the keys it signs assertions with. The Bulk Data
+    /// kit serves them on its suite's own route. A kit whose suite has no such
+    /// route (PDex) signs through inferno_core's auth_info with the core keys,
+    /// which inferno_core serves at <c>/jwks.json</c>: pass a null
+    /// <paramref name="suiteId"/> for those.
+    /// </summary>
+    public static string JwksUrl(string kitApiBaseUrl, string? suiteId)
+    {
+        var root = kitApiBaseUrl.TrimEnd('/').RemoveSuffix("/api");
+        return suiteId is null ? $"{root}/jwks.json" : $"{root}/custom/{suiteId}/.well-known/jwks.json";
+    }
 
     /// <summary>
     /// The verification keys of a JWKS, with any private member removed.
@@ -100,7 +109,7 @@ public static class InfernoBackendClient
 
     /// <summary>As above, registering <paramref name="client"/> rather than the seed's provider client.</summary>
     public static async Task<string> RegisterAsync(
-        string kitApiBaseUrl, string suiteId, ChoSeedFixture fixture, ChoSeedBackendClient client,
+        string kitApiBaseUrl, string? suiteId, ChoSeedFixture fixture, ChoSeedBackendClient client,
         CancellationToken cancellationToken)
     {
         using var http = new HttpClient { Timeout = InteropSettings.Timeouts.ProtocolCall };

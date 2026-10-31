@@ -83,7 +83,7 @@ public static class InfernoSuiteScenario
                 run.Record(InteropFinding.Info(
                     "inferno.auth.backendClient",
                     await InfernoBackendClient.RegisterAsync(
-                        kit.ApiBaseUrl, scenario.RequiredInfernoSuite, fixture,
+                        kit.ApiBaseUrl, JwksSuiteFor(scenario), fixture,
                         BackendClientFor(scenario, fixture), cancellationToken)));
             }
 
@@ -334,6 +334,14 @@ public static class InfernoSuiteScenario
                 $"does not know. Known: {InfernoAuthModes.ChoToken}, {InfernoAuthModes.BackendServices}, " +
                 $"{InfernoAuthModes.PayerBackendServices}, {InfernoAuthModes.PatientApp}."),
         };
+
+    /// <summary>
+    /// The suite whose own JWKS route holds the kit's signing keys, or null for
+    /// inferno_core's <c>/jwks.json</c>. The PDex server suite publishes no JWKS
+    /// route of its own; its auth_info input signs with the core keys.
+    /// </summary>
+    public static string? JwksSuiteFor(InteropScenarioDefinition scenario)
+        => scenario.InfernoAuth == InfernoAuthModes.PayerBackendServices ? null : scenario.RequiredInfernoSuite;
 
     /// <summary>The backend client a self-authenticating kit is registered as: a provider's, or a requesting payer's.</summary>
     public static ChoSeedBackendClient BackendClientFor(InteropScenarioDefinition scenario, ChoSeedFixture fixture)
