@@ -45,7 +45,7 @@ API. Prior authorization is the one CMS-0057-F path where a live seam
 
 | Tier | Goal | Work | Seams |
 | --- | --- | --- | --- |
-| 1. Foothold | CMS-0057-F APIs over the existing core | Initial load and change feed for members and coverage (834 through enrollment-import-service), providers, organizations and networks (provider-service APIs), benefit plans, and adjudicated claim history (**no load path exists yet**, see section 7). Agree who answers prior authorization. | Hydration. `IAuthorizationBackend` only if PA stays authoritative in the core |
+| 1. Foothold | CMS-0057-F APIs over the existing core | Initial load and change feed for members and coverage (834 through enrollment-import-service), providers, organizations and networks (provider-service APIs), benefit plans, and adjudicated claim history (CPCDS file drop, see [CPCDS-FILE-DROP-IMPORTER.md](CPCDS-FILE-DROP-IMPORTER.md)). Agree who answers prior authorization. | Hydration. `IAuthorizationBackend` only if PA stays authoritative in the core |
 | 2. Live reads | Staff and portal see the core's current data, not yesterday's load | Read methods of the live adapters | `IClaimAdapter` reads, `IProviderAdapter`, `IOrganizationAdapter`, `IBenefitPlanAdapter`, `IEligibilityAdapter` |
 | 3. Writes and Augment | CHO writes to the core, or runs in shadow beside it | `SubmitClaimAsync`, authorization create and status writes, a legacy-result feed for comparison ([operating modes](../architecture/OPERATING-MODE.md)) | Agreed per engagement in the SOW |
 
@@ -240,6 +240,9 @@ engagement relies on it.
    accepts claims with the core's adjudication results (allowed, paid, member
    responsibility, CARC/RARC, adjustment links), probably from the core's
    claim extract or 835s. This is the biggest gap for tier 1.
+   **Update:** the CPCDS file-drop importer
+   ([CPCDS-FILE-DROP-IMPORTER.md](CPCDS-FILE-DROP-IMPORTER.md)) is the first
+   load path. An X12 837/835 path is planned as the second.
 2. **Platform lookup falls back to CHO.** `TenantPlatformLookup` uses `cho`
    when tenant-service is unreachable or answers 5xx, and every adapter factory
    (claims, eligibility, benefit plan, provider, organization, ID card) uses

@@ -466,6 +466,15 @@ public class Claim
     [StringLength(100)]
     public string? InboundRemittanceId { get; set; }
 
+    /// <summary>
+    /// Set when the claim was adjudicated by another system (the plan's
+    /// incumbent core) and loaded into CHO from an extract, rather than
+    /// submitted and adjudicated here. Null for every claim CHO processed
+    /// itself. The importer uses it to tell its own rows from native ones, and
+    /// to decide on a reload whether the source changed.
+    /// </summary>
+    public ClaimExternalSource? ExternalSource { get; set; }
+
     // Version identity (5.1 — Claim Identity & Versioning)
     //
     // A claim is an append-only chain of immutable terminal versions. Each
@@ -792,6 +801,55 @@ public class ClaimLineTooth
 
     /// <summary>Tooth surfaces treated (M, O, D, B, L, I, F; up to 5). 837D: TOO03</summary>
     public List<string> Surfaces { get; set; } = new();
+}
+
+/// <summary>
+/// Where an externally adjudicated claim came from (see
+/// <see cref="Claim.ExternalSource"/>).
+/// </summary>
+[BsonIgnoreExtraElements]
+public class ClaimExternalSource
+{
+    /// <summary>The extract format, e.g. <c>cpcds</c>.</summary>
+    [StringLength(20)]
+    public string Format { get; set; } = string.Empty;
+
+    /// <summary>The system that adjudicated the claim, as the plan names it (e.g. <c>qnxt</c>, <c>facets</c>).</summary>
+    [StringLength(50)]
+    public string? SourceSystem { get; set; }
+
+    /// <summary>The claim's identifier in the source system (CPCDS "Claim unique identifier").</summary>
+    [StringLength(100)]
+    public string SourceClaimId { get; set; } = string.Empty;
+
+    /// <summary>The member identifier as the source system sent it, before the member crosswalk.</summary>
+    [StringLength(100)]
+    public string? SourceMemberId { get; set; }
+
+    /// <summary>
+    /// SHA-256 of the source rows that produced this version (and the member
+    /// id they resolved to). A reload with the same hash is a no-op; a
+    /// different hash appends a new version.
+    /// </summary>
+    [StringLength(64)]
+    public string ContentHash { get; set; } = string.Empty;
+
+    /// <summary>The import batch that wrote this version.</summary>
+    [StringLength(64)]
+    public string? ImportBatchId { get; set; }
+
+    /// <summary>The file this version was loaded from.</summary>
+    [StringLength(260)]
+    public string? FileName { get; set; }
+
+    /// <summary>When CHO loaded this version.</summary>
+    public DateTime ImportedAt { get; set; }
+
+    /// <summary>
+    /// When the extract was produced by the source system, if the sender said
+    /// so. The freshness of the Patient Access data is measured from this.
+    /// </summary>
+    public DateTime? ExtractedAt { get; set; }
 }
 
 /// <summary>A postal address carried on a claim (837 N3/N4).</summary>

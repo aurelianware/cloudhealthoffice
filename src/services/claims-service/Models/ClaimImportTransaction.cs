@@ -22,6 +22,19 @@ public class ClaimImportTransaction
     /// <summary>The file the claim arrived in (<c>EdiFile</c>), when it came from a raw 837.</summary>
     public string? EdiFileId { get; set; }
 
+    /// <summary>
+    /// The upload's format: null for a raw 837 (every record written before
+    /// the field existed), <c>cpcds</c> for an externally adjudicated claim
+    /// loaded from a CPCDS extract.
+    /// </summary>
+    public string? Format { get; set; }
+
+    /// <summary>The import batch, for a CPCDS load: one per file.</summary>
+    public string? ImportBatchId { get; set; }
+
+    /// <summary>For a CPCDS load: Created, Updated, Unchanged or Rejected. <see cref="Status"/> stays Accepted / Rejected.</summary>
+    public string? Outcome { get; set; }
+
     [Required]
     public string ClaimNumber { get; set; } = string.Empty;
 

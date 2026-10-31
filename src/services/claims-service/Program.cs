@@ -75,6 +75,12 @@ builder.Services.AddScoped<IClaimNoteRepository, ClaimNoteRepositoryMongo>();
 builder.Services.AddScoped<IClaimAccessAuditRepository, ClaimAccessAuditRepositoryMongo>();
 builder.Services.AddScoped<IMassAdjudicationRunRepository, MassAdjudicationRunRepositoryMongo>();
 builder.Services.AddScoped<IClaimImportTransactionRepository, ClaimImportTransactionRepositoryMongo>();
+
+// CPCDS file drop: claims the plan's core adjudicated, loaded for Patient and
+// Provider Access (docs/integration/CPCDS-FILE-DROP-IMPORTER.md). The member
+// crosswalk defaults to pass-through: the core's member id is CHO's.
+builder.Services.AddSingleton<ClaimsService.Import.Cpcds.ICoreMemberCrosswalk, ClaimsService.Import.Cpcds.PassThroughMemberCrosswalk>();
+builder.Services.AddScoped<ClaimsService.Import.Cpcds.ICpcdsClaimImportService, ClaimsService.Import.Cpcds.CpcdsClaimImportService>();
 builder.Services.AddHostedService<MassAdjudicationRunIndexInitializer>();
 
 // Claim version event publisher (5.1) — Mongo append-only stream is the
