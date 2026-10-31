@@ -581,6 +581,13 @@ builder.Services.AddHttpClient(ClaimsService.Import.Cpcds.Drop.HttpCpcdsDropArch
     client => client.Timeout = TimeSpan.FromMinutes(30));
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsDropArchive,
     ClaimsService.Import.Cpcds.Drop.HttpCpcdsDropArchive>();
+builder.Services.AddHttpClient(ClaimsService.Import.Cpcds.Drop.HttpCpcdsUpstreamImports.AuthorizationClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:AuthorizationService"]
+        ?? "http://authorization-service");
+    client.Timeout = TimeSpan.FromMinutes(30);
+});
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsUpstreamImports,
     ClaimsService.Import.Cpcds.Drop.HttpCpcdsUpstreamImports>();
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsImportBatchCompletedHandler,

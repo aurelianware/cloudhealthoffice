@@ -68,19 +68,20 @@ public sealed class CpcdsDropRunner
             ? null
             : ready.FirstOrDefault(f => CpcdsDropFileKinds.Classify(f.Name) == CpcdsDropFileKind.Coverages);
         var claimFiles = ready.Where(f => CpcdsDropFileKinds.Classify(f.Name) == CpcdsDropFileKind.Claims).ToList();
+        var authorizationFiles = ready.Where(f => CpcdsDropFileKinds.Classify(f.Name) == CpcdsDropFileKind.Authorizations).ToList();
 
         foreach (var file in ready)
         {
             var kind = CpcdsDropFileKinds.Classify(file.Name);
             if (kind == CpcdsDropFileKind.Unknown)
-                notes.Add($"{file.Name} left in inbound: the name says neither members, coverage nor claims.");
+                notes.Add($"{file.Name} left in inbound: the name says neither members, coverage, claims nor authorizations.");
             else if (kind == CpcdsDropFileKind.Coverages && members is null)
                 notes.Add($"{file.Name} left in inbound: a coverage file loads with its member file, and none is waiting.");
             else if ((kind == CpcdsDropFileKind.Members && file != members) || (kind == CpcdsDropFileKind.Coverages && file != coverages))
                 notes.Add($"{file.Name} left in inbound for the next run: one member and coverage pair loads per run.");
         }
 
-        var picked = new[] { members, coverages }.OfType<CpcdsDropFile>().Concat(claimFiles).ToList();
+        var picked = new[] { members, coverages }.OfType<CpcdsDropFile>().Concat(claimFiles).Concat(authorizationFiles).ToList();
         if (picked.Count == 0)
             return null;
 
@@ -143,6 +144,15 @@ public sealed class CpcdsDropRunner
                 var (step, batch) = await ImportClaimsAsync(tenantId, run.Id, tenant, file, content, ct);
                 run.Steps.Add(step);
                 if (batch is not null) batches.Add(batch);
+            }
+
+            // After members: an authorization names a member.
+            foreach (var original in authorizationFiles)
+            {
+                if (!taken.TryGetValue(original, out var file)) continue;
+                var content = await _store.ReadAllTextAsync(file, ct);
+                run.Steps.Add(await _upstream.ImportAuthorizationsAsync(
+                    tenantId, file, content, tenant.SourceSystem, tenant.LineOfBusiness.ToString(), ct));
             }
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
