@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `Patient/$member-match` accepts the HRex/PDex request form. A FHIR `Parameters` body (`MemberPatient`, `CoverageToMatch`, optional `CoverageToLink`, `Consent`; `hrex-parameters-member-match-in`) is read exactly as one `MemberBundle` of `Group/$bulk-member-match` is, and a match is answered with the HRex `MemberIdentifier` Parameters (v2-0203 `MB`, system `urn:cho:member-id`, which `Patient?identifier=` finds). A Consent that names the member as HRex does, by a local reference to the `MemberPatient` parameter (`Patient/1`), is judged against that Patient, in this operation and in each `MemberBundle` of `Group/$bulk-member-match`; before, such a consent named no one CHO could resolve and was refused. The consent check, payer binding and refusals are otherwise unchanged: no consent is 422, no match or more than one is 422, a request without `MemberPatient` or `CoverageToMatch` is 400. Before this, only CHO's own JSON shape was understood, so another payer's conforming request was refused as having insufficient criteria. CHO's JSON form still works and still answers with a Bundle. The CapabilityStatement now declares `member-match` on Patient with the HRex canonical (G-36).
+
 ## [6.1.1] - 2026-10-31
 
 "Spartacus," patch.
