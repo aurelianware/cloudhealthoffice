@@ -153,6 +153,14 @@ builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IBenefitPlan
 builder.Services.Configure<AcaOopLimitsOptions>(
     builder.Configuration.GetSection(AcaOopLimitsOptions.SectionName));
 builder.Services.AddSingleton<IAcaLimitsProvider, AcaLimitsProvider>();
+// State program benefit plan templates (docs/integration/STATE-PROGRAM-BENEFIT-TEMPLATES.md).
+builder.Services.AddSingleton<BenefitPlanService.Templates.IBenefitPlanTemplateCatalog>(sp =>
+{
+    var env = sp.GetRequiredService<IHostEnvironment>();
+    var configured = builder.Configuration["BenefitPlanTemplates:Directory"] ?? BenefitPlanService.Templates.BenefitPlanTemplateCatalog.DefaultDirectory;
+    var dir = Path.IsPathRooted(configured) ? configured : Path.Combine(env.ContentRootPath, configured);
+    return BenefitPlanService.Templates.BenefitPlanTemplateCatalog.LoadFrom(dir, sp.GetRequiredService<ILogger<BenefitPlanService.Templates.BenefitPlanTemplateCatalog>>());
+});
 builder.Services.AddSingleton<IPlanYearResolver, PlanYearResolver>();
 builder.Services.AddScoped<IPlanLimitValidator, PlanLimitValidator>();
 

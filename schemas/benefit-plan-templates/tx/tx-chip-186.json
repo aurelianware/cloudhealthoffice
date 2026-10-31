@@ -1,0 +1,312 @@
+{
+  "templateId": "tx-chip-186",
+  "state": "TX",
+  "program": "CHIP",
+  "planName": "Texas CHIP (Above 151% up to 186% FPL)",
+  "population": "Children under 19 in CHIP, household income above 151% up to 186% fpl",
+  "ageRange": [
+    0,
+    18
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2018-10-01",
+  "costSharing": {},
+  "sources": {
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    },
+    "hhsc-chip-cost-sharing": {
+      "title": "HHSC Medicaid and CHIP Eligibility Handbook, D-1800 Cost Sharing (D-1810 to D-1840, effective October 1, 2018)",
+      "url": "https://fhb.hhs.texas.gov/book/export/html/75596",
+      "accessed": "2026-10-31"
+    },
+    "tchp-chip-benefits": {
+      "title": "Texas Children's Health Plan, CHIP benefit table (MK-2205-426), MCO member material for the HHSC CHIP benefit",
+      "url": "https://www.texaschildrenshealthplan.org/sites/default/files/2022-08/MK-2205-426_CHIP_Benefit_Table.pdf",
+      "accessed": "2026-10-31"
+    }
+  },
+  "carveOuts": [
+    {
+      "service": "Dental",
+      "to": "CHIP dental maintenance organization (DMO), separate contract",
+      "status": "verify"
+    }
+  ],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "PA requirements are MCO policy within UMCM limits; load them as prior-auth rules per plan, not as benefit flags.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added services",
+      "why": "MCO-specific extras (for example adult dental, gift cards, extra vision) approved by HHSC per contract; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Formulary",
+      "why": "Outpatient drugs follow the state Vendor Drug Program formulary and preferred drug list; CHO has no formulary resolution yet (capability 5.14).",
+      "status": "verify"
+    },
+    {
+      "item": "Cost-sharing cap of 5% of family income",
+      "why": "The cap is per household and depends on income for the certification period; CHO's out-of-pocket maximum is a fixed dollar amount on the plan. The enrollment broker tracks it (households report at 4.75%).",
+      "status": "sourced",
+      "source": "hhsc-chip-cost-sharing"
+    },
+    {
+      "item": "Non-emergency ER copay ($75)",
+      "why": "CHO cost sharing cannot tell an emergent ER visit from a non-emergent one.",
+      "status": "sourced",
+      "source": "hhsc-chip-cost-sharing"
+    },
+    {
+      "item": "Enrollment fee ($35 per household per term)",
+      "why": "A premium-billing item, not a claim cost share.",
+      "status": "sourced",
+      "source": "hhsc-chip-cost-sharing"
+    },
+    {
+      "item": "American Indian, Alaska Native and unaccompanied refugee minor exemptions",
+      "why": "Member-level exemption from all cost sharing; needs a member attribute that zeroes copays.",
+      "status": "sourced",
+      "source": "hhsc-chip-cost-sharing"
+    },
+    {
+      "item": "Tobacco cessation ($100 per 12-month period)",
+      "why": "No CHO service category for tobacco cessation programs.",
+      "status": "sourced",
+      "source": "tchp-chip-benefits"
+    },
+    {
+      "item": "Frequency limits (one eye exam and one pair of eyewear per 12 months)",
+      "why": "Kept as text: a CHO visit limit counts every claim in the category, so it would deny the eyewear after the exam.",
+      "status": "sourced",
+      "source": "tchp-chip-benefits"
+    },
+    {
+      "item": "Prenatal visit schedule",
+      "why": "Not applicable to CHIP members; see the CHIP Perinatal templates.",
+      "status": "sourced",
+      "source": "tchp-chip-benefits"
+    }
+  ],
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": 20,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "hhsc-chip-cost-sharing",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": 20,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "hhsc-chip-cost-sharing",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "hhsc-chip-cost-sharing",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": 20,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "hhsc-chip-cost-sharing",
+      "status": "verify",
+      "limitations": "The HHSC table has no urgent care line; the doctor visit copay is assumed."
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "hhsc-chip-cost-sharing",
+      "status": "sourced",
+      "limitations": "Emergency visits have no copay; a non-emergency ER visit costs $75 (not modeled, see notModeled)."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-benefits",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": 75,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "hhsc-chip-cost-sharing",
+      "status": "sourced",
+      "limitations": "Copay is per admission. Post-delivery stays: 48 hours vaginal, 96 hours cesarean."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "hhsc-chip-cost-sharing",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "hhsc-chip-cost-sharing",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-benefits",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-benefits",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-benefits",
+      "status": "verify",
+      "limitations": "The HHSC table lists no behavioral health copay; whether the doctor visit copay applies to outpatient behavioral visits is not stated."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-benefits",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-benefits",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-benefits",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-benefits",
+      "status": "sourced",
+      "limitations": "Up to 120 days, for members with a life expectancy of 6 months."
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-benefits",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-benefits",
+      "status": "sourced",
+      "annualMaximum": 20000,
+      "limitations": "$20,000 per 12-month period; diabetic supplies and implantable devices do not count toward it."
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-benefits",
+      "status": "sourced",
+      "limitations": "One eye exam and one pair of non-prosthetic eyewear per 12-month period."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": 10,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "hhsc-chip-cost-sharing",
+      "status": "sourced",
+      "limitations": "Generic $10, brand $35 per prescription."
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": true,
+      "copay": 10,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "status": "sourced",
+      "source": "hhsc-chip-cost-sharing"
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": true,
+      "copay": 35,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "status": "sourced",
+      "source": "hhsc-chip-cost-sharing"
+    }
+  ],
+  "notes": "CHIP has nominal copays by income tier and no deductible or coinsurance. Exclusions include infertility, contraception for family planning, cosmetic and weight-loss services, custodial care and over-the-counter drugs."
+}

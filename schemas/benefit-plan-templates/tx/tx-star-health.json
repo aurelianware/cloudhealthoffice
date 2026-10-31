@@ -1,0 +1,281 @@
+{
+  "templateId": "tx-star-health",
+  "state": "TX",
+  "program": "STAR Health",
+  "planName": "Texas STAR Health",
+  "population": "Children in DFPS conservatorship and young adults formerly in foster care (one statewide MCO)",
+  "ageRange": [
+    0,
+    25
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2026-09-01",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Under 21: Texas Health Steps (EPSDT) and the Comprehensive Care Program cover medically necessary services beyond any adult limit."
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "status": "verify",
+      "source": "cho-tx-qualification"
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "status": "verify",
+      "source": "cho-tx-qualification"
+    }
+  ],
+  "carveOuts": [
+    {
+      "service": "Children's dental (Texas Health Steps dental)",
+      "to": "Dental maintenance organization (DMO), separate contract",
+      "status": "verify"
+    }
+  ],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "PA requirements are MCO policy within UMCM limits; load them as prior-auth rules per plan, not as benefit flags.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added services",
+      "why": "MCO-specific extras (for example adult dental, gift cards, extra vision) approved by HHSC per contract; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Formulary",
+      "why": "Outpatient drugs follow the state Vendor Drug Program formulary and preferred drug list; CHO has no formulary resolution yet (capability 5.14).",
+      "status": "verify"
+    },
+    {
+      "item": "Benefit limits for members 21 and over",
+      "why": "Members who stay in STAR Health after 21 get adult limits (30-day spell of illness; a $200,000 limit that HHSC waived during the COVID-19 emergency). Age-gated limits need benefit rule predicates authored per plan.",
+      "status": "verify",
+      "source": "molina-spell-of-illness"
+    }
+  ],
+  "sources": {
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    },
+    "molina-spell-of-illness": {
+      "title": "Molina Healthcare of Texas, Spell of Illness notice (STAR+PLUS and STAR Health 21+, 30-day inpatient limit)",
+      "url": "https://www.molinahealthcare.com/-/media/Molina/PublicWebsite/PDF/members/tx/en-us/Spell-of-Illness-Notice---Member-EN.pdf",
+      "accessed": "2026-10-31"
+    }
+  }
+}
