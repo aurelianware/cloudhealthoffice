@@ -8,8 +8,8 @@ claims. It stores the core's answer.
 
 This is the first of the hydration options in the
 [core adapter implementer guide](CORE-ADAPTER-IMPLEMENTER-GUIDE.md) (tier 1,
-"Foothold"). It closes known gap 1 there for claims. Members, coverage and
-providers follow in later changes (see [Roadmap](#roadmap)).
+"Foothold"). It closes known gap 1 there for claims, members and coverage.
+Practitioners and organizations follow (see [Roadmap](#roadmap)).
 
 ## Why CPCDS
 
@@ -124,6 +124,49 @@ extracted times). Each claim also gets a `ClaimImportTransaction` row
 (`Format = cpcds`), so the admin console's import log shows CPCDS loads beside
 raw 837 uploads.
 
+## Members and coverage
+
+`POST /api/v1/enrollment/import/cpcds` (enrollment-import-service, permission
+`enrollment:process`), multipart:
+
+| Field | Required | Meaning |
+|---|---|---|
+| `members` | yes | The CPCDS member file. Required column: `Member id`. |
+| `coverages` | no | The CPCDS coverage file. Required columns: `Member id`, `Plan identifier`, `Group id`. |
+| `dryRun` | no | `true` reports what would load, including the plan-code gap report, and writes nothing. |
+
+The two files are turned into the 834 enrollment shape and run through the same
+import as an 834, so members, sponsors and coverage are created, updated and
+audited exactly as they would be from one. Load members and coverage before
+the claims that name them.
+
+- **Member ids.** Every member, dependants included, is filed under the core's
+  own member id. That is what makes the pass-through crosswalk right: the id on
+  the claim file is the CHO member id, and a SMART patient token binds to it.
+  A dependant is not a subscriber; it names its subscriber (`Subscriber id`,
+  else the coverage row's) and its relationship (`self` 18, `spouse` 01,
+  `child` 19, anything else G8).
+- **Names, dates, gender.** `First name` / `Last name` / `Middle name`, or a
+  single `Name` column (`Last, First Middle` or `First Middle Last`). A member
+  with no first and last name is refused and the rest of the file loads.
+  Dates are ISO (`2026-01-01`) or `yyyyMMdd`.
+- **Coverage.** Each coverage row becomes a coverage line: `Plan identifier`
+  is the plan code, `Group id` / `Group name` the sponsor, `Start date` and
+  `End date` the benefit dates, and `Coverage type` picks health, dental
+  (`dental`, `DEN`) or vision. Cancelled, entered-in-error and draft rows are
+  skipped with a warning. A coverage row for a member not in the member file,
+  or a member in two groups, is a row error.
+- **Plan codes.** Coverage loads only for plan codes the tenant has mapped to
+  a CHO benefit plan (the same mapping 834 loads use). Every call returns the
+  plan-code gap report; run with `dryRun=true` first and map the gaps.
+- **Reloads.** Every row is a create-or-update (834 maintenance `001`), so
+  the daily full extract can be sent as is.
+
+Known limits: member updates do not change name or date of birth (as for
+834s); the claim file's `Coverage id` is the core's id, not the CHO coverage
+id the import created, so an EOB's `insurance.coverage` reference does not
+resolve to that Coverage yet.
+
 ## Member crosswalk
 
 `ICoreMemberCrosswalk` turns the core's member id into the CHO member id the
@@ -131,7 +174,9 @@ EOB's `patient` names and a SMART patient token is bound to. The default is
 pass-through (the core's id is CHO's). A crosswalk that knows the source system
 but not the member returns null, and the claim is refused rather than filed
 under a guess: a claim under the wrong member id is invisible to the member.
-A stored crosswalk loaded from the core's member extract comes next.
+Because the member import files members under the core's ids, pass-through is
+right for a plan that loads both files from the same core. A stored crosswalk
+is only needed when CHO already holds members under other ids.
 
 ## The report
 
@@ -157,8 +202,10 @@ A stored crosswalk loaded from the core's member extract comes next.
 
 1. **This change:** claim file parser, mapping to the claim record (and so to
    the C4BB EOBs), idempotent reloads, per-file report, pass-through crosswalk.
-2. Members, coverage, practitioners and organizations from the CPCDS member,
-   coverage and provider files; a stored member crosswalk.
+2. Members and coverage from the CPCDS member and coverage files (done, see
+   [Members and coverage](#members-and-coverage)). Next: practitioners and
+   organizations from the provider file, and resolving the claim's core
+   coverage id to the CHO Coverage.
 3. File-drop trigger (watched storage location) and a tenant-level
    reconciliation and freshness report: last extract time, claims and money
    loaded per source, and lag.

@@ -96,6 +96,17 @@ public class Enrollment834
 
 public class MemberEnrollment
 {
+    /// <summary>
+    /// The member id to file this member under, when the source names it
+    /// outright rather than deriving it from the subscriber id. Set by the
+    /// CPCDS importer, whose member file gives every member (dependents
+    /// included) the core's own member id: filing them under that id is what
+    /// lets the core's claims, which name the same id, find them. Never read
+    /// from a request body.
+    /// </summary>
+    [JsonIgnore]
+    public string? ExplicitMemberId { get; set; }
+
     [JsonPropertyName("relationship")]
     public string Relationship { get; set; } = string.Empty; // INS02: 18=Self, 01=Spouse, 19=Child
     

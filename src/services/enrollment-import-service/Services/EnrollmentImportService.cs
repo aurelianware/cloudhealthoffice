@@ -889,7 +889,10 @@ public class EnrollmentImportService : IEnrollmentImportService
             MemberId = memberId,
             SSN = enrollment.Demographics?.IdQualifier == "34" ? enrollment.Demographics.Id : null,
             GroupNumber = enrollment.GroupNumber ?? string.Empty,
-            IsSubscriber = true,
+            // An 834 top-level loop is always the subscriber. A CPCDS member
+            // file lists dependents as members in their own right, each with
+            // its relationship to the subscriber.
+            IsSubscriber = enrollment.ExplicitMemberId is null || enrollment.Relationship == "18",
             FirstName = enrollment.Demographics?.FirstName ?? string.Empty,
             LastName = enrollment.Demographics?.LastName ?? string.Empty,
             MiddleName = enrollment.Demographics?.MiddleName,
@@ -1804,6 +1807,12 @@ public class EnrollmentImportService : IEnrollmentImportService
 
     private string GenerateMemberId(MemberEnrollment enrollment)
     {
+        // A source that names the member outright (CPCDS) wins.
+        if (!string.IsNullOrWhiteSpace(enrollment.ExplicitMemberId))
+        {
+            return enrollment.ExplicitMemberId.Trim();
+        }
+
         // Use SubscriberId if available, otherwise generate
         if (!string.IsNullOrEmpty(enrollment.SubscriberId))
         {
