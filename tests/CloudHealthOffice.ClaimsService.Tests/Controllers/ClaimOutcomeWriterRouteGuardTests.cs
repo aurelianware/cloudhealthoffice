@@ -60,6 +60,9 @@ public class ClaimOutcomeWriterRouteGuardTests
             ["POST api/claims/work-queue/{claimId}/assign"] = (Kind.NoStatusChange, "work-queue assignment"),
             ["POST api/claims/work-queue/{claimId}/accumulator-adjustment/resolve"] = (Kind.NoStatusChange, "clears an accumulator clamp review"),
             ["POST api/mass-adjudication/runs"] = (Kind.NoStatusChange, "stores a run summary"),
+            ["POST api/v1/claims/shadow-adjudication/runs"] = (Kind.NoStatusChange,
+                "shadow adjudication: re-adjudicates imported core claims through read-only stages only (no Persistence), " +
+                "stores comparisons in their own collection; the claim is never written"),
         };
 
     [Fact]

@@ -74,6 +74,8 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
     public IClaimAdjustmentRepository AdjustmentRepository { get; } = Substitute.For<IClaimAdjustmentRepository>();
     public IClaimAdjustmentService AdjustmentService { get; } = Substitute.For<IClaimAdjustmentService>();
     public IClaimImportTransactionRepository ImportTransactionRepository { get; } = Substitute.For<IClaimImportTransactionRepository>();
+    public global::ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationRepository ShadowAdjudicationRepository { get; } =
+        Substitute.For<global::ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationRepository>();
     public IProviderAttributionRepository AttributionRepository { get; } = Substitute.For<IProviderAttributionRepository>();
 
     /// <summary>
@@ -233,6 +235,8 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(AdjustmentRepository);
             services.AddSingleton(AdjustmentService);
             services.AddSingleton(ImportTransactionRepository);
+            // The shadow adjudication store is Mongo, removed by the filter above.
+            services.AddSingleton(ShadowAdjudicationRepository);
             services.AddSingleton(AttributionRepository);
 
             // 5.7 — NcciEngine's repository implementation got removed by

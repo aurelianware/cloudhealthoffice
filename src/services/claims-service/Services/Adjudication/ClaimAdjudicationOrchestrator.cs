@@ -17,8 +17,33 @@ namespace ClaimsService.Services.Adjudication;
 /// member + plan once via the cached resolvers, then iterates the
 /// registered stages in <see cref="IClaimAdjudicationStage.Order"/> order.
 /// </summary>
-public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrator, IClaimApprovalReadjudicator
+public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrator, IClaimApprovalReadjudicator, IShadowAdjudicationPipeline
 {
+    /// <summary>
+    /// The stages a shadow run executes: each one only reads (or, for
+    /// BenefitCalculation, calls the benefit engine in Prospective mode, which
+    /// writes no accumulator). An allowlist on purpose: a stage added later is
+    /// left out of shadow runs until someone checks it has no side effect and
+    /// adds it here. Left out today: <see cref="Stages.PersistenceStage"/>
+    /// (writes the claim's projection and the accumulator outbox) and
+    /// <see cref="Stages.AiExaminationStage"/> (publishes a ClaimPended event
+    /// and spends model tokens).
+    /// </summary>
+    public static readonly IReadOnlySet<string> ShadowSafeStages = new HashSet<string>(StringComparer.Ordinal)
+    {
+        Stages.ScrubbingStage.StageName,
+        Stages.TimelyFilingStage.StageName,
+        Stages.DuplicateClaimStage.StageName,
+        Stages.ProviderIntegrityStage.StageName,
+        Stages.NetworkCredentialingStage.StageName,
+        Stages.InpatientGroupingStage.StageName,
+        Stages.PricingStage.StageName,
+        Stages.CoordinationOfBenefitsStage.StageName,
+        Stages.BenefitCalculationStage.StageName,
+        Stages.NcciEditsStage.StageName,
+        Stages.PlanEditsStage.StageName,
+    };
+
     private readonly ClaimAdapterFactory _adapterFactory;
     private readonly IBenefitPlanResolver _planResolver;
     private readonly IMemberResolver _memberResolver;
@@ -149,7 +174,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
 
     private async Task<ClaimAdjudicationContext> PrepareContextAsync(
         string tenantId, string claimVersionId, AdapterClaim claim,
-        string? actorId, string? correlationId, CancellationToken ct)
+        string? actorId, string? correlationId, CancellationToken ct, bool shadow = false)
     {
         var context = new ClaimAdjudicationContext
         {
@@ -158,6 +183,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             Claim = claim,
             ActorId = actorId,
             CorrelationId = correlationId,
+            IsShadow = shadow,
         };
 
         // The X12 837 on-ramp (ClaimsV1Controller.ImportRaw837 ->
@@ -437,6 +463,27 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         };
     }
 
+    /// <summary>
+    /// Shadow run (<see cref="IShadowAdjudicationPipeline"/>): adjudicates
+    /// <paramref name="claim"/> — a detached copy the caller owns — through
+    /// <see cref="ShadowSafeStages"/> only and returns the in-memory result.
+    /// Nothing is persisted, no accumulator commit is prepared for the
+    /// outbox, and no adjudicated event is emitted.
+    /// </summary>
+    public async Task<ClaimAdjudicationContext> EvaluateShadowAsync(
+        string tenantId, AdapterClaim claim, string? actorId, string? correlationId, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(tenantId);
+        ArgumentNullException.ThrowIfNull(claim);
+        _tenantContext.TenantId = tenantId;
+
+        var context = await PrepareContextAsync(
+            tenantId, claim.ClaimVersionId is { Length: > 0 } v ? v : claim.Id, claim,
+            actorId, correlationId, ct, shadow: true).ConfigureAwait(false);
+        await RunPipelineAsync(context, ct).ConfigureAwait(false);
+        return context;
+    }
+
     private static bool HasMeaningfulAdjudicationProjection(AdapterClaim claim)
     {
         var result = claim.AdjudicationResult;
@@ -471,6 +518,16 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     {
         foreach (var stage in _stages)
         {
+            // A shadow run never reaches a stage with a side effect, required
+            // or not (Persistence is required in a real run).
+            if (context.IsShadow && !ShadowSafeStages.Contains(stage.Name))
+            {
+                _logger.LogDebug(
+                    "Shadow run skips stage {Stage} for claim {ClaimVersionId}",
+                    stage.Name, LogSanitizer.Sanitize(context.ClaimVersionId));
+                continue;
+            }
+
             var enabled = IsEnabled(stage);
             var shouldSkip = !enabled
                 || (context.ShortCircuited && !stage.IsRequired)

@@ -52,4 +52,18 @@ public sealed class InMemoryClaimImportTransactionRepository : IClaimImportTrans
             return Task.FromResult(result);
         }
     }
+
+    public Task<IReadOnlyList<ClaimImportTransaction>> ListByImportBatchAsync(
+        string tenantId, string importBatchId, int limit, CancellationToken ct = default)
+    {
+        lock (_sync)
+        {
+            IReadOnlyList<ClaimImportTransaction> result = _transactions
+                .Where(t => t.TenantId == tenantId && t.ImportBatchId == importBatchId)
+                .OrderBy(t => t.ReceivedAt)
+                .Take(limit)
+                .ToList();
+            return Task.FromResult(result);
+        }
+    }
 }

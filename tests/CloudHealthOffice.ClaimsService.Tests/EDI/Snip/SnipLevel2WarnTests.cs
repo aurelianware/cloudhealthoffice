@@ -365,6 +365,10 @@ public class SnipLevel2WarnTests
         public Task<IReadOnlyList<ClaimImportTransaction>> ListWithSnipWarningsAsync(
             string tenantId, string? ruleId = null, int? level = null, string? submitterId = null, int limit = 100)
             => _inner.ListWithSnipWarningsAsync(tenantId, ruleId, level, submitterId, limit);
+
+        public Task<IReadOnlyList<ClaimImportTransaction>> ListByImportBatchAsync(
+            string tenantId, string importBatchId, int limit, CancellationToken ct = default)
+            => _inner.ListByImportBatchAsync(tenantId, importBatchId, limit, ct);
     }
 
     internal sealed record LogEntry(LogLevel Level, EventId EventId, string Message, IReadOnlyDictionary<string, object?> Properties);
