@@ -84,13 +84,13 @@ public sealed class CpcdsFreshnessReporter
     public const int FailingAfter = 3;
 
     private readonly ICpcdsDropRunRepository _runs;
-    private readonly CpcdsDropOptions _options;
+    private readonly CpcdsDropTenants _tenants;
     private readonly TimeProvider _clock;
 
-    public CpcdsFreshnessReporter(ICpcdsDropRunRepository runs, IOptions<CpcdsDropOptions> options, TimeProvider? clock = null)
+    public CpcdsFreshnessReporter(ICpcdsDropRunRepository runs, CpcdsDropTenants tenants, TimeProvider? clock = null)
     {
         _runs = runs;
-        _options = options.Value;
+        _tenants = tenants;
         _clock = clock ?? TimeProvider.System;
     }
 
@@ -98,8 +98,8 @@ public sealed class CpcdsFreshnessReporter
     {
         var now = _clock.GetUtcNow().UtcDateTime;
         windowDays = Math.Clamp(windowDays, 1, 366);
-        var configured = _options.Enabled && _options.Tenants.TryGetValue(tenantId, out _);
-        _options.Tenants.TryGetValue(tenantId, out var tenant);
+        var tenant = await _tenants.ResolveAsync(tenantId, ct);
+        var configured = tenant is not null;
 
         var report = new CpcdsFreshnessReport
         {
