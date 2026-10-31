@@ -305,6 +305,9 @@ EOBs appear once the member loads, and claims that found no CHO coverage carry
 a warning and link when the claim file is reloaded. Every import is
 idempotent, so moving a failed run's files back to `inbound` is always safe.
 
+For the hosted drop on GCP (SFTP into Cloud Storage), see
+[CPCDS-SFTP-DROP-GCP.md](CPCDS-SFTP-DROP-GCP.md).
+
 ## Freshness and reconciliation
 
 `GET /api/v1/claims/import/cpcds/drops/report` answers two questions about a
