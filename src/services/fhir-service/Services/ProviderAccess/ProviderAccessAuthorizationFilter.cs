@@ -127,7 +127,10 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
 
         // Patient Access (the member reading their own record) is governed by the
         // patient binding SMART already enforced, not by Provider Access consent.
-        if (!Governs(http.Request, scopes))
+        // A Payer-to-Payer identifier lookup is governed by the requesting
+        // payer's recorded consent, which PatientController checks.
+        if (!Governs(http.Request, scopes)
+            || http.Items[FhirService.Middleware.SmartScopeEnforcementMiddleware.PayerToPayerIdentifierLookupItemKey] is true)
         {
             await next();
             return;
