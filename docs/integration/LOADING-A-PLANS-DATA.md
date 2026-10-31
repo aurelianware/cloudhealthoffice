@@ -19,7 +19,7 @@ first, and close its gaps before moving on.
 | 3 | Providers and network | The core's provider and network tables, or credentialing | Providers and networks APIs; roster file import planned | Partly ships |
 | 4 | Members and coverage | CPCDS member and coverage files, or 834 | Enrollment import, or the daily drop | Ships |
 | 5 | Claims | CPCDS claim files | Claims import, or the daily drop | Ships |
-| 6 | Authorizations | The UM platform's export | Authorization import | In review ([#1683](https://github.com/aurelianware/cloudhealthoffice/pull/1683)) |
+| 6 | Authorizations | The UM platform's export (CSV), or X12 278 | Authorization import | CSV ships; 278 in review ([#1685](https://github.com/aurelianware/cloudhealthoffice/pull/1685)) |
 | 7 | Validate | | Inferno against the deployment | Ships |
 
 Every import shares these behaviors:
@@ -129,7 +129,7 @@ authorizations are read-only in CHO. See
 
 - Plans that decide authorizations in CHO don't need this step. That is the
   default, `Cms0057:Authorization:OperatingMode = Replace`.
-- X12 278 files, a real-time push endpoint for each decision, and CORE
+- X12 278 files load through `POST /api/v1/authorizations/import/x12-278` (in review). A real-time push endpoint for each decision, and CORE
   real-time 278 inbound are planned.
 
 ## The daily drop
