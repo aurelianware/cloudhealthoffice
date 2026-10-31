@@ -569,6 +569,13 @@ builder.Services.AddHttpClient(ClaimsService.Import.Cpcds.Drop.HttpCpcdsUpstream
     // A first load looks up every new NPI in NPPES.
     client.Timeout = TimeSpan.FromMinutes(30);
 });
+builder.Services.AddHttpClient(ClaimsService.Import.Cpcds.Drop.HttpCpcdsUpstreamImports.AuthorizationClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:AuthorizationService"]
+        ?? "http://authorization-service");
+    client.Timeout = TimeSpan.FromMinutes(30);
+});
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsUpstreamImports,
     ClaimsService.Import.Cpcds.Drop.HttpCpcdsUpstreamImports>();
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsImportBatchCompletedHandler,

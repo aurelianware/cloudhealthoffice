@@ -308,6 +308,10 @@ idempotent, so moving a failed run's files back to `inbound` is always safe.
 For the hosted drop on GCP (SFTP into Cloud Storage), see
 [CPCDS-SFTP-DROP-GCP.md](CPCDS-SFTP-DROP-GCP.md).
 
+Authorization files (a name with `auth` or `278`) travel the same drop. They
+load after members and coverage, through authorization-service. See
+[AUTHORIZATION-IMPORT.md](AUTHORIZATION-IMPORT.md#in-the-daily-drop).
+
 ### Hosted SFTP logins
 
 When Aurelianware hosts the drop (GCP, SFTPGo in front of the drop bucket),

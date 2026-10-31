@@ -19,12 +19,20 @@ public interface ICpcdsUpstreamImports
     Task<CpcdsDropStep> ImportClaimProvidersAsync(
         string tenantId, CpcdsDropFile claims, string claimsContent,
         IReadOnlyDictionary<string, string>? columnMap, CancellationToken ct);
+
+    /// <summary>
+    /// An authorization file (authorization-service): an X12 278 interchange
+    /// when the content starts with ISA, else the authorization CSV.
+    /// </summary>
+    Task<CpcdsDropStep> ImportAuthorizationsAsync(
+        string tenantId, CpcdsDropFile file, string content, string? sourceSystem, string? lineOfBusiness, CancellationToken ct);
 }
 
 public sealed class HttpCpcdsUpstreamImports : ICpcdsUpstreamImports
 {
     public const string EnrollmentClientName = "EnrollmentImportService";
     public const string ProviderClientName = "ProviderServiceCpcdsImports";
+    public const string AuthorizationClientName = "AuthorizationServiceImports";
 
     private readonly IHttpClientFactory _http;
 
@@ -75,6 +83,38 @@ public sealed class HttpCpcdsUpstreamImports : ICpcdsUpstreamImports
             Count(json, step, "npisInFile", "alreadyKnown", "created", "notInNppes", "lookupFailed", "invalid");
             Errors(json, step, "fileErrors");
         }, ct);
+        return step;
+    }
+
+    public async Task<CpcdsDropStep> ImportAuthorizationsAsync(
+        string tenantId, CpcdsDropFile file, string content, string? sourceSystem, string? lineOfBusiness, CancellationToken ct)
+    {
+        var x12 = content.TrimStart('\uFEFF', ' ', '\r', '\n', '\t').StartsWith("ISA", StringComparison.Ordinal);
+        using var form = new MultipartFormDataContent();
+        form.Add(FileContent(content), "file", file.Name);
+        if (!string.IsNullOrWhiteSpace(sourceSystem))
+            form.Add(new StringContent(sourceSystem), "sourceSystem");
+        if (!string.IsNullOrWhiteSpace(lineOfBusiness))
+            form.Add(new StringContent(lineOfBusiness), "lineOfBusiness");
+
+        var step = new CpcdsDropStep { Name = x12 ? "authorizations-278" : "authorizations", Files = [file.Name] };
+        await SendAsync(AuthorizationClientName, x12 ? "api/v1/authorizations/import/x12-278" : "api/v1/authorizations/import/csv",
+            tenantId, form, step, json =>
+            {
+                Count(json, step, "rowsRead", "transactionSets", "authorizationsInFile", "created", "updated", "unchanged", "rejected");
+                Errors(json, step, "fileErrors");
+                if (json.TryGetProperty("authorizations", out var list) && list.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in list.EnumerateArray())
+                    {
+                        if (step.Errors.Count >= MaxErrorsKept) break;
+                        if (!item.TryGetProperty("errors", out var errors) || errors.ValueKind != JsonValueKind.Array
+                            || errors.GetArrayLength() == 0) continue;
+                        var number = item.TryGetProperty("authorizationNumber", out var n) ? n.GetString() : null;
+                        step.Errors.Add($"{number}: {string.Join(" ", errors.EnumerateArray().Select(e => e.GetString()))}");
+                    }
+                }
+            }, ct);
         return step;
     }
 
