@@ -564,14 +564,17 @@ public sealed class InfernoRunner
     /// </summary>
     public static InteropStatus RollUp(InfernoTestRun run, IReadOnlyList<InfernoKnownKitIssue>? knownKitIssues = null)
     {
+        // A run is judged from its tests when it has any. A group's or suite's
+        // own row rolls up every test under it in the session, so the parent
+        // group's row in one group run also carries the failures of the groups
+        // run before it (each counted in its own run), and it is failed by an
+        // excused test too. Any failing test that is not excused still fails it.
         var results = run.Results;
-        if (knownKitIssues is { Count: > 0 }
-            && results.Any(r => MapStatus(r.Result) == InteropStatus.Failed && InfernoKnownKitIssue.Excuses(knownKitIssues, r.TestId)))
+        if (results.Any(r => r.TestId is not null))
         {
-            // A group's or suite's own row is failed by the excused test under it,
-            // so once one is excused the run is judged from its tests alone. Any
-            // other failing test still fails it.
-            results = results.Where(r => r.TestId is not null && !InfernoKnownKitIssue.Excuses(knownKitIssues, r.TestId)).ToList();
+            results = results
+                .Where(r => r.TestId is not null && !InfernoKnownKitIssue.Excuses(knownKitIssues ?? [], r.TestId))
+                .ToList();
         }
 
         var statuses = results.Select(r => MapStatus(r.Result)).ToList();

@@ -385,10 +385,13 @@ each with its reason. Its failure is still recorded, as an
 `inferno.result.knownKitIssue` finding in the run's evidence, but it does not
 fail the scenario. The scenario then passes or fails on every other test. A
 group row that failed only because of an excused test under it is recorded the
-same way. A unit test pins the list, so adding an entry shows up in review as
-the change of claim it is.
+same way. A run is judged from its test rows: the harness runs a suite's
+groups one at a time in one session, and Inferno's row for their parent group
+carries every earlier group's failures, which are counted in that group's own
+run. A unit test pins the list, so adding an entry shows up in review as the
+change of claim it is.
 
-There is one today, agreed on 2026-10-30:
+There are two today, both agreed on 2026-10-30:
 
 * **CARIN BB subtype validation with mixed claim types** (`c4bb_v200_eob_oral_validation_test`,
   `c4bb_v200_eob_pharmacy_validation_test`,
@@ -408,6 +411,28 @@ There is one today, agreed on 2026-10-30:
     the conformance goldens.
   * A kit release that validates each EOB only against the profile it
     declares removes the need for these entries. Re-check at every pin bump.
+
+* **Plan-Net forward-chain searches** (the 25
+  `davinci_plan_net_v110_forward_chain_*_search_test` entries for the
+  INFERNO-PLANNET-SERVER-001 scenario).
+  * In davinci-plan-net-test-kit `v0.13.4`, the latest release, a forward-chain
+    search takes its value from the first resource of the chained type the
+    suite has collected that carries the chained element
+    (`find_forward_chain_value` in `search_test.rb`). It does not check that
+    any resource of the searched type references that resource, and the test
+    fails when the search returns nothing.
+  * The first Organization collected is the payer, from the Endpoint group's
+    `_include=Endpoint:organization` search. So `PractitionerRole?organization.name=`,
+    `Location?organization.type=` and the like ask for resources that point at
+    the payer, and a directory that links practitioners, locations and
+    services to the practices that run them returns none.
+  * Before excusing them, the directory gained the links Plan-Net expects
+    (PractitionerRole.organization, healthcareService and location;
+    OrganizationAffiliation.organization; Organization.endpoint; #1636, #1639).
+    The chains whose first candidate is referenced now pass in the suite, and
+    CHO's chained search is covered by `PlanNetSearchEngineTests`. The 25 that
+    still fail in run 41133414552 all point at a resource nothing references.
+  * Re-check at every pin bump.
 
 What is deliberately not run, and why:
 

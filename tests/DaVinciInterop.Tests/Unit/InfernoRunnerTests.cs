@@ -329,6 +329,30 @@ public sealed class InfernoRunnerTests
         InfernoRunner.RollUp(run, OralIssue).Should().Be(InteropStatus.Skipped);
     }
 
+    [Fact]
+    public void A_parent_group_row_failed_by_an_earlier_group_run_does_not_fail_a_later_one()
+    {
+        // Groups run one at a time in one session (as run 41133414552 ran
+        // c4bb_v200_eob, then c4bb_v200_coverage): Inferno's row for their
+        // parent Group02 in the coverage run rolls up the EOB group's excused
+        // failure, while the coverage run's own tests passed or skipped.
+        var coverage = new InfernoTestRun
+        {
+            Status = "done",
+            Results =
+            [
+                new InfernoResult { TestId = "c4bb_v200-Group02-c4bb_v200_coverage-c4bb_v200_coverage_read_test", Result = "pass" },
+                new InfernoResult { TestId = "c4bb_v200-Group02-c4bb_v200_coverage-c4bb_v200_coverage__id_search_test", Result = "skip" },
+                new InfernoResult { TestGroupId = "c4bb_v200-Group02-c4bb_v200_coverage", Result = "pass" },
+                new InfernoResult { TestGroupId = "c4bb_v200-Group02", Result = "fail" },
+            ],
+        };
+
+        InfernoRunner.RollUp(coverage, OralIssue).Should().Be(InteropStatus.Passed);
+        InfernoRunner.RollUp(coverage).Should().Be(InteropStatus.Passed,
+            "the parent's failure belongs to the run of the group whose test failed, and is counted there");
+    }
+
     [Theory]
     [InlineData("c4bb_v200_eob_oral_validation_test", true)]
     [InlineData("c4bb_v200-Group02-c4bb_v200_eob-c4bb_v200_eob_oral_validation_test", true)]

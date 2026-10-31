@@ -211,6 +211,27 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **DaVinci Interop judges an Inferno run from its tests.** The harness runs a
+  suite's groups one at a time in one session, and Inferno's row for their
+  parent group carries the failures of every group run before it. In run
+  41133414552 the CARIN BB scenario failed only on that row (`c4bb_v200-Group02`),
+  carrying the EOB group's excused validation tests. Each group's failures are
+  still counted in its own run.
+- **The Plan-Net forward-chain searches are known kit issues.** The kit
+  (v0.13.4) chains on the first resource it collected with the chained element,
+  usually the payer, whether or not anything references it. The 25 forward-chain
+  tests that still fail after #1636 and #1639 are listed in
+  `infernoKnownKitIssues` with that reason (see `docs/interop/davinci.md`).
+- **DaVinci Interop runs the CARIN BB FHIR API group as one Inferno run.**
+  The Coverage, Organization and Practitioner groups read the references the
+  EOB searches save in Inferno's scratch, which lasts one run, so run as
+  separate groups they skipped with nothing to read, even in the kit's order.
+  The scenario now runs their parent group (`c4bb_v200-Group02`), which also
+  runs the RelatedPerson group (it skips: CHO publishes no RelatedPerson).
+- **The interop stack has 15 minutes to start.** `docker compose up --build`
+  for the first scenario builds every CHO and kit image, and took over the old
+  5-minute limit in run 41133414552, so the Bulk Data scenario never ran.
+
 - **DaVinci Interop prints the validator's log in the job log.** When the
   inferno-validator sidecar answers with an error, every kit reports "Unable
   to connect to validator" without the reason. The Inferno job now prints the
