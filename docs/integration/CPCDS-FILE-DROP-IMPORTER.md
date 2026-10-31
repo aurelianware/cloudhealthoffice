@@ -193,6 +193,81 @@ The report lists each NPI with its roles and outcome: `AlreadyKnown`,
 (reload to retry) or `Invalid`. Send this file before or after the claim
 import; order does not matter, since the EOB is built when it is read.
 
+## The daily file drop
+
+The endpoints above load a file when something calls them. The file drop
+loads a core's daily extracts without anyone calling anything: claims-service
+watches a folder per tenant and runs the imports in the order the data
+depends on.
+
+```
+{CpcdsDrop:Root}/{tenantId}/
+  inbound/      the core (or its SFTP upload) writes extracts here
+  processing/   a run moves the files it loads here first
+  processed/    then here, one folder per run, when every step ran
+  failed/       or here, when a step failed (reload by moving files back to inbound)
+```
+
+Any storage the claims-service pod can mount works the same: the volume
+behind an SFTP server, an SFTP-enabled Azure Blob account (blob CSI driver),
+a GCS bucket (gcsfuse CSI driver) or a plain persistent volume.
+
+Each run:
+
+1. Takes the files that have not changed for `QuietPeriod`, so a transfer
+   still in progress is not read half-written. Hidden files and `.part`,
+   `.partial`, `.filepart` and `.tmp` uploads are never read.
+2. Recognizes files by name: one containing `member` is the member file,
+   `coverage` the coverage file, `claim` a claim file (`CPCDS_Members.csv`,
+   `qnxt_claims_20261101.csv`). One member file, with its coverage file,
+   loads per run; claim files all load. A coverage file with no member file,
+   and a file the name does not place, wait in `inbound` with a note on the
+   run.
+3. Moves each file it will load into `processing/{runId}`. The move is
+   atomic, so with several claims-service replicas exactly one run gets
+   each file.
+4. Loads members and coverage (enrollment-import-service), then for each
+   claim file the providers it names (provider-service) and then its claims.
+   The two upstream imports are called with claims-service's own identity
+   for the tenant.
+5. Records the run (`CpcdsDropRuns`), moves the files to `processed` or
+   `failed`, and hands each loaded claim batch to the after-import handlers.
+   The built-in one shadow-adjudicates the batch when the tenant sets
+   `ShadowAfterImport` and shadow adjudication is enabled for it (see
+   [SHADOW-ADJUDICATION.md](SHADOW-ADJUDICATION.md)).
+
+Configuration (claims-service):
+
+```json
+"CpcdsDrop": {
+  "Enabled": true,
+  "Root": "/drops",
+  "Interval": "00:05:00",
+  "QuietPeriod": "00:02:00",
+  "Tenants": {
+    "plan-a": { "SourceSystem": "qnxt", "LineOfBusiness": "Medicaid", "ShadowAfterImport": true }
+  }
+}
+```
+
+Only the tenants listed are loaded; a folder for any other tenant is
+ignored. `Services:EnrollmentImportService` and `Services:ProviderService`
+name the upstream services.
+
+Endpoints (permission `claims:import`):
+
+| Endpoint | |
+|---|---|
+| `GET /api/v1/claims/import/cpcds/drops` | The tenant's recent runs: files, each step's counts and errors, where the files went, notes |
+| `GET /api/v1/claims/import/cpcds/drops/{runId}` | One run |
+| `POST /api/v1/claims/import/cpcds/drops/run` | Load what is waiting now instead of at the next poll (204 when nothing is ready) |
+
+A step that fails does not stop the others. A failed member load still lets
+the claims load: they are filed under the core's member ids, so a member's
+EOBs appear once the member loads, and claims that found no CHO coverage carry
+a warning and link when the claim file is reloaded. Every import is
+idempotent, so moving a failed run's files back to `inbound` is always safe.
+
 ## Member crosswalk
 
 `ICoreMemberCrosswalk` turns the core's member id into the CHO member id the
@@ -237,9 +312,9 @@ is only needed when CHO already holds members under other ids.
    [Members and coverage](#members-and-coverage)). Providers named on
    claims (done, see [Providers named on claims](#providers-named-on-claims)).
    Resolving the claim's core coverage id to the CHO Coverage (#1666).
-3. File-drop trigger (watched storage location) and a tenant-level
-   reconciliation and freshness report: last extract time, claims and money
-   loaded per source, and lag.
+3. The daily file drop (done, see [The daily file drop](#the-daily-file-drop)).
+   Next: a tenant-level reconciliation and freshness report over the drop
+   runs: last extract time, claims and money loaded per source, and lag.
 4. X12 as the second source: EOBs from the 837/835 pairs and members from the
    834 files CHO already parses, through the same pipeline, crosswalk and
    report.

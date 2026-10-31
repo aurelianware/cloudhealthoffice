@@ -531,6 +531,39 @@ builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdj
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationService,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationService>();
 
+// CPCDS file drop: a folder per tenant the core's daily extracts land in,
+// loaded on a timer (members and coverage, claim providers, claims). Off
+// unless CpcdsDrop:Enabled. See docs/integration/CPCDS-FILE-DROP-IMPORTER.md.
+builder.Services.Configure<ClaimsService.Import.Cpcds.Drop.CpcdsDropOptions>(
+    builder.Configuration.GetSection(ClaimsService.Import.Cpcds.Drop.CpcdsDropOptions.SectionName));
+builder.Services.AddSingleton<ClaimsService.Import.Cpcds.Drop.ICpcdsDropStore>(sp =>
+    new ClaimsService.Import.Cpcds.Drop.FolderCpcdsDropStore(
+        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ClaimsService.Import.Cpcds.Drop.CpcdsDropOptions>>().Value.Root));
+builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsDropRunRepository,
+    ClaimsService.Import.Cpcds.Drop.CpcdsDropRunRepositoryMongo>();
+builder.Services.AddHttpClient(ClaimsService.Import.Cpcds.Drop.HttpCpcdsUpstreamImports.EnrollmentClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:EnrollmentImportService"]
+        ?? "http://enrollment-import-service:8080");
+    // A daily member file can take minutes to import.
+    client.Timeout = TimeSpan.FromMinutes(30);
+});
+builder.Services.AddHttpClient(ClaimsService.Import.Cpcds.Drop.HttpCpcdsUpstreamImports.ProviderClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:ProviderService"]
+        ?? "http://provider-service:8080");
+    // A first load looks up every new NPI in NPPES.
+    client.Timeout = TimeSpan.FromMinutes(30);
+});
+builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsUpstreamImports,
+    ClaimsService.Import.Cpcds.Drop.HttpCpcdsUpstreamImports>();
+builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsImportBatchCompletedHandler,
+    ClaimsService.Import.Cpcds.Drop.ShadowAdjudicateAfterImport>();
+builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.CpcdsDropRunner>();
+builder.Services.AddHostedService<ClaimsService.Import.Cpcds.Drop.CpcdsDropWorker>();
+
 var adjudicationMaxConcurrentCalls = Math.Max(
     1,
     builder.Configuration.GetValue<int?>("Messaging:AdjudicationMaxConcurrentCalls") ?? 16);

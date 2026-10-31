@@ -274,6 +274,8 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
 
                 // Same filter, same reason: the shadow adjudication store is Mongo.
                 services.AddSingleton(Substitute.For<global::ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationRepository>());
+                services.AddSingleton<global::ClaimsService.Import.Cpcds.Drop.ICpcdsDropRunRepository>(
+                    new global::ClaimsService.Import.Cpcds.Drop.InMemoryCpcdsDropRunRepository());
 
                 // The claim access log's Mongo repository is removed by the
                 // filter above; the audit filter's writer still needs one.
