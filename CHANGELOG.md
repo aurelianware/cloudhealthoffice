@@ -211,6 +211,11 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
 
 ### Fixed
 
+- **The Inferno job frees disk space before building images.** Run
+  41159022696 ran out of disk while building the CHO service images, so no kit
+  started. The job now removes preinstalled toolchains it doesn't use (Android,
+  GHC, Swift, CodeQL) and prunes Docker before the build, and logs `df` before
+  and after.
 - **DaVinci Interop judges an Inferno run from its tests.** The harness runs a
   suite's groups one at a time in one session, and Inferno's row for their
   parent group carries the failures of every group run before it. In run
