@@ -176,6 +176,7 @@ R = responsible, A = accountable, C = consulted, I = informed.
 - **Compliance:** prior authorization decision timeliness and metrics reporting.
 
 ## Related Documents
+- [Implementation guide: loading a plan's data](../integration/LOADING-A-PLANS-DATA.md): the loads in order, with endpoints, dry runs and the daily drop
 - [Positioning and engagement layers](../POSITIONING.md)
 - [Core Administration Adapter QRE](../features/questionnaires/qre-core-admin-adapter-questions.md)
 - [Diligence binder](../diligence/README.md) and [sample pilot checklist](../diligence/SAMPLE-PILOT-CHECKLIST.md)
