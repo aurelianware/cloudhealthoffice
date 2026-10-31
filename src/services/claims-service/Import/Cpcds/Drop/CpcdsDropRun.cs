@@ -3,8 +3,10 @@ using MongoDB.Driver;
 
 namespace ClaimsService.Import.Cpcds.Drop;
 
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
 public enum CpcdsDropRunStatus { Running, Succeeded, CompletedWithErrors, Failed }
 
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
 public enum CpcdsDropStepStatus { Succeeded, CompletedWithErrors, Failed }
 
 /// <summary>One load of a tenant's drop: the files it took and what each step did.</summary>
