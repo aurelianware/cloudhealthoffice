@@ -52,4 +52,16 @@ public class ClaimImportTransactionRepositoryMongo : IClaimImportTransactionRepo
             .Limit(limit)
             .ToListAsync();
     }
+
+    public async Task<IReadOnlyList<ClaimImportTransaction>> ListByImportBatchAsync(
+        string tenantId, string importBatchId, int limit, CancellationToken ct = default)
+    {
+        var f = Builders<ClaimImportTransaction>.Filter;
+        var filter = f.Eq(x => x.TenantId, tenantId) & f.Eq(x => x.ImportBatchId, importBatchId);
+
+        return await _collection.Find(filter)
+            .SortBy(x => x.ReceivedAt)
+            .Limit(limit)
+            .ToListAsync(ct);
+    }
 }

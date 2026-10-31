@@ -17,4 +17,12 @@ public interface IClaimImportTransactionRepository
     /// </summary>
     Task<IReadOnlyList<ClaimImportTransaction>> ListWithSnipWarningsAsync(
         string tenantId, string? ruleId = null, int? level = null, string? submitterId = null, int limit = 100);
+
+    /// <summary>
+    /// The transactions one import batch wrote (CPCDS file drop: one per claim
+    /// in the file), oldest first. Used to pick the claims of a batch for a
+    /// shadow adjudication run.
+    /// </summary>
+    Task<IReadOnlyList<ClaimImportTransaction>> ListByImportBatchAsync(
+        string tenantId, string importBatchId, int limit, CancellationToken ct = default);
 }

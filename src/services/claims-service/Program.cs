@@ -520,6 +520,16 @@ builder.Services.AddScoped<ClaimAdjudicationOrchestrator>();
 builder.Services.AddScoped<IClaimAdjudicationOrchestrator>(sp => sp.GetRequiredService<ClaimAdjudicationOrchestrator>());
 // Examiner approval of a pended claim re-runs the pipeline (accumulators committed after the final write).
 builder.Services.AddScoped<IClaimApprovalReadjudicator>(sp => sp.GetRequiredService<ClaimAdjudicationOrchestrator>());
+// Shadow adjudication: the same pipeline, read-only stages only, run on claims
+// another core adjudicated (CPCDS file drop) to compare answers. Off unless
+// Adjudication:Shadow:Enabled. See docs/integration/SHADOW-ADJUDICATION.md.
+builder.Services.AddScoped<IShadowAdjudicationPipeline>(sp => sp.GetRequiredService<ClaimAdjudicationOrchestrator>());
+builder.Services.Configure<ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationOptions>(
+    builder.Configuration.GetSection(ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationOptions.SectionName));
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationRepository,
+    ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationService,
+    ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationService>();
 
 var adjudicationMaxConcurrentCalls = Math.Max(
     1,

@@ -28,6 +28,16 @@ public class ClaimAdjudicationContext
     public string? CorrelationId { get; init; }
     public string? ActorId { get; init; }
 
+    /// <summary>
+    /// True for a shadow run: re-adjudicating a claim another core already
+    /// adjudicated, to compare the two answers. The orchestrator runs only
+    /// the stages in <see cref="ClaimAdjudicationOrchestrator.ShadowSafeStages"/>
+    /// (never Persistence or AiExamination), drives no accumulator outbox and
+    /// emits no event, so the claim, its EOB projection and the member's
+    /// accumulators are untouched. See <see cref="Shadow.ShadowAdjudicationService"/>.
+    /// </summary>
+    public bool IsShadow { get; init; }
+
     /// <summary>Plan resolved by <see cref="IBenefitPlanResolver"/> at orchestrator entry.</summary>
     public ResolvedBenefitPlan? ResolvedPlan { get; set; }
 

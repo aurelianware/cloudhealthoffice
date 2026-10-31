@@ -95,6 +95,15 @@ public sealed class ClaimIndexInitializer : IHostedService
                 .Ascending(t => t.TenantId)
                 .Descending(t => t.ReceivedAt)),
             cancellationToken: cancellationToken);
+        // A CPCDS import batch's claims (shadow adjudication runs by batch).
+        txnCollection.Indexes.CreateOne(new CreateIndexModel<ClaimImportTransaction>(
+            Builders<ClaimImportTransaction>.IndexKeys
+                .Ascending(t => t.TenantId)
+                .Ascending(t => t.ImportBatchId)
+                .Ascending(t => t.ReceivedAt),
+            new CreateIndexOptions { Name = "tenant_import_batch", Sparse = true }),
+            cancellationToken: cancellationToken);
+        Services.Adjudication.Shadow.ShadowAdjudicationRepositoryMongo.EnsureIndexes(_db, cancellationToken);
         // SNIP warning lookups: "who sends rule X" (e.g. L2-2300-DTP472).
         // Optional: some Mongo-compatible stores (e.g. Cosmos DB for MongoDB)
         // limit compound indexes over array paths, and a missing index only
