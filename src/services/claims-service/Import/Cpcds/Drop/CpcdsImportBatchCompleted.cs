@@ -34,22 +34,22 @@ public interface ICpcdsImportBatchCompletedHandler
 public sealed class ShadowAdjudicateAfterImport : ICpcdsImportBatchCompletedHandler
 {
     private readonly IShadowAdjudicationService _shadow;
-    private readonly CpcdsDropOptions _drop;
+    private readonly CpcdsDropTenants _tenants;
     private readonly ShadowAdjudicationOptions _shadowOptions;
 
     public ShadowAdjudicateAfterImport(
         IShadowAdjudicationService shadow,
-        IOptions<CpcdsDropOptions> drop,
+        CpcdsDropTenants tenants,
         IOptions<ShadowAdjudicationOptions> shadowOptions)
     {
         _shadow = shadow;
-        _drop = drop.Value;
+        _tenants = tenants;
         _shadowOptions = shadowOptions.Value;
     }
 
     public async Task<string?> OnBatchImportedAsync(CpcdsImportBatchCompleted batch, CancellationToken ct)
     {
-        if (!_drop.Tenants.TryGetValue(batch.TenantId, out var tenant) || !tenant.ShadowAfterImport)
+        if (await _tenants.ResolveAsync(batch.TenantId, ct) is not { ShadowAfterImport: true })
             return null;
         if (!_shadowOptions.IsEnabledFor(batch.TenantId))
             return $"Shadow adjudication after import is on for this tenant but {ShadowAdjudicationOptions.SectionName} is not enabled for it; skipped.";

@@ -537,8 +537,20 @@ builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdj
 builder.Services.Configure<ClaimsService.Import.Cpcds.Drop.CpcdsDropOptions>(
     builder.Configuration.GetSection(ClaimsService.Import.Cpcds.Drop.CpcdsDropOptions.SectionName));
 builder.Services.AddSingleton<ClaimsService.Import.Cpcds.Drop.ICpcdsDropStore>(sp =>
-    new ClaimsService.Import.Cpcds.Drop.FolderCpcdsDropStore(
-        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ClaimsService.Import.Cpcds.Drop.CpcdsDropOptions>>().Value.Root));
+{
+    var drop = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ClaimsService.Import.Cpcds.Drop.CpcdsDropOptions>>().Value;
+    return drop.Store switch
+    {
+        ClaimsService.Import.Cpcds.Drop.CpcdsDropStoreKinds.Folder => new ClaimsService.Import.Cpcds.Drop.FolderCpcdsDropStore(drop.Root),
+        // The bucket client is built on first use, so a deployment with the
+        // drop off never needs Google credentials.
+        ClaimsService.Import.Cpcds.Drop.CpcdsDropStoreKinds.Gcs => new ClaimsService.Import.Cpcds.Drop.GcsCpcdsDropStore(
+            Google.Cloud.Storage.V1.StorageClient.Create(), drop.Gcs.Bucket),
+        _ => throw new InvalidOperationException(
+            $"CpcdsDrop:Store must be {ClaimsService.Import.Cpcds.Drop.CpcdsDropStoreKinds.Folder} or " +
+            $"{ClaimsService.Import.Cpcds.Drop.CpcdsDropStoreKinds.Gcs}."),
+    };
+});
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsDropRunRepository,
     ClaimsService.Import.Cpcds.Drop.CpcdsDropRunRepositoryMongo>();
 builder.Services.AddHttpClient(ClaimsService.Import.Cpcds.Drop.HttpCpcdsUpstreamImports.EnrollmentClientName, client =>
@@ -561,6 +573,9 @@ builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsUpstreamImports
     ClaimsService.Import.Cpcds.Drop.HttpCpcdsUpstreamImports>();
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsImportBatchCompletedHandler,
     ClaimsService.Import.Cpcds.Drop.ShadowAdjudicateAfterImport>();
+builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsDropTenantSettingsRepository,
+    ClaimsService.Import.Cpcds.Drop.CpcdsDropTenantSettingsRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.CpcdsDropTenants>();
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.CpcdsDropRunner>();
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.CpcdsFreshnessReporter>();
 builder.Services.AddHostedService<ClaimsService.Import.Cpcds.Drop.CpcdsDropWorker>();

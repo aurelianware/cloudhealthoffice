@@ -250,9 +250,43 @@ Configuration (claims-service):
 }
 ```
 
-Only the tenants listed are loaded; a folder for any other tenant is
-ignored. `Services:EnrollmentImportService` and `Services:ProviderService`
-name the upstream services.
+On GCP the drop can be a Cloud Storage bucket instead of a mounted folder:
+set `"Store": "Gcs"` and `"Gcs": { "Bucket": "<bucket>" }`. The layout is the
+same, as object name prefixes (`{tenant}/inbound/`, `{tenant}/processing/{run}/`,
+`{tenant}/processed/{run}/`, `{tenant}/failed/{run}/`), and claims-service
+reads it with its own Google identity (Workload Identity on GKE). A bucket has
+no atomic rename, so a run takes a file by copying it into its run prefix and
+then deleting the inbound object only if it is still the generation that was
+listed: only one run's delete can succeed, and the loser removes its copy. A
+file rewritten after it was listed waits for the next poll. This is the
+hosted drop: the SFTP server writes each plan's uploads straight into the
+bucket.
+
+A tenant can also turn its own drop on, with no redeploy, by saving drop
+settings (`PUT .../drops/settings`, below): the setup a plan does after it
+signs up. Saved settings replace the tenant's entry under `Tenants`,
+including to turn it off, and are picked up at the next poll. A folder for a
+tenant that is neither listed nor saved is ignored. `Enabled` stays the
+deployment's switch: while it is off, nothing loads whatever a tenant saved.
+`Services:EnrollmentImportService` and `Services:ProviderService` name the
+upstream services.
+
+```json
+PUT /api/v1/claims/import/cpcds/drops/settings
+{
+  "enabled": true,
+  "sourceSystem": "qnxt",
+  "lineOfBusiness": "Medicaid",
+  "columnMap": { "Claim unique identifier": "CLM_ID" },
+  "shadowAfterImport": false,
+  "expectedEveryHours": 24,
+  "staleGraceHours": 6
+}
+```
+
+`GET .../drops/settings` returns the tenant's settings, where they came from
+(`Stored`, `Configuration` or `None`), whether files dropped now would load,
+and the tenant's inbound folder relative to the drop root.
 
 Endpoints (permission `claims:import`):
 
@@ -261,6 +295,8 @@ Endpoints (permission `claims:import`):
 | `GET /api/v1/claims/import/cpcds/drops` | The tenant's recent runs: files, each step's counts and errors, where the files went, notes |
 | `GET /api/v1/claims/import/cpcds/drops/{runId}` | One run |
 | `GET /api/v1/claims/import/cpcds/drops/report?days=30` | The freshness and reconciliation report (below) |
+| `GET /api/v1/claims/import/cpcds/drops/settings` | The tenant's drop settings and whether its files load |
+| `PUT /api/v1/claims/import/cpcds/drops/settings` | Save them: turn the drop on or off, source system, line of business, column map, expected cadence |
 | `POST /api/v1/claims/import/cpcds/drops/run` | Load what is waiting now instead of at the next poll (204 when nothing is ready) |
 
 A step that fails does not stop the others. A failed member load still lets
@@ -268,6 +304,9 @@ the claims load: they are filed under the core's member ids, so a member's
 EOBs appear once the member loads, and claims that found no CHO coverage carry
 a warning and link when the claim file is reloaded. Every import is
 idempotent, so moving a failed run's files back to `inbound` is always safe.
+
+For the hosted drop on GCP (SFTP into Cloud Storage), see
+[CPCDS-SFTP-DROP-GCP.md](CPCDS-SFTP-DROP-GCP.md).
 
 ### Hosted SFTP logins
 

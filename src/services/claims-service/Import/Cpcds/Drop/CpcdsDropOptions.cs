@@ -22,6 +22,15 @@ public sealed class CpcdsDropOptions
     /// </summary>
     public string Root { get; set; } = "/drops";
 
+    /// <summary>
+    /// Where the drop lives: <see cref="CpcdsDropStoreKinds.Folder"/> (a
+    /// mounted folder under <see cref="Root"/>) or <see cref="CpcdsDropStoreKinds.Gcs"/>
+    /// (a Cloud Storage bucket, <see cref="Gcs"/>; the hosted drop on GCP).
+    /// </summary>
+    public string Store { get; set; } = CpcdsDropStoreKinds.Folder;
+
+    public CpcdsDropGcsOptions Gcs { get; set; } = new();
+
     /// <summary>How often the worker looks for files.</summary>
     public TimeSpan Interval { get; set; } = TimeSpan.FromMinutes(5);
 
@@ -33,6 +42,18 @@ public sealed class CpcdsDropOptions
 
     /// <summary>The tenants whose drops are loaded, by tenant id. A folder for any other tenant is ignored.</summary>
     public Dictionary<string, CpcdsDropTenantOptions> Tenants { get; set; } = new(StringComparer.Ordinal);
+}
+
+public static class CpcdsDropStoreKinds
+{
+    public const string Folder = "Folder";
+    public const string Gcs = "Gcs";
+}
+
+/// <summary>The drop bucket. Credentials come from Application Default Credentials (Workload Identity on GKE).</summary>
+public sealed class CpcdsDropGcsOptions
+{
+    public string Bucket { get; set; } = string.Empty;
 }
 
 public sealed class CpcdsDropTenantOptions

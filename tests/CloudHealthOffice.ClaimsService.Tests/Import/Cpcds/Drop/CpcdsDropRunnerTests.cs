@@ -67,7 +67,11 @@ public sealed class CpcdsDropRunnerTests : IDisposable
 
     private CpcdsDropRunner Runner() => new(
         new FolderCpcdsDropStore(_root), _claims, _upstream, _runs, [_handler], _tenantContext,
-        Options.Create(_options), NullLogger<CpcdsDropRunner>.Instance, new Clock(Now));
+        Options.Create(_options), Tenants(), NullLogger<CpcdsDropRunner>.Instance, new Clock(Now));
+
+    private readonly InMemoryCpcdsDropTenantSettingsRepository _stored = new();
+
+    private CpcdsDropTenants Tenants() => new(Options.Create(_options), _stored);
 
     private string Drop(string name, string content = "a,b\n1,2\n", TimeSpan? age = null, string tenant = Tenant)
     {
@@ -76,6 +80,34 @@ public sealed class CpcdsDropRunnerTests : IDisposable
         File.WriteAllText(path, content);
         File.SetLastWriteTimeUtc(path, Now - (age ?? TimeSpan.FromMinutes(10)));
         return path;
+    }
+
+    [Fact]
+    public async Task Saved_settings_load_a_drop_and_replace_configuration()
+    {
+        await _stored.SaveAsync(new CpcdsDropTenantSettings
+        {
+            TenantId = Tenant, Enabled = true, Settings = new CpcdsDropTenantOptions { SourceSystem = "facets" },
+        });
+        Drop("CPCDS_Claims.csv");
+
+        var run = await Runner().RunAsync(Tenant, default);
+
+        run!.SourceSystem.Should().Be("facets");
+        _calls.Should().Contain($"claims:CPCDS_Claims.csv:facets:{Tenant}");
+    }
+
+    [Fact]
+    public async Task A_drop_the_tenant_turned_off_is_left_in_inbound()
+    {
+        await _stored.SaveAsync(new CpcdsDropTenantSettings
+        {
+            TenantId = Tenant, Enabled = false, Settings = new CpcdsDropTenantOptions { SourceSystem = "qnxt" },
+        });
+        var path = Drop("CPCDS_Claims.csv");
+
+        (await Runner().RunAsync(Tenant, default)).Should().BeNull();
+        File.Exists(path).Should().BeTrue();
     }
 
     [Fact]
@@ -206,14 +238,14 @@ public sealed class CpcdsDropRunnerTests : IDisposable
     }
 
     [Fact]
-    public void A_file_another_run_already_took_is_not_loaded_twice()
+    public async Task A_file_another_run_already_took_is_not_loaded_twice()
     {
         var path = Drop("claims.csv");
         var store = new FolderCpcdsDropStore(_root);
-        var ready = store.ListReady(Tenant, TimeSpan.Zero, Now).Single();
+        var ready = (await store.ListReadyAsync(Tenant, TimeSpan.Zero, Now, default)).Single();
 
-        store.Claim(Tenant, "run-1", ready).Should().NotBeNull();
-        store.Claim(Tenant, "run-2", ready).Should().BeNull();
+        (await store.ClaimAsync(Tenant, "run-1", ready, default)).Should().NotBeNull();
+        (await store.ClaimAsync(Tenant, "run-2", ready, default)).Should().BeNull();
         File.Exists(path).Should().BeFalse();
     }
 
@@ -242,11 +274,11 @@ public sealed class CpcdsDropRunnerTests : IDisposable
         => CpcdsDropFileKinds.Classify(name).Should().Be(kind);
 
     [Fact]
-    public void A_tenant_id_that_is_not_a_safe_folder_name_is_refused()
+    public async Task A_tenant_id_that_is_not_a_safe_folder_name_is_refused()
     {
         var store = new FolderCpcdsDropStore(_root);
-        var act = () => store.ListReady("../other", TimeSpan.Zero, Now);
-        act.Should().Throw<ArgumentException>();
+        var act = () => store.ListReadyAsync("../other", TimeSpan.Zero, Now, default);
+        await act.Should().ThrowAsync<ArgumentException>();
     }
 
     // ── shadow adjudication after import ────────────────────────────────
@@ -260,7 +292,7 @@ public sealed class CpcdsDropRunnerTests : IDisposable
         var shadow = Substitute.For<IShadowAdjudicationService>();
         shadow.RunAsync(Tenant, Arg.Any<ShadowAdjudicationRunRequest>(), "cpcds-drop", Arg.Any<CancellationToken>())
             .Returns(new ShadowAdjudicationRunResponse { Run = new ShadowAdjudicationRun { Id = "s-1", ClaimsRequested = 3, ClaimsCompared = 3 }, Results = [] });
-        var handler = new ShadowAdjudicateAfterImport(shadow, Options.Create(_options),
+        var handler = new ShadowAdjudicateAfterImport(shadow, Tenants(),
             Options.Create(new ShadowAdjudicationOptions { Enabled = true }));
 
         var note = await handler.OnBatchImportedAsync(Batch(), default);
@@ -277,7 +309,7 @@ public sealed class CpcdsDropRunnerTests : IDisposable
         var shadow = Substitute.For<IShadowAdjudicationService>();
         shadow.RunAsync(Tenant, Arg.Any<ShadowAdjudicationRunRequest>(), "cpcds-drop", Arg.Any<CancellationToken>())
             .Returns(new ShadowAdjudicationRunResponse { Run = new ShadowAdjudicationRun { Id = "s-2", ClaimsRequested = 200, ClaimsCompared = 198 }, Results = [] });
-        var handler = new ShadowAdjudicateAfterImport(shadow, Options.Create(_options),
+        var handler = new ShadowAdjudicateAfterImport(shadow, Tenants(),
             Options.Create(new ShadowAdjudicationOptions { Enabled = true, MaxClaimsPerRun = 200 }));
 
         var note = await handler.OnBatchImportedAsync(Batch() with { Created = 450, Unchanged = 50 }, default);
@@ -291,11 +323,11 @@ public sealed class CpcdsDropRunnerTests : IDisposable
         var shadow = Substitute.For<IShadowAdjudicationService>();
         var off = new ShadowAdjudicationOptions { Enabled = false };
 
-        (await new ShadowAdjudicateAfterImport(shadow, Options.Create(_options), Options.Create(off))
+        (await new ShadowAdjudicateAfterImport(shadow, Tenants(), Options.Create(off))
             .OnBatchImportedAsync(Batch(), default)).Should().BeNull();
 
         _options.Tenants[Tenant].ShadowAfterImport = true;
-        (await new ShadowAdjudicateAfterImport(shadow, Options.Create(_options), Options.Create(off))
+        (await new ShadowAdjudicateAfterImport(shadow, Tenants(), Options.Create(off))
             .OnBatchImportedAsync(Batch(), default)).Should().Contain("not enabled");
         await shadow.DidNotReceiveWithAnyArgs().RunAsync(default!, default!, default, default);
     }

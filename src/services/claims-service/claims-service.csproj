@@ -71,6 +71,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Confluent.Kafka" />
+    <!-- The hosted CPCDS drop on GCP reads a Cloud Storage bucket (Import/Cpcds/Drop/GcsCpcdsDropStore.cs). -->
+    <PackageReference Include="Google.Cloud.Storage.V1" />
   </ItemGroup>
 
 </Project>
