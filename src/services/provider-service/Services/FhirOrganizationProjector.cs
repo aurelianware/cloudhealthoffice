@@ -201,16 +201,23 @@ public sealed class FhirOrganizationProjector : IFhirOrganizationProjector
             if (!string.IsNullOrEmpty(provider.City)) address["city"] = provider.City;
             if (!string.IsNullOrEmpty(provider.State)) address["state"] = provider.State;
             if (!string.IsNullOrEmpty(provider.ZipCode)) address["postalCode"] = provider.ZipCode;
+            // An NPI is issued only to US providers (NPPES), so the country
+            // is known.
+            address["country"] = "US";
             org["address"] = new JsonArray { address };
         }
 
         // ── meta ────────────────────────────────────────────────────────
+        // C4BB-Organization too: an EOB's billing provider resolves here.
+        // The public Plan-Net directory replaces the profiles with its own.
         org["meta"] = new JsonObject
         {
             ["lastUpdated"] = DateTime.SpecifyKind(provider.LastUpdatedDate, DateTimeKind.Utc).ToString("o"),
             ["profile"] = new JsonArray(
                 ChoProviderFhirUrls.UsCoreOrganizationProfile,
-                ChoProviderFhirUrls.PlanNetOrganizationProfile),
+                ChoProviderFhirUrls.PlanNetOrganizationProfile,
+                ChoProviderFhirUrls.CarinBbOrganizationProfile,
+                $"{ChoProviderFhirUrls.CarinBbOrganizationProfile}|{ChoProviderFhirUrls.CarinBbProfileVersion}"),
         };
 
         return org;

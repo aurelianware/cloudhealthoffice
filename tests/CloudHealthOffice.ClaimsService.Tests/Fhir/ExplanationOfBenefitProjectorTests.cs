@@ -52,6 +52,33 @@ public class ExplanationOfBenefitProjectorTests
     }
 
     [Fact]
+    public void Project_names_the_configured_plan_organization_as_insurer()
+    {
+        var projector = new ExplanationOfBenefitProjector(
+            new CarinEobInsurerOptions { Reference = "Organization/plan", Display = "Example Health Plan" });
+
+        var insurer = projector.Project(MinimalClaim())["insurer"]!;
+
+        insurer["reference"]!.GetValue<string>().Should().Be("Organization/plan");
+        insurer["display"]!.GetValue<string>().Should().Be("Example Health Plan");
+    }
+
+    [Theory]
+    [InlineData("2", "Organization/1234567890")]
+    [InlineData("1", "Practitioner/1234567890")]
+    [InlineData(null, null)]
+    public void Project_types_the_billing_provider_only_when_the_837_said_what_it_is(string? entityType, string? reference)
+    {
+        var claim = MinimalClaim();
+        claim.BillingProviderEntityType = entityType;
+
+        var provider = _projector.Project(claim)["provider"]!;
+
+        provider["reference"]?.GetValue<string>().Should().Be(reference);
+        provider["identifier"]!["value"]!.GetValue<string>().Should().Be("1234567890");
+    }
+
+    [Fact]
     public void Project_declares_the_financial_profile_with_and_without_the_2_0_version()
     {
         // CARIN BB 2.0.0's EOB-*-meta-profile-version invariants are errors and

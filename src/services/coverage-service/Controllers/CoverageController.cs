@@ -327,8 +327,10 @@ public class CoverageController : ControllerBase
             TenantId = TenantId,
             MemberId = request.MemberId,
             GroupNumber = request.GroupNumber,
+            GroupName = string.IsNullOrWhiteSpace(request.GroupName) ? null : request.GroupName.Trim(),
             SponsorPolicyNumber = request.SponsorPolicyNumber,
             PlanId = request.PlanId,
+            PlanName = string.IsNullOrWhiteSpace(request.PlanName) ? null : request.PlanName.Trim(),
             CoverageLevel = request.CoverageLevel,
             InsuranceLineCode = request.InsuranceLineCode,
             EffectiveDate = request.EffectiveDate,
@@ -399,7 +401,12 @@ public class CoverageController : ControllerBase
             });
         }
 
-        if (request.PlanId != null) coverage.PlanId = request.PlanId;
+        if (request.PlanId != null && request.PlanId != coverage.PlanId)
+        {
+            coverage.PlanId = request.PlanId;
+            coverage.PlanName = null;
+        }
+        if (!string.IsNullOrWhiteSpace(request.PlanName)) coverage.PlanName = request.PlanName.Trim();
         if (request.CoverageLevel != null) coverage.CoverageLevel = request.CoverageLevel;
         if (request.Status.HasValue) coverage.Status = request.Status.Value;
         if (request.MonthlyPremium.HasValue) coverage.MonthlyPremium = request.MonthlyPremium.Value;
@@ -889,6 +896,14 @@ public class CreateCoverageRequest
     [Required]
     public string PlanId { get; set; } = string.Empty;
 
+    /// <summary>The group's name as members know it; see <see cref="Coverage.GroupName"/>.</summary>
+    [StringLength(200)]
+    public string? GroupName { get; set; }
+
+    /// <summary>The plan's name as members know it; see <see cref="Coverage.PlanName"/>.</summary>
+    [StringLength(200)]
+    public string? PlanName { get; set; }
+
     /// <summary>
     /// The sponsor policy number the 834's REF*1L named, when it named a policy
     /// rather than a group. Optional, and deliberately absent from
@@ -917,6 +932,13 @@ public class CreateCoverageRequest
 public class UpdateCoverageRequest
 {
     public string? PlanId { get; set; }
+
+    /// <summary>
+    /// The plan's name. A new <see cref="PlanId"/> without one clears the
+    /// old name, which belonged to the old plan.
+    /// </summary>
+    [StringLength(200)]
+    public string? PlanName { get; set; }
     public string? CoverageLevel { get; set; }
     public CoverageStatus? Status { get; set; }
     public decimal? MonthlyPremium { get; set; }

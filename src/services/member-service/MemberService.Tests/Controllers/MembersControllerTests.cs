@@ -83,6 +83,20 @@ public class MembersControllerTests
     }
 
     [Fact]
+    public async Task CreateMember_Records_race_and_ethnicity()
+    {
+        var (ctl, repo, _, _, _, _, _) = Build();
+        var req = CreateReq();
+        req.Race = new CodedConcept { System = "urn:oid:2.16.840.1.113883.6.238", Code = "2106-3", Display = "White" };
+        req.Ethnicity = new CodedConcept { System = "urn:oid:2.16.840.1.113883.6.238", Code = "2186-5" };
+
+        await ctl.CreateMember(req, CancellationToken.None);
+
+        repo.Members[0].Race!.Code.Should().Be("2106-3");
+        repo.Members[0].Ethnicity!.Code.Should().Be("2186-5");
+    }
+
+    [Fact]
     public async Task CreateMember_DuplicateMemberId_Returns409()
     {
         var (ctl, _, _, _, _, _, _) = Build();

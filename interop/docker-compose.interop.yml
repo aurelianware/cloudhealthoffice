@@ -182,6 +182,10 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       MongoDb__ConnectionString: mongodb://interop-mongo:27017
       MongoDb__DatabaseName: InteropCoverageDB
+      # Coverage.payor names the plan's own Organization, which fhir-service
+      # serves from Fhir__PlanOrganization (CARIN BB follows the reference).
+      Fhir__Coverage__PayorReference: Organization/interop-plan
+      Fhir__Coverage__PayorDisplay: Interop Health Plan (synthetic)
     depends_on:
       interop-mongo:
         condition: service_healthy
@@ -202,6 +206,9 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       MongoDb__ConnectionString: mongodb://interop-mongo:27017
       MongoDb__DatabaseName: InteropClaimsDB
+      # The EOB insurer: the same plan Organization as Coverage.payor.
+      Fhir__Insurer__Reference: Organization/interop-plan
+      Fhir__Insurer__Display: Interop Health Plan (synthetic)
     depends_on:
       interop-mongo:
         condition: service_healthy
@@ -407,6 +414,19 @@ services:
       PublicProviderDirectory__Payers__interop__City: Springfield
       PublicProviderDirectory__Payers__interop__State: FL
       PublicProviderDirectory__Payers__interop__PostalCode: "32401"
+      # The plan's own C4BB Organization, at Organization/interop-plan: the
+      # EOB insurer and Coverage payor the CARIN BB kit reads. Synthetic ids;
+      # 00000 is not an issued NAIC company code.
+      Fhir__PlanOrganization__Id: interop-plan
+      Fhir__PlanOrganization__Name: Interop Health Plan (synthetic)
+      Fhir__PlanOrganization__PayerId: INTEROP-PAYER-1
+      Fhir__PlanOrganization__NaicCode: "00000"
+      Fhir__PlanOrganization__Phone: 555-0199
+      Fhir__PlanOrganization__Website: https://example.org/interop-health-plan
+      Fhir__PlanOrganization__AddressLine: 1 Synthetic Way
+      Fhir__PlanOrganization__City: Springfield
+      Fhir__PlanOrganization__State: FL
+      Fhir__PlanOrganization__PostalCode: "32401"
       # The kit issues several hundred searches from one address in a few
       # minutes; the production default (300 a minute) would throttle the
       # conformance run rather than test it.

@@ -294,6 +294,8 @@ public class MembersController : ControllerBase
             Identifiers = identifiers,
             PreferredLanguage = request.PreferredLanguage,
             BirthSex = request.BirthSex,
+            Race = request.Race,
+            Ethnicity = request.Ethnicity,
             CreatedDate = DateTime.UtcNow,
             LastUpdatedDate = DateTime.UtcNow,
             CreatedBy = User.Identity?.Name ?? "System"
@@ -977,6 +979,12 @@ public class CreateMemberRequest
 
     public string? PreferredLanguage { get; set; }
     public string? BirthSex { get; set; }
+
+    /// <summary>OMB race category (CDC race and ethnicity code set), as an 834's DMG05 or an enrollment form records it.</summary>
+    public CodedConcept? Race { get; set; }
+
+    /// <summary>OMB ethnicity category, from the same code set as <see cref="Race"/>.</summary>
+    public CodedConcept? Ethnicity { get; set; }
 
     /// <summary>Optional client-supplied idempotency key for the MemberCreated event.</summary>
     public string? EventId { get; set; }

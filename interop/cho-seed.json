@@ -60,12 +60,16 @@
     "phone": "555-0100",
     "email": "testcase.interop@example.invalid",
     "preferredLanguage": "en",
+    "race": { "system": "urn:oid:2.16.840.1.113883.6.238", "code": "2106-3", "display": "White" },
+    "ethnicity": { "system": "urn:oid:2.16.840.1.113883.6.238", "code": "2186-5", "display": "Not Hispanic or Latino" },
     "effectiveDate": "2026-01-01T00:00:00Z"
   },
   "coverage": {
     "memberId": "INTEROP-MEM-1",
     "groupNumber": "INTEROP-GRP-1",
+    "groupName": "Interop Employer Group (synthetic)",
     "planId": "INTEROP-PLAN-1",
+    "planName": "Interop Gold HMO (synthetic)",
     "coverageLevel": "EMP",
     "insuranceLineCode": "HM",
     "effectiveDate": "2026-01-01T00:00:00Z"
@@ -82,6 +86,7 @@
       "patientRelationship": "18",
       "lineOfBusiness": 1,
       "billingProviderNPI": "1234567893",
+      "billingProviderEntityType": "2",
       "billingProviderName": "Interop Provider A (synthetic)",
       "renderingProviderNPI": "1679576722",
       "renderingProviderName": "Interop Rendering B (synthetic)",
@@ -120,6 +125,7 @@
       "patientRelationship": "18",
       "lineOfBusiness": 1,
       "billingProviderNPI": "1234567893",
+      "billingProviderEntityType": "2",
       "billingProviderName": "Interop Hospital A (synthetic)",
       "renderingProviderNPI": "1679576722",
       "renderingProviderName": "Interop Rendering B (synthetic)",
@@ -182,7 +188,9 @@
       "coverage": {
         "memberId": "INTEROP-MEM-2",
         "groupNumber": "INTEROP-GRP-1",
+        "groupName": "Interop Employer Group (synthetic)",
         "planId": "INTEROP-PLAN-1",
+        "planName": "Interop Gold HMO (synthetic)",
         "coverageLevel": "EMP",
         "insuranceLineCode": "HM",
         "effectiveDate": "2026-01-01T00:00:00Z"
@@ -198,6 +206,7 @@
           "patientRelationship": "18",
           "lineOfBusiness": 1,
           "billingProviderNPI": "1234567893",
+          "billingProviderEntityType": "2",
           "billingProviderName": "Interop Provider A (synthetic)",
           "renderingProviderNPI": "1679576722",
           "renderingProviderName": "Interop Rendering B (synthetic)",
@@ -240,6 +249,7 @@
       "patientFirstName": "Testcase",
       "patientLastName": "Interop",
       "billingProviderNPI": "1234567893",
+      "billingProviderEntityType": "2",
       "billingProviderName": "Interop Provider A (synthetic)",
       "renderingProviderNPI": "1679576722",
       "lineOfBusiness": "Commercial",
@@ -278,7 +288,7 @@
     }
   ],
   "claimsProviders": {
-    "_comment": "The rendering practitioner the seeded claims name (renderingProviderNPI), so the EOB's careTeam reference Practitioner/1679576722 resolves and the CARIN BB Practitioner group has a C4BB-Practitioner to read. It joins no network, so the directory gains this practitioner and its Location but no PractitionerRole. The billing provider 1234567893 is not seeded: the EOB names it by identifier only.",
+    "_comment": "The providers the seeded claims name, so the EOB's references resolve: the rendering practitioner (careTeam, Practitioner/1679576722) and the billing organization (provider, Organization/1234567893). Neither joins a network, so the public directory lists each with its Location (and the organization's HealthcareService) but no role or affiliation.",
     "providers": [
       {
         "npi": "1679576722",
@@ -294,6 +304,22 @@
         "state": "FL",
         "zipCode": "32401",
         "phone": "555-0180",
+        "acceptingNewPatients": true
+      },
+      {
+        "_comment": "The billing provider the claims name (billingProviderNPI, entity type 2), so the EOB's provider reference Organization/1234567893 resolves to a C4BB-Organization. The tax id is synthetic.",
+        "npi": "1234567893",
+        "providerType": "Organization",
+        "status": "Active",
+        "organizationName": "Interop Provider A (synthetic)",
+        "taxId": "000000001",
+        "primarySpecialty": "Clinic/Center",
+        "taxonomyCode": "261QP2300X",
+        "address": "50 Synthetic Way",
+        "city": "Springfield",
+        "state": "FL",
+        "zipCode": "32401",
+        "phone": "555-0190",
         "acceptingNewPatients": true
       }
     ]

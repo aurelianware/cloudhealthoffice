@@ -112,6 +112,13 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
     // duplicate) / DUP002 (suspect duplicate).
     private const string DuplicateEditSystem = "urn:cho:duplicate-edit";
 
+    private readonly CarinEobInsurerOptions? _insurer;
+
+    public ExplanationOfBenefitProjector(CarinEobInsurerOptions? insurer = null)
+    {
+        _insurer = insurer;
+    }
+
     public JsonObject Project(Claim claim)
     {
         ArgumentNullException.ThrowIfNull(claim);
@@ -128,7 +135,8 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
             augmentItem: (item, line) =>
                 AddLineMoney(item, line, editFailuresByLine, duplicateFindingsByLine),
             augmentSupportingInfo: entries => AddAiExamination(claim, entries),
-            augmentHeaderAdjudication: entries => AddAdjustmentReasons(claim, entries));
+            augmentHeaderAdjudication: entries => AddAdjustmentReasons(claim, entries),
+            insurer: _insurer);
 
         // total is 1..* on every financial profile, so it is emitted whether or
         // not the claim has been adjudicated: what was submitted is known from

@@ -196,6 +196,52 @@ public class FhirOrganizationControllerTests
     }
 
     [Fact]
+    public async Task SearchOrganizations_id_reads_each_id_as_a_read_would()
+    {
+        await _providerRepo.CreateAsync(OrgProvider("1234567890", "Acme Hospital"));
+        await _orgRepo.CreateDraftAsync(Network("NET-1", "Gold Network"));
+        var draft = _orgRepo.Docs.First();
+        draft.VersionState = OrganizationVersionState.Active;
+        await _orgRepo.ActivateAndSupersedeAsync(draft, null);
+
+        var bundle = ParseFhirContent(await _controller.SearchOrganizations(
+            npi: null, identifier: null, name: null, city: null,
+            state: null, postalCode: null, type: null, id: "1234567890,NET-1,NOPE", ct: default));
+
+        bundle["entry"]!.AsArray().Select(e => e!["resource"]!["id"]!.GetValue<string>())
+            .Should().BeEquivalentTo("1234567890", "NET-1");
+    }
+
+    [Fact]
+    public async Task SearchOrganizations_lastUpdated_returns_only_the_organization_updated_then()
+    {
+        var acme = OrgProvider("1234567890", "Acme Hospital");
+        acme.LastUpdatedDate = new DateTime(2026, 10, 31, 4, 0, 0, DateTimeKind.Utc);
+        var other = OrgProvider("1999999992", "Other Hospital");
+        other.LastUpdatedDate = acme.LastUpdatedDate.AddMinutes(5);
+        await _providerRepo.CreateAsync(acme);
+        await _providerRepo.CreateAsync(other);
+        var served = ParseFhirContent(await _controller.ReadOrganization("1234567890", default))
+            ["meta"]!["lastUpdated"]!.GetValue<string>();
+
+        var bundle = ParseFhirContent(await _controller.SearchOrganizations(
+            npi: null, identifier: null, name: null, city: null,
+            state: null, postalCode: null, type: "prov", lastUpdated: [served], ct: default));
+
+        bundle["entry"]!.AsArray().Single()!["resource"]!["id"]!.GetValue<string>().Should().Be("1234567890");
+    }
+
+    [Fact]
+    public async Task SearchOrganizations_lastUpdated_that_is_not_a_date_is_a_400()
+    {
+        var result = await _controller.SearchOrganizations(
+            npi: null, identifier: null, name: null, city: null,
+            state: null, postalCode: null, type: null, lastUpdated: ["soon"], ct: default);
+
+        result.Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
     public async Task SearchOrganizations_invalid_npi_returns_400()
     {
         var result = await _controller.SearchOrganizations(

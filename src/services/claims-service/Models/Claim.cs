@@ -116,6 +116,14 @@ public class Claim
     public string? BillingProviderName { get; set; }
 
     /// <summary>
+    /// Whether the billing provider is a person ("1") or an organization
+    /// ("2"). 837: NM102 (2010AA). Null when the source did not say, in
+    /// which case the FHIR projection names the provider by NPI only.
+    /// </summary>
+    [StringLength(1)]
+    public string? BillingProviderEntityType { get; set; }
+
+    /// <summary>
     /// Pay-to address: 837 Loop 2010AB (NM1*87 N3/N4). In 5010 this loop is
     /// an address only (NM103 onward are not used): the billing provider is
     /// the pay-to provider, and this is the address to direct payment to when

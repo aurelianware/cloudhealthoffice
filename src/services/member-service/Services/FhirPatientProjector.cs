@@ -20,6 +20,7 @@ public sealed class FhirPatientProjector : IFhirPatientProjector
 {
     private const string NpiSystem = "http://hl7.org/fhir/sid/us-npi";
     private const string V2IdentifierTypeSystem = "http://terminology.hl7.org/CodeSystem/v2-0203";
+    private const string C4BbIdentifierTypeSystem = "http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBIdentifierType";
     public const string UsCorePatientProfile = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient";
     public const string CarinBbPatientProfile = "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Patient|2.0.0";
 
@@ -93,6 +94,21 @@ public sealed class FhirPatientProjector : IFhirPatientProjector
                 },
                 ["system"] = FhirIdentifierSystems.MemberId,
                 ["value"] = member.MemberId
+            },
+            // The member id is also the payer's unique identifier for the
+            // person: it stays the same across coverages, which is what
+            // CARIN BB's identifier:uniquememberid ("um") slice holds. A
+            // second identifier rather than a second coding, because one
+            // identifier matching two slices is invalid.
+            new JsonObject
+            {
+                ["use"] = "usual",
+                ["type"] = new JsonObject
+                {
+                    ["coding"] = new JsonArray(Coding(C4BbIdentifierTypeSystem, "um"))
+                },
+                ["system"] = FhirIdentifierSystems.MemberId,
+                ["value"] = member.MemberId
             }
         };
         foreach (var ident in member.Identifiers)
@@ -154,9 +170,11 @@ public sealed class FhirPatientProjector : IFhirPatientProjector
         {
             patient["deceasedDateTime"] = member.DeceasedDate.Value.ToString("o");
         }
-        else if (member.Deceased)
+        else
         {
-            patient["deceasedBoolean"] = true;
+            // The record says whether the member has died, so false is a
+            // fact the plan holds, not an absence.
+            patient["deceasedBoolean"] = member.Deceased;
         }
 
         // ── Address ──────────────────────────────────────────────────

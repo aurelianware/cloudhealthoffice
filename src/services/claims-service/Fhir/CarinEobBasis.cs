@@ -63,8 +63,24 @@ internal static class CarinEobBasis
     internal const string SupportingInfoTypeSystem = C4BbBase + "C4BBSupportingInfoType";
     internal const string CareTeamRoleSystem = C4BbBase + "C4BBClaimCareTeamRole";
 
-    /// <summary>The plan's own name, used as the insurer's display.</summary>
+    /// <summary>The plan's own name, used as the insurer's display when none is configured.</summary>
     internal const string InsurerDisplay = "CloudHealthOffice";
+
+    /// <summary>
+    /// The EOB's <c>insurer</c>: the configured plan organization when there
+    /// is one (a literal reference the FHIR façade serves, plus its name),
+    /// otherwise the default display.
+    /// </summary>
+    internal static JsonObject Insurer(CarinEobInsurerOptions? insurer)
+    {
+        var node = new JsonObject
+        {
+            ["display"] = string.IsNullOrWhiteSpace(insurer?.Display) ? InsurerDisplay : insurer.Display.Trim(),
+        };
+        if (!string.IsNullOrWhiteSpace(insurer?.Reference))
+            node["reference"] = insurer.Reference.Trim();
+        return node;
+    }
 
     /// <summary>
     /// Everything the Basis profiles require, which is everything the financial
@@ -76,7 +92,8 @@ internal static class CarinEobBasis
         ProfileShape shape,
         Action<JsonObject, ClaimLine>? augmentItem = null,
         Action<JsonArray>? augmentSupportingInfo = null,
-        Action<JsonArray>? augmentHeaderAdjudication = null)
+        Action<JsonArray>? augmentHeaderAdjudication = null,
+        CarinEobInsurerOptions? insurer = null)
     {
         ArgumentNullException.ThrowIfNull(claim);
 
@@ -110,8 +127,9 @@ internal static class CarinEobBasis
             ["patient"] = new JsonObject { ["reference"] = $"Patient/{claim.MemberId}" },
             ["billablePeriod"] = BillablePeriod(claim),
             ["created"] = AsUtc(claim.SubmittedDate).ToString("o"),
-            ["insurer"] = new JsonObject { ["display"] = InsurerDisplay },
-            ["provider"] = ProviderReference(claim.BillingProviderNPI, claim.BillingProviderName),
+            ["insurer"] = Insurer(insurer),
+            ["provider"] = ProviderReference(
+                claim.BillingProviderNPI, claim.BillingProviderName, BillingProviderType(claim.BillingProviderEntityType)),
             ["outcome"] = MapOutcome(claim.Status),
         };
 
@@ -262,6 +280,19 @@ internal static class CarinEobBasis
     }
 
     /// <summary>
+    /// The resource type the 837 says the billing provider is (NM102 in
+    /// 2010AA): a person is a <c>Practitioner</c>, a non-person entity an
+    /// <c>Organization</c>. provider-service serves both by NPI from the same
+    /// base. Unknown stays null, and the reference names the NPI only.
+    /// </summary>
+    internal static string? BillingProviderType(string? entityType) => entityType?.Trim() switch
+    {
+        "1" => "Practitioner",
+        "2" => "Organization",
+        _ => null,
+    };
+
+    /// <summary>
     /// A provider reference by NPI.
     ///
     /// <para>
@@ -272,7 +303,8 @@ internal static class CarinEobBasis
     /// <c>us-core-practitioner</c> projection by NPI and fhir-service serves
     /// it from the same <c>fhir/r4</c> base as this EOB, so the relative
     /// reference resolves against a live server. A billing NPI may belong to a
-    /// group, and CHO does not know which from the claim alone, so it stays an
+    /// person or a group: it is typed only when the 837 said which
+    /// (<see cref="BillingProviderType"/>), and otherwise stays an
     /// identifier-and-display reference rather than asserting a type that may
     /// 404.
     /// </para>

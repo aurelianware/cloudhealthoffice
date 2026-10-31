@@ -1,9 +1,13 @@
 using FhirService.Services.Identity;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FhirService.Mappers;
 using FhirService.Models;
+using FhirService.Services.ChoNative;
+using FhirService.Services.PlanOrganization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Controllers;
@@ -32,6 +36,7 @@ public class ProviderDirectoryController : FhirControllerBase
     private readonly HttpClient _verificationClient;
     private readonly HttpClient _providerServiceClient;
     private readonly ILogger<ProviderDirectoryController> _logger;
+    private readonly PlanOrganizationOptions _planOrganization;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -40,8 +45,10 @@ public class ProviderDirectoryController : FhirControllerBase
 
     public ProviderDirectoryController(
         IHttpClientFactory httpClientFactory,
-        ILogger<ProviderDirectoryController> logger)
+        ILogger<ProviderDirectoryController> logger,
+        IOptions<PlanOrganizationOptions>? planOrganization = null)
     {
+        _planOrganization = planOrganization?.Value ?? new PlanOrganizationOptions();
         _httpClient = httpClientFactory.CreateClient("NppesApi");
         _verificationClient = httpClientFactory.CreateClient("ProviderVerificationService");
         _providerServiceClient = httpClientFactory.CreateClient("ProviderService");
@@ -111,7 +118,14 @@ public class ProviderDirectoryController : FhirControllerBase
     [HttpGet("Organization/{id}")]
     [Produces("application/fhir+json")]
     public Task<IActionResult> ReadOrganization(string id, CancellationToken ct)
-        => ProxyProviderServiceAsync("Organization", $"fhir/Organization/{Uri.EscapeDataString(id)}", ct);
+    {
+        // The plan's own Organization is configuration, not a provider-service
+        // record (PlanOrganizationOptions).
+        if (IsPlanOrganization(id))
+            return Task.FromResult<IActionResult>(FhirJson(PlanOrganizationResource.Project(_planOrganization)));
+
+        return ProxyProviderServiceAsync("Organization", $"fhir/Organization/{Uri.EscapeDataString(id)}", ct);
+    }
 
     /// <summary>
     /// GET /fhir/r4/Organization?npi=&amp;name=&amp;... — search Organizations.
@@ -123,13 +137,92 @@ public class ProviderDirectoryController : FhirControllerBase
     /// </summary>
     [HttpGet("Organization")]
     [Produces("application/fhir+json")]
-    public Task<IActionResult> SearchOrganizations(CancellationToken ct = default)
+    public async Task<IActionResult> SearchOrganizations(CancellationToken ct = default)
     {
         var qs = HttpContext.Request.QueryString.HasValue
             ? HttpContext.Request.QueryString.Value
             : string.Empty;
-        return ProxyProviderServiceAsync("Organization", $"fhir/Organization{qs}", ct);
+        if (!_planOrganization.IsConfigured)
+            return await ProxyProviderServiceAsync("Organization", $"fhir/Organization{qs}", ct);
+
+        // The plan's own Organization answers the searches it can be judged
+        // by (_id and _lastUpdated, or none), ahead of provider-service's.
+        bool planMatches;
+        try
+        {
+            planMatches = PlanOrganizationMatches(HttpContext.Request.Query);
+        }
+        catch (FhirSearchNotSupportedException ex)
+        {
+            return FhirBadRequest(ex.Message);
+        }
+
+        var ids = IdsSearched(HttpContext.Request.Query);
+        var upstream = ids.Count > 0 && ids.All(IsPlanOrganization)
+            ? FhirJson(new JsonObject { ["resourceType"] = "Bundle", ["type"] = "searchset", ["total"] = 0, ["entry"] = new JsonArray() })
+            : await ProxyProviderServiceAsync("Organization", $"fhir/Organization{qs}", ct);
+        if (!planMatches) return upstream;
+
+        if (upstream is not ContentResult { StatusCode: 200, Content: { } content }
+            || JsonNode.Parse(content) is not JsonObject bundle)
+        {
+            return upstream;
+        }
+
+        var entries = bundle["entry"] as JsonArray ?? new JsonArray();
+        entries.Insert(0, new JsonObject
+        {
+            ["resource"] = PlanOrganizationResource.Project(_planOrganization),
+            ["search"] = new JsonObject { ["mode"] = "match" },
+        });
+        bundle["entry"] = entries;
+        bundle["total"] = (bundle["total"]?.GetValue<int>() ?? entries.Count - 1) + 1;
+        return FhirJson(bundle);
     }
+
+    /// <summary>The search parameters the plan's own Organization can be judged by.</summary>
+    private static readonly HashSet<string> PlanOrganizationSearchParameters = new(StringComparer.Ordinal)
+    {
+        "_id", "_lastUpdated", "_count", "_page", "_format", "_pretty",
+    };
+
+    private bool IsPlanOrganization(string id)
+        => _planOrganization.IsConfigured
+           && string.Equals(id?.Trim(), _planOrganization.Id!.Trim(), StringComparison.Ordinal);
+
+    private static List<string> IdsSearched(IQueryCollection query)
+        => query.TryGetValue("_id", out var values)
+            ? values.SelectMany(v => (v ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)).ToList()
+            : [];
+
+    /// <summary>
+    /// Whether the plan's own Organization belongs in a search's results: no
+    /// parameter it cannot be judged by, its id among any <c>_id</c> values,
+    /// and its <c>meta.lastUpdated</c> within any <c>_lastUpdated</c> range.
+    /// </summary>
+    private bool PlanOrganizationMatches(IQueryCollection query)
+    {
+        if (query.Keys.Any(k => !PlanOrganizationSearchParameters.Contains(k))) return false;
+
+        var ids = IdsSearched(query);
+        if (query.ContainsKey("_id") && !ids.Any(IsPlanOrganization)) return false;
+
+        if (FhirSearchTranslation.ParseDates("_lastUpdated", query["_lastUpdated"]) is { } range)
+        {
+            var lastUpdated = PlanOrganizationResource.LastUpdated(_planOrganization);
+            if (range.From is { } from && lastUpdated < from) return false;
+            if (range.To is { } to && lastUpdated >= to) return false;
+        }
+
+        return true;
+    }
+
+    private static ContentResult FhirJson(JsonObject resource) => new()
+    {
+        ContentType = "application/fhir+json",
+        Content = resource.ToJsonString(),
+        StatusCode = 200,
+    };
 
     // ── PractitionerRole (proxied to provider-service, capability 5.8) ───────
 

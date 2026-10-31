@@ -100,7 +100,7 @@ public class FhirPatientProjectorTests
     {
         var json = new FhirPatientProjector().Project(BuildMember());
         var ids = json["identifier"]!.AsArray();
-        ids.Should().HaveCount(3); // MemberId + MBI + SSN
+        ids.Should().HaveCount(4); // MemberId (memberid and uniquememberid) + MBI + SSN
         ids.Any(i => i!["system"]!.ToString() == "urn:cho:member-id").Should().BeTrue();
         ids.Any(i => i!["system"]!.ToString() == "http://hl7.org/fhir/sid/us-mbi").Should().BeTrue();
 
@@ -157,10 +157,20 @@ public class FhirPatientProjectorTests
     public void Project_MemberId_FillsCarinBbMemberIdSlice()
     {
         var json = new FhirPatientProjector().Project(BuildMember());
-        var memberId = json["identifier"]!.AsArray().Single(i => i!["system"]!.ToString() == "urn:cho:member-id")!;
-        var type = memberId["type"]!["coding"]!.AsArray().Single()!;
-        type["system"]!.ToString().Should().Be("http://terminology.hl7.org/CodeSystem/v2-0203");
-        type["code"]!.ToString().Should().Be("MB");
+        var memberIds = json["identifier"]!.AsArray().Where(i => i!["system"]!.ToString() == "urn:cho:member-id").ToList();
+        var types = memberIds.Select(i => i!["type"]!["coding"]!.AsArray().Single()!).ToList();
+        types.Select(t => (t["system"]!.ToString(), t["code"]!.ToString())).Should().Equal(
+            ("http://terminology.hl7.org/CodeSystem/v2-0203", "MB"),
+            ("http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBIdentifierType", "um"));
+        memberIds.Should().OnlyContain(i => i!["value"]!.ToString() == json["id"]!.ToString());
+    }
+
+    [Fact]
+    public void Project_LivingMember_SaysSo()
+    {
+        var json = new FhirPatientProjector().Project(BuildMember());
+        json["deceasedBoolean"]!.GetValue<bool>().Should().BeFalse();
+        json["deceasedDateTime"].Should().BeNull();
     }
 
     [Fact]
@@ -202,7 +212,7 @@ public class FhirPatientProjectorTests
         };
         var json = new FhirPatientProjector().Project(min);
         json["resourceType"]!.ToString().Should().Be("Patient");
-        json["identifier"]!.AsArray().Should().ContainSingle();
+        json["identifier"]!.AsArray().Should().HaveCount(2, "the member id, once as memberid and once as uniquememberid");
     }
 
     [Fact]

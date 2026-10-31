@@ -94,6 +94,10 @@ builder.Services.AddHostedService<ClaimAdjustmentIndexInitializer>();
 
 // FHIR R4 ExplanationOfBenefit projector — hand-built JsonObject to avoid
 // the Hl7.Fhir.R4 transitive dep; used by the v1 member-scoped claims endpoint.
+// The insurer it names comes from Fhir:Insurer (Reference / Display).
+builder.Services.AddSingleton(
+    builder.Configuration.GetSection(CarinEobInsurerOptions.SectionName).Get<CarinEobInsurerOptions>()
+    ?? new CarinEobInsurerOptions());
 builder.Services.AddSingleton<IExplanationOfBenefitProjector, ExplanationOfBenefitProjector>();
 
 // FHIR R4 Claim projector — the same record as billed, alongside the
