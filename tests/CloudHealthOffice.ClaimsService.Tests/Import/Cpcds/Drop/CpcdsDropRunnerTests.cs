@@ -259,15 +259,30 @@ public sealed class CpcdsDropRunnerTests : IDisposable
         _options.Tenants[Tenant].ShadowAfterImport = true;
         var shadow = Substitute.For<IShadowAdjudicationService>();
         shadow.RunAsync(Tenant, Arg.Any<ShadowAdjudicationRunRequest>(), "cpcds-drop", Arg.Any<CancellationToken>())
-            .Returns(new ShadowAdjudicationRunResponse { Run = new ShadowAdjudicationRun { Id = "s-1", ClaimsCompared = 3 }, Results = [] });
+            .Returns(new ShadowAdjudicationRunResponse { Run = new ShadowAdjudicationRun { Id = "s-1", ClaimsRequested = 3, ClaimsCompared = 3 }, Results = [] });
         var handler = new ShadowAdjudicateAfterImport(shadow, Options.Create(_options),
             Options.Create(new ShadowAdjudicationOptions { Enabled = true }));
 
         var note = await handler.OnBatchImportedAsync(Batch(), default);
 
-        note.Should().Contain("s-1").And.Contain("3 claims compared");
+        note.Should().Contain("s-1").And.Contain("3 of 3 claims, 3 compared").And.NotContain("Partial");
         await shadow.Received(1).RunAsync(Tenant, Arg.Is<ShadowAdjudicationRunRequest>(r => r.ImportBatchId == "batch-1"),
             "cpcds-drop", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task A_shadow_run_that_covers_part_of_a_large_batch_says_so()
+    {
+        _options.Tenants[Tenant].ShadowAfterImport = true;
+        var shadow = Substitute.For<IShadowAdjudicationService>();
+        shadow.RunAsync(Tenant, Arg.Any<ShadowAdjudicationRunRequest>(), "cpcds-drop", Arg.Any<CancellationToken>())
+            .Returns(new ShadowAdjudicationRunResponse { Run = new ShadowAdjudicationRun { Id = "s-2", ClaimsRequested = 200, ClaimsCompared = 198 }, Results = [] });
+        var handler = new ShadowAdjudicateAfterImport(shadow, Options.Create(_options),
+            Options.Create(new ShadowAdjudicationOptions { Enabled = true, MaxClaimsPerRun = 200 }));
+
+        var note = await handler.OnBatchImportedAsync(Batch() with { Created = 450, Unchanged = 50 }, default);
+
+        note.Should().Contain("s-2 for claims.csv: 200 of 500 claims, 198 compared").And.Contain("Partial").And.Contain("200");
     }
 
     [Fact]
