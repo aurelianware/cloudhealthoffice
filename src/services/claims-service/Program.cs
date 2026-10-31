@@ -573,6 +573,9 @@ builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsUpstreamImports
     ClaimsService.Import.Cpcds.Drop.HttpCpcdsUpstreamImports>();
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsImportBatchCompletedHandler,
     ClaimsService.Import.Cpcds.Drop.ShadowAdjudicateAfterImport>();
+builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsDropTenantSettingsRepository,
+    ClaimsService.Import.Cpcds.Drop.CpcdsDropTenantSettingsRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.CpcdsDropTenants>();
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.CpcdsDropRunner>();
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.CpcdsFreshnessReporter>();
 builder.Services.AddHostedService<ClaimsService.Import.Cpcds.Drop.CpcdsDropWorker>();

@@ -1,0 +1,298 @@
+{
+  "templateId": "az-kidscare",
+  "state": "AZ",
+  "program": "KidsCare",
+  "planName": "Arizona KidsCare (CHIP)",
+  "population": "Children under 19 above the AHCCCS income limit, up to the KidsCare limit (for example $74,256 a year for a family of four from 2025-02-01)",
+  "ageRange": [
+    0,
+    18
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2025-02-01",
+  "notes": "KidsCare members enroll in the same ACC plans as Medicaid children. The benefit equivalence to AHCCCS child coverage is marked verify.",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "bcbsaz-hca-ch2",
+      "status": "sourced",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "bcbsaz-hca-ch2",
+      "status": "sourced",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "KidsCare covers the same services as AHCCCS for children under 19, including EPSDT, dental, vision and hearing."
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    }
+  ],
+  "carveOuts": [
+    {
+      "service": "American Indian and Alaska Native members who choose it",
+      "to": "American Indian Health Program (AIHP, AHCCCS fee-for-service) or a Tribal ALTCS program",
+      "status": "verify"
+    }
+  ],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "Set by each plan within state rules; load as prior-auth rules per plan.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added or in-lieu-of services",
+      "why": "Plan-specific extras approved by the state; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Monthly premiums",
+      "why": "Premiums are stopped until further notice; premium billing is not a claim cost share in any case.",
+      "source": "ahcccs-kidscare",
+      "status": "sourced"
+    },
+    {
+      "item": "Member copayments",
+      "why": "Members under 19 are exempt from AHCCCS copayments.",
+      "source": "ahcccs-copayments",
+      "status": "sourced"
+    },
+    {
+      "item": "Dental",
+      "why": "Covered by the health plan; CHO has no dental service category.",
+      "status": "verify"
+    }
+  ],
+  "sources": {
+    "ahcccs-copayments": {
+      "title": "AHCCCS, Copayments (optional and required copay amounts, 5% of household income per quarter limit, exempt members and services)",
+      "url": "https://www.azahcccs.gov/PlansProviders/RatesAndBilling/copayments.html",
+      "accessed": "2026-10-31"
+    },
+    "ahcccs-kidscare": {
+      "title": "AHCCCS, KidsCare (Arizona CHIP): under 19, income limits effective 2025-02-01, monthly premiums stopped until further notice",
+      "url": "https://www.azahcccs.gov/KidsCare",
+      "accessed": "2026-10-31"
+    },
+    "bcbsaz-hca-ch2": {
+      "title": "Blue Cross Blue Shield of Arizona Health Choice (AHCCCS Complete Care) provider manual, Chapter 2, Member Eligibility and Member Services (rev. 2024-07): adult service limits and under-21 coverage",
+      "url": "https://assets.azblue.com/m/4b1f3cc754867708/original/Chapter_02_Member-Eligibility-and-Member-Services_HCA_final_07-24-24.pdf",
+      "accessed": "2026-10-31"
+    },
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval; applies to every state)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    }
+  }
+}

@@ -1,0 +1,262 @@
+{
+  "templateId": "ny-mltc",
+  "state": "NY",
+  "program": "MLTC",
+  "planName": "New York Managed Long Term Care (partial capitation)",
+  "population": "Adults 21+ who need community-based long-term care for more than 120 days, mostly dual eligibles",
+  "ageRange": [
+    21,
+    null
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2023-04-01",
+  "notes": "Partial capitation MLTC covers long-term care only. Medical care is Medicare or Medicaid fee-for-service. MAP and PACE products are not covered by this template.",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Not in the MLTC partial capitation benefit; covered by Medicaid fee-for-service or Medicare."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Not in the MLTC partial capitation benefit; covered by Medicaid fee-for-service or Medicare."
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Not in the MLTC partial capitation benefit; covered by Medicaid fee-for-service or Medicare."
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Not in the MLTC partial capitation benefit; covered by Medicaid fee-for-service or Medicare."
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Not in the MLTC partial capitation benefit; covered by Medicaid fee-for-service or Medicare."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "verify",
+      "limitations": "Non-emergency transportation only; emergency ambulance is fee-for-service or Medicare."
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Not in the MLTC partial capitation benefit; covered by Medicaid fee-for-service or Medicare."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Not in the MLTC partial capitation benefit; covered by Medicaid fee-for-service or Medicare."
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Not in the MLTC partial capitation benefit; covered by Medicaid fee-for-service or Medicare."
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Not in the MLTC partial capitation benefit; covered by Medicaid fee-for-service or Medicare."
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Not in the MLTC partial capitation benefit; covered by Medicaid fee-for-service or Medicare."
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Not in the MLTC partial capitation benefit; covered by Medicaid fee-for-service or Medicare."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Not in the MLTC partial capitation benefit; covered by Medicaid fee-for-service or Medicare."
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Nursing home care not covered by Medicare, for members eligible for institutional Medicaid; permanent placement leads to disenrollment after three months."
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Home health not covered by Medicare (nursing, aide, therapies), personal care, CDPAS, private duty nursing."
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Not in the MLTC partial capitation benefit; covered by Medicaid fee-for-service or Medicare."
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Outpatient rehabilitation and therapies in the home."
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "DME, medical supplies, prosthetics and orthotics; enteral formula only for tube-fed members or rare inborn metabolic disorders."
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Optometry."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-mltc-handbook",
+      "status": "sourced",
+      "limitations": "Pharmacy is fee-for-service Medicaid (NYRx) or Medicare Part D."
+    }
+  ],
+  "displayBenefits": [],
+  "carveOuts": [],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "Set by each plan within state rules; load as prior-auth rules per plan.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added or in-lieu-of services",
+      "why": "Plan-specific extras approved by the state; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Community LTSS without a CHO category",
+      "why": "Adult day health, social day care, home delivered meals, nutrition, medical social services, social and environmental supports, PERS, respite.",
+      "source": "ny-mltc-handbook",
+      "status": "sourced"
+    },
+    {
+      "item": "Dental, audiology and podiatry",
+      "why": "Covered by the MLTC plan; no CHO categories.",
+      "source": "ny-mltc-handbook",
+      "status": "sourced"
+    },
+    {
+      "item": "Spenddown or surplus",
+      "why": "Amount set by the local department of social services; not a claim cost share.",
+      "source": "ny-mltc-handbook",
+      "status": "sourced"
+    }
+  ],
+  "sources": {
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval; applies to every state)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    },
+    "ny-mltc-handbook": {
+      "title": "NYS DOH, MLTC Partial Capitation Model Member Handbook (covered and not covered services)",
+      "url": "https://healthweb-back.health.ny.gov/health_care/managed_care/mltc/partial_cap_member_hndbk.htm",
+      "accessed": "2026-10-31"
+    }
+  }
+}

@@ -1,0 +1,277 @@
+{
+  "templateId": "ny-child-health-plus",
+  "state": "NY",
+  "program": "Child Health Plus",
+  "planName": "New York Child Health Plus (CHIP)",
+  "population": "Children under 19 above the Medicaid income limit; monthly premium per child of $0 to $60 by income (family maximum three children), full premium above about 400% FPL",
+  "ageRange": [
+    0,
+    18
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2026-01-01",
+  "notes": "No deductible and no copayments.",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced",
+      "limitations": "Child Health Plus has no deductible and no copayments."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced",
+      "limitations": "Child Health Plus has no deductible and no copayments."
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced",
+      "limitations": "Child Health Plus has no deductible and no copayments."
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "verify",
+      "limitations": "Not named on the At a Glance list (which is not all-inclusive); confirm in the plan's CHP contract. No copayments."
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced",
+      "limitations": "Child Health Plus has no deductible and no copayments."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "verify",
+      "limitations": "Not named on the At a Glance list (which is not all-inclusive); confirm in the plan's CHP contract. No copayments."
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced",
+      "limitations": "Child Health Plus has no deductible and no copayments."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced",
+      "limitations": "Child Health Plus has no deductible and no copayments."
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced",
+      "limitations": "Child Health Plus has no deductible and no copayments."
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced",
+      "limitations": "Child Health Plus has no deductible and no copayments."
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced",
+      "limitations": "Child Health Plus has no deductible and no copayments."
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced",
+      "limitations": "Child Health Plus has no deductible and no copayments."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "verify",
+      "limitations": "Not named on the At a Glance list (which is not all-inclusive); confirm in the plan's CHP contract. No copayments."
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "verify",
+      "limitations": "Not named on the At a Glance list (which is not all-inclusive); confirm in the plan's CHP contract. No copayments."
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "verify",
+      "limitations": "Not named on the At a Glance list (which is not all-inclusive); confirm in the plan's CHP contract. No copayments."
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "verify",
+      "limitations": "Not named on the At a Glance list (which is not all-inclusive); confirm in the plan's CHP contract. No copayments."
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced",
+      "limitations": "Short-term physical and occupational therapy; speech and hearing services. No copayments."
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "verify",
+      "limitations": "Not named on the At a Glance list (which is not all-inclusive); confirm in the plan's CHP contract. No copayments."
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced",
+      "limitations": "Child Health Plus has no deductible and no copayments."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced",
+      "limitations": "Prescription and non-prescription drugs ordered by a licensed professional, covered by the plan (CHP is not part of NYRx). No copayments."
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ny-chp-glance-2026",
+      "status": "sourced"
+    }
+  ],
+  "carveOuts": [],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "Set by each plan within state rules; load as prior-auth rules per plan.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added or in-lieu-of services",
+      "why": "Plan-specific extras approved by the state; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Monthly premiums ($0, $15, $30, $45, $60 per child, or full premium)",
+      "why": "Premium billing, not a claim cost share.",
+      "source": "ny-chp-glance-2026",
+      "status": "sourced"
+    },
+    {
+      "item": "Dental and vision",
+      "why": "Covered by the CHP plan; CHO has no dental category, and vision here covers the exam and eyewear together.",
+      "source": "ny-chp-glance-2026",
+      "status": "sourced"
+    }
+  ],
+  "sources": {
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval; applies to every state)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    },
+    "ny-chp-glance-2026": {
+      "title": "NY State of Health, Child Health Plus At a Glance 2026 (no deductible or copayments; premiums by income; covered services)",
+      "url": "https://info.nystateofhealth.ny.gov/sites/default/files/Child%20Health%20Plus%20At%20a%20Glance%20-%202026%20English.pdf",
+      "accessed": "2026-10-31"
+    }
+  }
+}

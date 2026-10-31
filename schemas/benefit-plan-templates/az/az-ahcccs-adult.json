@@ -1,0 +1,305 @@
+{
+  "templateId": "az-ahcccs-adult",
+  "state": "AZ",
+  "program": "AHCCCS Complete Care",
+  "planName": "Arizona AHCCCS Complete Care (21 and over)",
+  "population": "Adults 21+ in ACC plans, including the Adult Group (expansion), parents and caretakers, and SSI without long-term care",
+  "ageRange": [
+    21,
+    null
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2024-10-01",
+  "notes": "No deductible or coinsurance. Copays depend on the member's eligibility group, so they are left at $0 here.",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ahcccs-copayments",
+      "status": "verify",
+      "limitations": "$3.40 optional or $4.00 required copay for some eligibility groups; template uses $0."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ahcccs-copayments",
+      "status": "sourced",
+      "limitations": "Exempt from AHCCCS copayments."
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ahcccs-copayments",
+      "status": "sourced",
+      "limitations": "Exempt from AHCCCS copayments."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ahcccs-copayments",
+      "status": "sourced",
+      "limitations": "Exempt from AHCCCS copayments."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ahcccs-copayments",
+      "status": "verify",
+      "limitations": "$3.00 required copay for non-emergency outpatient surgery for Transitional Medical Assistance adults; template uses $0."
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Integrated in AHCCCS Complete Care; members with a serious mental illness are served by the ACC-RBHA plan in their region."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ahcccs-copayments",
+      "status": "sourced",
+      "limitations": "Exempt from AHCCCS copayments."
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "bcbsaz-hca-ch2",
+      "status": "sourced",
+      "limitations": "Adults 21+: outpatient PT 15 visits per contract year (October 1 to September 30) to restore a skill or level of function, plus 15 visits to maintain or attain one; OT has the same limits. Kept as text: CHO counts every claim in the category."
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Adults 21+: eye exams for medical conditions; routine eyeglasses not covered except after cataract surgery. Confirm against AMPM 310-G."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ahcccs-copayments",
+      "status": "verify",
+      "limitations": "$2.30 optional or required copay for some eligibility groups; template uses $0."
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    }
+  ],
+  "carveOuts": [
+    {
+      "service": "American Indian and Alaska Native members who choose it",
+      "to": "American Indian Health Program (AIHP, AHCCCS fee-for-service) or a Tribal ALTCS program",
+      "status": "verify"
+    },
+    {
+      "service": "Members with developmental disabilities",
+      "to": "DES Division of Developmental Disabilities (ALTCS-DD), which subcontracts physical and behavioral health",
+      "status": "verify"
+    }
+  ],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "Set by each plan within state rules; load as prior-auth rules per plan.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added or in-lieu-of services",
+      "why": "Plan-specific extras approved by the state; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "AHCCCS copayments",
+      "why": "Optional (nominal) copays for some groups, for example 1931 families, SSI and Freedom to Work: $2.30 prescription, $2.30 outpatient therapy, $3.40 office visit; a provider cannot deny care for nonpayment. Required copays for Transitional Medical Assistance adults: $2.30 prescription, $4.00 office visit, $3.00 therapy, $3.00 non-emergency outpatient surgery. Total capped at 5% of household income per quarter. Exempt: under 19, SMI, ALTCS, hospice, AI/AN, pregnant and postpartum members, and others; exempt services include hospital stays, ER, family planning, pregnancy and preventive care. Depends on eligibility group, so the template uses $0.",
+      "source": "ahcccs-copayments",
+      "status": "sourced"
+    },
+    {
+      "item": "Adult emergency dental ($1,000 per contract year)",
+      "why": "No dental service category in CHO; route to the plan's dental benefit.",
+      "source": "bcbsaz-hca-ch2",
+      "status": "sourced"
+    },
+    {
+      "item": "Adult exclusions: hearing aids, cochlear implants, BAHA, allergy immunotherapy",
+      "why": "Load as exclusion rules per plan; no CHO category holds them.",
+      "source": "bcbsaz-hca-ch2",
+      "status": "sourced"
+    },
+    {
+      "item": "Respite (600 hours per 12 months)",
+      "why": "Hour-based LTSS limit; no CHO category.",
+      "source": "bcbsaz-hca-ch2",
+      "status": "sourced"
+    },
+    {
+      "item": "Formulary",
+      "why": "AHCCCS drug list; CHO has no formulary resolution yet.",
+      "status": "verify"
+    },
+    {
+      "item": "Dual eligibles",
+      "why": "Medicare pays first; handled through coordination of benefits.",
+      "status": "verify"
+    }
+  ],
+  "sources": {
+    "ahcccs-copayments": {
+      "title": "AHCCCS, Copayments (optional and required copay amounts, 5% of household income per quarter limit, exempt members and services)",
+      "url": "https://www.azahcccs.gov/PlansProviders/RatesAndBilling/copayments.html",
+      "accessed": "2026-10-31"
+    },
+    "bcbsaz-hca-ch2": {
+      "title": "Blue Cross Blue Shield of Arizona Health Choice (AHCCCS Complete Care) provider manual, Chapter 2, Member Eligibility and Member Services (rev. 2024-07): adult service limits and under-21 coverage",
+      "url": "https://assets.azblue.com/m/4b1f3cc754867708/original/Chapter_02_Member-Eligibility-and-Member-Services_HCA_final_07-24-24.pdf",
+      "accessed": "2026-10-31"
+    },
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval; applies to every state)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    }
+  }
+}
