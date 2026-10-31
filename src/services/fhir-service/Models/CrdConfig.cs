@@ -11,4 +11,10 @@ public class CrdConfig
     public List<string> AuthRequiredCodes { get; set; } = new();
     public List<string> AutoApprovedCodes { get; set; } = new();
     public List<string> DocumentationRequiredCodes { get; set; } = new();
+
+    /// <summary>
+    /// How long a coverage assertion is kept, so its coverage-assertion-id still
+    /// resolves as a DTR <c>$questionnaire-package</c> context (DTR spec-107).
+    /// </summary>
+    public int AssertionRetentionDays { get; set; } = 90;
 }

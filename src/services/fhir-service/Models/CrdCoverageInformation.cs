@@ -96,8 +96,9 @@ public enum CrdIndeterminateReason
 ///
 /// <para>
 /// The invariants this construction respects, by never producing the shapes they
-/// forbid: <c>q1</c> (no questionnaire without doc-needed — CHO emits no
-/// questionnaire), <c>q2</c> (no pa-needed under not-covered — CHO never asserts
+/// forbid: <c>q1</c> (no questionnaire without doc-needed — CHO names
+/// questionnaires only on a documentation-required determination, which always
+/// carries doc-needed), <c>q2</c> (no pa-needed under not-covered — CHO never asserts
 /// not-covered, because it does not evaluate benefit exclusions here),
 /// <c>q3</c>/<c>q5</c> (CHO emits neither <c>conditional</c> nor
 /// <c>satisfied</c>), <c>q4</c> (doc-purpose <c>withpa</c> is never paired with a
@@ -137,6 +138,13 @@ public sealed record CrdCoverageInformation
     public string? BillingCodeSystem { get; init; }
     public string? BillingCode { get; init; }
 
+    /// <summary>
+    /// Canonicals (<c>url|version</c>) of the DTR questionnaires that collect the
+    /// documentation (CRD resp-38). Emitted only alongside doc-needed, so
+    /// invariant crd-ci-q1 holds whatever a caller puts here.
+    /// </summary>
+    public IReadOnlyList<string> Questionnaires { get; init; } = [];
+
     /// <summary>`covered` / `not-covered` / `conditional` / `indeterminate`.</summary>
     public string Covered => Determination == CrdDetermination.Indeterminate ? "indeterminate" : "covered";
 
@@ -170,6 +178,11 @@ public sealed record CrdCoverageInformation
             // needed. withpa would also collide with crd-ci-q4 the moment the
             // pa-needed answer changed.
             parts.Add(Part("doc-purpose", "valueCode", "withorder"));
+
+            // resp-38: name the forms, so a DTR client can ask for exactly
+            // these by canonical or resolve them from coverage-assertion-id.
+            foreach (var canonical in Questionnaires.Where(q => !string.IsNullOrWhiteSpace(q)).Distinct(StringComparer.Ordinal))
+                parts.Add(Part("questionnaire", "valueCanonical", canonical));
         }
 
         if (BillingCode is not null)
