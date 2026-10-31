@@ -6,7 +6,14 @@
     <atom:link href="https://cloudhealthoffice.com/release-notes/feed.xml" rel="self" type="application/rss+xml"/>
     <description>New releases of Cloud Health Office, the core administration platform for health plans.</description>
     <language>en-us</language>
-    <lastBuildDate>Wed, 28 Oct 2026 00:00:00 GMT</lastBuildDate>
+    <lastBuildDate>Sat, 31 Oct 2026 00:00:00 GMT</lastBuildDate>
+    <item>
+      <title>Cloud Health Office v6.1.0: Spartacus</title>
+      <link>https://cloudhealthoffice.com/release-notes/v6-1-0</link>
+      <guid isPermaLink="true">https://cloudhealthoffice.com/release-notes/v6-1-0</guid>
+      <pubDate>Sat, 31 Oct 2026 00:00:00 GMT</pubDate>
+      <description>Cloud Health Office v6.1.0 (Spartacus): SMART Backend Services, in both directions; the public Provider Directory is Plan-Net 1.2.0.</description>
+    </item>
     <item>
       <title>Cloud Health Office v6.0.0: Paths of Glory</title>
       <link>https://cloudhealthoffice.com/release-notes/v6-0-0</link>

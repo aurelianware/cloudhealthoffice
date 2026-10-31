@@ -6,11 +6,11 @@ This directory contains comprehensive release documentation for CloudHealthOffic
 
 ## Current Release
 
-### v6.1.0 — Spartacus (TBD)
+### v6.1.0 — Spartacus (October 2026)
 
 SMART Backend Services authentication in both directions, the public Provider Directory as
-Plan-Net 1.2.0, and the rest of Bulk Data `$export` (still off by default). No breaking changes.
-Not tagged until the nightly Inferno run is clean.
+Plan-Net 1.2.0, the rest of Bulk Data `$export` (still off by default), and CAQH CORE real-time
+270/271 and 276/277. All four nightly Inferno kits pass, apart from known kit issues. No breaking changes.
 
 | Document | Description |
 |----------|-------------|

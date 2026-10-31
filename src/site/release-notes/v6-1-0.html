@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>v6.1.0: Spartacus Release Notes | Cloud Health Office</title>
+  <meta name="description" content="Cloud Health Office v6.1.0 (Spartacus): SMART Backend Services, in both directions; the public Provider Directory is Plan-Net 1.2.0.">
+  <link rel="canonical" href="https://cloudhealthoffice.com/release-notes/v6-1-0">
+  <link rel="alternate" type="application/rss+xml" title="Cloud Health Office release notes" href="/release-notes/feed.xml">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:url" content="https://cloudhealthoffice.com/release-notes/v6-1-0">
+  <meta property="og:title" content="v6.1.0: Spartacus Release Notes | Cloud Health Office">
+  <meta property="og:description" content="Cloud Health Office v6.1.0 (Spartacus): SMART Backend Services, in both directions; the public Provider Directory is Plan-Net 1.2.0.">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
+  <meta property="article:published_time" content="2026-10-31">
+  <meta name="twitter:card" content="summary">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "Cloud Health Office v6.1.0: Spartacus release notes",
+      "description": "Cloud Health Office v6.1.0 (Spartacus): SMART Backend Services, in both directions; the public Provider Directory is Plan-Net 1.2.0.",
+      "url": "https://cloudhealthoffice.com/release-notes/v6-1-0",
+      "mainEntityOfPage": "https://cloudhealthoffice.com/release-notes/v6-1-0",
+      "datePublished": "2026-10-31",
+      "author": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc."
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg"
+        }
+      },
+      "about": {
+        "@type": "SoftwareApplication",
+        "name": "Cloud Health Office",
+        "softwareVersion": "6.1.0",
+        "applicationCategory": "BusinessApplication"
+      }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Release notes",
+          "item": "https://cloudhealthoffice.com/release-notes"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "v6.1.0",
+          "item": "https://cloudhealthoffice.com/release-notes/v6-1-0"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <style>
+    .rn { max-width: 860px; margin: 0 auto; padding: 48px 20px 96px; }
+    .rn-crumbs { font-size: .9rem; color: var(--cho-muted); margin-bottom: 28px; }
+    .rn-crumbs a { color: var(--cho-accent); }
+    .rn-eyebrow { color: var(--cho-accent); font-size: .8rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .rn h1 { font-size: clamp(2rem, 4.5vw, 3rem); line-height: 1.1; margin: 10px 0 18px; }
+    .rn h2 { margin-top: 56px; padding-top: 8px; border-top: 1px solid var(--cho-line); font-size: 1.7rem; }
+    .rn h3 { margin-top: 36px; font-size: 1.25rem; }
+    .rn h4 { margin-top: 28px; font-size: 1.05rem; }
+    .rn p, .rn li { font-size: 1.04rem; line-height: 1.75; color: var(--cho-body); }
+    .rn li { margin: 6px 0; }
+    .rn a { color: var(--cho-accent); }
+    .rn a:hover { color: var(--cho-accent-hover); }
+    .rn code { font-family: var(--cho-mono); font-size: .88em; background: var(--cho-surface-2); padding: .1rem .35rem; border-radius: 4px; overflow-wrap: anywhere; }
+    .rn pre { background: var(--cho-navy); color: var(--cho-navy-ink); padding: 18px 20px; border-radius: 8px; overflow-x: auto; }
+    .rn pre code { background: none; padding: 0; color: inherit; }
+    .rn hr { border: 0; border-top: 1px solid var(--cho-line); margin: 40px 0; }
+    .rn blockquote { margin: 24px 0; padding: 4px 20px; border-left: 4px solid var(--cho-accent); background: var(--cho-surface); }
+    .rn-meta { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 0 0 28px; padding: 16px 20px; background: var(--cho-surface); border: 1px solid var(--cho-line); border-radius: 8px; font-size: .95rem; }
+    .rn-meta dt { font-weight: 600; color: var(--cho-ink); }
+    .rn-meta dd { margin: 0; }
+    .rn-meta div { display: flex; gap: 6px; }
+    .rn-toc { margin: 0 0 32px; padding: 16px 20px; border: 1px solid var(--cho-line); border-radius: 8px; }
+    .rn-toc p { margin: 0 0 6px; font-weight: 600; color: var(--cho-ink); }
+    .rn-toc ul { margin: 0; padding-left: 20px; }
+    .rn-toc li { font-size: .97rem; margin: 2px 0; }
+    .rn-table { margin: 24px 0; overflow-x: auto; border: 1px solid var(--cho-line); border-radius: 8px; }
+    .rn-table table { margin: 0; width: 100%; border-collapse: collapse; font-size: .95rem; }
+    .rn-table th, .rn-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--cho-line); vertical-align: top; }
+    .rn-table th { background: var(--cho-surface); color: var(--cho-ink); }
+    .rn-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0; }
+    .rn-actions a { border: 1px solid var(--cho-line-strong); border-radius: 6px; padding: 9px 14px; text-decoration: none; font-weight: 500; }
+    .rn-pager { display: flex; justify-content: space-between; gap: 16px; margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--cho-line); }
+    .rn-card { margin: 28px 0; padding: 24px; border: 1px solid var(--cho-line); border-radius: 10px; }
+    .rn-card h2 { margin: 6px 0 4px; padding: 0; border: 0; font-size: 1.5rem; }
+    .rn-card h2 a { color: var(--cho-ink); text-decoration: none; }
+    .rn-card time { color: var(--cho-muted); font-size: .95rem; }
+    .rn-card ul { margin: 14px 0 0; }
+    .rn-latest { border-color: var(--cho-accent); box-shadow: 0 0 0 1px var(--cho-accent); }
+  </style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<script defer src="/js/mobile-nav.js"></script>
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body>
+<nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/blueprints/google-cloud">Reference architecture</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="/api-explorer">API explorer</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+<main id="main-content" class="rn">
+<div class="rn-crumbs"><a href="/">Home</a> / <a href="/release-notes">Release notes</a> / v6.1.0</div>
+<div class="rn-eyebrow">Release notes</div>
+<h1>v6.1.0: Spartacus</h1>
+<dl class="rn-meta"><div><dt>Released</dt><dd>October 31, 2026</dd></div><div><dt>Previous release</dt><dd><a href="/release-notes/v6-0-0">v6.0.0</a></dd></div></dl>
+<aside class="rn-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#highlights">Highlights</a></li><li><a href="#upgrading-from-60">Upgrading from 6.0</a></li><li><a href="#where-this-release-has-been-validated">Where this release has been validated</a></li><li><a href="#off-by-default">Off by default</a></li><li><a href="#not-yet-done-for-cms-0057-f">Not yet done for CMS-0057-F</a></li></ul></aside>
+<p>This release covers the pull requests merged since v6.0.0 (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1583" rel="noopener">#1583</a> to <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1651" rel="noopener">#1651</a>). It is a minor version: nothing in it requires a configuration change to upgrade from 6.0, and everything new that changes behaviour is off until a deployment turns it on.</p>
+<p>It closes most of what the v6.0.0 notes listed as <a href="/release-notes/v6-0-0#not-yet-done-for-cms-0057-f">not yet done for CMS-0057-F</a>: SMART Backend Services authentication, the Plan-Net 1.2.0 Provider Directory and the rest of Bulk Data <code>$export</code>. Work planned for 6.2 (mid-December) landed here too. What is still open is under <a href="#not-yet-done-for-cms-0057-f">Not yet done for CMS-0057-F</a>.</p>
+<p>&quot;I'm Spartacus&quot;: a backend client now proves who it is with its own signed assertion, and CHO can do the same to other payers.</p>
+<h2 id="highlights">Highlights</h2>
+<h3 id="smart-backend-services-in-both-directions-g-42">SMART Backend Services, in both directions (G-42)</h3>
+<ul><li><strong>Inbound</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1583" rel="noopener">#1583</a>): a tenant administrator registers a backend client with its public keys (<code>jwks</code> or <code>jwksUri</code>) instead of a secret. The client gets <code>client_credentials</code> tokens with a <code>private_key_jwt</code> assertion (RS384 or ES384, single-use <code>jti</code>, <code>exp</code> at most five minutes out). <code>PUT /api/admin/smart/clients/{clientId}/keys</code> rotates the keys.</li><li><strong>For a provider</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1585" rel="noopener">#1585</a>): a backend client registered with <code>providerId</code> gets tokens carrying <code>provider_id</code>, and fhir-service treats it as that provider for Provider Access, including bulk <code>Group/{providerId}/$export</code>.</li><li><strong>Outbound</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1587" rel="noopener">#1587</a>): for Payer-to-Payer as the new payer, CHO signs its own assertions to the other payer's token endpoint, caches the token, and publishes its public keys at <code>/fhir/r4/.well-known/smart-backend-jwks.json</code>.</li><li><strong>Evidence:</strong> the hosted Inferno Bulk Data kit's SMART Backend Services group passed against the GKE demo on 2026-10-29 (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1598" rel="noopener">#1598</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1606" rel="noopener">#1606</a>), and the nightly run now includes that group (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1607" rel="noopener">#1607</a>).</li></ul>
+<h3 id="the-public-provider-directory-is-plan-net-120-g-36">The public Provider Directory is Plan-Net 1.2.0 (G-36)</h3>
+<ul><li><code>/fhir/r4/directory/{directory}/</code> serves all nine Plan-Net profiles, including the plan's own payer Organization, with every SHALL search, chain, <code>_has</code>, <code>_include</code> and <code>_revinclude</code> of the Plan-Net CapabilityStatement (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1584" rel="noopener">#1584</a>).</li><li>Each directory is an in-memory snapshot, rebuilt in the background every <code>PublicProviderDirectory:RefreshMinutes</code> (60).</li><li>The GKE deploy can now publish directories from one setting, <code>PUBLIC_PROVIDER_DIRECTORY</code> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1608" rel="noopener">#1608</a>). Before, only the interop profile could.</li><li>The Inferno Plan-Net kit runs nightly with no token (<code>INFERNO-PLANNET-SERVER-001</code>). The kit is generated from Plan-Net 1.1.0, so check its known mismatches before treating a finding as a CHO defect.</li></ul>
+<h3 id="bulk-data-export-is-complete-g-34-g-35-still-off-by-default">Bulk Data <code>$export</code> is complete (G-34, G-35), still off by default</h3>
+<ul><li>Claims-history attribution feeds a provider's Group export (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1586" rel="noopener">#1586</a>), so a plan that relies on it alone no longer exports nobody.</li><li><code>Patient/$export</code> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1588" rel="noopener">#1588</a>), and GET kick-offs on every export endpoint.</li><li>Payer-to-Payer over bulk: <code>PayerToPayer/$export</code> for consented members (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1589" rel="noopener">#1589</a>), PDex <code>Group/$bulk-member-match</code> and <code>Group/{id}/$davinci-data-export</code> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1590" rel="noopener">#1590</a>), and outbound bulk with CHO as the new payer (<code>PayerToPayer/$bulk-initiate</code>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1591" rel="noopener">#1591</a>).</li><li><code>_typeFilter</code> and <code>patient</code> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1594" rel="noopener">#1594</a>).</li><li>Fixes from the first Inferno Bulk Data run (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1592" rel="noopener">#1592</a>), and bulk jobs now read CHO's own services in the export's tenant (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1589" rel="noopener">#1589</a>).</li></ul>
+<h3 id="prior-authorization-reporting">Prior authorization reporting</h3>
+<ul><li>Appeal outcomes the PA reporting ledger refused can be listed and re-queued by an <code>appeals:admin</code> operator, from the API or the portal case screen (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1596" rel="noopener">#1596</a>).</li></ul>
+<h3 id="conformance-testing">Conformance testing</h3>
+<ul><li>The nightly interop job now runs the Bulk Data kit (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1593" rel="noopener">#1593</a>) and the Plan-Net kit, and the kits actually boot: database migration (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1597" rel="noopener">#1597</a>), seed fixes (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1597" rel="noopener">#1597</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1604" rel="noopener">#1604</a>) and harness fixes (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1605" rel="noopener">#1605</a>). From 2026-10-24 to 2026-10-28 the job had failed silently and produced no verdicts.</li><li>The GKE demo can be put in front of hosted Inferno on public tunnel hostnames, opt-in (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1598" rel="noopener">#1598</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1606" rel="noopener">#1606</a>). Runbook: <code>docs/deploy/GCP-CONFORMANCE-TESTING.md</code>.</li><li>The harness now reaches the kits and reports honestly: sized request bodies instead of chunked ones (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1611" rel="noopener">#1611</a>), its own faults kept apart from CHO failures (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1612" rel="noopener">#1612</a>), the kit's own tokens (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1614" rel="noopener">#1614</a>), authorization-service and an Encounter in the interop stack (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1616" rel="noopener">#1616</a>), and the validator's reason on each failing test (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1617" rel="noopener">#1617</a>).</li></ul>
+<h3 id="fixes-from-the-first-inferno-results">Fixes from the first Inferno results</h3>
+<p>The first runs that produced kit results found real CHO defects. Fixed:</p>
+<ul><li>FHIR codings pass terminology validation: dotted ICD-10-CM codes, BCP-47 language display names, NUCC display names (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1620" rel="noopener">#1620</a>).</li><li>The US Core searches the kit makes no longer answer 400 (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1621" rel="noopener">#1621</a>), and <code>POST [type]/_search</code> is served as the equivalent GET search (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1615" rel="noopener">#1615</a>).</li><li>CARIN BB: the CapabilityStatement instantiates C4BB, local line codes are marked not-applicable, EOBs declare the versioned profile and a payee, Coverage supports <code>_include</code>, and EOB search applies the CARIN BB search parameters (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1623" rel="noopener">#1623</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1625" rel="noopener">#1625</a>).</li><li>A patient launch's token response now carries the <code>patient</code> and <code>encounter</code> launch context SMART App Launch requires (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1625" rel="noopener">#1625</a>).</li><li>Interop fixture: a second member for Bulk Data, and a Plan-Net network address and plan document URL (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1622" rel="noopener">#1622</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1624" rel="noopener">#1624</a>).</li><li>Later runs found more, also fixed: the public directory links practitioners, affiliations, locations and endpoints as Plan-Net expects (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1626" rel="noopener">#1626</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1636" rel="noopener">#1636</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1639" rel="noopener">#1639</a>); FHIR date search matches an instant only at its stated precision (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1632" rel="noopener">#1632</a>); CARIN BB Coverage carries the subscriber and relationship, and C4BB Practitioner is served (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1649" rel="noopener">#1649</a>); Practitioner search honours <code>_lastUpdated</code> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1651" rel="noopener">#1651</a>).</li></ul>
+<h3 id="x12-caqh-core-real-time-and-dental-claims">X12: CAQH CORE real-time and dental claims</h3>
+<ul><li><strong>CAQH CORE real-time eligibility</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1641" rel="noopener">#1641</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1643" rel="noopener">#1643</a>): with <code>CoreConnectivity:Enabled</code>, eligibility-service answers CORE Connectivity vC2.2.0 envelopes at <code>/core/eligibility</code> (SOAP 1.2 or MIME multipart), a 270 in and its 271 back, following the CORE eligibility data content rule. Submitters authenticate by client certificate, username and password, or a CHO OAuth token.</li><li><strong>CAQH CORE real-time claim status</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1642" rel="noopener">#1642</a>): claims-service answers a 276 with its 277 at <code>/core/claimstatus</code>, only for claims of the subscriber the 276 names.</li><li><strong>CORE system availability</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1644" rel="noopener">#1644</a>): the weekly downtime and planned windows are published at <code>GET /core/eligibility/availability</code>, with availability measured against the 86% rule.</li><li><strong>Dental claims (837D)</strong> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1637" rel="noopener">#1637</a>): intake parses SV3 and TOO, keeps tooth and oral-cavity data on the claim lines, and SNIP validation knows the 837D. Two Medicaid dental prior-authorization demo stories ship as <code>seed-dental</code> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1638" rel="noopener">#1638</a>).</li></ul>
+<h3 id="demo-site-and-documentation">Demo, site and documentation</h3>
+<ul><li>The demo portal has a guided tour, a scripted prior-authorization story and a recorded walkthrough, with a prospect-access runbook (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1618" rel="noopener">#1618</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1619" rel="noopener">#1619</a>).</li><li>The website publishes the nightly Inferno results and a per-kit explainer (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1630" rel="noopener">#1630</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1631" rel="noopener">#1631</a>), and claims it could not back were removed (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1628" rel="noopener">#1628</a>).</li><li>New core adapter implementer guide (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1648" rel="noopener">#1648</a>), diagrams of where CHO plugs into the CMS APIs (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1633" rel="noopener">#1633</a>), and a refreshed architecture overview (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1650" rel="noopener">#1650</a>).</li></ul>
+<p>The full list, itemized, is in the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/CHANGELOG.md" rel="noopener">changelog</a>.</p>
+<h2 id="upgrading-from-60">Upgrading from 6.0</h2>
+<p>No steps are required. Things to know:</p>
+<ul><li><strong>Public directory resources changed shape.</strong> Practitioner, PractitionerRole and Organization now declare only the Plan-Net profiles, and PractitionerRole carries Plan-Net codes instead of the CHO tier and secondary specialties. The authenticated <code>/fhir/r4/</code> routes are unchanged. This matters only to a plan that published a directory on 6.0.</li><li><strong>A cancelled bulk export's status URL answers 404</strong> (it was 410), as Bulk Data 2.0 requires. Only deployments with <code>BulkExport:Enabled</code> are affected.</li><li><strong><code>.well-known/smart-configuration</code></strong> now advertises <code>private_key_jwt</code> algorithms, <code>client-confidential-asymmetric</code> and the <code>refresh_token</code> grant.</li><li><strong>To publish a directory</strong>, each plan still needs its <code>PublicProviderDirectory:Payers:&lt;id&gt;</code> entry with an address; Plan-Net fails without it. See <code>docs/architecture/public-provider-directory.md</code>.</li></ul>
+<h2 id="where-this-release-has-been-validated">Where this release has been validated</h2>
+<ul><li><strong>Hosted Inferno, against the GKE demo:</strong> Bulk Data v2.0.0 SMART Backend Services group, <strong>pass</strong> (2026-10-29). The export groups have not been run on hosted Inferno.</li><li><strong>Inferno kits against the seeded <code>interop-cho</code> profile:</strong> US Core 3.1.1, CARIN BB 2.0.0, Da Vinci Plan-Net and Bulk Data 2.0.0 (with its SMART Backend Services group) all <strong>pass</strong> on <code>main</code> at this release's commit (DaVinci Interop run <a href="https://github.com/aurelianware/cloudhealthoffice/actions/runs/41168269450" rel="noopener">41168269450</a>, 2026-10-31), apart from the known kit issues below. The results are also on the website at <code>/evidence/inferno-conformance</code>.</li><li><strong>Known kit issues, not counted as failures</strong> (listed with their reasons as <code>infernoKnownKitIssues</code> in <code>interop/scenarios.json</code>; see &quot;Known kit issues&quot; in <code>docs/interop/davinci.md</code>):<ul><li>CARIN BB (<code>carin-for-blue-button-test-kit</code> v0.16.3, the latest release): the five EOB subtype validation tests (inpatient institutional, outpatient institutional, oral, pharmacy, professional non-clinician). Each checks every EOB the kit collected against that one subtype's profile, so a member with more than one claim type always fails them. Each EOB is still validated against its own profile on the conformance goldens.</li><li>Plan-Net (<code>davinci-plan-net-test-kit</code> v0.13.4, the latest release): 25 forward-chain search tests. The kit takes the chained value from the first resource of that type it collected, which is often the payer Organization that nothing references, and then fails on an empty result. CHO's chained search is covered by <code>PlanNetSearchEngineTests</code>, and the forward chains whose first candidate is referenced pass. The kit is also generated from Plan-Net 1.1.0, while CHO serves 1.2.0.</li></ul></li><li><strong>Google Cloud (GKE):</strong> the demo is deployed on every merge to <code>main</code>.</li><li><strong>Azure:</strong> automatic deploys are still paused (<code>AZURE_DEPLOYMENTS_ENABLED</code>) behind the <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1217" rel="noopener">#1217</a> deployment checklist. Neither 6.0 nor 6.1 has been deployed to Azure.</li></ul>
+<h2 id="off-by-default">Off by default</h2>
+<p>New in 6.1, or changed, and doing nothing until a deployment turns them on:</p>
+<div class="rn-table"><table><thead><tr><th>Feature</th><th>Switch</th></tr></thead><tbody><tr><td>Bulk <code>$export</code>: Group, Patient, Payer-to-Payer, bulk member match</td><td><code>BulkExport:Enabled</code>; GCP <code>enable_bulk_export</code> with <code>BULK_EXPORT_BUCKET</code> and <code>FHIR_SERVICE_GOOGLE_ACCOUNT</code></td></tr><tr><td>Outbound bulk Payer-to-Payer (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1591" rel="noopener">#1591</a>)</td><td><code>Cms0057:PayerToPayerOutbound:Bulk:Enabled</code></td></tr><tr><td>Outbound SMART Backend Services credentials (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1587" rel="noopener">#1587</a>)</td><td><code>SmartBackendClients:*</code> and a <code>CredentialKey</code> on the payer's directory entry</td></tr><tr><td>Public Provider Directory</td><td>A plan listed in <code>PublicProviderDirectory:Directories</code>; on GKE, <code>PUBLIC_PROVIDER_DIRECTORY</code> (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1608" rel="noopener">#1608</a>)</td></tr><tr><td>Hosted-Inferno hostnames on the GKE demo (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1598" rel="noopener">#1598</a>)</td><td><code>CONFORMANCE_FHIR_HOST</code>, <code>CONFORMANCE_AUTH_HOST</code></td></tr><tr><td>CAQH CORE real-time eligibility and claim status (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1641" rel="noopener">#1641</a>, <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1642" rel="noopener">#1642</a>)</td><td><code>CoreConnectivity:Enabled</code> and <code>CoreConnectivity:Submitters</code></td></tr></tbody></table></div>
+<p>Everything in the <a href="/release-notes/v6-0-0#off-by-default">v6.0.0 list</a> is still off by default too.</p>
+<h2 id="not-yet-done-for-cms-0057-f">Not yet done for CMS-0057-F</h2>
+<p>The Patient Access, Provider Access and Payer-to-Payer API requirements take effect on January 1, 2027. Still open after 6.1:</p>
+<ul><li><strong>Hosted Inferno for the export groups.</strong> The nightly kits pass, but the Bulk Data export groups have not been run on hosted Inferno against an HTTPS deployment (G-60).</li><li><strong>System-level <code>$export</code></strong> still answers 501; no caller has been approved for it.</li><li><strong>No X12 278 bridge.</strong> CHO relies on HHS enforcement discretion for FHIR-based prior authorization without a 278.</li><li><strong>Per-issuer scope limits</strong> (G-39), so only named issuers can mint <code>system/PayerToPayer.read</code>, are not built.</li></ul>
+<p>A plan must also supply some things itself:</p>
+<ul><li>the <code>PA-DECISION-EXTENSION</code> letter template;</li><li>its <code>PublicProviderDirectory</code> entry, with the plan's address;</li><li>its counsel's reading of &quot;more than once&quot; for the Patient Access usage figures. The usage ledger counts only from the day 6.0 or later is deployed, so days before that need another source.</li></ul>
+<p><code>docs/epa-gap-matrix.md</code> gives the status of every requirement.</p>
+<p><strong>Full changelog:</strong> <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/CHANGELOG.md" rel="noopener">CHANGELOG.md</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/compare/v6.0.0...v6.1.0" rel="noopener">v6.0.0...v6.1.0</a></p>
+<div class="rn-actions">
+<a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/releases/RELEASE_NOTES_v6.1.0.md" rel="noopener">Source of these notes</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/CHANGELOG.md" rel="noopener">Full changelog</a>
+<a href="/release-notes/feed.xml">Subscribe (RSS)</a>
+</div>
+<div class="rn-pager">
+<span><a href="/release-notes/v6-0-0">&larr; v6.0.0 Paths of Glory</a></span>
+<span><a href="/release-notes">All releases</a></span>
+</div>
+</main>
+<footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+</body>
+</html>
