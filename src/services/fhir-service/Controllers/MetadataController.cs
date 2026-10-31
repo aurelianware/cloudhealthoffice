@@ -23,6 +23,21 @@ public class MetadataController : FhirControllerBase
         _config = config;
     }
 
+    private const string CarinBbProfileBase = "http://hl7.org/fhir/us/carin-bb/StructureDefinition/";
+
+    /// <summary>The Patient profiles member-service's projection declares.</summary>
+    public const string UsCorePatientProfile = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient";
+    public const string CarinBbPatientProfile = CarinBbProfileBase + "C4BB-Patient";
+
+    /// <summary>The CARIN BB ExplanationOfBenefit profiles claims-service's projection declares.</summary>
+    public static readonly string[] CarinBbEobProfiles =
+    [
+        CarinBbProfileBase + "C4BB-ExplanationOfBenefit-Inpatient-Institutional-Basis",
+        CarinBbProfileBase + "C4BB-ExplanationOfBenefit-Outpatient-Institutional-Basis",
+        CarinBbProfileBase + "C4BB-ExplanationOfBenefit-Professional-NonClinician-Basis",
+        CarinBbProfileBase + "C4BB-ExplanationOfBenefit-Oral-Basis",
+    ];
+
     /// <summary>The CARIN Blue Button server CapabilityStatement that CHO's own instantiates.</summary>
     public const string CarinBbServerCapabilityStatement = "http://hl7.org/fhir/us/carin-bb/CapabilityStatement/c4bb";
 
@@ -86,6 +101,10 @@ public class MetadataController : FhirControllerBase
                             ("gender",       SearchParamType.Token)
                         ],
                         revIncludes: [ChoNativeFhirDataAdapter.ProvenanceRevInclude],
+                        // What member-service's Patient projection declares in
+                        // meta.profile (FhirPatientProjector), so a client is
+                        // told the profiles it will get (G-36).
+                        supportedProfiles: [UsCorePatientProfile, CarinBbPatientProfile],
                         // HRex/PDex Payer-to-Payer member match (G-36), always
                         // served; and Bulk Data (G-34): a provider's panel as
                         // Patient/$export.
@@ -101,7 +120,8 @@ public class MetadataController : FhirControllerBase
                             ("status",       SearchParamType.Token),
                             ("type",         SearchParamType.Token)
                         ],
-                        includes: [ChoNativeFhirDataAdapter.CoveragePayorInclude]),
+                        includes: [ChoNativeFhirDataAdapter.CoveragePayorInclude],
+                        supportedProfiles: [ChoNativeFhirDataAdapter.C4bbCoverageProfile]),
                         // Two projections share this resource type. Without `use`
                         // the search returns claims (claims-service's
                         // projection); `use=preauthorization` returns prior
@@ -131,7 +151,11 @@ public class MetadataController : FhirControllerBase
                             // toward. Declared as the target, not as a passed
                             // conformance claim: no profile validation has run
                             // against it (see PriorAuthorizationEobProjector).
-                            ExplanationOfBenefitController.PdexPriorAuthorizationProfile
+                            ExplanationOfBenefitController.PdexPriorAuthorizationProfile,
+                            // The CARIN BB claim-type profiles claims-service's
+                            // projection declares; the CARIN BB kit validates the
+                            // EOBs against them nightly (pharmacy is not emitted).
+                            .. CarinBbEobProfiles,
                         ]),
                         BuildResource("Encounter",
                         [
@@ -190,7 +214,8 @@ public class MetadataController : FhirControllerBase
                         ],
                         supportedProfiles:
                         [
-                            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitioner"
+                            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitioner",
+                            CarinBbProfileBase + "C4BB-Practitioner",
                         ]),
                         BuildResource("PractitionerRole",
                         [
@@ -214,7 +239,8 @@ public class MetadataController : FhirControllerBase
                         ],
                         supportedProfiles:
                         [
-                            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-organization"
+                            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-organization",
+                            CarinBbProfileBase + "C4BB-Organization",
                         ]),
                         BuildResource("Location",
                         [

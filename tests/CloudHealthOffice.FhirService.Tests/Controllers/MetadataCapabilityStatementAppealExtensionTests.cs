@@ -73,6 +73,26 @@ public class MetadataCapabilityStatementAppealExtensionTests : IClassFixture<Fhi
         resource.SupportedProfile.Should().Contain(profileUrl);
     }
 
+    /// <summary>
+    /// G-36: the resources CHO serves in a CARIN BB / US Core shape declare
+    /// those profiles, the ones the projections put in meta.profile.
+    /// </summary>
+    [Theory]
+    [InlineData("Patient", "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient")]
+    [InlineData("Patient", "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Patient")]
+    [InlineData("Coverage", "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Coverage")]
+    [InlineData("ExplanationOfBenefit", "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Inpatient-Institutional-Basis")]
+    [InlineData("ExplanationOfBenefit", "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Professional-NonClinician-Basis")]
+    [InlineData("ExplanationOfBenefit", "http://hl7.org/fhir/us/davinci-pdex/StructureDefinition/pdex-priorauthorization")]
+    [InlineData("Practitioner", "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Practitioner")]
+    [InlineData("Organization", "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Organization")]
+    public async Task Served_profiles_are_declared(string resourceType, string profileUrl)
+    {
+        var cs = await GetCapabilityStatement();
+        cs.Rest[0].Resource.Single(r => r.Type.ToString() == resourceType)
+            .SupportedProfile.Should().Contain(profileUrl);
+    }
+
     [Fact]
     public async Task cho_appeal_submit_operation_is_advertised()
     {
