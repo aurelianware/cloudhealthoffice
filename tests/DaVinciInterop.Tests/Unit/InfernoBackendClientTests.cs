@@ -12,6 +12,25 @@ public sealed class InfernoBackendClientTests
             .Should().Be("http://127.0.0.1:14572/custom/bulk_data_v200/.well-known/jwks.json");
 
     [Fact]
+    public void Without_a_suite_route_the_jwks_url_is_inferno_cores_own()
+        => InfernoBackendClient.JwksUrl("http://127.0.0.1:14572/api", null)
+            .Should().Be("http://127.0.0.1:14572/jwks.json");
+
+    /// <summary>
+    /// The PDex server suite has no JWKS route of its own (the first run got a
+    /// 404 there); its auth_info input signs with inferno_core's keys. The Bulk
+    /// Data kit keeps its suite route.
+    /// </summary>
+    [Fact]
+    public void The_pdex_kit_registers_inferno_cores_keys_and_bulk_data_its_suites()
+    {
+        var inventory = InteropScenarioInventory.Load();
+
+        InfernoSuiteScenario.JwksSuiteFor(inventory.Scenario("INFERNO-PDEX-SERVER-001")).Should().BeNull();
+        InfernoSuiteScenario.JwksSuiteFor(inventory.Scenario("INFERNO-BULK-SERVER-001")).Should().Be("bulk_data_v200");
+    }
+
+    [Fact]
     public void Only_public_key_material_is_registered()
     {
         const string jwks = """
