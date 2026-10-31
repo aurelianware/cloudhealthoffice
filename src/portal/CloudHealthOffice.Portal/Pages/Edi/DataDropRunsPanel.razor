@@ -1,0 +1,400 @@
+@using CloudHealthOffice.Portal.Infrastructure
+@inject IDataDropService DataDrops
+@inject ISnackbar Snackbar
+
+@*
+    The daily file drop: is the core-fed data current, does what loaded add
+    up, what each run took and did, each file as received (archived in the
+    document repository), and a way to load what is waiting now.
+*@
+
+<div class="d-flex align-center gap-3 my-3">
+    <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Refresh"
+               OnClick="LoadAsync" Disabled="_loading || _running">
+        Refresh
+    </MudButton>
+    @if (CanRun)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlayArrow"
+                   OnClick="RunNowAsync" Disabled="_loading || _running" data-testid="drop-run-now">
+            Load now
+        </MudButton>
+    }
+    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55);">@Status</MudText>
+</div>
+@if (_loading || _running)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-3" />
+}
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3" ShowCloseIcon="true" CloseIconClicked="() => _error = null">@_error</MudAlert>
+}
+
+@if (_report is { } report)
+{
+    <MudPaper Elevation="0" Class="pa-4 mb-4" Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;" data-testid="drop-freshness">
+        <div class="d-flex align-center gap-3 mb-2 flex-wrap">
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Freshness</MudText>
+            <MudChip T="string" Size="Size.Small" Color="@FreshnessColor(report.Status)">@FreshnessLabel(report.Status)</MudChip>
+            @if (!string.IsNullOrWhiteSpace(report.SourceSystem))
+            {
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55);">from @report.SourceSystem</MudText>
+            }
+        </div>
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="6" md="3">
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55);">Newest claim extract</MudText>
+                <MudText Typo="Typo.body2">@When(report.NewestClaimExtractAt)@(report.ClaimExtractAgeHours is { } age ? $" ({age:0.#} h old)" : "")</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55);">Claims last loaded</MudText>
+                <MudText Typo="Typo.body2">@When(report.LastClaimsLoadedAt)</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55);">Members last loaded</MudText>
+                <MudText Typo="Typo.body2">@When(report.LastMembersLoadedAt)</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55);">Last run</MudText>
+                <MudText Typo="Typo.body2">@When(report.LastRunAt)@(report.LastRunStatus is { } s ? " · " + RunLabel(s) : "")</MudText>
+            </MudItem>
+        </MudGrid>
+
+        <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1" Style="font-weight: 700;">Last @report.WindowDays days</MudText>
+        <MudSimpleTable Dense="true" Elevation="0" data-testid="drop-reconciliation">
+            <tbody>
+                <tr>
+                    <td>Runs</td>
+                    <td>@report.Window.Runs (@report.Window.FailedRuns failed)</td>
+                    <td>Claim files loaded</td>
+                    <td>@report.Window.ClaimFilesLoaded</td>
+                </tr>
+                <tr>
+                    <td>Claims</td>
+                    <td>@N(report.Window.ClaimsCreated) created · @N(report.Window.ClaimsUpdated) updated · @N(report.Window.ClaimsUnchanged) unchanged · <span style="@(report.Window.ClaimsRejected > 0 ? "color: var(--cho-error);" : "")">@N(report.Window.ClaimsRejected) refused</span></td>
+                    <td>Paid in files / loaded</td>
+                    <td>@report.Window.PaidAmountInFiles.ToString("C") / @report.Window.PaidAmountLoaded.ToString("C")
+                        @if (report.Window.PaidAmountNotLoaded != 0)
+                        {
+                            <span style="color: var(--cho-error);"> (@report.Window.PaidAmountNotLoaded.ToString("C") not loaded)</span>
+                        }
+                    </td>
+                </tr>
+                <tr>
+                    <td>Members</td>
+                    <td>@N(report.Window.MembersCreated) created · @N(report.Window.MembersUpdated) updated</td>
+                    <td>Providers from claims</td>
+                    <td>@N(report.Window.ProvidersCreated) created · @N(report.Window.ProvidersNotInNppes) not in NPPES</td>
+                </tr>
+            </tbody>
+        </MudSimpleTable>
+
+        @if (report.Issues.Count > 0)
+        {
+            <MudAlert Severity="@(report.Status is "Fresh" ? Severity.Warning : Severity.Error)" Variant="Variant.Outlined" Dense="true" Class="mt-3" data-testid="drop-issues">
+                @foreach (var issue in report.Issues)
+                {
+                    <div>@issue</div>
+                }
+            </MudAlert>
+        }
+    </MudPaper>
+}
+
+<MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 700;">By type</MudText>
+<MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4"
+                Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;" data-testid="drop-by-type">
+    <thead>
+        <tr><th>Import</th><th>Files</th><th>Last loaded</th><th>Created</th><th>Updated</th><th>Unchanged</th><th>Refused</th><th>Failed loads</th></tr>
+    </thead>
+    <tbody>
+        @if (ByType.Count == 0)
+        {
+            <tr><td colspan="8" style="color: var(--cb-fg-text-55);">Nothing has loaded through the drop yet.</td></tr>
+        }
+        @foreach (var row in ByType)
+        {
+            <tr>
+                <td>@StepLabel(row.Name)</td>
+                <td>@row.Files</td>
+                <td>@When(row.LastLoaded)</td>
+                <td>@N(row.Created)</td>
+                <td>@N(row.Updated)</td>
+                <td>@N(row.Unchanged)</td>
+                <td style="@(row.Rejected > 0 ? "color: var(--cho-error);" : "")">@N(row.Rejected)</td>
+                <td style="@(row.Failed > 0 ? "color: var(--cho-error);" : "")">@row.Failed</td>
+            </tr>
+        }
+    </tbody>
+</MudSimpleTable>
+
+<MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 700;">Runs</MudText>
+<MudTable Items="_runs" Dense="true" Hover="true" T="DataDropRunRecord" RowsPerPage="10" data-testid="drop-runs"
+          Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;">
+    <HeaderContent>
+        <MudTh>Started</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Files</MudTh>
+        <MudTh>Steps</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Started">
+            <MudLink Style="font-family: monospace; cursor: pointer;" OnClick="@(() => Toggle(context.Id))">
+                @context.StartedAt.ToLocalTime().ToString("MM/dd HH:mm:ss")
+            </MudLink>
+        </MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small" Color="@RunColor(context.Status)">@RunLabel(context.Status)</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Files">
+            <MudText Typo="Typo.body2">@context.Files.Count</MudText>
+        </MudTd>
+        <MudTd DataLabel="Steps">
+            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-65);">
+                @string.Join(" · ", context.Steps.Select(s => $"{StepLabel(s.Name)} {StepSummary(s)}"))
+            </MudText>
+        </MudTd>
+    </RowTemplate>
+    <ChildRowContent>
+        @if (_expanded.Contains(context.Id))
+        {
+            <td colspan="4" class="pa-3" data-testid="drop-run-detail">
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); font-family: monospace;">
+                    Run @context.Id@(context.ArchivedTo is { } to ? " · files moved to " + to : "")
+                </MudText>
+                <MudSimpleTable Dense="true" Elevation="0" Class="mt-2">
+                    <thead><tr><th>File</th><th>Type</th><th>Size</th><th>Written</th><th>As received</th></tr></thead>
+                    <tbody>
+                        @foreach (var file in context.Files)
+                        {
+                            <tr>
+                                <td style="font-family: monospace;">@file.Name</td>
+                                <td>@file.Kind</td>
+                                <td>@FileSize(file.Length)</td>
+                                <td>@When(file.LastWriteUtc)</td>
+                                <td>
+                                    @if (DownloadPath(file, context.Id) is { } href)
+                                    {
+                                        <MudLink Href="@href" Target="_blank" data-testid="drop-file-download">Download</MudLink>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-45);">Not archived</MudText>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+                @foreach (var step in context.Steps)
+                {
+                    <div class="mt-2">
+                        <MudText Typo="Typo.body2" Style="font-weight: 600;">
+                            @StepLabel(step.Name): @RunLabel(step.Status)@(step.HttpStatus is { } code ? $" (HTTP {code})" : "")
+                        </MudText>
+                        @if (step.Counts.Count > 0)
+                        {
+                            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-65);">
+                                @string.Join(" · ", step.Counts.Select(c => $"{c.Key} {c.Value:0.##}"))
+                            </MudText>
+                        }
+                        @foreach (var error in step.Errors)
+                        {
+                            <MudText Typo="Typo.caption" Style="color: var(--cho-error); display: block;">@error</MudText>
+                        }
+                    </div>
+                }
+                @foreach (var note in context.Notes)
+                {
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); display: block;" Class="mt-1">@note</MudText>
+                }
+            </td>
+        }
+    </ChildRowContent>
+    <NoRecordsContent>
+        <div class="pa-6 text-center">
+            <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-55);">No drop runs yet. Turn the drop on under Setup, then drop the core's extracts in the inbound folder.</MudText>
+        </div>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new[] { 10, 25, 50 }" />
+    </PagerContent>
+</MudTable>
+
+@code {
+    /// <summary>Show "Load now" (claims:import).</summary>
+    [Parameter] public bool CanRun { get; set; }
+
+    private readonly List<DataDropRunRecord> _runs = new();
+    private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
+    private DataDropFreshnessReport? _report;
+    private bool _loading;
+    private bool _running;
+    private string? _error;
+    private DateTimeOffset? _lastRefreshedAt;
+
+    private string Status => _lastRefreshedAt is null ? "Not checked yet" : $"Last checked {_lastRefreshedAt.Value.LocalDateTime:HH:mm:ss}";
+
+    internal sealed record TypeRow(string Name, int Files, DateTime? LastLoaded, decimal Created, decimal Updated, decimal Unchanged, decimal Rejected, int Failed);
+
+    /// <summary>Each import the drop ran, over the runs listed: how many files, when last loaded, and its totals.</summary>
+    private List<TypeRow> ByType => _runs
+        .SelectMany(r => r.Steps.Where(s => s.Name is not ("archive" or "run")).Select(s => (Run: r, Step: s)))
+        .GroupBy(x => x.Step.Name)
+        .Select(g =>
+        {
+            var loaded = g.Where(x => x.Step.Status != "Failed").ToList();
+            return new TypeRow(
+                g.Key,
+                loaded.Sum(x => x.Step.Files.Count),
+                loaded.Select(x => (DateTime?)(x.Run.CompletedAt ?? x.Run.StartedAt)).Max(),
+                loaded.Sum(x => Count(x.Step, "created", "membersCreated", "dependentsCreated")),
+                loaded.Sum(x => Count(x.Step, "updated", "membersUpdated", "dependentsUpdated")),
+                loaded.Sum(x => Count(x.Step, "unchanged")),
+                loaded.Sum(x => Count(x.Step, "rejected", "failedCount")),
+                g.Count(x => x.Step.Status == "Failed"));
+        })
+        .OrderBy(r => StepOrder(r.Name))
+        .ToList();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var runs = await DataDrops.GetRunsAsync(50);
+            _runs.Clear();
+            _runs.AddRange(runs);
+            _report = await DataDrops.GetReportAsync(30);
+            _lastRefreshedAt = DateTimeOffset.Now;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task RunNowAsync()
+    {
+        _running = true;
+        _error = null;
+        try
+        {
+            var result = await DataDrops.RunNowAsync();
+            if (result.Errors.Count > 0)
+            {
+                _error = string.Join(" ", result.Errors);
+                return;
+            }
+            if (result.Value is null)
+            {
+                Snackbar.Add("Nothing is waiting in the drop.", Severity.Info);
+                return;
+            }
+            Snackbar.Add($"Loaded {result.Value.Files.Count} file(s): {RunLabel(result.Value.Status)}.",
+                result.Value.Status == "Succeeded" ? Severity.Success : Severity.Warning);
+            _expanded.Add(result.Value.Id);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _running = false;
+        }
+        await LoadAsync();
+    }
+
+    private void Toggle(string runId)
+    {
+        if (!_expanded.Remove(runId))
+            _expanded.Add(runId);
+    }
+
+    private static string? DownloadPath(DataDropRunFile file, string runId)
+        => DocumentDownloadEndpoint.IsValidId(file.DocumentId) && DocumentDownloadEndpoint.IsValidSubjectId(runId)
+            ? DocumentDownloadEndpoint.PathFor(file.DocumentId!, DocumentSubjectKind.ImportRun, runId)
+            : null;
+
+    private static decimal Count(DataDropStep step, params string[] names) => names.Sum(n => step.Counts.GetValueOrDefault(n));
+
+    private static string StepSummary(DataDropStep step)
+    {
+        if (step.Status == "Failed") return "failed";
+        var created = Count(step, "created", "membersCreated", "dependentsCreated");
+        var rejected = Count(step, "rejected", "failedCount");
+        return rejected > 0 ? $"+{created:0} ({rejected:0} refused)" : $"+{created:0}";
+    }
+
+    private static int StepOrder(string name) => name switch
+    {
+        "members-and-coverage" => 0,
+        "claim-providers" => 1,
+        "claims" => 2,
+        "authorizations" => 3,
+        "authorizations-278" => 4,
+        _ => 9,
+    };
+
+    internal static string StepLabel(string name) => name switch
+    {
+        "archive" => "Archive",
+        "run" => "Run",
+        "members-and-coverage" => "Members and coverage",
+        "claim-providers" => "Providers on claims",
+        "claims" => "Claims",
+        "authorizations" => "Authorizations (CSV)",
+        "authorizations-278" => "Authorizations (X12 278)",
+        _ => name,
+    };
+
+    private static string RunLabel(string status) => status switch
+    {
+        "CompletedWithErrors" => "Completed with errors",
+        _ => status,
+    };
+
+    private static Color RunColor(string status) => status switch
+    {
+        "Succeeded" => Color.Success,
+        "CompletedWithErrors" => Color.Warning,
+        "Failed" => Color.Error,
+        _ => Color.Info,
+    };
+
+    private static string FreshnessLabel(string status) => status switch
+    {
+        "NotConfigured" => "Not set up",
+        "NeverLoaded" => "Nothing loaded yet",
+        _ => status,
+    };
+
+    private static Color FreshnessColor(string status) => status switch
+    {
+        "Fresh" => Color.Success,
+        "Stale" => Color.Warning,
+        "Failing" => Color.Error,
+        _ => Color.Default,
+    };
+
+    private static string When(DateTime? at) => at is { } t ? t.ToLocalTime().ToString("MM/dd/yyyy HH:mm") : "—";
+
+    private static string N(decimal value) => value.ToString("#,0");
+
+    private static string FileSize(long bytes) => bytes switch
+    {
+        >= 1L << 30 => $"{bytes / (double)(1L << 30):0.#} GB",
+        >= 1L << 20 => $"{bytes / (double)(1L << 20):0.#} MB",
+        >= 1L << 10 => $"{bytes / 1024.0:0.#} KB",
+        _ => $"{bytes} B",
+    };
+}

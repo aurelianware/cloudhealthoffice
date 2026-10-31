@@ -1,20 +1,22 @@
 @page "/edi-transactions"
 @attribute [Authorize]
 @using CloudHealthOffice.Portal.Services
+@using CloudHealthOffice.Portal.Pages.Edi
 @inject IEdiTransactionsService EdiTransactionsService
+@inject IUserContextService UserContextService
 @inject ISnackbar Snackbar
 
-<PageTitle>EDI Transactions — Cloud Health Office</PageTitle>
+<PageTitle>Imports &amp; EDI — Cloud Health Office</PageTitle>
 
 <PermissionGate Permission="claims:read" RoleName="ClaimsSupervisor">
 <div class="edi-transactions-page">
 <MudText Typo="Typo.h4" Class="mb-1" Style="color: var(--cho-accent); font-weight: 700;">
     <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Class="mr-2" Style="vertical-align: middle;" />
-    EDI Transactions
+    Imports &amp; EDI
 </MudText>
 <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-55);" Class="mb-4">
-    Every 834 enrollment and 837 claim file dropped through the evaluator on-ramp, accepted or rejected — the audit
-    trail behind the 834-to-837 loop.
+    Everything loaded into CHO from the plan's other systems: the daily file drop (members, claims and authorizations from the
+    core and UM platform, each file kept as received), and every 834 enrollment and 837 claim file, accepted or rejected.
 </MudText>
 
 @if (!string.IsNullOrWhiteSpace(_error))
@@ -25,6 +27,12 @@
 }
 
 <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-0">
+    @if (_canImport)
+    {
+        <MudTabPanel Text="Daily drop" Icon="@Icons.Material.Filled.MoveToInbox">
+            <DataDropRunsPanel CanRun="true" />
+        </MudTabPanel>
+    }
     <MudTabPanel Text="834 Enrollment" Icon="@Icons.Material.Filled.HowToReg">
         <div class="d-flex align-center gap-3 my-3">
             <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Refresh"
@@ -205,6 +213,13 @@
             </PagerContent>
         </MudTable>
     </MudTabPanel>
+
+    @if (_canImport || _canManageSettings)
+    {
+        <MudTabPanel Text="Setup" Icon="@Icons.Material.Filled.Settings">
+            <DataDropSetupPanel CanEdit="_canImport" CanManageSftp="_canManageSettings" />
+        </MudTabPanel>
+    }
 </MudTabs>
 </div>
 </PermissionGate>
@@ -231,8 +246,14 @@
             ? _enrollmentTransactions
             : _enrollmentTransactions.Where(t => string.Equals(t.BatchId, _selectedBatchId, StringComparison.OrdinalIgnoreCase));
 
+    private bool _canImport;
+    private bool _canManageSettings;
+
     protected override async Task OnInitializedAsync()
     {
+        await UserContextService.GetCurrentUserAsync();
+        _canImport = UserContextService.HasPermission("claims:import");
+        _canManageSettings = UserContextService.HasPermission("settings:manage");
         await LoadEnrollmentData();
         await LoadClaimTransactions();
     }

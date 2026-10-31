@@ -1,0 +1,325 @@
+@inject IDataDropService DataDrops
+@inject ISnackbar Snackbar
+
+@*
+    Setting up the daily file drop: the tenant's drop settings (claims:import)
+    and, when Aurelianware hosts CHO, the plan's SFTP login (settings:manage).
+*@
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-3" />
+}
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="my-3" ShowCloseIcon="true" CloseIconClicked="() => _error = null">@_error</MudAlert>
+}
+
+<MudGrid Spacing="3" Class="mt-1">
+    <MudItem xs="12" md="6">
+        <MudPaper Elevation="0" Class="pa-4" Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;" data-testid="drop-settings">
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Daily drop</MudText>
+            @if (_view is { } view)
+            {
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); display: block;" Class="mb-2" data-testid="drop-settings-state">
+                    @DropState(view)
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mb-3">
+                    Files go in <code>@view.InboundFolder</code>. Members and coverage load first, then the providers each claim file names,
+                    then claims, then authorizations.
+                </MudText>
+            }
+
+            <MudSwitch T="bool" @bind-Value="_form.Enabled" Color="Color.Primary" Label="Load this tenant's drop" Disabled="!CanEdit" />
+            <MudTextField T="string" @bind-Value="_form.SourceSystem" Label="Source system" Placeholder="qnxt"
+                          HelperText="The core the extracts come from; recorded on each claim and authorization." Disabled="!CanEdit" />
+            <MudSelect T="string" @bind-Value="_form.LineOfBusiness" Label="Line of business" Disabled="!CanEdit" Class="mt-2">
+                @foreach (var lob in LinesOfBusiness)
+                {
+                    <MudSelectItem T="string" Value="@lob">@lob</MudSelectItem>
+                }
+            </MudSelect>
+            <div class="d-flex gap-3 mt-2">
+                <MudNumericField T="int" @bind-Value="_form.ExpectedEveryHours" Label="Expected every (hours)" Min="1" Max="744" Disabled="!CanEdit" />
+                <MudNumericField T="int" @bind-Value="_form.StaleGraceHours" Label="Late after (hours)" Min="0" Max="168" Disabled="!CanEdit" />
+            </div>
+            <MudSwitch T="bool" @bind-Value="_form.ShadowAfterImport" Color="Color.Primary" Class="mt-2"
+                       Label="Shadow-adjudicate each claim file after it loads" Disabled="!CanEdit" />
+            <MudTextField T="string" @bind-Value="_columnMapText" Label="Column map" Lines="4" Class="mt-2" Disabled="!CanEdit"
+                          Placeholder="Claim unique identifier = CLAIM_ID"
+                          HelperText="One per line: the documented CPCDS column = the extract's own header. Only for columns named differently." />
+            @if (_settingsErrors.Count > 0)
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" Class="mt-2" data-testid="drop-settings-errors">
+                    @foreach (var e in _settingsErrors)
+                    {
+                        <div>@e</div>
+                    }
+                </MudAlert>
+            }
+            @if (CanEdit)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" OnClick="SaveSettingsAsync" Disabled="_saving" data-testid="drop-settings-save">
+                    Save
+                </MudButton>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Elevation="0" Class="pa-4" Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;" data-testid="drop-sftp">
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">SFTP login</MudText>
+            @if (!CanManageSftp)
+            {
+                <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-55);">
+                    A tenant administrator (settings:manage) sets up the SFTP login.
+                </MudText>
+            }
+            else if (_sftpUnavailable is { } why)
+            {
+                <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-55);" data-testid="drop-sftp-unavailable">
+                    @why When the plan hosts CHO itself, its core writes to the drop bucket directly.
+                </MudText>
+            }
+            else if (_sftp is { } sftp)
+            {
+                @if (sftp.Exists)
+                {
+                    <MudSimpleTable Dense="true" Elevation="0" Class="mb-2">
+                        <tbody>
+                            <tr><td>Status</td><td>@(sftp.Enabled ? "On" : "Off")</td></tr>
+                            <tr><td>Host</td><td style="font-family: monospace;">@sftp.Host:@sftp.Port</td></tr>
+                            <tr><td>Username</td><td style="font-family: monospace;">@sftp.Username</td></tr>
+                            <tr><td>Upload to</td><td style="font-family: monospace;">@sftp.InboundFolder</td></tr>
+                            <tr><td>Read only</td><td style="font-family: monospace;">@string.Join(", ", sftp.ReadOnlyFolders)</td></tr>
+                            <tr>
+                                <td>Keys</td>
+                                <td style="font-family: monospace;" data-testid="drop-sftp-keys">
+                                    @foreach (var fingerprint in sftp.KeyFingerprints)
+                                    {
+                                        <div>@fingerprint</div>
+                                    }
+                                </td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mb-2">No login yet. Add the core's SSH public key to create one. There is no password.</MudText>
+                }
+                <MudTextField T="string" @bind-Value="_keysText" Label="SSH public keys" Lines="3"
+                              Placeholder="ssh-ed25519 AAAA... core-prod"
+                              HelperText="One per line, up to 5. Saving replaces the keys and turns the login on." />
+                @if (_sftpErrors.Count > 0)
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" Class="mt-2" data-testid="drop-sftp-errors">
+                        @foreach (var e in _sftpErrors)
+                        {
+                            <div>@e</div>
+                        }
+                    </MudAlert>
+                }
+                <div class="d-flex gap-2 mt-3">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveKeysAsync" Disabled="_saving" data-testid="drop-sftp-save">
+                        @(sftp.Exists ? "Replace keys" : "Create login")
+                    </MudButton>
+                    @if (sftp.Exists && sftp.Enabled)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="DisableSftpAsync" Disabled="_saving">
+                            Turn off login
+                        </MudButton>
+                    }
+                </div>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    /// <summary>Edit the drop settings (claims:import).</summary>
+    [Parameter] public bool CanEdit { get; set; }
+
+    /// <summary>See and change the SFTP login (settings:manage).</summary>
+    [Parameter] public bool CanManageSftp { get; set; }
+
+    private static readonly string[] LinesOfBusiness = ["Commercial", "Medicare", "Medicaid", "Exchange", "TRICARE", "VA"];
+
+    private DataDropSettingsView? _view;
+    private DataDropSettings _form = new();
+    private string? _columnMapText;
+    private DataDropSftpAccount? _sftp;
+    private string? _sftpUnavailable;
+    private string? _keysText;
+    private List<string> _settingsErrors = new();
+    private List<string> _sftpErrors = new();
+    private bool _loading;
+    private bool _saving;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        try
+        {
+            Show(await DataDrops.GetSettingsAsync());
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+
+        if (CanManageSftp)
+        {
+            try
+            {
+                _sftp = await DataDrops.GetSftpAccountAsync();
+                if (_sftp is null)
+                    _sftpUnavailable = "Hosted SFTP is not available for this tenant.";
+            }
+            catch (ServiceUnavailableException)
+            {
+                _sftpUnavailable = "Hosted SFTP is not set up in this deployment.";
+            }
+        }
+        _loading = false;
+    }
+
+    private void Show(DataDropSettingsView? view)
+    {
+        _view = view;
+        var settings = view?.Settings;
+        _form = settings is null
+            ? new DataDropSettings()
+            : new DataDropSettings
+            {
+                Enabled = settings.Enabled,
+                SourceSystem = settings.SourceSystem,
+                LineOfBusiness = settings.LineOfBusiness,
+                ColumnMap = settings.ColumnMap,
+                ShadowAfterImport = settings.ShadowAfterImport,
+                ExpectedEveryHours = settings.ExpectedEveryHours,
+                StaleGraceHours = settings.StaleGraceHours,
+            };
+        _columnMapText = settings?.ColumnMap is { Count: > 0 } map
+            ? string.Join("\n", map.Select(kv => $"{kv.Key} = {kv.Value}"))
+            : null;
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        _settingsErrors = new();
+        var (map, errors) = ParseColumnMap(_columnMapText);
+        if (errors.Count > 0)
+        {
+            _settingsErrors = errors;
+            return;
+        }
+        _form.ColumnMap = map;
+        _form.SourceSystem = string.IsNullOrWhiteSpace(_form.SourceSystem) ? null : _form.SourceSystem.Trim();
+
+        _saving = true;
+        try
+        {
+            var result = await DataDrops.SaveSettingsAsync(_form);
+            if (result.Succeeded)
+            {
+                Show(result.Value);
+                Snackbar.Add("Drop settings saved. They take effect at the next poll.", Severity.Success);
+            }
+            else
+            {
+                _settingsErrors = result.Errors.ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task SaveKeysAsync()
+    {
+        _sftpErrors = new();
+        var keys = (_keysText ?? string.Empty)
+            .Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .ToList();
+        if (keys.Count == 0)
+        {
+            _sftpErrors.Add("Add at least one SSH public key.");
+            return;
+        }
+        await ChangeSftpAsync(() => DataDrops.SetSftpKeysAsync(keys), "SFTP keys saved; the login is on.");
+        if (_sftpErrors.Count == 0)
+            _keysText = null;
+    }
+
+    private Task DisableSftpAsync()
+        => ChangeSftpAsync(DataDrops.DisableSftpAsync, "SFTP login turned off. Files already uploaded still load.");
+
+    private async Task ChangeSftpAsync(Func<Task<DataDropChange<DataDropSftpAccount>>> change, string done)
+    {
+        _saving = true;
+        try
+        {
+            var result = await change();
+            if (result.Succeeded)
+            {
+                _sftp = result.Value;
+                Snackbar.Add(done, Severity.Success);
+            }
+            else
+            {
+                _sftpErrors = result.Errors.ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>"CPCDS column = file header" per line; blank lines ignored.</summary>
+    public static (Dictionary<string, string>? Map, List<string> Errors) ParseColumnMap(string? text)
+    {
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(text))
+            return (null, errors);
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        var lineNumber = 0;
+        foreach (var raw in text.Split('\n'))
+        {
+            lineNumber++;
+            var line = raw.Trim();
+            if (line.Length == 0) continue;
+            var at = line.IndexOf('=');
+            var column = at > 0 ? line[..at].Trim() : string.Empty;
+            var header = at > 0 ? line[(at + 1)..].Trim() : string.Empty;
+            if (column.Length == 0 || header.Length == 0)
+                errors.Add($"Column map line {lineNumber}: write it as column = header.");
+            else
+                map[column] = header;
+        }
+        return (map.Count > 0 ? map : null, errors);
+    }
+
+    private static string DropState(DataDropSettingsView view)
+    {
+        if (!view.DropEnabledForDeployment)
+            return "The file drop is off in this deployment; settings saved here take effect once it is on.";
+        if (view.Loading)
+            return "On: files dropped now will load at the next poll." + Updated(view);
+        return view.Source == "None" ? "Not set up yet." : "Off: settings are kept, but nothing loads." + Updated(view);
+    }
+
+    private static string Updated(DataDropSettingsView view)
+        => view.UpdatedAt is { } at ? $" Last saved {at.ToLocalTime():MM/dd/yyyy HH:mm}{(view.UpdatedBy is { } by ? " by " + by : "")}." : "";
+}

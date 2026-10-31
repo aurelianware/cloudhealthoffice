@@ -1,5 +1,6 @@
 namespace ClaimsService.Import.Cpcds.Drop;
 
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
 public enum CpcdsDropFileKind { Unknown, Members, Coverages, Claims, Authorizations }
 
 /// <summary>

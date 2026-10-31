@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 
 namespace ClaimsService.Import.Cpcds.Drop;
 
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
 public enum CpcdsFreshness
 {
     /// <summary>No drop is configured for the tenant.</summary>
