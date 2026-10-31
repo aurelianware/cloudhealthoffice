@@ -1,9 +1,9 @@
 # v6.1.0 — Spartacus
 
-**Release date:** TBD (tagged once the nightly Inferno run is clean)
+**Release date:** October 31, 2026
 **Previous release:** [v6.0.0](./RELEASE_NOTES_v6.0.0.md) (October 28, 2026)
 
-This release covers the pull requests merged since v6.0.0 (#1583 to #1625).
+This release covers the pull requests merged since v6.0.0 (#1583 to #1651).
 It is a minor version: nothing in it requires a configuration change to
 upgrade from 6.0, and everything new that changes behaviour is off until a
 deployment turns it on.
@@ -104,10 +104,40 @@ The first runs that produced kit results found real CHO defects. Fixed:
 - Interop fixture: a second member for Bulk Data, and a Plan-Net network
   address and plan document URL (#1622, #1624).
 
-### Demo
+- Later runs found more, also fixed: the public directory links
+  practitioners, affiliations, locations and endpoints as Plan-Net expects
+  (#1626, #1636, #1639); FHIR date search matches an instant only at its
+  stated precision (#1632); CARIN BB Coverage carries the subscriber and
+  relationship, and C4BB Practitioner is served (#1649); Practitioner search
+  honours `_lastUpdated` (#1651).
+
+### X12: CAQH CORE real-time and dental claims
+
+- **CAQH CORE real-time eligibility** (#1641, #1643): with
+  `CoreConnectivity:Enabled`, eligibility-service answers CORE Connectivity
+  vC2.2.0 envelopes at `/core/eligibility` (SOAP 1.2 or MIME multipart), a 270
+  in and its 271 back, following the CORE eligibility data content rule.
+  Submitters authenticate by client certificate, username and password, or a
+  CHO OAuth token.
+- **CAQH CORE real-time claim status** (#1642): claims-service answers a 276
+  with its 277 at `/core/claimstatus`, only for claims of the subscriber the
+  276 names.
+- **CORE system availability** (#1644): the weekly downtime and planned
+  windows are published at `GET /core/eligibility/availability`, with
+  availability measured against the 86% rule.
+- **Dental claims (837D)** (#1637): intake parses SV3 and TOO, keeps tooth and
+  oral-cavity data on the claim lines, and SNIP validation knows the 837D.
+  Two Medicaid dental prior-authorization demo stories ship as `seed-dental`
+  (#1638).
+
+### Demo, site and documentation
 
 - The demo portal has a guided tour, a scripted prior-authorization story and
   a recorded walkthrough, with a prospect-access runbook (#1618, #1619).
+- The website publishes the nightly Inferno results and a per-kit explainer
+  (#1630, #1631), and claims it could not back were removed (#1628).
+- New core adapter implementer guide (#1648), diagrams of where CHO plugs into
+  the CMS APIs (#1633), and a refreshed architecture overview (#1650).
 
 The full list, itemized, is in the [changelog](../../CHANGELOG.md).
 
@@ -137,11 +167,29 @@ No steps are required. Things to know:
 - **Hosted Inferno, against the GKE demo:** Bulk Data v2.0.0 SMART Backend
   Services group, **pass** (2026-10-29). The export groups have not been run
   on hosted Inferno.
-- **Nightly interop job (Inferno kits against the seeded `interop-cho`
-  profile), 2026-10-30:** Bulk Data 2.0.0 (with its SMART Backend Services
-  group) and US Core 3.1.1 **pass**. CARIN BB 2.0.0 and Plan-Net **fail**;
-  their fixes are in progress. _To be updated from the run this release is
-  tagged on._
+- **Inferno kits against the seeded `interop-cho` profile:** US Core 3.1.1,
+  CARIN BB 2.0.0, Da Vinci Plan-Net and Bulk Data 2.0.0 (with its SMART
+  Backend Services group) all **pass** on `main` at this release's commit
+  (DaVinci Interop run
+  [41168269450](https://github.com/aurelianware/cloudhealthoffice/actions/runs/41168269450),
+  2026-10-31), apart from the known kit issues below. The results are also on
+  the website at `/evidence/inferno-conformance`.
+- **Known kit issues, not counted as failures** (listed with their reasons as
+  `infernoKnownKitIssues` in `interop/scenarios.json`; see "Known kit issues"
+  in `docs/interop/davinci.md`):
+  - CARIN BB (`carin-for-blue-button-test-kit` v0.16.3, the latest release):
+    the five EOB subtype validation tests (inpatient institutional, outpatient
+    institutional, oral, pharmacy, professional non-clinician). Each checks
+    every EOB the kit collected against that one subtype's profile, so a
+    member with more than one claim type always fails them. Each EOB is still
+    validated against its own profile on the conformance goldens.
+  - Plan-Net (`davinci-plan-net-test-kit` v0.13.4, the latest release): 25
+    forward-chain search tests. The kit takes the chained value from the first
+    resource of that type it collected, which is often the payer Organization
+    that nothing references, and then fails on an empty result. CHO's chained
+    search is covered by `PlanNetSearchEngineTests`, and the forward chains
+    whose first candidate is referenced pass. The kit is also generated from
+    Plan-Net 1.1.0, while CHO serves 1.2.0.
 - **Google Cloud (GKE):** the demo is deployed on every merge to `main`.
 - **Azure:** automatic deploys are still paused (`AZURE_DEPLOYMENTS_ENABLED`)
   behind the #1217 deployment checklist. Neither 6.0 nor 6.1 has been deployed
@@ -160,6 +208,7 @@ New in 6.1, or changed, and doing nothing until a deployment turns them on:
 | Outbound SMART Backend Services credentials (#1587) | `SmartBackendClients:*` and a `CredentialKey` on the payer's directory entry |
 | Public Provider Directory | A plan listed in `PublicProviderDirectory:Directories`; on GKE, `PUBLIC_PROVIDER_DIRECTORY` (#1608) |
 | Hosted-Inferno hostnames on the GKE demo (#1598) | `CONFORMANCE_FHIR_HOST`, `CONFORMANCE_AUTH_HOST` |
+| CAQH CORE real-time eligibility and claim status (#1641, #1642) | `CoreConnectivity:Enabled` and `CoreConnectivity:Submitters` |
 
 Everything in the [v6.0.0 list](./RELEASE_NOTES_v6.0.0.md#off-by-default) is
 still off by default too.
@@ -171,9 +220,9 @@ still off by default too.
 The Patient Access, Provider Access and Payer-to-Payer API requirements take
 effect on January 1, 2027. Still open after 6.1:
 
-- **External verdicts.** CARIN BB and Plan-Net do not yet pass the nightly
-  Inferno run (G-60). The Bulk Data export groups have not been run on hosted
-  Inferno.
+- **Hosted Inferno for the export groups.** The nightly kits pass, but the
+  Bulk Data export groups have not been run on hosted Inferno against an
+  HTTPS deployment (G-60).
 - **System-level `$export`** still answers 501; no caller has been approved
   for it.
 - **No X12 278 bridge.** CHO relies on HHS enforcement discretion for

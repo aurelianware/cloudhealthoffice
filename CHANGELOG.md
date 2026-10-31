@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.1.0] - 2026-10-31
+
+"Spartacus."
+
+A minor version with no breaking changes: SMART Backend Services
+authentication in both directions, the public Provider Directory as Plan-Net
+1.2.0, and the rest of Bulk Data `$export` (still off by default). Covers the
+pull requests merged between v6.0.0 and this release (#1583 to #1651).
+Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
+
 ### Added
 
 - CAQH CORE real-time claim status. With `CoreConnectivity:Enabled`, claims-service answers CORE envelopes at `/core/claimstatus`: a 276 (005010X212) in, a 277 back with one status loop per matching claim (TRN echoed, STC, payer claim control number, patient control number, service dates). Claims are looked up by REF*1K, REF*EJ, or the subscriber, provider and dates, and are only returned when they belong to the subscriber the 276 names. Not found is A4:35; a lookup that fails or runs past the response budget is E1:0.
@@ -14,24 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Claims intake accepts dental claims (837D, 005010X224A2). The 837 parser reads SV3 service lines (CDT procedure, charge, place of service, oral cavity, prosthesis code, quantity, diagnosis pointers) and the TOO tooth and surface segments; claim lines now keep `teeth`, `oralCavityDesignations` and `prosthesisCrownInlayCode`, and dental lines reach the scrub engine as CDT (`AD`) with their teeth. SNIP validation recognises the 837D version and checks SV3, TOO, CLM02 balancing against SV302, SV311 pointers and CDT format; diagnoses are optional on 837D as the implementation guide allows. Before this, a dental file was rejected at GS08 and, if parsed, lost every service line.
 - Website and README: Inferno conformance results page (`/evidence/inferno-conformance`) rendered from a new `inferno-conformance-public-evidence.json` snapshot, and the article "Which Inferno Test Kit Checks Which CMS-0057-F API". The DaVinci Interop workflow's new `publish-inferno` job projects the nightly kit results (`scripts/interop/publish-inferno-evidence.mjs`) to the ci-evidence branch, and the site deploys overlay it. It also publishes one shields.io badge per kit to `ci-evidence/badges/inferno-*.json`, shown in the README. Pages that said no Inferno kit had run now link to the results.
 - CAQH CORE system availability. `CoreConnectivity:Availability` holds the weekly regular downtime, planned windows (flagged when announced less than a week ahead) and the record of unscheduled and emergency outages. `GET /core/eligibility/availability` publishes the schedule, the downtime in force, the next 30 days of windows and this week's and last week's availability against the 86% rule, without credentials. During a published window a 270 gets an immediate 271 with AAA 42. Each host logs a warning at startup for a schedule that cannot meet the rule.
-
-### Fixed
-
-- FHIR Practitioner search honours `_lastUpdated` (date, dateTime or instant at its own precision, with the FHIR prefixes). It was ignored, so a search for one practitioner's last update returned every practitioner, which failed the CARIN BB kit's Practitioner `_lastUpdated` test. A value that is not a FHIR date is a 400.
-- CARIN BB Coverage and Practitioner. fhir-service's Coverage now carries `subscriberId`, `subscriber` and `relationship` (subscriber-relationship, mapped from the member's INS02) read from member-service, and declares C4BB-Coverage at 2.0.0 only when those are present. member-service's FHIR Patient search returns each member's relationship code. provider-service's Practitioner types its NPI identifier (v2-0203 `NPI`), declares C4BB-Practitioner at 2.0.0, and answers `_id` searches by NPI. The interop seed adds the claims' rendering practitioner, so the EOB's careTeam reference resolves; the public directory lists it with no role.
-- 271 content follows the CAQH CORE eligibility data content rule. The 270 parser reads every `EQ` service type (repeats and several segments), `TRN` trace numbers and the BHT reference; the 271 echoes them as `TRN*2` and BHT03. A generic `EQ*30` inquiry is answered with the CORE service types the plan covers. Deductible and out-of-pocket amounts move to EB07 with time period 23 (or 22), met amounts use 24 and remaining amounts 29, always sent. Co-payment, co-insurance (EB08 as a decimal) and visit limits go under each service type's X12 code, mapped from the plan's category; a label is never sent in EB03. Network "N" now stays N. Inactive coverage no longer carries `AAA*N**42*Y`, which meant "try again later".
-
-## [6.1.0] - TBD
-
-"Spartacus."
-
-A minor version with no breaking changes: SMART Backend Services
-authentication in both directions, the public Provider Directory as Plan-Net
-1.2.0, and the rest of Bulk Data `$export` (still off by default). Covers the
-pull requests merged between v6.0.0 and this release (#1583 to #1625).
-Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
-
-### Added
 
 - **The public Provider Directory links practitioners, affiliations and
   endpoints the way Plan-Net expects.** A practitioner's role names the
@@ -212,6 +204,10 @@ Release notes: `docs/releases/RELEASE_NOTES_v6.1.0.md`.
   capability, and the `refresh_token` grant (D-25).
 
 ### Fixed
+
+- FHIR Practitioner search honours `_lastUpdated` (date, dateTime or instant at its own precision, with the FHIR prefixes). It was ignored, so a search for one practitioner's last update returned every practitioner, which failed the CARIN BB kit's Practitioner `_lastUpdated` test. A value that is not a FHIR date is a 400.
+- CARIN BB Coverage and Practitioner. fhir-service's Coverage now carries `subscriberId`, `subscriber` and `relationship` (subscriber-relationship, mapped from the member's INS02) read from member-service, and declares C4BB-Coverage at 2.0.0 only when those are present. member-service's FHIR Patient search returns each member's relationship code. provider-service's Practitioner types its NPI identifier (v2-0203 `NPI`), declares C4BB-Practitioner at 2.0.0, and answers `_id` searches by NPI. The interop seed adds the claims' rendering practitioner, so the EOB's careTeam reference resolves; the public directory lists it with no role.
+- 271 content follows the CAQH CORE eligibility data content rule. The 270 parser reads every `EQ` service type (repeats and several segments), `TRN` trace numbers and the BHT reference; the 271 echoes them as `TRN*2` and BHT03. A generic `EQ*30` inquiry is answered with the CORE service types the plan covers. Deductible and out-of-pocket amounts move to EB07 with time period 23 (or 22), met amounts use 24 and remaining amounts 29, always sent. Co-payment, co-insurance (EB08 as a decimal) and visit limits go under each service type's X12 code, mapped from the plan's category; a label is never sent in EB03. Network "N" now stays N. Inactive coverage no longer carries `AAA*N**42*Y`, which meant "try again later".
 
 - **The Inferno job frees disk space before building images.** Run
   41159022696 ran out of disk while building the CHO service images, so no kit
