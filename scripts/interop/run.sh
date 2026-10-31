@@ -15,6 +15,20 @@
 #   ./scripts/interop/run.sh inferno all        # every conformance kit
 #   ./scripts/interop/run.sh unit               # harness unit tests only, no Docker
 #
+#   ./scripts/interop/run.sh deployment         # US Core, CARIN BB and Plan-Net against a DEPLOYED CHO
+#   ./scripts/interop/run.sh deployment c4bb    # one kit (us-core | c4bb | plan-net | all)
+#
+# The `deployment` target points the same pinned kits at a CHO that is already
+# running somewhere (a plan's own installation, or a hosted tenant) and judges
+# the data it holds, such as claims loaded by the CPCDS importer. Only the kit
+# starts; nothing is seeded. It reads, from the environment:
+#   CHO_INTEROP_TARGET_URL            the deployment's FHIR base (required)
+#   CHO_INTEROP_TARGET_PATIENT_IDS    comma-separated Patient ids from the plan's data
+#   CHO_INTEROP_TARGET_TOKEN          an access token the deployment issued for them
+#   CHO_INTEROP_TARGET_DIRECTORY_URL  the public Provider Directory base (Plan-Net)
+#   CHO_INTEROP_TARGET_LABEL          the plan or tenant name for the evidence
+# See docs/integration/VALIDATE-A-DEPLOYMENT.md.
+#
 # The `inferno` target turns the direction around. The br-payer scenarios have
 # CHO driving an independent payer and this harness judging the answers; the
 # conformance kits have an independent implementation judging CHO. They start
@@ -51,10 +65,16 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMPOSE_FILE="$REPO_ROOT/interop/docker-compose.interop.yml"
 PROJECT_NAME="cho-interop"
 TEST_PROJECT="$REPO_ROOT/tests/DaVinciInterop.Tests/DaVinciInterop.Tests.csproj"
-ARTIFACTS="${CHO_INTEROP_ARTIFACTS:-$REPO_ROOT/artifacts/interop}"
-
 TARGET="${1:-br-payer}"
 MODE="${2:-smoke}"
+
+# A deployment's evidence never merges into CHO's own run document: it judges
+# a plan's data, not the seed, and may quote it.
+if [[ "$TARGET" == "deployment" ]]; then
+  ARTIFACTS="${CHO_INTEROP_ARTIFACTS:-$REPO_ROOT/artifacts/deployment-validation}"
+else
+  ARTIFACTS="${CHO_INTEROP_ARTIFACTS:-$REPO_ROOT/artifacts/interop}"
+fi
 
 if [[ "$TARGET" == "unit" || "$TARGET" == "--unit" ]]; then
   MODE="unit"
@@ -83,6 +103,32 @@ if [[ "$TARGET" == "inferno" ]]; then
       exit 2
       ;;
   esac
+elif [[ "$TARGET" == "deployment" ]]; then
+  MODE="${2:-all}"
+  if [[ -z "${CHO_INTEROP_TARGET_URL:-}" ]]; then
+    echo "Set CHO_INTEROP_TARGET_URL to the deployment's FHIR base (see docs/integration/VALIDATE-A-DEPLOYMENT.md)." >&2
+    exit 2
+  fi
+  case "$MODE" in
+    us-core)  FILTER='Scenario=INFERNO-USCORE-SERVER-001' ;;
+    c4bb)     FILTER='Scenario=INFERNO-C4BB-SERVER-001' ;;
+    plan-net) FILTER='Scenario=INFERNO-PLANNET-SERVER-001' ;;
+    all)
+      FILTER='Scenario=INFERNO-USCORE-SERVER-001|Scenario=INFERNO-C4BB-SERVER-001'
+      if [[ -n "${CHO_INTEROP_TARGET_DIRECTORY_URL:-}" ]]; then
+        FILTER="$FILTER|Scenario=INFERNO-PLANNET-SERVER-001"
+      else
+        echo "    CHO_INTEROP_TARGET_DIRECTORY_URL is not set, so Plan-Net (the public Provider Directory) is not run."
+      fi
+      ;;
+    *)
+      echo "Unknown mode '$MODE' for target 'deployment'. Modes: us-core | c4bb | plan-net | all." >&2
+      echo "Bulk Data and PDex authenticate with SMART Backend Services and do not run against a deployment yet." >&2
+      exit 2
+      ;;
+  esac
+  LABEL="Inferno kits against the deployment ${CHO_INTEROP_TARGET_LABEL:-at $CHO_INTEROP_TARGET_URL} ($MODE)"
+  export CHO_INTEROP_ENVIRONMENT="${CHO_INTEROP_ENVIRONMENT:-deployment}"
 else
   case "$MODE" in
     smoke) FILTER='Scenario=BR-PAS-SUBMIT-001'; LABEL='PAS $submit smoke (BR-PAS-SUBMIT-001)' ;;
@@ -124,11 +170,12 @@ if [[ "$MODE" == "unit" ]]; then
   exec dotnet test "$TEST_PROJECT" -c Debug --filter "Category=DaVinciInteropUnit"
 fi
 
-if [[ "$TARGET" != "br-payer" && "$TARGET" != "inferno" ]]; then
+if [[ "$TARGET" != "br-payer" && "$TARGET" != "inferno" && "$TARGET" != "deployment" ]]; then
   echo "Unknown interop target '$TARGET'." >&2
   echo "Executable targets in this repository:" >&2
   echo "  br-payer  BR-PAS-SUBMIT-001, BR-CRD-001, BR-DTR-001" >&2
   echo "  inferno   INFERNO-USCORE-SERVER-001, INFERNO-C4BB-SERVER-001, INFERNO-PLANNET-SERVER-001, INFERNO-BULK-SERVER-001" >&2
+  echo "  deployment  the US Core, CARIN BB and Plan-Net kits against a deployed CHO" >&2
   echo "Other targets are pinned in interop/versions.json but have no scenario yet;" >&2
   echo "see docs/interop/davinci.md for how to add one." >&2
   exit 2
@@ -137,7 +184,7 @@ fi
 # The kits publish no upstream image, so a checkout at the pinned tag has to
 # exist before Compose can build one. Checking here turns a twenty-minute build
 # failure into a one-line instruction.
-if [[ "$TARGET" == "inferno" ]]; then
+if [[ "$TARGET" == "inferno" || "$TARGET" == "deployment" ]]; then
   for kit in \
     "us-core:$REPO_ROOT/interop/.external/us-core-test-kit:$MODE:us-core" \
     "c4bb:$REPO_ROOT/interop/.external/carin-for-blue-button-test-kit:$MODE:c4bb" \
@@ -154,7 +201,7 @@ if [[ "$TARGET" == "inferno" ]]; then
   done
 fi
 
-if ! command -v node >/dev/null 2>&1; then
+if [[ "$TARGET" != "deployment" ]] && ! command -v node >/dev/null 2>&1; then
   echo "node is required: the interop-cho profile is seeded by scripts/interop/seed-cho.mjs." >&2
   exit 2
 fi
@@ -168,7 +215,9 @@ echo "==> Cleaning previous evidence from $ARTIFACTS"
 rm -rf "$ARTIFACTS"
 
 echo "==> Running Da Vinci interoperability: $LABEL"
-if [[ "$TARGET" == "inferno" ]]; then
+if [[ "$TARGET" == "deployment" ]]; then
+  echo "    the deployment is the system under test; nothing is seeded; the kits are pinned by tag in interop/versions.json"
+elif [[ "$TARGET" == "inferno" ]]; then
   echo "    CHO is the system under test; the kits are pinned by tag in interop/versions.json"
 else
   echo "    target: HL7-DaVinci/br-payer, pinned by digest in interop/versions.json"
