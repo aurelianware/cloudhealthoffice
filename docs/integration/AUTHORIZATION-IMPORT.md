@@ -124,13 +124,71 @@ Imported authorizations do take part in:
   metrics to be complete.
 - **Retention.** The same policy applies as for native authorizations.
 
+## X12 278 files
+
+`POST /api/v1/authorizations/import/x12-278` takes the same multipart fields,
+except `columnMap`. The file is an X12 interchange (`ISA` to `IEA`) of
+005010X217 278 transactions, from a core or a clearinghouse. A sample is at
+[samples/authorizations/authorizations-278.x12](samples/authorizations/authorizations-278.x12)
+(synthetic data).
+
+- **What is an authorization.** Each response (`BHT02 = 11`) patient event
+  (`HL` level `EV`, loop 2000E) is one authorization. It is identified by the
+  certification number (`HCR02`, on the event or on a service line), or else by
+  the administrative reference (`REF*NT`).
+- **Status.** The status is the event's `HCR01`. Without one, it is worked out
+  from the lines' `HCR01`s: all certified means approved, all denied means
+  denied, a pend anywhere means pended, and anything else means modified.
+  `CT` (contact payer) is stored as pended, and `NA` (no action required) is
+  not loaded.
+- **Requests and responses.** A request (`BHT02 = 13`) in the same file is
+  paired with its response by the event's trace number (`TRN02` and `TRN03`,
+  which the response echoes). The request's `BHT04` and `BHT05` give when it
+  was received, and the response's give when it was decided. A response
+  without its request still loads, with a warning that its decision timeframe
+  can't be reported. A request with no response has no decision and no number,
+  so it is reported and not loaded.
+- **Field mapping.**
+
+  | Field | X12 source |
+  |---|---|
+  | Member | `2010C NM109`, or a dependent's own id in `2010D` |
+  | Patient name and birth date | `NM1` and `DMG` |
+  | Requesting provider | `2010B NM109` (`XX`) |
+  | Servicing provider | `2010EA` `SJ`, `71`, `72` or `DK` |
+  | Facility | `2010EA` `FA` |
+  | Request type | `UM01` (`SC` is a referral, `AR` renewal or revision is concurrent review) |
+  | Service type | `UM03` |
+  | Level of service | `UM06` |
+  | Requested dates | `DTP*472` (or `435` admission) |
+  | Certified period | `DTP*AAH` |
+  | Expiration | `DTP*036` |
+  | Diagnoses | `HI` (ICD-10-CM qualifiers only) |
+  | Lines | `SV1`, `SV2` and `SV3`, with the request's quantity as requested and the response's (or `HSD02`) as approved |
+  | Denial reason | `HCR03` |
+- **Line of business.** The 278 doesn't carry one, so it comes from the
+  request's `lineOfBusiness` (or the drop tenant's setting).
+- **Reloads.** The content hash covers the event and the parties above it,
+  never the envelope. The same response re-sent with new ISA, GS, ST or BHT
+  control numbers is `Unchanged`.
+
+## In the daily drop
+
+Authorization files go in the same `{tenant}/inbound` folder as the CPCDS
+extracts ([CPCDS-FILE-DROP-IMPORTER.md](CPCDS-FILE-DROP-IMPORTER.md)).
+
+- **Recognized by name.** A file whose name contains `auth` or `278` is an
+  authorization file, for example `jiva_authorizations_20261101.csv` or
+  `um_278_20261101.x12`.
+- **Routed by content.** A file that starts with `ISA` goes to the 278 import,
+  and anything else goes to the CSV import.
+- **Order and settings.** Authorization files load after members and coverage,
+  with the tenant's drop `SourceSystem` and `LineOfBusiness`.
+- **Reported in the run.** Each file is a step in the run, with its counts, and
+  each rejected authorization appears with its errors.
+
 ## Not yet
 
-- **X12 278 files.** Request and response pairs from a core or clearinghouse
-  will load through the same pipeline.
-- **The SFTP drop.** Authorization files left in `{tenant}/inbound` will be
-  picked up with the CPCDS files. See
-  [CPCDS-FILE-DROP-IMPORTER.md](CPCDS-FILE-DROP-IMPORTER.md).
 - **A real-time push endpoint.** The UM system would send each decision as it
   is made, so the Prior Authorization API's status never waits for the nightly
   file.

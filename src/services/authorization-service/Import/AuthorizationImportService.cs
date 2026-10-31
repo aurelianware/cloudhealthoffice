@@ -16,6 +16,10 @@ public interface IAuthorizationImportService
 {
     Task<AuthorizationImportResult> ImportCsvAsync(
         string tenantId, string content, AuthorizationImportOptions options, string? actorId, CancellationToken ct = default);
+
+    /// <summary>Loads X12 005010X217 278 responses (with their requests, when sent together).</summary>
+    Task<AuthorizationImportResult> ImportX12_278Async(
+        string tenantId, string content, AuthorizationImportOptions options, string? actorId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -64,6 +68,21 @@ public sealed class AuthorizationImportService : IAuthorizationImportService
         result.FileErrors.AddRange(parsed.FileErrors);
 
         await StoreAsync(tenantId, AuthorizationCsvReader.Format, parsed.Candidates, options, actorId, result, ct);
+        return result;
+    }
+
+    public async Task<AuthorizationImportResult> ImportX12_278Async(
+        string tenantId, string content, AuthorizationImportOptions options, string? actorId, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var parsed = X12_278Reader.Read(content, options);
+        var result = NewResult(X12_278Reader.Format, options);
+        result.TransactionSets = parsed.TransactionSets;
+        result.FileErrors.AddRange(parsed.FileErrors);
+
+        await StoreAsync(tenantId, X12_278Reader.Format, parsed.Candidates, options, actorId, result, ct);
         return result;
     }
 

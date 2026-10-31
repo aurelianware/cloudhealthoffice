@@ -46,6 +46,12 @@ public sealed class CpcdsDropRunnerTests : IDisposable
                 _calls.Add("providers:" + ci.ArgAt<CpcdsDropFile>(1).Name);
                 return new CpcdsDropStep { Name = "claim-providers", Status = CpcdsDropStepStatus.Succeeded };
             });
+        _upstream.ImportAuthorizationsAsync(Tenant, Arg.Any<CpcdsDropFile>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                _calls.Add($"authorizations:{ci.ArgAt<CpcdsDropFile>(1).Name}:{ci.ArgAt<string?>(3)}:{ci.ArgAt<string?>(4)}");
+                return new CpcdsDropStep { Name = "authorizations", Status = CpcdsDropStepStatus.Succeeded };
+            });
         _claims.ImportAsync(Tenant, Arg.Any<string>(), Arg.Any<CpcdsImportOptions>(), CpcdsDropRunner.Actor, Arg.Any<CancellationToken>())
             .Returns(ci =>
             {
@@ -385,5 +391,42 @@ public sealed class CpcdsDropRunnerTests : IDisposable
         step.Status.Should().Be(CpcdsDropStepStatus.Failed);
         step.HttpStatus.Should().Be(422);
         step.Errors.Should().Equal("No provider NPI column found");
+    }
+
+    [Fact]
+    public async Task Authorization_files_load_after_members_with_the_tenants_source_and_line_of_business()
+    {
+        Drop("jiva_authorizations_20261101.csv");
+        Drop("CPCDS_Members.csv");
+        Drop("um_278_20261101.x12");
+
+        var run = await Runner().RunAsync(Tenant, default);
+
+        _calls.Should().Equal(
+            "members:CPCDS_Members.csv+",
+            "authorizations:jiva_authorizations_20261101.csv:qnxt:Commercial",
+            "authorizations:um_278_20261101.x12:qnxt:Commercial");
+        run!.Files.Where(f => f.Kind == CpcdsDropFileKind.Authorizations).Should().HaveCount(2);
+        run.Notes.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("ISA*00*...", "/api/v1/authorizations/import/x12-278", "authorizations-278")]
+    [InlineData("authorization_number,member_id\n", "/api/v1/authorizations/import/csv", "authorizations")]
+    public async Task An_authorization_file_goes_to_the_import_its_content_names(string content, string path, string stepName)
+    {
+        var (imports, handler) = Upstream(HttpStatusCode.OK, """
+            { "authorizationsInFile": 2, "created": 1, "rejected": 1, "fileErrors": [],
+              "authorizations": [ { "authorizationNumber": "PA-1", "errors": [] },
+                                  { "authorizationNumber": "PA-2", "errors": ["Member id is required."] } ] }
+            """);
+
+        var step = await imports.ImportAuthorizationsAsync(Tenant, File_("auths.dat"), content, "jiva", "Medicaid", default);
+
+        handler.Request!.RequestUri!.AbsolutePath.Should().Be(path);
+        step.Name.Should().Be(stepName);
+        step.Status.Should().Be(CpcdsDropStepStatus.CompletedWithErrors);
+        step.Counts.Should().Contain(new KeyValuePair<string, decimal>("created", 1));
+        step.Errors.Should().Equal("PA-2: Member id is required.");
     }
 }

@@ -68,8 +68,14 @@ public sealed class AuthorizationImportResult
     public DateTime StartedAt { get; init; }
     public DateTime? CompletedAt { get; set; }
     public DateTime? ExtractedAt { get; init; }
+    /// <summary>CSV: the delimiter the header used.</summary>
     public string? Delimiter { get; set; }
+
+    /// <summary>CSV: data rows read.</summary>
     public int RowsRead { get; set; }
+
+    /// <summary>X12: 278 transaction sets read (requests and responses).</summary>
+    public int TransactionSets { get; set; }
     public int AuthorizationsInFile { get; set; }
     public int Created { get; set; }
     public int Updated { get; set; }

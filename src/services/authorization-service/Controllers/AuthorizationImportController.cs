@@ -104,4 +104,63 @@ public class AuthorizationImportController : ControllerBase
             ? UnprocessableEntity(result)
             : Ok(result);
     }
+
+    /// <summary>
+    /// Loads an X12 005010X217 278 file: responses, with their requests when
+    /// the same file carries them (paired by the event's trace number). Each
+    /// response's patient event is one authorization, identified by its
+    /// certification number (HCR02). Reloading is safe.
+    /// </summary>
+    /// <param name="file">The X12 interchange (ISA ... IEA), one or more 278 transaction sets.</param>
+    /// <param name="sourceSystem">The system that decided the authorizations.</param>
+    /// <param name="extractedAt">When the file was produced (ISO 8601).</param>
+    /// <param name="lineOfBusiness">The authorizations' line of business (the 278 does not carry one). Default Commercial.</param>
+    /// <param name="dryRun">Parse, map and report only.</param>
+    [HttpPost("x12-278")]
+    [RequirePermission(ImportPermission)]
+    [RequestSizeLimit(200_000_000)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 200_000_000)]
+    [ProducesResponseType(typeof(AuthorizationImportResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AuthorizationImportResult), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AuthorizationImportResult>> ImportX12_278(
+        [FromForm] IFormFile file,
+        [FromForm] string? sourceSystem = null,
+        [FromForm] DateTime? extractedAt = null,
+        [FromForm] string? lineOfBusiness = null,
+        [FromForm] bool dryRun = false,
+        CancellationToken ct = default)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "A non-empty 278 file is required." });
+
+        var lob = LineOfBusiness.Commercial;
+        if (!string.IsNullOrWhiteSpace(lineOfBusiness)
+            && (!Enum.TryParse(lineOfBusiness, ignoreCase: true, out lob) || !Enum.IsDefined(lob) || lob == LineOfBusiness.Unknown))
+        {
+            return BadRequest(new { error = $"lineOfBusiness '{lineOfBusiness}' is not one of: Commercial, Medicare, Medicaid, Exchange, TRICARE, VA." });
+        }
+
+        string content;
+        using (var reader = new StreamReader(file.OpenReadStream()))
+            content = await reader.ReadToEndAsync(ct);
+
+        var result = await _import.ImportX12_278Async(
+            TenantId,
+            content,
+            new AuthorizationImportOptions
+            {
+                SourceSystem = string.IsNullOrWhiteSpace(sourceSystem) ? null : sourceSystem.Trim().ToLowerInvariant(),
+                FileName = file.FileName,
+                ExtractedAt = extractedAt?.ToUniversalTime(),
+                LineOfBusiness = lob,
+                DryRun = dryRun,
+            },
+            _actor.UserId,
+            ct);
+
+        return result.FileErrors.Count > 0 && result.AuthorizationsInFile == 0
+            ? UnprocessableEntity(result)
+            : Ok(result);
+    }
 }
