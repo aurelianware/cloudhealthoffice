@@ -67,6 +67,18 @@ public static class PlanOrganizationResource
     private static readonly DateTimeOffset StartedAt = DateTimeOffset.FromUnixTimeMilliseconds(
         DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
+    /// <summary>
+    /// Whether <paramref name="reference"/> names the configured plan
+    /// Organization, relative (<c>Organization/{Id}</c>) or absolute.
+    /// </summary>
+    public static bool IsReferenceTo(PlanOrganizationOptions? options, string? reference)
+    {
+        if (options is not { IsConfigured: true } || string.IsNullOrWhiteSpace(reference)) return false;
+        var relative = $"Organization/{options.Id!.Trim()}";
+        return string.Equals(reference, relative, StringComparison.Ordinal)
+               || reference.EndsWith("/" + relative, StringComparison.Ordinal);
+    }
+
     public static DateTime LastUpdated(PlanOrganizationOptions options)
         => (options.LastUpdated ?? StartedAt).UtcDateTime;
 

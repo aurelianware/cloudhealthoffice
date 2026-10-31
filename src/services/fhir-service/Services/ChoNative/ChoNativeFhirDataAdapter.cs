@@ -6,8 +6,10 @@ using System.Text.Json.Nodes;
 using CloudHealthOffice.Infrastructure.Logging;
 using FhirService.Middleware;
 using FhirService.Models;
+using FhirService.Services.PlanOrganization;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using Task = System.Threading.Tasks.Task;
 
@@ -86,11 +88,13 @@ public sealed class ChoNativeFhirDataAdapter
 
     /// <summary>
     /// The one <c>_include</c> a Coverage search accepts, which CARIN BB
-    /// requires. Nothing is added for it unless a payor is a literal
-    /// reference: coverage-service names the payor by display unless a
-    /// deployment configures <c>Fhir:Coverage:PayorReference</c>, and a payor
-    /// with no reference has no resource to include. A search whose results do
-    /// carry one is refused rather than answered without what it asked for.
+    /// requires. coverage-service names the payor by display unless a
+    /// deployment configures <c>Fhir:Coverage:PayorReference</c>; a payor with
+    /// no reference has no resource to include. A payor that references the
+    /// plan's own Organization (<c>Fhir:PlanOrganization</c>) is included by
+    /// <see cref="Controllers.CoverageController"/>. A search whose results
+    /// reference any other payor is refused rather than answered without what
+    /// it asked for.
     /// </summary>
     public const string CoveragePayorInclude = "Coverage:payor";
 
@@ -124,13 +128,16 @@ public sealed class ChoNativeFhirDataAdapter
     private readonly IHttpClientFactory _clients;
     private readonly IHttpContextAccessor _http;
     private readonly ILogger<ChoNativeFhirDataAdapter> _logger;
+    private readonly PlanOrganizationOptions? _planOrganization;
 
     public ChoNativeFhirDataAdapter(
-        IHttpClientFactory clients, IHttpContextAccessor http, ILogger<ChoNativeFhirDataAdapter> logger)
+        IHttpClientFactory clients, IHttpContextAccessor http, ILogger<ChoNativeFhirDataAdapter> logger,
+        IOptions<PlanOrganizationOptions>? planOrganization = null)
     {
         _clients = clients;
         _http = http;
         _logger = logger;
+        _planOrganization = planOrganization?.Value;
     }
 
     // ── Patient ──────────────────────────────────────────────────────────────
@@ -242,7 +249,8 @@ public sealed class ChoNativeFhirDataAdapter
 
         q.AddPage(search.Page, search.Count);
         var result = await SearchAsync<Coverage>(CoverageServiceClient, "Coverage", CoverageSearchRoute, CoverageSearchRoute + q, ct);
-        if (includesPayor && result.Items.Any(c => c.Payor.Any(p => !string.IsNullOrEmpty(p.Reference))))
+        if (includesPayor && result.Items.Any(c => c.Payor.Any(p =>
+                !string.IsNullOrEmpty(p.Reference) && !PlanOrganizationResource.IsReferenceTo(_planOrganization, p.Reference))))
         {
             throw new FhirSearchNotSupportedException(
                 $"_include={CoveragePayorInclude} is not supported when the payor is a resource reference.");

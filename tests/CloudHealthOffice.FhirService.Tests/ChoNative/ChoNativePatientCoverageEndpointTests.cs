@@ -76,6 +76,8 @@ public class ChoNativePatientCoverageEndpointTests : IClassFixture<ChoNativePati
             builder.UseSetting("FhirAdapters:Sources:Coverage", "ChoNative");
             builder.UseSetting("Services:MemberServiceUrl", "http://member-service/api");
             builder.UseSetting("Services:CoverageServiceUrl", "http://coverage-service/api");
+            builder.UseSetting("Fhir:PlanOrganization:Id", "interop-plan");
+            builder.UseSetting("Fhir:PlanOrganization:Name", "Interop Health Plan");
             builder.ConfigureServices(services =>
             {
                 services.AddHttpClient(ChoNativeFhirDataAdapter.MemberServiceClient)
@@ -168,6 +170,58 @@ public class ChoNativePatientCoverageEndpointTests : IClassFixture<ChoNativePati
         _host.Upstream.Calls.Should().ContainSingle()
             .Which.PathAndQuery.Should().Contain("birthDateFrom=1980-01-01&birthDateTo=1990-01-01");
     }
+
+    // DaVinci Interop run 41175316418: once the payor referenced the plan's
+    // Organization, CARIN BB's Coverage?_include=Coverage:payor got a 400.
+    [Theory]
+    [InlineData("Organization/interop-plan")]
+    [InlineData("http://localhost/fhir/r4/Organization/interop-plan")]
+    public async Task A_payor_include_brings_the_plans_own_organization(string payor)
+    {
+        _host.Upstream.Override = request => request.RequestUri!.AbsolutePath == "/api/v1/coverage/fhir/Coverage"
+            ? Upstream.Json("{\"total\":1,\"items\":[{\"resource\":" + CoverageWithPayor(payor) + "}]}")
+            : null!;
+
+        var response = await Get("/fhir/r4/Coverage?_id=cov-001&_include=Coverage:payor", PatientToken("pat-001"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var bundle = await Body(response);
+        bundle["total"]!.GetValue<int>().Should().Be(1, "an included resource is not a match");
+        var entries = bundle["entry"]!.AsArray();
+        entries.Select(e => e!["search"]!["mode"]!.ToString()).Should().Equal("match", "include");
+        var organization = entries[1]!["resource"]!;
+        organization["resourceType"]!.ToString().Should().Be("Organization");
+        organization["id"]!.ToString().Should().Be("interop-plan");
+        organization["name"]!.ToString().Should().Be("Interop Health Plan");
+    }
+
+    [Fact]
+    public async Task A_payor_include_is_still_refused_for_a_payor_this_service_cannot_include()
+    {
+        _host.Upstream.Override = request => request.RequestUri!.AbsolutePath == "/api/v1/coverage/fhir/Coverage"
+            ? Upstream.Json("{\"total\":1,\"items\":[{\"resource\":" + CoverageWithPayor("Organization/other-plan") + "}]}")
+            : null!;
+
+        var response = await Get("/fhir/r4/Coverage?_id=cov-001&_include=Coverage:payor", PatientToken("pat-001"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Without_the_include_the_plan_organization_is_not_added()
+    {
+        _host.Upstream.Override = request => request.RequestUri!.AbsolutePath == "/api/v1/coverage/fhir/Coverage"
+            ? Upstream.Json("{\"total\":1,\"items\":[{\"resource\":" + CoverageWithPayor("Organization/interop-plan") + "}]}")
+            : null!;
+
+        var response = await Get("/fhir/r4/Coverage?_id=cov-001", PatientToken("pat-001"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Body(response))["entry"]!.AsArray().Should().ContainSingle();
+    }
+
+    private static string CoverageWithPayor(string payor) =>
+        $$"""{"resourceType":"Coverage","id":"cov-001","status":"active","beneficiary":{"reference":"Patient/pat-001"},"payor":[{"reference":"{{payor}}"}]}""";
 
     [Fact]
     public async Task An_upstream_outage_answers_502_with_an_operation_outcome()
