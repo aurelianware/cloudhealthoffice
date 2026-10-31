@@ -312,6 +312,38 @@ Authorization files (a name with `auth` or `278`) travel the same drop. They
 load after members and coverage, through authorization-service. See
 [AUTHORIZATION-IMPORT.md](AUTHORIZATION-IMPORT.md#in-the-daily-drop).
 
+### Hosted SFTP logins
+
+When Aurelianware hosts the drop (GCP, SFTPGo in front of the drop bucket),
+tenant-service creates each plan's SFTP login. The plan registers SSH public
+keys; there is no password to issue, store or send.
+
+| Endpoint (tenant-service, `settings:manage`) | |
+|---|---|
+| `GET /api/v1/tenants/{tenantId}/cpcds-sftp` | Host, port, username, folders and the registered keys' SHA256 fingerprints |
+| `PUT /api/v1/tenants/{tenantId}/cpcds-sftp` | `{ "publicKeys": ["ssh-ed25519 AAAA... core-prod"] }` creates the login or replaces its keys (1 to 5) |
+| `DELETE /api/v1/tenants/{tenantId}/cpcds-sftp` | Turns the login off; files already uploaded stay and still load |
+
+- Keys accepted: `ssh-ed25519`, `ecdsa-sha2-nistp256/384/521`, and
+  `ssh-rsa` of 3072 bits or more. One bad key refuses the whole request.
+  Comments are dropped.
+- The username is the tenant id. The plan sees `/inbound` (upload, rename,
+  delete) and `/processed` and `/failed` (read only); its filesystem is the
+  `{tenantId}/` prefix of the drop bucket, so it cannot see another plan.
+- Password and keyboard-interactive sign-in are refused.
+- PUT and DELETE are written to the tenant audit log.
+- 503 means SFTPGo could not be reached; nothing changed.
+
+Configuration (`CpcdsSftp` section, off by default):
+
+| Key | |
+|---|---|
+| `Enabled` | `true` where the hosted drop runs |
+| `ApiBaseUrl` | SFTPGo's cluster-internal API (default `http://sftpgo-api.cho-sftp:8080`) |
+| `AdminUsername`, `AdminPassword` | From the `sftpgo-admin` secret |
+| `Bucket` | The drop bucket (Terraform output `cpcds_drop_bucket`) |
+| `Host`, `Port` | What plans connect to (the `cpcds_sftp_address` or its DNS name; 22) |
+
 ## Freshness and reconciliation
 
 `GET /api/v1/claims/import/cpcds/drops/report` answers two questions about a
