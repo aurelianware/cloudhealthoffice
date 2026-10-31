@@ -88,7 +88,9 @@ else
     smoke) FILTER='Scenario=BR-PAS-SUBMIT-001'; LABEL='PAS $submit smoke (BR-PAS-SUBMIT-001)' ;;
     crd)   FILTER='Scenario=BR-CRD-001';        LABEL='CRD CDS Hooks (BR-CRD-001)' ;;
     dtr)   FILTER='Scenario=BR-DTR-001';        LABEL='DTR $questionnaire-package, chained from CRD (BR-DTR-001)' ;;
-    all)   FILTER='Scenario!=INFERNO-USCORE-SERVER-001&Scenario!=INFERNO-C4BB-SERVER-001&Scenario!=INFERNO-PLANNET-SERVER-001&Scenario!=INFERNO-BULK-SERVER-001&Category=DaVinciInterop'
+    # Select by target, not by excluding Inferno scenarios one by one: a new
+    # Inferno scenario left off that list ran here without its kit (#1660).
+    all)   FILTER='Target=HL7-DaVinci/br-payer&Category=DaVinciInterop'
            LABEL='all br-payer external scenarios' ;;
     unit)  : ;;
     *)
