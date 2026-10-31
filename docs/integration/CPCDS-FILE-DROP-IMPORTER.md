@@ -61,7 +61,7 @@ Required columns: `Claim unique identifier`, `Member id`, `Claim type`,
 |---|---|---|
 | Claim unique identifier | `ClaimNumber`, EOB `identifier` (uc) | Also the reload key |
 | Member id | `MemberId` (after the crosswalk), EOB `patient` | |
-| Coverage id | `CoverageId`, EOB `insurance.coverage` | Optional; without it the EOB names the plan by display |
+| Coverage id | `ExternalSource.SourceCoverageId` | Kept for tracing only. The EOB's `insurance.coverage` is the CHO Coverage the member held on the first date of service for the claim's benefit line (medical or dental), looked up in coverage-service; with none, the EOB names the plan by display and the claim carries a warning |
 | Claim type | `ClaimType` | `inpatient-facility`, `outpatient-facility`, `institutional` → Institutional; `professional-nonclinician`, `professional`, `vision` → Professional; `oral`, `dental` → Dental; `pharmacy` refused (no pharmacy projection yet) |
 | Claim service start / end date | `ServiceDateFrom` / `ServiceDateTo` | |
 | Claim received date | `ReceivedDate`, `SubmittedDate` (EOB `created`) | |
@@ -191,6 +191,11 @@ is only needed when CHO already holds members under other ids.
 | `claims[]` | Per claim: outcome, CHO id, version, member, file lines, errors, warnings |
 
 ## Not yet
+
+- Coverage is linked at load time. Load members and coverage first; a claim
+  loaded before its coverage is linked when the claim file is next reloaded
+  (the linked coverage is part of the content hash, so the reload makes a new
+  version).
 
 - Pharmacy claims (needs a C4BB Pharmacy EOB projection).
 - Line-level allowed and paid amounts are stored but the financial EOB still

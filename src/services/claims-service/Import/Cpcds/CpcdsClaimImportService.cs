@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
+using ClaimsService.Services.Adjudication;
+using ClaimsService.Services.Resolution;
 using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Import.Cpcds;
@@ -45,6 +47,7 @@ public sealed class CpcdsClaimImportService : ICpcdsClaimImportService
     private readonly IClaimRepository _claims;
     private readonly IClaimImportTransactionRepository _transactions;
     private readonly ICoreMemberCrosswalk _crosswalk;
+    private readonly ICoverageResolver? _coverage;
     private readonly ILogger<CpcdsClaimImportService> _logger;
     private readonly TimeProvider _clock;
 
@@ -53,8 +56,10 @@ public sealed class CpcdsClaimImportService : ICpcdsClaimImportService
         IClaimImportTransactionRepository transactions,
         ICoreMemberCrosswalk crosswalk,
         ILogger<CpcdsClaimImportService> logger,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        ICoverageResolver? coverage = null)
     {
+        _coverage = coverage;
         _claims = claims;
         _transactions = transactions;
         _crosswalk = crosswalk;
@@ -153,8 +158,10 @@ public sealed class CpcdsClaimImportService : ICpcdsClaimImportService
             return await Rejected(tenantId, claimResult, options, report, ct);
 
         var claim = mapped.Claim;
+        var sourceCoverageId = claim.CoverageId;
+        claim.CoverageId = await ResolveChoCoverageAsync(tenantId, claim, claimResult, ct);
         var now = _clock.GetUtcNow().UtcDateTime;
-        var hash = ContentHash(record, memberId!, options);
+        var hash = ContentHash(record, memberId!, options, claim.CoverageId);
 
         var existing = await _claims.GetByClaimNumberAsync(record.ClaimId);
         if (existing is not null && existing.ExternalSource is null)
@@ -194,6 +201,7 @@ public sealed class CpcdsClaimImportService : ICpcdsClaimImportService
             SourceSystem = options.SourceSystem,
             SourceClaimId = record.ClaimId,
             SourceMemberId = sourceMemberId,
+            SourceCoverageId = sourceCoverageId,
             ContentHash = hash,
             ImportBatchId = report.BatchId,
             FileName = options.FileName,
@@ -297,11 +305,37 @@ public sealed class CpcdsClaimImportService : ICpcdsClaimImportService
     }
 
     /// <summary>
+    /// The CHO coverage the member held on the claim's first date of service,
+    /// for the claim's benefit line. The core's coverage id means nothing to
+    /// CHO's FHIR server, so the EOB references the Coverage CHO serves, or,
+    /// when there is none (coverage not loaded, or not active that day),
+    /// names the plan by display instead of pointing at a Coverage that would
+    /// 404. Part of the content hash, so reloading the claim file after the
+    /// coverage file links claims loaded before it.
+    /// </summary>
+    private async Task<string?> ResolveChoCoverageAsync(
+        string tenantId, Claim claim, CpcdsClaimResult claimResult, CancellationToken ct)
+    {
+        if (_coverage is null) return null;
+        var resolution = await _coverage.ResolveCoverageAsync(
+            tenantId, claim.MemberId, claim.ServiceDateFrom,
+            ClaimAdjudicationOrchestrator.MapInsuranceLineCode(claim.ClaimType), ct);
+        if (resolution?.CoverageId is { } coverageId)
+            return coverageId;
+
+        claimResult.Warnings.Add(
+            $"No CHO coverage found for member '{claim.MemberId}' on {claim.ServiceDateFrom:yyyy-MM-dd}; " +
+            "the EOB names the plan instead of a Coverage. Load the member's coverage and reload this file to link it.");
+        return null;
+    }
+
+    /// <summary>
     /// The hash a reload is compared on: every recognized value of every row,
     /// independent of row order and of columns the importer ignores, plus the
     /// member the claim resolved to and how it was loaded.
     /// </summary>
-    internal static string ContentHash(CpcdsClaimRecord record, string memberId, CpcdsImportOptions options)
+    internal static string ContentHash(
+        CpcdsClaimRecord record, string memberId, CpcdsImportOptions options, string? choCoverageId = null)
     {
         var rows = record.Rows
             .Select(r => string.Join('\u001f', r.Values
@@ -311,7 +345,8 @@ public sealed class CpcdsClaimImportService : ICpcdsClaimImportService
             .OrderBy(r => r, StringComparer.Ordinal);
 
         var canonical = string.Join('\u001e', rows)
-                        + $"\u001dmember={memberId}\u001dlob={options.LineOfBusiness}\u001dsource={options.SourceSystem}";
+                        + $"\u001dmember={memberId}\u001dlob={options.LineOfBusiness}\u001dsource={options.SourceSystem}"
+                        + (choCoverageId is null ? string.Empty : $"\u001dcoverage={choCoverageId}");
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
     }
 }

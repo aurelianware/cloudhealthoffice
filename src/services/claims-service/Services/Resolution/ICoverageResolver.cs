@@ -55,7 +55,11 @@ public interface ICoverageResolver
 /// given.
 /// </para>
 /// </remarks>
+/// <param name="CoverageId">The CHO coverage record the plan id was read from,
+/// when coverage-service named it. Imported claims (CPCDS) use it so their
+/// EOB's <c>insurance.coverage</c> names the Coverage CHO serves.</param>
 public sealed record CoverageResolution(
     string PlanId,
     string? GroupNumber = null,
-    string? SponsorPolicyNumber = null);
+    string? SponsorPolicyNumber = null,
+    string? CoverageId = null);
