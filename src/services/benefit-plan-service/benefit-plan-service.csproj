@@ -50,6 +50,11 @@
              Link="schemas\aca-oop-limits\limits.json"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
+    <!-- State program benefit plan templates, read by BenefitPlanTemplateCatalog. -->
+    <Content Include="..\..\..\schemas\benefit-plan-templates\**\*.json"
+             Link="schemas\benefit-plan-templates\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\..\schemas\aca-oop-limits\README.md"
              Link="schemas\aca-oop-limits\README.md"
              CopyToOutputDirectory="PreserveNewest"

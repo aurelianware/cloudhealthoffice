@@ -1,0 +1,279 @@
+{
+  "templateId": "tx-chip-perinatal-at-or-below-threshold",
+  "state": "TX",
+  "program": "CHIP Perinatal",
+  "planName": "Texas CHIP Perinatal (at or below Medicaid threshold)",
+  "population": "Unborn children of pregnant women not eligible for Medicaid, family income at or below the Medicaid eligibility threshold",
+  "ageRange": null,
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2026-07-01",
+  "costSharing": {},
+  "sources": {
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    },
+    "tchp-chip-perinatal": {
+      "title": "Texas Children's Health Plan, CHIP Perinatal and born child combined benefit table (2026-07)",
+      "url": "https://www.texaschildrenshealthplan.org/sites/default/files/2026-07/MK-2205-426_CHIP_Peri%20and%20Born_Child_%20Combined_Benefit_Table.pdf",
+      "accessed": "2026-10-31"
+    }
+  },
+  "carveOuts": [],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "PA requirements are MCO policy within UMCM limits; load them as prior-auth rules per plan, not as benefit flags.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added services",
+      "why": "MCO-specific extras (for example adult dental, gift cards, extra vision) approved by HHSC per contract; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Formulary",
+      "why": "Outpatient drugs follow the state Vendor Drug Program formulary and preferred drug list; CHO has no formulary resolution yet (capability 5.14).",
+      "status": "verify"
+    },
+    {
+      "item": "Coverage conditioned on diagnosis",
+      "why": "Emergency, ambulance and outpatient coverage applies only to pregnancy-related diagnoses; needs diagnosis rule predicates authored per plan.",
+      "status": "sourced",
+      "source": "tchp-chip-perinatal"
+    },
+    {
+      "item": "Prenatal visit limit (20 plus 2 postpartum)",
+      "why": "Kept as text: a CHO visit limit counts every maternity claim (delivery, labs), and high-risk pregnancies are exempt.",
+      "status": "sourced",
+      "source": "tchp-chip-perinatal"
+    },
+    {
+      "item": "Newborn transition",
+      "why": "At birth the newborn moves to 12 months of continuous CHIP (or Medicaid) coverage; that is an enrollment event onto the CHIP plan, not part of this plan.",
+      "status": "sourced",
+      "source": "tchp-chip-perinatal"
+    },
+    {
+      "item": "Postpartum care for the mother",
+      "why": "Limited to the 2 postpartum visits; other services for the mother after delivery are excluded.",
+      "status": "sourced",
+      "source": "tchp-chip-perinatal"
+    }
+  ],
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced",
+      "limitations": "Prenatal care only."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced",
+      "limitations": "Prenatal and pregnancy-related care only."
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced",
+      "limitations": "Only emergencies related to labor and delivery, threatened labor, miscarriage or non-viable pregnancy."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced",
+      "limitations": "Only transport related to labor, threatened labor, miscarriage, non-viable pregnancy or delivery."
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced",
+      "limitations": "Facility charges for labor and delivery are not covered under CHIP Perinatal at this income level; they are billed to Emergency Medicaid."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced",
+      "limitations": "Limited to labs, imaging, medically necessary drugs, and miscarriage or non-viable pregnancy services."
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced",
+      "limitations": "20 prenatal visits plus 2 postpartum visits within 60 days unless a complication is documented; high-risk pregnancies are not capped at 20. Labor and delivery covered (professional only; the facility bills Emergency Medicaid)."
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced"
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "tchp-chip-perinatal",
+      "status": "sourced",
+      "limitations": "Drugs medically necessary for the unborn child."
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "status": "sourced",
+      "source": "tchp-chip-perinatal"
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": true,
+      "copay": 0,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "status": "sourced",
+      "source": "tchp-chip-perinatal"
+    }
+  ],
+  "notes": "No copayments or enrollment fees. Covers the unborn child, so most non-pregnancy benefits are excluded. The two MCO-published tables (English and Spanish) differ on some details; the stricter reading is used where they differ."
+}

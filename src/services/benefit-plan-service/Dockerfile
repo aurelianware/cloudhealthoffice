@@ -43,6 +43,7 @@ COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/ src/engines/CloudHealthO
 # with MSB3030 "Could not copy the file ... because it was not found."
 COPY schemas/service-category-mappings/ schemas/service-category-mappings/
 COPY schemas/aca-oop-limits/ schemas/aca-oop-limits/
+COPY schemas/benefit-plan-templates/ schemas/benefit-plan-templates/
 RUN dotnet build src/services/benefit-plan-service/benefit-plan-service.csproj -c Release --no-restore
 
 # Publish stage

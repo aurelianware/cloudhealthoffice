@@ -1,0 +1,258 @@
+{
+  "templateId": "tx-star-adult",
+  "state": "TX",
+  "program": "STAR",
+  "planName": "Texas STAR (adults 21 and over)",
+  "population": "Adults in STAR: pregnant women, parents and caretakers",
+  "ageRange": [
+    21,
+    null
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2026-09-01",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "molina-spell-of-illness",
+      "status": "verify",
+      "limitations": "Adults 21+: 30-day inpatient spell-of-illness limit applies in Texas Medicaid; confirm it applies to STAR adults under the contract (the cited notice names STAR+PLUS and STAR Health 21+)."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Adult eye exams and eyewear are limited compared with children; frequency is not stated in the sources reviewed."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "status": "verify",
+      "source": "cho-tx-qualification"
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "status": "verify",
+      "source": "cho-tx-qualification"
+    }
+  ],
+  "carveOuts": [],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "PA requirements are MCO policy within UMCM limits; load them as prior-auth rules per plan, not as benefit flags.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added services",
+      "why": "MCO-specific extras (for example adult dental, gift cards, extra vision) approved by HHSC per contract; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Formulary",
+      "why": "Outpatient drugs follow the state Vendor Drug Program formulary and preferred drug list; CHO has no formulary resolution yet (capability 5.14).",
+      "status": "verify"
+    },
+    {
+      "item": "30-day spell of illness",
+      "why": "A rolling 30-day inpatient limit per spell (reset after 60 days out of hospital) is not a visit limit; CHO benefit limits count visits or dollars per year.",
+      "status": "verify",
+      "source": "molina-spell-of-illness"
+    }
+  ],
+  "sources": {
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    },
+    "molina-spell-of-illness": {
+      "title": "Molina Healthcare of Texas, Spell of Illness notice (STAR+PLUS and STAR Health 21+, 30-day inpatient limit)",
+      "url": "https://www.molinahealthcare.com/-/media/Molina/PublicWebsite/PDF/members/tx/en-us/Spell-of-Illness-Notice---Member-EN.pdf",
+      "accessed": "2026-10-31"
+    }
+  },
+  "notes": "No member cost sharing. Pregnant-women coverage includes prenatal, delivery and postpartum care."
+}
