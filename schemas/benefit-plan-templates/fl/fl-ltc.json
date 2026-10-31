@@ -1,0 +1,254 @@
+{
+  "templateId": "fl-ltc",
+  "state": "FL",
+  "program": "SMMC LTC",
+  "planName": "Florida SMMC Long-Term Care",
+  "population": "Adults 65+ and adults 18+ with disabilities who meet nursing facility level of care",
+  "ageRange": [
+    18,
+    null
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2025-02-01",
+  "notes": "LTC wraps around MMA: medical services stay with the member's MMA plan. Benefits here are the LTC plan's only.",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Nursing facility services."
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Home health and personal care under the LTC plan of care."
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Hospice for LTC enrollees."
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Assistive care and medical equipment and supplies under the plan of care."
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "Covered by the member's MMA plan, not the LTC plan."
+    }
+  ],
+  "displayBenefits": [],
+  "carveOuts": [],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "Set by each plan within state rules; load as prior-auth rules per plan.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added or in-lieu-of services",
+      "why": "Plan-specific extras approved by the state; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Home and community-based services",
+      "why": "Adult day health, attendant care, homemaker, respite, home accessibility adaptation, personal emergency response, behavior management, caregiver training and others follow the plan of care; no CHO service categories.",
+      "status": "verify"
+    },
+    {
+      "item": "Patient responsibility",
+      "why": "Income the member pays toward nursing facility or HCBS cost, set by DCF eligibility; not a plan cost share.",
+      "status": "verify"
+    },
+    {
+      "item": "Case management",
+      "why": "Care management function, not a claim benefit.",
+      "status": "verify"
+    }
+  ],
+  "sources": {
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval; applies to every state)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    }
+  }
+}

@@ -1,0 +1,320 @@
+{
+  "templateId": "ca-medi-cal-adult",
+  "state": "CA",
+  "program": "Medi-Cal",
+  "planName": "California Medi-Cal managed care (21 and over)",
+  "population": "Adults in Medi-Cal managed care, including the ACA expansion, seniors and persons with disabilities, and long-term care members (carved in statewide)",
+  "ageRange": [
+    21,
+    null
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2024-01-01",
+  "notes": "No deductible or coinsurance. Pregnant and postpartum members get full-scope coverage for 12 months postpartum.",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ca-wic-14134",
+      "status": "verify",
+      "limitations": "Statute allows a $1 copayment per visit (W&I \u00a714134); this template uses $0. A provider cannot deny care for nonpayment."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ca-wic-14134",
+      "status": "verify",
+      "limitations": "Statute allows a $1 copayment per visit (W&I \u00a714134); this template uses $0. A provider cannot deny care for nonpayment."
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ca-wic-14134",
+      "status": "verify",
+      "limitations": "Statute allows a $5 copayment for a non-emergency ER visit (W&I \u00a714134); emergencies are exempt. This template uses $0."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ca-wic-14134",
+      "status": "verify",
+      "limitations": "Statute allows a $1 copayment per visit (W&I \u00a714134); this template uses $0. A provider cannot deny care for nonpayment."
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cencal-other-agencies",
+      "status": "sourced",
+      "limitations": "Non-specialty (mild to moderate) mental health only. Specialty mental health is the county mental health plan; substance use treatment is the county DMC or DMC-ODS program."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-boilerplate",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-medi-cal-rx-scope",
+      "status": "sourced",
+      "limitations": "Only drugs billed on medical or institutional claims (physician-administered drugs, infusion). Pharmacy-claim drugs are Medi-Cal Rx."
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-medi-cal-rx-scope",
+      "status": "sourced",
+      "limitations": "Pharmacy-claim drugs are covered by Medi-Cal Rx, not the plan."
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": false,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "dhcs-medi-cal-rx-scope",
+      "status": "sourced",
+      "limitations": "Pharmacy-claim drugs are covered by Medi-Cal Rx, not the plan."
+    }
+  ],
+  "carveOuts": [
+    {
+      "service": "Outpatient pharmacy (drugs billed on pharmacy claims)",
+      "to": "Medi-Cal Rx (DHCS fee-for-service); drugs and supplies billed on medical or institutional claims stay with the plan",
+      "source": "dhcs-medi-cal-rx-scope",
+      "status": "sourced"
+    },
+    {
+      "service": "Specialty mental health services",
+      "to": "County mental health plan (MHP); the managed care plan covers non-specialty mental health",
+      "source": "cencal-other-agencies",
+      "status": "sourced"
+    },
+    {
+      "service": "Substance use disorder treatment",
+      "to": "County Drug Medi-Cal / DMC-ODS program",
+      "source": "cencal-other-agencies",
+      "status": "sourced"
+    },
+    {
+      "service": "Dental",
+      "to": "Medi-Cal Dental (fee-for-service; dental managed care in some counties)",
+      "source": "cencal-other-agencies",
+      "status": "sourced"
+    },
+    {
+      "service": "Developmental disability services",
+      "to": "Regional center",
+      "source": "cencal-other-agencies",
+      "status": "sourced"
+    }
+  ],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "Set by each plan within state rules; load as prior-auth rules per plan.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added or in-lieu-of services",
+      "why": "Plan-specific extras approved by the state; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Nominal copayments ($1 visit, $1 prescription, $5 non-emergency ER)",
+      "why": "Allowed by statute with many exemptions (emergency, family planning, perinatal, inpatients, USPSTF A/B preventive, services under $10) and not collectible as a condition of care; plans generally do not apply them. Left at $0; set per plan if the contract requires.",
+      "source": "ca-wic-14134",
+      "status": "verify"
+    },
+    {
+      "item": "Long-term care (skilled nursing, ICF/DD, subacute)",
+      "why": "Carved into managed care statewide; share of cost set by the county is member liability, not a plan cost share.",
+      "status": "verify"
+    },
+    {
+      "item": "Enhanced Care Management and Community Supports (CalAIM)",
+      "why": "Care management and plan-elected housing, food and respite supports; no CHO service category.",
+      "status": "verify"
+    },
+    {
+      "item": "Dual eligibles (D-SNP / Medi-Medi plans)",
+      "why": "Medicare pays first; handled through coordination of benefits.",
+      "status": "verify"
+    }
+  ],
+  "sources": {
+    "ca-wic-14134": {
+      "title": "California Welfare and Institutions Code \u00a714134 (Medi-Cal copayments and exemptions)",
+      "url": "https://california.public.law/codes/ca_welf_and_inst_code_section_14134",
+      "accessed": "2026-10-31"
+    },
+    "cencal-other-agencies": {
+      "title": "CenCal Health provider manual Section F, Services Covered by Other Agencies (2024): dental, specialty mental health, SUD, regional center, LEA, pharmacy",
+      "url": "https://wwwqa.cencalhealth.org/wp-content/uploads/2023/12/Section-F-Services-Covered-by-Other-Agencies-2024.pdf",
+      "accessed": "2026-10-31"
+    },
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval; applies to every state)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    },
+    "dhcs-boilerplate": {
+      "title": "DHCS Medi-Cal managed care boilerplate contracts (controlling covered-services language; not yet reviewed line by line)",
+      "url": "https://www.dhcs.ca.gov/providers-partners/medi-cal-managed-care-boilerplate-contracts/",
+      "accessed": "2026-10-31"
+    },
+    "dhcs-medi-cal-rx-scope": {
+      "title": "DHCS, Medi-Cal Rx scope (pharmacy-claim benefits moved from managed care plans to Medi-Cal Rx)",
+      "url": "https://www.dhcs.ca.gov/provgovpart/pharmacy/Documents/Medi-Cal-Rx-Scope.pdf",
+      "accessed": "2026-10-31"
+    }
+  }
+}

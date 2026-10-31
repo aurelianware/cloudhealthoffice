@@ -2,7 +2,7 @@
 
 Medicaid and CHIP benefits are set by the state, per program, not by the plan,
 so one template per state program and population gives every MCO in that state
-the same starting plan. Texas is the first state.
+the same starting plan. Texas, California and Florida are done.
 
 - Templates: `schemas/benefit-plan-templates/{state}/*.json`, copied into the
   benefit-plan-service image and loaded at startup by `BenefitPlanTemplateCatalog`
@@ -85,6 +85,40 @@ HHSC Medicaid and CHIP Eligibility Handbook D-1800, with copay and fee sections
 effective October 1, 2018 and read 2026-10-31. CHIP and CHIP Perinatal limits come
 from Texas Children's Health Plan's published benefit tables. Confirm both against
 the current UMCM and the plan's contract before going live.
+
+## California
+
+| Template | Program and population | Member cost sharing | Main differences |
+|---|---|---|---|
+| `ca-medi-cal-child` | Medi-Cal managed care, under 21 (California runs CHIP inside Medi-Cal) | None; under 18 exempt by statute | EPSDT; CCS conditions carved out to the county except in Whole Child Model counties |
+| `ca-medi-cal-adult` | Medi-Cal managed care, 21+ (expansion adults, seniors and persons with disabilities, long-term care) | $0 in the template; statute allows $1 per visit, $1 per prescription and $5 for a non-emergency ER visit, with wide exemptions | Long-term care carved in statewide; nominal copays left for the plan's contract to decide |
+
+Both templates share these carve-outs:
+
+- Pharmacy-claim drugs go to Medi-Cal Rx; drugs billed on medical claims stay with the plan.
+- Specialty mental health goes to the county mental health plan.
+- Substance use treatment goes to the county DMC or DMC-ODS program.
+- Dental goes to Medi-Cal Dental.
+- Developmental services go to regional centers.
+
+The county plan model (COHS, two-plan, single plan, GMC, regional) decides which
+plan a member is in, not what the plan covers, so it belongs on the tenant-service
+program rather than in a template. CalAIM Enhanced Care Management and Community
+Supports are listed as not modeled. The covered-services wording in the DHCS
+boilerplate contract has not been reviewed line by line, so most values are `verify`.
+
+## Florida
+
+| Template | Program and population | Member cost sharing | Main differences |
+|---|---|---|---|
+| `fl-mma-child` | SMMC Managed Medical Assistance, under 21 (also MediKids, ages 1 to 4) | None | EPSDT; MediKids premiums are premium billing |
+| `fl-mma-adult` | SMMC MMA, 21+ | $0 in the template; the fee-for-service schedule is $1 to $3 per provider per day, plus 5% of the first $300 (max $15) for non-emergency ER use | Copays and their exemptions are left for the plan contract |
+| `fl-ltc` | SMMC Long-Term Care, nursing facility level of care | None (patient responsibility is set at eligibility) | Covers only nursing facility, home health, hospice and equipment; HCBS waiver services not modeled; medical stays with MMA |
+| `fl-healthy-kids` | Florida Healthy Kids (CHIP, ages 5 to 18), subsidized and full-pay | Office and specialist $5, ER and ambulance $10, prescriptions $5, therapy, home health, hospice and refraction $5; hospital, labs, behavioral health $0 | Premiums $15 or $20 (subsidized); ER copay waiver, visit limits and eyewear copay not modeled |
+
+Dental is a separate SMMC dental plan, and Healthy Kids has its own dental plan.
+Urgent care and outpatient surgery copays are not on the Healthy Kids benefits
+page, so they are marked `verify`.
 
 ## Adding a state
 
