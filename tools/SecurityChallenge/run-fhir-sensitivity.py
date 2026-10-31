@@ -17,8 +17,8 @@ ROOT = Path(__file__).resolve().parents[2]
 FHIR_MUTATIONS = {
     "scope-bypass": (
         "src/services/fhir-service/Middleware/SmartScopeEnforcementMiddleware.cs",
-        "if (!HasRequiredScope(scopes, resourceType, interaction.Access, interaction.Contexts,",
-        "if (scopes.Count < 0 && !HasRequiredScope(scopes, resourceType, interaction.Access, interaction.Contexts,",
+        "var hasScope = HasRequiredScope(scopes, resourceType, interaction.Access, interaction.Contexts,",
+        "var hasScope = scopes.Count >= 0 || HasRequiredScope(scopes, resourceType, interaction.Access, interaction.Contexts,",
         ["scope.unrelated", "scope.write-only", "scope.lowercase-route"],
     ),
     "audience-bypass": (
