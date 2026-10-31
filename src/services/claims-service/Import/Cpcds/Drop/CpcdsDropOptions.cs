@@ -51,4 +51,13 @@ public sealed class CpcdsDropTenantOptions
     /// docs/integration/SHADOW-ADJUDICATION.md.
     /// </summary>
     public bool ShadowAfterImport { get; set; }
+
+    /// <summary>
+    /// How often the core sends a claim extract. The freshness report calls
+    /// the drop stale once the newest claim extract is older than this plus
+    /// <see cref="StaleGrace"/>.
+    /// </summary>
+    public TimeSpan ExpectedEvery { get; set; } = TimeSpan.FromDays(1);
+
+    public TimeSpan StaleGrace { get; set; } = TimeSpan.FromHours(6);
 }
