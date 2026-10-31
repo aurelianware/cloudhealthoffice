@@ -11,6 +11,7 @@
 #   ./scripts/interop/run.sh inferno c4bb       # CARIN BB financial groups (INFERNO-C4BB-SERVER-001)
 #   ./scripts/interop/run.sh inferno plan-net   # Plan-Net public directory (INFERNO-PLANNET-SERVER-001)
 #   ./scripts/interop/run.sh inferno bulk-data  # Bulk Data Group and Patient export (INFERNO-BULK-SERVER-001)
+#   ./scripts/interop/run.sh inferno pdex       # PDex payer-server $member-match (INFERNO-PDEX-SERVER-001)
 #   ./scripts/interop/run.sh inferno all        # every conformance kit
 #   ./scripts/interop/run.sh unit               # harness unit tests only, no Docker
 #
@@ -20,7 +21,7 @@
 # the interop-cho profile — CHO's own services, not the mock — seed it through
 # those services' APIs, and hand the kit CHO's endpoint and a development token
 # (the Bulk Data kit instead authenticates itself with SMART Backend Services).
-# The kits must be fetched first: ./scripts/interop/fetch-inferno.sh us-core c4bb plan-net bulk-data
+# The kits must be fetched first: ./scripts/interop/fetch-inferno.sh us-core c4bb plan-net bulk-data pdex
 #
 # Each scenario starts the pinned HL7 Da Vinci burden-reduction payer reference
 # implementation, waits for it to actually be ready, performs a real exchange
@@ -73,10 +74,12 @@ if [[ "$TARGET" == "inferno" ]]; then
              LABEL='Inferno Plan-Net public Provider Directory (INFERNO-PLANNET-SERVER-001)' ;;
     bulk-data) FILTER='Scenario=INFERNO-BULK-SERVER-001'
              LABEL='Inferno Bulk Data Group and Patient export (INFERNO-BULK-SERVER-001)' ;;
+    pdex)    FILTER='Scenario=INFERNO-PDEX-SERVER-001'
+             LABEL='Inferno PDex payer-server $member-match (INFERNO-PDEX-SERVER-001)' ;;
     all)     FILTER='Target~inferno-framework'
              LABEL='every Inferno conformance kit' ;;
     *)
-      echo "Unknown mode '$MODE' for target 'inferno'. Modes: us-core | c4bb | plan-net | bulk-data | all." >&2
+      echo "Unknown mode '$MODE' for target 'inferno'. Modes: us-core | c4bb | plan-net | bulk-data | pdex | all." >&2
       exit 2
       ;;
   esac

@@ -47,6 +47,7 @@ public sealed record ChoSeedFixture
     [JsonPropertyName("auth")] public ChoSeedAuth Auth { get; init; } = new();
     [JsonPropertyName("member")] public ChoSeedMember Member { get; init; } = new();
     [JsonPropertyName("backendClient")] public ChoSeedBackendClient BackendClient { get; init; } = new();
+    [JsonPropertyName("payerBackendClient")] public ChoSeedBackendClient PayerBackendClient { get; init; } = new();
     [JsonPropertyName("patientApp")] public ChoSeedPatientApp PatientApp { get; init; } = new();
 
     public static ChoSeedFixture Load() => LoadFrom(InteropPaths.ChoSeedFixture);
@@ -111,6 +112,10 @@ public sealed record ChoSeedFixture
 public sealed record ChoSeedMember
 {
     [JsonPropertyName("memberId")] public string MemberId { get; init; } = "";
+    [JsonPropertyName("firstName")] public string FirstName { get; init; } = "";
+    [JsonPropertyName("lastName")] public string LastName { get; init; } = "";
+    [JsonPropertyName("dateOfBirth")] public string DateOfBirth { get; init; } = "";
+    [JsonPropertyName("gender")] public string Gender { get; init; } = "";
 }
 
 /// <summary>
@@ -125,6 +130,13 @@ public sealed record ChoSeedBackendClient
 
     /// <summary>The provider the client acts for: the Group a kit exports.</summary>
     [JsonPropertyName("providerId")] public string ProviderId { get; init; } = "";
+
+    /// <summary>
+    /// The payer the client is registered to, for a kit acting as the
+    /// requesting payer of a Payer-to-Payer exchange (D-13): the receiving
+    /// payer CHO binds the request to, and the consent's information recipient.
+    /// </summary>
+    [JsonPropertyName("payerId")] public string PayerId { get; init; } = "";
 
     [JsonPropertyName("scopes")] public List<string> Scopes { get; init; } = new();
 }

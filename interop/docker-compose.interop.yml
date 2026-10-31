@@ -13,7 +13,7 @@
 #   interop-br           HL7 br-payer                  (CRD/DTR/PAS payer RI)
 #   interop-br-provider  HL7 br-provider               (provider-side RI)
 #   interop-cho          CHO native stack + mongo      (CHO as the server under test)
-#   interop-pdex         Inferno PDex test kit         (no scenario yet — see docs/interop/davinci.md)
+#   interop-pdex         Inferno PDex test kit         (INFERNO-PDEX-SERVER-001)
 #   interop-dtr-inferno  Inferno DTR test kit          (no scenario yet — see docs/interop/davinci.md)
 #   interop-c4bb         Inferno CARIN BB test kit     (INFERNO-C4BB-SERVER-001; judges Provider Access EOBs)
 #   interop-us-core      Inferno US Core test kit      (INFERNO-USCORE-SERVER-001; the US Core floor)
@@ -395,6 +395,10 @@ services:
       FhirAdapters__Sources__Coverage: ChoNative
       FhirAdapters__Sources__Encounter: ChoNative
       FhirAdapters__Sources__Claim: ChoNative
+      # Payer-to-Payer member match and export from CHO's own services (ADR
+      # 020) rather than the mock directory, so INFERNO-PDEX-SERVER-001 matches
+      # the seeded member. Uses the member, coverage and claims URLs below.
+      FhirAdapters__Sources__PayerToPayer: ChoNative
       Services__MemberServiceUrl: http://cho-member-service:8080/
       Services__CoverageServiceUrl: http://cho-coverage-service:8080/
       Services__EncounterServiceUrl: http://cho-encounter-service:8080/

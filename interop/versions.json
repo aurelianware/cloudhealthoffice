@@ -99,13 +99,14 @@
         "suites": ["pdex_payer_server", "pdex_payer_client", "pdex_provider_client"],
         "runner": "docker compose build && docker compose up (upstream run.sh) from a checkout at the pinned tag"
       },
-      "implementationGuides": { "PDex": "see kit release notes for v0.13.2" },
+      "implementationGuides": { "PDex": "2.0.0", "HRex": "1.0.0", "US Core": "3.1.1" },
+      "igVersionProvenance": "Read from lib/davinci_pdex_test_kit/pdex_payer_server_suite.rb at the pinned tag (fhir_resource_validator igs 'hl7.fhir.us.davinci-pdex#2.0.0', HRex 1.0.0 as its dependency) and the bundled igs/davinci-pdex-2.0.0.tgz.",
       "requiredEgress": [
         "https://github.com — the kit is fetched at the pinned tag during explicit setup",
         "https://rubygems.org and Docker Hub — the kit image is built locally from upstream's Dockerfile",
         "https://packages.fhir.org — the bundled hl7_validator_service loads IG packages"
       ],
-      "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Not started in this PR — see docs/interop/davinci.md for the exact integration point."
+      "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Started by INFERNO-PDEX-SERVER-001, which runs the pdex_payer_server $member-match group and its no-match failure case. The kit is generated from PDex 2.0.0 and HRex 1.0.0, while CHO's Payer-to-Payer data exchange follows PDex 2.1.0 (bulk $davinci-data-export), so the 2.0 query workflow groups are not run."
     },
     {
       "name": "inferno-framework/davinci-dtr-test-kit",

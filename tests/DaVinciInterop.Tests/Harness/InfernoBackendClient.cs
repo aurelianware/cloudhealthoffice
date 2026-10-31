@@ -64,15 +64,30 @@ public static class InfernoBackendClient
     }
 
     /// <summary>The admin API body for <paramref name="client"/> with <paramref name="jwks"/>.</summary>
-    public static JsonObject RegistrationBody(ChoSeedBackendClient client, JsonObject jwks) => new()
+    public static JsonObject RegistrationBody(ChoSeedBackendClient client, JsonObject jwks)
     {
-        ["clientId"] = client.ClientId,
-        ["kind"] = "backend",
-        ["displayName"] = client.DisplayName,
-        ["scopes"] = new JsonArray(client.Scopes.Select(scope => (JsonNode)JsonValue.Create(scope)!).ToArray()),
-        ["providerId"] = client.ProviderId,
-        ["jwks"] = jwks,
-    };
+        var body = new JsonObject
+        {
+            ["clientId"] = client.ClientId,
+            ["kind"] = "backend",
+            ["displayName"] = client.DisplayName,
+            ["scopes"] = new JsonArray(client.Scopes.Select(scope => (JsonNode)JsonValue.Create(scope)!).ToArray()),
+        };
+
+        // A client is bound to a provider (Provider Access) or to a payer
+        // (Payer-to-Payer); each binding is sent only when the seed gives it.
+        if (!string.IsNullOrEmpty(client.ProviderId))
+        {
+            body["providerId"] = client.ProviderId;
+        }
+        if (!string.IsNullOrEmpty(client.PayerId))
+        {
+            body["payerId"] = client.PayerId;
+        }
+
+        body["jwks"] = jwks;
+        return body;
+    }
 
     /// <summary>
     /// Reads the kit's keys and registers the client. A client already
@@ -81,6 +96,12 @@ public static class InfernoBackendClient
     /// </summary>
     public static async Task<string> RegisterAsync(
         string kitApiBaseUrl, string suiteId, ChoSeedFixture fixture, CancellationToken cancellationToken)
+        => await RegisterAsync(kitApiBaseUrl, suiteId, fixture, fixture.BackendClient, cancellationToken);
+
+    /// <summary>As above, registering <paramref name="client"/> rather than the seed's provider client.</summary>
+    public static async Task<string> RegisterAsync(
+        string kitApiBaseUrl, string suiteId, ChoSeedFixture fixture, ChoSeedBackendClient client,
+        CancellationToken cancellationToken)
     {
         using var http = new HttpClient { Timeout = InteropSettings.Timeouts.ProtocolCall };
 
@@ -89,14 +110,14 @@ public static class InfernoBackendClient
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{ChoUnderTest.HostSmartAuthUrl}/api/admin/smart/clients")
         {
-            Content = JsonContent.Create(RegistrationBody(fixture.BackendClient, jwks)),
+            Content = JsonContent.Create(RegistrationBody(client, jwks)),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", fixture.DevelopmentToken());
 
         using var response = await http.SendAsync(request, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
-            return $"backend client '{fixture.BackendClient.ClientId}' was already registered";
+            return $"backend client '{client.ClientId}' was already registered";
         }
 
         if (!response.IsSuccessStatusCode)
@@ -107,8 +128,11 @@ public static class InfernoBackendClient
                 Redaction.Body(body));
         }
 
-        return $"backend client '{fixture.BackendClient.ClientId}' registered for provider " +
-               $"'{fixture.BackendClient.ProviderId}' with {jwks["keys"]!.AsArray().Count} public keys from {jwksUrl}";
+        var boundTo = string.IsNullOrEmpty(client.PayerId)
+            ? $"provider '{client.ProviderId}'"
+            : $"payer '{client.PayerId}'";
+        return $"backend client '{client.ClientId}' registered for {boundTo} with " +
+               $"{jwks["keys"]!.AsArray().Count} public keys from {jwksUrl}";
     }
 
     private static string RemoveSuffix(this string value, string suffix)

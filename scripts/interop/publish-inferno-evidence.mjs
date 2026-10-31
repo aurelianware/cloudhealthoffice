@@ -96,7 +96,11 @@ const REGULATORY_CONTEXT = {
     'Da Vinci PDex Plan-Net is the implementation guide CMS recommends.',
   'Bulk Data':
     'The Provider Access and Payer-to-Payer APIs CMS-0057-F requires by January 1, 2027, which must support ' +
-    'FHIR Bulk Data Access, with the calling system authorized by SMART Backend Services.'
+    'FHIR Bulk Data Access, with the calling system authorized by SMART Backend Services.',
+  PDex:
+    'The Payer-to-Payer API CMS-0057-F requires by January 1, 2027: a new payer finds a member at the prior payer ' +
+    'with the HRex $member-match operation, under the member\'s consent. Da Vinci PDex is the implementation ' +
+    'guide CMS recommends.'
 };
 
 // Groups the kit declares without an id are named by the runnable id Inferno
@@ -270,7 +274,8 @@ const BADGE_LABELS = {
   'US Core': 'Inferno US Core',
   'CARIN BB': 'Inferno CARIN BB',
   'Plan-Net': 'Inferno Plan-Net',
-  'Bulk Data': 'Inferno Bulk Data'
+  'Bulk Data': 'Inferno Bulk Data',
+  PDex: 'Inferno PDex'
 };
 
 function badgeFor(kit) {

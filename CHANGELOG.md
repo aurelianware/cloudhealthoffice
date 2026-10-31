@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Nightly conformance: the Inferno PDex payer-server kit (`davinci-pdex-test-kit` v0.13.2) judges CHO's HRex `Patient/$member-match` as `INFERNO-PDEX-SERVER-001`: the member-match group and the no-match case. The kit authenticates as a requesting payer (SMART Backend Services, `system/PayerToPayer.read`, registered payer) and sends HRex requests built from the seed with a consent naming its payer. The interop profile binds Payer-to-Payer to CHO's own services. The result is published with the other kits, with an `inferno-pdex` badge on ci-evidence.
+
 ### Fixed
 
 - CARIN BB `Coverage?_include=Coverage:payor` answers again. Once the interop Coverage named the plan's Organization as its payor (`Fhir:Coverage:PayorReference`), the search was refused with a 400 because fhir-service could not include a referenced payor. A payor that references the plan's own Organization (`Fhir:PlanOrganization`) is now included in the searchset (`search.mode` include); any other referenced payor is still refused.

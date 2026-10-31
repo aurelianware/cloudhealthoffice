@@ -78,12 +78,13 @@ public static class InfernoSuiteScenario
             var runner = new InfernoRunner(kit.ApiBaseUrl);
             var fixture = ChoSeedFixture.Load();
 
-            if (scenario.InfernoAuth == InfernoAuthModes.BackendServices)
+            if (scenario.InfernoAuth is InfernoAuthModes.BackendServices or InfernoAuthModes.PayerBackendServices)
             {
                 run.Record(InteropFinding.Info(
                     "inferno.auth.backendClient",
                     await InfernoBackendClient.RegisterAsync(
-                        kit.ApiBaseUrl, scenario.RequiredInfernoSuite, fixture, cancellationToken)));
+                        kit.ApiBaseUrl, scenario.RequiredInfernoSuite, fixture,
+                        BackendClientFor(scenario, fixture), cancellationToken)));
             }
 
             string? patientToken = null;
@@ -246,6 +247,14 @@ public static class InfernoSuiteScenario
             "bulk_timeout" => new InfernoInput { Name = "bulk_timeout", Value = BulkTimeoutSeconds },
             "lines_to_validate" => new InfernoInput { Name = "lines_to_validate", Value = BulkLinesToValidate },
             "since_timestamp" => new InfernoInput { Name = "since_timestamp", Value = BulkSinceTimestamp },
+            "member_match_request" => new InfernoInput
+            {
+                Name = name, Value = PdexMemberMatchRequest.OneMatch(fixture).ToJsonString(),
+            },
+            "no_member_match_request" => new InfernoInput
+            {
+                Name = name, Value = PdexMemberMatchRequest.NoMatch(fixture).ToJsonString(),
+            },
             _ => throw new InteropEnvironmentException(
                 $"Scenario '{scenario.Id}' declares an input '{name}' the harness does not know how to " +
                 "supply. Add it here deliberately: an input silently left unset makes the suite test " +
@@ -315,16 +324,22 @@ public static class InfernoSuiteScenario
         => scenario.InfernoAuth switch
         {
             InfernoAuthModes.ChoToken or InfernoAuthModes.PatientApp => InfernoInput.AccessToken("smart_auth_info", token),
-            InfernoAuthModes.BackendServices => InfernoInput.BackendServices(
+            InfernoAuthModes.BackendServices or InfernoAuthModes.PayerBackendServices => InfernoInput.BackendServices(
                 "smart_auth_info",
                 ChoUnderTest.ContainerTokenUrl,
-                fixture.BackendClient.ClientId,
-                string.Join(' ', fixture.BackendClient.Scopes)),
+                BackendClientFor(scenario, fixture).ClientId,
+                string.Join(' ', BackendClientFor(scenario, fixture).Scopes)),
             _ => throw new InteropEnvironmentException(
                 $"Scenario '{scenario.Id}' declares infernoAuth '{scenario.InfernoAuth}', which the harness " +
                 $"does not know. Known: {InfernoAuthModes.ChoToken}, {InfernoAuthModes.BackendServices}, " +
-                $"{InfernoAuthModes.PatientApp}."),
+                $"{InfernoAuthModes.PayerBackendServices}, {InfernoAuthModes.PatientApp}."),
         };
+
+    /// <summary>The backend client a self-authenticating kit is registered as: a provider's, or a requesting payer's.</summary>
+    public static ChoSeedBackendClient BackendClientFor(InteropScenarioDefinition scenario, ChoSeedFixture fixture)
+        => scenario.InfernoAuth == InfernoAuthModes.PayerBackendServices
+            ? fixture.PayerBackendClient
+            : fixture.BackendClient;
 
     private static async Task<InfernoTestRun> ExecuteAsync(
         InfernoRunner runner,
@@ -464,6 +479,7 @@ public static class InfernoSuiteScenario
         "CARIN BB" => "2.2.0",
         "Plan-Net" => "1.2.0",
         "Bulk Data" => "2.0.0",
+        "PDex" => "2.1.0",
         _ => null,
     };
 

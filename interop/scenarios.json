@@ -55,13 +55,23 @@
     },
     {
       "id": "INFERNO-PDEX-SERVER-001",
-      "title": "Inferno PDex payer-server suite against CHO",
+      "title": "Inferno PDex 2.0.0 payer-server $member-match against CHO",
       "protocol": "PDex",
       "choRole": "Server",
       "externalTarget": "inferno-pdex",
-      "requiredServices": ["cho-fhir-service", "inferno-pdex"],
-      "implemented": false,
-      "description": "Run the davinci-pdex-test-kit pdex_payer_server suite with CHO's FHIR base as the suite input."
+      "requiredServices": [
+        "cho-fhir-service",
+        "cho-smart-auth-service",
+        "cho-member-service",
+        "cho-coverage-service",
+        "inferno-pdex"
+      ],
+      "implemented": true,
+      "infernoSuite": "pdex_payer_server",
+      "infernoGroups": ["pdex_workflow_member_match", "pdex_no_member_matches"],
+      "infernoInputs": ["url", "smart_auth_info", "member_match_request", "no_member_match_request"],
+      "infernoAuth": "payerBackendServices",
+      "description": "Run the davinci-pdex-test-kit pdex_payer_server $member-match group and its no-match failure case against the interop-cho profile with Payer-to-Payer bound to CHO's own services (G-35, G-60). The kit is the new payer: it authenticates itself with SMART Backend Services (private_key_jwt) as a backend client the harness registers with system/PayerToPayer.read and a registered payer, so the token, the payer binding (D-13) and the consent check (ADR 022) are the real path. The requests are HRex Parameters built from the seed (tests/DaVinciInterop.Tests/Harness/PdexMemberMatchRequest.cs): the seeded member's demographics, CoverageToMatch with the member id as subscriberId and CHO's payer as payor, and an HRex Consent naming the kit's payer as information recipient and the member by local reference to MemberPatient. The group checks the CapabilityStatement declares member-match, validates the request, posts it, validates the HRex member-match-out response and finds the Patient by the returned MemberIdentifier; the failure case expects 422 for a consented request matching no one. Not run: the multiple-match case (the seed holds no two members one request can match), and the PDex 2.0 clinical-data, $everything and $export workflow groups and the PDex/US Core search groups, which read a member's data with the requesting payer's token by query; CHO's Payer-to-Payer data path is the PDex 2.1 bulk exchange ($davinci-data-export), see the gap matrix (G-35)."
     },
     {
       "id": "INFERNO-USCORE-SERVER-001",
