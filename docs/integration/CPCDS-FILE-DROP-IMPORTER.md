@@ -8,8 +8,8 @@ claims. It stores the core's answer.
 
 This is the first of the hydration options in the
 [core adapter implementer guide](CORE-ADAPTER-IMPLEMENTER-GUIDE.md) (tier 1,
-"Foothold"). It closes known gap 1 there for claims, members and coverage.
-Practitioners and organizations follow (see [Roadmap](#roadmap)).
+"Foothold"). It closes known gap 1 there for claims, members, coverage and
+the providers the claims name.
 
 ## Why CPCDS
 
@@ -167,6 +167,32 @@ Known limits: member updates do not change name or date of birth (as for
 id the import created, so an EOB's `insurance.coverage` reference does not
 resolve to that Coverage yet.
 
+## Providers named on claims
+
+`POST /api/v1/providers/import/cpcds-claims` (provider-service, permission
+`providers:write`), multipart `file` (the same claim file), optional
+`columnMap` and `dryRun`.
+
+A CPCDS claim file names providers by NPI only, and the EOBs reference
+`Practitioner/{npi}` (the care team) and, where the type is known,
+`Organization/{npi}`. This reads the distinct NPIs in the billing, performing
+(rendering), attending, referring and site-of-service columns. An NPI CHO
+already has is left alone. Every other NPI is looked up in NPPES (through
+provider-verification-service) and created as a **reference-only** provider:
+name, NPI-1 or NPI-2 type, primary taxonomy and practice location from NPPES,
+no network participation, not accepting new patients.
+
+Reference-only providers are readable through the FHIR API, so the EOB's
+references resolve, but are **never published in the public Provider
+Directory**: CHO knows nothing about them except that a claim named them, and
+many will be out of network. When the plan's roster makes one a directory
+provider, update it with `referenceOnly: false`.
+
+The report lists each NPI with its roles and outcome: `AlreadyKnown`,
+`Created`, `NotInNppes` (EOBs naming it carry the NPI only), `LookupFailed`
+(reload to retry) or `Invalid`. Send this file before or after the claim
+import; order does not matter, since the EOB is built when it is read.
+
 ## Member crosswalk
 
 `ICoreMemberCrosswalk` turns the core's member id into the CHO member id the
@@ -208,9 +234,9 @@ is only needed when CHO already holds members under other ids.
 1. **This change:** claim file parser, mapping to the claim record (and so to
    the C4BB EOBs), idempotent reloads, per-file report, pass-through crosswalk.
 2. Members and coverage from the CPCDS member and coverage files (done, see
-   [Members and coverage](#members-and-coverage)). Next: practitioners and
-   organizations from the provider file, and resolving the claim's core
-   coverage id to the CHO Coverage.
+   [Members and coverage](#members-and-coverage)). Providers named on
+   claims (done, see [Providers named on claims](#providers-named-on-claims)).
+   Resolving the claim's core coverage id to the CHO Coverage (#1666).
 3. File-drop trigger (watched storage location) and a tenant-level
    reconciliation and freshness report: last extract time, claims and money
    loaded per source, and lag.

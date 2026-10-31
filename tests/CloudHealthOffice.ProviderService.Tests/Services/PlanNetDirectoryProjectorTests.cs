@@ -308,6 +308,15 @@ public class PlanNetDirectoryProjectorTests
         _projector.ProjectProvider(provider, Networks(Network()), AsOf).Should().BeEmpty();
     }
 
+    [Fact]
+    public void A_provider_known_only_from_a_claim_is_not_published()
+    {
+        var provider = Individual();
+        provider.ReferenceOnly = true;
+
+        _projector.ProjectProvider(provider, Networks(Network()), AsOf).Should().BeEmpty();
+    }
+
     // ── organizations ─────────────────────────────────────────────────────
 
     [Fact]

@@ -97,6 +97,12 @@ public sealed class PlanNetDirectoryProjector : IPlanNetDirectoryProjector
         if (provider.VersionState != ProviderVersionState.Active || provider.Status != ProviderStatus.Active)
             return Array.Empty<JsonObject>();
 
+        // Known only from a claim (e.g. an out-of-network provider on a
+        // core's CPCDS extract): resolvable for the member's EOB, but not a
+        // network provider, so not in the directory.
+        if (provider.ReferenceOnly)
+            return Array.Empty<JsonObject>();
+
         return provider.ProviderType == ProviderType.Individual
             ? ProjectIndividual(provider, networks, asOf)
             : ProjectOrganization(provider, networks, asOf);
