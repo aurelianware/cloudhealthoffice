@@ -44,8 +44,8 @@ public static class InteropSettings
         /// <summary>Pulling the pinned images (cold cache, several hundred MB).</summary>
         public static TimeSpan ImagePull => FromEnv("CHO_INTEROP_PULL_TIMEOUT_SECONDS", TimeSpan.FromMinutes(15));
 
-        /// <summary>`docker compose up --detach` returning.</summary>
-        public static TimeSpan ContainerStart => FromEnv("CHO_INTEROP_START_TIMEOUT_SECONDS", TimeSpan.FromMinutes(5));
+        /// <summary>`docker compose up --detach --build` returning: the first scenario of a run builds the CHO service and kit images (run 41133414552 took over 5 minutes).</summary>
+        public static TimeSpan ContainerStart => FromEnv("CHO_INTEROP_START_TIMEOUT_SECONDS", TimeSpan.FromMinutes(15));
 
         /// <summary>Waiting for an external implementation to become ready.</summary>
         public static TimeSpan Readiness => FromEnv("CHO_INTEROP_READY_TIMEOUT_SECONDS", TimeSpan.FromMinutes(8));
@@ -54,7 +54,7 @@ public static class InteropSettings
         public static TimeSpan ProtocolCall => FromEnv("CHO_INTEROP_CALL_TIMEOUT_SECONDS", TimeSpan.FromSeconds(90));
 
         /// <summary>One scenario end to end, excluding stack startup.</summary>
-        public static TimeSpan Scenario => FromEnv("CHO_INTEROP_SCENARIO_TIMEOUT_SECONDS", TimeSpan.FromMinutes(5));
+        public static TimeSpan Scenario => FromEnv("CHO_INTEROP_SCENARIO_TIMEOUT_SECONDS", TimeSpan.FromMinutes(15));
 
         /// <summary>Tearing the stack down.</summary>
         public static TimeSpan Teardown => FromEnv("CHO_INTEROP_TEARDOWN_TIMEOUT_SECONDS", TimeSpan.FromMinutes(3));

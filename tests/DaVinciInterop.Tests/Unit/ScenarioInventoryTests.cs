@@ -178,9 +178,13 @@ public sealed class ScenarioInventoryTests
                 issue.Test.Should().NotBeNullOrWhiteSpace($"'{scenario.Id}' lists a known kit issue with no test");
                 issue.Test.Should().NotContain(",").And.NotContain("*", "a known kit issue names exactly one test");
                 issue.Reason.Length.Should().BeGreaterThan(40, $"'{issue.Test}' needs its reason written down");
-                scenario.InfernoGroups.Should().Contain(
-                    group => issue.Test.StartsWith(group + "_", StringComparison.Ordinal),
-                    $"'{issue.Test}' must belong to a group '{scenario.Id}' runs");
+                // A scenario that runs the whole suite (no groups named) runs every test.
+                if (scenario.InfernoGroups.Count > 0)
+                {
+                    scenario.InfernoGroups.Should().Contain(
+                        group => issue.Test.StartsWith(group + "_", StringComparison.Ordinal),
+                        $"'{issue.Test}' must belong to a group '{scenario.Id}' runs");
+                }
             }
 
             scenario.InfernoKnownKitIssues.Select(i => i.Test).Should().OnlyHaveUniqueItems();
@@ -202,17 +206,33 @@ public sealed class ScenarioInventoryTests
     }
 
     [Fact]
-    public void The_carin_bb_mixed_claim_type_validation_tests_are_the_only_known_kit_issues()
+    public void The_known_kit_issues_are_the_carin_bb_mixed_claim_types_and_the_plan_net_forward_chains()
     {
+        var planNetForwardChains = new[]
+        {
+            "endpoint_organization_partof",
+            "insurance_plan_administered_by_partof", "insurance_plan_owned_by_partof",
+            "org_affil_primary_organization_partof", "org_affil_participating_organization_type",
+            "org_affil_participating_organization_name", "org_affil_participating_organization_partof",
+            "org_affil_network_name", "org_affil_endpoint_organization",
+            "practitioner_role_organization_name", "practitioner_role_organization_partof",
+            "practitioner_role_organization_type", "practitioner_role_network_name",
+            "practitioner_role_network_type", "practitioner_role_endpoint_organization",
+            "healthcare_service_organization_name", "healthcare_service_organization_partof",
+            "healthcare_service_organization_type", "healthcare_service_endpoint_organization",
+            "location_partof_address", "location_partof_organization", "location_organization_name",
+            "location_organization_partof", "location_organization_type", "location_endpoint_organization",
+        }.Select(chain => ("INFERNO-PLANNET-SERVER-001", $"davinci_plan_net_v110_forward_chain_{chain}_search_test"));
+
         Inventory.Scenarios.SelectMany(s => s.InfernoKnownKitIssues.Select(i => (s.Id, i.Test)))
-            .Should().BeEquivalentTo(new[]
+            .Should().BeEquivalentTo(planNetForwardChains.Concat(new[]
             {
                 ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_oral_validation_test"),
                 ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_pharmacy_validation_test"),
                 ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_professional_non_clinician_validation_test"),
                 ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_inpatient_institutional_validation_test"),
                 ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_outpatient_institutional_validation_test"),
-            }, "adding one is a change of claim, so it should be seen here too");
+            }), "adding one is a change of claim, so it should be seen here too");
     }
 
     [Fact]

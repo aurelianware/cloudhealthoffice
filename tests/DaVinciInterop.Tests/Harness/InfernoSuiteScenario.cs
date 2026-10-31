@@ -378,11 +378,13 @@ public static class InfernoSuiteScenario
             if (status == InteropStatus.Failed && result.TestId is null
                 && InfernoRunner.RollUp(groupRun, knownKitIssues) != InteropStatus.Failed)
             {
-                // A group or suite row failed only by the excused tests under it.
+                // A group or suite row failed by tests this run did not fail: an
+                // excused test under it, or a test of a group run earlier in the
+                // session, which that group's run reports.
                 run.Record(InteropFinding.Info(
                     "inferno.result.failedByKnownKitIssue",
                     $"Inferno reported '{result.Result}' for {result.TestGroupId ?? result.TestSuiteId ?? result.Id}, " +
-                    "only because of a known kit issue under it."));
+                    "only because of a known kit issue under it or a test reported with its own group."));
                 continue;
             }
 
