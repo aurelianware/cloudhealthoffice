@@ -326,12 +326,12 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
             return BadRequest("A file is required.");
         if (await RefuseCreationHoldAsync(form.LegalHold, form.LegalHoldReason, auditSubject, ct) is { } holdRefusal)
             return holdRefusal;
-        if (file.Length > _uploadPolicy.MaxUploadBytes)
+        if (file.Length > _uploadPolicy.MaxBytesFor(form.Type))
             return await RefuseUploadAsync(auditSubject, null, StatusCodes.Status413PayloadTooLarge,
-                $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes.", ct);
+                $"Documents are limited to {_uploadPolicy.MaxBytesFor(form.Type)} bytes.", ct);
 
         var contentType = DocumentUploadPolicy.NormalizeContentType(file.ContentType);
-        if (contentType is null || !_uploadPolicy.IsAllowedContentType(contentType))
+        if (contentType is null || !_uploadPolicy.IsAllowedContentType(form.Type, contentType))
             return await RefuseUploadAsync(auditSubject, null, StatusCodes.Status415UnsupportedMediaType, UnsupportedTypeMessage(file.ContentType), ct);
 
         await using var buffer = TempBuffer();
@@ -399,7 +399,7 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
             return holdRefusal;
 
         var contentType = DocumentUploadPolicy.NormalizeContentType(request.ContentType);
-        if (contentType is null || !_uploadPolicy.IsAllowedContentType(contentType))
+        if (contentType is null || !_uploadPolicy.IsAllowedContentType(request.Type, contentType))
             return await RefuseUploadAsync(auditSubject, null, StatusCodes.Status415UnsupportedMediaType, UnsupportedTypeMessage(request.ContentType), ct);
 
         var id = Guid.NewGuid().ToString("N");
@@ -464,11 +464,11 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
             return await RefuseUploadAsync(auditSubject, id, StatusCodes.Status409Conflict,
                 "Nothing has been uploaded for this document yet.", ct);
         }
-        if (staged.SizeBytes > _uploadPolicy.MaxUploadBytes)
+        if (staged.SizeBytes > _uploadPolicy.MaxBytesFor(document.Type))
         {
             await _store.DeleteAsync(Container, staging, ct);
             return await RefuseUploadAsync(auditSubject, id, StatusCodes.Status413PayloadTooLarge,
-                $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.", ct);
+                $"Documents are limited to {_uploadPolicy.MaxBytesFor(document.Type)} bytes; the upload was discarded.", ct);
         }
 
         await using var buffer = TempBuffer();
@@ -478,11 +478,11 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
             int read;
             while ((read = await content.ReadAsync(chunk, ct)) > 0)
             {
-                if (buffer.Length + read > _uploadPolicy.MaxUploadBytes)
+                if (buffer.Length + read > _uploadPolicy.MaxBytesFor(document.Type))
                 {
                     await _store.DeleteAsync(Container, staging, ct);
                     return await RefuseUploadAsync(auditSubject, id, StatusCodes.Status413PayloadTooLarge,
-                        $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.", ct);
+                        $"Documents are limited to {_uploadPolicy.MaxBytesFor(document.Type)} bytes; the upload was discarded.", ct);
                 }
                 await buffer.WriteAsync(chunk.AsMemory(0, read), ct);
             }

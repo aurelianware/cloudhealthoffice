@@ -37,6 +37,9 @@ public sealed class CpcdsDropRunFile
     public CpcdsDropFileKind Kind { get; set; }
     public long Length { get; set; }
     public DateTime LastWriteUtc { get; set; }
+
+    /// <summary>The document-service document holding the file as received, when it was archived.</summary>
+    public string? DocumentId { get; set; }
 }
 
 /// <summary>

@@ -40,6 +40,7 @@ public static class SubjectAccess
             [DocumentLinkKind.Provider] = "providers:read",
             [DocumentLinkKind.RfaiRequest] = "rfai:read",
             [DocumentLinkKind.PaymentRun] = "payments:read",
+            [DocumentLinkKind.ImportRun] = "claims:import",
         };
 
     public static string ReadPermissionFor(DocumentLinkKind kind) => ReadPermission[kind];

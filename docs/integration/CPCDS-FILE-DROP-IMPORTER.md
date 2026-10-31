@@ -340,6 +340,45 @@ Configuration (`CpcdsSftp` section, off by default):
 | `Bucket` | The drop bucket (Terraform output `cpcds_drop_bucket`) |
 | `Host`, `Port` | What plans connect to (the `cpcds_sftp_address` or its DNS name; 22) |
 
+### Archive: every file kept as received
+
+With `CpcdsDrop:Archive:Enabled` turned on (it is on in the GCP render), each
+run stores every file it takes in CHO's document repository (document-service)
+before anything loads from it. The drop bucket is then transit only (its
+objects are deleted after 30 days), and the archive is the lasting record of
+what the plan's systems sent and when.
+
+Each archived file is stored like this:
+
+| Field | Value |
+|---|---|
+| Type | `SourceExtract`. It is the only document type that may be CSV, plain text or X12 (`application/edi-x12`, which must start with `ISA`), and it can never be anything else |
+| Channel | `SFTP` |
+| Received at | The file's last write time |
+| External ids | `DropRun={runId}` and `SourceSystem={tenant's source system}` |
+| Link | `ImportRun:{runId}` |
+
+- **Who can read it.** Opening the file through its import run needs
+  `claims:import`, which tenant administrators and CHO services hold. Every
+  view or download is written to the document access audit.
+- **Retention and legal hold.** Files fall under the tenant's retention policy
+  (`DEFAULT-10Y`: ten years) and can be placed on legal hold like any other
+  document.
+- **Scanning.** Files are virus-scanned like any upload. The scanner checks at
+  most 64 MiB (`Documents:Scanner:ClamAv:MaxBytes`). A larger extract is stored
+  and retained with a `Failed` scan, but it can't be downloaded until scanning
+  covers larger files. This is a known gap.
+- **On the run record.** Each file in the run lists its `documentId`, and the
+  run has an `archive` step with `archived` and `notArchived` counts.
+- **Failures don't block loading.** A file that can't be archived still loads.
+  The step reports why, but it never sends the files to `failed/`, so a
+  document-service outage doesn't hold up the plan's data.
+- **Size.** Files up to `CpcdsDrop:Archive:MultipartMaxBytes` (60 MiB) go in
+  one upload. Larger ones use document-service's pre-signed upload, which needs
+  document storage that can sign upload links. Source extracts are capped at
+  `Documents:MaxSourceExtractBytes` (1 GiB by default), separately from
+  attachments (64 MiB).
+
 ## Freshness and reconciliation
 
 `GET /api/v1/claims/import/cpcds/drops/report` answers two questions about a

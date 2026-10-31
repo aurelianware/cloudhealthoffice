@@ -15,6 +15,13 @@ namespace DocumentService.Services;
 /// </list>
 /// Configuration: <c>Documents:MaxUploadBytes</c>,
 /// <c>Documents:AllowedContentTypes</c> (array).
+///
+/// <para>Source extracts (<see cref="Models.DocumentTypes.SourceExtract"/>)
+/// follow their own rule: CSV, plain text or X12 only, and never any other
+/// type, so a member-facing type can't be filed as a spreadsheet; a core's
+/// extract is never a PDF. Their cap is <c>Documents:MaxSourceExtractBytes</c>
+/// (default 1 GiB): a plan's daily claim file outgrows an attachment's 64 MiB.
+/// Above the multipart limit, use the pre-signed upload.</para>
 /// </summary>
 public sealed class DocumentUploadPolicy
 {
@@ -37,6 +44,8 @@ public sealed class DocumentUploadPolicy
             // PDF or an image being filed as a clinical document. Content is
             // only ever served as a download with X-Content-Type-Options:
             // nosniff, so XML is not an execution vector here.
+            // An X12 interchange starts with its ISA segment (a source extract only).
+            ["application/edi-x12"] = (".x12", [ "ISA"u8.ToArray(), [0xEF, 0xBB, 0xBF, (byte)'I', (byte)'S', (byte)'A'] ]),
             ["application/hl7-cda+xml"] = (".xml",
             [
                 "<?xml"u8.ToArray(),
@@ -44,9 +53,17 @@ public sealed class DocumentUploadPolicy
             ]),
         };
 
-    public DocumentUploadPolicy(long maxUploadBytes, IEnumerable<string> allowedContentTypes)
+    /// <summary>1 GiB.</summary>
+    public const long DefaultMaxSourceExtractBytes = 1024L * 1024 * 1024;
+
+    /// <summary>What a source extract may be.</summary>
+    public static readonly IReadOnlySet<string> SourceExtractContentTypes =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "text/csv", "text/plain", "application/edi-x12" };
+
+    public DocumentUploadPolicy(long maxUploadBytes, IEnumerable<string> allowedContentTypes, long? maxSourceExtractBytes = null)
     {
         MaxUploadBytes = maxUploadBytes;
+        MaxSourceExtractBytes = maxSourceExtractBytes ?? DefaultMaxSourceExtractBytes;
         AllowedContentTypes = new HashSet<string>(allowedContentTypes.Select(NormalizeContentType)!, StringComparer.OrdinalIgnoreCase);
     }
 
@@ -56,10 +73,26 @@ public sealed class DocumentUploadPolicy
     {
         var max = configuration.GetValue<long?>("Documents:MaxUploadBytes") ?? DefaultMaxUploadBytes;
         var types = configuration.GetSection("Documents:AllowedContentTypes").Get<string[]>();
-        return new DocumentUploadPolicy(max, types is { Length: > 0 } ? types : KnownTypes.Keys);
+        var extracts = configuration.GetValue<long?>("Documents:MaxSourceExtractBytes");
+        return new DocumentUploadPolicy(max, types is { Length: > 0 } ? types : KnownTypes.Keys, extracts);
     }
 
     public long MaxUploadBytes { get; }
+
+    public long MaxSourceExtractBytes { get; }
+
+    private static bool IsSourceExtract(string? documentType)
+        => string.Equals(documentType, Models.DocumentTypes.SourceExtract, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The size cap for a document of <paramref name="documentType"/>.</summary>
+    public long MaxBytesFor(string? documentType)
+        => IsSourceExtract(documentType) ? MaxSourceExtractBytes : MaxUploadBytes;
+
+    /// <summary>Whether <paramref name="contentType"/> may be stored as <paramref name="documentType"/>.</summary>
+    public bool IsAllowedContentType(string? documentType, string? contentType)
+        => IsSourceExtract(documentType)
+            ? NormalizeContentType(contentType) is { } t && SourceExtractContentTypes.Contains(t)
+            : IsAllowedContentType(contentType);
 
     public IReadOnlySet<string> AllowedContentTypes { get; }
 

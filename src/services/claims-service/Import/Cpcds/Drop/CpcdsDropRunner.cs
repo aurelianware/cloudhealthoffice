@@ -18,6 +18,7 @@ public sealed class CpcdsDropRunner
     private readonly ICpcdsDropStore _store;
     private readonly ICpcdsClaimImportService _claims;
     private readonly ICpcdsUpstreamImports _upstream;
+    private readonly ICpcdsDropArchive? _archive;
     private readonly ICpcdsDropRunRepository _runs;
     private readonly IEnumerable<ICpcdsImportBatchCompletedHandler> _handlers;
     private readonly IAdjudicationTenantContext _tenantContext;
@@ -36,8 +37,10 @@ public sealed class CpcdsDropRunner
         IOptions<CpcdsDropOptions> options,
         CpcdsDropTenants tenants,
         ILogger<CpcdsDropRunner> logger,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        ICpcdsDropArchive? archive = null)
     {
+        _archive = archive;
         _store = store;
         _claims = claims;
         _upstream = upstream;
@@ -114,6 +117,9 @@ public sealed class CpcdsDropRunner
         var batches = new List<CpcdsImportBatchCompleted>();
         try
         {
+            if (_options.Archive.Enabled && _archive is not null)
+                run.Steps.Add(await ArchiveAsync(tenantId, run, tenant, taken.Values, ct));
+
             if (members is not null && taken.TryGetValue(members, out var membersFile))
             {
                 var membersContent = await _store.ReadAllTextAsync(membersFile, ct);
@@ -181,6 +187,39 @@ public sealed class CpcdsDropRunner
         _logger.LogInformation("CPCDS drop run {RunId} for tenant {TenantId} finished {Status}",
             run.Id, LogSanitizer.Sanitize(tenantId), run.Status);
         return run;
+    }
+
+    /// <summary>
+    /// Keeps each file, as received, in document-service before anything loads
+    /// from it. A file that can't be archived still loads: the step reports it
+    /// (and the run's status shows errors), but it never fails the run, so a
+    /// document-service outage doesn't hold up the plan's data.
+    /// </summary>
+    private async Task<CpcdsDropStep> ArchiveAsync(
+        string tenantId, CpcdsDropRun run, CpcdsDropTenantOptions tenant, IEnumerable<CpcdsDropFile> files, CancellationToken ct)
+    {
+        var step = new CpcdsDropStep { Name = "archive" };
+        var archived = 0;
+        foreach (var file in files)
+        {
+            step.Files.Add(file.Name);
+            var content = await _store.ReadAllTextAsync(file, ct);
+            var result = await _archive!.ArchiveAsync(tenantId, run.Id, file, content, tenant.SourceSystem, ct);
+            if (result.DocumentId is { } documentId)
+            {
+                archived++;
+                if (run.Files.FirstOrDefault(f => f.Name == file.Name) is { } record)
+                    record.DocumentId = documentId;
+            }
+            else
+            {
+                step.Errors.Add($"{file.Name} was not archived: {result.Error}");
+            }
+        }
+        step.Counts["archived"] = archived;
+        step.Counts["notArchived"] = step.Files.Count - archived;
+        step.Status = step.Errors.Count == 0 ? CpcdsDropStepStatus.Succeeded : CpcdsDropStepStatus.CompletedWithErrors;
+        return step;
     }
 
     private async Task<(CpcdsDropStep Step, CpcdsImportBatchCompleted? Batch)> ImportClaimsAsync(
