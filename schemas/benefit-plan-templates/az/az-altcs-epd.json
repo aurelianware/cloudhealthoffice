@@ -1,0 +1,314 @@
+{
+  "templateId": "az-altcs-epd",
+  "state": "AZ",
+  "program": "ALTCS",
+  "planName": "Arizona Long Term Care System, Elderly and Physically Disabled (ALTCS-EPD)",
+  "population": "Members 65+ or with a physical disability who need nursing facility level of care",
+  "ageRange": [
+    0,
+    null
+  ],
+  "lineOfBusiness": "Medicaid",
+  "planType": "Medicaid",
+  "effectiveFrom": "2024-10-01",
+  "notes": "ALTCS-EPD contractors are fully integrated: acute, behavioral and long-term care. ALTCS-DD is run by DES/DDD.",
+  "costSharing": {},
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS members are exempt from AHCCCS copayments."
+    },
+    {
+      "serviceCategory": "Specialist Visit",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "Preventive Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "Urgent Care",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "Emergency Room",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "Ambulance",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "Inpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "Outpatient Surgery",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS members are exempt from AHCCCS copayments."
+    },
+    {
+      "serviceCategory": "Outpatient Hospital",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "Imaging",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "Behavioral Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "Maternity",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "Skilled Nursing",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ahcccs-ampm-310r",
+      "status": "verify",
+      "limitations": "Nursing facility services, including custodial care for members at institutional level of care."
+    },
+    {
+      "serviceCategory": "Home Health",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ahcccs-ampm-1240a",
+      "status": "verify",
+      "limitations": "Home health; attendant care, personal care, homemaker and other HCBS follow the member's service plan (not modeled)."
+    },
+    {
+      "serviceCategory": "Hospice",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "DME",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "Vision",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify",
+      "limitations": "ALTCS-EPD plans cover acute care as well as long-term care."
+    },
+    {
+      "serviceCategory": "Pharmacy",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "ahcccs-copayments",
+      "status": "sourced",
+      "limitations": "ALTCS members are exempt from AHCCCS copayments."
+    }
+  ],
+  "displayBenefits": [
+    {
+      "serviceCategory": "Generic",
+      "formularyTier": "Generic",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    },
+    {
+      "serviceCategory": "Preferred Brand",
+      "formularyTier": "Preferred Brand",
+      "covered": true,
+      "copay": null,
+      "coinsurance": 0,
+      "deductibleApplies": false,
+      "source": "cho-tx-qualification",
+      "status": "verify"
+    }
+  ],
+  "carveOuts": [
+    {
+      "service": "American Indian and Alaska Native members who choose it",
+      "to": "American Indian Health Program (AIHP, AHCCCS fee-for-service) or a Tribal ALTCS program",
+      "status": "verify"
+    }
+  ],
+  "notModeled": [
+    {
+      "item": "Prior authorization lists",
+      "why": "Set by each plan within state rules; load as prior-auth rules per plan.",
+      "status": "verify"
+    },
+    {
+      "item": "Value-added or in-lieu-of services",
+      "why": "Plan-specific extras approved by the state; not a state benefit.",
+      "status": "verify"
+    },
+    {
+      "item": "Home and community based services",
+      "why": "Attendant care, adult day health, habilitation, home delivered meals, respite, home modifications and others follow the service plan with hour and cost ceilings; no CHO categories.",
+      "source": "ahcccs-ampm-1240a",
+      "status": "verify"
+    },
+    {
+      "item": "Share of cost",
+      "why": "Income the member pays toward long-term care, set at eligibility; not a claim cost share.",
+      "status": "verify"
+    },
+    {
+      "item": "Member copayments",
+      "why": "ALTCS members are exempt.",
+      "source": "ahcccs-copayments",
+      "status": "sourced"
+    },
+    {
+      "item": "Adult limits for members 21+",
+      "why": "The ACC adult limits (therapy visits, emergency dental, exclusions) also apply to ALTCS adults; see az-ahcccs-adult.",
+      "source": "bcbsaz-hca-ch2",
+      "status": "verify"
+    },
+    {
+      "item": "Dual eligibles",
+      "why": "Most ALTCS members have Medicare, which pays first.",
+      "status": "verify"
+    }
+  ],
+  "sources": {
+    "ahcccs-ampm-1240a": {
+      "title": "AHCCCS Medical Policy Manual 1240-A, ALTCS home and community based services",
+      "url": "https://azahcccs.gov/shared/Downloads/MedicalPolicyManual/1200/1240-A.pdf",
+      "accessed": "2026-10-31"
+    },
+    "ahcccs-ampm-310r": {
+      "title": "AHCCCS Medical Policy Manual 310-R, Nursing Facility Services",
+      "url": "https://azahcccs.gov/shared/Downloads/MedicalPolicyManual/300/310R.pdf",
+      "accessed": "2026-10-31"
+    },
+    "ahcccs-copayments": {
+      "title": "AHCCCS, Copayments (optional and required copay amounts, 5% of household income per quarter limit, exempt members and services)",
+      "url": "https://www.azahcccs.gov/PlansProviders/RatesAndBilling/copayments.html",
+      "accessed": "2026-10-31"
+    },
+    "bcbsaz-hca-ch2": {
+      "title": "Blue Cross Blue Shield of Arizona Health Choice (AHCCCS Complete Care) provider manual, Chapter 2, Member Eligibility and Member Services (rev. 2024-07): adult service limits and under-21 coverage",
+      "url": "https://assets.azblue.com/m/4b1f3cc754867708/original/Chapter_02_Member-Eligibility-and-Member-Services_HCA_final_07-24-24.pdf",
+      "accessed": "2026-10-31"
+    },
+    "cho-tx-qualification": {
+      "title": "CHO Texas Medicaid qualification backlog (each configured restriction needs a contract or policy citation, effective version and clinical approval; applies to every state)",
+      "url": "docs/implementation/TEXAS-MEDICAID-QUALIFICATION.md",
+      "accessed": "2026-10-31"
+    }
+  }
+}
