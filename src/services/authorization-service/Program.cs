@@ -82,6 +82,7 @@ if (builder.Services.AddChoDatabase(builder.Configuration) is null)
 }
 builder.Services.AddSingleton<AuthorizationIndexes>();
 builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepositoryMongo>();
+builder.Services.AddScoped<AuthorizationService.Import.IAuthorizationImportService, AuthorizationService.Import.AuthorizationImportService>();
 builder.Services.Configure<PaReportingPackageOptions>(builder.Configuration.GetSection("PaReportingPackages"));
 builder.Services.AddScoped<IPaReportingPackageRepository, PaReportingPackageRepositoryMongo>();
 builder.Services.AddHostedService<AuthorizationIndexStartup>();

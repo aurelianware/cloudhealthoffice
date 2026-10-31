@@ -65,6 +65,8 @@ public static class AuthorizationDeadlinePolicy
         Authorization authorization, ExtendDecisionDeadline command, string actor, DateTime nowUtc)
     {
         if (string.IsNullOrWhiteSpace(actor)) throw new ArgumentException("An authenticated actor is required.");
+        if (authorization.IsImported)
+            throw new InvalidOperationException("This authorization was imported and is read-only in CHO; its source system extends its timeframe.");
         if (!Enum.IsDefined(command.Basis) || command.Basis == DecisionExtensionBasis.Unspecified)
             throw new ArgumentException("State why the timeframe is extended.");
         if (string.IsNullOrWhiteSpace(command.Reason))

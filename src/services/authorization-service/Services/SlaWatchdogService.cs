@@ -173,6 +173,10 @@ public class SlaWatchdogService : BackgroundService
                 continue;
             }
 
+            // An imported request is decided in the source system; CHO has no deadline to keep for it.
+            if (auth.IsImported)
+                continue;
+
             if (!auth.Status.IsOpen())
                 continue;
 

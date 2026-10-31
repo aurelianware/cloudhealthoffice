@@ -29,6 +29,27 @@ public class Authorization
     public PaReportingLedger? ReportingLedger { get; set; }
 
     /// <summary>
+    /// Set when the authorization was decided by another system (the plan's
+    /// own UM platform or core) and loaded into CHO from an extract, so the
+    /// CMS-0057-F APIs can serve it. Null for every authorization CHO
+    /// received or decided itself. An imported authorization is read-only in
+    /// CHO: no reviewer, worker or endpoint changes it; a reload does. Never
+    /// accepted from a request body (see <see cref="AuthorizationExternalSource"/>).
+    /// </summary>
+    [JsonIgnore]
+    public AuthorizationExternalSource? ExternalSource { get; set; }
+
+    /// <summary>True when the authorization was loaded from another system and is read-only here.</summary>
+    [JsonPropertyName("imported")]
+    [BsonIgnore]
+    public bool IsImported => ExternalSource is not null;
+
+    /// <summary>The system an imported authorization came from (or its format when unnamed). Output only.</summary>
+    [JsonPropertyName("importedFrom")]
+    [BsonIgnore]
+    public string? ImportedFrom => ExternalSource is null ? null : ExternalSource.SourceSystem ?? ExternalSource.Format;
+
+    /// <summary>
     /// Owning tenant (every query is scoped by it). Always set
     /// server-side from the caller's token; a value in a request body is ignored,
     /// so it is not a required request field.
@@ -448,6 +469,44 @@ public class AuthorizationStatusChange
     /// </summary>
     [JsonPropertyName("source")]
     public string? Source { get; set; }
+}
+
+/// <summary>
+/// Where an imported authorization came from (see
+/// <see cref="Authorization.ExternalSource"/>).
+/// </summary>
+[BsonIgnoreExtraElements]
+public class AuthorizationExternalSource
+{
+    /// <summary>The extract format: <c>csv</c> or <c>x12-278</c>.</summary>
+    public string Format { get; set; } = string.Empty;
+
+    /// <summary>The system that decided the authorization, as the plan names it (e.g. <c>jiva</c>, <c>qnxt</c>).</summary>
+    public string? SourceSystem { get; set; }
+
+    /// <summary>The member identifier as the source sent it.</summary>
+    public string? SourceMemberId { get; set; }
+
+    /// <summary>
+    /// SHA-256 of the source rows that produced the current content. A reload
+    /// with the same hash changes nothing.
+    /// </summary>
+    public string ContentHash { get; set; } = string.Empty;
+
+    /// <summary>The import batch that last wrote this authorization.</summary>
+    public string? ImportBatchId { get; set; }
+
+    /// <summary>The file it was last loaded from.</summary>
+    public string? FileName { get; set; }
+
+    /// <summary>When CHO first loaded it.</summary>
+    public DateTime FirstImportedAt { get; set; }
+
+    /// <summary>When CHO last changed it from a reload.</summary>
+    public DateTime ImportedAt { get; set; }
+
+    /// <summary>When the source produced the extract, if the sender said so.</summary>
+    public DateTime? ExtractedAt { get; set; }
 }
 
 /// <summary>

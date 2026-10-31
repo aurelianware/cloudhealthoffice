@@ -3,14 +3,30 @@ using CloudHealthOffice.Infrastructure.Data;
 
 namespace AuthorizationService.Backends;
 
-public sealed class AuthorizationTransitionException(AuthorizationStatus from, AuthorizationStatus to)
-    : ConcurrencyConflictException($"Authorization transition from {from} to {to} is not permitted.");
+public class AuthorizationTransitionException : ConcurrencyConflictException
+{
+    public AuthorizationTransitionException(AuthorizationStatus from, AuthorizationStatus to)
+        : base($"Authorization transition from {from} to {to} is not permitted.") { }
+
+    protected AuthorizationTransitionException(string message) : base(message) { }
+}
+
+/// <summary>
+/// An authorization loaded from another system (<see cref="Authorization.ExternalSource"/>)
+/// is that system's record: CHO serves it and never changes it. A change comes
+/// from the source, by a reload.
+/// </summary>
+public sealed class ImportedAuthorizationReadOnlyException(string? sourceSystem)
+    : AuthorizationTransitionException(
+        $"This authorization was imported from {sourceSystem ?? "another system"} and is read-only in CHO; " +
+        "change it there and reload it.");
 
 /// <summary>Ordinary review lifecycle. Reopening/adverse-decision overturns require a separate workflow.</summary>
 public static class AuthorizationLifecyclePolicy
 {
     public static void Validate(Authorization authorization, AuthorizationStatus target, DateTime? nowUtc = null)
     {
+        EnsureNotImported(authorization);
         var current = authorization.Status;
         var allowed = Enum.IsDefined(current) && Enum.IsDefined(target) && (current == target || current switch
         {
@@ -26,6 +42,13 @@ public static class AuthorizationLifecyclePolicy
         if (!allowed || (target == AuthorizationStatus.Expired && current != target
             && !IsExpired(authorization, nowUtc ?? DateTime.UtcNow)))
             throw new AuthorizationTransitionException(current, target);
+    }
+
+    /// <summary>Refuses any change to an imported authorization (see <see cref="ImportedAuthorizationReadOnlyException"/>).</summary>
+    public static void EnsureNotImported(Authorization authorization)
+    {
+        if (authorization.ExternalSource is { } source)
+            throw new ImportedAuthorizationReadOnlyException(source.SourceSystem);
     }
 
     public static AuthorizationStatus ClinicalDecisionStatus(Authorization auth)
