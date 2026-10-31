@@ -276,6 +276,8 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                 services.AddSingleton(Substitute.For<global::ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationRepository>());
                 services.AddSingleton<global::ClaimsService.Import.Cpcds.Drop.ICpcdsDropRunRepository>(
                     new global::ClaimsService.Import.Cpcds.Drop.InMemoryCpcdsDropRunRepository());
+                services.AddSingleton<global::ClaimsService.Import.Cpcds.Drop.ICpcdsDropTenantSettingsRepository>(
+                    new global::ClaimsService.Import.Cpcds.Drop.InMemoryCpcdsDropTenantSettingsRepository());
 
                 // The claim access log's Mongo repository is removed by the
                 // filter above; the audit filter's writer still needs one.

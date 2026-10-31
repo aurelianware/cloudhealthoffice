@@ -22,7 +22,7 @@ public class CpcdsFreshnessReporterTests
     }
 
     private Task<CpcdsFreshnessReport> Report(int days = 30) =>
-        new CpcdsFreshnessReporter(_runs, Options.Create(_options), new Clock(Now)).BuildAsync(Tenant, days);
+        new CpcdsFreshnessReporter(_runs, new CpcdsDropTenants(Options.Create(_options), new InMemoryCpcdsDropTenantSettingsRepository()), new Clock(Now)).BuildAsync(Tenant, days);
 
     private int _n;
 
