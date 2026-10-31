@@ -328,7 +328,10 @@ public static class InfernoSuiteScenario
                 "smart_auth_info",
                 ChoUnderTest.ContainerTokenUrl,
                 BackendClientFor(scenario, fixture).ClientId,
-                string.Join(' ', BackendClientFor(scenario, fixture).Scopes)),
+                string.Join(' ', BackendClientFor(scenario, fixture).Scopes),
+                // The Bulk Data kit runs SMART Backend Services tests that
+                // obtain the token; the PDex server suite has none.
+                startExpired: scenario.InfernoAuth == InfernoAuthModes.PayerBackendServices),
             _ => throw new InteropEnvironmentException(
                 $"Scenario '{scenario.Id}' declares infernoAuth '{scenario.InfernoAuth}', which the harness " +
                 $"does not know. Known: {InfernoAuthModes.ChoToken}, {InfernoAuthModes.BackendServices}, " +

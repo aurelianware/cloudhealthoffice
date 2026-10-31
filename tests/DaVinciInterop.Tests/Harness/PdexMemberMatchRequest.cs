@@ -12,13 +12,19 @@ namespace DaVinciInterop.Tests.Harness;
 /// the member's coverage with CHO: its <c>subscriberId</c> is the seeded member
 /// id, and its payor is fhir-service's local payer. <c>MemberPatient</c>
 /// carries the demographics a new payer would have (name, birth date,
-/// gender) and no identifier of CHO's, because a new payer does not know it.
+/// gender) and the new payer's own member id, typed HRex <c>UMB</c>: US Core
+/// Patient, which HRex 1.0.0 requires of <c>MemberPatient</c>, needs an
+/// identifier, and a new payer does not know CHO's. <c>CoverageToLink</c> is the
+/// member's coverage with the new payer, which the kit's must-support tests
+/// expect.
 /// </para>
 ///
 /// <para>
-/// The Consent is HRex's: patient-privacy scope, IDSCL category, the
-/// <c>#sensitive</c> policy, a permit from CHO's payer (source) to the kit's
-/// registered payer (information recipient), and the member named by a local
+/// The Consent is HRex 1.0.0's <c>hrex-consent</c>: patient-privacy scope,
+/// IDSCL category, the <c>#sensitive</c> policy, a source document reference,
+/// a bounded permit period, a permit from CHO's payer (source, provenance
+/// <c>performer</c>) to the kit's registered payer (information recipient,
+/// <c>IRCP</c>), and the member named by a local
 /// reference to the <c>MemberPatient</c> parameter, which the kit's own
 /// "only uses local references" test requires. Nothing here is weaker than
 /// what CHO demands of any requesting payer (ADR 022).
@@ -34,6 +40,14 @@ public static class PdexMemberMatchRequest
 
     /// <summary>When the consent and the coverage start: the seeded coverage's effective date.</summary>
     public const string Start = "2026-01-01";
+
+    /// <summary>When the consent ends (HRex requires an end); after any run of this harness's pins.</summary>
+    public const string End = "2027-12-31";
+
+    /// <summary>The member id the requesting payer (the kit) has for the member.</summary>
+    public const string NewPayerMemberId = "INFERNO-NEW-PAYER-MEMBER-1";
+
+    private const string NewPayerMemberSystem = "urn:cho:interop:inferno-new-payer:member-id";
 
     /// <summary>A request for exactly the seeded member.</summary>
     public static JsonObject OneMatch(ChoSeedFixture fixture) => Build(
@@ -71,6 +85,14 @@ public static class PdexMemberMatchRequest
             {
                 ["profile"] = new JsonArray("http://hl7.org/fhir/us/davinci-hrex/StructureDefinition/hrex-patient-demographics"),
             },
+            ["identifier"] = new JsonArray(new JsonObject
+            {
+                // Not MB: CHO reads a MemberPatient MB identifier as its own
+                // member id. UMB is HRex's type for the new payer's id.
+                ["type"] = Concept("http://hl7.org/fhir/us/davinci-hrex/CodeSystem/hrex-temp", "UMB"),
+                ["system"] = NewPayerMemberSystem,
+                ["value"] = NewPayerMemberId,
+            }),
             ["name"] = new JsonArray(new JsonObject
             {
                 ["use"] = "official",
@@ -100,6 +122,30 @@ public static class PdexMemberMatchRequest
             }),
         };
 
+        var coverageToLink = new JsonObject
+        {
+            ["resourceType"] = "Coverage",
+            ["id"] = "cov-to-link",
+            ["meta"] = new JsonObject
+            {
+                ["profile"] = new JsonArray("http://hl7.org/fhir/us/davinci-hrex/StructureDefinition/hrex-coverage"),
+            },
+            ["status"] = "active",
+            ["identifier"] = new JsonArray(new JsonObject
+            {
+                ["system"] = NewPayerMemberSystem,
+                ["value"] = NewPayerMemberId,
+            }),
+            ["subscriberId"] = NewPayerMemberId,
+            ["beneficiary"] = new JsonObject { ["reference"] = "Patient/1" },
+            ["period"] = new JsonObject { ["start"] = Start },
+            ["payor"] = new JsonArray(new JsonObject
+            {
+                ["identifier"] = new JsonObject { ["value"] = requestingPayerId },
+                ["display"] = "Inferno PDex test kit",
+            }),
+        };
+
         var consent = new JsonObject
         {
             ["resourceType"] = "Consent",
@@ -112,6 +158,11 @@ public static class PdexMemberMatchRequest
             ["category"] = new JsonArray(Concept("http://terminology.hl7.org/CodeSystem/v3-ActCode", "IDSCL")),
             ["patient"] = new JsonObject { ["reference"] = "Patient/1" },
             ["performer"] = new JsonArray(new JsonObject { ["reference"] = "Patient/1" }),
+            ["sourceReference"] = new JsonObject
+            {
+                ["reference"] = "urn:cho:interop:inferno-new-payer:consent-document-1",
+                ["display"] = "The member's signed Payer-to-Payer consent (synthetic)",
+            },
             ["policy"] = new JsonArray(new JsonObject
             {
                 ["uri"] = "http://hl7.org/fhir/us/davinci-hrex/StructureDefinition-hrex-consent.html#sensitive",
@@ -119,10 +170,12 @@ public static class PdexMemberMatchRequest
             ["provision"] = new JsonObject
             {
                 ["type"] = "permit",
-                ["period"] = new JsonObject { ["start"] = Start },
+                ["period"] = new JsonObject { ["start"] = Start, ["end"] = End },
                 ["actor"] = new JsonArray(
-                    Actor("PERF", ChoPayerId, "Cloud Health Office (interop)"),
-                    Actor("IRCP", requestingPayerId, "Inferno PDex test kit")),
+                    Actor("http://terminology.hl7.org/CodeSystem/provenance-participant-type", "performer",
+                        ChoPayerId, "Cloud Health Office (interop)"),
+                    Actor("http://terminology.hl7.org/CodeSystem/v3-ParticipationType", "IRCP",
+                        requestingPayerId, "Inferno PDex test kit")),
                 ["action"] = new JsonArray(Concept("http://terminology.hl7.org/CodeSystem/consentaction", "disclose")),
             },
         };
@@ -137,6 +190,7 @@ public static class PdexMemberMatchRequest
             ["parameter"] = new JsonArray(
                 new JsonObject { ["name"] = "MemberPatient", ["resource"] = patient },
                 new JsonObject { ["name"] = "CoverageToMatch", ["resource"] = coverage },
+                new JsonObject { ["name"] = "CoverageToLink", ["resource"] = coverageToLink },
                 new JsonObject { ["name"] = "Consent", ["resource"] = consent }),
         };
     }
@@ -144,9 +198,9 @@ public static class PdexMemberMatchRequest
     private static JsonObject Concept(string system, string code) =>
         new() { ["coding"] = new JsonArray(new JsonObject { ["system"] = system, ["code"] = code }) };
 
-    private static JsonObject Actor(string role, string payerId, string display) => new()
+    private static JsonObject Actor(string roleSystem, string role, string payerId, string display) => new()
     {
-        ["role"] = Concept("http://terminology.hl7.org/CodeSystem/v3-ParticipationType", role),
+        ["role"] = Concept(roleSystem, role),
         ["reference"] = new JsonObject
         {
             ["identifier"] = new JsonObject { ["value"] = payerId },
