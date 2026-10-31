@@ -138,7 +138,7 @@ public static class BulkMemberMatchRequestReader
         {
             MemberPatient = patient,
             CoverageToMatch = coverage,
-            Consent = consent,
+            Consent = WithMemberPatient(consent, patient),
             FamilyName = Str(name?["family"]),
             GivenName = Str((name?["given"] as JsonArray)?.FirstOrDefault()),
             BirthDate = Str(patient["birthDate"]),
@@ -151,6 +151,42 @@ public static class BulkMemberMatchRequestReader
             Email = Telecom(patient, "email"),
             AsOfDate = DatePart(Str(period?["end"]) ?? Str(period?["start"])),
         };
+    }
+
+    /// <summary>The id a <c>MemberPatient</c> is contained under when the Consent names it.</summary>
+    internal const string ContainedMemberPatientId = "hrex-member-patient";
+
+    /// <summary>
+    /// HRex requests name the member in the Consent by a local reference to the
+    /// <c>MemberPatient</c> parameter (<c>Patient/1</c> for a MemberPatient with
+    /// id 1), and the Inferno PDex kit requires exactly that. The consent check
+    /// reads the member only from a contained Patient or an identifier, so such
+    /// a Consent is judged on a copy with the MemberPatient contained and the
+    /// reference pointing at it. Nothing is added that the request did not say:
+    /// the Patient is the one the request supplied, and a Consent naming any
+    /// other reference is left as it came.
+    /// </summary>
+    internal static JsonObject? WithMemberPatient(JsonObject? consent, JsonObject patient)
+    {
+        if (consent?["patient"] is not JsonObject subject
+            || Str(subject["reference"]) is not { } reference
+            || Str(patient["id"]) is not { } id
+            || reference != $"Patient/{id}")
+        {
+            return consent;
+        }
+
+        var copy = (JsonObject)consent.DeepClone();
+        var contained = (JsonObject)patient.DeepClone();
+        contained["id"] = ContainedMemberPatientId;
+        if (copy["contained"] is not JsonArray list)
+        {
+            list = new JsonArray();
+            copy["contained"] = list;
+        }
+        list.Add(contained);
+        copy["patient"] = new JsonObject { ["reference"] = $"#{ContainedMemberPatientId}" };
+        return copy;
     }
 
     private static JsonObject? Part(List<JsonObject> parts, string name, string resourceType)

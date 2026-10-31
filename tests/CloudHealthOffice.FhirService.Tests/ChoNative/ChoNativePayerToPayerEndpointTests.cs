@@ -311,7 +311,8 @@ public class ChoNativePayerToPayerEndpointTests : IClassFixture<ChoNativePayerTo
     // ── Member match, HRex form (PDex $member-match) ─────────────────────────
 
     private static System.Text.Json.Nodes.JsonObject HrexMatch(
-        string family, string birthDate, bool withConsent = true, bool withCoverage = true)
+        string family, string birthDate, bool withConsent = true, bool withCoverage = true,
+        bool consentNamesMemberPatient = false)
     {
         var parameters = new System.Text.Json.Nodes.JsonArray
         {
@@ -358,11 +359,21 @@ public class ChoNativePayerToPayerEndpointTests : IClassFixture<ChoNativePayerTo
             parameters.Add(new System.Text.Json.Nodes.JsonObject
             {
                 ["name"] = "Consent",
-                ["resource"] = CloudHealthOffice.FhirService.Tests.PayerToPayer.P2PTestConsent.For(
-                    Payer, memberId: null, family, birthDate),
+                ["resource"] = consentNamesMemberPatient
+                    ? NamingMemberPatient(CloudHealthOffice.FhirService.Tests.PayerToPayer.P2PTestConsent.For(Payer, memberId: null))
+                    : CloudHealthOffice.FhirService.Tests.PayerToPayer.P2PTestConsent.For(
+                        Payer, memberId: null, family, birthDate),
             });
         }
         return new System.Text.Json.Nodes.JsonObject { ["resourceType"] = "Parameters", ["parameter"] = parameters };
+    }
+
+    // As HRex sends it: the consent's patient is the MemberPatient parameter, by local reference.
+    private static System.Text.Json.Nodes.JsonObject NamingMemberPatient(System.Text.Json.Nodes.JsonObject consent)
+    {
+        consent.Remove("contained");
+        consent["patient"] = new System.Text.Json.Nodes.JsonObject { ["reference"] = "Patient/1" };
+        return consent;
     }
 
     private async Task<HttpResponseMessage> PostFhir(string path, System.Text.Json.Nodes.JsonObject body)
@@ -395,6 +406,27 @@ public class ChoNativePayerToPayerEndpointTests : IClassFixture<ChoNativePayerTo
         var coding = identifier.GetProperty("type").GetProperty("coding")[0];
         coding.GetProperty("system").GetString().Should().Be("http://terminology.hl7.org/CodeSystem/v2-0203");
         coding.GetProperty("code").GetString().Should().Be("MB");
+    }
+
+    [Fact]
+    public async Task Hrex_member_match_accepts_a_consent_naming_the_member_patient_parameter()
+    {
+        var response = await PostFhir(MatchPath, HrexMatch("Jones", "1962-03-22", consentNamesMemberPatient: true));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("pat-002");
+    }
+
+    [Fact]
+    public async Task Hrex_member_match_with_a_consent_naming_someone_else_is_422()
+    {
+        var body = HrexMatch("Jones", "1962-03-22", consentNamesMemberPatient: true);
+        var consent = body["parameter"]!.AsArray().Single(p => (string?)p!["name"] == "Consent")!["resource"]!;
+        consent["patient"] = new System.Text.Json.Nodes.JsonObject { ["reference"] = "Patient/someone-else" };
+
+        var response = await PostFhir(MatchPath, body);
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
