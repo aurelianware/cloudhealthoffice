@@ -237,6 +237,9 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(ImportTransactionRepository);
             // The shadow adjudication store is Mongo, removed by the filter above.
             services.AddSingleton(ShadowAdjudicationRepository);
+            // So is the CPCDS drop run store.
+            services.AddSingleton<global::ClaimsService.Import.Cpcds.Drop.ICpcdsDropRunRepository>(
+                new global::ClaimsService.Import.Cpcds.Drop.InMemoryCpcdsDropRunRepository());
             services.AddSingleton(AttributionRepository);
 
             // 5.7 — NcciEngine's repository implementation got removed by

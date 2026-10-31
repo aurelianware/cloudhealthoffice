@@ -46,6 +46,8 @@ public class ClaimOutcomeWriterRouteGuardTests
             ["POST api/v1/claims/import/cpcds"] = (Kind.StatusOrOutcomeWriter,
                 "CPCDS import (claims:import): stores outcomes the plan's core adjudicated, never a CHO-adjudicated claim; " +
                 "only claims carrying ExternalSource, a changed source claim is a new version superseding the old"),
+            ["POST api/v1/claims/import/cpcds/drops/run"] = (Kind.StatusOrOutcomeWriter,
+                "CPCDS drop run (claims:import): the same CPCDS import, on the files waiting in the tenant's drop"),
 
             // ── No status / outcome change ──────────────────────────────
             ["POST api/claims"] = (Kind.NoStatusChange, "legacy submission: creates a Submitted claim; the pipeline adjudicates it"),
@@ -91,7 +93,8 @@ public class ClaimOutcomeWriterRouteGuardTests
                 "POST api/claims/admin/accumulators/prior-auth-unavailable-pends/rerun",
                 "POST api/v1/claims/{predecessorClaimId}/adjustments",
                 "POST api/claims/admin/lifecycle/deny-backfill",
-                "POST api/v1/claims/import/cpcds");
+                "POST api/v1/claims/import/cpcds",
+                "POST api/v1/claims/import/cpcds/drops/run");
     }
 
     [Theory]
