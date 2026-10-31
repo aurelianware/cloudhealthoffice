@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "inferno-conformance",
-  "generatedAtUtc": "2026-10-31T02:53:37Z",
-  "sourceCommit": "2c2342be92d6acb61d32aeefc2b1728d5c96f7f1",
-  "sourceCommitShort": "2c2342be92d6",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/2c2342be92d6acb61d32aeefc2b1728d5c96f7f1",
+  "generatedAtUtc": "2026-10-31T03:56:31Z",
+  "sourceCommit": "e6545d1bb19507d9451787facaa1e25385fb567f",
+  "sourceCommitShort": "e6545d1bb195",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/e6545d1bb19507d9451787facaa1e25385fb567f",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence and of the Da Vinci interoperability snapshot. A kit result never changes a CMS-0057-F scenario status, and no result here is CMS, ONC or HL7 certification.",
   "kits": [
@@ -32,7 +32,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T02:52:59.5686833+00:00",
+      "testedAtUtc": "2026-10-31T03:55:59.3101986+00:00",
       "tests": {
         "passed": 21,
         "failed": 0,
@@ -113,10 +113,10 @@
       ],
       "status": "Failed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T02:49:19.5602572+00:00",
+      "testedAtUtc": "2026-10-31T03:51:11.7576319+00:00",
       "tests": {
-        "passed": 32,
-        "failed": 4,
+        "passed": 35,
+        "failed": 1,
         "skipped": 20,
         "omitted": 0,
         "knownKitIssue": 5,
@@ -129,34 +129,9 @@
           "message": "(no message)"
         },
         {
-          "test": "c4bb_v200_coverage_validation_test",
-          "result": "fail",
-          "message": "Resource does not conform to the profile http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Coverage|2.0.0"
-        },
-        {
-          "test": "c4bb_v200_coverage",
-          "result": "fail",
-          "message": "(no message)"
-        },
-        {
-          "test": "c4bb_v200_practitioner__id_search_test",
+          "test": "c4bb_v200_practitioner__lastUpdated_search_test",
           "result": "fail",
           "message": "Returned resource did not match the search parameter"
-        },
-        {
-          "test": "c4bb_v200_practitioner_read_test",
-          "result": "fail",
-          "message": "Unexpected response status: expected 200, but received 404"
-        },
-        {
-          "test": "c4bb_v200_practitioner_validation_test",
-          "result": "fail",
-          "message": "Resource does not conform to the profile http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Practitioner|2.0.0"
-        },
-        {
-          "test": "c4bb_v200_practitioner",
-          "result": "fail",
-          "message": "(no message)"
         }
       ],
       "notRunTests": [
@@ -208,7 +183,12 @@
         {
           "test": "c4bb_v200_coverage_must_support_test",
           "result": "skip",
-          "message": "Could not find identifier, subscriberId, relationship, class:group.name, class:plan.name in the 1 provided resource(s)"
+          "message": "Could not find identifier, class:group.name, class:plan.name in the 1 provided resource(s)"
+        },
+        {
+          "test": "c4bb_v200_coverage",
+          "result": "skip",
+          "message": "(no message)"
         },
         {
           "test": "c4bb_v200_organization__id_search_test",
@@ -244,6 +224,11 @@
           "test": "c4bb_v200_practitioner_must_support_test",
           "result": "skip",
           "message": "Could not find Practitioner.identifier:tax in the 1 provided resource(s)"
+        },
+        {
+          "test": "c4bb_v200_practitioner",
+          "result": "skip",
+          "message": "(no message)"
         },
         {
           "test": "c4bb_v200_related_person__id_search_test",
@@ -324,7 +309,7 @@
       "groups": [],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T02:50:57.5197102+00:00",
+      "testedAtUtc": "2026-10-31T03:53:26.2476431+00:00",
       "tests": {
         "passed": 180,
         "failed": 0,
@@ -408,7 +393,7 @@
         {
           "test": "davinci_plan_net_v110_practitioner_must_support_test",
           "result": "skip",
-          "message": "Could not find identifier.type, name.text, qualification.identifier, qualification.period, qualification.issuer, Practitioner.address.extension:geolocation, Practitioner.qualification.extension:practitioner-qualification, Practitioner.communication.extension:communication-profici…"
+          "message": "Could not find name.text, qualification.identifier, qualification.period, qualification.issuer, Practitioner.address.extension:geolocation, Practitioner.qualification.extension:practitioner-qualification, Practitioner.communication.extension:communication-proficiency in the 2 pro…"
         },
         {
           "test": "davinci_plan_net_v110_healthcare_service_coverage_area_search_test",
@@ -728,7 +713,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-10-31T02:47:03.1334740+00:00",
+      "testedAtUtc": "2026-10-31T03:48:22.9486070+00:00",
       "tests": {
         "passed": 31,
         "failed": 0,
@@ -754,11 +739,11 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-10-31T02:52:59.5703701+00:00",
+    "generatedAtUtc": "2026-10-31T03:55:59.3119160+00:00",
     "environment": "CI",
-    "choCommit": "2c2342be92d6acb61d32aeefc2b1728d5c96f7f1",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/2c2342be92d6acb61d32aeefc2b1728d5c96f7f1",
-    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41160167552",
+    "choCommit": "e6545d1bb19507d9451787facaa1e25385fb567f",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/e6545d1bb19507d9451787facaa1e25385fb567f",
+    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41164743092",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 3,
