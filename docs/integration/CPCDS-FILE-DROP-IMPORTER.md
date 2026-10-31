@@ -260,6 +260,7 @@ Endpoints (permission `claims:import`):
 |---|---|
 | `GET /api/v1/claims/import/cpcds/drops` | The tenant's recent runs: files, each step's counts and errors, where the files went, notes |
 | `GET /api/v1/claims/import/cpcds/drops/{runId}` | One run |
+| `GET /api/v1/claims/import/cpcds/drops/report?days=30` | The freshness and reconciliation report (below) |
 | `POST /api/v1/claims/import/cpcds/drops/run` | Load what is waiting now instead of at the next poll (204 when nothing is ready) |
 
 A step that fails does not stop the others. A failed member load still lets
@@ -267,6 +268,23 @@ the claims load: they are filed under the core's member ids, so a member's
 EOBs appear once the member loads, and claims that found no CHO coverage carry
 a warning and link when the claim file is reloaded. Every import is
 idempotent, so moving a failed run's files back to `inbound` is always safe.
+
+## Freshness and reconciliation
+
+`GET /api/v1/claims/import/cpcds/drops/report` answers two questions about a
+core-fed tenant: is the data members' apps see current, and do the loads add
+up? It reads the drop runs.
+
+| Field | Meaning |
+|---|---|
+| `status` | `Fresh`; `Stale` (the newest claim extract loaded is older than the tenant's `ExpectedEvery` plus `StaleGrace`, default 1 day + 6 hours); `Failing` (the last 3 runs failed); `NeverLoaded`; `NotConfigured` |
+| `newestClaimExtractAt`, `claimExtractAgeHours` | When the newest claim file that loaded was written, and its age now |
+| `lastClaimsLoadedAt`, `lastMembersLoadedAt`, `lastRunAt`, `lastRunStatus`, `consecutiveFailedRuns` | |
+| `window` | Over the last `days` (default 30): runs and failed runs, claim files loaded, claims created / updated / unchanged / rejected, paid amount in the files against paid amount loaded (`paidAmountNotLoaded` is the refused claims' money), members created and updated, providers created and not in NPPES, plan codes unmapped in the last member load |
+| `issues` | What needs attention, in plain words |
+
+Set `ExpectedEvery` per tenant to the core's extract cadence (a weekly core:
+`"ExpectedEvery": "7.00:00:00"`).
 
 ## Member crosswalk
 
@@ -313,8 +331,8 @@ is only needed when CHO already holds members under other ids.
    claims (done, see [Providers named on claims](#providers-named-on-claims)).
    Resolving the claim's core coverage id to the CHO Coverage (#1666).
 3. The daily file drop (done, see [The daily file drop](#the-daily-file-drop)).
-   Next: a tenant-level reconciliation and freshness report over the drop
-   runs: last extract time, claims and money loaded per source, and lag.
+   And its freshness and reconciliation report (done, see
+   [Freshness and reconciliation](#freshness-and-reconciliation)).
 4. X12 as the second source: EOBs from the 837/835 pairs and members from the
    834 files CHO already parses, through the same pipeline, crosswalk and
    report.

@@ -18,11 +18,14 @@ public class CpcdsDropController : ControllerBase
     private readonly ICpcdsDropRunRepository _runs;
     private readonly CpcdsDropRunner _runner;
     private readonly CpcdsDropOptions _options;
+    private readonly CpcdsFreshnessReporter _reporter;
     private readonly ICurrentActor _actor;
 
     public CpcdsDropController(
-        ICpcdsDropRunRepository runs, CpcdsDropRunner runner, IOptions<CpcdsDropOptions> options, ICurrentActor actor)
+        ICpcdsDropRunRepository runs, CpcdsDropRunner runner, CpcdsFreshnessReporter reporter,
+        IOptions<CpcdsDropOptions> options, ICurrentActor actor)
     {
+        _reporter = reporter;
         _runs = runs;
         _runner = runner;
         _options = options.Value;
@@ -38,6 +41,18 @@ public class CpcdsDropController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<CpcdsDropRun>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<CpcdsDropRun>>> List([FromQuery] int limit = 30, CancellationToken ct = default)
         => Ok(await _runs.ListAsync(TenantId, Math.Clamp(limit, 1, 200), ct));
+
+    /// <summary>
+    /// Whether the tenant's core-fed data is current (newest claim extract
+    /// loaded, its age, recent failures) and whether the loads add up (claims
+    /// and paid amounts in the files against what loaded, over the last
+    /// <paramref name="days"/> days), with what needs attention.
+    /// </summary>
+    [HttpGet("report")]
+    [RequirePermission(ClaimsPermissions.Import)]
+    [ProducesResponseType(typeof(CpcdsFreshnessReport), StatusCodes.Status200OK)]
+    public async Task<ActionResult<CpcdsFreshnessReport>> Report([FromQuery] int days = 30, CancellationToken ct = default)
+        => Ok(await _reporter.BuildAsync(TenantId, days, ct));
 
     [HttpGet("{runId}")]
     [RequirePermission(ClaimsPermissions.Import)]

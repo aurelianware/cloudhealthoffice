@@ -562,6 +562,7 @@ builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsUpstreamImports
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsImportBatchCompletedHandler,
     ClaimsService.Import.Cpcds.Drop.ShadowAdjudicateAfterImport>();
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.CpcdsDropRunner>();
+builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.CpcdsFreshnessReporter>();
 builder.Services.AddHostedService<ClaimsService.Import.Cpcds.Drop.CpcdsDropWorker>();
 
 var adjudicationMaxConcurrentCalls = Math.Max(
