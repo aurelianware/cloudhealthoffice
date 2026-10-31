@@ -14,8 +14,9 @@ namespace ClaimsService.Adapters;
 /// migration TODO until the payer-specific Facets connector is implemented and accepted.
 /// </summary>
 /// <remarks>
-/// TODO(facets-claims): integrate with the Facets claim API (CLM transaction
-/// set on the Facets claims stack). Reference doc:
+/// TODO(facets-claims): integrate with the payer's licensed Facets interface
+/// (operation names come from that specification, not from this comment).
+/// Reference docs: docs/integration/CORE-ADAPTER-IMPLEMENTER-GUIDE.md,
 /// docs/architecture/claim-adapter-pattern.md.
 /// </remarks>
 public class FacetsClaimAdapter : IClaimAdapter

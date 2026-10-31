@@ -15,6 +15,7 @@ and mapping deliverables for architects and SI teams across all core vendors.
 ## From questionnaire to implementation
 
 After discovery, complete the [connector onboarding and acceptance checklist](../../implementation/CORE-CONNECTOR-ONBOARDING.md). For the first QNXT engagement, use the [connectivity, security and partnership design](../../implementation/QNXT-CONNECTIVITY-ENGAGEMENT.md); licensed specifications and test access remain pending.
+Engineers building the connector should start with the [core adapter implementer guide](../../integration/CORE-ADAPTER-IMPLEMENTER-GUIDE.md), which covers each interface, the CMS-0057-F data path and the conformance tests.
 It records the agreed environment/access matrix, domain scope, mapping and
 failure contracts, reconciliation controls, traceable acceptance evidence and
 cutover/support ownership. QRE answers scope the work; they are not themselves

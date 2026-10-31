@@ -40,7 +40,8 @@ contract/interface**, **payer-specific connector implementation**, and **deploye
 acceptance**. Do not count a connector interface as either a shipped vendor
 integration or a missing native business capability.
 
-Use the [onboarding and acceptance template](../implementation/CORE-CONNECTOR-ONBOARDING.md) to turn QRE answers into a traceable implementation contract.
+Use the [onboarding and acceptance template](../implementation/CORE-CONNECTOR-ONBOARDING.md) to turn QRE answers into a traceable implementation contract. The [implementer guide](../integration/CORE-ADAPTER-IMPLEMENTER-GUIDE.md)
+and its conformance suites cover what each connector method must do.
 
 ## Engagement acceptance
 
