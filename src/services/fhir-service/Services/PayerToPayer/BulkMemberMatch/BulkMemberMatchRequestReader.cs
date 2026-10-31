@@ -89,14 +89,46 @@ public static class BulkMemberMatchRequestReader
                 error = $"MemberBundle {i + 1} must carry a MemberPatient (Patient) and a CoverageToMatch (Coverage).";
                 return false;
             }
-            read.Add(Entry(patient, coverage, Part(parts, "Consent", "Consent")));
+            read.Add(Member(patient, coverage, Part(parts, "Consent", "Consent")));
         }
 
         entries = read;
         return true;
     }
 
-    private static BulkMemberMatchEntry Entry(JsonObject patient, JsonObject coverage, JsonObject? consent)
+    /// <summary>
+    /// Reads the single-member HRex <c>Patient/$member-match</c> input
+    /// (<c>hrex-parameters-member-match-in</c>): the same <c>MemberPatient</c>,
+    /// <c>CoverageToMatch</c>, optional <c>CoverageToLink</c> and
+    /// <c>Consent</c> parameters a <c>MemberBundle</c> carries, at the top
+    /// level of the Parameters. Read exactly as one bundle of the bulk form is,
+    /// so the two operations cannot match the same member differently.
+    /// </summary>
+    public static bool TryReadSingle(JsonObject? body, out BulkMemberMatchEntry? entry, out string? error)
+    {
+        entry = null;
+        error = null;
+
+        if (body is null || Str(body["resourceType"]) != "Parameters")
+        {
+            error = "The request body must be a FHIR Parameters resource.";
+            return false;
+        }
+
+        var parts = (body["parameter"] as JsonArray ?? []).OfType<JsonObject>().ToList();
+        var patient = Part(parts, "MemberPatient", "Patient");
+        var coverage = Part(parts, "CoverageToMatch", "Coverage");
+        if (patient is null || coverage is null)
+        {
+            error = "A member-match request must carry a MemberPatient (Patient) and a CoverageToMatch (Coverage).";
+            return false;
+        }
+
+        entry = Member(patient, coverage, Part(parts, "Consent", "Consent"));
+        return true;
+    }
+
+    private static BulkMemberMatchEntry Member(JsonObject patient, JsonObject coverage, JsonObject? consent)
     {
         var name = Names(patient).FirstOrDefault(n => Str(n["use"]) == "official") ?? Names(patient).FirstOrDefault();
         var subscriberId = Str(coverage["subscriberId"]);
@@ -106,7 +138,7 @@ public static class BulkMemberMatchRequestReader
         {
             MemberPatient = patient,
             CoverageToMatch = coverage,
-            Consent = consent,
+            Consent = WithMemberPatient(consent, patient),
             FamilyName = Str(name?["family"]),
             GivenName = Str((name?["given"] as JsonArray)?.FirstOrDefault()),
             BirthDate = Str(patient["birthDate"]),
@@ -119,6 +151,42 @@ public static class BulkMemberMatchRequestReader
             Email = Telecom(patient, "email"),
             AsOfDate = DatePart(Str(period?["end"]) ?? Str(period?["start"])),
         };
+    }
+
+    /// <summary>The id a <c>MemberPatient</c> is contained under when the Consent names it.</summary>
+    internal const string ContainedMemberPatientId = "hrex-member-patient";
+
+    /// <summary>
+    /// HRex requests name the member in the Consent by a local reference to the
+    /// <c>MemberPatient</c> parameter (<c>Patient/1</c> for a MemberPatient with
+    /// id 1), and the Inferno PDex kit requires exactly that. The consent check
+    /// reads the member only from a contained Patient or an identifier, so such
+    /// a Consent is judged on a copy with the MemberPatient contained and the
+    /// reference pointing at it. Nothing is added that the request did not say:
+    /// the Patient is the one the request supplied, and a Consent naming any
+    /// other reference is left as it came.
+    /// </summary>
+    internal static JsonObject? WithMemberPatient(JsonObject? consent, JsonObject patient)
+    {
+        if (consent?["patient"] is not JsonObject subject
+            || Str(subject["reference"]) is not { } reference
+            || Str(patient["id"]) is not { } id
+            || reference != $"Patient/{id}")
+        {
+            return consent;
+        }
+
+        var copy = (JsonObject)consent.DeepClone();
+        var contained = (JsonObject)patient.DeepClone();
+        contained["id"] = ContainedMemberPatientId;
+        if (copy["contained"] is not JsonArray list)
+        {
+            list = new JsonArray();
+            copy["contained"] = list;
+        }
+        list.Add(contained);
+        copy["patient"] = new JsonObject { ["reference"] = $"#{ContainedMemberPatientId}" };
+        return copy;
     }
 
     private static JsonObject? Part(List<JsonObject> parts, string name, string resourceType)

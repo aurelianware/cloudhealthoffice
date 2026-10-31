@@ -308,6 +308,164 @@ public class ChoNativePayerToPayerEndpointTests : IClassFixture<ChoNativePayerTo
         body.Should().Contain("pat-002").And.NotContain("pat-777");
     }
 
+    // ── Member match, HRex form (PDex $member-match) ─────────────────────────
+
+    private static System.Text.Json.Nodes.JsonObject HrexMatch(
+        string family, string birthDate, bool withConsent = true, bool withCoverage = true,
+        bool consentNamesMemberPatient = false)
+    {
+        var parameters = new System.Text.Json.Nodes.JsonArray
+        {
+            new System.Text.Json.Nodes.JsonObject
+            {
+                ["name"] = "MemberPatient",
+                ["resource"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["resourceType"] = "Patient",
+                    ["id"] = "1",
+                    ["name"] = new System.Text.Json.Nodes.JsonArray
+                    {
+                        new System.Text.Json.Nodes.JsonObject
+                        {
+                            ["use"] = "official",
+                            ["family"] = family,
+                            ["given"] = new System.Text.Json.Nodes.JsonArray { "Pat" },
+                        },
+                    },
+                    ["birthDate"] = birthDate,
+                },
+            },
+        };
+        if (withCoverage)
+        {
+            parameters.Add(new System.Text.Json.Nodes.JsonObject
+            {
+                ["name"] = "CoverageToMatch",
+                ["resource"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["resourceType"] = "Coverage",
+                    ["id"] = "9876B1",
+                    ["status"] = "active",
+                    ["beneficiary"] = new System.Text.Json.Nodes.JsonObject { ["reference"] = "Patient/1" },
+                    ["payor"] = new System.Text.Json.Nodes.JsonArray
+                    {
+                        new System.Text.Json.Nodes.JsonObject { ["display"] = "Old Health Plan" },
+                    },
+                },
+            });
+        }
+        if (withConsent)
+        {
+            parameters.Add(new System.Text.Json.Nodes.JsonObject
+            {
+                ["name"] = "Consent",
+                ["resource"] = consentNamesMemberPatient
+                    ? NamingMemberPatient(CloudHealthOffice.FhirService.Tests.PayerToPayer.P2PTestConsent.For(Payer, memberId: null))
+                    : CloudHealthOffice.FhirService.Tests.PayerToPayer.P2PTestConsent.For(
+                        Payer, memberId: null, family, birthDate),
+            });
+        }
+        return new System.Text.Json.Nodes.JsonObject { ["resourceType"] = "Parameters", ["parameter"] = parameters };
+    }
+
+    // As HRex sends it: the consent's patient is the MemberPatient parameter, by local reference.
+    private static System.Text.Json.Nodes.JsonObject NamingMemberPatient(System.Text.Json.Nodes.JsonObject consent)
+    {
+        consent.Remove("contained");
+        consent["patient"] = new System.Text.Json.Nodes.JsonObject { ["reference"] = "Patient/1" };
+        return consent;
+    }
+
+    private async Task<HttpResponseMessage> PostFhir(string path, System.Text.Json.Nodes.JsonObject body)
+    {
+        var token = Token("native-p2p");
+        using var client = _host.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, path)
+        {
+            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/fhir+json"),
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await client.SendAsync(request);
+    }
+
+    [Fact]
+    public async Task Hrex_member_match_answers_with_the_member_identifier_parameters()
+    {
+        var response = await PostFhir(MatchPath, HrexMatch("Jones", "1962-03-22"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/fhir+json");
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = doc.RootElement;
+        root.GetProperty("resourceType").GetString().Should().Be("Parameters");
+        var parameter = root.GetProperty("parameter").EnumerateArray().Should().ContainSingle().Subject;
+        parameter.GetProperty("name").GetString().Should().Be("MemberIdentifier");
+        var identifier = parameter.GetProperty("valueIdentifier");
+        identifier.GetProperty("value").GetString().Should().Be("pat-002");
+        identifier.GetProperty("system").GetString().Should().Be(ChoNativeFhirDataAdapter.MemberIdSystem);
+        var coding = identifier.GetProperty("type").GetProperty("coding")[0];
+        coding.GetProperty("system").GetString().Should().Be("http://terminology.hl7.org/CodeSystem/v2-0203");
+        coding.GetProperty("code").GetString().Should().Be("MB");
+    }
+
+    [Fact]
+    public async Task Hrex_member_match_accepts_a_consent_naming_the_member_patient_parameter()
+    {
+        var response = await PostFhir(MatchPath, HrexMatch("Jones", "1962-03-22", consentNamesMemberPatient: true));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("pat-002");
+    }
+
+    [Fact]
+    public async Task Hrex_member_match_with_a_consent_naming_someone_else_is_422()
+    {
+        var body = HrexMatch("Jones", "1962-03-22", consentNamesMemberPatient: true);
+        var consent = body["parameter"]!.AsArray().Single(p => (string?)p!["name"] == "Consent")!["resource"]!;
+        consent["patient"] = new System.Text.Json.Nodes.JsonObject { ["reference"] = "Patient/someone-else" };
+
+        var response = await PostFhir(MatchPath, body);
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
+    public async Task Hrex_member_match_without_a_consent_is_422_and_nothing_is_read()
+    {
+        var response = await PostFhir(MatchPath, HrexMatch("Jones", "1962-03-22", withConsent: false));
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        lock (_host.Upstream) _host.Upstream.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Hrex_member_match_with_no_matching_member_is_422()
+    {
+        var response = await PostFhir(MatchPath, HrexMatch("Nobody", "1990-01-01"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
+    public async Task Hrex_member_match_with_two_candidates_is_422()
+    {
+        // pat-002 and pat-777 share the birth date; a name neither carries
+        // leaves both standing, which HRex answers with 422.
+        var response = await PostFhir(MatchPath, HrexMatch("Smith", "1962-03-22"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
+    public async Task Hrex_member_match_without_a_coverage_to_match_is_400()
+    {
+        var response = await PostFhir(MatchPath, HrexMatch("Jones", "1962-03-22", withCoverage: false));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("CoverageToMatch");
+        lock (_host.Upstream) _host.Upstream.Calls.Should().BeEmpty();
+    }
+
     private sealed class MissingCoverageUrlHost : FhirTestWebAppFactory
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)

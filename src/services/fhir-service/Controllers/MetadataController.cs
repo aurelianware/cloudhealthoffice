@@ -86,8 +86,12 @@ public class MetadataController : FhirControllerBase
                             ("gender",       SearchParamType.Token)
                         ],
                         revIncludes: [ChoNativeFhirDataAdapter.ProvenanceRevInclude],
-                        // Bulk Data (G-34): a provider's panel as Patient/$export.
-                        operations: BulkExportEnabled ? [PatientExportOperation] : null),
+                        // HRex/PDex Payer-to-Payer member match (G-36), always
+                        // served; and Bulk Data (G-34): a provider's panel as
+                        // Patient/$export.
+                        operations: BulkExportEnabled
+                            ? [MemberMatchOperation, PatientExportOperation]
+                            : [MemberMatchOperation]),
                         BuildResource("Coverage",
                         [
                             ("_id",          SearchParamType.Token),
@@ -416,6 +420,13 @@ public class MetadataController : FhirControllerBase
 
         return Ok(cs);
     }
+
+    /// <summary>
+    /// HRex <c>$member-match</c>, the canonical the PDex 2.0 CapabilityStatement
+    /// and the Inferno PDex kit look for on Patient.
+    /// </summary>
+    internal static readonly (string Name, string Definition) MemberMatchOperation =
+        ("member-match", "http://hl7.org/fhir/us/davinci-hrex/OperationDefinition/member-match");
 
     private static readonly (string Name, string Definition) PatientExportOperation =
         ("export", "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/patient-export");
