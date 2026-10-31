@@ -144,6 +144,31 @@ public class FhirPractitionerControllerTests
     }
 
     [Fact]
+    public async Task SearchPractitioners_id_is_the_NPI()
+    {
+        await _repository.CreateAsync(IndividualProvider("1234567890", "Jane", "Doe"));
+        await _repository.CreateAsync(IndividualProvider("1679576722", "John", "Roe"));
+
+        var bundle = ParseFhirContent(await _controller.SearchPractitioners(
+            npi: null, identifier: null, id: "1679576722", given: null, family: null,
+            city: null, state: null, postalCode: null, specialty: null));
+
+        bundle["entry"]!.AsArray().Single()!["resource"]!["id"]!.GetValue<string>().Should().Be("1679576722");
+    }
+
+    [Fact]
+    public async Task SearchPractitioners_id_that_is_not_an_NPI_matches_nothing()
+    {
+        await _repository.CreateAsync(IndividualProvider("1234567890", "Jane", "Doe"));
+
+        var bundle = ParseFhirContent(await _controller.SearchPractitioners(
+            npi: null, identifier: null, id: "not-an-npi", given: null, family: null,
+            city: null, state: null, postalCode: null, specialty: null));
+
+        bundle["total"]!.GetValue<int>().Should().Be(0, "an _id filter is never ignored");
+    }
+
+    [Fact]
     public async Task SearchPractitioners_NPI_for_organization_returns_empty_bundle()
     {
         await _repository.CreateAsync(OrganizationProvider("1111111111"));

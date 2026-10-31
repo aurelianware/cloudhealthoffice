@@ -277,8 +277,29 @@
       ]
     }
   ],
+  "claimsProviders": {
+    "_comment": "The rendering practitioner the seeded claims name (renderingProviderNPI), so the EOB's careTeam reference Practitioner/1679576722 resolves and the CARIN BB Practitioner group has a C4BB-Practitioner to read. It joins no network, so the directory gains this practitioner and its Location but no PractitionerRole. The billing provider 1234567893 is not seeded: the EOB names it by identifier only.",
+    "providers": [
+      {
+        "npi": "1679576722",
+        "providerType": "Individual",
+        "status": "Active",
+        "firstName": "Rendering",
+        "lastName": "Testcase",
+        "credentials": "MD",
+        "primarySpecialty": "Family Medicine",
+        "taxonomyCode": "207Q00000X",
+        "address": "40 Synthetic Way",
+        "city": "Springfield",
+        "state": "FL",
+        "zipCode": "32401",
+        "phone": "555-0180",
+        "acceptingNewPatients": true
+      }
+    ]
+  },
   "directory": {
-    "_comment": "What the public Plan-Net Provider Directory publishes (G-36, INFERNO-PLANNET-SERVER-001): one network, one practitioner and one hospital in it, and one plan on that network with one plan document (published as a Plan-Net Endpoint). The NPIs 1888888884 and 1999999992 are synthetic, with valid check digits, and distinct from the claims NPIs so the directory seed cannot change what the CARIN BB suite reads. The directory id and payer are configured on cho-fhir-service in interop/docker-compose.interop.yml.",
+    "_comment": "What the public Plan-Net Provider Directory publishes (G-36, INFERNO-PLANNET-SERVER-001): one network, one practitioner and one hospital in it, and one plan on that network with one plan document (published as a Plan-Net Endpoint). The NPIs 1888888884 and 1999999992 are synthetic, with valid check digits, and distinct from the claims NPIs so the directory seed cannot change what the CARIN BB suite reads. The claims' rendering practitioner (claimsProviders) is listed too, with no role, because the directory publishes every active provider. The directory id and payer are configured on cho-fhir-service in interop/docker-compose.interop.yml.",
     "directoryId": "interop",
     "network": {
       "id": "INTEROP-NET-1",

@@ -42,6 +42,23 @@ internal static class ChoProviderFhirUrls
     public const string PlanNetPractitionerProfile =
         "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/plannet-Practitioner";
 
+    /// <summary>
+    /// CARIN BB's Practitioner, which an EOB's care team resolves to. Declared
+    /// at 2.0.0 as well (<see cref="CarinBbProfileVersion"/>).
+    /// </summary>
+    public const string CarinBbPractitionerProfile =
+        "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Practitioner";
+
+    /// <summary>
+    /// CARIN BB 2.0.0 makes each profile's <c>meta-profile-version</c>
+    /// invariant an error: meta.profile must hold the canonical followed by
+    /// <c>|2.0.</c>, as claims-service's EOBs and fhir-service's Coverage do.
+    /// </summary>
+    public const string CarinBbProfileVersion = "2.0.0";
+
+    /// <summary>HL7 v2 identifier types (table 0203): NPI, TAX.</summary>
+    public const string V2IdentifierTypeSystem = "http://terminology.hl7.org/CodeSystem/v2-0203";
+
     public const string UsCorePractitionerRoleProfile =
         "http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitionerrole";
 

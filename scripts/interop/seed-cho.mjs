@@ -153,7 +153,23 @@ async function seed(fixture, token) {
       asPayload(encounter));
   }
 
+  await seedClaimsProviders(fixture.claimsProviders, token);
   await seedDirectory(fixture.directory, token);
+}
+
+/**
+ * The practitioners the claims name by literal reference (the EOB's
+ * careTeam), so a suite that follows the reference finds the Practitioner.
+ */
+async function seedClaimsProviders(claimsProviders, token) {
+  console.log(`==> provider-service ${SERVICES.provider} (claims providers)`);
+  for (const provider of claimsProviders.providers) {
+    await createUnlessPresent(
+      provider.npi,
+      `${SERVICES.provider}/api/v1/providers/npi/${provider.npi}`,
+      `${SERVICES.provider}/api/v1/providers`,
+      token, asPayload(provider));
+  }
 }
 
 async function seedHousehold({ member, coverage, claims }, token) {
@@ -289,6 +305,14 @@ async function verify(fixture, token) {
         `(total ${encounters.total ?? 0}).`);
     }
     console.log(`    Encounter ${encounter.encounterControlNumber}`);
+  }
+
+  for (const provider of fixture.claimsProviders.providers) {
+    const practitionerUrl = `${SERVICES.fhir}/fhir/r4/Practitioner/${provider.npi}`;
+    console.log(`==> verifying the claims' practitioner ${practitionerUrl}`);
+    const practitioner = await readFhir(practitionerUrl, token, `the claims' practitioner ${provider.npi}`);
+    expectProfile(
+      practitioner, 'http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Practitioner', 'Practitioner');
   }
 
   await verifyDirectory(fixture.directory);

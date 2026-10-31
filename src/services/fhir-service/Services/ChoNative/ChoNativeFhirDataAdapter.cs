@@ -192,7 +192,10 @@ public sealed class ChoNativeFhirDataAdapter
     {
         RequireRequestTenant(tenantId);
         var body = await GetAsync(CoverageServiceClient, "Coverage", $"/api/v1/coverage/{Uri.EscapeDataString(id)}/fhir", "/api/v1/coverage/{id}/fhir", ct);
-        return body is null ? null : ParseResource<Coverage>("Coverage", body);
+        if (body is null) return null;
+        var coverage = ParseResource<Coverage>("Coverage", body);
+        await WithSubscribersAsync([coverage], ct);
+        return coverage;
     }
 
     public async Task<(IReadOnlyList<Coverage> Items, int Total)> SearchCoverageAsync(
@@ -244,8 +247,103 @@ public sealed class ChoNativeFhirDataAdapter
             throw new FhirSearchNotSupportedException(
                 $"_include={CoveragePayorInclude} is not supported when the payor is a resource reference.");
         }
+        await WithSubscribersAsync(result.Items, ct);
         return result;
     }
+
+    /// <summary>CARIN BB's Coverage profile, claimed once the subscriber is filled in.</summary>
+    public const string C4bbCoverageProfile = "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-Coverage";
+
+    /// <summary>
+    /// The version the profile is also declared at: CARIN BB 2.0.0 makes its
+    /// <c>coverage-meta-profile-version</c> invariant an error, as for the EOBs
+    /// (claims-service's <c>CarinEobBasis.FinancialProfileVersion</c>).
+    /// </summary>
+    public const string C4bbProfileVersion = "2.0.0";
+
+    /// <summary>The subscriber-relationship code system Coverage.relationship is bound to (required).</summary>
+    public const string SubscriberRelationshipSystem = "http://terminology.hl7.org/CodeSystem/subscriber-relationship";
+
+    /// <summary>
+    /// Fills in each coverage's subscriber from member-service, which holds it:
+    /// coverage-service keeps the coverage, not who the member is covered
+    /// through. One member-service read per distinct beneficiary.
+    /// </summary>
+    private async Task WithSubscribersAsync(IReadOnlyList<Coverage> coverages, CancellationToken ct)
+    {
+        var members = new Dictionary<string, (string? Subscriber, string? Relationship)?>(StringComparer.Ordinal);
+        foreach (var coverage in coverages)
+        {
+            if (BeneficiaryMemberId(coverage) is not { } memberId) continue;
+            if (!members.TryGetValue(memberId, out var member))
+                members[memberId] = member = await SubscriberOfAsync(memberId, ct);
+            if (member is { } m)
+                ApplySubscriber(coverage, memberId, m.Subscriber, m.Relationship);
+        }
+    }
+
+    private async Task<(string? Subscriber, string? Relationship)?> SubscriberOfAsync(string memberId, CancellationToken ct)
+    {
+        var body = await GetAsync(MemberServiceClient, "Patient",
+            $"{PatientSearchRoute}?memberId={Uri.EscapeDataString(memberId)}&offset=0&limit=1", PatientSearchRoute, ct);
+        if (body is null) return null;
+        try
+        {
+            var item = (JsonNode.Parse(body)?["items"] as JsonArray)?
+                .FirstOrDefault(i => i?["memberId"]?.GetValue<string>() == memberId);
+            return item is null
+                ? null
+                : (item["subscriberMemberId"]?.GetValue<string>(), item["relationshipCode"]?.GetValue<string>());
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            _logger.LogWarning(ex, "Patient upstream search response was unreadable");
+            throw new FhirUpstreamException("Patient", "Patient upstream returned an unreadable response.", ex);
+        }
+    }
+
+    private static string? BeneficiaryMemberId(Coverage coverage)
+        => coverage.Beneficiary?.Reference is { } reference && reference.StartsWith("Patient/", StringComparison.Ordinal)
+            ? reference["Patient/".Length..]
+            : null;
+
+    /// <summary>
+    /// Sets Coverage.subscriberId, subscriber and relationship, and then claims
+    /// C4BB-Coverage, whose minimums they are. A member with no recorded
+    /// relationship, or a dependent with no recorded subscriber, is left as
+    /// coverage-service projected it, without the claim.
+    /// </summary>
+    internal static void ApplySubscriber(Coverage coverage, string memberId, string? subscriberMemberId, string? relationshipCode)
+    {
+        if (SubscriberRelationship(relationshipCode) is not { } relationship) return;
+        var subscriber = relationship.Code == "self" ? memberId : subscriberMemberId;
+        if (string.IsNullOrWhiteSpace(subscriber)) return;
+
+        coverage.SubscriberId = subscriber;
+        coverage.Subscriber = new ResourceReference($"Patient/{subscriber}");
+        coverage.Relationship = new CodeableConcept(SubscriberRelationshipSystem, relationship.Code, relationship.Display);
+
+        coverage.Meta ??= new Meta();
+        coverage.Meta.Profile = coverage.Meta.Profile
+            .Concat([C4bbCoverageProfile, $"{C4bbCoverageProfile}|{C4bbProfileVersion}"])
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>
+    /// An 834 INS02 relationship code as a subscriber-relationship code. INS02
+    /// 20 (employee) is the subscriber; parent, ward and the other INS02 codes
+    /// have no closer FHIR code than "other". Null when nothing was recorded.
+    /// </summary>
+    internal static (string Code, string Display)? SubscriberRelationship(string? ins02) => ins02?.Trim() switch
+    {
+        null or "" => null,
+        "18" or "20" => ("self", "Self"),
+        "01" => ("spouse", "Spouse"),
+        "53" or "29" => ("common", "Common Law Spouse"),
+        "19" or "17" or "10" => ("child", "Child"),
+        _ => ("other", "Other"),
+    };
 
 
     // ── Encounter ────────────────────────────────────────────────────────────

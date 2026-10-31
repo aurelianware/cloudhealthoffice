@@ -88,7 +88,7 @@ public class FhirPractitionerController : ControllerBase
 
     /// <summary>
     /// FHIR Practitioner search. Honors FHIR R4 search parameter names
-    /// (<c>given</c>, <c>family</c>, <c>city</c>, <c>state</c>,
+    /// (<c>_id</c>, <c>given</c>, <c>family</c>, <c>city</c>, <c>state</c>,
     /// <c>postal-code</c>, <c>specialty</c>, <c>identifier</c>) plus the
     /// shorthand <c>npi</c> alias the existing fhir-service controller
     /// uses. Returns a FHIR <c>Bundle</c> of type <c>searchset</c>.
@@ -104,6 +104,7 @@ public class FhirPractitionerController : ControllerBase
         [FromQuery] string? state,
         [FromQuery(Name = "postal-code")] string? postalCode,
         [FromQuery] string? specialty,
+        [FromQuery(Name = "_id")] string? id = null,
         [FromQuery] int _count = DefaultPageSize,
         [FromQuery] int _page = 1,
         CancellationToken ct = default)
@@ -117,6 +118,15 @@ public class FhirPractitionerController : ControllerBase
         // caller error for this directory — we only index by NPI today —
         // so reject with 400 rather than silently falling back to a
         // broad search (FHIR token semantics say: don't ignore filters).
+        // A Practitioner's id is its NPI, so _id is a lookup by NPI too. An id
+        // that is not an NPI names no Practitioner: an empty bundle, not every
+        // practitioner (FHIR search must not ignore a filter it was given).
+        if (!string.IsNullOrEmpty(id) && string.IsNullOrEmpty(npi))
+        {
+            if (!NpiPattern.IsMatch(id)) return BundleResult(new JsonArray());
+            npi = id;
+        }
+
         var resolvedNpi = npi;
         if (string.IsNullOrEmpty(resolvedNpi) && !string.IsNullOrEmpty(identifier))
         {
