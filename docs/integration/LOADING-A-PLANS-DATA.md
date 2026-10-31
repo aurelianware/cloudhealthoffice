@@ -56,6 +56,12 @@ Coverage, then publishes each plan
 (`POST /api/v1/plans/{planId}/versions/{versionId}/publish`). Nothing a
 member sees is drawn from a draft.
 
+A plan also needs the rates its claims are paid at. Load the state Medicaid
+fee schedule (or the plan's own rate sheet) as the plan's default fee schedule
+with the [fee schedule CSV importer](FEE-SCHEDULE-IMPORTER.md)
+(`POST /api/v1/fee-schedules/import/csv?planId=...`). Without one, lines from
+uncontracted providers pend.
+
 ## 2. Plan-code mappings
 
 The core names plans by its own codes: the 834 HD04 value, or the CPCDS

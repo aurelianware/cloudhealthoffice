@@ -111,6 +111,8 @@ builder.Services.AddChoCaching(builder.Configuration, builder.Environment);
 builder.Services.AddScoped<IBenefitPlanService, BenefitPlanServiceImpl>();
 // QHP PUF benefit plan importer (docs/integration/QHP-PUF-BENEFIT-PLAN-IMPORTER.md).
 builder.Services.AddScoped<BenefitPlanService.Import.QhpPuf.IQhpPufImportService, BenefitPlanService.Import.QhpPuf.QhpPufImportService>();
+// Fee schedule CSV importer (docs/integration/FEE-SCHEDULE-IMPORTER.md).
+builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IFeeScheduleImportService, BenefitPlanService.Import.FeeSchedules.FeeScheduleImportService>();
 builder.Services.AddScoped<IBenefitViewService, BenefitViewService>();
 builder.Services.AddHttpContextAccessor();
 

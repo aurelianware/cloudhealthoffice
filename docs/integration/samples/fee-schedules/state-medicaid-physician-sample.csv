@@ -1,0 +1,12 @@
+Sample State Medicaid Fee Schedule - Physician (SYNTHETIC, not real rates)
+Posted 10/01/2026,,,,,,
+,,,,,,
+Provider Type,Procedure Code,Modifier,Description,Non-Facility Fee,Facility Fee,Effective Date
+Physician,99212,,Office/outpatient visit est,$30.00,$21.40,09/01/2025
+Physician,99212,,Office/outpatient visit est,$31.50,$22.10,09/01/2026
+Physician,99213,,Office/outpatient visit est,$62.10,$44.80,09/01/2026
+Physician,99214,,Office/outpatient visit est,$91.25,$66.30,09/01/2026
+Physician,71046,26,Chest x-ray 2 views,$9.85,$9.85,09/01/2026
+Physician,71046,TC,Chest x-ray 2 views,$21.40,,09/01/2026
+Physician,J3490,,Unclassified drugs,BR,,09/01/2026
+Nurse Practitioner,99213,,Office/outpatient visit est,$52.79,$38.08,09/01/2026
