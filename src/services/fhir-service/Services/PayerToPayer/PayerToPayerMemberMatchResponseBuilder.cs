@@ -16,9 +16,9 @@ namespace FhirService.Services.PayerToPayer;
 /// payer, subscriber id, status, and effective period are explicit (rather than
 /// the member-derived placeholder the Patient Access projection returns).
 ///
-/// (A formal Da Vinci HRex <c>Parameters</c>/<c>MemberIdentifier</c> wrapper is a
-/// thin future addition; the resolved member/coverage identity is unchanged by
-/// that envelope.)
+/// That Bundle answers CHO's own JSON request form. A request in the HRex shape
+/// (a FHIR <c>Parameters</c>, as every PDex payer sends it) is answered in the
+/// HRex shape by <see cref="BuildParameters"/>.
 /// </summary>
 public static class PayerToPayerMemberMatchResponseBuilder
 {
@@ -50,6 +50,45 @@ public static class PayerToPayerMemberMatchResponseBuilder
             Entry = entries,
         };
     }
+
+    /// <summary>The HRex member-match type of the member identifier (v2-0203 <c>MB</c>, member number).</summary>
+    public const string MemberIdentifierTypeSystem = "http://terminology.hl7.org/CodeSystem/v2-0203";
+    public const string MemberIdentifierTypeCode = "MB";
+
+    /// <summary>
+    /// The HRex <c>$member-match</c> answer (<c>hrex-parameters-member-match-out</c>):
+    /// a Parameters with one <c>MemberIdentifier</c>, the member's id with this
+    /// plan, under the system CHO serves it as on Patient. The requesting payer
+    /// finds the Patient with <c>Patient?identifier=</c> that value, which is
+    /// how PDex uses it.
+    /// </summary>
+    public static System.Text.Json.Nodes.JsonObject BuildParameters(ChoMember member) => new()
+    {
+        ["resourceType"] = "Parameters",
+        ["parameter"] = new System.Text.Json.Nodes.JsonArray
+        {
+            new System.Text.Json.Nodes.JsonObject
+            {
+                ["name"] = "MemberIdentifier",
+                ["valueIdentifier"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["type"] = new System.Text.Json.Nodes.JsonObject
+                    {
+                        ["coding"] = new System.Text.Json.Nodes.JsonArray
+                        {
+                            new System.Text.Json.Nodes.JsonObject
+                            {
+                                ["system"] = MemberIdentifierTypeSystem,
+                                ["code"] = MemberIdentifierTypeCode,
+                            },
+                        },
+                    },
+                    ["system"] = FhirService.Services.ChoNative.ChoNativeFhirDataAdapter.MemberIdSystem,
+                    ["value"] = member.MemberId,
+                },
+            },
+        },
+    };
 
     private static FhirCoverage MapCoverage(ChoMember member, ChoCoverage coverage) => new()
     {

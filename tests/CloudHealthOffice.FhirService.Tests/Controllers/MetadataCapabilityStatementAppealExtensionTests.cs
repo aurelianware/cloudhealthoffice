@@ -95,9 +95,12 @@ public class MetadataCapabilityStatementAppealExtensionTests : IClassFixture<Fhi
         });
 
         // System-level $export is refused by the server, so it is not claimed;
-        // with bulk export off neither is Patient or Group export.
+        // with bulk export off neither is Patient or Group export. HRex
+        // $member-match is always served, so Patient declares it alone.
         rest.Operation.Should().NotContain(o => o.Name == "export");
-        rest.Resource.Single(r => r.Type.ToString() == "Patient").Operation.Should().BeEmpty();
+        rest.Resource.Single(r => r.Type.ToString() == "Patient").Operation
+            .Select(o => (o.Name, o.Definition)).Should().Equal(
+                ("member-match", "http://hl7.org/fhir/us/davinci-hrex/OperationDefinition/member-match"));
         rest.Resource.Should().NotContain(r => r.Type.ToString() == "Group");
 
         cs.Implementation.Description.Should().Contain("CMS-0057-F");
