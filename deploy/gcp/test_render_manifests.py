@@ -305,6 +305,8 @@ def test_claims_service_reads_the_cpcds_drop_bucket_through_workload_identity():
     assert env(claims)["CpcdsDrop__Enabled"] == "true"
     assert env(claims)["CpcdsDrop__Store"] == "Gcs"
     assert env(claims)["CpcdsDrop__Gcs__Bucket"] == "demo-project-cho-cpcds-drops"
+    assert env(claims)["CpcdsDrop__Archive__Enabled"] == "true"
+    assert env(claims)["Services__DocumentService"] == "http://document-service"
     accounts = [d for d in docs if d["kind"] == "ServiceAccount" and d["metadata"]["name"] == "claims-service"]
     assert len(accounts) == 1
     assert accounts[0]["metadata"]["annotations"]["iam.gke.io/gcp-service-account"] == gsa

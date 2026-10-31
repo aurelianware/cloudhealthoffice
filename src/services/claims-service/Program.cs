@@ -569,6 +569,18 @@ builder.Services.AddHttpClient(ClaimsService.Import.Cpcds.Drop.HttpCpcdsUpstream
     // A first load looks up every new NPI in NPPES.
     client.Timeout = TimeSpan.FromMinutes(30);
 });
+builder.Services.AddHttpClient(ClaimsService.Import.Cpcds.Drop.HttpCpcdsDropArchive.DocumentClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:DocumentService"]
+        ?? "http://document-service");
+    // A large extract is hashed and virus-scanned before document-service answers.
+    client.Timeout = TimeSpan.FromMinutes(15);
+});
+builder.Services.AddHttpClient(ClaimsService.Import.Cpcds.Drop.HttpCpcdsDropArchive.StorageClientName,
+    client => client.Timeout = TimeSpan.FromMinutes(30));
+builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.ICpcdsDropArchive,
+    ClaimsService.Import.Cpcds.Drop.HttpCpcdsDropArchive>();
 builder.Services.AddHttpClient(ClaimsService.Import.Cpcds.Drop.HttpCpcdsUpstreamImports.AuthorizationClientName, client =>
 {
     client.BaseAddress = new Uri(
