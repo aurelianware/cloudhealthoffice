@@ -6,6 +6,20 @@ This directory contains comprehensive release documentation for CloudHealthOffic
 
 ## Current Release
 
+### v6.1.1 — Spartacus, patch (October 2026)
+
+Fixes `Coverage?_include=Coverage:payor`, which returned a 400 in the v6.1.0 tag. No configuration
+changes. All four nightly Inferno kits pass, apart from known kit issues.
+
+| Document | Description |
+|----------|-------------|
+| [v6.1.1 Release Notes](./RELEASE_NOTES_v6.1.1.md) | The fix, and what the v6.1.0 tag also included |
+| [Changelog](../../CHANGELOG.md) | Itemized changes |
+
+---
+
+## Previous Releases
+
 ### v6.1.0 — Spartacus (October 2026)
 
 SMART Backend Services authentication in both directions, the public Provider Directory as
@@ -16,10 +30,6 @@ Plan-Net 1.2.0, the rest of Bulk Data `$export` (still off by default), and CAQH
 |----------|-------------|
 | [v6.1.0 Release Notes](./RELEASE_NOTES_v6.1.0.md) | Highlights, upgrading from 6.0, what is still open for CMS-0057-F |
 | [Changelog](../../CHANGELOG.md) | Itemized changes |
-
----
-
-## Previous Releases
 
 ### v6.0.0 — Paths of Glory (October 2026)
 
