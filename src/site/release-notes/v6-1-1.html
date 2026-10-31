@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>v6.1.1: Spartacus (patch) Release Notes | Cloud Health Office</title>
+  <meta name="description" content="Cloud Health Office v6.1.1 (Spartacus (patch)): .">
+  <link rel="canonical" href="https://cloudhealthoffice.com/release-notes/v6-1-1">
+  <link rel="alternate" type="application/rss+xml" title="Cloud Health Office release notes" href="/release-notes/feed.xml">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:url" content="https://cloudhealthoffice.com/release-notes/v6-1-1">
+  <meta property="og:title" content="v6.1.1: Spartacus (patch) Release Notes | Cloud Health Office">
+  <meta property="og:description" content="Cloud Health Office v6.1.1 (Spartacus (patch)): .">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
+  <meta property="article:published_time" content="2026-10-31">
+  <meta name="twitter:card" content="summary">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "Cloud Health Office v6.1.1: Spartacus (patch) release notes",
+      "description": "Cloud Health Office v6.1.1 (Spartacus (patch)): .",
+      "url": "https://cloudhealthoffice.com/release-notes/v6-1-1",
+      "mainEntityOfPage": "https://cloudhealthoffice.com/release-notes/v6-1-1",
+      "datePublished": "2026-10-31",
+      "author": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc."
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg"
+        }
+      },
+      "about": {
+        "@type": "SoftwareApplication",
+        "name": "Cloud Health Office",
+        "softwareVersion": "6.1.1",
+        "applicationCategory": "BusinessApplication"
+      }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Release notes",
+          "item": "https://cloudhealthoffice.com/release-notes"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "v6.1.1",
+          "item": "https://cloudhealthoffice.com/release-notes/v6-1-1"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <style>
+    .rn { max-width: 860px; margin: 0 auto; padding: 48px 20px 96px; }
+    .rn-crumbs { font-size: .9rem; color: var(--cho-muted); margin-bottom: 28px; }
+    .rn-crumbs a { color: var(--cho-accent); }
+    .rn-eyebrow { color: var(--cho-accent); font-size: .8rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .rn h1 { font-size: clamp(2rem, 4.5vw, 3rem); line-height: 1.1; margin: 10px 0 18px; }
+    .rn h2 { margin-top: 56px; padding-top: 8px; border-top: 1px solid var(--cho-line); font-size: 1.7rem; }
+    .rn h3 { margin-top: 36px; font-size: 1.25rem; }
+    .rn h4 { margin-top: 28px; font-size: 1.05rem; }
+    .rn p, .rn li { font-size: 1.04rem; line-height: 1.75; color: var(--cho-body); }
+    .rn li { margin: 6px 0; }
+    .rn a { color: var(--cho-accent); }
+    .rn a:hover { color: var(--cho-accent-hover); }
+    .rn code { font-family: var(--cho-mono); font-size: .88em; background: var(--cho-surface-2); padding: .1rem .35rem; border-radius: 4px; overflow-wrap: anywhere; }
+    .rn pre { background: var(--cho-navy); color: var(--cho-navy-ink); padding: 18px 20px; border-radius: 8px; overflow-x: auto; }
+    .rn pre code { background: none; padding: 0; color: inherit; }
+    .rn hr { border: 0; border-top: 1px solid var(--cho-line); margin: 40px 0; }
+    .rn blockquote { margin: 24px 0; padding: 4px 20px; border-left: 4px solid var(--cho-accent); background: var(--cho-surface); }
+    .rn-meta { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 0 0 28px; padding: 16px 20px; background: var(--cho-surface); border: 1px solid var(--cho-line); border-radius: 8px; font-size: .95rem; }
+    .rn-meta dt { font-weight: 600; color: var(--cho-ink); }
+    .rn-meta dd { margin: 0; }
+    .rn-meta div { display: flex; gap: 6px; }
+    .rn-toc { margin: 0 0 32px; padding: 16px 20px; border: 1px solid var(--cho-line); border-radius: 8px; }
+    .rn-toc p { margin: 0 0 6px; font-weight: 600; color: var(--cho-ink); }
+    .rn-toc ul { margin: 0; padding-left: 20px; }
+    .rn-toc li { font-size: .97rem; margin: 2px 0; }
+    .rn-table { margin: 24px 0; overflow-x: auto; border: 1px solid var(--cho-line); border-radius: 8px; }
+    .rn-table table { margin: 0; width: 100%; border-collapse: collapse; font-size: .95rem; }
+    .rn-table th, .rn-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--cho-line); vertical-align: top; }
+    .rn-table th { background: var(--cho-surface); color: var(--cho-ink); }
+    .rn-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0; }
+    .rn-actions a { border: 1px solid var(--cho-line-strong); border-radius: 6px; padding: 9px 14px; text-decoration: none; font-weight: 500; }
+    .rn-pager { display: flex; justify-content: space-between; gap: 16px; margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--cho-line); }
+    .rn-card { margin: 28px 0; padding: 24px; border: 1px solid var(--cho-line); border-radius: 10px; }
+    .rn-card h2 { margin: 6px 0 4px; padding: 0; border: 0; font-size: 1.5rem; }
+    .rn-card h2 a { color: var(--cho-ink); text-decoration: none; }
+    .rn-card time { color: var(--cho-muted); font-size: .95rem; }
+    .rn-card ul { margin: 14px 0 0; }
+    .rn-latest { border-color: var(--cho-accent); box-shadow: 0 0 0 1px var(--cho-accent); }
+  </style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<script defer src="/js/mobile-nav.js"></script>
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body>
+<nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/blueprints/google-cloud">Reference architecture</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="/api-explorer">API explorer</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+<main id="main-content" class="rn">
+<div class="rn-crumbs"><a href="/">Home</a> / <a href="/release-notes">Release notes</a> / v6.1.1</div>
+<div class="rn-eyebrow">Release notes</div>
+<h1>v6.1.1: Spartacus (patch)</h1>
+<dl class="rn-meta"><div><dt>Released</dt><dd>October 31, 2026</dd></div><div><dt>Previous release</dt><dd><a href="/release-notes/v6-1-0">v6.1.0</a></dd></div></dl>
+<aside class="rn-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#fixed">Fixed</a></li><li><a href="#included-from-the-v610-tag">Included from the v6.1.0 tag</a></li><li><a href="#website-and-documentation">Website and documentation</a></li><li><a href="#where-this-release-has-been-validated">Where this release has been validated</a></li></ul></aside>
+<p>A patch release with no configuration changes. Upgrade from 6.1.0 by deploying this version; nothing else is needed.</p>
+<p>The v6.1.0 tag was placed on <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1654" rel="noopener">#1654</a>, one commit after the commit the Inferno gate tested (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1653" rel="noopener">#1653</a>). <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1654" rel="noopener">#1654</a> gave CARIN BB's skipped tests data, but it also broke one search: once the Coverage payor referenced the plan's Organization, <code>Coverage?_include=Coverage:payor</code> was refused with a 400 and the CARIN BB kit failed one test. This release adds <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1655" rel="noopener">#1655</a>, which fixes that, and the website and documentation changes merged since.</p>
+<h2 id="fixed">Fixed</h2>
+<ul><li><strong><code>Coverage?_include=Coverage:payor</code> answers again (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1655" rel="noopener">#1655</a>).</strong> A payor that references the plan's own Organization (<code>Fhir:PlanOrganization</code>) is included in the searchset with <code>search.mode</code> include. Any other referenced payor is still refused, as before.</li></ul>
+<h2 id="included-from-the-v610-tag">Included from the v6.1.0 tag</h2>
+<p>These shipped in the v6.1.0 tag but are not described in the v6.1.0 notes, because they merged after the commit those notes cover.</p>
+<ul><li><strong>CARIN BB Organization and must-support data (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1654" rel="noopener">#1654</a>).</strong> The plan's own Organization is served as a C4BB-Organization at <code>Organization/{Fhir:PlanOrganization:Id}</code>, and the EOB insurer and Coverage payor reference it. The EOB's provider is typed from the 837 billing provider's entity type (NM102). Coverage carries the member id as its MB identifier and, when recorded, group and plan names (new optional <code>groupName</code> and <code>planName</code> on coverage create). Patient carries CARIN BB's unique member id and <code>deceasedBoolean</code> false for a living member, and member create accepts <code>race</code> and <code>ethnicity</code>.</li></ul>
+<h2 id="website-and-documentation">Website and documentation</h2>
+<ul><li>The Inferno results page, badges and article show the excused known kit issues and match the all-green run (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1657" rel="noopener">#1657</a>).</li><li>The website architecture page is refreshed for v6.0 (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1656" rel="noopener">#1656</a>).</li><li>New answers on pended versus pending prior authorizations (<a href="https://github.com/aurelianware/cloudhealthoffice/pull/1652" rel="noopener">#1652</a>).</li></ul>
+<h2 id="where-this-release-has-been-validated">Where this release has been validated</h2>
+<ul><li><strong>Inferno kits against the seeded <code>interop-cho</code> profile:</strong> US Core 3.1.1, CARIN BB 2.0.0, Da Vinci Plan-Net and Bulk Data 2.0.0 all <strong>pass</strong> on <code>main</code> after <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1655" rel="noopener">#1655</a> (DaVinci Interop run <a href="https://github.com/aurelianware/cloudhealthoffice/actions/runs/41207410008" rel="noopener">41207410008</a>, commit 5d5e87d, 2026-10-31), apart from the same known kit issues listed in the <a href="/release-notes/v6-1-0#where-this-release-has-been-validated">v6.1.0 notes</a>. The commits after it change only the website and documentation.</li><li><strong>Google Cloud (GKE):</strong> the demo is deployed on every merge to <code>main</code>.</li><li><strong>Azure:</strong> automatic deploys are still paused behind the <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1217" rel="noopener">#1217</a> deployment checklist.</li></ul>
+<p><strong>Full changelog:</strong> <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/CHANGELOG.md" rel="noopener">CHANGELOG.md</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/compare/v6.1.0...v6.1.1" rel="noopener">v6.1.0...v6.1.1</a></p>
+<div class="rn-actions">
+<a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/releases/RELEASE_NOTES_v6.1.1.md" rel="noopener">Source of these notes</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/CHANGELOG.md" rel="noopener">Full changelog</a>
+<a href="/release-notes/feed.xml">Subscribe (RSS)</a>
+</div>
+<div class="rn-pager">
+<span><a href="/release-notes/v6-1-0">&larr; v6.1.0 Spartacus</a></span>
+<span><a href="/release-notes">All releases</a></span>
+</div>
+</main>
+<footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+</body>
+</html>
