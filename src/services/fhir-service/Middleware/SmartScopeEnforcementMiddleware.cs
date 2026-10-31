@@ -148,9 +148,12 @@ public class SmartScopeEnforcementMiddleware
                            ?? context.User.FindFirst("patient")?.Value;
 
         // ── 1. Scope check ────────────────────────────────────────────────────
-        if (!HasRequiredScope(scopes, resourceType, interaction.Access, interaction.Contexts,
-                interaction.ExplicitScopeOnly)
-            && !FollowsPayerToPayerExport(context.Request, scopes))
+        var hasScope = HasRequiredScope(scopes, resourceType, interaction.Access, interaction.Contexts,
+            interaction.ExplicitScopeOnly);
+        var payerToPayerLookup = !hasScope && IsPayerToPayerIdentifierLookup(context.Request, interaction, scopes);
+        if (!hasScope
+            && !FollowsPayerToPayerExport(context.Request, scopes)
+            && !payerToPayerLookup)
         {
             _logger.LogWarning(
                 "SMART scope denied — resource: {Resource}, access: {Access}, scopes: {Scopes}",
@@ -235,6 +238,9 @@ public class SmartScopeEnforcementMiddleware
 
             context.Items["SmartPatientId"] = normalizedPatient;
         }
+
+        if (payerToPayerLookup)
+            context.Items[PayerToPayerIdentifierLookupItemKey] = true;
 
         context.Items["SmartScopes"] = scopes;
         await _next(context);
@@ -412,6 +418,42 @@ public class SmartScopeEnforcementMiddleware
                && (string.Equals(segments[2], "$export-status", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(segments[2], "$export-file", StringComparison.OrdinalIgnoreCase))
                && scopes.Contains($"system/{PayerToPayerScopeResource}.{ReadAccess}");
+    }
+
+    /// <summary>
+    /// Marks a request admitted only as a Payer-to-Payer identifier lookup
+    /// (<see cref="IsPayerToPayerIdentifierLookup"/>). PatientController answers
+    /// it from the consents member match recorded, and the Provider Access
+    /// filter leaves it alone.
+    /// </summary>
+    public const string PayerToPayerIdentifierLookupItemKey = "cho:p2p-identifier-lookup";
+
+    /// <summary>
+    /// PDex (requirement 35): after <c>$member-match</c> returns a
+    /// <c>MemberIdentifier</c>, the requesting payer finds the member's logical
+    /// Patient id with <c>GET Patient?identifier=</c>. That one search, and no
+    /// other, is admitted under <c>system/PayerToPayer.read</c>: a type-level
+    /// GET of Patient whose only parameter is a single <c>identifier</c> (and
+    /// optionally <c>_format</c>). PatientController then returns the Patient
+    /// only for a member whose consent naming the caller's payer is in force,
+    /// so the lookup tells the payer nothing member match did not. Reads by id,
+    /// every other parameter and every other resource stay refused.
+    /// </summary>
+    private static bool IsPayerToPayerIdentifierLookup(
+        HttpRequest request, FhirInteraction interaction, HashSet<string> scopes)
+    {
+        if (!HttpMethods.IsGet(request.Method)
+            || !string.Equals(interaction.Resource, "Patient", StringComparison.Ordinal)
+            || interaction.ResourceId is not null
+            || !scopes.Contains($"system/{PayerToPayerScopeResource}.{ReadAccess}"))
+        {
+            return false;
+        }
+
+        var identifiers = request.Query["identifier"];
+        return identifiers.Count == 1
+               && !string.IsNullOrWhiteSpace(identifiers[0])
+               && request.Query.Keys.All(key => key is "identifier" or "_format");
     }
 
     /// <summary>The resource name in the payer-to-payer scope, <c>system/PayerToPayer.read</c>.</summary>

@@ -3,6 +3,8 @@ using Hl7.Fhir.Model;
 using FhirService.Models;
 using FhirService.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace FhirService.Controllers;
 
@@ -45,6 +47,9 @@ public class PatientController : FhirControllerBase
         search.Count = ClampPageSize(search.Count);
         search.Page = ClampPage(search.Page);
 
+        if (HttpContext.Items[FhirService.Middleware.SmartScopeEnforcementMiddleware.PayerToPayerIdentifierLookupItemKey] is true)
+            return await PayerToPayerIdentifierLookupAsync(search, ct);
+
         // A patient-bound token searches its own record only, whatever else
         // the query says (name, birthdate, identifier...).
         if (AuthorizedMemberId is { } bound)
@@ -67,5 +72,43 @@ public class PatientController : FhirControllerBase
             "Patient", FhirBaseUrl, RawQueryString);
 
         return Ok(bundle);
+    }
+
+    /// <summary>
+    /// PDex requirement 35: a requesting payer turns the <c>MemberIdentifier</c>
+    /// <c>$member-match</c> returned into the member's logical Patient id. The
+    /// middleware admitted only <c>Patient?identifier=</c> under
+    /// <c>system/PayerToPayer.read</c>; here the caller must be registered to a
+    /// payer, and a Patient is returned only when the consent naming that payer
+    /// (recorded by member match, ADR 022) is in force for the member. Anyone
+    /// else is left out of the searchset, so "no such member" and "no consent"
+    /// look the same, as member match's own 422 does.
+    /// </summary>
+    private async Task<IActionResult> PayerToPayerIdentifierLookupAsync(
+        PatientSearchParams search, CancellationToken ct)
+    {
+        var logger = HttpContext.RequestServices
+            .GetRequiredService<ILogger<PatientController>>();
+        if (!TryBindReceivingPayer(null, logger, "patient identifier lookup", out var payerId))
+            return FhirForbidden(PayerToPayerController.PayerBindingMessage);
+
+        var consents = HttpContext.RequestServices
+            .GetRequiredService<FhirService.Services.PayerToPayer.IPayerToPayerConsentAttestationStore>();
+        var now = (HttpContext.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+
+        var (items, _) = await _adapter.SearchPatientsAsync(search, TenantId, ct);
+        var consented = new List<Patient>();
+        foreach (var patient in items)
+        {
+            if (!string.IsNullOrEmpty(patient.Id)
+                && await consents.FindInForceAsync(TenantId, patient.Id, payerId, now, ct) is not null)
+            {
+                consented.Add(patient);
+            }
+        }
+
+        return Ok(_bundleBuilder.Build(
+            consented, consented.Count, search.Page, search.Count,
+            "Patient", FhirBaseUrl, RawQueryString));
     }
 }

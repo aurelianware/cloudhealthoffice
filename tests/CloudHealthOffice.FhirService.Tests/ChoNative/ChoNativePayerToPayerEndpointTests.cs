@@ -118,6 +118,9 @@ public class ChoNativePayerToPayerEndpointTests : IClassFixture<ChoNativePayerTo
         {
             base.ConfigureWebHost(builder);
             builder.UseSetting("FhirAdapters:Sources:PayerToPayer", "ChoNative");
+            // Patient from member-service too, as the manifest binds it, so a
+            // requesting payer's Patient?identifier= lookup reads the same member.
+            builder.UseSetting("FhirAdapters:Sources:Patient", "ChoNative");
             builder.UseSetting("Services:MemberServiceUrl", "http://member-service/api");
             builder.UseSetting("Services:CoverageServiceUrl", "http://coverage-service/api");
             builder.ConfigureServices(services =>
@@ -464,6 +467,61 @@ public class ChoNativePayerToPayerEndpointTests : IClassFixture<ChoNativePayerTo
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await response.Content.ReadAsStringAsync()).Should().Contain("CoverageToMatch");
         lock (_host.Upstream) _host.Upstream.Calls.Should().BeEmpty();
+    }
+
+    // ── Patient?identifier= after a match (PDex requirement 35) ─────────────
+
+    private async Task<HttpResponseMessage> Get(string path, string clientId = "native-p2p", string payer = Payer)
+    {
+        var token = _host.IssueToken("system/PayerToPayer.read", patientId: null,
+            extraClaims: [new SecurityClaim("client_id", clientId), new SecurityClaim("payer_id", payer)]);
+        using var client = _host.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await client.SendAsync(request);
+    }
+
+    private static async Task<List<string>> PatientIds(HttpResponseMessage response)
+    {
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return doc.RootElement.TryGetProperty("entry", out var entries)
+            ? entries.EnumerateArray().Select(e => e.GetProperty("resource").GetProperty("id").GetString()!).ToList()
+            : [];
+    }
+
+    [Fact]
+    public async Task After_a_consented_match_the_payer_finds_the_patient_by_the_returned_identifier()
+    {
+        (await PostFhir(MatchPath, HrexMatch("Jones", "1962-03-22"))).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await Get("/fhir/r4/Patient?identifier=pat-002");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await PatientIds(response)).Should().Equal("pat-002");
+    }
+
+    [Fact]
+    public async Task The_identifier_lookup_returns_nobody_whose_consent_names_another_payer()
+    {
+        (await PostFhir(MatchPath, HrexMatch("Jones", "1962-03-22"))).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await Get("/fhir/r4/Patient?identifier=pat-002", clientId: "other-p2p", payer: "PAYER-B");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await PatientIds(response)).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("/fhir/r4/Patient/pat-002")]
+    [InlineData("/fhir/r4/Patient?identifier=pat-002&family=Jones")]
+    [InlineData("/fhir/r4/Patient?identifier=pat-002&identifier=pat-777")]
+    [InlineData("/fhir/r4/Patient?family=Jones")]
+    [InlineData("/fhir/r4/Coverage?patient=pat-002")]
+    public async Task A_payer_token_reads_nothing_but_a_single_identifier_search(string path)
+    {
+        var response = await Get(path);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     private sealed class MissingCoverageUrlHost : FhirTestWebAppFactory
