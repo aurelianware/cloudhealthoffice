@@ -82,17 +82,16 @@ A synthetic sample is in [samples/fee-schedules](samples/fee-schedules/state-med
 | Plan | Default fee schedule (uncontracted providers) | Public source | Load path |
 |---|---|---|---|
 | Medicaid managed care (TX STAR/CHIP, Medi-Cal, AHCCCS, FL SMMC, NY) | State Medicaid FFS schedule, by program and provider type. Out-of-network payment rules are set by the state contract; check it. | TMHP fee schedules (Texas), DHCS Medi-Cal Rates file (California), each state agency's fee schedule pages | **This importer** |
-| Medicare Advantage | Original Medicare rates for the provider's locality | CMS PFS RVU files (PPRRVU + GPCI + conversion factor), OPPS Addendum B, ASC Addendum AA, DMEPOS, CLFS, IPPS | PFS: not yet in the claims store (see below). Per-state DMEPOS and CLFS: this importer with column overrides. |
+| Medicare Advantage | Original Medicare rates for the provider's locality | CMS PFS RVU files (PPRRVU + GPCI + conversion factor), OPPS Addendum B, ASC Addendum AA, DMEPOS, CLFS, IPPS | PFS: [Medicare PFS importer](MEDICARE-PFS-IMPORTER.md). Per-state DMEPOS and CLFS: this importer with column overrides. |
 | Exchange / commercial | No public default; the plan's own contracts | Transparency in Coverage in-network rate files (the plan's own) | Future: contract import from the plan's TiC file |
 
 ### Not yet loadable into the claims store
 
-- **Medicare PFS by locality.** The CMS loaders in `CloudHealthOffice.PricingApi`
-  (`/api/v1/admin/fee-schedules/upload/rbrvs|opps|drg`) write the Pricing API's
-  own `fee_schedule_entries`, not the `FeeSchedules` collection adjudication
-  reads. ADR 016 lists this re-ingest as open. Until it lands, percent-of-Medicare
-  contract terms and Medicaid schedules defined as a percent of Medicare have
-  no Medicare base to price from in adjudication.
+- **Medicare PFS by locality** now loads with the
+  [Medicare PFS importer](MEDICARE-PFS-IMPORTER.md) (one RVU schedule per
+  locality, the base that percent-of-Medicare terms and Medicaid schedules
+  reference). The Pricing API's own CMS loaders still write only the Pricing
+  API's store.
 - **IPPS (MS-DRG)** needs each hospital's base rate as well as the weights.
 - **OPPS** packaging and status-indicator rules are not modelled; loading
   Addendum B as flat rates is only an approximation.

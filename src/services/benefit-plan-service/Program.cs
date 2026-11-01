@@ -113,6 +113,7 @@ builder.Services.AddScoped<IBenefitPlanService, BenefitPlanServiceImpl>();
 builder.Services.AddScoped<BenefitPlanService.Import.QhpPuf.IQhpPufImportService, BenefitPlanService.Import.QhpPuf.QhpPufImportService>();
 // Fee schedule CSV importer (docs/integration/FEE-SCHEDULE-IMPORTER.md).
 builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IFeeScheduleImportService, BenefitPlanService.Import.FeeSchedules.FeeScheduleImportService>();
+builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IMedicarePfsImportService, BenefitPlanService.Import.FeeSchedules.MedicarePfsImportService>();
 builder.Services.AddScoped<IBenefitViewService, BenefitViewService>();
 builder.Services.AddHttpContextAccessor();
 

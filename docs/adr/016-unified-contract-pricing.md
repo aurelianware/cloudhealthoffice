@@ -354,6 +354,10 @@ implemented, rather than silently ignoring them.
   `ProviderContractBackfillTests` runs all of this against a real mongod, with
   the four stores seeded as they actually look.
 
+- **Partly done.** The Medicare PFS is now loaded straight from the CMS RVU
+  files into tenant `FeeSchedule` documents, one per locality
+  (`POST /api/v1/fee-schedules/import/medicare-pfs`,
+  docs/integration/MEDICARE-PFS-IMPORTER.md). OPPS and DRG are still open.
 - **Open.** PricingApi `fee_schedule_entries` are re-ingested into global
   `FeeSchedule` documents through the loaders. The invariant is the
   cross-store parity test: for every code and place of service, the re-ingested
