@@ -739,3 +739,93 @@ def test_public_directory_is_checked():
     assert "needs Tenant" in render_error("--public-directory", json.dumps({"demo": {**entry, "Tenant": " "}}))
     assert "go together" in render_error("--public-directory", json.dumps({"demo": {**entry, "IdentifierSystem": "urn:x"}}))
     assert "must be a string" in render_error("--public-directory", json.dumps({"demo": {**entry, "PostalCode": 32401}}))
+
+
+# ── The hosted HIPAA environment (--hosted) ──────────────────────────────────
+
+IAP_AUD = "/projects/123456789012/global/backendServices/987654321"
+
+
+def hosted_args(tmp_path, *extra):
+    args = list(production_args(tmp_path))
+    i = args.index("--access-team-domain")
+    del args[i:i + 2]
+    args[args.index("--access-audience") + 1] = IAP_AUD
+    return (*args, "--hosted", "--access-provider", "google-iap", "--access-tenant", "plan-a", *extra)
+
+
+def render_error(*args):
+    result = subprocess.run([sys.executable, str(SCRIPT), "--registry", REGISTRY, *args], capture_output=True, text=True)
+    assert result.returncode != 0
+    return result.stderr
+
+
+def test_hosted_runs_production_hosts_with_no_synthetic_data(tmp_path):
+    docs = render(*hosted_args(tmp_path))
+    for name, dep in deployments(docs).items():
+        e = env(dep)
+        assert e["ASPNETCORE_ENVIRONMENT"] == "Production", name
+        assert e["SyntheticData__Allowed"] == "false", name
+        assert "Features__BenefitPlanSyntheticValidationEnabled" not in e, name
+        assert not any(k.startswith("WorkManagement__Reconcile__Tenants") for k in e), name
+    assert config_map(docs, "fhir-service-config").get("FhirAdapters__DataClassification") != "synthetic"
+
+
+def test_hosted_signs_in_through_google_iap(tmp_path):
+    docs = render(*hosted_args(tmp_path))
+    portal = env(deployments(docs)["portal"])
+    assert portal["Authentication__CloudflareAccess__Provider"] == "GoogleIap"
+    assert portal["Authentication__CloudflareAccess__Audiences__0"] == IAP_AUD
+    assert "Authentication__CloudflareAccess__TeamDomain" not in portal
+    token = config_map(docs, "token-service-config")
+    assert token["CloudflareAccess__Provider"] == "GoogleIap"
+    assert token["CloudflareAccess__Tenants__0"] == "plan-a"
+    assert "CloudflareAccess__TeamDomain" not in token
+
+
+def test_hosted_reads_the_redis_password_from_its_secret(tmp_path):
+    docs = render(*hosted_args(tmp_path))
+    assert "Redis__ConnectionString" not in config_map(docs, "portal-config")
+    for name in ("portal", "claims-service", "benefit-plan-service"):
+        container = deployments(docs)[name]["spec"]["template"]["spec"]["containers"][0]
+        entry = next(e for e in container["env"] if e["name"] == "Redis__ConnectionString")
+        assert entry == {"name": "Redis__ConnectionString",
+                         "valueFrom": {"secretKeyRef": {"name": "redis-secret", "key": "connectionString"}}}, name
+
+
+def test_ca_bundle_replaces_every_containers_system_bundle(tmp_path):
+    docs = render(*hosted_args(tmp_path, "--ca-bundle-configmap", "cho-ca-bundle"))
+    for name, dep in deployments(docs).items():
+        spec = dep["spec"]["template"]["spec"]
+        assert {"name": "cho-ca-bundle", "configMap": {"name": "cho-ca-bundle"}} in spec["volumes"], name
+        for container in spec["containers"]:
+            assert {"name": "cho-ca-bundle", "mountPath": "/etc/ssl/certs/ca-certificates.crt",
+                    "subPath": "ca-certificates.crt", "readOnly": True} in container["volumeMounts"], (name, container["name"])
+
+
+def test_hosted_refuses_the_demo_tenant_cloudflare_and_non_production_hosts(tmp_path):
+    args = list(hosted_args(tmp_path))
+    args[args.index("--access-tenant") + 1] = "demo"
+    assert "--access-tenant" in render_error(*args)
+
+    args = list(hosted_args(tmp_path))
+    args[args.index("--access-provider") + 1] = "cloudflare"
+    args += ["--access-team-domain", ACCESS_TEAM]
+    assert "BAA" in render_error(*args)
+
+    assert "Production" in render_error(*hosted_args(tmp_path, "--host-environment", "Staging"))
+    assert "--security production" in render_error("--hosted", "--access-tenant", "plan-a")
+
+
+def test_google_iap_needs_a_backend_service_audience(tmp_path):
+    args = list(hosted_args(tmp_path))
+    args[args.index("--access-audience") + 1] = ACCESS_AUD
+    assert "backendServices" in render_error(*args)
+
+
+def test_demo_and_cloudflare_production_render_as_before(tmp_path):
+    demo = render()
+    assert all("cho-ca-bundle" not in yaml.safe_dump(d) for d in deployments(demo).values())
+    portal = env(deployments(render(*production_args(tmp_path)))["portal"])
+    assert portal["Authentication__CloudflareAccess__TeamDomain"] == ACCESS_TEAM
+    assert "Authentication__CloudflareAccess__Provider" not in portal
