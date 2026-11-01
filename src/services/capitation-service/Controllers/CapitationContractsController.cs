@@ -71,10 +71,10 @@ public class CapitationContractsController : ControllerBase
     [ProducesResponseType(typeof(IEnumerable<CapitationContract>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<CapitationContract>>> GetRateConfigsByContractId(string id)
     {
-        var results = await _contractRepository.SearchAsync(
-            providerNpi: null, lob: null, type: null, status: null, page: 1, pageSize: 1000);
-        var filtered = results.Where(c => c.ContractId == id).ToList();
-        return Ok(filtered);
+        // Queried by parent id: a search page filtered afterwards missed children
+        // past its first 1000 rate configs.
+        var children = await _contractRepository.GetByContractIdAsync(id);
+        return Ok(children);
     }
 
     /// <summary>

@@ -123,6 +123,63 @@ public static class PlanSettings
     };
 
     /// <summary>
+    /// Which classification an inpatient claim is grouped by when
+    /// <see cref="GroupInpatientDrg"/> is on: <c>msDrg</c>, CHO's own MS-DRG
+    /// grouper (Medicare and most commercial contracts), or <c>aprDrg</c>,
+    /// the plan's licensed 3M APR-DRG grouper, which Texas, California and
+    /// most other Medicaid programs price by. The APR-DRG answer prices as
+    /// "DRG-SOI" (e.g. <c>139-3</c>), the key state weight tables use.
+    ///
+    /// <para>
+    /// Set it per line of business: a plan with Medicare and Medicaid lines
+    /// groups the same hospital's stays both ways.
+    /// </para>
+    /// </summary>
+    public static readonly SettingDefinition InpatientDrgClassification = new()
+    {
+        Key = "pricing.inpatient.drgClassification",
+        Type = SettingType.Enum,
+        Owner = "claims-service",
+        Description = "Group inpatient claims by MS-DRG (CHO's grouper) or APR-DRG (the plan's licensed grouper).",
+        Default = "\"msDrg\"",
+        AllowedLevels = new HashSet<SettingLevel>
+        {
+            SettingLevel.Tenant,
+            SettingLevel.LineOfBusiness,
+            SettingLevel.BenefitPlan,
+            SettingLevel.Sponsor,
+            SettingLevel.SponsorPolicy,
+        },
+        Constraints = new SettingConstraints { AllowedValues = ["msDrg", "aprDrg"] },
+        ChangeControl = ChangeControl.ReasonRequired,
+    };
+
+    /// <summary>
+    /// The APR-DRG major version the state prices discharges under, e.g. 40.
+    /// The licensed grouper must answer in exactly this version, because
+    /// state relative weights are published per version. 0, the default,
+    /// leaves the version to the grouper. Effective-dated like every
+    /// setting, so a state's version change on its rate year is one dated
+    /// value.
+    /// </summary>
+    public static readonly SettingDefinition AprDrgVersion = new()
+    {
+        Key = "pricing.inpatient.aprDrgVersion",
+        Type = SettingType.Integer,
+        Owner = "claims-service",
+        Description = "APR-DRG version the state prices by (0 lets the grouper choose).",
+        Default = "0",
+        AllowedLevels = new HashSet<SettingLevel>
+        {
+            SettingLevel.Tenant,
+            SettingLevel.LineOfBusiness,
+            SettingLevel.BenefitPlan,
+        },
+        Constraints = new SettingConstraints { Min = 0, Max = 99 },
+        ChangeControl = ChangeControl.ReasonRequired,
+    };
+
+    /// <summary>
     /// Whether releasing money needs a second user (maker-checker):
     /// capitation disbursements and premium drafts cannot be released by the
     /// person who prepared them (plan-configuration.md §12 step 2b).
@@ -173,6 +230,8 @@ public static class PlanSettings
     [
         OrphanGraceDays,
         GroupInpatientDrg,
+        InpatientDrgClassification,
+        AprDrgVersion,
         PaymentEnforceSeparationOfDuties,
         PersonalRepresentativeRequireSecondUserActivation,
     ];

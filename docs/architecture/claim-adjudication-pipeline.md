@@ -464,6 +464,29 @@ so it passes, while one with tables loaded pends with `CONFIGUNAVAIL`.
 See ADR 024 §8 for the rest, including why present-on-admission reporting is
 sent as `Unknown` and what a payer still needs on file before turning this on.
 
+### APR-DRG for Medicaid lines
+
+Texas, California and most other Medicaid programs pay inpatient stays by
+APR-DRG with severity of illness, not MS-DRG. The plan setting
+`pricing.inpatient.drgClassification` (`msDrg` by default, or `aprDrg`)
+chooses between them per line of business, benefit plan or sponsor, once
+`pricing.inpatient.groupDrg` is on. When it is `aprDrg`:
+
+- The stage asks the plan's licensed grouper through `IAprDrgGrouper`
+  (`docs/integration/LICENSED-GROUPER-CONTRACT.md`). The MS-DRG grouper is
+  not called.
+- It sends `pricing.inpatient.aprDrgVersion` as the requested version, because
+  state weights are published per version. 0 leaves the version to the
+  grouper.
+- The priced DRG is the "DRG-SOI" key state weight tables use, such as `139-3`.
+  The whole APR-DRG answer is kept on `InpatientGroupingOutcome.AprDrgResult`.
+- It fails closed in the same way as MS-DRG:
+  - a refused or invalid answer pends `DRGREVIEW`;
+  - a missing or unreachable grouper pends `GROUPERUNAVAIL`;
+  - a classification or version setting that cannot be read pends `CONFIGUNAVAIL`.
+- A host with a licensed grouper configured counts as able to group. When it
+  cannot read `groupDrg`, it pends instead of pricing the billed DRG.
+
 ## Provider integrity stage (added July 2026)
 
 `ProviderIntegrityStage`, `Order=150`, runs the same federal-exclusion
