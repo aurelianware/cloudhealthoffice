@@ -60,7 +60,9 @@ A plan also needs the rates its claims are paid at. Load the state Medicaid
 fee schedule (or the plan's own rate sheet) as the plan's default fee schedule
 with the [fee schedule CSV importer](FEE-SCHEDULE-IMPORTER.md)
 (`POST /api/v1/fee-schedules/import/csv?planId=...`). Without one, lines from
-uncontracted providers pend.
+uncontracted providers pend. Contracted providers' terms load with the
+[contract roster importer](CONTRACT-ROSTER-IMPORTER.md)
+(`POST /api/v1/pricing-contracts/import/csv`).
 
 ## 2. Plan-code mappings
 

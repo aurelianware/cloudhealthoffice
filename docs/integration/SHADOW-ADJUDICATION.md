@@ -100,8 +100,8 @@ you which one is missing.
 |---|---|
 | Members, coverage, plan id, group | 834 (`enrollment-import-service`), or the CPCDS member and coverage files |
 | Provider network and credentialing | provider-service |
-| Medicare-based fee schedules | PricingApi RBRVS / OPPS / DRG uploads |
-| Provider contracts and custom fee schedules | provider-contracts-service API (bulk loader planned) |
+| Medicare physician fee schedule | [Medicare PFS importer](MEDICARE-PFS-IMPORTER.md), one schedule per locality (the PricingApi uploads do not reach adjudication) |
+| Provider contracts and custom fee schedules | [Contract roster importer](CONTRACT-ROSTER-IMPORTER.md) and [fee schedule CSV importer](FEE-SCHEDULE-IMPORTER.md) |
 | Benefit plan design | benefit-plan-service API / portal |
 | Accumulators to date | Not yet: CHO starts the member at zero, so deductible and out-of-pocket differences show as `PaidVariance` / `MemberLiabilityVariance` (baseline seed planned) |
 | Prior authorizations | authorization-service |
@@ -126,7 +126,8 @@ pricing, provider, coverage, member, authorization), once per claim.
    store and the run endpoints.
 2. Run report: top reasons by count and dollars (CARC, CHO stage, pend code,
    procedure, provider), CSV export of discrepant lines.
-3. Provider contract and custom fee schedule loader.
+3. Provider contract and custom fee schedule loader: the contract roster and
+   fee schedule CSV importers.
 4. Accumulator baseline, seeded from a core accumulator extract or derived from
    the imported claims, held apart from live balances.
 5. Automatic run after each CPCDS file-drop batch; re-run after a configuration
