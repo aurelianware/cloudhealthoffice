@@ -18,15 +18,17 @@ public class StateEncounterRoutesController : ControllerBase
     private readonly IStateEncounterRouteRegistry _registry;
     private readonly IStateEncounterBatchService _batches;
     private readonly IStateResponseReconciler _responses;
+    private readonly IEncounterReworkService _rework;
     private readonly ICurrentActor _actor;
 
     public StateEncounterRoutesController(
         IStateEncounterRouteRegistry registry, IStateEncounterBatchService batches,
-        IStateResponseReconciler responses, ICurrentActor actor)
+        IStateResponseReconciler responses, IEncounterReworkService rework, ICurrentActor actor)
     {
         _registry = registry;
         _batches = batches;
         _responses = responses;
+        _rework = rework;
         _actor = actor;
     }
 
@@ -121,6 +123,58 @@ public class StateEncounterRoutesController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    /// <summary>
+    /// The rework queue: Texas and California encounters held back by validation or
+    /// rejected by the state, nearest deadline first, with the reasons to fix.
+    /// Filter by <c>state</c> and by <c>reason</c> (VALIDATION, SYNTAX_REJECTED, STATE_REJECTED).
+    /// </summary>
+    [HttpGet("rework")]
+    [ProducesResponseType(typeof(EncounterReworkPage), StatusCodes.Status200OK)]
+    public async Task<ActionResult<EncounterReworkPage>> ListRework(
+        [FromQuery] string? state = null, [FromQuery] string? reason = null,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default) =>
+        Ok(await _rework.ListAsync(_actor.TenantId, state, reason?.Trim().ToUpperInvariant(), page, pageSize, ct));
+
+    /// <summary>
+    /// After the source is fixed (claim, member or provider record), sends the encounter
+    /// back to Pending; the next batch re-reads and re-validates it.
+    /// </summary>
+    [HttpPost("rework/{submissionId}/requeue")]
+    [ProducesResponseType(typeof(Models.EncounterSubmission), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Requeue(string submissionId, [FromBody] ReworkActionRequest? request, CancellationToken ct)
+    {
+        var (outcome, submission) = await _rework.RequeueAsync(_actor.TenantId, submissionId, _actor.UserId, request?.Note, ct);
+        return ReworkResult(outcome, submission);
+    }
+
+    /// <summary>Closes an encounter that should not be reported. A reason is required.</summary>
+    [HttpPost("rework/{submissionId}/close")]
+    [ProducesResponseType(typeof(Models.EncounterSubmission), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Close(string submissionId, [FromBody] ReworkActionRequest? request, CancellationToken ct)
+    {
+        var (outcome, submission) = await _rework.CloseAsync(_actor.TenantId, submissionId, _actor.UserId, request?.Note, ct);
+        return ReworkResult(outcome, submission);
+    }
+
+    private IActionResult ReworkResult(ReworkOutcome outcome, Models.EncounterSubmission? submission) => outcome switch
+    {
+        ReworkOutcome.Done => Ok(submission),
+        ReworkOutcome.NotFound => NotFound(),
+        ReworkOutcome.ReasonRequired => BadRequest(new { message = "A reason (note) is required to close an encounter." }),
+        _ => Conflict(new { message = $"The encounter is not in the rework queue (status {submission?.Status})." })
+    };
+}
+
+public sealed class ReworkActionRequest
+{
+    /// <summary>What was fixed (requeue), or why it is not reportable (close).</summary>
+    public string? Note { get; set; }
 }
 
 public sealed class StateResponseRequest

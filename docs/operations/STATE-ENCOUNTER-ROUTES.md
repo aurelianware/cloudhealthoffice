@@ -119,6 +119,35 @@ took the encounter; it is not final encounter acceptance.
 The Florida `POST /api/encounters/{tenantId}/acknowledge` path now only
 touches Florida records.
 
+## Rework queue
+
+`GET /api/encounters/state/rework?state=TX&reason=VALIDATION` lists the
+tenant's Texas and California encounters that need a person, nearest
+deadline first, each with its reasons to fix:
+
+| Reason | Status | Comes from |
+| --- | --- | --- |
+| `VALIDATION` | `ValidationFailed` | CHO's own pre-send validation; the encounter was never sent |
+| `SYNTAX_REJECTED` | `Rejected` | the state's 999 (IK3/IK4 detail) |
+| `STATE_REJECTED` | `Rejected` | the state's 277CA / 277 (STC codes) |
+
+Fix the source record (claim, member, provider), then
+`POST /api/encounters/state/rework/{submissionId}/requeue` with an optional
+`{ "note": "what was fixed" }`. The encounter returns to `Pending`, its old
+batch, file and control numbers are cleared, and the next batch re-reads and
+re-validates it. A state-rejected encounter was never accepted, so it goes
+back as a new original (DHCS APL 14-019 handles rejected records the same
+way). DHCS expects corrections within 15 calendar days of the response file.
+
+To take an encounter out of the queue without reporting it (a duplicate, a
+service the state does not take encounters for),
+`POST .../rework/{submissionId}/close` with a required note. It becomes
+`ClosedNotReportable`. Every action is kept in the record's `reworkHistory`
+with who did it and why.
+
+Florida rejections keep their existing `retry` endpoint and are not in this
+queue.
+
 ## Not done yet
 
 - **Transport.** Nothing sends files to TMHP or DHCS or collects responses
@@ -126,8 +155,8 @@ touches Florida records.
   (TX-02: "agree actual HHSC destination/operator"), and responses are
   posted to the API.
 - **DHCS EVR file** and any HHSC encounter quality reports after the 277CA.
-- **Rework queue.** `ValidationFailed` and rejected records have no work
-  queue or portal view yet.
+- **Work distribution and portal.** The rework queue is an API; it is not
+  yet a work type in work-management-service or a portal page.
 - **Replacements and voids.** The writer supports frequency 7/8 with REF*F8,
   and the state reference is now captured, but nothing yet produces them from
   claim adjustments.
