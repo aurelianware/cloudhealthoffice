@@ -173,4 +173,22 @@ public class StateCapitationControllerTests
         rows.Single().MemberId.Should().Be("M,1");
         rows.Single().DaysEnrolled.Should().Be(14);
     }
+
+    [Fact]
+    public async Task Mlr_UsesTheCapitationReceivedInThePeriod_AndTheLoadedMemberMonths()
+    {
+        await Controller("member_id,month,rate_cell\n91000001A,2027-01,LA-ACA-EXP\n91000002B,2027-01,LA-CHILD\n").LoadExpected("CA");
+        await Controller(Medi820("DHCS-1", ("91000001A", 530.25m, "LA-ACA-EXP"), ("91000002B", 180.40m, "LA-CHILD"))).Record820("CA");
+
+        var body = Json(await Controller().Mlr("CA", new MlrRequest
+        {
+            From = "2027-01", To = "2027-12", IncurredClaims = 600m, QualityImprovement = 10m, OtherPremiumRevenue = 89.35m
+        }));
+
+        body.GetProperty("capitationReceived").GetDecimal().Should().Be(710.65m);
+        body.GetProperty("memberMonths").GetInt32().Should().Be(2);
+        body.GetProperty("mlr").GetProperty("adjustedPremiumRevenue").GetDecimal().Should().Be(800m);
+        body.GetProperty("mlr").GetProperty("unadjustedMlr").GetDecimal().Should().Be(0.7625m);
+        body.GetProperty("mlr").GetProperty("credibility").GetInt32().Should().Be((int)PremiumBillingService.Mlr.MlrCredibility.NonCredible);
+    }
 }

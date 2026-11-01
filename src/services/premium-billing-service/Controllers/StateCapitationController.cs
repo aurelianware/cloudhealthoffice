@@ -3,6 +3,7 @@ using System.Text;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PremiumBillingService.Edi;
+using PremiumBillingService.Mlr;
 using PremiumBillingService.StateCapitation;
 
 namespace PremiumBillingService.Controllers;
@@ -204,6 +205,64 @@ public sealed class StateCapitationController : ControllerBase
             $"{profile.State.ToLowerInvariant()}-capitation-{window.From:yyyy-MM}-{window.To:yyyy-MM}.csv");
     }
 
+    /// <summary>
+    /// The 42 CFR 438.8 MLR for a reporting period: premium revenue is the
+    /// state capitation received on recorded 820s for months in the period,
+    /// plus any other premium revenue given (state-directed payments,
+    /// risk-sharing settlements). Incurred claims (paid plus the IBNR change,
+    /// from <c>POST api/claims/finance/ibnr</c>), quality improvement, fraud
+    /// prevention and taxes come from the request. Member-months default to
+    /// the expected member-months loaded for the period.
+    /// </summary>
+    [HttpPost("mlr")]
+    [RequirePermission("finance:read")]
+    public async Task<ActionResult> Mlr(string state, [FromBody] MlrRequest request)
+    {
+        if (Profile(state) is not { } profile || MlrStandard.ForState(state) is not { } standard) return UnknownState(state);
+        if (Window(request.From, request.To) is not { } window) return BadWindow();
+        if (request.IncurredClaims < 0 || request.QualityImprovement < 0 || request.FraudPrevention < 0
+            || request.TaxesAndFees < 0 || request.OtherPremiumRevenue < 0 || request.MemberMonths < 0)
+            return BadRequest(new { error = "Amounts and member-months cannot be negative" });
+
+        var warnings = new List<string>();
+        var received = StateCapitationReconciler.ReadReceived(profile, await _store.GetPaymentsAsync(profile.State), warnings)
+            .Where(r => r.Month >= window.From && r.Month <= window.To)
+            .ToList();
+        var capitation = received.Sum(r => r.Amount);
+        var memberMonths = request.MemberMonths
+            ?? (await _store.GetExpectedAsync(profile.State, window.From, window.To)).Count;
+
+        MlrResult result;
+        try
+        {
+            result = MedicaidMlrCalculator.Calculate(new MlrInputs
+            {
+                IncurredClaims = request.IncurredClaims,
+                QualityImprovement = request.QualityImprovement,
+                FraudPrevention = request.FraudPrevention,
+                PremiumRevenue = capitation + request.OtherPremiumRevenue,
+                TaxesAndFees = request.TaxesAndFees,
+                MemberMonths = memberMonths
+            }, standard);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message, capitationReceived = capitation });
+        }
+
+        return Ok(new
+        {
+            state = profile.State,
+            from = window.From.ToString("yyyy-MM"),
+            to = window.To.ToString("yyyy-MM"),
+            capitationReceived = capitation,
+            otherPremiumRevenue = request.OtherPremiumRevenue,
+            memberMonths,
+            mlr = result,
+            warnings
+        });
+    }
+
     private async Task<StateCapitationReconciliation> RunAsync(StateCapitationProfile profile, DateOnly from, DateOnly to)
     {
         var expected = await _store.GetExpectedAsync(profile.State, from, to);
@@ -271,4 +330,24 @@ public sealed class StateCapitationController : ControllerBase
         }
         return Encoding.UTF8.GetString(buffer.ToArray());
     }
+}
+
+public sealed class MlrRequest
+{
+    /// <summary>First month of the MLR reporting year (yyyy-MM).</summary>
+    public string From { get; set; } = string.Empty;
+
+    /// <summary>Last month (yyyy-MM).</summary>
+    public string To { get; set; } = string.Empty;
+
+    public decimal IncurredClaims { get; set; }
+    public decimal QualityImprovement { get; set; }
+    public decimal FraudPrevention { get; set; }
+    public decimal TaxesAndFees { get; set; }
+
+    /// <summary>Premium revenue not on the state 820s (state-directed payments, risk corridors, settlements).</summary>
+    public decimal OtherPremiumRevenue { get; set; }
+
+    /// <summary>Overrides the expected member-months loaded for the period.</summary>
+    public int? MemberMonths { get; set; }
 }
