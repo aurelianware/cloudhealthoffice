@@ -1396,6 +1396,20 @@ public partial class BenefitCalculationStageTests
     }
 
     [Fact]
+    public void ApplyToContext_KeepsTheTplDecision()
+    {
+        var ctx = ContextFor(BuildClaim(Guid.NewGuid().ToString()));
+        ctx.AdjudicationResult.ThirdPartyLiability = new ClaimTplRecord { Decision = "PayAndChase", ReasonCode = "tpl-pay-and-chase" };
+
+        BenefitCalculationStage.ApplyToContext(ctx, SingleLineResult(new LineBenefitResult
+        {
+            LineNumber = 1, IsCovered = true, BilledAmount = 100m, AllowedAmount = 100m, PlanPaidAmount = 100m,
+        }));
+
+        Assert.Equal("PayAndChase", ctx.AdjudicationResult.ThirdPartyLiability?.Decision);
+    }
+
+    [Fact]
     public void ApplyToContext_DrgLineWithoutAdjustments_SynthesizesBalancingCas()
     {
         var ctx = ContextFor(BuildClaim(Guid.NewGuid().ToString()));

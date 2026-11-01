@@ -303,4 +303,18 @@ public class CapitationContractsControllerTests
     }
 
     #endregion
+
+    [Fact]
+    public async Task GetRateConfigsByContractId_QueriesByParent_NotAFilteredSearchPage()
+    {
+        _contractRepo.Setup(r => r.GetByContractIdAsync("pc-1"))
+            .ReturnsAsync(new List<CapitationContract> { CreateContract("c-1"), CreateContract("c-2") });
+
+        var result = await _controller.GetRateConfigsByContractId("pc-1");
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ((IEnumerable<CapitationContract>)ok.Value!).Should().HaveCount(2);
+        _contractRepo.Verify(r => r.SearchAsync(It.IsAny<string?>(), It.IsAny<LineOfBusiness?>(),
+            It.IsAny<ContractType?>(), It.IsAny<CapitationRateConfigStatus?>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+    }
 }

@@ -132,6 +132,12 @@ public class AppealsController : ControllerBase
                 modelStateDictionary: ModelState);
         }
 
+        if (!string.IsNullOrWhiteSpace(request.GrievanceCategory) && request.AppealType != AppealType.Grievance)
+        {
+            ModelState.AddModelError(nameof(CreateAppealRequest.GrievanceCategory), "Only a grievance has a grievance category.");
+            return ValidationProblem(ModelState);
+        }
+
         var appeal = new Appeal
         {
             TenantId = TenantId,
@@ -144,6 +150,7 @@ public class AppealsController : ControllerBase
             ProviderNPI = request.ProviderNPI,
             ProviderName = request.ProviderName,
             DenialReasonCode = request.DenialReasonCode,
+            GrievanceCategory = string.IsNullOrWhiteSpace(request.GrievanceCategory) ? null : request.GrievanceCategory.Trim(),
             DeniedAmount = request.DeniedAmount,
             AppealedAmount = request.AppealedAmount,
             AppealType = request.AppealType,
@@ -1213,6 +1220,7 @@ public class AppealsController : ControllerBase
             ProviderNPI = appeal.ProviderNPI,
             ProviderName = appeal.ProviderName,
             DenialReasonCode = appeal.DenialReasonCode,
+            GrievanceCategory = appeal.GrievanceCategory,
             DeniedAmount = appeal.DeniedAmount,
             AppealedAmount = appeal.AppealedAmount,
             AppealType = appeal.AppealType,
@@ -1401,6 +1409,10 @@ public class CreateAppealRequest
 
     [StringLength(5)]
     public string? DenialReasonCode { get; set; }
+
+    /// <summary>Grievances only: the category the state reports use (see <see cref="GrievanceCategories"/>).</summary>
+    [StringLength(80)]
+    public string? GrievanceCategory { get; set; }
 
     [StringLength(4000)]
     public string? DenialReason { get; set; }

@@ -241,9 +241,12 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
         // A = Accepted, E = Accepted with errors (partial), R = Rejected
         var (ackCode, errors) = Parse999Acknowledgment(acknowledgmentContent);
 
+        // Florida only: Texas and California responses are reconciled per record by
+        // StateResponseReconciler, and must never be overwritten batch-wide here.
         var batchFilter = Builders<EncounterSubmission>.Filter.And(
             Builders<EncounterSubmission>.Filter.Eq(s => s.BatchId, batchId),
-            Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId)
+            Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId),
+            Builders<EncounterSubmission>.Filter.Eq(s => s.StateCode, "FL")
         );
         var submissions = await _collection.Find(batchFilter).ToListAsync();
 
@@ -370,6 +373,9 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
             SyntaxAcceptedWithErrors = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.SyntaxAcceptedWithErrors),
             Rejected = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.Rejected),
             DeadlineWarning = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.DeadlineWarning),
+            ValidationFailed = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.ValidationFailed),
+            StateFrontEndAccepted = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.StateFrontEndAccepted),
+            ClosedNotReportable = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.ClosedNotReportable),
             Total = allForTenant.Count
         };
 

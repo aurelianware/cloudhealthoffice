@@ -436,6 +436,7 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         ProviderNPI = a.ProviderNPI,
         ProviderName = a.ProviderName,
         DenialReasonCode = a.DenialReasonCode,
+        GrievanceCategory = a.GrievanceCategory,
         DenialReason = a.DenialReason,
         DeniedAmount = a.DeniedAmount,
         AppealedAmount = a.AppealedAmount,

@@ -1229,12 +1229,53 @@ public class AdjudicationResult
     /// 835: DTM*405
     /// </summary>
     public DateTime? PaymentDate { get; set; }
+
+    /// <summary>
+    /// Medicaid third-party liability decision; null when the TPL stage did
+    /// not run (off, or not a Medicaid claim).
+    /// </summary>
+    public ClaimTplRecord? ThirdPartyLiability { get; set; }
 }
 
 /// <summary>
 /// Line-level adjudication result
 /// 835: 2110 loop (service payment information)
 /// </summary>
+/// <summary>
+/// The Medicaid third-party liability decision kept on the claim
+/// (<see cref="AdjudicationResult.ThirdPartyLiability"/>): which TPL
+/// resources applied, which lines were cost-avoided and which were paid with
+/// recovery to follow. Recovery tracking reads the pay-and-chase lines.
+/// </summary>
+public class ClaimTplRecord
+{
+    /// <summary><c>NoTpl</c>, <c>PayAndChase</c>, <c>CostAvoided</c>, <c>Pended</c> or <c>OtherPayerBilled</c>.</summary>
+    public string Decision { get; set; } = string.Empty;
+    public string ReasonCode { get; set; } = string.Empty;
+    public string? Message { get; set; }
+    public List<ClaimTplResource> Resources { get; set; } = new();
+    public List<int> CostAvoidLines { get; set; } = new();
+    public List<ClaimTplPayAndChaseLine> PayAndChaseLines { get; set; } = new();
+    public DateTime DecidedAt { get; set; }
+}
+
+public class ClaimTplResource
+{
+    /// <summary>coverage-service TplPolicy id.</summary>
+    public string TplPolicyId { get; set; } = string.Empty;
+    public string State { get; set; } = string.Empty;
+    public string? CarrierCode { get; set; }
+    public string CarrierName { get; set; } = string.Empty;
+    public string? PolicyNumber { get; set; }
+    public string? StateCoverageCode { get; set; }
+}
+
+public class ClaimTplPayAndChaseLine
+{
+    public int LineNumber { get; set; }
+    public string Reason { get; set; } = string.Empty;
+}
+
 public class LineAdjudicationResult
 {
     /// <summary>

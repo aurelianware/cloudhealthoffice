@@ -31,6 +31,14 @@ public interface IPaymentRepository
         int page = 1,
         int pageSize = 50);
     Task<PaymentsSummary> GetPaymentsSummaryAsync(DateTime from, DateTime to);
+
+    /// <summary>
+    /// Payments this plan issued (by a payment or reversal run) dated in
+    /// [<paramref name="from"/>, <paramref name="before"/>), excluding any
+    /// voided before its file reached the bank: the 1099 basis.
+    /// </summary>
+    Task<IReadOnlyList<Services.InformationReturns.IssuedPayment>> GetIssuedPaymentsAsync(DateTime from, DateTime before, CancellationToken ct = default)
+        => throw new NotSupportedException("Issued payments need the MongoDB payment store.");
     Task<Payment> CreateAsync(Payment payment);
     Task<Payment> UpdateAsync(Payment payment);
     Task DeleteAsync(string id);

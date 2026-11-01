@@ -149,3 +149,38 @@ To verify:
 - Medi-Cal State Plan Amendment CA-25-0022, Attachment 4.19-A.
 - DHCS, *SFY 2026-27 DRG provider training*.
 - DHCS, *California APR-DRG Payment Design Document* (2013). Its worked example (194-1, 0.4968 × $7,200 = $3,577) is a test case.
+
+## Outpatient hospital
+
+### Texas (1 TAC §355.8061)
+
+`TexasOutpatientHospitalPricer` implements both of Texas's methods. The rule
+switches between them on an event, not a date: everything moves to EAPG
+"once the modernized MMIS is operational". Confirm which method is in force
+before choosing one. The method is chosen per plan.
+
+- **`PercentOfChargesInterim`** is the rule's current text, §355.8061(b).
+  - Payment is allowable charges × class percentage × the hospital's interim
+    rate (its outpatient cost-to-charge ratio).
+  - The class percentages are:
+
+    | Hospital class | High volume | Other |
+    | --- | --- | --- |
+    | Children's and state-owned | 76.03% | 72.27% |
+    | Rural | 100% | 100% |
+    | All other | 72.00% | 68.44% |
+
+  - A rural interim rate is capped at 100%.
+  - Imaging, non-emergent ER and outpatient surgery (ASC method) are paid by
+    fee schedule. The existing fee schedule engine handles them.
+- **`Eapg`**: each payable or discounted line is paid EAPG weight × conversion
+  factor × discount factor. Packaged, consolidated and not-payable lines are
+  paid $0. The EAPG comes from the plan's licensed grouper (#1718).
+- Since 1 September 2020, MCOs must pay rural hospitals at least the
+  rural-specific rates (§355.8061(f)).
+
+### Medi-Cal
+
+Medi-Cal pays outpatient hospital services from the Medi-Cal fee schedule by
+HCPCS/CPT, not EAPG or APC. That is already loadable with the Medi-Cal rates
+importer (#1711), so nothing new is needed here.
