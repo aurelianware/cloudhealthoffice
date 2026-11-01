@@ -18,7 +18,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The plan settings change consumer authenticated to Kafka with SASL PLAIN while every other client uses SCRAM-SHA-512. It now uses SCRAM-SHA-512 too.
 
-
 ## [6.2.0] - 2026-10-31
 
 ### Added
