@@ -16,9 +16,9 @@ adjudication pends it. It is never paid at $0 or at charges.
 
 ## Status
 
-The formulas are in place, and the reader for the Texas SDA files is in place (see below). Still to come:
+The formulas, the Texas file readers, and a rate store with an import endpoint are in place (see below). Still to come:
 
-- a store and import endpoint for hospital rates, and the importer for the state weight tables;
+- the Medi-Cal importers (DRG Pricing Calculator, Hospital Characteristics File);
 - wiring the formulas into `PricingStage`.
 
 Until both land, no claim is priced by these formulas.
@@ -69,6 +69,51 @@ Results on the SFY 2027 files (effective September 1, 2026, universal mean $10,1
 
 - **Urban:** 298 hospitals, none held back.
 - **Rural:** 138 hospitals loaded, 1 held back. HHSC prints Memorial Hospital of Polk County (TPI 112697106) with a $576.53 add-on, but its SDA with add-on ($12,435.40) equals the SDA alone. Its delivery SDA ($17,750.68) is consistent with no add-on. The plan should confirm the right SDA with HHSC.
+
+### Texas APR-DRG weight tables
+
+`TexasDrgWeightFileReader` reads HHSC's weight table in both of the forms HHSC publishes it.
+
+- **PDF:** for example `tx-apr-drg-grouper-current-ver.pdf`. Long descriptions wrap, and Excel centres the numbers vertically, so a row's numbers often sit on a different baseline from its key. On each page the reader pairs the k-th DRG-SOI key with the k-th value in each numeric column. The counts must agree, and each pair must line up within a row.
+- **Excel:** `.xlsx` for SFY 2021 on, with separate DRG, SOI and DRG-SOI (`0011`) columns. `.xls` for grouper 35/36, with one `APR-DRG` column (`001-1`), the title on one sheet and the table on the next.
+
+Shared checks:
+
+- The title must give the grouper version and the effective discharge date. The universal mean is printed only from SFY 2021 on.
+- Every priced DRG must have all four severities.
+- The ungroupable DRGs (955, 956) are skipped, so stays that group there pend.
+- A threshold below the MLOS is loaded as published (SFY 2027 prints 772-3 with MLOS 9.5 and threshold 9).
+
+What the files Mark uploaded show:
+
+- **Weights barely change.** The V38 (2021), V40 2024, 2025 and 2026 tables have the same values for every DRG-SOI they share. V40 only adds APR-DRG 011 (CAR-T). The universal mean has been $10,161.08 throughout.
+- **One year is missing.** No table was uploaded for SFY 2024 (V40, effective September 1, 2023). Discharges from then to August 31, 2024 fall back to the V38 table of October 1, 2022, which has no APR-DRG 011. Load that year's file before pricing claims from that period.
+
+### Rate store and import endpoint
+
+The store (`IMedicaidDrgRateRepository`, FeeScheduleEngine) is per tenant:
+
+- **Weight tables:** collection `MedicaidDrgWeightTables`, one per state and effective date.
+- **Hospital rate tables:** collection `MedicaidHospitalRateTables`, one per state, class and effective date. Held-back rows are kept as discrepancies.
+- **Which table applies:** the one with the latest effective date on or before the discharge date. Loading next year never changes an earlier discharge.
+
+```
+POST /api/v1/medicaid-drg/import/texas?dryRun=true&replace=false
+Content-Type: multipart/form-data   files=<one or more PDFs / workbooks>
+```
+
+- **Permission:** `settings:manage`.
+- **Recognising files:** each file is identified by its content. A PDF titled with a grouper version is a weight table, other PDFs are SDA files, and workbooks are weight tables.
+- **All or nothing:** every file is parsed before anything is written, so one bad file writes nothing.
+- **Duplicates:** identical copies, such as the same year as PDF and as Excel, are written once. Numbers are compared without trailing zeros. Two different files for the same effective date are refused.
+- **Outcomes:** `WouldWrite`, `Created`, `Unchanged` (same content), `Exists` (different content and `replace` not set) and `Replaced`.
+- **Warnings:** the report warns when universal means for the same date disagree.
+
+Loading all of Mark's uploads in one request gives:
+
+- weight tables for 2018-09-01 (V35), 2018-10-01 (V36), 2019-09-01 (V36), 2021-10-01 (V38), 2022-10-01 (V38), 2024-09-01, 2025-09-01 and 2026-09-01 (V40);
+- the SFY 2027 urban table (298 hospitals);
+- the SFY 2027 rural table (138 hospitals, 1 held back).
 
 ## Medi-Cal (State Plan Attachment 4.19-A, DRG payment method)
 

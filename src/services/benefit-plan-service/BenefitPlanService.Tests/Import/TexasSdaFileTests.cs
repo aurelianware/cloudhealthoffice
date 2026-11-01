@@ -11,7 +11,7 @@ namespace BenefitPlanService.Tests.Import;
 /// <summary>Texas APR-DRG SDA PDFs, laid out like HHSC's SFY 2027 urban and rural files.</summary>
 public class TexasSdaFileTests
 {
-    private static readonly string[] UrbanTitle =
+    internal static readonly string[] UrbanTitle =
     [
         "State Fiscal Year 2027",
         "All Patient Refined Diagnosis Related Group (APR DRG)",
@@ -19,7 +19,7 @@ public class TexasSdaFileTests
         "Universal Mean Effective September 1, 2026 - $10,161.08",
     ];
 
-    private static readonly string[] RuralTitle =
+    internal static readonly string[] RuralTitle =
     [
         "State Fiscal Year 2027",
         "All Patient Refined Diagnosis Related Group (APR DRG)",
@@ -28,19 +28,19 @@ public class TexasSdaFileTests
     ];
 
     // Real SFY 2027 rows (public HHSC data).
-    private static readonly string[] Waco =
+    internal static readonly string[] Waco =
     [
         "111829108", "1093708679", "450042", "ASCENSION PROVIDENCE", "6901 MEDICAL PARKWAY", "WACO", "76712", "MCLENNAN",
         "$2,993.72", "$139.21", "$150.16", "$49.49", "$59.54", "$320.75", "$3,712.87",
     ];
 
-    private static readonly string[] Houston =
+    internal static readonly string[] Houston =
     [
         "365048301", "1669732178", "670102", "AD HOSPITAL EAST LLC", "12950 EAST FWY", "HOUSTON", "77015", "HARRIS",
         "$2,993.72", "$139.21", "$432.10", "$0.00", "$0.00", "$0.00", "$3,565.03",
     ];
 
-    private static readonly string[] Andrews =
+    internal static readonly string[] Andrews =
     [
         "127298107", "1174563779", "450144", "ANDREWS COUNTY HOSPITAL DISTRICT", "720 HOSPITAL DR", "ANDREWS", "79714", "ANDREWS",
         "$17,296.96", "$576.53", "$17,873.49", "$23,188.77",
@@ -177,7 +177,7 @@ public class TexasSdaFileTests
     }
 
     /// <summary>A landscape page: title lines, then each row's columns at their own x like the Excel export.</summary>
-    private static MemoryStream Pdf(IEnumerable<string> title, params string[][] rows)
+    internal static MemoryStream Pdf(IEnumerable<string> title, params string[][] rows)
     {
         var builder = new PdfDocumentBuilder();
         var font = builder.AddStandard14Font(Standard14Font.Helvetica);
