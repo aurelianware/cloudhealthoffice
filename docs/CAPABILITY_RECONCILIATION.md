@@ -87,7 +87,7 @@ closed merely by defining tests.
 | Finding | Current status / acceptance boundary |
 | --- | --- |
 | CA-00 | Unverified: actual entity, contract/model/counties, launch, benefits and delegation need approval. |
-| CA-01 | Confirmed gap: paid-claim encounter consumer is FL-only; CA characterization demonstrates no record, not a repair. |
+| CA-01 | Partial: a California (DHCS) 837P/837I route exists behind per-plan configuration ([runbook](operations/STATE-ENCOUNTER-ROUTES.md)); unconfigured tenants still create no record. DHCS companion-guide review, partner testing, 999/277/EVR reconciliation and acceptance remain open. |
 | CA-02 | Partial: batch integrity/999 semantics repaired; CA partner final acceptance, corrections and QMED 2.0 reconciliation remain. |
 | CA-03 | Unverified: medical MEDS/834/HCO controls, CIN/retroactivity and downstream reconciliation need actual feed acceptance. |
 | CA-04 | Partial: composition/rendering and scoped California appeals pack exist; PA appeal/hearing and delivered notices remain unaccepted. |
@@ -173,7 +173,7 @@ records retain their original evidence. No Texas launch readiness is asserted.
 | Finding | Classification | Reverified behavior / remaining limit |
 | --- | --- | --- |
 | TX-01 | Unverified | Generic durable 834/member/coverage lifecycle exists; Texas feed, crosswalk, scope and downstream reconciliation not accepted. |
-| TX-02 | Confirmed gap | Registered encounter consumer/builder remains FL-only/FMMIS JSON. Merged complete-batch/999 syntax fixes do not implement a Texas route. |
+| TX-02 | Partial | State route framework adds a Texas (TMHP) 837P/837I route behind per-plan configuration ([runbook](operations/STATE-ENCOUNTER-ROUTES.md)). TMHP companion-guide review, partner testing, response reconciliation, rework, replacements/voids and state acceptance remain open. |
 | TX-03 | Partial | Texas source/gate registered; authorized interface, freshness, location/history and actual refresh/typed-client composition require acceptance/repair. |
 | TX-04 | Confirmed gap | Seeded Medicaid gold-card rule approves before clinical review despite the cited exemption's Medicaid exclusion. |
 | TX-05 | Confirmed gap | Native receipt deadline selector has only 72/168-hour targets; Texas-specific scenarios are not selected. |

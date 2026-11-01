@@ -418,7 +418,7 @@ public class InpatientGroupingStageTests
         BilledDrg = "470",
     };
 
-    private static ClaimAdjudicationContext ProfessionalContext()
+    internal static ClaimAdjudicationContext ProfessionalContext()
     {
         var serviceDate = new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc);
         var claim = new AdapterClaim
@@ -449,7 +449,7 @@ public class InpatientGroupingStageTests
         };
     }
 
-    private static ClaimAdjudicationContext InpatientContext()
+    internal static ClaimAdjudicationContext InpatientContext()
     {
         var context = ProfessionalContext();
         var admit = new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc);

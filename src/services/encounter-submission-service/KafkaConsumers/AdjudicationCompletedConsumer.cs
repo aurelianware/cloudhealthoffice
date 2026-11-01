@@ -2,15 +2,18 @@ using System.Text.Json;
 using Confluent.Kafka;
 using EncounterSubmissionService.Models.Events;
 using EncounterSubmissionService.Services;
+using EncounterSubmissionService.StateRoutes;
 
 namespace EncounterSubmissionService.KafkaConsumers;
 
 /// <summary>
 /// Kafka consumer that listens to the <c>adjudication-completed</c> topic.
-/// When a claim is <b>Approved</b> or <b>Paid</b> AND the tenant has a
-/// StateCode configured, automatically creates an <see cref="Models.EncounterSubmission"/>
-/// record to track the 60-day FMMIS submission window and publishes an
-/// <see cref="EncounterSubmissionCreatedEvent"/>.
+/// When a Medicaid claim is <b>Approved</b> or <b>Paid</b> and its state has an
+/// encounter route this tenant is set up for (<see cref="IStateEncounterRouteRegistry"/>),
+/// creates an <see cref="Models.EncounterSubmission"/> record with that state's
+/// deadline and publishes an <see cref="EncounterSubmissionCreatedEvent"/>.
+/// Florida is always routed (FMMIS); Texas (TMHP) and California (DHCS) only
+/// once the route is enabled and the plan's state-issued identities are configured.
 ///
 /// Follows the existing BackgroundService Kafka consumer pattern from
 /// <c>authorization-service/Consumers/RfaiDocsReceivedConsumer.cs</c>.
@@ -48,15 +51,21 @@ public class AdjudicationCompletedConsumer : BackgroundService
 
     // Constructor for unit testing (direct service injection)
     private readonly IEncounterSubmissionService? _testService;
+    private readonly IStateEncounterRouteRegistry? _testRegistry;
+    private readonly IStateEncounterBatchService? _testStateService;
 
     internal AdjudicationCompletedConsumer(
         IEncounterSubmissionService service,
-        ILogger<AdjudicationCompletedConsumer> logger)
+        ILogger<AdjudicationCompletedConsumer> logger,
+        IStateEncounterRouteRegistry? registry = null,
+        IStateEncounterBatchService? stateService = null)
     {
         _serviceProvider = null!;
         _logger = logger;
         _configuration = null!;
         _testService = service;
+        _testRegistry = registry ?? StateEncounterRouteRegistry.FloridaOnly();
+        _testStateService = stateService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -128,7 +137,9 @@ public class AdjudicationCompletedConsumer : BackgroundService
                     httpContextAccessor.HttpContext.Items["TenantId"] = message.TenantId;
                 }
 
-                await ProcessMessageAsync(message, service);
+                await ProcessMessageAsync(message, service,
+                    scope.ServiceProvider.GetRequiredService<IStateEncounterRouteRegistry>(),
+                    scope.ServiceProvider.GetRequiredService<IStateEncounterBatchService>());
 
                 consumer.Commit(consumeResult);
             }
@@ -153,12 +164,14 @@ public class AdjudicationCompletedConsumer : BackgroundService
     {
         if (_testService == null)
             throw new InvalidOperationException("Use the overload with service parameter");
-        await ProcessMessageAsync(message, _testService);
+        await ProcessMessageAsync(message, _testService, _testRegistry!, _testStateService);
     }
 
     internal async Task ProcessMessageAsync(
         AdjudicationCompletedMessage message,
-        IEncounterSubmissionService service)
+        IEncounterSubmissionService service,
+        IStateEncounterRouteRegistry registry,
+        IStateEncounterBatchService? stateService)
     {
         // Gate 0: a message without a tenant is an error, never a record in an
         // empty tenant (and claims/reference-data calls could not be authenticated).
@@ -179,7 +192,7 @@ public class AdjudicationCompletedConsumer : BackgroundService
             return;
         }
 
-        // Gate 2: tenant must have a StateCode set (FL Medicaid encounter requirement)
+        // Gate 2: tenant must have a StateCode set
         if (string.IsNullOrWhiteSpace(message.StateCode))
         {
             _logger.LogDebug(
@@ -188,26 +201,39 @@ public class AdjudicationCompletedConsumer : BackgroundService
             return;
         }
 
-        // Gate 3: only FL Medicaid claims require FMMIS encounter submission
-        if (!string.Equals(message.StateCode, "FL", StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(message.LineOfBusiness, "Medicaid", StringComparison.OrdinalIgnoreCase))
+        // Gate 3: the state must have an encounter route this tenant is set up for.
+        // Florida is always routed; Texas and California need the route enabled and
+        // the plan's state-issued identities configured. Nothing else is admitted.
+        var route = registry.Resolve(message.StateCode, message.LineOfBusiness, message.TenantId, out var reason);
+        if (route is null)
         {
             _logger.LogDebug(
-                "Skipping claim {ClaimId}: state '{State}' / LOB '{Lob}' not FL Medicaid",
-                message.ClaimId, message.StateCode, message.LineOfBusiness);
+                "Skipping claim {ClaimId}: state '{State}' / LOB '{Lob}' not routed ({Reason})",
+                message.ClaimId, message.StateCode, message.LineOfBusiness, reason);
             return;
         }
 
-        var submission = await service.CreateSubmissionRecordAsync(
-            message.ClaimId, message.TenantId, message.AdjudicatedAt);
+        Models.EncounterSubmission submission;
+        if (route.Format == EncounterRouteFormat.FmmisJson)
+        {
+            submission = await service.CreateSubmissionRecordAsync(
+                message.ClaimId, message.TenantId, message.AdjudicatedAt);
+        }
+        else
+        {
+            if (stateService is null)
+                throw new InvalidOperationException($"No state encounter service is registered for {route.StateCode}.");
+            submission = await stateService.CreateSubmissionRecordAsync(
+                route, message.ClaimId, message.TenantId, message.AdjudicatedAt);
+        }
 
         // Publish EncounterSubmissionCreatedEvent
         await PublishCreatedEventAsync(submission);
 
         _logger.LogInformation(
-            "Created encounter submission {SubmissionId} for FL Medicaid claim {ClaimId} " +
-            "(status={Status}), tenant {TenantId}, deadline {Deadline:yyyy-MM-dd}",
-            submission.Id, message.ClaimId, message.Status,
+            "Created encounter submission {SubmissionId} for {State} Medicaid claim {ClaimId} " +
+            "(status={Status}, receiver={Receiver}), tenant {TenantId}, deadline {Deadline:yyyy-MM-dd}",
+            submission.Id, route.StateCode, message.ClaimId, message.Status, route.Receiver,
             message.TenantId, submission.SubmissionDeadline);
     }
 
