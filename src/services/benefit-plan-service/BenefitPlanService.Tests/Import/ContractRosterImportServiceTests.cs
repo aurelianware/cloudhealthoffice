@@ -19,6 +19,7 @@ public sealed class ContractRosterImportServiceTests
 {
     private const string Tenant = "tenant-a";
     private static readonly Guid PlanGuid = Guid.Parse("7d4f2a9e-3b1c-4e5f-9a8b-1c2d3e4f5a6b");
+    private static readonly Guid SecondPlanGuid = Guid.Parse("2a6c1e0f-8d3b-4c7a-b5e9-0f1a2b3c4d5e");
     private const string ContractedNpi = "1245319599";
     private const string HospitalNpi = "1003000126";
     private const string ContractSchedule = "tenant-a:acme-pcp-rates:20260101";
@@ -154,11 +155,158 @@ public sealed class ContractRosterImportServiceTests
 
     // ── helpers ──
 
+    // ── CHO as system of record: legal contracts in provider-contracts-service ──
+
+    private static ContractRosterImportOptions ChoOptions(bool dryRun = true) =>
+        new() { Source = "QNXT", DryRun = dryRun, SystemOfRecord = ContractSystemOfRecord.Cho };
+
+    private const string ChoRoster =
+        "NPI,Provider Name,Provider Type,Plan,Network Status,Effective Date,Contract Number,LOB,Method,Fee Schedule ID,Percent,Code From,Code To\n" +
+        $"{ContractedNpi},Acme Family Clinic,organization,STAR-TX-01,in,01/01/2026,C-100,Medicaid,fee_schedule,{ContractSchedule},,99202,99499\n" +
+        $"{ContractedNpi},Acme Family Clinic,organization,STAR-TX-01,in,01/01/2026,C-100,Medicaid,percent_of_medicare,{MedicareSchedule},110,,\n";
+
+    [Fact]
+    public async Task Cho_RealRun_CreatesActivatesAndPricesFromTheProjection()
+    {
+        var legal = new FakeProviderContractsClient();
+        var (svc, contracts, schedules) = await Build(legal);
+
+        var report = await svc.ImportAsync(Csv(ChoRoster), ChoOptions(dryRun: false), Tenant, "admin");
+
+        report.Errors.Should().BeEmpty();
+        report.SystemOfRecord.Should().Be(ContractSystemOfRecord.Cho);
+        report.LegalContracts.Should().ContainSingle(l => l.ContractNumber == "C-100" && l.Outcome == "Created");
+        legal.Calls.Should().Equal("get C-100", "create C-100", "terms legal-C-100", "activate legal-C-100", "projection legal-C-100");
+        legal.Calls.Should().NotContain(c => c.StartsWith("put "), "the importer never replaces the whole contract (its TIN is masked on read)");
+
+        var created = legal.ByNumber["C-100"];
+        created.ProviderName.Should().Be("Acme Family Clinic");
+        created.ProviderType.Should().Be(LegalProviderType.Organization);
+        created.LineOfBusiness.Should().Be(LegalLineOfBusiness.Medicaid);
+        created.PlanIds.Should().Equal(PlanGuid.ToString("D"));
+        created.Status.Should().Be(LegalContractStatus.Active);
+        created.ReimbursementTerms.Should().HaveCount(2);
+
+        var stored = contracts.Stored.Should().ContainSingle().Subject;
+        stored.Origin.Should().Be("legal");
+        stored.LegalContractId.Should().Be("legal-C-100");
+
+        var engine = new RateResolutionService(schedules, contracts, NullLogger<RateResolutionService>.Instance);
+        var xray = await engine.ResolveAsync(new PricingRequest
+        {
+            TenantId = Tenant, PlanId = PlanGuid.ToString("D"), ProviderNpi = ContractedNpi, ProcedureCode = "71046",
+            PlaceOfServiceCode = "11", ServiceDate = new DateTime(2026, 3, 1), BilledAmount = 200m,
+        });
+        xray.AllowedAmount.Should().Be(44.00m, "the CHO contract's 110%-of-Medicare term prices it");
+
+        // Re-running the same roster changes nothing.
+        legal.Calls.Clear();
+        var again = await svc.ImportAsync(Csv(ChoRoster), ChoOptions(dryRun: false), Tenant, "admin");
+        again.LegalContracts.Single().Outcome.Should().Be("Unchanged");
+        again.Outcomes[ContractImportOutcome.Unchanged].Should().Be(1);
+        legal.Calls.Should().Equal("get C-100", "projection legal-C-100");
+    }
+
+    [Fact]
+    public async Task Cho_DryRun_OnlyLooksUpContracts()
+    {
+        var legal = new FakeProviderContractsClient();
+        var (svc, contracts, _) = await Build(legal);
+
+        var report = await svc.ImportAsync(Csv(ChoRoster), ChoOptions(), Tenant, "admin");
+
+        report.LegalContracts.Single().Outcome.Should().Be("WouldCreate");
+        legal.Calls.Should().Equal("get C-100");
+        contracts.Writes.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Cho_RequiresAContractNumber()
+    {
+        var (svc, _, _) = await Build(new FakeProviderContractsClient());
+        var roster = "NPI,Plan,Network,Effective Date,Method,Percent\n" + $"{HospitalNpi},STAR-TX-01,par,2026-01-01,percent_of_billed,55\n";
+
+        var report = await svc.ImportAsync(Csv(roster), ChoOptions(), Tenant, "admin");
+
+        report.RowsRejected.Should().Be(1);
+        report.LegalContracts.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Cho_RejectsANumberThatIsAnotherProvidersContract()
+    {
+        var legal = new FakeProviderContractsClient();
+        legal.ByNumber["C-100"] = new LegalContractDto
+        {
+            Id = "legal-other", ContractNumber = "C-100", ProviderNpi = HospitalNpi, Status = LegalContractStatus.Active,
+        };
+        var (svc, contracts, _) = await Build(legal);
+
+        var report = await svc.ImportAsync(Csv(ChoRoster), ChoOptions(dryRun: false), Tenant, "admin");
+
+        var result = report.LegalContracts.Single();
+        result.Outcome.Should().Be("Rejected");
+        result.Detail.Should().Contain(HospitalNpi);
+        legal.Calls.Should().Equal("get C-100");
+        contracts.Writes.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Cho_RejectsPlansWithDifferentTermsUnderOneNumber()
+    {
+        var legal = new FakeProviderContractsClient();
+        var (svc, _, _) = await Build(legal);
+        var roster =
+            "NPI,Plan,Network,Effective Date,Contract Number,Method,Percent\n" +
+            $"{HospitalNpi},STAR-TX-01,par,2026-01-01,H-7,percent_of_billed,55\n" +
+            $"{HospitalNpi},STAR-TX-02,par,2026-01-01,H-7,percent_of_billed,60\n";
+
+        var report = await svc.ImportAsync(Csv(roster), ChoOptions(dryRun: false), Tenant, "admin");
+
+        var result = report.LegalContracts.Single();
+        result.Outcome.Should().Be("Rejected");
+        result.Detail.Should().Contain("different terms");
+        legal.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Cho_LeavesAnotherLegalContractsPricingCopyAlone()
+    {
+        var legal = new FakeProviderContractsClient();
+        var (svc, contracts, _) = await Build(legal);
+        await contracts.UpsertAsync(new ProviderContract
+        {
+            Id = ProviderContract.MakeId(Tenant, ContractedNpi, PlanGuid.ToString("D")), TenantId = Tenant,
+            ProviderNpi = ContractedNpi, PlanId = PlanGuid.ToString("D"), Origin = "legal", LegalContractId = "legal-older",
+            EffectiveDate = new DateTime(2025, 1, 1),
+        });
+
+        var report = await svc.ImportAsync(Csv(ChoRoster), ChoOptions(dryRun: false), Tenant, "admin");
+
+        report.Outcomes[ContractImportOutcome.Protected].Should().Be(1);
+        contracts.Stored.Single().LegalContractId.Should().Be("legal-older");
+    }
+
+    [Fact]
+    public async Task Cho_ContractsServiceRefusal_IsReportedNotThrown()
+    {
+        var legal = new FakeProviderContractsClient { FailCreate = true };
+        var (svc, contracts, _) = await Build(legal);
+
+        var report = await svc.ImportAsync(Csv(ChoRoster), ChoOptions(dryRun: false), Tenant, "admin");
+
+        var result = report.LegalContracts.Single();
+        result.Outcome.Should().Be("Failed");
+        result.Detail.Should().Contain("contracts:write");
+        contracts.Writes.Should().Be(0);
+    }
+
     private static MemoryStream Csv(string text) => new(Encoding.UTF8.GetBytes(text));
 
     private static ContractRosterImportOptions Options(bool dryRun = true) => new() { Source = "QNXT", DryRun = dryRun };
 
-    private static async Task<(ContractRosterImportService, InMemoryProviderContractRepository, InMemoryFeeScheduleRepository)> Build()
+    private static async Task<(ContractRosterImportService, InMemoryProviderContractRepository, InMemoryFeeScheduleRepository)> Build(
+        IProviderContractsClient? legal = null)
     {
         var contracts = new InMemoryProviderContractRepository();
         var schedules = new InMemoryFeeScheduleRepository();
@@ -166,6 +314,11 @@ public sealed class ContractRosterImportServiceTests
         await plans.CreateAsync(new BenefitPlan
         {
             Id = PlanGuid.ToString("D"), TenantId = Tenant, PlanId = "STAR-TX-01", PlanName = "STAR test plan",
+            EffectiveDate = new DateTime(2026, 1, 1), VersionState = PlanVersionState.Published,
+        });
+        await plans.CreateAsync(new BenefitPlan
+        {
+            Id = SecondPlanGuid.ToString("D"), TenantId = Tenant, PlanId = "STAR-TX-02", PlanName = "Second STAR plan",
             EffectiveDate = new DateTime(2026, 1, 1), VersionState = PlanVersionState.Published,
         });
 
@@ -187,7 +340,7 @@ public sealed class ContractRosterImportServiceTests
             Lines = [new FeeScheduleLine { ProcedureCode = "99213", RateType = FeeScheduleRateType.FlatRate, Rate = 55m }],
         });
 
-        return (new ContractRosterImportService(contracts, schedules, plans, NullLogger<ContractRosterImportService>.Instance),
+        return (new ContractRosterImportService(contracts, schedules, plans, NullLogger<ContractRosterImportService>.Instance, legal),
             contracts, schedules);
     }
 }
