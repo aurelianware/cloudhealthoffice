@@ -54,6 +54,9 @@ builder.Services.AddScoped<ICoverageRepository>(sp => new CoverageRepositoryMong
     sp.GetRequiredService<IMongoDatabase>(), sp.GetRequiredService<PcpMongoSession>(),
     sp.GetRequiredService<PcpRosterWriteGuard>()));
 builder.Services.AddScoped<IPcpAssignmentRepository, PcpAssignmentRepositoryMongo>();
+// Medicaid third-party liability: the state TPL file and the member's TPL resources.
+builder.Services.AddScoped<ITplPolicyRepository, TplPolicyRepositoryMongo>();
+builder.Services.AddScoped<CoverageService.Services.Tpl.ITplImportService, CoverageService.Services.Tpl.TplImportService>();
 
 // PCP assignment + provider client + care team projector
 builder.Services.Configure<ProviderServiceOptions>(opts =>

@@ -82,6 +82,9 @@ public class EncounterStatusSummary
     public int SyntaxAcceptedWithErrors { get; set; }
     public int Rejected { get; set; }
     public int DeadlineWarning { get; set; }
+    public int ValidationFailed { get; set; }
+    public int StateFrontEndAccepted { get; set; }
+    public int ClosedNotReportable { get; set; }
     public int Total { get; set; }
 }
 

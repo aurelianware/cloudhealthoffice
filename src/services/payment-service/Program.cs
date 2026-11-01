@@ -101,6 +101,15 @@ else
 }
 builder.Services.AddScoped<IFfsEftFileService, FfsEftFileService>();
 
+// 1099-MISC box 6: the payee's TIN and legal name from provider-service's
+// service-only tax identity read, with payment-service's own identity.
+builder.Services.AddHttpClient(PaymentService.Services.InformationReturns.HttpProviderTaxIdentitySource.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["ProviderService:BaseUrl"] ?? "http://provider-service.cloudhealthoffice/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+builder.Services.AddScoped<PaymentService.Services.InformationReturns.IProviderTaxIdentitySource, PaymentService.Services.InformationReturns.HttpProviderTaxIdentitySource>();
+
 // Bank transmission of a completed ACH run's NACHA file. Off unless
 // BankTransmission:Enabled is true (and the tenant's own
 // paymentControls.nachaTransmission.enabled in tenant-service). While off, no

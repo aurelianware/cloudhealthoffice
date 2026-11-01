@@ -92,6 +92,15 @@ public interface IClaimRepository
     Task<ClaimInsights> GetInsightsAsync(DateTime from, DateTime to, LineOfBusiness? lineOfBusiness, DateTime asOf, CancellationToken ct = default)
         => throw new NotSupportedException("Claims Insights needs the MongoDB claim store.");
 
+    /// <summary>
+    /// Every version of every claim whose service began in
+    /// [<paramref name="incurredFrom"/>, <paramref name="incurredBefore"/>),
+    /// reduced to what the lag triangle needs (incurred date, paid date, plan
+    /// paid, voided).
+    /// </summary>
+    Task<IReadOnlyList<Finance.ClaimPaymentVersion>> GetPaymentVersionsAsync(DateTime incurredFrom, DateTime incurredBefore, LineOfBusiness? lineOfBusiness, CancellationToken ct = default)
+        => throw new NotSupportedException("The lag triangle needs the MongoDB claim store.");
+
     Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByIdsAsync(
         IReadOnlyCollection<string> claimIds,
         string? memberId,
@@ -319,6 +328,17 @@ public interface IClaimRepository
     /// <paramref name="to"/>] with no pending accumulator commit: the
     /// candidates of the post-rollout accumulator sweep.
     /// </summary>
+    /// <summary>
+    /// Finalized (Approved / PartiallyPaid / Paid), current-version Medicaid
+    /// claims of the request tenant adjudicated in [<paramref name="from"/>,
+    /// <paramref name="to"/>), oldest first. With <paramref name="payAndChaseOnly"/>,
+    /// only those whose TPL decision was pay and chase; with
+    /// <paramref name="memberId"/>, only that member's. Feeds Medicaid TPL
+    /// recovery cases.
+    /// </summary>
+    Task<IReadOnlyList<Claim>> FindFinalizedMedicaidAsync(
+        DateTime from, DateTime to, string? memberId, bool payAndChaseOnly, int limit, CancellationToken ct = default);
+
     Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(
         DateTime from, DateTime to, int limit, CancellationToken ct = default);
 

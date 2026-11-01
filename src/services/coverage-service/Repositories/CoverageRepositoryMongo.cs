@@ -91,6 +91,20 @@ public class CoverageRepositoryMongo : ICoverageRepository
             ? _collection.Find(session, filter) : _collection.Find(filter)).ToListAsync();
     }
 
+    public async Task<IReadOnlySet<string>> GetKnownMemberIdsAsync(
+        string tenantId, IReadOnlyCollection<string> memberIds, CancellationToken ct = default)
+    {
+        var known = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var batch in memberIds.Distinct().Chunk(5000))
+        {
+            var filter = Builders<Coverage>.Filter.Eq(c => c.TenantId, tenantId)
+                         & Builders<Coverage>.Filter.In(c => c.MemberId, batch);
+            var found = await _collection.Distinct(c => c.MemberId, filter, cancellationToken: ct).ToListAsync(ct);
+            known.UnionWith(found);
+        }
+        return known;
+    }
+
     public async Task<List<Coverage>> GetCoverageHistoryAsync(
         string tenantId,
         string memberId,
