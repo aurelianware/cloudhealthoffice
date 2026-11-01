@@ -1,0 +1,36 @@
+# CPCDS trial on a laptop: the services a plan's extracts load into, wired to
+# each other, with the daily file drop on and reading ./drops.
+#
+#   docker compose -f docker-compose.yml -f deploy/local/cpcds-trial/docker-compose.cpcds.yml \
+#     --profile core --profile finance --profile fhir up -d
+#
+# Then follow docs/integration/CPCDS-TRIAL-KIT.md ("On a laptop"). Development
+# settings only: services accept scripts/dev-token.sh tokens, documents are
+# kept in memory, and nothing here is fit for real member data.
+
+services:
+  claims-service:
+    environment:
+      - Services__EnrollmentImportService=http://enrollment-import-service:8080
+      - Services__ProviderService=http://provider-service:8080
+      - Services__AuthorizationService=http://authorization-service:8080
+      - Services__DocumentService=http://document-service:8080
+      - Services__MemberService=http://member-service:8080
+      - Services__CoverageService=http://coverage-service:8080
+      - Services__BenefitPlanService=http://benefit-plan-service:8080
+      # The drop: {Root}/{tenant}/inbound, checked every 30 seconds, a file
+      # loaded once it has been still for 10 (a laptop copy, not an SFTP upload).
+      - CpcdsDrop__Enabled=true
+      - CpcdsDrop__Root=/drops
+      - CpcdsDrop__Interval=00:00:30
+      - CpcdsDrop__QuietPeriod=00:00:10
+      - CpcdsDrop__Archive__Enabled=true
+    volumes:
+      - ${CHO_DROP_DIR:-./drops}:/drops
+
+  enrollment-import-service:
+    environment:
+      - Services__MemberService=http://member-service:8080
+      - Services__SponsorService=http://sponsor-service:8080
+      - Services__BenefitPlanService=http://benefit-plan-service:8080
+      - Services__CoverageService=http://coverage-service:8080

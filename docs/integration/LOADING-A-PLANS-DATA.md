@@ -183,6 +183,7 @@ can hold plan data, so keep it with the plan.
 
 ## Related
 
+- [CPCDS trial kit](CPCDS-TRIAL-KIT.md): steps 4 to 7 as one script (dry run, load, Inferno) for a plan trying CHO on its own extracts.
 - [Implementation Blueprint](../implementation/IMPLEMENTATION-BLUEPRINT.md): phases, teams and decision gates.
 - [Core adapter implementer guide](CORE-ADAPTER-IMPLEMENTER-GUIDE.md): live adapters, the alternative to loading data into CHO.
 - [Core data contract](CORE-DATA-CONTRACT.md): what an SI agrees and delivers per domain.
