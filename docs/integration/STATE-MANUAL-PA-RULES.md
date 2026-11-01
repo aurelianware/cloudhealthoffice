@@ -82,9 +82,44 @@ curl -sS -X POST "$CHO/api/v1/prior-auth-rules/import/state-manual?stateCode=TX&
   -H "Authorization: Bearer $TOKEN"
 ```
 
+## California: Medi-Cal TAR and Non-Benefit List
+
+California's fee-for-service source is the Medi-Cal Provider Manual's Part 2
+"TAR and Non-Benefit List" sections: one PDF per CPT range (codes 10000 thru
+19999 ... 80000 thru 89999), each a table of Code | Description | Benefit
+Restrictions. Managed care plans still set their own lists; load those with
+the CSV importer, and the two apply side by side.
+
+`POST /api/v1/prior-auth-rules/import/medi-cal-tar` (benefit-plan-service),
+multipart `files` (the PDFs, or a `.zip` of them). Permission
+`settings:manage`. **Dry run by default.** Always CA.
+
+| Query parameter | Default | Meaning |
+|---|---|---|
+| `lob` | `Medicaid` | Line of business of the target rule set. |
+| `program` | none | Program code. |
+| `nonBenefitNeedsTar` | `true` | Load "Non-Benefit" codes as needing a TAR: DHCS denies them unless an approved TAR shows medical necessity. `false` leaves them out. |
+| `keepExemptions`, `includeCodes`, `dryRun` | as above | |
+
+- "Requires TAR" rows become one `ProcedureRequiresAuth` rule per range,
+  `import:medi-cal:tar-<from>-thru-<to>`; Non-Benefit rows become
+  `import:medi-cal:non-benefit-<from>-thru-<to>`.
+- "Assistant Surgeon services not payable" alone is a billing rule: counted in
+  `noTar`, not loaded.
+- Rows with no recognised restriction are warned about, not loaded.
+- **Upload every range each time.** The upload is the whole Medi-Cal list for
+  the scope: ranges left out are disabled. The plan's own CSV list is not.
+- Not covered: TAR requirements written into other manual sections (inpatient,
+  DME, some HCPCS), and limits stated in the description text.
+
+The reader groups the PDF's words into lines by baseline. It has been tested on
+generated PDFs laid out like the published ones, not yet on the DHCS files
+themselves: review the first dry run (`files[]` counts per range, `warnings`,
+`import.rules` with `includeCodes=true`) against the PDFs.
+
 ## Other states
 
-Only the TMPPM is ingested. California's Medi-Cal Provider Manual (TAR
-requirements by provider type) would need its own downloader and section
-parser feeding the same terminology-service rules (with `State = CA`); this
-promotion step already takes any state.
+Texas (TMPPM) and California (TAR list) are covered. Another state needs its
+own source: a code-level list can go through the CSV importer or a reader
+like the Medi-Cal one; a narrative manual needs an extractor like the TMPPM
+tool feeding terminology-service (the promotion step above takes any state).
