@@ -33,6 +33,9 @@ public sealed class ClaimCriteria
     /// <summary>Adjudicated to an outcome (<see cref="ClaimStatusSets.Outcome"/>).</summary>
     public bool Adjudicated { get; init; }
 
+    /// <summary>Denied, finalized or not (<see cref="ClaimStatusSets.Denied"/>).</summary>
+    public bool Denied { get; init; }
+
     /// <summary>Received (CHO intake, <see cref="Claim.SubmittedDate"/>) strictly after this instant.</summary>
     public DateTime? ReceivedAfter { get; init; }
 
