@@ -11,14 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Hosted mode for `scripts/deploy-gke.sh` (`HOSTED=true`) and a manual, approval-gated `deploy-gcp-hosted` workflow. Disks are encrypted with the hosted disks key. Kafka gets a TLS-only listener with SCRAM-SHA-512 sign-in. MongoDB and Redis serve TLS from an internal CA, and Redis gets a password and an append-only file. Database passwords are kept in Secret Manager (`infrastructure/gcp/hosted-secrets.tf`, its own CMEK key). The plan's tenant and administrators are seeded instead of the demo tenant. Cloudflare, demo tenants and the AI examiner without a BAA are refused. In hosted mode `render_manifests.py` gives every Kafka client the SASL credentials and sets `SSL_CERT_FILE` with the CA bundle. `CPCDS_DROP_BUCKET` and `CPCDS_DROP_SERVICE_ACCOUNT` now reach the renderer. See `docs/deploy/GCP-HOSTED-HIPAA.md`, "Deploy".
 - `render_manifests.py --hosted` for the hosted HIPAA environment. It renders Production hosts with synthetic data refused, keeps the FHIR data classified as PHI, and drops the demo seeding. Plan tenants must be named (never `demo`), and every Redis connection string is read from `redis-secret`. `--access-provider google-iap` signs the portal in through Google Cloud IAP. `--ca-bundle-configmap` gives every container a CA bundle that also trusts the in-cluster Kafka CA.
+- Hosted HIPAA profile, operations (`infrastructure/gcp/hosted-operations.tf`): a daily Backup for GKE plan covering every namespace, its secrets and its volume data. It is encrypted with its own customer-managed key, kept 35 days and delete-locked for the first 7. Also security alert policies on the audit logs (IAM policy, encryption key, audit log routing and organization policy changes, and failed backups), emailed to `hosted_alert_emails`. Off unless `hosted = true`.
+
+- Hosted HIPAA profile for the Google Cloud Terraform (`hosted = true`, `infrastructure/gcp/hosted.tf`), for a separate project under a Google Cloud BAA: customer-managed Cloud KMS keys (90-day rotation) for Kubernetes secrets, node disks, every bucket and Artifact Registry; a private-node regional cluster on its own VPC with Cloud NAT, Shielded nodes, a least-privilege node account and a DNS control plane endpoint; project organization policies (US-only locations, no service account keys, no external VM addresses); and data access audit logs for every service, kept six years. Off by default, so the demo is unchanged. A new `terraform-gcp` workflow formats and validates the module. See `docs/deploy/GCP-HOSTED-HIPAA.md`.
 
 ### Fixed
 
 - The plan settings change consumer authenticated to Kafka with SASL PLAIN while every other client uses SCRAM-SHA-512. It now uses SCRAM-SHA-512 too.
-
-### Added
-
-- Hosted HIPAA profile for the Google Cloud Terraform (`hosted = true`, `infrastructure/gcp/hosted.tf`), for a separate project under a Google Cloud BAA: customer-managed Cloud KMS keys (90-day rotation) for Kubernetes secrets, node disks, every bucket and Artifact Registry; a private-node regional cluster on its own VPC with Cloud NAT, Shielded nodes, a least-privilege node account and a DNS control plane endpoint; project organization policies (US-only locations, no service account keys, no external VM addresses); and data access audit logs for every service, kept six years. Off by default, so the demo is unchanged. A new `terraform-gcp` workflow formats and validates the module. See `docs/deploy/GCP-HOSTED-HIPAA.md`.
 
 ## [6.2.0] - 2026-10-31
 
