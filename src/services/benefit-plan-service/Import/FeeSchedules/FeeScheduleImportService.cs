@@ -182,12 +182,12 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
 
     // ── Parsing ───────────────────────────────────────────────────
 
-    private sealed record Candidate(int Row, FeeScheduleLine Line, DateTime? EffectiveDate);
+    private sealed record Candidate(int Row, FeeScheduleLine Line, DateTime? EffectiveDate, int Rank = 0);
 
     internal static List<FeeScheduleLine> Parse(Stream csv, FeeScheduleImportOptions options, FeeScheduleImportReport report)
     {
         FeeScheduleColumns? cols = null;
-        List<(int Index, string Value)> filters = [];
+        List<(int Index, string[] Values)> filters = [];
         var scheduleStart = options.EffectiveDate.Date;
         var byKey = new Dictionary<(string Code, string Revenue, string Modifier), List<Candidate>>();
 
@@ -203,7 +203,7 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
             var c = cols!;
             string Field(int? i) => i is { } v && v < f.Length ? f[v].Trim() : string.Empty;
 
-            if (filters.Count > 0 && !filters.All(x => string.Equals(Field(x.Index), x.Value, StringComparison.OrdinalIgnoreCase)))
+            if (filters.Count > 0 && !filters.All(x => x.Values.Contains(Field(x.Index), StringComparer.OrdinalIgnoreCase)))
             {
                 report.RowsFilteredOut++;
                 continue;
@@ -285,7 +285,11 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
             // Like the plan default endpoint: a revenue code only distinguishes a revenue-code-only line.
             var key = (code, code.Length == 0 ? revenue : string.Empty, modifier);
             if (!byKey.TryGetValue(key, out var list)) byKey[key] = list = [];
-            list.Add(new Candidate(row, line, rowEffective));
+            // FilterOrder: the position of this row's value in the first filter that lists several.
+            var ranked = filters.FirstOrDefault(x => x.Values.Length > 1);
+            var rank = ranked.Values is null ? 0
+                : Array.FindIndex(ranked.Values, v => string.Equals(v, Field(ranked.Index), StringComparison.OrdinalIgnoreCase));
+            list.Add(new Candidate(row, line, rowEffective, rank));
         }
 
         var result = new List<FeeScheduleLine>(byKey.Count);
@@ -309,7 +313,7 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
         {
             report.Errors.Add(
                 $"{report.DuplicateKeys} code(s) have more than one rate. Narrow the file with filter " +
-                "(for example filter=Provider Type=Physician), or choose onDuplicate=First, Lowest or Highest.");
+                "(for example filter=Provider Type=Physician), or choose onDuplicate=First, Lowest, Highest or FilterOrder.");
         }
         else if (report.DuplicateKeys > 0)
         {
@@ -349,22 +353,27 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
             DuplicateRatePolicy.First => inForce[0].Line,
             DuplicateRatePolicy.Lowest => inForce.MinBy(c => c.Line.Rate)!.Line,
             DuplicateRatePolicy.Highest => inForce.MaxBy(c => c.Line.Rate)!.Line,
+            DuplicateRatePolicy.FilterOrder => inForce.MinBy(c => c.Rank)!.Line,
             _ => null,
         };
     }
 
-    private static List<(int Index, string Value)> ResolveFilters(
+    /// <summary>
+    /// Each filter keeps rows whose column equals the value, or one of several values
+    /// separated by "|" (e.g. "Proc Type" = "I|J|K|L|M|N"). Several filters must all match.
+    /// </summary>
+    private static List<(int Index, string[] Values)> ResolveFilters(
         FeeScheduleColumns columns, IReadOnlyList<(string Column, string Value)> filters)
     {
         var normalized = columns.Header.Select(FeeScheduleCsvReader.Normalize).ToList();
-        var result = new List<(int, string)>();
+        var result = new List<(int, string[])>();
         foreach (var (column, value) in filters)
         {
             var i = normalized.IndexOf(FeeScheduleCsvReader.Normalize(column));
             if (i < 0)
                 throw new FeeScheduleFormatException(
                     $"Filter column '{column}' is not in the header (row {columns.HeaderRowNumber}): {string.Join(", ", columns.Header.Where(h => h.Length > 0))}.");
-            result.Add((i, value.Trim()));
+            result.Add((i, value.Split('|').Select(v => v.Trim()).ToArray()));
         }
         return result;
     }

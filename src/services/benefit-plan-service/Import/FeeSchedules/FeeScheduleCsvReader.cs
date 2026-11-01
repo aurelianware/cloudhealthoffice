@@ -78,7 +78,7 @@ public static class FeeScheduleCsvReader
         "nonfacilityfee", "nonfacilityrate", "nonfacilityprice", "nonfacilityamount", "nonfacilityallowable", "nonfacility",
         "nonfacilitypricingamount", "medicaidfee", "medicaidrate", "maximumallowable", "maximumallowablefee", "maxallowable",
         "maximumfee", "maxfee", "feescheduleamount", "feeamount", "allowedamount", "allowable", "allowed",
-        "officefee", "rate", "fee", "amount", "price", "paymentrate", "reimbursementrate", "reimbursement", "negotiatedrate",
+        "officefee", "basicrate", "rate", "fee", "amount", "price", "paymentrate", "reimbursementrate", "reimbursement", "negotiatedrate",
     ];
 
     internal static readonly string[] FacilityRateAliases =
@@ -130,10 +130,19 @@ public static class FeeScheduleCsvReader
         if (!isZip) return seekable;
 
         var archive = new ZipArchive(seekable, ZipArchiveMode.Read, leaveOpen: false);
+        // A .csv first; otherwise the largest .txt (DHCS's Medi-Cal zip holds rates_data.txt and the
+        // much smaller conv_data.txt).
         var entry = archive.Entries.FirstOrDefault(e => e.FullName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+            ?? archive.Entries.Where(e => e.FullName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(e => e.Length).FirstOrDefault()
             ?? throw new FeeScheduleFormatException(
-                $"The zip '{fileName}' has no .csv file in it. Save an Excel fee schedule as CSV first.");
-        return entry.Open();
+                $"The zip '{fileName}' has no .csv or .txt file in it. Save an Excel fee schedule as CSV first.");
+        // Copied out so the reader can look at the start of the file to tell tab from comma.
+        var copyOut = new MemoryStream();
+        using (var entryStream = entry.Open()) entryStream.CopyTo(copyOut);
+        archive.Dispose();
+        copyOut.Position = 0;
+        return copyOut;
     }
 
     /// <summary>
@@ -144,9 +153,12 @@ public static class FeeScheduleCsvReader
     public static IEnumerable<(int RowNumber, string[] Fields)> Read(
         Stream csv, FeeScheduleColumnOverrides overrides, Action<FeeScheduleColumns> columns)
     {
+        var tabs = IsTabDelimited(csv);
         using var reader = new StreamReader(csv, detectEncodingFromByteOrderMarks: true);
         var config = new CsvConfiguration(CultureInfo.InvariantCulture)
         {
+            Delimiter = tabs ? "\t" : ",",
+            Mode = tabs ? CsvMode.NoEscape : CsvMode.RFC4180,
             HasHeaderRecord = false,
             BadDataFound = null,
             MissingFieldFound = null,
@@ -158,12 +170,23 @@ public static class FeeScheduleCsvReader
         FeeScheduleColumns? found = null;
         var rowNumber = 0;
         var searched = 0;
+        var searchedRows = new List<(int Row, string[] Fields)>();
         while (found is null && searched < MaxHeaderSearchRows && parser.Read())
         {
             searched++;
             rowNumber = parser.Row; // the file's line number (blank lines are not records)
             var record = parser.Record ?? [];
+            searchedRows.Add((rowNumber, record));
             found = TryResolve(record, rowNumber, overrides);
+        }
+
+        // DHCS's Medi-Cal rates_data.txt has no header row: give it the columns of its Excel twin,
+        // and read the rows the header search went past as data.
+        var replay = new List<(int Row, string[] Fields)>();
+        if (found is null && tabs && searchedRows.Any(r => IsMediCalRatesRow(r.Fields)))
+        {
+            found = TryResolve(MediCalRatesHeader, 0, overrides);
+            replay = searchedRows;
         }
 
         if (found is null)
@@ -176,6 +199,12 @@ public static class FeeScheduleCsvReader
 
         columns(found);
 
+        foreach (var (row, record) in replay)
+        {
+            if (record.All(string.IsNullOrWhiteSpace)) continue;
+            yield return (row, record);
+        }
+
         while (parser.Read())
         {
             rowNumber = parser.Row;
@@ -183,6 +212,46 @@ public static class FeeScheduleCsvReader
             if (record is null || record.All(string.IsNullOrWhiteSpace)) continue;
             yield return (rowNumber, record);
         }
+    }
+
+    /// <summary>The columns of DHCS's Medi-Cal Rates worksheet, which rates_data.txt has without a header.</summary>
+    internal static readonly string[] MediCalRatesHeader =
+    [
+        "Proc Type", "Proc Code", "Procedure Description", "Unit Value", "Basic Rate", "Child Rate", "ER Rate",
+        "Conv Ind", "ER Ind", "Cutback Ind", "Prof %", "Rental Rate", "Non-Physn Med Prac Ind",
+    ];
+
+    /// <summary>A rates_data.txt row: proc type, a 5-character code, a description, a unit value, then a $ basic rate.</summary>
+    internal static bool IsMediCalRatesRow(string[] f) =>
+        f.Length is >= 12 and <= 14
+        && f[0].Trim().Length is >= 1 and <= 2
+        && f[1].Trim().Length == 5
+        && f[4].Trim().StartsWith('$');
+
+    /// <summary>
+    /// True when the start of the file has more tabs than commas outside quotes (a tab-delimited
+    /// export such as DHCS's rates_data.txt). Only a seekable stream can be looked at; others are
+    /// read as comma-separated.
+    /// </summary>
+    internal static bool IsTabDelimited(Stream csv)
+    {
+        if (!csv.CanSeek) return false;
+        var start = csv.Position;
+        var buffer = new byte[16 * 1024];
+        var read = csv.Read(buffer, 0, buffer.Length);
+        csv.Position = start;
+        int tabs = 0, commas = 0;
+        var quoted = false;
+        for (var i = 0; i < read; i++)
+        {
+            switch ((char)buffer[i])
+            {
+                case '"': quoted = !quoted; break;
+                case '\t' when !quoted: tabs++; break;
+                case ',' when !quoted: commas++; break;
+            }
+        }
+        return tabs > commas;
     }
 
     /// <summary>The columns of <paramref name="record"/> as a header, or null when it is not the header.</summary>

@@ -313,6 +313,69 @@ public sealed class FeeScheduleImportServiceTests
 
     // ── helpers ──
 
+    // DHCS's Medi-Cal rates_data.txt: a date line, then tab-separated rows with no header,
+    // one row per procedure type and code (synthetic codes and descriptions).
+    private const string MediCalRates =
+        "10/15/2026\n" +
+        "N\t99213\tOFFICE VISIT                  \t     2.40\t   $24.00\t   $26.18\t   $29.81\t001\t1\t1\t0.00\t    $0.00\tY\t\n" +
+        "P\t99213\tOFFICE VISIT                  \t     2.40\t   $24.00\t   $26.18\t       --\t052\t0\t1\t0.00\t    $0.00\tY\t\n" +
+        "X\t99213\tOFFICE VISIT                  \t    82.02\t   $82.02\t      ---\t       --\t009\t1\t1\t0.00\t    $0.00\tY\t\n" +
+        "K\t27447\tKNEE REPLACEMENT              \t    40.00\t $1489.20\t      ---\t $1878.00\t004\t1\t0\t0.00\t    $0.00\tY\t\n" +
+        "O\t27447\tKNEE REPLACEMENT              \t     8.00\t  $297.84\t      ---\t  $375.60\t004\t1\t0\t0.00\t    $0.00\tY\t\n" +
+        "L\t71046\tCHEST X-RAY                   \t     7.19\t   $27.47\t      ---\t       --\t005\t0\t0\t0.34\t    $0.00\tY\t\n";
+
+    [Fact]
+    public async Task MediCalRatesTxt_HeaderlessTabFile_IsReadWithTheWorksheetColumns()
+    {
+        var (svc, _, _) = Build();
+
+        var report = await svc.ImportAsync(Csv(MediCalRates),
+            Options(filter: ("Proc Type", "I|K|L|M|N"), includeLines: true), Tenant, "admin");
+
+        report.Errors.Should().BeEmpty();
+        report.Columns["procedureCode"].Should().Be("Proc Code");
+        report.Columns["rate"].Should().Be("Basic Rate");
+        report.RowsFilteredOut.Should().Be(4, "the date line and the podiatrist, TRI and assistant-surgeon rows are not in the filter");
+        report.Lines.Select(l => (l.ProcedureCode, l.Rate)).Should().Equal(("27447", 1489.20m), ("71046", 27.47m), ("99213", 24.00m));
+    }
+
+    [Fact]
+    public async Task FilterOrder_KeepsTheEarliestListedValue_TargetedRateIncreaseOverBase()
+    {
+        var (svc, _, _) = Build();
+
+        var report = await svc.ImportAsync(Csv(MediCalRates),
+            Options(filter: ("Proc Type", "X|I|K|L|M|N"), onDuplicate: DuplicateRatePolicy.FilterOrder, includeLines: true), Tenant, "admin");
+
+        report.Errors.Should().BeEmpty();
+        report.Lines.Single(l => l.ProcedureCode == "99213").Rate.Should().Be(82.02m, "X (the targeted rate increase) is listed first");
+        report.Lines.Single(l => l.ProcedureCode == "27447").Rate.Should().Be(1489.20m, "no TRI row: the base primary-surgeon rate");
+    }
+
+    [Fact]
+    public async Task MediCalZip_ReadsTheRatesTxt_NotTheConversionFactors()
+    {
+        var (svc, _, _) = Build();
+        var zipBytes = new MemoryStream();
+        using (var zip = new System.IO.Compression.ZipArchive(zipBytes, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+        {
+            void Add(string name, string text)
+            {
+                using var w = new StreamWriter(zip.CreateEntry(name).Open());
+                w.Write(text);
+            }
+            Add("conv_data.txt", "10/15/2026\n001\tADULT\tPRIMARY CARE I\t001\t   $10.00\n");
+            Add("rates_data.txt", MediCalRates);
+        }
+        zipBytes.Position = 0;
+
+        await using var csv = FeeScheduleCsvReader.OpenCsv(zipBytes, "rates_files.zip");
+        var report = await svc.ImportAsync(csv, Options(filter: ("Proc Type", "K|L|N")), Tenant, "admin");
+
+        report.Errors.Should().BeEmpty();
+        report.LinesLoaded.Should().Be(3);
+    }
+
     private static MemoryStream Csv(string text) => new(Encoding.UTF8.GetBytes(text));
 
     private static FeeScheduleImportOptions Options(
