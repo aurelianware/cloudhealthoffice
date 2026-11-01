@@ -1,0 +1,127 @@
+# The hosted HIPAA environment's public front door: one external Application
+# Load Balancer (GKE Ingress) with Google-managed certificates for three host
+# names. deploy/gcp/hosted/apply-ingress.sh fills in the placeholders and
+# applies it; never apply it to the demo cluster.
+#
+#   ${PORTAL_HOST}  the portal, behind Identity-Aware Proxy (plan staff)
+#   ${FHIR_HOST}    fhir-service: Patient Access, Provider Access, Payer-to-Payer,
+#                   Prior Authorization and the public Provider Directory
+#   ${AUTH_HOST}    smart-auth-service: the SMART authorization server
+#
+# The FHIR and SMART hosts are public by design (patient apps, other payers);
+# every request still needs a SMART token, except the public directory and
+# the discovery documents. All three pass through the Cloud Armor policy.
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: cho-hosted
+  namespace: cloudhealthoffice
+spec:
+  domains:
+    - ${PORTAL_HOST}
+    - ${FHIR_HOST}
+    - ${AUTH_HOST}
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: cho-hosted
+  namespace: cloudhealthoffice
+spec:
+  sslPolicy: ${SSL_POLICY}
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT
+---
+# The portal: IAP signs people in (the portal reads x-goog-iap-jwt-assertion,
+# Authentication:CloudflareAccess:Provider=GoogleIap). Blazor Server keeps a
+# circuit per browser, so each browser sticks to one pod, and the WebSocket
+# may stay open for an hour.
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: cho-portal
+  namespace: cloudhealthoffice
+spec:
+  iap:
+    enabled: true
+    oauthclientCredentials:
+      secretName: iap-oauth
+  securityPolicy:
+    name: ${SECURITY_POLICY}
+  sessionAffinity:
+    affinityType: GENERATED_COOKIE
+    affinityCookieTtlSec: 10800
+  timeoutSec: 3600
+  connectionDraining:
+    drainingTimeoutSec: 60
+  healthCheck:
+    type: HTTP
+    requestPath: /health
+    port: 8080
+  logging:
+    enable: true
+    sampleRate: 1.0
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: cho-public-api
+  namespace: cloudhealthoffice
+spec:
+  securityPolicy:
+    name: ${SECURITY_POLICY}
+  timeoutSec: 300
+  connectionDraining:
+    drainingTimeoutSec: 30
+  healthCheck:
+    type: HTTP
+    requestPath: /health
+    port: 8080
+  logging:
+    enable: true
+    sampleRate: 1.0
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cho-hosted
+  namespace: cloudhealthoffice
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: ${ADDRESS_NAME}
+    networking.gke.io/managed-certificates: cho-hosted
+    networking.gke.io/v1beta1.FrontendConfig: cho-hosted
+    kubernetes.io/ingress.allow-http: "true"
+spec:
+  rules:
+    - host: ${PORTAL_HOST}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: portal
+                port:
+                  number: 80
+    - host: ${FHIR_HOST}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fhir-service
+                port:
+                  number: 80
+    - host: ${AUTH_HOST}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: smart-auth-service
+                port:
+                  number: 80

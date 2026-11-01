@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Hosted HIPAA profile, ingress (`infrastructure/gcp/hosted-ingress.tf`, `deploy/gcp/hosted/`). Terraform adds a global static IP, a TLS 1.2+ SSL policy and a Cloud Armor policy (per-IP rate ban, preconfigured WAF rules in preview until `hosted_waf_enforce`, Adaptive Protection), and grants IAP access to `hosted_portal_members`. `apply-ingress.sh` applies one GKE Ingress with Google-managed certificates for the portal (behind IAP), FHIR and SMART host names, and refuses the demo cluster. Off unless `hosted = true`.
+
 - Hosted HIPAA profile for the Google Cloud Terraform (`hosted = true`, `infrastructure/gcp/hosted.tf`), for a separate project under a Google Cloud BAA: customer-managed Cloud KMS keys (90-day rotation) for Kubernetes secrets, node disks, every bucket and Artifact Registry; a private-node regional cluster on its own VPC with Cloud NAT, Shielded nodes, a least-privilege node account and a DNS control plane endpoint; project organization policies (US-only locations, no service account keys, no external VM addresses); and data access audit logs for every service, kept six years. Off by default, so the demo is unchanged. A new `terraform-gcp` workflow formats and validates the module. See `docs/deploy/GCP-HOSTED-HIPAA.md`.
 
 ## [6.2.0] - 2026-10-31

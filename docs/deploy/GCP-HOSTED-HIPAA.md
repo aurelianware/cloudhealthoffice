@@ -49,13 +49,52 @@ The hosted profile refuses `autopilot = true` and `enable_managed_fhir_store = t
 
 Two outputs feed the next steps: `hosted_disk_kms_key` (the encrypted StorageClass) and `hosted_storage_kms_key`.
 
+## Ingress
+
+One external Application Load Balancer serves three host names. Pick them under a domain the plan will recognize, for example `portal.`, `fhir.` and `auth.` under a hosted subdomain.
+
+| Host | Goes to | Who gets through |
+| --- | --- | --- |
+| Portal | `portal` | People listed in `hosted_portal_members` (IAP), who also need an Active user in their CHO tenant |
+| FHIR | `fhir-service` | Anyone with a valid SMART token. The public Provider Directory and discovery documents need none |
+| SMART authorization | `smart-auth-service` | Public (OAuth endpoints) |
+
+`hosted-ingress.tf` creates a global static IP and an SSL policy (TLS 1.2 or later, MODERN). It also creates a Cloud Armor policy on every backend, with these rules:
+
+- A per-IP limit: `hosted_rate_limit_per_minute`, then a ten-minute ban.
+- Google's preconfigured WAF rules for SQL injection, XSS, file inclusion, code execution and scanners. They log only until `hosted_waf_enforce = true`, so FHIR search false positives can be tuned first.
+- Adaptive Protection.
+
+It also grants IAP access to `hosted_portal_members`.
+
+Steps after the Terraform apply:
+
+1. **IAP OAuth client (console, once).** Plan staff sign in with their own Google or other accounts, so IAP needs an OAuth client of your own: Google's managed client admits only your organization's users. In APIs & Services:
+    1. Configure the OAuth consent screen as External.
+    2. Create an OAuth client ID of type Web application.
+    3. Add the redirect URI `https://iap.googleapis.com/v1/oauth/clientIds/CLIENT_ID:handleRedirect`.
+2. **Apply the Kubernetes side.** Run it once the services are deployed:
+
+    ```bash
+    PORTAL_HOST=portal.example.com FHIR_HOST=fhir.example.com AUTH_HOST=auth.example.com \
+    ADDRESS_NAME="$(terraform output -raw hosted_ingress_address_name)" \
+    SSL_POLICY="$(terraform output -raw hosted_ssl_policy)" \
+    SECURITY_POLICY="$(terraform output -raw hosted_security_policy)" \
+    IAP_CLIENT_ID=... IAP_CLIENT_SECRET=... \
+    deploy/gcp/hosted/apply-ingress.sh
+    ```
+
+    It refuses a context that looks like the demo cluster. It keeps the OAuth client in Secret `iap-oauth` (pass it again only to rotate it), applies `deploy/gcp/hosted/ingress.yaml` and points each service at its BackendConfig.
+3. **DNS.** Add A records for the three hosts to `terraform output hosted_ingress_ip`, as DNS only. A Cloudflare-proxied record would put Cloudflare in the PHI path. The Google-managed certificate turns Active once DNS resolves, usually within an hour.
+4. **Portal audience.** Set `Authentication:CloudflareAccess:Provider=GoogleIap` and the portal backend service as the audience, in both the portal and token-service. See `docs/security/portal-token-service.md`, "Behind Google Cloud IAP instead".
+
 ## Workstreams
 
 | # | Workstream | Status |
 | --- | --- | --- |
 | 1 | Infrastructure base: keys, private regional cluster, organization policies, audit log bucket | In this module |
 | 2 | State services: Managed Service for Apache Kafka with TLS and SASL, Memorystore for Redis, MongoDB on an encrypted SSD StorageClass with TLS | Next |
-| 3 | Ingress: Google external load balancer, managed certificates, Cloud Armor, Identity-Aware Proxy for the portal, public FHIR endpoints under SMART, the SFTP address | Next |
+| 3 | Ingress: Google external load balancer, managed certificates, Cloud Armor, Identity-Aware Proxy for the portal, public FHIR endpoints under SMART (`hosted-ingress.tf`, `deploy/gcp/hosted/`) | Written. The SFTP address is unchanged (`cpcds-drops.tf`) |
 | 4 | Production hosts and sign-in: a `hosted` mode in `scripts/deploy-gke.sh` (Production hosts, synthetic data refused, Cloud KMS token signing, staff sign-in from IAP or the plan's identity provider), and the deploy using the DNS endpoint | Next |
 | 5 | Secrets in Secret Manager behind the secret provider interface | Next |
 | 6 | Alerts on IAM changes, key changes and repeated failed sign-ins | Next |
