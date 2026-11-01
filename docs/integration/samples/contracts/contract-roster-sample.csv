@@ -1,0 +1,4 @@
+NPI,Plan,Network Status,Effective Date,Term Date,Contract Number,Line of Business,Method,Fee Schedule ID,Percent,Multiplier,Code From,Code To,Claim Type,Lesser Of Billed,Description
+1245319599,STAR-TX-01,in,01/01/2026,,C-100,Medicaid,fee_schedule,acme:tx-medicaid-physician-2026-09:20260901,,1.05,99202,99499,professional,Y,E/M at 105% of the TX Medicaid schedule (SYNTHETIC)
+1245319599,STAR-TX-01,in,01/01/2026,,C-100,Medicaid,percent_of_medicare,acme:medicare-pfs-2026-04412-18:20260101,95,,,,professional,Y,Everything else at 95% of Medicare Dallas
+1003000126,STAR-TX-01,par,01/01/2026,12/31/2026,H-7,Medicaid,percent_of_billed,,55,,,,institutional,,Hospital at 55% of charges
