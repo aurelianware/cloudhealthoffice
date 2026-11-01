@@ -23,6 +23,7 @@ follow-up work.
 | [013](docs/adr/013-cms-0057-f-com-companion-property.md) | cms-0057-f.com as a companion educational property, with a cross-site attribution contract |
 | [017](docs/adr/017-mongodb-api-only-persistence.md) | MongoDB API is the only document persistence path (Azure DocumentDB in Azure) |
 | [023](docs/adr/023-managed-fhir-store-projection.md) | Publish FHIR projections into the plan's managed FHIR store (Google Cloud Healthcare API first), streaming to BigQuery and Vertex AI |
+| [035](docs/adr/035-server-side-cql-for-quality-measures.md) | Run CQL server-side, in batch, for quality measures only (DTR keeps Q-6) |
 
 ## ADR Backlog
 
