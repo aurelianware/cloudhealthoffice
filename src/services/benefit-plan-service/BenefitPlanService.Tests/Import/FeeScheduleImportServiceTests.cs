@@ -376,6 +376,19 @@ public sealed class FeeScheduleImportServiceTests
         report.LinesLoaded.Should().Be(3);
     }
 
+    [Fact]
+    public async Task TmhpAdjustedFee_IsReadOverTheUnreducedFee()
+    {
+        var (svc, _, _) = Build();
+        // TMHP static fee schedules carry the fee before and after mandated rate reductions.
+        var csv = "Procedure Code,Fee,Adjusted Fee\n99213,50.00,48.75\n";
+
+        var report = await svc.ImportAsync(Csv(csv), Options(includeLines: true), Tenant, "admin");
+
+        report.Columns["rate"].Should().Be("Adjusted Fee");
+        report.Lines.Single().Rate.Should().Be(48.75m);
+    }
+
     private static MemoryStream Csv(string text) => new(Encoding.UTF8.GetBytes(text));
 
     private static FeeScheduleImportOptions Options(

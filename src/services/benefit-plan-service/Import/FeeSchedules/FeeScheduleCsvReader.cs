@@ -75,14 +75,14 @@ public static class FeeScheduleCsvReader
 
     internal static readonly string[] RateAliases =
     [
-        "nonfacilityfee", "nonfacilityrate", "nonfacilityprice", "nonfacilityamount", "nonfacilityallowable", "nonfacility",
+        "adjustedfee", "nonfacilityadjustedfee", "nonfacilityfee", "nonfacilityrate", "nonfacilityprice", "nonfacilityamount", "nonfacilityallowable", "nonfacility",
         "nonfacilitypricingamount", "medicaidfee", "medicaidrate", "maximumallowable", "maximumallowablefee", "maxallowable",
         "maximumfee", "maxfee", "feescheduleamount", "feeamount", "allowedamount", "allowable", "allowed",
         "officefee", "basicrate", "rate", "fee", "amount", "price", "paymentrate", "reimbursementrate", "reimbursement", "negotiatedrate",
     ];
 
     internal static readonly string[] FacilityRateAliases =
-        ["facilityfee", "facilityrate", "facilityprice", "facilityamount", "facilityallowable", "facilitypricingamount", "facility"];
+        ["facilityadjustedfee", "facilityfee", "facilityrate", "facilityprice", "facilityamount", "facilityallowable", "facilitypricingamount", "facility"];
 
     internal static readonly string[] ModifierAliases =
         ["modifier", "modifier1", "mod", "mod1", "proceduremodifier", "procmod", "procmodifier"];
