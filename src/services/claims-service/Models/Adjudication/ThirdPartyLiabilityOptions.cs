@@ -28,6 +28,14 @@ public sealed class ThirdPartyLiabilityOptions
 
     /// <summary>Age below which a member counts as pediatric (EPSDT runs to 21).</summary>
     public int PediatricAgeLimit { get; set; } = 21;
+
+    /// <summary>
+    /// Per-state pay-and-chase services, keyed by two-letter state (the TPL
+    /// row's state). Added to CHO's built-in lists
+    /// (<see cref="Services.Adjudication.Tpl.TplStateRules.BuiltIn"/>).
+    /// </summary>
+    public Dictionary<string, Services.Adjudication.Tpl.TplStateRules> States { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
 }
 
 public enum TplEnforcementMode

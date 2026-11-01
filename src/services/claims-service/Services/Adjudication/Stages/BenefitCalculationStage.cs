@@ -1145,6 +1145,8 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             RemarkCodes = existing.RemarkCodes,
             CheckNumber = existing.CheckNumber,
             PaymentDate = existing.PaymentDate,
+            // Decided at 276, before benefits; keep it on the rebuilt result.
+            ThirdPartyLiability = existing.ThirdPartyLiability,
         };
 
         // Line CAS is load-bearing downstream: ClaimEventPublisher derives
