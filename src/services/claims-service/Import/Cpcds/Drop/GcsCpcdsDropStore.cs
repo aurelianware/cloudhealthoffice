@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using Google;
@@ -52,7 +53,7 @@ public sealed class GcsCpcdsDropStore : ICpcdsDropStore
             if (name.Length == 0 || FolderCpcdsDropStore.IsTransient(name))
                 continue;
 
-            var updated = obj.UpdatedDateTimeOffset?.UtcDateTime ?? DateTime.MaxValue;
+            var updated = UpdatedUtc(obj.UpdatedRaw) ?? DateTime.MaxValue;
             if (updated > nowUtc - quietPeriod)
                 continue;
 
@@ -69,7 +70,11 @@ public sealed class GcsCpcdsDropStore : ICpcdsDropStore
         try
         {
             await _client.CopyObjectAsync(_bucket, file.Path, _bucket, destination,
-                new CopyObjectOptions { IfSourceGenerationMatch = file.Generation }, ct);
+                // Copy exactly the generation that was listed, as well as
+                // requiring it to still be current: a rewritten file then
+                // answers 404 or 412 and waits for the next poll, even on an
+                // emulator that ignores the precondition.
+                new CopyObjectOptions { SourceGeneration = file.Generation, IfSourceGenerationMatch = file.Generation }, ct);
         }
         catch (GoogleApiException ex) when (IsGoneOrChanged(ex))
         {
@@ -131,6 +136,18 @@ public sealed class GcsCpcdsDropStore : ICpcdsDropStore
         {
         }
     }
+
+    /// <summary>
+    /// The object's RFC 3339 <c>updated</c> time in UTC. Parsed here rather than
+    /// through <c>UpdatedDateTimeOffset</c>, which rejects fractional seconds of
+    /// other than the three digits Cloud Storage itself sends (fake-gcs-server
+    /// sends up to nine).
+    /// </summary>
+    internal static DateTime? UpdatedUtc(string? updated)
+        => DateTimeOffset.TryParse(updated, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var value)
+            ? value.UtcDateTime
+            : null;
 
     private static bool IsGoneOrChanged(GoogleApiException ex)
         => ex.HttpStatusCode is HttpStatusCode.NotFound or HttpStatusCode.PreconditionFailed;

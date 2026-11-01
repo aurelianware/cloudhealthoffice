@@ -219,3 +219,26 @@ public sealed class GcsCpcdsDropStoreContractTests : CpcdsDropStoreContractTests
         return names.Order(StringComparer.Ordinal).ToList();
     }
 }
+
+/// <summary>The <c>updated</c> time is read whatever fractional precision the server sends.</summary>
+public sealed class GcsCpcdsDropStoreUpdatedTimeTests
+{
+    [Theory]
+    [InlineData("2026-11-01T02:05:58.530Z")]
+    [InlineData("2026-11-01T02:05:58.530133Z")]
+    [InlineData("2026-11-01T02:05:58.5301Z")]
+    [InlineData("2026-11-01T02:05:58.530133000Z")]
+    [InlineData("2026-10-31T19:05:58.530-07:00")]
+    public void Any_rfc3339_precision_parses_to_utc(string updated)
+    {
+        var parsed = GcsCpcdsDropStore.UpdatedUtc(updated);
+
+        parsed.Should().NotBeNull();
+        parsed!.Value.Kind.Should().Be(DateTimeKind.Utc);
+        parsed.Value.Should().BeCloseTo(new DateTime(2026, 11, 1, 2, 5, 58, 530, DateTimeKind.Utc), TimeSpan.FromMilliseconds(1));
+    }
+
+    [Fact]
+    public void A_missing_time_is_null()
+        => GcsCpcdsDropStore.UpdatedUtc(null).Should().BeNull();
+}
