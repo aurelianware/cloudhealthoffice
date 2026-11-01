@@ -14,7 +14,8 @@ Status by step:
 | 1 | TPL store and state file loader (this page) | Built |
 | 2 | Cost-avoid denial in adjudication when in-scope TPL is active | Built (off by default) |
 | 3 | State exempt-service lists, TPL decision saved on the claim | Built |
-| 4 | Recovery tracking (case per paid claim, 12-month CA clock, state reports) | Next |
+| 4 | Recovery tracking (case per paid claim, 12-month CA clock, state reports) | Built |
+| 5 | Report plan-discovered coverage to the state (CA: within 10 days) | Next |
 
 ## The TPL store
 
@@ -220,6 +221,36 @@ Modes: `Off` (default), `SoftValidation` (records the decision, never changes
 the claim; use it first, and in shadow runs), `Pend`, `CostAvoid`. The stage
 is shadow-safe, so a shadow adjudication run shows what cost avoidance would
 have done to a plan's history.
+
+## Recovery cases
+
+claims-service keeps a `TplRecoveryCase` (collection `TplRecoveryCases`) per
+claim and origin, under `api/v1/claims/tpl-recoveries` (`claims:read` to read,
+`claims:work` to change):
+
+| Call | What it does | When |
+| --- | --- | --- |
+| `POST sync?from=&to=` | Opens a case for each Medicaid claim adjudicated in the window whose pay-and-chase lines were paid. Idempotent. | Daily, or after each payment cycle |
+| `POST retroactive` `{ "memberIds": [...] }` | Re-checks those members' paid Medicaid claims (last 12 months, `RetroactiveLookbackMonths`) against their TPL now and opens a case for lines other coverage turns out to have covered. Claims already cost-avoided, paid-and-chased or billed to the other payer are skipped. | After a TPL file load, for the members it added coverage for |
+| `POST {id}/events` | `Billed`, `PaymentReceived` (amount), `RepaymentPlanAgreed`, `CarrierDenied`, `WrittenOff` (amount), `Note` | As the recovery team works the case |
+| `POST apply-clocks` | Hands open cases past the state's window to the state | Daily |
+| `GET report?state=CA&month=2027-02-01` | Month's CSV: cases handed to the state, recoveries received | Monthly |
+| `GET ?state=&status=&openOnly=&deadlineBefore=&memberId=` | Work list | Any time |
+
+Each case holds the lines, what Medicaid paid on them, the TPL rows to
+recover from, amounts recovered and written off, and every event with who
+recorded it.
+
+**Retention window.** `RecoveryRetentionMonths` is per state; California is
+12 (APL 21-002): the plan keeps recoveries made within 12 months of payment,
+or later under a repayment plan agreed by then; from month 13 DHCS's TPLRD
+recovers and keeps the money. `apply-clocks` moves such cases to
+`TransferredToState` the day after the deadline unless a repayment plan was
+agreed on or before it. Texas has no window by default; set one if the
+contract gives HHSC-OIG the recovery after a period.
+
+**Monthly report.** DHCS asks MCPs for a monthly report by the 15th over SFTP.
+The CSV here is CHO's layout; map it to the DHCS spec once the plan has it.
 
 ## References
 

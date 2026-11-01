@@ -541,6 +541,10 @@ builder.Services.Configure<ClaimsService.Services.Adjudication.Shadow.ShadowAdju
     builder.Configuration.GetSection(ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationOptions.SectionName));
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationRepository,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationRepositoryMongo>();
+// Medicaid TPL recovery cases (pay-and-chase and retroactive), with the
+// state retention clock and monthly report.
+builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryRepository, ClaimsService.Services.Tpl.TplRecoveryRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryService, ClaimsService.Services.Tpl.TplRecoveryService>();
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationService,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationService>();
 

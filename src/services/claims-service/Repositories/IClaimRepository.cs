@@ -303,6 +303,17 @@ public interface IClaimRepository
     /// <paramref name="to"/>] with no pending accumulator commit: the
     /// candidates of the post-rollout accumulator sweep.
     /// </summary>
+    /// <summary>
+    /// Finalized (Approved / PartiallyPaid / Paid), current-version Medicaid
+    /// claims of the request tenant adjudicated in [<paramref name="from"/>,
+    /// <paramref name="to"/>), oldest first. With <paramref name="payAndChaseOnly"/>,
+    /// only those whose TPL decision was pay and chase; with
+    /// <paramref name="memberId"/>, only that member's. Feeds Medicaid TPL
+    /// recovery cases.
+    /// </summary>
+    Task<IReadOnlyList<Claim>> FindFinalizedMedicaidAsync(
+        DateTime from, DateTime to, string? memberId, bool payAndChaseOnly, int limit, CancellationToken ct = default);
+
     Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(
         DateTime from, DateTime to, int limit, CancellationToken ct = default);
 

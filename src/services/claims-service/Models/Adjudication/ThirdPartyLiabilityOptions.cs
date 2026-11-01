@@ -36,6 +36,18 @@ public sealed class ThirdPartyLiabilityOptions
     /// </summary>
     public Dictionary<string, Services.Adjudication.Tpl.TplStateRules> States { get; set; } =
         new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Months after payment a plan may recover and keep the money, per state.
+    /// California: 12 (APL 21-002; DHCS recovers from month 13 unless a
+    /// repayment plan was agreed in time). A state not listed has no window:
+    /// cases stay with the plan until closed.
+    /// </summary>
+    public Dictionary<string, int> RecoveryRetentionMonths { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase) { ["CA"] = 12 };
+
+    /// <summary>How far back a retroactive TPL check looks at paid claims.</summary>
+    public int RetroactiveLookbackMonths { get; set; } = 12;
 }
 
 public enum TplEnforcementMode

@@ -1234,6 +1234,24 @@ public class ClaimRepositoryMongo : IClaimRepository
         return result.ModifiedCount == 1;
     }
 
+    public async Task<IReadOnlyList<Claim>> FindFinalizedMedicaidAsync(
+        DateTime from, DateTime to, string? memberId, bool payAndChaseOnly, int limit, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(
+            b.Eq(c => c.TenantId, GetTenantId()),
+            b.Eq(c => c.LineOfBusiness, LineOfBusiness.Medicaid),
+            b.In(c => c.Status, new[] { ClaimStatus.Approved, ClaimStatus.PartiallyPaid, ClaimStatus.Paid }),
+            b.Gte(c => c.AdjudicatedDate, from),
+            b.Lt(c => c.AdjudicatedDate, to),
+            b.Eq(c => c.SupersededAt, null));
+        if (!string.IsNullOrWhiteSpace(memberId))
+            filter &= b.Eq(c => c.MemberId, memberId);
+        if (payAndChaseOnly)
+            filter &= b.Eq(c => c.AdjudicationResult!.ThirdPartyLiability!.Decision, "PayAndChase");
+        return (await _collection.Find(filter).SortBy(c => c.AdjudicatedDate).Limit(limit).ToListAsync(ct)).Select(Hydrate).ToList();
+    }
+
     public async Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(
         DateTime from, DateTime to, int limit, CancellationToken ct = default)
     {
