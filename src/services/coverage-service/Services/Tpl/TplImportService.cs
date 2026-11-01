@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Logging;
 using CoverageService.Models.Tpl;
 using CoverageService.Repositories;
 
@@ -274,7 +275,7 @@ public sealed class TplImportService : ITplImportService
             await _policies.UpsertManyAsync(changed.Values.ToList(), ct).ConfigureAwait(false);
             _logger.LogInformation(
                 "TPL import {Layout} for {State}: {Inserted} inserted, {Updated} updated, {Ended} ended, {NotOnFile} ended not on file, {Removed} removed, {Rejected} rejected",
-                layout.Id, state, report.Inserted, report.Updated, report.Ended, report.EndedNotOnFile, report.Removed, report.Rejected);
+                LogSanitizer.Sanitize(layout.Id), LogSanitizer.Sanitize(state), report.Inserted, report.Updated, report.Ended, report.EndedNotOnFile, report.Removed, report.Rejected);
         }
         return report;
 
