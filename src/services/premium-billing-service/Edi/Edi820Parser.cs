@@ -19,6 +19,8 @@ namespace PremiumBillingService.Edi;
 ///   <item>NM1*IL (2100B): member name and id (NM109).</item>
 ///   <item>RMR (2300A/B): reference qualifier (01), reference (02), amount paid (04), billed (05).</item>
 ///   <item>DTM*582 after an RMR: coverage period (RD8 or D8).</item>
+///   <item>REF after an RMR (same 2300B loop): kept on the item (qualifier, value); state
+///     capitation 820s carry the rate cell or aid category there.</item>
 ///   <item>ADX (2320A/B): adjustment amount and reason, attached to the preceding RMR.</item>
 /// </list>
 /// Unknown segments are skipped. Missing BPR or TRN, or an unreadable amount
@@ -135,6 +137,11 @@ public static class Edi820Parser
                     // Header REF*38: the master policy (group) number the payer is paying for.
                     if (El(seg, 1) == "38" && _entityNumber == null && Advice.Items.Count == 0)
                         Advice.GroupReference = NullIfEmpty(El(seg, 2));
+                    // A REF in the RMR's own loop (2300B) belongs to that item:
+                    // state capitation 820s put the rate cell or aid category here.
+                    else if (_lastItem != null && _lastSegmentId is "RMR" or "REF" or "DTM"
+                             && El(seg, 1).Length > 0 && El(seg, 2).Length > 0)
+                        _lastItem.References.Add(new RemittanceReference { Qualifier = El(seg, 1), Value = El(seg, 2) });
                     break;
                 case "N1":
                     if (El(seg, 1) == "PR")
