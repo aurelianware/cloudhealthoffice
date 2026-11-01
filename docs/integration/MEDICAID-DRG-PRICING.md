@@ -16,9 +16,9 @@ adjudication pends it. It is never paid at $0 or at charges.
 
 ## Status
 
-These are the formulas only. Still to come:
+The formulas are in place, and the reader for the Texas SDA files is in place (see below). Still to come:
 
-- importers for the state weight tables and hospital files;
+- a store and import endpoint for hospital rates, and the importer for the state weight tables;
 - wiring the formulas into `PricingStage`.
 
 Until both land, no claim is priced by these formulas.
@@ -46,6 +46,29 @@ To verify with a plan or HHSC:
 - **Cost outlier wording.** The rule says the amount above the threshold is "multiplied by 60%". That is implemented as cost minus threshold.
 - **Downgraded DRGs.** Where a DRG was downgraded for a preventable adverse event, the rule pays the lesser of the original and downgraded outliers. This is not implemented yet.
 - **MCO contracts.** These set what an MCO actually pays. The rural hospital minimum fee schedule is one example.
+
+- **Rural labor and delivery.** A rural hospital is paid its OB-GYN delivery SDA instead of its final SDA for labor and delivery stays (§355.8052(e)(2)). The rule names services, not DRGs. The default list is APR-DRGs 540, 541, 542 and 560 (`TexasDrgPolicy.DeliveryBaseDrgs`), which is a guess to confirm.
+
+### Texas SDA files
+
+HHSC Provider Finance publishes each fiscal year's SDAs as PDFs, one per hospital class (for example `2027-fy-hosp-urban-sda.pdf` and `2027-fy-hosp-rural-sda.pdf`). `TexasSdaFileReader` (benefit-plan-service, `Import/MedicaidDrg`) reads them as published:
+
+- **Urban:** base SDA, supplemental funds base adjustment, then the wage index, IME, trauma and safety-net add-ons, giving the SDA with applicable add-ons.
+- **Rural:** SDA, add-on, SDA with add-on, and the OB-GYN delivery SDA.
+- **Title block:** the class, the state fiscal year, and the universal mean with its effective date. The universal mean feeds `TexasDrgPolicy.UniversalMean`.
+
+Every row's arithmetic is checked: the parts must add up to the final SDA, and the delivery SDA can't be below it.
+
+- A row that reads cleanly but contradicts itself is HHSC's error, not a misread. It is held back as a discrepancy, so that hospital's stays pend, and the rest of the file loads.
+- A row that can't be read at all, or a layout with an unexpected number of dollar columns, refuses the whole file.
+- Children's hospital files are refused until their layout has been seen.
+
+The interim rate (needed only for outliers) is not in these files.
+
+Results on the SFY 2027 files (effective September 1, 2026, universal mean $10,161.08):
+
+- **Urban:** 298 hospitals, none held back.
+- **Rural:** 138 hospitals loaded, 1 held back. HHSC prints Memorial Hospital of Polk County (TPI 112697106) with a $576.53 add-on, but its SDA with add-on ($12,435.40) equals the SDA alone. Its delivery SDA ($17,750.68) is consistent with no add-on. The plan should confirm the right SDA with HHSC.
 
 ## Medi-Cal (State Plan Attachment 4.19-A, DRG payment method)
 

@@ -66,6 +66,14 @@ public sealed record MedicaidDrgHospital
     public required decimal BaseRate { get; init; }
 
     /// <summary>
+    /// Texas rural hospitals only: the final SDA for labor and delivery stays
+    /// (§355.8052(e)(2), the "OB-GYN delivery SDA" column of the rural SDA
+    /// file). Used instead of <see cref="BaseRate"/> when the stay groups to
+    /// a delivery DRG; null means the hospital has no separate delivery SDA.
+    /// </summary>
+    public decimal? DeliveryBaseRate { get; init; }
+
+    /// <summary>
     /// Ratio used to estimate cost from charges: the Texas interim rate or the
     /// Medi-Cal interim cost-to-charge ratio. Needed only for outliers.
     /// </summary>
