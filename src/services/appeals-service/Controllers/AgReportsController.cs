@@ -85,7 +85,7 @@ public class AgReportsController : ControllerBase
         CancellationToken ct = default)
     {
         var asOf = _clock.GetUtcNow().UtcDateTime;
-        var toDate = (to ?? asOf).ToUniversalTime();
+        var toDate = StandardReports.AsUtc(to ?? asOf);
         var (fromDate, _, error) = StandardReports.Period(
             from ?? StandardReports.MonthOf(toDate).AddMonths(-12), toDate, asOf, TimeSpan.Zero, TimeSpan.FromDays(400));
         if (error is not null) return BadRequest(new { error });
