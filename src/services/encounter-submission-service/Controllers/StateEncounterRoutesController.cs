@@ -8,7 +8,7 @@ namespace EncounterSubmissionService.Controllers;
 /// <summary>
 /// State encounter routes for the caller's tenant: which states are ready, and the
 /// 837 files each batch produced. The tenant always comes from the CHO token.
-/// GET needs encounters:read (the default set in Program.cs).
+/// GET needs encounters:read, POST needs encounters:write (defaults set in Program.cs).
 /// </summary>
 [ApiController]
 [Route("api/encounters/state")]
@@ -17,13 +17,16 @@ public class StateEncounterRoutesController : ControllerBase
 {
     private readonly IStateEncounterRouteRegistry _registry;
     private readonly IStateEncounterBatchService _batches;
+    private readonly IStateResponseReconciler _responses;
     private readonly ICurrentActor _actor;
 
     public StateEncounterRoutesController(
-        IStateEncounterRouteRegistry registry, IStateEncounterBatchService batches, ICurrentActor actor)
+        IStateEncounterRouteRegistry registry, IStateEncounterBatchService batches,
+        IStateResponseReconciler responses, ICurrentActor actor)
     {
         _registry = registry;
         _batches = batches;
+        _responses = responses;
         _actor = actor;
     }
 
@@ -73,6 +76,57 @@ public class StateEncounterRoutesController : ControllerBase
         if (file is null) return NotFound();
         return File(Encoding.ASCII.GetBytes(file.Content), "text/plain", file.FileName);
     }
+
+    /// <summary>
+    /// Records that a staged file was handed to the state (SFTP drop, partner upload).
+    /// Its batched encounters become Submitted.
+    /// </summary>
+    [HttpPost("files/{fileId}/transmitted")]
+    [ProducesResponseType(typeof(StateEncounterFile), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<StateEncounterFile>> MarkTransmitted(string fileId, CancellationToken ct)
+    {
+        var file = await _batches.MarkTransmittedAsync(_actor.TenantId, fileId, ct);
+        return file is null ? NotFound() : Ok(file);
+    }
+
+    /// <summary>
+    /// Applies a response file from the state (999, 277CA / 277) to this tenant's
+    /// encounters on that route, record by record. The DHCS EVR XML file is refused
+    /// with 422 until its schema is implemented.
+    /// </summary>
+    [HttpPost("{stateCode}/responses")]
+    [ProducesResponseType(typeof(StateResponseResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<StateResponseResult>> ApplyResponse(
+        string stateCode, [FromBody] StateResponseRequest request, CancellationToken ct)
+    {
+        var route = _registry.Get(stateCode);
+        if (route is null || route.Format != EncounterRouteFormat.X12_837)
+            return BadRequest(new { message = $"'{stateCode}' has no X12 encounter route." });
+        if (string.IsNullOrWhiteSpace(request.Content))
+            return BadRequest(new { message = "Content is required." });
+
+        try
+        {
+            return Ok(await _responses.ApplyAsync(route, _actor.TenantId, request.FileName, request.Content, ct));
+        }
+        catch (NotSupportedException ex)
+        {
+            return UnprocessableEntity(new { message = ex.Message });
+        }
+        catch (FormatException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+}
+
+public sealed class StateResponseRequest
+{
+    public string? FileName { get; set; }
+    public string Content { get; set; } = string.Empty;
 }
 
 public sealed class StateRouteStatus

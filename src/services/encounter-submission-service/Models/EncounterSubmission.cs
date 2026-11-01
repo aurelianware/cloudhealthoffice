@@ -131,6 +131,21 @@ public class EncounterSubmission
     [JsonPropertyName("patientControlNumber")]
     public string? PatientControlNumber { get; set; }
 
+    /// <summary>
+    /// The state's identifier for this encounter (277CA REF*1K: TMHP ICN, DHCS claim ID).
+    /// A replacement or void must reference it in REF*F8.
+    /// </summary>
+    [JsonPropertyName("stateClaimReference")]
+    public string? StateClaimReference { get; set; }
+
+    /// <summary>Status codes from the most recent state response (999 IK5, 277CA STC).</summary>
+    [JsonPropertyName("stateStatusCodes")]
+    public List<string> StateStatusCodes { get; set; } = new();
+
+    /// <summary>Every state response applied to this record, oldest first.</summary>
+    [JsonPropertyName("responseHistory")]
+    public List<EncounterResponseEvent> ResponseHistory { get; set; } = new();
+
     /// <summary>Pre-submission validation failures that held the encounter back.</summary>
     [JsonPropertyName("validationErrors")]
     public List<string> ValidationErrors { get; set; } = new();
@@ -146,4 +161,28 @@ public class EncounterSubmission
     /// </summary>
     [JsonPropertyName("updatedAt")]
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>One state response applied to an encounter submission.</summary>
+public class EncounterResponseEvent
+{
+    [JsonPropertyName("responseId")]
+    public string ResponseId { get; set; } = string.Empty;
+
+    /// <summary>999, 277CA, 277.</summary>
+    [JsonPropertyName("kind")]
+    public string Kind { get; set; } = string.Empty;
+
+    [JsonPropertyName("receivedAt")]
+    public DateTime ReceivedAt { get; set; }
+
+    [JsonPropertyName("statusCodes")]
+    public List<string> StatusCodes { get; set; } = new();
+
+    [JsonPropertyName("resultingStatus")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public EncounterSubmissionStatus ResultingStatus { get; set; }
+
+    [JsonPropertyName("errors")]
+    public List<string> Errors { get; set; } = new();
 }
