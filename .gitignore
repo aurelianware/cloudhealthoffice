@@ -99,3 +99,7 @@ tools/cms-grouper-parity-oracle/build/
 # Demo walkthrough recordings (scripts/demo/walkthrough/record.js)
 scripts/demo/walkthrough/out/
 scripts/demo/walkthrough/node_modules/
+
+# CPCDS trial kit: local drop folder and import reports (can hold plan data)
+/drops/
+cpcds-trial-out/

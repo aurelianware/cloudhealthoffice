@@ -19,6 +19,7 @@ the architecture, and find an area to contribute.
 | Deploy beyond local development | [Deployment](deployment/DEPLOYMENT.md) |
 | Plan an implementation (phases, plan staffing, gates, risks) | [Implementation Blueprint](implementation/IMPLEMENTATION-BLUEPRINT.md) and the [core admin adapter QRE](features/questionnaires/qre-core-admin-adapter-questions.md) |
 | Load a plan's data (benefit plans, providers, members, claims, authorizations) and validate its APIs | [Implementation guide: loading a plan's data](integration/LOADING-A-PLANS-DATA.md) |
+| Try CHO on a plan's own CPCDS extracts and check its CMS-0057-F APIs with Inferno (plan-hosted) | [CPCDS trial kit](integration/CPCDS-TRIAL-KIT.md) |
 | Sell the first Layer 1 pilot | CMS-0057-F Accelerator offer (maintained in a private repository) and [diligence binder](diligence/README.md) |
 | Position software + professional services | [Product-led services ADR](adr/012-product-led-professional-services.md), services content plan (maintained in a private repository), and the assistant plan (maintained in a private repository) |
 | Run the cms-0057-f.com companion property | [ADR 013](adr/013-cms-0057-f-com-companion-property.md) and the cross-site contract (maintained in a private repository) |
