@@ -138,8 +138,8 @@ public class ClaimReportsController : ControllerBase
         CancellationToken ct = default)
     {
         var asOf = _clock.GetUtcNow().UtcDateTime;
-        var toDate = (to ?? asOf).ToUniversalTime();
-        var fromDate = (from ?? new DateTime(toDate.Year, toDate.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-12)).ToUniversalTime();
+        var toDate = AsUtc(to ?? asOf);
+        var fromDate = AsUtc(from ?? new DateTime(toDate.Year, toDate.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-12));
         if (fromDate >= toDate)
             return BadRequest(new { error = "from must be before to." });
         if (toDate - fromDate > TimeSpan.FromDays(400))
@@ -171,10 +171,18 @@ public class ClaimReportsController : ControllerBase
         return Respond(run, format);
     }
 
+    /// <summary>
+    /// A query date with no offset (<c>2026-03-01</c>) is a UTC date, as the
+    /// report periods are UTC: read it as one, not as the server's local time.
+    /// </summary>
+    internal static DateTime AsUtc(DateTime value) => value.Kind == DateTimeKind.Unspecified
+        ? DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        : value.ToUniversalTime();
+
     private static (DateTime From, DateTime To, string? Error) Period(DateTime? from, DateTime? to, DateTime asOf, TimeSpan defaultLength)
     {
-        var toDate = (to ?? asOf).ToUniversalTime();
-        var fromDate = (from ?? toDate - defaultLength).ToUniversalTime();
+        var toDate = AsUtc(to ?? asOf);
+        var fromDate = AsUtc(from ?? toDate - defaultLength);
         if (fromDate >= toDate) return (fromDate, toDate, "from must be before to.");
         if (toDate - fromDate > TimeSpan.FromDays(366)) return (fromDate, toDate, "The period can be at most a year.");
         return (fromDate, toDate, null);
