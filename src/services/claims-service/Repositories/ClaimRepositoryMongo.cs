@@ -1433,4 +1433,25 @@ public class ClaimRepositoryMongo : IClaimRepository
 
         return items.Select(Hydrate).ToList();
     }
+
+    public async Task<IReadOnlyList<(DateTime Received, DateTime? Adjudicated)>> GetReceiptToAdjudicationAsync(ClaimCriteria criteria, int limit, CancellationToken ct = default)
+    {
+        var rows = await _collection.Find(ClaimCriteriaFilter.Build(GetTenantId(), criteria))
+            .SortBy(c => c.SubmittedDate)
+            .Limit(Math.Max(limit, 1))
+            .Project(c => new { c.SubmittedDate, c.AdjudicatedDate })
+            .ToListAsync(ct);
+        return rows.Select(r => (r.SubmittedDate, r.AdjudicatedDate)).ToList();
+    }
+
+    public async Task<(IReadOnlyList<Claim> Rows, int TotalCount)> GetReportRowsAsync(ClaimCriteria criteria, int limit, CancellationToken ct = default)
+    {
+        var filter = ClaimCriteriaFilter.Build(GetTenantId(), criteria);
+        var total = (int)await _collection.CountDocumentsAsync(filter, cancellationToken: ct);
+        var docs = await _collection.Find(filter)
+            .SortBy(c => c.SubmittedDate).ThenBy(c => c.Id)
+            .Limit(Math.Max(limit, 1))
+            .ToListAsync(ct);
+        return (docs.Select(Hydrate).ToList(), total);
+    }
 }

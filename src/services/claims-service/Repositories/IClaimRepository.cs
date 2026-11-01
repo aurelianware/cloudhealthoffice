@@ -66,6 +66,22 @@ public interface IClaimRepository
         => throw new NotSupportedException("Searching by claim reference or Insights criteria needs the MongoDB claim store.");
 
     /// <summary>
+    /// Receipt and adjudication instants of the current claims matching
+    /// <paramref name="criteria"/>, at most <paramref name="limit"/>: the
+    /// processing-timeliness report's basis.
+    /// </summary>
+    Task<IReadOnlyList<(DateTime Received, DateTime? Adjudicated)>> GetReceiptToAdjudicationAsync(ClaimCriteria criteria, int limit, CancellationToken ct = default)
+        => throw new NotSupportedException("Processing timeliness needs the MongoDB claim store.");
+
+    /// <summary>
+    /// A standard report's rows: the current claims matching
+    /// <paramref name="criteria"/>, oldest receipt first, at most
+    /// <paramref name="limit"/>, and how many match in all.
+    /// </summary>
+    Task<(IReadOnlyList<Claim> Rows, int TotalCount)> GetReportRowsAsync(ClaimCriteria criteria, int limit, CancellationToken ct = default)
+        => throw new NotSupportedException("Claims reports need the MongoDB claim store.");
+
+    /// <summary>
     /// How many current claims (header or any line, 837 REF*G1) carry each of
     /// these prior authorization numbers; numbers no claim carries are absent.
     /// </summary>

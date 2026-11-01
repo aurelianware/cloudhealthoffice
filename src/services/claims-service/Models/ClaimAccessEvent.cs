@@ -84,6 +84,8 @@ public static class ClaimAccessActions
 {
     public const string View = "View";
     public const string Search = "Search";
+    /// <summary>A standard report run (claims:reports): the claims it returned.</summary>
+    public const string Report = "Report";
     public const string List = "List";
     public const string Notes = "Notes";
     public const string Edits = "Edits";
