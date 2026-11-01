@@ -57,6 +57,17 @@ else
     throw new InvalidOperationException("MongoDb:ConnectionString must be configured for provider-contracts-service");
 }
 
+// capitation-service holds the capitation rate configs that copy a contract's
+// number, NPI, provider name and line of business; sync-children (and a
+// contract edit that changes one of them) pushes them there with this
+// service's own token. Under *.cloudhealthoffice, so it is a CHO host.
+builder.Services.AddHttpClient(ProviderContractsService.Services.HttpCapitationChildSync.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["CapitationService:BaseUrl"] ?? "http://capitation-service.cloudhealthoffice/");
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddScoped<ProviderContractsService.Services.ICapitationChildSync, ProviderContractsService.Services.HttpCapitationChildSync>();
+
 // Health checks
 builder.Services.AddChoHealthChecks(options =>
 {
