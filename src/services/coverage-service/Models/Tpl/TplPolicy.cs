@@ -86,6 +86,29 @@ public sealed class TplPolicy
 
     public string? LastUpdatedBy { get; set; }
 
+    /// <summary>When the plan learned of the coverage (plan-discovered rows).</summary>
+    public DateTime? DiscoveredAt { get; set; }
+
+    /// <summary>What the plan still owes the state for this row: report a
+    /// newly found policy (<c>Add</c>) or ask for a wrong state record to be
+    /// removed (<c>Remove</c>). Null once reported, or for rows the state sent.</summary>
+    public TplStateAction? PendingStateAction { get; set; }
+
+    /// <summary>Why the plan asked the state to remove the record.</summary>
+    public string? PendingStateActionReason { get; set; }
+
+    /// <summary>When the report to the state is due (California: 10 calendar
+    /// days after discovery, APL 21-002). Null where the state sets no clock.</summary>
+    public DateTime? StateReportDueBy { get; set; }
+
+    public DateTime? ReportedToStateAt { get; set; }
+
+    /// <summary>The state's reference for the report (batch or form id).</summary>
+    public string? StateReportReference { get; set; }
+
+    /// <summary>When a state file first carried a row the plan had found itself.</summary>
+    public DateTime? StateConfirmedAt { get; set; }
+
     /// <summary>Natural key used to match a file row to a stored row:
     /// member, state, carrier, policy and start date. Two rows from the same
     /// state for the same policy that start on different dates are separate
@@ -107,6 +130,12 @@ public sealed class TplPolicy
         Status != TplPolicyStatus.Removed
         && EffectiveDate.Date <= date.Date
         && (EndDate is null || EndDate.Value.Date >= date.Date);
+}
+
+public enum TplStateAction
+{
+    Add,
+    Remove,
 }
 
 public enum TplPolicyStatus

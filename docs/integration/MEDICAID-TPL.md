@@ -15,7 +15,7 @@ Status by step:
 | 2 | Cost-avoid denial in adjudication when in-scope TPL is active | Built (off by default) |
 | 3 | State exempt-service lists, TPL decision saved on the claim | Built |
 | 4 | Recovery tracking (case per paid claim, 12-month CA clock, state reports) | Built |
-| 5 | Report plan-discovered coverage to the state (CA: within 10 days) | Next |
+| 5 | Plan-found coverage and removal requests, queued for the state report (CA: within 10 days) | Built |
 
 ## The TPL store
 
@@ -148,6 +148,22 @@ labor and delivery and postpartum care are cost-avoided; pediatric preventive
 services are paid without regard to TPL unless the state found 90-day cost
 avoidance warranted; claims tied to medical child support may be paid without
 regard to TPL for up to 100 days.
+
+## Coverage the plan finds itself
+
+| Call | What it does |
+| --- | --- |
+| `POST /api/v1/coverage/member/{id}/tpl` | Records a policy the plan found (provider EOB, member call, data match). `coverage` takes the state's code (`K`, `MAJOR MEDICAL`) or scope names. It counts for cost avoidance at once and is queued as an **Add** for the state. |
+| `POST /api/v1/coverage/tpl/{policyId}/removal-request` `{ reason }` | Queues a **Remove** request for a state record the plan believes is wrong; the record stays in force until the state's file drops it. A plan-found row never reported is simply withdrawn. |
+| `GET /api/v1/coverage/tpl/state-report?state=CA` | CSV of adds and removal requests owed, with due date and an overdue flag (`includeReported=true` adds the history). |
+| `POST /api/v1/coverage/tpl/state-report/mark-reported` `{ policyIds, reportedAt, reference }` | Clears them once sent, keeping the state's batch or form reference. |
+
+California's clock is 10 calendar days from discovery (APL 21-002; DHCS takes
+the OHC Addition/Removal form or HI-36 batch). `Tpl:Reporting:ReportDueDays`
+sets it per state; Texas has none by default but its rows are still listed.
+When a later state file carries the same policy, the importer adopts the
+plan's row as the state's (`ConfirmedPlanDiscovered` in the import report) and
+the pending add is dropped.
 
 ## Cost avoidance in adjudication
 

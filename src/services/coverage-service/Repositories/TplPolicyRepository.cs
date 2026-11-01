@@ -17,6 +17,13 @@ public interface ITplPolicyRepository
     Task<IReadOnlyList<TplPolicy>> GetActiveBySourceAsync(
         string tenantId, string state, string source, CancellationToken ct = default);
 
+    Task<TplPolicy?> GetByIdAsync(string tenantId, string id, CancellationToken ct = default);
+
+    /// <summary>Rows with a report still owed to the state (or, with
+    /// <paramref name="includeReported"/>, also those already reported).</summary>
+    Task<IReadOnlyList<TplPolicy>> GetStateReportRowsAsync(
+        string tenantId, string state, bool includeReported, CancellationToken ct = default);
+
     /// <summary>Inserts or replaces by id.</summary>
     Task UpsertManyAsync(IReadOnlyCollection<TplPolicy> policies, CancellationToken ct = default);
 }
@@ -62,6 +69,20 @@ public sealed class TplPolicyRepositoryMongo : ITplPolicyRepository
         await _collection.Find(x => x.TenantId == tenantId && x.State == state && x.Source == source
                                     && x.Status == TplPolicyStatus.Active)
             .ToListAsync(ct).ConfigureAwait(false);
+
+    public async Task<TplPolicy?> GetByIdAsync(string tenantId, string id, CancellationToken ct = default) =>
+        await _collection.Find(x => x.TenantId == tenantId && x.Id == id).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+
+    public async Task<IReadOnlyList<TplPolicy>> GetStateReportRowsAsync(
+        string tenantId, string state, bool includeReported, CancellationToken ct = default)
+    {
+        var b = Builders<TplPolicy>.Filter;
+        var filter = b.Eq(x => x.TenantId, tenantId) & b.Eq(x => x.State, state);
+        filter &= includeReported
+            ? b.Or(b.Ne(x => x.PendingStateAction, null), b.Ne(x => x.ReportedToStateAt, null))
+            : b.Ne(x => x.PendingStateAction, null);
+        return await _collection.Find(filter).SortBy(x => x.StateReportDueBy).ToListAsync(ct).ConfigureAwait(false);
+    }
 
     public async Task UpsertManyAsync(IReadOnlyCollection<TplPolicy> policies, CancellationToken ct = default)
     {
