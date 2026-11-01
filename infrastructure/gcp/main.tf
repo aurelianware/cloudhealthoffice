@@ -163,6 +163,17 @@ resource "google_container_cluster" "cho" {
     channel = "REGULAR"
   }
 
+  # Hosted: the Backup for GKE agent, for the daily backup plan
+  # (hosted-operations.tf).
+  dynamic "addons_config" {
+    for_each = var.hosted ? [1] : []
+    content {
+      gke_backup_agent_config {
+        enabled = true
+      }
+    }
+  }
+
   # Workload Identity: pods act as Google service accounts without keys
   # (document storage below). Autopilot always has it; Standard needs it set.
   workload_identity_config {

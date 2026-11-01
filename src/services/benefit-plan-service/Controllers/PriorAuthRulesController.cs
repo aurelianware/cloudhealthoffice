@@ -1,3 +1,5 @@
+using BenefitPlanService.Import.FeeSchedules;
+using BenefitPlanService.Import.PriorAuthRules;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using CloudHealthOffice.PriorAuthRuleEngine.Persistence;
@@ -16,14 +18,93 @@ public sealed class PriorAuthRulesController : ControllerBase
     private readonly ICurrentActor _actor;
     private readonly ILogger<PriorAuthRulesController> _logger;
 
+    private readonly IPriorAuthRuleImportService? _importer;
+
+    /// <summary>A plan's PA list is a few thousand rows; 20 MB leaves room for long description columns.</summary>
+    private const long MaxImportBytes = 20L * 1024 * 1024;
+
     public PriorAuthRulesController(
         IPaRuleRepository repository,
         ICurrentActor actor,
-        ILogger<PriorAuthRulesController> logger)
+        ILogger<PriorAuthRulesController> logger,
+        IPriorAuthRuleImportService? importer = null)
     {
         _repository = repository;
         _actor = actor;
         _logger = logger;
+        _importer = importer;
+    }
+
+    /// <summary>
+    /// Loads the plan's own list of items and services that need prior
+    /// authorization (CSV, or a .zip holding one) as this tenant's rule set for
+    /// one state, line of business and (optionally) program. CRD, PAS
+    /// <c>$submit</c> and the published required-services list all read that
+    /// rule set. Accepts the CSV <c>required-services?format=csv</c> returns,
+    /// and typical payer PA lists (a code column, optional category, place of
+    /// service, diagnosis and limit columns). The file is the whole list for
+    /// its scope: an earlier import's rules it no longer has are disabled.
+    /// Dry run by default. Tenant configuration: <c>settings:manage</c>.
+    /// See docs/integration/PRIOR-AUTH-RULES-IMPORTER.md.
+    /// </summary>
+    [HttpPost("import/csv")]
+    [RequirePermission("settings:manage")]
+    [RequestSizeLimit(MaxImportBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxImportBytes)]
+    [ProducesResponseType(typeof(PriorAuthRuleImportReport), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ImportCsv(
+        IFormFile? file,
+        [FromQuery] string? stateCode,
+        [FromQuery] PaLineOfBusiness lob,
+        [FromQuery] string? program = null,
+        [FromQuery] bool keepExemptions = true,
+        [FromQuery] bool dryRun = true,
+        [FromQuery] bool includeCodes = false,
+        CancellationToken ct = default)
+    {
+        if (_importer is null)
+            return StatusCode(StatusCodes.Status501NotImplemented, new { error = "The prior-auth list importer is not registered." });
+        if (string.IsNullOrWhiteSpace(_actor.TenantId))
+            return BadRequest(new { error = "Tenant context missing." });
+
+        var errors = new List<string>();
+        if (file is null || file.Length == 0) errors.Add("Upload the list as 'file' (CSV, or a .zip holding one).");
+        if (string.IsNullOrWhiteSpace(stateCode) || stateCode.Trim().Length != 2 || !stateCode.Trim().All(char.IsAsciiLetter))
+            errors.Add("Supply a two-letter state code.");
+        if (!Enum.IsDefined(lob)) errors.Add("Supply a line of business.");
+        if (program is not null && (program.Trim().Length is 0 or > 32 || !program.Trim().All(char.IsAsciiLetterOrDigit)))
+            errors.Add("A program code is letters and digits only.");
+        if (errors.Count > 0) return BadRequest(new { error = "Invalid prior-auth list import.", details = errors });
+
+        var options = new PriorAuthRuleImportOptions
+        {
+            StateCode = stateCode!.Trim().ToUpperInvariant(),
+            LineOfBusiness = lob,
+            Program = string.IsNullOrWhiteSpace(program) ? null : program.Trim(),
+            SourceName = Path.GetFileName(file!.FileName),
+            KeepExemptions = keepExemptions,
+            DryRun = dryRun,
+            IncludeCodes = includeCodes,
+        };
+
+        try
+        {
+            await using var csv = FeeScheduleCsvReader.OpenCsv(file.OpenReadStream(), file.FileName);
+            return Ok(await _importer.ImportAsync(csv, options, _actor.TenantId, _actor.UserId, ct));
+        }
+        catch (PriorAuthRuleFormatException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (FeeScheduleFormatException ex)
+        {
+            return BadRequest(new { error = ex.Message.Replace("fee schedule", "prior-auth list", StringComparison.Ordinal) });
+        }
+        catch (InvalidDataException ex)
+        {
+            return BadRequest(new { error = $"Could not read the upload: {ex.Message}" });
+        }
     }
 
     /// <summary>
