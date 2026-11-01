@@ -27,6 +27,10 @@ f9da612c2e62501b0ff5a6c37770bafa65bf7ef0:k8s/x12-275-upload-job.yaml:generic-api
 e8f5b011cc8a1d2bc6981cf5176739765966013b:test-attachment-oauth.sh:curl-auth-header:63
 e8f5b011cc8a1d2bc6981cf5176739765966013b:test-attachment-oauth.sh:generic-api-key:8
 #
+# A fake JWT-shaped bearer token ({"alg":"RS256"}.{"sub":"test"}.signature-value)
+# in the deployed-CHO Inferno target tests. Joined at runtime in the next change.
+afca31ffddefdb841c47f708695038bce8187293:tests/DaVinciInterop.Tests/Unit/ChoRemoteTargetTests.cs:jwt:15
+#
 # Fixed placeholder API keys for the provider eligibility API test factory
 # (never real credentials). Replaced by per-run generated keys in the next
 # commit on the same branch.
