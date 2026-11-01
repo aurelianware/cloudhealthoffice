@@ -97,6 +97,4 @@ The username and key prefix must be the tenant id: claims-service reads
 * The hosted environment itself (Google BAA in place, CMEK by default, a
   private cluster) is separate work; until then this runs on the demo
   project, which holds synthetic data only.
-* tenant-service's SFTP user provisioning (from signup and the portal's setup
-  page, where a plan pastes its public key) is the next PR.
 * The SFTPGo image is pinned to a minor tag; pin a digest before production.
