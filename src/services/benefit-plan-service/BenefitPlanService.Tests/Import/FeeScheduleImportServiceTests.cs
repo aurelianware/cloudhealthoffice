@@ -389,6 +389,102 @@ public sealed class FeeScheduleImportServiceTests
         report.Lines.Single().Rate.Should().Be(48.75m);
     }
 
+    // An extract of TMHP's Physician static fee schedule (November 2026): its three header rows
+    // and the rows of a few codes, saved from the downloaded .xls as CSV, .xls and .xlsx.
+    private static string Fixture(string extension) =>
+        Path.Combine(AppContext.BaseDirectory, "Import", "Fixtures", "tmhp-physician-sample" + extension);
+
+    private static readonly (string, string)[] TmhpAdultFilters =
+        [("TOS", "1|2|3|4|5|6|7|9|0|I|T|F"), ("Client Age Thru", "999")];
+
+    [Theory]
+    [InlineData(".csv")]
+    [InlineData(".xls")]
+    [InlineData(".xlsx")]
+    public async Task TmhpStaticSchedule_TwoRowHeader_ReadsTheAdjustedFees(string extension)
+    {
+        var (svc, _, _) = Build();
+        await using var file = File.OpenRead(Fixture(extension));
+        await using var csv = FeeScheduleCsvReader.OpenCsv(file, "FeeSchedules" + extension);
+
+        var report = await svc.ImportAsync(csv,
+            Options(includeLines: true, onDuplicate: DuplicateRatePolicy.FilterOrder) with { Filters = TmhpAdultFilters },
+            Tenant, "admin");
+
+        report.Errors.Should().BeEmpty();
+        report.Columns["rate"].Should().Be("Non-facility Adjusted Fee for Report Date",
+            "the \"Non-facility\" group label alone sits over the RVU column");
+        report.Columns["facilityRate"].Should().Be("Facility Adjusted Fee for Report Date");
+        report.DuplicateKeys.Should().Be(0);
+        report.Lines.Select(l => (l.ProcedureCode, l.Modifier, l.Rate, l.FacilityRate)).Should().Equal(
+            ("19302", null, 731.35m, 731.35m),
+            ("27447", null, 1039.28m, 1039.28m),
+            ("71046", null, 27.00m, null),
+            ("71046", "26", 8.29m, 8.29m),
+            ("71046", "TC", 18.71m, null),
+            ("97598", null, 35.82m, 19.25m),
+            ("99213", null, 33.95m, 33.95m));
+        report.LinesPricedOnlyInFacility.Should().Be(2, "19302 and 27447 have no non-facility price");
+    }
+
+    [Fact]
+    public async Task TmhpStaticSchedule_ChildRates_RankAcrossBothFilters()
+    {
+        var (svc, _, _) = Build();
+        await using var csv = File.OpenRead(Fixture(".csv"));
+
+        var report = await svc.ImportAsync(csv,
+            Options(includeLines: true, onDuplicate: DuplicateRatePolicy.FilterOrder) with
+            {
+                Filters = [("Client Age Thru", "20|999"), ("TOS", "1|2|4|I|T")],
+            },
+            Tenant, "admin");
+
+        report.Errors.Should().BeEmpty();
+        var rates = report.Lines.ToDictionary(l => l.ProcedureCode + l.Modifier, l => (l.Rate, l.FacilityRate));
+        rates["99213"].Should().Be((39.90m, 39.90m), "the 0-20 TOS 1 row ranks over the 10-20 TOS 2 row");
+        rates["97598"].Should().Be((37.61m, 20.21m));
+        rates["71046TC"].Should().Be((19.65m, (decimal?)null));
+    }
+
+    [Fact]
+    public async Task TwoRowHeader_WhoseTopRowIsNoHeader_IsFoundWithANamedRateColumn()
+    {
+        var (svc, _, _) = Build();
+        // TMHP's hospital outpatient imaging schedule: rates under "Urban Hospitals" and "Rural Hospitals".
+        var csv =
+            "TOS,TOS Desc,Proc Code,Client Age,,,Urban Hospitals,,Rural Hospitals,\n" +
+            ",,,Frm,Thru,Units,Outpatient Rate,Adjusted Fee for Report,Outpatient Rate,Adjusted Fee for Report\n" +
+            "4,RADIOLOGY,70010,0,999,Years,57.48,57.48,461.69,461.69\n";
+
+        var report = await svc.ImportAsync(Csv(csv),
+            Options(includeLines: true, columns: new FeeScheduleColumnOverrides(Rate: "Rural Hospitals Adjusted Fee for Report")),
+            Tenant, "admin");
+
+        report.Errors.Should().BeEmpty();
+        report.HeaderRow.Should().Be(1);
+        report.Lines.Single().Rate.Should().Be(461.69m);
+    }
+
+    [Fact]
+    public void ZipOfManyWorkbooks_AsksForOne()
+    {
+        var zipBytes = new MemoryStream();
+        using (var zip = new System.IO.Compression.ZipArchive(zipBytes, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var name in new[] { "FeeSchedules (1).xls", "FeeSchedules (2).xls", "__MACOSX/._FeeSchedules.xls" })
+            {
+                using var w = zip.CreateEntry(name).Open();
+                w.Write(File.ReadAllBytes(Fixture(".xls")));
+            }
+        }
+        zipBytes.Position = 0;
+
+        var act = () => FeeScheduleCsvReader.OpenCsv(zipBytes, "Archive.zip");
+
+        act.Should().Throw<FeeScheduleFormatException>().WithMessage("*2 Excel workbooks*");
+    }
+
     private static MemoryStream Csv(string text) => new(Encoding.UTF8.GetBytes(text));
 
     private static FeeScheduleImportOptions Options(

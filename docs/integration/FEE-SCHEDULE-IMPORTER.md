@@ -10,7 +10,7 @@ claims are paid at.
 Typical inputs:
 
 - a **state Medicaid fee schedule** (Texas TMHP, Medi-Cal, AHCCCS, Florida AHCA,
-  eMedNY, ...), saved as CSV, as the default schedule of a Medicaid managed care
+  eMedNY, ...), as the default schedule of a Medicaid managed care
   plan;
 - a **plan's contracted rate sheet** (for a provider contract term to name by
   id), the missing input that leaves shadow adjudication lines `ChoUndecided`
@@ -21,7 +21,8 @@ Typical inputs:
 ## Endpoint
 
 `POST /api/v1/fee-schedules/import/csv` (benefit-plan-service), multipart
-field `file` (CSV, or a `.zip` holding one). Permission `settings:manage`.
+field `file`: CSV, an Excel workbook (`.xls` or `.xlsx`, first sheet), or a `.zip`
+holding one CSV, tab-separated `.txt` or workbook. Permission `settings:manage`.
 **Dry run by default**: nothing is written until `dryRun=false`.
 
 | Query parameter | Required | Meaning |
@@ -34,7 +35,7 @@ field `file` (CSV, or a `.zip` holding one). Permission `settings:manage`.
 | `sourceType`, `sourceId`, `sourceVersion`, `jurisdiction` | no | Provenance stored on the schedule (`sourceType` defaults to `PublicGovernment` for Medicaid, `PayerContract` otherwise). |
 | `filter` | no, repeatable | `Column=Value`, keep only matching rows, e.g. `filter=Provider Type=Physician`. Several values separated by `|` keep any of them, e.g. `filter=Proc Type=I|K|L|M|N`. State exports often hold several programs or provider types in one file. |
 | `codeColumn`, `rateColumn`, `facilityRateColumn`, `modifierColumn`, `revenueCodeColumn` | no | Name a column when the aliases below do not find it. |
-| `onDuplicate` | no | `Reject` (default), `First`, `Lowest`, `Highest` or `FilterOrder`, for codes that still have more than one rate. `FilterOrder` keeps the row whose value comes first in a `|` filter. |
+| `onDuplicate` | no | `Reject` (default), `First`, `Lowest`, `Highest` or `FilterOrder`, for codes that still have more than one rate. `FilterOrder` keeps the row whose value comes first in a `|` filter; with several such filters, the first one decides first. |
 | `keepZeroRates` | no | Load `$0.00` rows (off: a state's $0 usually means manually priced or not payable). |
 | `replace` | no | Replace an existing schedule with the same id that has different rates. |
 | `includeLines` | no | Return every line in the report, not the first 25. |
@@ -49,6 +50,17 @@ field `file` (CSV, or a `.zip` holding one). Permission `settings:manage`.
   also `Modifier`/`Mod`, `Modifier 2`, `Revenue Code`, `Effective Date`,
   `End Date`, `Mult Proc`. The report's `columns` says which column was read
   for each role.
+- **Two-row headers**: when the row under the header has group sub-labels
+  (TMHP's `Non-facility` and `Facility` over `Total RVUs`, `Medicaid Fee`,
+  `Adjusted Fee for Report Date`, ...), each sub-label is named with its group,
+  e.g. `Non-facility Adjusted Fee for Report Date`, and that is the name to
+  use in `filter` and the column parameters.
+- **Facility only**: a row with a facility rate and no non-facility rate (inpatient
+  surgery) loads the facility rate as its rate everywhere (`linesPricedOnlyInFacility`).
+  Two rows that each give one side of the same code are one line with both rates.
+- **Professional and technical components**: in a file with a `TOS` (type of
+  service) column, rows with TOS `I` and `T` and no modifier become `26` and `TC`
+  lines.
 - **Codes**: 5-character CPT, HCPCS or CDT codes; revenue-code-only lines
   (blank procedure code) price 837I lines by revenue code.
 - **Not loaded** (counted in `skipped` with examples): by report, manually
@@ -64,16 +76,33 @@ field `file` (CSV, or a `.zip` holding one). Permission `settings:manage`.
   file needs `replace=true`.
 - At most 50,000 lines per schedule.
 
-### Example: Texas Medicaid physician schedule as a STAR plan's default
+### Texas Medicaid (TMHP static fee schedules)
+
+Download a schedule from TMHP's static fee schedules (Texas Medicaid, then the provider
+type, for example `Physician`) and upload the `.xls` as it comes. The importer finds its
+two-row header and reads `Non-facility Adjusted Fee for Report Date` and `Facility Adjusted
+Fee for Report Date`, the fees after the mandated rate reductions (TMPPM §2.3).
+
+TMHP lists a code once per **type of service** and **client age range**, so two filters
+are required:
+
+| Column | Keep | Why |
+|---|---|---|
+| `TOS` | `1\|2\|3\|4\|5\|6\|7\|9\|0\|I\|T\|F` | `I` and `T` become the 26 and TC lines. `8` (assistant surgery) is left out: the engine pays modifiers 80, 81, 82 and AS at 16% of the surgeon's rate, which is what TMHP's TOS 8 rows are. |
+| `Client Age Thru` | `999` for adults; `20\|999` with `onDuplicate=FilterOrder` for children | The engine has no age dimension, so one schedule holds one age group. A children's schedule falls back to the adult rate for codes TMHP prices only for adults. |
 
 ```bash
-# 1. Dry run: check columns, skips and duplicates
-curl -X POST "$CHO/api/v1/fee-schedules/import/csv?name=TX%20Medicaid%20Physician%202026-09&effectiveDate=2026-09-01&type=Medicaid&jurisdiction=TX&sourceId=tx-tmhp-physician&sourceVersion=2026-10-01&planId=$PLAN&filter=Provider%20Type%3DPhysician" \
-  -H "Authorization: Bearer $TOKEN" -F file=@tmhp-physician.csv | jq '{outcome, columns, linesLoaded, skipped, duplicateKeys, errors}'
-
-# 2. Write it
-curl -X POST "...same query...&dryRun=false" -H "Authorization: Bearer $TOKEN" -F file=@tmhp-physician.csv
+curl -X POST "$CHO/api/v1/fee-schedules/import/csv?name=TX%20Medicaid%20Physician%20Adult%202026-11&effectiveDate=2026-11-01&type=Medicaid&jurisdiction=TX&sourceId=tx-tmhp-physician&sourceVersion=2026-11-01&planId=$PLAN_CODE&filter=TOS%3D1%7C2%7C3%7C4%7C5%7C6%7C7%7C9%7C0%7CI%7CT%7CF&filter=Client%20Age%20Thru%3D999&onDuplicate=FilterOrder" \
+  -H "Authorization: Bearer $TOKEN" -H "X-Tenant-ID: $TENANT" -F "file=@FeeSchedules.xls"
 ```
+
+The November 2026 Physician schedule loads 9,745 adult lines with no conflicts:
+99213 $33.95, 71046 $27.00 (26 $8.29, TC $18.71), 27447 $1,039.28 (facility only).
+Not loaded: anesthesia (base units × conversion factor plus time, like Medi-Cal's J) and
+TMHP's $0 and blank rows (by report or manually priced). Schedules that are not one row per
+code, such as renal dialysis composite rates by county, need their own reader. The hospital
+outpatient imaging schedule has urban and rural rates; name one with
+`rateColumn=Urban Hospitals Urban Hospital Adjusted Fee for Report` (or `Rural ...`).
 
 ### Medi-Cal (DHCS Rates file)
 

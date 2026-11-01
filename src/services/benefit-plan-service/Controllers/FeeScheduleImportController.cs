@@ -76,7 +76,7 @@ public sealed class FeeScheduleImportController : ControllerBase
             return BadRequest(new { message = "Tenant context missing." });
 
         var errors = new List<string>();
-        if (file is null || file.Length == 0) errors.Add("Upload the fee schedule as 'file' (CSV, or a .zip holding one).");
+        if (file is null || file.Length == 0) errors.Add("Upload the fee schedule as 'file' (CSV, Excel .xls or .xlsx, or a .zip holding one).");
         if (string.IsNullOrWhiteSpace(name)) errors.Add("name is required.");
         if (effectiveDate is null) errors.Add("effectiveDate is required (the date the rates take effect).");
         if (termDate is { } t && effectiveDate is { } e && t.Date <= e.Date) errors.Add("termDate must be after effectiveDate.");

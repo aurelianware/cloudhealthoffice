@@ -182,7 +182,7 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
 
     // ── Parsing ───────────────────────────────────────────────────
 
-    private sealed record Candidate(int Row, FeeScheduleLine Line, DateTime? EffectiveDate, int Rank = 0);
+    private sealed record Candidate(int Row, FeeScheduleLine Line, DateTime? EffectiveDate, long Rank = 0);
 
     internal static List<FeeScheduleLine> Parse(Stream csv, FeeScheduleImportOptions options, FeeScheduleImportReport report)
     {
@@ -190,6 +190,7 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
         List<(int Index, string[] Values)> filters = [];
         var scheduleStart = options.EffectiveDate.Date;
         var byKey = new Dictionary<(string Code, string Revenue, string Modifier), List<Candidate>>();
+        var facilityOnlyLines = new HashSet<FeeScheduleLine>(ReferenceEqualityComparer.Instance);
 
         foreach (var (row, f) in FeeScheduleCsvReader.Read(csv, options.Columns, c =>
                  {
@@ -232,6 +233,17 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
             }
 
             var modifier = Field(c.Modifier).ToUpperInvariant();
+            // TMHP lists a code's professional and technical components as their own rows with
+            // type of service I and T and no modifier; on a claim they are billed with 26 and TC.
+            if (modifier.Length == 0 && c.TypeOfService is not null)
+            {
+                modifier = Field(c.TypeOfService).ToUpperInvariant() switch
+                {
+                    "I" => "26",
+                    "T" => "TC",
+                    _ => modifier,
+                };
+            }
             if (modifier.Length > 0 && (modifier.Length != 2 || !modifier.All(char.IsLetterOrDigit)))
             {
                 Skip("modifier is not 2 letters or digits");
@@ -252,16 +264,20 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
                 if (end < scheduleStart) { Skip("rate ended before the schedule's effective date"); continue; }
             }
 
-            var (rate, rateProblem) = ParseMoney(Field(c.Rate));
-            if (rateProblem is not null) { Skip(rateProblem); continue; }
-            if (rate == 0m && !options.KeepZeroRates) { Skip("$0.00 rate (not loaded; pass keepZeroRates=true to load)"); continue; }
-
             decimal? facility = null;
             if (c.FacilityRate is not null)
             {
                 var (fr, frProblem) = ParseMoney(Field(c.FacilityRate));
                 if (frProblem is null && (fr > 0m || options.KeepZeroRates)) facility = fr;
             }
+
+            var (rate, rateProblem) = ParseMoney(Field(c.Rate));
+            // A code priced only in a facility (TMHP leaves the non-facility side blank for
+            // inpatient surgery) pays its facility rate wherever it is billed.
+            var facilityOnly = rateProblem == "no rate" && facility is not null;
+            if (facilityOnly) (rate, rateProblem) = (facility!.Value, null);
+            if (rateProblem is not null) { Skip(rateProblem); continue; }
+            if (rate == 0m && !options.KeepZeroRates) { Skip("$0.00 rate (not loaded; pass keepZeroRates=true to load)"); continue; }
 
             MultipleProcedureIndicator? mpi = null;
             var mpiText = Field(c.MultipleProcedureIndicator);
@@ -285,10 +301,35 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
             // Like the plan default endpoint: a revenue code only distinguishes a revenue-code-only line.
             var key = (code, code.Length == 0 ? revenue : string.Empty, modifier);
             if (!byKey.TryGetValue(key, out var list)) byKey[key] = list = [];
-            // FilterOrder: the position of this row's value in the first filter that lists several.
-            var ranked = filters.FirstOrDefault(x => x.Values.Length > 1);
-            var rank = ranked.Values is null ? 0
-                : Array.FindIndex(ranked.Values, v => string.Equals(v, Field(ranked.Index), StringComparison.OrdinalIgnoreCase));
+            // FilterOrder: the position of this row's value in each filter that lists several,
+            // the first such filter deciding first.
+            long rank = 0;
+            foreach (var (index, values) in filters.Where(x => x.Values.Length > 1))
+            {
+                var position = Array.FindIndex(values, v => string.Equals(v, Field(index), StringComparison.OrdinalIgnoreCase));
+                rank = rank * 1_000 + position;
+            }
+            // TMHP sometimes prices a code's non-facility and facility sides on two rows: one
+            // line with both rates, not two rates for one code.
+            var other = list.FirstOrDefault(x => x.Rank == rank && x.EffectiveDate == rowEffective
+                && (facilityOnly
+                    ? x.Line.FacilityRate is null && !facilityOnlyLines.Contains(x.Line)
+                    : facility is null && facilityOnlyLines.Contains(x.Line)));
+            if (other is not null)
+            {
+                if (facilityOnly)
+                {
+                    other.Line.FacilityRate = facility;
+                }
+                else
+                {
+                    facilityOnlyLines.Remove(other.Line);
+                    other.Line.FacilityRate = other.Line.Rate;
+                    other.Line.Rate = rate;
+                }
+                continue;
+            }
+            if (facilityOnly) facilityOnlyLines.Add(line);
             list.Add(new Candidate(row, line, rowEffective, rank));
         }
 
@@ -307,6 +348,13 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
                         candidates.Select(x => x.Line.Rate).ToList()));
             }
             if (pick is not null) result.Add(pick);
+        }
+
+        report.LinesPricedOnlyInFacility = result.Count(facilityOnlyLines.Contains);
+        if (report.LinesPricedOnlyInFacility > 0)
+        {
+            report.Warnings.Add(
+                $"{report.LinesPricedOnlyInFacility} line(s) have only a facility rate; it is also their rate outside a facility.");
         }
 
         if (report.DuplicateKeys > 0 && options.OnDuplicate == DuplicateRatePolicy.Reject)

@@ -72,6 +72,7 @@
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="CsvHelper" Version="33.0.1" />
     <PackageVersion Include="EphemeralMongo" Version="3.2.0" />
+    <PackageVersion Include="ExcelDataReader" Version="3.8.0" />
     <PackageVersion Include="FluentAssertions" Version="6.12.2" />
     <PackageVersion Include="Fluid.Core" Version="2.31.0" />
     <!-- Managed FHIR store (CloudHealthOffice.ManagedFhirStore): matches the version Google.Cloud.Storage.V1 resolves. -->
