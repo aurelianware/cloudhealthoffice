@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Hosted HIPAA profile, ingress (`infrastructure/gcp/hosted-ingress.tf`, `deploy/gcp/hosted/`). Terraform adds a global static IP, a TLS 1.2+ SSL policy and a Cloud Armor policy (per-IP rate ban, preconfigured WAF rules in preview until `hosted_waf_enforce`, Adaptive Protection), and grants IAP access to `hosted_portal_members`. `apply-ingress.sh` applies one GKE Ingress with Google-managed certificates for the portal (behind IAP), FHIR and SMART host names, and refuses the demo cluster. Off unless `hosted = true`.
 - Portal and token-service sign-in behind Google Cloud Identity-Aware Proxy: `Provider = GoogleIap` in `CloudflareAccess` (token-service) and `Authentication:CloudflareAccess` (portal). The services validate the ES256 `x-goog-iap-jwt-assertion` token from `https://cloud.google.com/iap` against the configured backend services, and sign-out clears the IAP cookie. Cloudflare Access stays the default. For the hosted HIPAA environment, where Cloudflare would need its own BAA.
 - Hosted HIPAA profile, operations (`infrastructure/gcp/hosted-operations.tf`): a daily Backup for GKE plan covering every namespace, its secrets and its volume data. It is encrypted with its own customer-managed key, kept 35 days and delete-locked for the first 7. Also security alert policies on the audit logs (IAM policy, encryption key, audit log routing and organization policy changes, and failed backups), emailed to `hosted_alert_emails`. Off unless `hosted = true`.
 
