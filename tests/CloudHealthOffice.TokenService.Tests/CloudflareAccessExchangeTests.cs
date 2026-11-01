@@ -267,6 +267,23 @@ public sealed class CloudflareAccessExchangeTests : IDisposable
     [Fact]
     public void A_valid_configuration_passes() => Valid().Validate();
 
+    [Fact]
+    public void Behind_google_iap_the_provider_reaches_the_validator()
+    {
+        var options = new CloudflareAccessExchangeOptions
+        {
+            Enabled = true,
+            Provider = EdgeAccessProvider.GoogleIap,
+            Audiences = { "/projects/123456789012/global/backendServices/987654321" },
+            Tenants = { "plan-a" },
+        };
+
+        options.Validate();
+        var validator = options.ToValidatorOptions();
+        validator.Issuer.Should().Be("https://cloud.google.com/iap");
+        validator.CertsUrl.Should().Be("https://www.gstatic.com/iap/verify/public_key-jwk");
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("http://cho-test.cloudflareaccess.com")]

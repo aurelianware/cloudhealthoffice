@@ -52,17 +52,21 @@ public class CloudflareAccessSignInTests
         });
     }
 
-    private static CloudflareAccessTokenValidator Validator() => new(
-        new CloudflareAccessOptions { TeamDomain = TeamDomain, Audiences = { Aud } },
-        new StaticCloudflareAccessKeys(Jwks()));
+    private static readonly CloudflareAccessOptions AccessOptions = new() { TeamDomain = TeamDomain, Audiences = { Aud } };
 
-    private static async Task<AuthenticateResult> Authenticate(string? header)
+    private static CloudflareAccessTokenValidator Validator() => new(AccessOptions, new StaticCloudflareAccessKeys(Jwks()));
+
+    private static Task<AuthenticateResult> Authenticate(string? header)
+        => Authenticate(header, CloudflareAccessOptions.AssertionHeader, AccessOptions, Validator());
+
+    private static async Task<AuthenticateResult> Authenticate(
+        string? header, string headerName, CloudflareAccessOptions options, ICloudflareAccessTokenValidator validator)
     {
         var handler = new CloudflareAccessAuthenticationHandler(
-            new StaticOptionsMonitor(), NullLoggerFactory.Instance, UrlEncoder.Default, Validator());
+            new StaticOptionsMonitor(), NullLoggerFactory.Instance, UrlEncoder.Default, validator, options);
         var context = new DefaultHttpContext();
         if (header != null)
-            context.Request.Headers[CloudflareAccessOptions.AssertionHeader] = header;
+            context.Request.Headers[headerName] = header;
         await handler.InitializeAsync(
             new AuthenticationScheme(CloudflareAccessAuthenticationHandler.SchemeName, null, typeof(CloudflareAccessAuthenticationHandler)),
             context);
@@ -109,6 +113,66 @@ public class CloudflareAccessSignInTests
 
         result.Succeeded.Should().BeFalse();
         result.Failure.Should().NotBeNull();
+    }
+
+    // ── Behind Google Cloud IAP instead of Cloudflare ──
+
+    private const string IapAudience = "/projects/123456789012/global/backendServices/987654321";
+    private static readonly ECDsaSecurityKey IapKey = new(ECDsa.Create(ECCurve.NamedCurves.nistP256)) { KeyId = "iap-1" };
+
+    private static string IapJwks()
+    {
+        var p = IapKey.ECDsa.ExportParameters(false);
+        return JsonSerializer.Serialize(new
+        {
+            keys = new[] { new { kid = IapKey.KeyId, kty = "EC", alg = "ES256", use = "sig", crv = "P-256", x = Base64UrlEncoder.Encode(p.Q.X), y = Base64UrlEncoder.Encode(p.Q.Y) } },
+        });
+    }
+
+    private static string IapToken() => new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+    {
+        Issuer = CloudflareAccessOptions.GoogleIapIssuer,
+        Audience = IapAudience,
+        IssuedAt = DateTime.UtcNow.AddMinutes(-1),
+        Expires = DateTime.UtcNow.AddMinutes(9),
+        Claims = new Dictionary<string, object> { ["sub"] = "accounts.google.com:1234567890", ["email"] = "pat@acme.example", ["hd"] = "acme.example" },
+        SigningCredentials = new SigningCredentials(IapKey, SecurityAlgorithms.EcdsaSha256),
+    });
+
+    private static readonly CloudflareAccessOptions IapOptions = new() { Provider = EdgeAccessProvider.GoogleIap, Audiences = { IapAudience } };
+
+    [Fact]
+    public async Task Behind_google_iap_the_iap_header_signs_the_person_in()
+    {
+        var validator = new CloudflareAccessTokenValidator(IapOptions, new StaticCloudflareAccessKeys(IapJwks()));
+        var token = IapToken();
+
+        var result = await Authenticate(token, CloudflareAccessOptions.GoogleIapAssertionHeader, IapOptions, validator);
+
+        result.Succeeded.Should().BeTrue();
+        result.Principal!.FindFirst(ClaimTypes.Email)!.Value.Should().Be("pat@acme.example");
+        result.Principal.FindFirst(CloudflareAccessAuthenticationHandler.AssertionClaim)!.Value.Should().Be(token);
+    }
+
+    [Fact]
+    public async Task Behind_google_iap_a_cloudflare_header_is_ignored()
+    {
+        var validator = new CloudflareAccessTokenValidator(IapOptions, new StaticCloudflareAccessKeys(IapJwks()));
+
+        (await Authenticate(IapToken(), CloudflareAccessOptions.AssertionHeader, IapOptions, validator)).None.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Behind_google_iap_sign_out_clears_the_iap_cookie()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            [PortalAuthMode.ConfigurationKey] = PortalAuthMode.CloudflareAccess,
+            ["Authentication:CloudflareAccess:Provider"] = "GoogleIap",
+        }).Build();
+
+        PortalAuthMode.SignOutPath(configuration).Should().Be("/?gcp-iap-mode=CLEAR_LOGIN_COOKIE");
+        PortalAuthMode.SignInPath(configuration).Should().Be(PortalAuthMode.CloudflareAccessSignInPath);
     }
 
     // ── Token exchange ──

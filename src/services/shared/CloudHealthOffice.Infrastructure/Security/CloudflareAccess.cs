@@ -4,17 +4,45 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace CloudHealthOffice.Infrastructure.Security;
 
+/// <summary>The identity-aware proxy in front of an application.</summary>
+public enum EdgeAccessProvider
+{
+    /// <summary>Cloudflare Access (Zero Trust): RS256 tokens from the team domain.</summary>
+    Cloudflare,
+
+    /// <summary>
+    /// Google Cloud Identity-Aware Proxy on an external Application Load
+    /// Balancer: ES256 tokens issued by <c>https://cloud.google.com/iap</c>,
+    /// covered by the Google Cloud BAA.
+    /// </summary>
+    GoogleIap,
+}
+
 /// <summary>
-/// Trust settings for Cloudflare Access application tokens. When an
-/// application sits behind Cloudflare Access, every request Access lets through
-/// carries the signed-in person's Access token in the
-/// <c>Cf-Access-Jwt-Assertion</c> header: an RS256 JWT whose issuer is the
-/// Zero Trust team domain and whose audience is the Access application's AUD tag.
+/// Trust settings for the signed tokens an identity-aware proxy adds to every
+/// request it lets through. Cloudflare Access (the default) sends an RS256 JWT
+/// in <c>Cf-Access-Jwt-Assertion</c>, whose issuer is the Zero Trust team
+/// domain and whose audience is the Access application's AUD tag. Google
+/// Cloud IAP (<see cref="Provider"/> = <c>GoogleIap</c>) sends an ES256 JWT in
+/// <c>x-goog-iap-jwt-assertion</c>, issued by <c>https://cloud.google.com/iap</c>
+/// with the backend service as its audience.
 /// </summary>
 public sealed class CloudflareAccessOptions
 {
     /// <summary>The request header Cloudflare Access adds to every proxied request.</summary>
     public const string AssertionHeader = "Cf-Access-Jwt-Assertion";
+
+    /// <summary>The request header Google Cloud IAP adds to every proxied request.</summary>
+    public const string GoogleIapAssertionHeader = "x-goog-iap-jwt-assertion";
+
+    /// <summary>The only issuer of Google Cloud IAP tokens.</summary>
+    public const string GoogleIapIssuer = "https://cloud.google.com/iap";
+
+    /// <summary>Where Google publishes the IAP signing keys (JWKS).</summary>
+    public const string GoogleIapCertsUrl = "https://www.gstatic.com/iap/verify/public_key-jwk";
+
+    /// <summary>Which proxy signs the tokens. Default: Cloudflare.</summary>
+    public EdgeAccessProvider Provider { get; set; } = EdgeAccessProvider.Cloudflare;
 
     /// <summary>
     /// The Zero Trust team domain, e.g. <c>cloudhealthoffice.cloudflareaccess.com</c>
@@ -25,8 +53,10 @@ public sealed class CloudflareAccessOptions
     public string TeamDomain { get; set; } = string.Empty;
 
     /// <summary>
-    /// The Access application AUD tags accepted (Zero Trust → Access →
-    /// Applications → the application → Overview → Application Audience (AUD) Tag).
+    /// The audiences accepted. Cloudflare: the Access application AUD tags (Zero
+    /// Trust → Access → Applications → the application → Overview →
+    /// Application Audience (AUD) Tag). Google IAP: the backend services, as
+    /// <c>/projects/PROJECT_NUMBER/global/backendServices/SERVICE_ID</c>.
     /// </summary>
     public List<string> Audiences { get; set; } = new();
 
@@ -35,23 +65,57 @@ public sealed class CloudflareAccessOptions
 
     public TimeSpan ClockSkew { get; set; } = TimeSpan.FromMinutes(1);
 
-    /// <summary><c>https://&lt;team domain&gt;</c>, the only issuer accepted.</summary>
-    public string Issuer => "https://" + Host();
+    /// <summary>The only issuer accepted: <c>https://&lt;team domain&gt;</c>, or Google IAP's.</summary>
+    public string Issuer => Provider == EdgeAccessProvider.GoogleIap ? GoogleIapIssuer : "https://" + Host();
 
-    /// <summary>Where Cloudflare publishes the team's signing keys.</summary>
-    public string CertsUrl => Issuer + "/cdn-cgi/access/certs";
+    /// <summary>Where the proxy publishes its signing keys.</summary>
+    public string CertsUrl => Provider == EdgeAccessProvider.GoogleIap ? GoogleIapCertsUrl : Issuer + "/cdn-cgi/access/certs";
+
+    /// <summary>The request header that carries the token.</summary>
+    public string Header => Provider == EdgeAccessProvider.GoogleIap ? GoogleIapAssertionHeader : AssertionHeader;
+
+    /// <summary>The one signing algorithm accepted.</summary>
+    public string Algorithm => Provider == EdgeAccessProvider.GoogleIap ? SecurityAlgorithms.EcdsaSha256 : SecurityAlgorithms.RsaSha256;
+
+    /// <summary>A name for messages: "Cloudflare Access" or "Google Cloud IAP".</summary>
+    public string DisplayName => Provider == EdgeAccessProvider.GoogleIap ? "Google Cloud IAP" : "Cloudflare Access";
 
     public void Validate(string section)
     {
+        if (!Enum.IsDefined(Provider))
+            throw new InvalidOperationException($"{section}:Provider must be Cloudflare or GoogleIap.");
+        if (Provider == EdgeAccessProvider.GoogleIap)
+        {
+            if (!string.IsNullOrWhiteSpace(TeamDomain))
+                throw new InvalidOperationException(
+                    $"{section}:TeamDomain is a Cloudflare setting; leave it empty with Provider GoogleIap.");
+            if (Audiences.Count == 0 || Audiences.Any(a => !IsIapAudience(a)))
+                throw new InvalidOperationException(
+                    $"{section}:Audiences must list the load balancer's backend services, as /projects/PROJECT_NUMBER/global/backendServices/SERVICE_ID.");
+            ValidateClockSkew(section);
+            return;
+        }
         if (string.IsNullOrWhiteSpace(TeamDomain))
             throw new InvalidOperationException($"{section}:TeamDomain is required (e.g. yourteam.cloudflareaccess.com).");
         _ = Host(section);
         if (Audiences.Count == 0 || Audiences.Any(string.IsNullOrWhiteSpace))
             throw new InvalidOperationException(
                 $"{section}:Audiences must list the Access application's AUD tag.");
+        ValidateClockSkew(section);
+    }
+
+    private void ValidateClockSkew(string section)
+    {
         if (ClockSkew < TimeSpan.Zero || ClockSkew > TimeSpan.FromMinutes(5))
             throw new InvalidOperationException($"{section}:ClockSkew must be between 0 and 5 minutes.");
     }
+
+    // /projects/123456789012/global/backendServices/987654321 (a regional
+    // backend service uses regions/REGION in place of global).
+    private static bool IsIapAudience(string? audience)
+        => !string.IsNullOrWhiteSpace(audience)
+           && System.Text.RegularExpressions.Regex.IsMatch(
+               audience, @"^/projects/[0-9]+/(global|regions/[a-z0-9-]+)/backendServices/[0-9]+$");
 
     private string Host(string section = "CloudflareAccess")
     {
@@ -73,7 +137,7 @@ public sealed class CloudflareAccessOptions
     }
 }
 
-/// <summary>The person Cloudflare Access signed in.</summary>
+/// <summary>The person the identity-aware proxy signed in.</summary>
 public sealed record CloudflareAccessIdentity(string Email, string Subject, string Issuer);
 
 public sealed record CloudflareAccessResult(CloudflareAccessIdentity? Identity, string? Reason)
@@ -93,11 +157,13 @@ public interface ICloudflareAccessTokenValidator
 }
 
 /// <summary>
-/// Validates a Cloudflare Access application token: RS256 signature by the
-/// team's keys, issuer = the team domain, audience = a configured AUD tag,
-/// expiry, and a person (an <c>email</c> and <c>sub</c>). Access service-token
-/// JWTs (machine clients, <c>common_name</c>, no email) are refused: they name
-/// no person to sign in.
+/// Validates an identity-aware proxy token. Cloudflare Access: RS256 signature
+/// by the team's keys, issuer = the team domain, audience = a configured AUD
+/// tag. Google Cloud IAP: ES256 signature by Google's IAP keys, issuer
+/// <c>https://cloud.google.com/iap</c>, audience = a configured backend
+/// service. Both: expiry, and a person (an <c>email</c> and <c>sub</c>).
+/// Cloudflare service-token JWTs (machine clients, <c>common_name</c>, no
+/// email) are refused: they name no person to sign in.
 /// </summary>
 public sealed class CloudflareAccessTokenValidator : ICloudflareAccessTokenValidator
 {
@@ -123,7 +189,7 @@ public sealed class CloudflareAccessTokenValidator : ICloudflareAccessTokenValid
         var result = await ValidateSignedAsync(token, refresh: false, ct);
         if (result.Exception is SecurityTokenSignatureKeyNotFoundException)
         {
-            // Cloudflare rotates the team's keys; refetch once.
+            // Cloudflare and Google rotate their keys; refetch once.
             result = await ValidateSignedAsync(token, refresh: true, ct);
         }
 
@@ -165,7 +231,7 @@ public sealed class CloudflareAccessTokenValidator : ICloudflareAccessTokenValid
             RequireSignedTokens = true,
             ValidateIssuerSigningKey = true,
             IssuerSigningKeys = keys,
-            ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
+            ValidAlgorithms = [_options.Algorithm],
             ClockSkew = _options.ClockSkew,
             LifetimeValidator = (notBefore, expires, _, p) =>
             {
@@ -190,7 +256,7 @@ public sealed class CloudflareAccessTokenValidator : ICloudflareAccessTokenValid
     };
 
     public sealed class KeysUnavailableException(Exception inner)
-        : Exception("The Cloudflare Access signing keys could not be loaded.", inner);
+        : Exception("The identity-aware proxy's signing keys could not be loaded.", inner);
 
     /// <summary>The validator for these options: a configured JWKS, or the team's certs URL.</summary>
     public static CloudflareAccessTokenValidator Create(CloudflareAccessOptions options, HttpClient httpClient, TimeProvider? time = null)
