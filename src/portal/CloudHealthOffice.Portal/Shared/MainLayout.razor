@@ -470,7 +470,7 @@
                 && (UserContextService.HasPermission("enrollment:read") || UserContextService.HasPermission("billing:read"));
             _canReadContracts = userContext != null && UserContextService.HasPermission("contracts:read");
             _canWork = userContext != null && UserContextService.HasPermission("workqueue:work");
-            _canRunReports = userContext != null && UserContextService.HasPermission("reports:claims");
+            _canRunReports = userContext != null && ReportModules.All.Any(m => m.Permissions.Any(UserContextService.HasPermission));
             _canAdminWork = userContext != null && UserContextService.HasPermission("workqueue:admin");
             _canPostNotices = userContext != null && UserContextService.HasPermission("notices:write");
             _canReadCorrespondence = userContext != null && UserContextService.HasPermission("correspondence:read");

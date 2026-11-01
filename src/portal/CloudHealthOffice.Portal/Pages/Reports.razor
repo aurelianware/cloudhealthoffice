@@ -1,9 +1,9 @@
 @page "/reports"
+@using System.Globalization
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
-@inject IClaimsService ClaimsService
+@inject IReportsService ReportsService
 @inject IUserContextService UserContext
-@inject NavigationManager Navigation
 @inject IJSRuntime JS
 
 <PageTitle>Reports - Cloud Health Office</PageTitle>
@@ -11,9 +11,9 @@
 @*
     Reports (docs/architecture/portal-reporting.md, layer 2: module standard
     reports). Each module serves its own catalog and runs; the page lists the
-    reports the user may run, takes the report's parameters, shows the rows
-    and downloads the same run as CSV. Claims reports need reports:claims and
-    every row-level run is written to the claim access log by claims-service.
+    reports the user may run, renders each report's parameters from its
+    definition, shows the rows and downloads the same run as CSV. The services
+    enforce the permissions and write every row-level run to the access log.
 *@
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h3" Class="mb-4">
@@ -21,36 +21,39 @@
         Reports
     </MudText>
 
-    @if (_loadError is not null)
-    {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" data-testid="reports-error">@_loadError</MudAlert>
-    }
-    else if (_catalog is null)
+    @if (_modules is null)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
     }
-    else if (_catalog.Count == 0)
+    else if (_modules.Count == 0)
     {
         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" data-testid="reports-none">
-            You don't have permission to run any reports. Claims reports need the reports:claims permission (claims supervisors).
+            You don't have permission to run any reports. Claims reports need reports:claims; prior authorization and
+            appeals reports need reports:um or reports:compliance.
         </MudAlert>
     }
     else
     {
         <MudGrid Spacing="3">
-            <MudItem xs="12" md="3">
-                <MudText Typo="Typo.overline">Claims</MudText>
-                <MudList T="string" Dense="true" data-testid="reports-catalog">
-                    @foreach (var r in _catalog)
+            <MudItem xs="12" md="3" data-testid="reports-catalog">
+                @foreach (var m in _modules)
+                {
+                    <MudText Typo="Typo.overline" Class="d-block mt-2" data-testid="reports-module">@m.Module.Title</MudText>
+                    @if (m.Error is not null)
                     {
-                        <MudListItem T="string" Href="@($"/reports?report={Uri.EscapeDataString(r.Id)}")"
-                                     Class="@(r.Id == _selected?.Id ? "mud-selected-item" : null)" data-testid="reports-catalog-item">
-                            <MudText Typo="Typo.body2" Class="@(r.Id == _selected?.Id ? "font-weight-bold" : null)">@r.Name</MudText>
-                        </MudListItem>
+                        <MudText Typo="Typo.caption" Color="Color.Warning" Class="d-block" data-testid="reports-module-error">@m.Error</MudText>
                     }
-                </MudList>
-                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    Authorization, appeals and grievance, finance and state regulatory reports are being added.
+                    <MudList T="string" Dense="true">
+                        @foreach (var r in m.Reports)
+                        {
+                            <MudListItem T="string" Href="@($"/reports?report={Uri.EscapeDataString(r.Id)}")" data-testid="reports-catalog-item">
+                                <MudText Typo="Typo.body2" Class="@(r.Id == _selected?.Report.Id ? "font-weight-bold" : null)">@r.Name</MudText>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
+                    Finance and state regulatory reports are being added.
                 </MudText>
             </MudItem>
 
@@ -61,7 +64,7 @@
                 }
                 else
                 {
-                    var r = _selected;
+                    var r = _selected.Report;
                     <MudPaper Class="pa-4 mb-3" Elevation="1" data-testid="report-form">
                         <MudText Typo="Typo.h5">@r.Name</MudText>
                         <MudText Typo="Typo.body2" Class="mb-1">@r.Description</MudText>
@@ -70,35 +73,36 @@
                             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2" data-testid="report-regulation">Standard: @r.Regulation</MudText>
                         }
                         <div class="d-flex flex-wrap align-end gap-3 mt-2">
-                            @if (r.Takes("from"))
+                            @foreach (var p in r.Parameters)
                             {
-                                <MudDatePicker @bind-Date="_from" Label="From" Dense="true" Variant="Variant.Outlined" Style="max-width: 180px;" />
-                            }
-                            @if (r.Takes("to"))
-                            {
-                                <MudDatePicker @bind-Date="_to" Label="To (exclusive)" Dense="true" Variant="Variant.Outlined" Style="max-width: 180px;" />
-                            }
-                            @if (r.Takes("lineOfBusiness"))
-                            {
-                                <MudSelect T="string" @bind-Value="_lob" Label="Line of business" Dense="true" Variant="Variant.Outlined" Style="max-width: 200px;">
-                                    <MudSelectItem T="string" Value="@("")">All</MudSelectItem>
-                                    @foreach (var lob in LinesOfBusiness)
-                                    {
-                                        <MudSelectItem T="string" Value="@lob">@lob</MudSelectItem>
-                                    }
-                                </MudSelect>
-                            }
-                            @if (r.Takes("pendCode"))
-                            {
-                                <MudTextField @bind-Value="_pendCode" Label="Pend code" Dense="true" Variant="Variant.Outlined" Style="max-width: 160px;" />
-                            }
-                            @if (r.Takes("denialReasonCode"))
-                            {
-                                <MudTextField @bind-Value="_denialCode" Label="Denial reason code" Dense="true" Variant="Variant.Outlined" Style="max-width: 180px;" />
-                            }
-                            @if (r.Takes("minAgeDays"))
-                            {
-                                <MudNumericField T="int?" @bind-Value="_minAgeDays" Label="At least (days old)" Min="0" Dense="true" Variant="Variant.Outlined" Style="max-width: 160px;" />
+                                var name = p.Name;
+                                @switch (Kind(p))
+                                {
+                                    case ParameterKind.Date:
+                                        <MudDatePicker Date="@DateValue(name)" DateChanged="@(d => SetDate(name, d))" Label="@Label(p)"
+                                                       Dense="true" Variant="Variant.Outlined" Style="max-width: 190px;" data-testid="@($"param-{name}")" />
+                                        break;
+                                    case ParameterKind.Choice:
+                                        <MudSelect T="string" Value="@(_values.GetValueOrDefault(name) ?? "")" ValueChanged="@(v => SetValue(name, v))"
+                                                   Label="@Label(p)" Dense="true" Variant="Variant.Outlined" Style="max-width: 200px;" data-testid="@($"param-{name}")">
+                                            <MudSelectItem T="string" Value="@("")">Any</MudSelectItem>
+                                            @foreach (var option in Options(p))
+                                            {
+                                                <MudSelectItem T="string" Value="@option.Value">@option.Label</MudSelectItem>
+                                            }
+                                        </MudSelect>
+                                        break;
+                                    case ParameterKind.Number:
+                                        <MudNumericField T="int?" Value="@IntValue(name)" ValueChanged="@(v => SetValue(name, v?.ToString(CultureInfo.InvariantCulture)))"
+                                                         Label="@Label(p)" Min="0" Dense="true" Variant="Variant.Outlined" Style="max-width: 170px;"
+                                                         data-testid="@($"param-{name}")" />
+                                        break;
+                                    default:
+                                        <MudTextField T="string" Value="@_values.GetValueOrDefault(name)" ValueChanged="@(v => SetValue(name, v))"
+                                                      Label="@Label(p)" Dense="true" Variant="Variant.Outlined" Style="max-width: 200px;"
+                                                      data-testid="@($"param-{name}")" />
+                                        break;
+                                }
                             }
                             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RunAsync" Disabled="_running" data-testid="report-run">Run</MudButton>
                             <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download"
@@ -118,7 +122,7 @@
                     {
                         <MudText Typo="Typo.caption" Color="Color.Secondary" data-testid="report-meta">
                             @(_run.Truncated ? $"Showing {_run.Items.Count:N0} of {_run.TotalCount:N0}" : $"{_run.TotalCount:N0} rows")
-                            · run @_run.AsOf.ToLocalTime().ToString("MM/dd/yyyy h:mm tt") by @_run.RunBy
+                            · run @_run.AsOf.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture) by @_run.RunBy
                         </MudText>
                         @if (_run.Truncated)
                         {
@@ -149,9 +153,9 @@
                                     <tr data-testid="report-row">
                                         @foreach (var c in _run.Columns)
                                         {
-                                            @if (c == "ClaimNumber" && ReportRunView.Cell(row, "ClaimId") is { Length: > 0 } claimId)
+                                            @if (ReportRunView.Link(row, c) is { } href)
                                             {
-                                                <td><MudLink Href="@($"/claims/{Uri.EscapeDataString(claimId)}")">@ReportRunView.Cell(row, c)</MudLink></td>
+                                                <td><MudLink Href="@href">@ReportRunView.Cell(row, c)</MudLink></td>
                                             }
                                             else
                                             {
@@ -170,20 +174,16 @@
 </MudContainer>
 
 @code {
-    private static readonly string[] LinesOfBusiness = ["Commercial", "Medicare", "Medicaid", "Exchange", "TRICARE", "VA"];
+    private sealed record LoadedModule(ReportModule Module, List<ReportDefinitionView> Reports, string? Error);
+    private sealed record SelectedReport(ReportModule Module, ReportDefinitionView Report);
+    private enum ParameterKind { Text, Date, Choice, Number }
 
     [SupplyParameterFromQuery(Name = "report")] public string? ReportId { get; set; }
 
-    private List<ReportDefinitionView>? _catalog;
-    private ReportDefinitionView? _selected;
-    private string? _loadError;
+    private List<LoadedModule>? _modules;
+    private SelectedReport? _selected;
 
-    private DateTime? _from;
-    private DateTime? _to;
-    private string _lob = "";
-    private string? _pendCode;
-    private string? _denialCode;
-    private int? _minAgeDays;
+    private readonly Dictionary<string, string?> _values = new();
 
     private bool _running;
     private ReportRunView? _run;
@@ -192,42 +192,73 @@
     protected override async Task OnInitializedAsync()
     {
         await UserContext.GetCurrentUserAsync();
-        if (!UserContext.HasPermission("reports:claims"))
-        {
-            _catalog = new();
-            return;
-        }
+        var allowed = ReportModules.All.Where(m => m.Permissions.Any(UserContext.HasPermission)).ToList();
+        var loaded = await Task.WhenAll(allowed.Select(LoadAsync));
+        _modules = loaded.Where(m => m.Reports.Count > 0 || m.Error is not null).ToList();
+    }
+
+    private async Task<LoadedModule> LoadAsync(ReportModule module)
+    {
         try
         {
-            _catalog = await ClaimsService.GetClaimReportCatalogAsync();
+            return new LoadedModule(module, await ReportsService.GetCatalogAsync(module), null);
         }
-        catch (ServiceUnavailableException ex)
+        catch (ServiceUnavailableException)
         {
-            _loadError = $"Reports couldn't be loaded: {ex.Message}";
+            return new LoadedModule(module, new(), $"{module.Title} reports couldn't be loaded.");
         }
     }
 
     protected override void OnParametersSet()
     {
-        var selected = _catalog?.FirstOrDefault(r => string.Equals(r.Id, ReportId, StringComparison.OrdinalIgnoreCase));
-        if (selected?.Id == _selected?.Id) return;
+        var selected = _modules?
+            .SelectMany(m => m.Reports.Select(r => new SelectedReport(m.Module, r)))
+            .FirstOrDefault(s => string.Equals(s.Report.Id, ReportId, StringComparison.OrdinalIgnoreCase));
+        if (selected?.Report.Id == _selected?.Report.Id) return;
         _selected = selected;
+        _values.Clear();
         _run = null;
         _runError = null;
     }
 
-    private Dictionary<string, string?> Parameters()
+    private static ParameterKind Kind(ReportParameterView p) => p.Type switch
     {
-        var p = new Dictionary<string, string?>();
-        var r = _selected!;
-        if (r.Takes("from") && _from is { } f) p["from"] = DateTime.SpecifyKind(f.Date, DateTimeKind.Utc).ToString("yyyy-MM-dd");
-        if (r.Takes("to") && _to is { } t) p["to"] = DateTime.SpecifyKind(t.Date, DateTimeKind.Utc).ToString("yyyy-MM-dd");
-        if (r.Takes("lineOfBusiness") && !string.IsNullOrEmpty(_lob)) p["lineOfBusiness"] = _lob;
-        if (r.Takes("pendCode")) p["pendCode"] = _pendCode?.Trim();
-        if (r.Takes("denialReasonCode")) p["denialReasonCode"] = _denialCode?.Trim();
-        if (r.Takes("minAgeDays") && _minAgeDays is { } age) p["minAgeDays"] = age.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        return p;
-    }
+        "date" => ParameterKind.Date,
+        "int" => ParameterKind.Number,
+        "bool" or "LineOfBusiness" => ParameterKind.Choice,
+        _ when p.Name is "requestType" or "kind" => ParameterKind.Choice,
+        _ => ParameterKind.Text,
+    };
+
+    private IEnumerable<(string Value, string Label)> Options(ReportParameterView p) => p switch
+    {
+        { Type: "bool" } => [("true", "Yes"), ("false", "No")],
+        { Type: "LineOfBusiness" } => _selected!.Module.LinesOfBusiness.Select(l => (l, l)),
+        { Name: "requestType" } => [("Standard", "Standard"), ("Expedited", "Expedited")],
+        { Name: "kind" } => [("Appeal", "Appeal"), ("Grievance", "Grievance")],
+        _ => [],
+    };
+
+    private static string Label(ReportParameterView p) => p.Name switch
+    {
+        "from" => "From",
+        "to" => "To (exclusive)",
+        "lineOfBusiness" => "Line of business",
+        "minAgeDays" => "At least (days old)",
+        _ => ReportRunView.Header(char.ToUpperInvariant(p.Name[0]) + p.Name[1..]),
+    };
+
+    private void SetValue(string name, string? value) =>
+        _values[name] = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private DateTime? DateValue(string name) =>
+        DateTime.TryParseExact(_values.GetValueOrDefault(name), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;
+
+    private void SetDate(string name, DateTime? date) =>
+        _values[name] = date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private int? IntValue(string name) =>
+        int.TryParse(_values.GetValueOrDefault(name), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : null;
 
     private async Task RunAsync()
     {
@@ -236,7 +267,7 @@
         _runError = null;
         try
         {
-            _run = await ClaimsService.RunClaimReportAsync(_selected.Id, Parameters());
+            _run = await ReportsService.RunAsync(_selected.Module, _selected.Report.Id, new Dictionary<string, string?>(_values));
         }
         catch (Exception ex) when (ex is ReportForbiddenException or ArgumentException or ServiceUnavailableException)
         {
@@ -256,7 +287,7 @@
         _runError = null;
         try
         {
-            var file = await ClaimsService.DownloadClaimReportCsvAsync(_selected.Id, Parameters());
+            var file = await ReportsService.DownloadCsvAsync(_selected.Module, _selected.Report.Id, new Dictionary<string, string?>(_values));
             await JS.InvokeVoidAsync("downloadBase64File", file.FileName, "text/csv", Convert.ToBase64String(file.Content));
         }
         catch (Exception ex) when (ex is ReportForbiddenException or ArgumentException or ServiceUnavailableException)

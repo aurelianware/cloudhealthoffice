@@ -8,15 +8,6 @@ public interface IClaimsService
     /// <summary>Claims Insights for claims adjudicated in [from, to), and open inventory now (claims:read).</summary>
     Task<ClaimInsightsView> GetClaimInsightsAsync(DateTime from, DateTime to, string? lineOfBusiness = null);
     Task<ClaimDetails?> GetClaimByIdAsync(string claimId);
-
-    /// <summary>The claims standard reports (reports:claims).</summary>
-    Task<List<ReportDefinitionView>> GetClaimReportCatalogAsync();
-
-    /// <summary>Runs a claims report; <see cref="ReportForbiddenException"/> without reports:claims.</summary>
-    Task<ReportRunView> RunClaimReportAsync(string reportId, IReadOnlyDictionary<string, string?> parameters);
-
-    /// <summary>The same run as a CSV file.</summary>
-    Task<ReportFile> DownloadClaimReportCsvAsync(string reportId, IReadOnlyDictionary<string, string?> parameters);
     Task<string?> GetExplanationOfBenefitJsonAsync(string claimId);
     Task<List<MassAdjudicationRunSummary>> GetMassAdjudicationRunsAsync(int limit = 25);
     Task<MassAdjudicationRunSummary?> GetMassAdjudicationRunAsync(string runId);

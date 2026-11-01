@@ -9,25 +9,25 @@ using MudBlazor.Services;
 namespace CloudHealthOffice.Portal.Tests.Pages;
 
 /// <summary>
-/// The Reports page (portal-reporting.md, module standard reports): lists the
-/// claims reports a reports:claims user may run, takes each report's
-/// parameters, renders any report's rows from its column list, and downloads
-/// the same run as CSV.
+/// The Reports page (portal-reporting.md, module standard reports): lists
+/// each module's reports the user may run, takes each report's parameters,
+/// renders any report's rows from its column list, and downloads the same run
+/// as CSV.
 /// </summary>
 public class ReportsPageTests : TestContext
 {
-    private readonly Mock<IClaimsService> _claims = new();
+    private readonly Mock<IReportsService> _reports = new();
     private readonly Mock<IUserContextService> _user = new();
 
     public ReportsPageTests()
     {
         Services.AddMudServices();
         JSInterop.Mode = JSRuntimeMode.Loose;
-        Services.AddSingleton(_claims.Object);
+        Services.AddSingleton(_reports.Object);
         Services.AddSingleton(_user.Object);
         _user.Setup(u => u.GetCurrentUserAsync()).ReturnsAsync(new UserContext { UserId = "sup-1", Roles = ["ClaimsSupervisor"] });
         _user.Setup(u => u.HasPermission("reports:claims")).Returns(true);
-        _claims.Setup(c => c.GetClaimReportCatalogAsync()).ReturnsAsync(Catalog());
+        _reports.Setup(c => c.GetCatalogAsync(ReportModules.Claims)).ReturnsAsync(Catalog());
     }
 
     private static List<ReportDefinitionView> Catalog() =>
@@ -64,7 +64,7 @@ public class ReportsPageTests : TestContext
         var cut = Open();
 
         cut.WaitForAssertion(() => cut.Find("[data-testid=reports-none]").TextContent.Should().Contain("reports:claims"));
-        _claims.Verify(c => c.GetClaimReportCatalogAsync(), Times.Never);
+        _reports.Verify(c => c.GetCatalogAsync(It.IsAny<ReportModule>()), Times.Never);
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public class ReportsPageTests : TestContext
     [Fact]
     public void Running_a_report_renders_its_columns_rows_and_truncation()
     {
-        _claims.Setup(c => c.RunClaimReportAsync("claims-pended-inventory", It.IsAny<IReadOnlyDictionary<string, string?>>()))
+        _reports.Setup(c => c.RunAsync(ReportModules.Claims, "claims-pended-inventory", It.IsAny<IReadOnlyDictionary<string, string?>>()))
             .ReturnsAsync(new ReportRunView
             {
                 ReportId = "claims-pended-inventory", AsOf = DateTime.UtcNow, RunBy = "sup-1", TotalCount = 1500, Truncated = true,
@@ -111,7 +111,7 @@ public class ReportsPageTests : TestContext
     [Fact]
     public void A_refused_run_shows_the_reason()
     {
-        _claims.Setup(c => c.RunClaimReportAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string?>>()))
+        _reports.Setup(c => c.RunAsync(It.IsAny<ReportModule>(), It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string?>>()))
             .ThrowsAsync(new ReportForbiddenException("claims-pended-inventory"));
 
         var cut = Open("claims-pended-inventory");
@@ -124,7 +124,7 @@ public class ReportsPageTests : TestContext
     [Fact]
     public void Csv_downloads_the_file_the_service_produced()
     {
-        _claims.Setup(c => c.DownloadClaimReportCsvAsync("claims-pended-inventory", It.IsAny<IReadOnlyDictionary<string, string?>>()))
+        _reports.Setup(c => c.DownloadCsvAsync(ReportModules.Claims, "claims-pended-inventory", It.IsAny<IReadOnlyDictionary<string, string?>>()))
             .ReturnsAsync(new ReportFile("claims-pended-inventory-20261101T1200Z.csv", "ClaimId\n"u8.ToArray()));
         JSInterop.SetupVoid("downloadBase64File", _ => true);
 
@@ -136,6 +136,53 @@ public class ReportsPageTests : TestContext
         var call = JSInterop.VerifyInvoke("downloadBase64File");
         call.Arguments[0].Should().Be("claims-pended-inventory-20261101T1200Z.csv");
         call.Arguments[1].Should().Be("text/csv");
+    }
+
+    [Fact]
+    public void A_compliance_user_sees_prior_auth_and_appeals_reports_but_not_claims()
+    {
+        _user.Setup(u => u.HasPermission(It.IsAny<string>())).Returns(false);
+        _user.Setup(u => u.HasPermission("reports:compliance")).Returns(true);
+        _reports.Setup(c => c.GetCatalogAsync(ReportModules.UtilizationManagement)).ReturnsAsync(
+            [new() { Id = "um-pending-by-deadline", Name = "Open requests by deadline", Parameters = [new() { Name = "requestType", Type = "string" }] }]);
+        _reports.Setup(c => c.GetCatalogAsync(ReportModules.AppealsAndGrievances))
+            .ThrowsAsync(new ServiceUnavailableException("Appeals Service"));
+
+        var cut = Open("um-pending-by-deadline");
+
+        cut.WaitForAssertion(() => cut.FindAll("[data-testid=reports-module]").Select(m => m.TextContent)
+            .Should().Equal("Prior authorization", "Appeals and grievances"));
+        cut.Find("[data-testid=reports-module-error]").TextContent.Should().Contain("Appeals and grievances");
+        cut.Find("[data-testid=report-form]").TextContent.Should().Contain("Open requests by deadline").And.Contain("Request type");
+        _reports.Verify(c => c.GetCatalogAsync(ReportModules.Claims), Times.Never);
+    }
+
+    [Fact]
+    public void Parameters_are_sent_as_entered_and_the_run_goes_to_the_reports_module()
+    {
+        IReadOnlyDictionary<string, string?>? sent = null;
+        _reports.Setup(c => c.RunAsync(ReportModules.Claims, "claims-pended-inventory", It.IsAny<IReadOnlyDictionary<string, string?>>()))
+            .Callback<ReportModule, string, IReadOnlyDictionary<string, string?>>((_, _, p) => sent = p)
+            .ReturnsAsync(new ReportRunView { Columns = ["ClaimId"] });
+
+        var cut = Open("claims-pended-inventory");
+        cut.WaitForAssertion(() => cut.Find("input[data-testid=param-pendCode], [data-testid=param-pendCode] input"));
+        cut.Find("input[data-testid=param-pendCode], [data-testid=param-pendCode] input").Change("COB");
+        cut.Find("[data-testid=report-run]").Click();
+
+        cut.WaitForAssertion(() => sent.Should().NotBeNull());
+        sent!["pendCode"].Should().Be("COB");
+        cut.Find("[data-testid=report-empty]");
+    }
+
+    [Fact]
+    public void Authorization_and_appeal_numbers_link_to_their_records()
+    {
+        var row = Row("""{"authorizationId":"a-1","authorizationNumber":"PA-1","appealId":"ap-1","appealNumber":"APL-1"}""");
+
+        ReportRunView.Link(row, "AuthorizationNumber").Should().Be("/authorizations/a-1");
+        ReportRunView.Link(row, "AppealNumber").Should().Be("/appeals/ap-1");
+        ReportRunView.Link(row, "ClaimNumber").Should().BeNull();
     }
 
     [Theory]

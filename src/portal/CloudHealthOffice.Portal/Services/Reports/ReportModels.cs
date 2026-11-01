@@ -66,11 +66,25 @@ public sealed class ReportRunView
                 money.ToString("C2", CultureInfo.GetCultureInfo("en-US")),
             JsonValueKind.Number => value.GetRawText(),
             JsonValueKind.String when column.EndsWith("At", StringComparison.Ordinal) && value.TryGetDateTime(out var at) =>
-                at.ToUniversalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                at.ToUniversalTime() is var u && u.TimeOfDay == TimeSpan.Zero
+                    ? u.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                    : u.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture),
             JsonValueKind.String => value.GetString() ?? string.Empty,
             _ => value.GetRawText(),
         };
     }
+
+    /// <summary>
+    /// The record a number column opens: a claim, authorization or appeal
+    /// number links to that record when the row carries its id.
+    /// </summary>
+    public static string? Link(Dictionary<string, JsonElement> row, string column) => column switch
+    {
+        "ClaimNumber" when Cell(row, "ClaimId") is { Length: > 0 } id => "/claims/" + Uri.EscapeDataString(id),
+        "AuthorizationNumber" when Cell(row, "AuthorizationId") is { Length: > 0 } id => "/authorizations/" + Uri.EscapeDataString(id),
+        "AppealNumber" when Cell(row, "AppealId") is { Length: > 0 } id => "/appeals/" + Uri.EscapeDataString(id),
+        _ => null,
+    };
 
     /// <summary>"ClaimNumber" → "Claim number"; "BillingProviderNpi" → "Billing provider NPI".</summary>
     public static string Header(string column)
