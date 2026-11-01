@@ -126,20 +126,32 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     private readonly IAuthorizationValidationClient _authorizationValidationClient;
     private readonly ILogger<BenefitCalculationStage> _logger;
     private readonly PriorAuthAdjudicationOptions _priorAuth;
+    private readonly IPriorAuthRuleScopeClient? _ruleScope;
 
     public BenefitCalculationStage(
         IBenefitCalculationEngine engine,
         IMemberResolver memberResolver,
         IAuthorizationValidationClient authorizationValidationClient,
         ILogger<BenefitCalculationStage> logger,
-        Microsoft.Extensions.Options.IOptions<PriorAuthAdjudicationOptions>? priorAuthOptions = null)
+        Microsoft.Extensions.Options.IOptions<PriorAuthAdjudicationOptions>? priorAuthOptions = null,
+        IPriorAuthRuleScopeClient? ruleScope = null)
     {
         _engine = engine;
         _memberResolver = memberResolver;
         _authorizationValidationClient = authorizationValidationClient;
         _logger = logger;
         _priorAuth = priorAuthOptions?.Value ?? new PriorAuthAdjudicationOptions();
+        _ruleScope = ruleScope;
     }
+
+    /// <summary>
+    /// <see cref="PendDetails.PendCode"/> for a line the plan's PA rule set
+    /// requires an authorization for, that has no valid one, where the rule
+    /// set also has exemptions claims cannot evaluate (gold card etc.): an
+    /// examiner decides, rather than the claim denying a possibly exempt
+    /// provider. The existing "Missing Authorization" code and work queue.
+    /// </summary>
+    public const string RuleSetExemptionReviewPendCode = "NOAUTH";
 
     public string Name => StageName;
     public int Order => 300;
@@ -581,9 +593,55 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         }
 
         var lines = LinesRequiringPriorAuthorization(claim, _priorAuth.UsePlanFlaggedCodes ? context.ResolvedPlan : null);
+
+        // The plan's PA rule set: the source CRD, PAS and the published list
+        // answer from. It adds lines; it never takes one out of scope.
+        PriorAuthRuleScope? scope = null;
+        var ruleSetOnly = new Dictionary<int, string>();
+        if (_priorAuth.UseRuleSet && _ruleScope is not null && !string.IsNullOrWhiteSpace(claim.BenefitPlanId))
+        {
+            try
+            {
+                scope = await _ruleScope.GetScopeAsync(context.TenantId, claim.BenefitPlanId.Trim(), ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                _logger.LogWarning(ex,
+                    "PA rule set unavailable for claim {ClaimVersionId}; which lines need prior authorization is unknown, pending",
+                    LogSanitizer.Sanitize(context.ClaimVersionId));
+                return new PriorAuthorizationDecision(null,
+                    $"{PriorAuthorizationUnavailableReason} (the plan's PA rule set could not be read); {TransientPendClearedBy}");
+            }
+
+            if (scope is not null)
+            {
+                var inScope = lines.Select(l => l.LineNumber).ToHashSet();
+                foreach (var line in claim.ClaimLines)
+                {
+                    if (inScope.Contains(line.LineNumber) || scope.Match(claim, line) is not { } entry) continue;
+                    ruleSetOnly[line.LineNumber] = entry.RuleId;
+                    lines.Add(line);
+                }
+                lines = lines.OrderBy(l => l.LineNumber).ToList();
+            }
+        }
+
         if (lines.Count == 0)
         {
             return default;
+        }
+
+        // A denial on a line only the rule set put in scope goes to review when
+        // the set has exemptions claims cannot check (the provider may be exempt).
+        var exemptReview = new List<string>();
+        string? DenyOrReview(AdapterClaimLine line, string? current, string reason)
+        {
+            if (scope is { HasExemptions: true } && ruleSetOnly.TryGetValue(line.LineNumber, out var ruleId))
+            {
+                exemptReview.Add($"line {line.LineNumber} ({line.ProcedureCode?.Trim()}, rule {ruleId})");
+                return current;
+            }
+            return current ?? reason;
         }
 
         var claimMemberId = claim.MemberId?.Trim();
@@ -612,7 +670,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             var number = AuthorizationNumberFor(claim, line);
             if (number is null)
             {
-                denialReason ??= PriorAuthorizationRequiredReason;
+                denialReason = DenyOrReview(line, denialReason, PriorAuthorizationRequiredReason);
                 continue;
             }
 
@@ -648,12 +706,12 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 case AuthorizationLookupStatus.Valid:
                     break;
                 case AuthorizationLookupStatus.Invalid:
-                    denialReason ??= string.IsNullOrWhiteSpace(lookup.Reason)
+                    denialReason = DenyOrReview(line, denialReason, string.IsNullOrWhiteSpace(lookup.Reason)
                         ? PriorAuthorizationInvalidReason
-                        : lookup.Reason;
+                        : lookup.Reason);
                     break;
                 case AuthorizationLookupStatus.NotFound:
-                    denialReason ??= PriorAuthorizationRequiredReason;
+                    denialReason = DenyOrReview(line, denialReason, PriorAuthorizationRequiredReason);
                     break;
                 default:
                     unavailable.Add($"line {line.LineNumber}: {lookup.Reason ?? "no definitive answer"}");
@@ -672,6 +730,14 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 unavailable.Count);
             var reason = $"{PriorAuthorizationUnavailableReason} ({string.Join("; ", unavailable)}); {TransientPendClearedBy}";
             return new PriorAuthorizationDecision(null, Truncate(reason, 500));
+        }
+
+        if (denialReason is null && exemptReview.Count > 0)
+        {
+            var reason = $"Prior authorization required by the plan's PA rules ({scope!.RuleSet ?? "rule set"}) but none valid on " +
+                         $"{string.Join("; ", exemptReview)}; the rule set has exemptions claims cannot check " +
+                         $"({string.Join(", ", scope.Exemptions)}), so an examiner decides";
+            return new PriorAuthorizationDecision(null, Truncate(reason, 500), RuleSetExemptionReviewPendCode);
         }
 
         return new PriorAuthorizationDecision(denialReason, null);

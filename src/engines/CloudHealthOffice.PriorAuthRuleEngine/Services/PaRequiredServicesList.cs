@@ -75,8 +75,13 @@ public sealed record PaRequiredServicesList
     /// <summary>HCPCS Level II J codes are drugs administered other than orally.</summary>
     private static bool IsDrugCode(string code) => code.StartsWith('J') || code.StartsWith('j');
 
+    /// <param name="includeDrugCodes">
+    /// Keep drug codes (HCPCS J) on the entries. Off for the public list, which
+    /// excludes drugs; claims adjudication turns it on, because a J code billed
+    /// on a medical claim is still checked against the plan's PA rules.
+    /// </param>
     public static PaRequiredServicesList Build(string stateCode, PaLineOfBusiness lob, string? program,
-        RuleSetKey? resolvedKey, IReadOnlyList<PaRuleDocument> rules, DateTime generatedAt)
+        RuleSetKey? resolvedKey, IReadOnlyList<PaRuleDocument> rules, DateTime generatedAt, bool includeDrugCodes = false)
     {
         var entries = new List<PaRequiredServiceEntry>();
         var exemptions = new List<PaRequirementExemption>();
@@ -89,8 +94,11 @@ public sealed record PaRequiredServicesList
             var prefixes = Normalize(rule.ProcedureCodePrefixes);
             var allServices = codes.Count == 0 && prefixes.Count == 0;
             foreach (var code in codes.Concat(prefixes).Where(IsDrugCode)) drugs.Add(code);
-            codes = codes.Where(c => !IsDrugCode(c)).ToList();
-            prefixes = prefixes.Where(p => !IsDrugCode(p)).ToList();
+            if (!includeDrugCodes)
+            {
+                codes = codes.Where(c => !IsDrugCode(c)).ToList();
+                prefixes = prefixes.Where(p => !IsDrugCode(p)).ToList();
+            }
             // Every code the rule named was a drug: nothing of it belongs on the list.
             var onlyDrugs = !allServices && codes.Count == 0 && prefixes.Count == 0;
 

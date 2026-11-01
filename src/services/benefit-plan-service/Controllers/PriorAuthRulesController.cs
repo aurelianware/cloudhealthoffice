@@ -1,6 +1,8 @@
 using BenefitPlanService.Import.FeeSchedules;
 using BenefitPlanService.Import.PriorAuthRules;
+using BenefitPlanService.Services;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.PlanConfiguration;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using CloudHealthOffice.PriorAuthRuleEngine.Persistence;
 using CloudHealthOffice.PriorAuthRuleEngine.Domain;
@@ -108,6 +110,71 @@ public sealed class PriorAuthRulesController : ControllerBase
     }
 
     /// <summary>
+    /// The PA-required list for one benefit plan: the rule set its program
+    /// (state, line of business, program code) resolves to, the same one CRD
+    /// and PAS evaluate a member of the plan against. Claims adjudication reads
+    /// it to decide which lines need an authorization, so a claim edit and a
+    /// CRD answer come from one source.
+    /// <para>
+    /// <c>resolved: false</c> (200) when the plan has no program, or its
+    /// program is unknown or names a line of business the rule engine has no
+    /// rule sets for: there is no rule set to read, which is an answer, not an
+    /// outage. 404 when there is no such plan; 503 when tenant-service could
+    /// not be asked. <c>includeDrugs=true</c> keeps HCPCS J codes on the
+    /// entries (claims); the public list leaves them out.
+    /// </para>
+    /// </summary>
+    [HttpGet("plans/{planId}/required-services")]
+    [RequirePermission("benefits:read")]
+    [ProducesResponseType(typeof(PlanPaRequiredServices), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> PlanRequiredServices(string planId, [FromQuery] bool includeDrugs,
+        // Per action, not in the constructor: the plan service's dependencies
+        // (ACA limits file etc.) must not be built for the controller's other actions.
+        [FromServices] IBenefitPlanService plans, [FromServices] IProgramDirectory? programs, CancellationToken ct)
+    {
+        var tenantId = _actor.TenantId;
+        if (string.IsNullOrWhiteSpace(tenantId)) return BadRequest(new { error = "Tenant context missing." });
+
+        var plan = await plans.GetPlanAsync(planId, tenantId);
+        if (plan is null) return NotFound(new { error = "No such plan." });
+
+        if (string.IsNullOrWhiteSpace(plan.ProgramId))
+            return Ok(PlanPaRequiredServices.Unresolved(planId, null,
+                "The plan has no program, so its state and program are not stated."));
+        if (programs is null)
+            return Ok(PlanPaRequiredServices.Unresolved(planId, plan.ProgramId, "No program directory is configured."));
+
+        ProgramDescriptor? program;
+        try
+        {
+            program = await programs.GetAsync(tenantId, plan.ProgramId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Program lookup failed for a plan's PA rule set");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { error = "The plan's program could not be read from tenant-service." });
+        }
+        if (program is null)
+            return Ok(PlanPaRequiredServices.Unresolved(planId, plan.ProgramId, "The plan's program was not found."));
+        if (!Enum.TryParse<PaLineOfBusiness>(program.LineOfBusiness, ignoreCase: true, out var lob) || !Enum.IsDefined(lob))
+            return Ok(PlanPaRequiredServices.Unresolved(planId, plan.ProgramId,
+                $"The program's line of business ({program.LineOfBusiness}) has no PA rule sets."));
+
+        var (key, rules) = await PaRuleSetResolver.ResolveAsync(_repository, program.StateCode, lob, program.Code,
+            tenantId, program.Id, ct);
+        return Ok(new PlanPaRequiredServices
+        {
+            PlanId = planId,
+            ProgramId = program.Id,
+            Resolved = true,
+            List = PaRequiredServicesList.Build(program.StateCode, lob, program.Code, key, rules, DateTime.UtcNow, includeDrugs),
+        });
+    }
+
+    /// <summary>
     /// CMS-0057-F: the list of items and services, excluding drugs, that require
     /// prior authorization for one state, line of business and (optionally)
     /// program, built from the rule set this tenant's requests are evaluated
@@ -191,3 +258,16 @@ public sealed class PriorAuthRulesController : ControllerBase
 }
 
 public sealed record PriorAuthSeedResponse(int TotalPlatformRules, int SeededRules);
+
+/// <summary>A plan's PA-required list, or why there is none (<see cref="Resolved"/> false).</summary>
+public sealed record PlanPaRequiredServices
+{
+    public required string PlanId { get; init; }
+    public string? ProgramId { get; init; }
+    public required bool Resolved { get; init; }
+    public string? Reason { get; init; }
+    public PaRequiredServicesList? List { get; init; }
+
+    public static PlanPaRequiredServices Unresolved(string planId, string? programId, string reason) =>
+        new() { PlanId = planId, ProgramId = programId, Resolved = false, Reason = reason };
+}
