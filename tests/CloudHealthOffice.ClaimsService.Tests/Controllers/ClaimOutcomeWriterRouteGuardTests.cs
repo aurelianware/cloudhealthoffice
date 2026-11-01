@@ -68,6 +68,10 @@ public class ClaimOutcomeWriterRouteGuardTests
             ["POST api/v1/claims/shadow-adjudication/runs"] = (Kind.NoStatusChange,
                 "shadow adjudication: re-adjudicates imported core claims through read-only stages only (no Persistence), " +
                 "stores comparisons in their own collection; the claim is never written"),
+            ["PUT api/claims/extracts/claims"] = (Kind.NoStatusChange,
+                "saves the tenant's warehouse extract settings (extracts:manage); writes no claim"),
+            ["POST api/claims/extracts/claims/runs"] = (Kind.NoStatusChange,
+                "starts a warehouse extract: reads claims and writes files to the tenant's drop; the claim is never written"),
             ["POST api/v1/claims/tpl-recoveries/sync"] = (Kind.NoStatusChange,
                 "opens Medicaid TPL recovery cases in their own collection from paid claims; reads claims only"),
             ["POST api/v1/claims/tpl-recoveries/retroactive"] = (Kind.NoStatusChange,

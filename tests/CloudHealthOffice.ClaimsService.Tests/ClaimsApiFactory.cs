@@ -245,6 +245,9 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<global::ClaimsService.Import.Cpcds.Drop.ICpcdsDropTenantSettingsRepository>(
                 new global::ClaimsService.Import.Cpcds.Drop.InMemoryCpcdsDropTenantSettingsRepository());
             services.AddSingleton(AttributionRepository);
+            // The claims warehouse extract's stores are Mongo too.
+            services.AddSingleton<global::ClaimsService.Extracts.IClaimExtractStore>(new global::ClaimsService.Extracts.InMemoryClaimExtractStore());
+            services.AddSingleton<global::ClaimsService.Extracts.IClaimExtractSource>(new global::ClaimsService.Extracts.InMemoryClaimExtractSource());
 
             // 5.7 — NcciEngine's repository implementation got removed by
             // the Cosmos/Mongo filter above. The engine's INcciEditService

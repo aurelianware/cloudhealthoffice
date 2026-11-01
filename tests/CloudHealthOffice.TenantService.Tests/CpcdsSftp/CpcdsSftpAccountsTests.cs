@@ -129,6 +129,7 @@ public class CpcdsSftpAccountsTests
         var permissions = user["permissions"]!.AsObject();
         permissions["/"]!.AsArray().Select(n => n!.GetValue<string>()).Should().Equal("list");
         permissions["/processed"]!.AsArray().Select(n => n!.GetValue<string>()).Should().BeEquivalentTo("list", "download");
+        permissions["/outbound"]!.AsArray().Select(n => n!.GetValue<string>()).Should().BeEquivalentTo("list", "download");
         permissions["/inbound"]!.AsArray().Select(n => n!.GetValue<string>()).Should().Contain("upload");
         user.ToJsonString().Should().NotContain("password\":\"");
     }
