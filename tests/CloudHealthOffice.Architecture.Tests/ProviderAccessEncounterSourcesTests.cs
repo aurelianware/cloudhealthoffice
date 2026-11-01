@@ -65,11 +65,16 @@ public class ProviderAccessEncounterSourcesTests
         // baseDefinition of its financial sibling; naming that file here would
         // mean this guard failed on the next rearrangement inside claims-service
         // while still not catching a copy made next to it.
+        //
+        // The one exception is the CapabilityStatement, which names the profiles
+        // claims-service serves (supportedProfile) and shapes no EOB. It is
+        // excluded by exact path, so a projector added beside it still counts.
         var owners = Directory
             .EnumerateFiles(Path.Combine(Root(), "src"), "*.cs", SearchOption.AllDirectories)
             .Where(f => File.ReadAllText(f).Contains(
                 "C4BB-ExplanationOfBenefit-Professional-NonClinician-Basis", StringComparison.Ordinal))
             .Select(f => Path.GetRelativePath(Root(), f).Replace('\\', '/'))
+            .Where(f => f != CapabilityStatementDeclaration)
             .OrderBy(f => f, StringComparer.Ordinal)
             .ToArray();
 
@@ -81,6 +86,9 @@ public class ProviderAccessEncounterSourcesTests
 
         Assert.StartsWith("src/services/claims-service/", owners[0], StringComparison.Ordinal);
     }
+
+    /// <summary>Declares what CHO serves in the CapabilityStatement; projects nothing.</summary>
+    private const string CapabilityStatementDeclaration = "src/services/fhir-service/Controllers/MetadataController.cs";
 
     private static string Root()
     {
