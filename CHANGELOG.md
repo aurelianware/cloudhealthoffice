@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `render_manifests.py --hosted` for the hosted HIPAA environment. It renders Production hosts with synthetic data refused, keeps the FHIR data classified as PHI, and drops the demo seeding. Plan tenants must be named (never `demo`), and every Redis connection string is read from `redis-secret`. `--access-provider google-iap` signs the portal in through Google Cloud IAP. `--ca-bundle-configmap` gives every container a CA bundle that also trusts the in-cluster Kafka CA.
+
+### Fixed
+
+- The plan settings change consumer authenticated to Kafka with SASL PLAIN while every other client uses SCRAM-SHA-512. It now uses SCRAM-SHA-512 too.
+
+### Added
+
 - Hosted HIPAA profile for the Google Cloud Terraform (`hosted = true`, `infrastructure/gcp/hosted.tf`), for a separate project under a Google Cloud BAA: customer-managed Cloud KMS keys (90-day rotation) for Kubernetes secrets, node disks, every bucket and Artifact Registry; a private-node regional cluster on its own VPC with Cloud NAT, Shielded nodes, a least-privilege node account and a DNS control plane endpoint; project organization policies (US-only locations, no service account keys, no external VM addresses); and data access audit logs for every service, kept six years. Off by default, so the demo is unchanged. A new `terraform-gcp` workflow formats and validates the module. See `docs/deploy/GCP-HOSTED-HIPAA.md`.
 
 ## [6.2.0] - 2026-10-31

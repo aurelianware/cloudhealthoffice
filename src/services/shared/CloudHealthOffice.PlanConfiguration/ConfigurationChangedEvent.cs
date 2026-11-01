@@ -61,7 +61,8 @@ public sealed class ConfigurationChangeListener(
         if (!string.IsNullOrEmpty(config.SaslUsername))
         {
             config.SecurityProtocol = SecurityProtocol.SaslSsl;
-            config.SaslMechanism = SaslMechanism.Plain;
+            // SCRAM-SHA-512, as every other CHO Kafka client uses.
+            config.SaslMechanism = SaslMechanism.ScramSha512;
         }
 
         try

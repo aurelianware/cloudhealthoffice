@@ -47,7 +47,19 @@ What it changes:
       * the portal signs people in through Cloudflare Access
         (--access-team-domain, --access-audience), and token-service gives
         Access users tokens for --access-tenant only.
+      * with --access-provider google-iap the portal reads Google Cloud IAP's
+        header instead, and --access-audience is the portal's backend service.
     The default, --security demo, is the development-key demo described above.
+  - With --hosted (needs --security production and --access-provider
+    google-iap), the hosted HIPAA environment (docs/deploy/GCP-HOSTED-HIPAA.md):
+    Production hosts, SyntheticData__Allowed=false, FHIR data left classified
+    as the manifests say (PHI), no demo work-management seeding or synthetic
+    benefit plan validation, plan tenants named explicitly (never demo), and
+    every Redis connection string read from redis-secret, which carries the
+    password.
+  - With --ca-bundle-configmap, every container's /etc/ssl/certs/ca-certificates.crt
+    is that ConfigMap's bundle (the system CAs plus the in-cluster Kafka CA),
+    so .NET and librdkafka trust Kafka's TLS listener with no client setting.
   - With --documents-bucket and --documents-service-account, the services
     that store documents (DOCUMENT_SERVICES) use Google Cloud Storage: each
     gets its own Kubernetes service account bound to the Google service
@@ -282,6 +294,18 @@ PRODUCTION_ENV = {
     "SyntheticData__Allowed": "true",
 }
 
+# The hosted environment holds real member data: no synthetic-data components.
+HOSTED_ENV = {
+    "SecretProvider__Provider": "None",
+    "SyntheticData__Allowed": "false",
+}
+
+CA_BUNDLE_VOLUME = "cho-ca-bundle"
+CA_BUNDLE_PATH = "/etc/ssl/certs/ca-certificates.crt"
+
+# A Google Cloud IAP audience: the load balancer's backend service.
+IAP_AUDIENCE = re.compile(r"^/projects/[0-9]+/(global|regions/[a-z0-9-]+)/backendServices/[0-9]+$")
+
 KMS_VERSION_PATTERN = re.compile(r"^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+/cryptoKeyVersions/[0-9]+$")
 
 
@@ -300,6 +324,43 @@ def cpu_millicores(value) -> int:
 
 def production(args: argparse.Namespace) -> bool:
     return getattr(args, "security", "demo") == "production"
+
+
+def hosted(args: argparse.Namespace) -> bool:
+    """The hosted HIPAA environment: real member data, Production hosts, Google IAP sign-in."""
+    return bool(getattr(args, "hosted", False))
+
+
+def google_iap(args: argparse.Namespace) -> bool:
+    return getattr(args, "access_provider", "cloudflare") == "google-iap"
+
+
+def set_env_from_secret(container: dict, name: str, secret: str, key: str) -> None:
+    env = container.setdefault("env", [])
+    ref = {"secretKeyRef": {"name": secret, "key": key}}
+    for entry in env:
+        if entry.get("name") == name:
+            entry.pop("value", None)
+            entry["valueFrom"] = ref
+            return
+    env.append({"name": name, "valueFrom": ref})
+
+
+def mount_ca_bundle(spec: dict, configmap: str) -> None:
+    """
+    Replace the system CA bundle with one that also trusts the in-cluster
+    certificate authorities (Strimzi's cluster CA). .NET and the statically
+    linked librdkafka both read /etc/ssl/certs/ca-certificates.crt, so Kafka
+    over TLS needs no per-client setting.
+    """
+    volumes = spec.setdefault("volumes", [])
+    if not any(v.get("name") == CA_BUNDLE_VOLUME for v in volumes):
+        volumes.append({"name": CA_BUNDLE_VOLUME, "configMap": {"name": configmap}})
+    for container in spec.get("containers", []) + spec.get("initContainers", []):
+        mounts = container.setdefault("volumeMounts", [])
+        if not any(m.get("name") == CA_BUNDLE_VOLUME for m in mounts):
+            mounts.append({"name": CA_BUNDLE_VOLUME, "mountPath": CA_BUNDLE_PATH,
+                           "subPath": "ca-certificates.crt", "readOnly": True})
 
 
 def host_environment(service: str, args: argparse.Namespace | None = None) -> str:
@@ -395,10 +456,13 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
         for key, value in list(data.items()):
             if key == "Messaging__Backend" and value == "Auto":
                 data[key] = "InMemory"
-        if name == "fhir-service-config":
+        if name == "fhir-service-config" and not hosted(args):
             # The manifest labels its data production PHI; the demo cluster
             # holds synthetic members only, and its FHIR responses must say so.
             data["FhirAdapters__DataClassification"] = "synthetic"
+        if hosted(args):
+            # Redis takes a password there; every service reads it from redis-secret.
+            data.pop("Redis__ConnectionString", None)
         if name == "smart-auth-service-config":
             if production(args):
                 data.pop("SmartAuth__DevMode", None)
@@ -461,8 +525,10 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
 
     for container in spec.get("containers", []):
         set_env(container, "ASPNETCORE_ENVIRONMENT", host_environment(name, args))
-        for key, value in (PRODUCTION_ENV if production(args) else DEMO_ENV).items():
+        for key, value in (HOSTED_ENV if hosted(args) else PRODUCTION_ENV if production(args) else DEMO_ENV).items():
             set_env(container, key, value)
+        if hosted(args) and any(e.get("name") == "Redis__ConnectionString" for e in container.get("env", []) or []):
+            set_env_from_secret(container, "Redis__ConnectionString", "redis-secret", "connectionString")
         if name != "portal":
             env_from = container.setdefault("envFrom", [])
             if not any(e.get("configMapRef", {}).get("name") == "cho-service-tokens" for e in env_from):
@@ -495,7 +561,7 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             set_env(container, "ProviderVerification__ExclusionScreening__Leie__Enabled", "true")
         if name == "claims-service":
             set_env(container, "Adjudication__Enforcement__AiMode", "BestEffort" if args.ai_examiner else "Disabled")
-        if name == "work-management-service":
+        if name == "work-management-service" and not hosted(args):
             for key, value in WORK_MANAGEMENT_DEMO_ENV.items():
                 # The LocalDemo user does not exist with production security.
                 if not (production(args) and key.startswith("WorkManagement__SeedMemberUserIds")):
@@ -561,6 +627,9 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             set_env(container, "HOME", "/tmp")
         if name == "portal" and production(args):
             portal_access_settings(container, args)
+
+    if args.ca_bundle_configmap:
+        mount_ca_bundle(spec, args.ca_bundle_configmap)
 
     if production(args) and name not in NO_SERVICE_IDENTITY:
         add_service_identity(doc, spec, name, args)
@@ -673,21 +742,28 @@ def token_service_config(data: dict, args: argparse.Namespace) -> None:
         "ServiceTokens__TokenLifetime": "00:05:00",
         "ServiceTokens__ServiceClientsFile": "/etc/cho/service-clients/service-clients.json",
         "CloudflareAccess__Enabled": "true",
-        "CloudflareAccess__TeamDomain": args.access_team_domain,
         "CloudflareAccess__Audiences__0": args.access_audience,
     })
+    if google_iap(args):
+        data["CloudflareAccess__Provider"] = "GoogleIap"
+    else:
+        data["CloudflareAccess__TeamDomain"] = args.access_team_domain
     for i, tenant in enumerate(args.access_tenant):
         data[f"CloudflareAccess__Tenants__{i}"] = tenant
 
 
 def portal_access_settings(container: dict, args: argparse.Namespace) -> None:
-    """The portal signs people in from the Cloudflare Access header; no Entra, no LocalDemo."""
+    """The portal signs people in from the identity-aware proxy's header; no Entra, no LocalDemo."""
     set_env(container, "Authentication__Mode", "CloudflareAccess")
-    set_env(container, "Authentication__CloudflareAccess__TeamDomain", args.access_team_domain)
+    if google_iap(args):
+        set_env(container, "Authentication__CloudflareAccess__Provider", "GoogleIap")
+    else:
+        set_env(container, "Authentication__CloudflareAccess__TeamDomain", args.access_team_domain)
     set_env(container, "Authentication__CloudflareAccess__Audiences__0", args.access_audience)
     set_env(container, "Services__TokenService", "http://token-service")
-    # Synthetic claims for benefit plan validation (demo data only).
-    set_env(container, "Features__BenefitPlanSyntheticValidationEnabled", "true")
+    if not hosted(args):
+        # Synthetic claims for benefit plan validation (demo data only).
+        set_env(container, "Features__BenefitPlanSyntheticValidationEnabled", "true")
 
 
 def add_service_identity(doc: dict, spec: dict, name: str, args: argparse.Namespace) -> None:
@@ -794,9 +870,10 @@ def validate_production_args(parser: argparse.ArgumentParser, args: argparse.Nam
         "--token-service-google-account": args.token_service_google_account,
         "--kubernetes-issuer": args.kubernetes_issuer,
         "--token-public-key-file": args.token_public_key_file,
-        "--access-team-domain": args.access_team_domain,
         "--access-audience": args.access_audience,
     }
+    if not google_iap(args):
+        required["--access-team-domain"] = args.access_team_domain
     missing = [flag for flag, value in required.items() if not value]
     if missing:
         parser.error("--security production requires " + ", ".join(missing))
@@ -808,6 +885,11 @@ def validate_production_args(parser: argparse.ArgumentParser, args: argparse.Nam
         parser.error("--host-environment must not be Development or Testing: those hosts accept development keys")
     if not args.access_tenant or any(not t or "*" in t for t in args.access_tenant):
         parser.error("--access-tenant must name each CHO tenant explicitly")
+    if google_iap(args):
+        if args.access_team_domain:
+            parser.error("--access-team-domain is a Cloudflare setting; leave it out with --access-provider google-iap")
+        if not IAP_AUDIENCE.match(args.access_audience):
+            parser.error("--access-audience with google-iap must be /projects/PROJECT_NUMBER/global/backendServices/SERVICE_ID")
     pem = Path(args.token_public_key_file).read_text().strip()
     if not pem.startswith("-----BEGIN PUBLIC KEY-----") or not pem.endswith("-----END PUBLIC KEY-----"):
         parser.error("--token-public-key-file must hold one PEM public key (gcloud kms keys versions get-public-key)")
@@ -889,16 +971,26 @@ def main() -> int:
     parser.add_argument("--list-images", action="store_true", help="Print 'name dockerfile' for each image to build, then exit")
     parser.add_argument("--security", choices=("demo", "production"), default="demo",
                         help="demo: development keys and LocalDemo sign-in; production: Cloud KMS, Kubernetes identity, Cloudflare Access")
-    parser.add_argument("--host-environment", default="Staging",
-                        help="ASPNETCORE_ENVIRONMENT for --security production (default: %(default)s)")
+    parser.add_argument("--host-environment", default=None,
+                        help="ASPNETCORE_ENVIRONMENT for --security production (default: Staging, Production with --hosted)")
+    parser.add_argument("--hosted", action="store_true",
+                        help="The hosted HIPAA environment: real member data, Production hosts, no synthetic data, "
+                             "Google IAP sign-in, Redis password from redis-secret. Needs --security production")
+    parser.add_argument("--ca-bundle-configmap", default="",
+                        help="ConfigMap whose ca-certificates.crt replaces every container's system CA bundle "
+                             "(the system CAs plus the in-cluster Kafka CA)")
     parser.add_argument("--token-signing-key-version", default="", help="terraform output token_signing_key_version")
     parser.add_argument("--token-service-google-account", default="", help="terraform output token_service_google_account")
     parser.add_argument("--token-service-account-name", default="token-service-sa",
                         help="Kubernetes service account token-service runs as (default: %(default)s)")
     parser.add_argument("--kubernetes-issuer", default="", help="terraform output kubernetes_service_account_issuer")
     parser.add_argument("--token-public-key-file", default="", help="PEM public key of the token signing key version")
+    parser.add_argument("--access-provider", choices=("cloudflare", "google-iap"), default="cloudflare",
+                        help="The identity-aware proxy in front of the portal (default: %(default)s)")
     parser.add_argument("--access-team-domain", default="", help="Cloudflare Zero Trust team domain")
-    parser.add_argument("--access-audience", default="", help="Cloudflare Access application AUD tag")
+    parser.add_argument("--access-audience", default="",
+                        help="Cloudflare Access application AUD tag, or with google-iap the portal's backend service "
+                             "(/projects/N/global/backendServices/ID)")
     parser.add_argument("--access-tenant", action="append", default=None,
                         help="CHO tenant that accepts Cloudflare Access sign-in (repeatable; default demo)")
     parser.add_argument("--platform-tenant-id", default="", help="Entra directory of platform administrators (default: none)")
@@ -916,6 +1008,14 @@ def main() -> int:
                              "\"City\": ..., \"State\": ..., \"PostalCode\": ...}} (default: none)")
     args = parser.parse_args()
     args.service_clients = []
+    if args.host_environment is None:
+        args.host_environment = "Production" if args.hosted else "Staging"
+    if args.hosted:
+        # The demo tenant holds synthetic data; a hosted plan's tenant is named.
+        if args.access_tenant is None or "demo" in args.access_tenant:
+            parser.error("--hosted needs --access-tenant naming each plan's tenant (not demo)")
+        if args.conformance_tenant == "demo" and args.conformance_fhir_host:
+            parser.error("--hosted needs --conformance-tenant naming the plan's tenant (not demo)")
     if args.access_tenant is None:
         args.access_tenant = ["demo"]
 
@@ -973,6 +1073,15 @@ def main() -> int:
         parser.error(f"--public-directory {e}")
     if production(args):
         validate_production_args(parser, args)
+    if args.hosted:
+        if not production(args):
+            parser.error("--hosted needs --security production")
+        if not google_iap(args):
+            parser.error("--hosted needs --access-provider google-iap: Cloudflare would need its own BAA")
+        if args.host_environment != "Production":
+            parser.error("--hosted runs Production hosts")
+        if args.public_directories and "demo" in args.public_directories:
+            parser.error("--hosted publishes no demo Provider Directory")
 
     rendered = document_service_accounts(args) if args.documents_bucket else []
     if args.cpcds_drop_bucket:
