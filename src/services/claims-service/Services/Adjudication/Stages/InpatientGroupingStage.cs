@@ -1,6 +1,7 @@
 using ClaimsService.Models;
 using CloudHealthOffice.GrouperEngine.Domain;
 using CloudHealthOffice.GrouperEngine.Hac;
+using CloudHealthOffice.GrouperEngine.Licensed;
 using CloudHealthOffice.GrouperEngine.Models;
 using CloudHealthOffice.GrouperEngine.Services;
 using CloudHealthOffice.Infrastructure.Logging;
@@ -32,15 +33,27 @@ public sealed record InpatientGroupingOutcome(
     MsDrgGroupingResult? Result,
     bool Grouped)
 {
+    /// <summary>
+    /// The licensed grouper's APR-DRG answer, kept whole, when the plan
+    /// groups by APR-DRG. <see cref="PricedDrg"/> is then the "DRG-SOI" key
+    /// (e.g. <c>139-3</c>) and <see cref="Result"/> is null.
+    /// </summary>
+    public AprDrgGroupingResult? AprDrgResult { get; init; }
+
     /// <summary>Grouping did not run: the billed DRG stands.</summary>
     public static InpatientGroupingOutcome NotGrouped(string? billedDrg) =>
         new(billedDrg, billedDrg, null, Grouped: false);
 
     /// <summary>Whether the grouper disagreed with the facility.</summary>
+    /// <remarks>
+    /// For an APR-DRG stay the facility's billed DRG is compared with the base
+    /// APR-DRG, because a facility bills the three-digit group and the
+    /// severity is the grouper's to assign.
+    /// </remarks>
     public bool DisagreesWithFacility =>
         Grouped
         && !string.IsNullOrWhiteSpace(BilledDrg)
-        && !string.Equals(PricedDrg, BilledDrg, StringComparison.OrdinalIgnoreCase);
+        && !string.Equals(AprDrgResult?.AprDrg ?? PricedDrg, BilledDrg, StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -108,7 +121,22 @@ public sealed class InpatientGroupingStage : IClaimAdjudicationStage
     /// </summary>
     public const string SettingUnavailablePendCode = "CONFIGUNAVAIL";
 
+    /// <summary>
+    /// <see cref="PendDetails.PendCode"/> when the plan groups by APR-DRG and
+    /// the licensed grouper is not configured or could not be reached.
+    /// Resolved by fixing or waiting for the grouper and re-running, not by
+    /// reading the chart, so it is kept apart from <see cref="GroupingPendCode"/>.
+    /// </summary>
+    public const string GrouperUnavailablePendCode = "GROUPERUNAVAIL";
+
+    /// <summary>The plan setting that chooses MS-DRG or APR-DRG.</summary>
+    public static readonly string ClassificationSettingKey = PlanSettings.InpatientDrgClassification.Key;
+
+    /// <summary>The plan setting naming the APR-DRG version the state prices by.</summary>
+    public static readonly string AprDrgVersionSettingKey = PlanSettings.AprDrgVersion.Key;
+
     private readonly IMsDrgGrouper _grouper;
+    private readonly IAprDrgGrouper? _aprGrouper;
     private readonly IPlanSettings _settings;
     private readonly IMsDrgReleaseProvider? _releases;
     private readonly ILogger<InpatientGroupingStage> _logger;
@@ -117,9 +145,11 @@ public sealed class InpatientGroupingStage : IClaimAdjudicationStage
         IMsDrgGrouper grouper,
         IPlanSettings settings,
         ILogger<InpatientGroupingStage> logger,
-        IMsDrgReleaseProvider? releases = null)
+        IMsDrgReleaseProvider? releases = null,
+        IAprDrgGrouper? aprGrouper = null)
     {
         _grouper = grouper;
+        _aprGrouper = aprGrouper;
         _settings = settings;
         _logger = logger;
         _releases = releases;
@@ -134,7 +164,9 @@ public sealed class InpatientGroupingStage : IClaimAdjudicationStage
     /// Registered only when a release imported, which is what makes the
     /// nullable injection above a capability answer rather than a guess.
     /// </summary>
-    private bool CanGroup => _releases is not null;
+    private bool CanGroup =>
+        _releases is not null
+        || _aprGrouper is not (null or NotConfiguredLicensedGrouper);
 
     public async Task<ClaimAdjudicationStageResult> ExecuteAsync(
         ClaimAdjudicationContext context,
@@ -189,6 +221,30 @@ public sealed class InpatientGroupingStage : IClaimAdjudicationStage
         {
             context.InpatientGrouping = InpatientGroupingOutcome.NotGrouped(billedDrg);
             return ClaimAdjudicationStageResult.Pass(StageName);
+        }
+
+        var classification = await _settings
+            .ResolveAsync(
+                context.TenantId,
+                ClassificationSettingKey,
+                context.SettingScopeForClaim(),
+                claim.Institutional?.DischargeDate ?? claim.ServiceDateFrom,
+                ct)
+            .ConfigureAwait(false);
+
+        if (classification.IsFallback)
+        {
+            // Grouping is on but which grouper is unknown. Guessing MS-DRG for
+            // a Medicaid line would price an APR-DRG contract against the
+            // wrong table, so the claim waits for the setting.
+            context.InpatientGrouping = InpatientGroupingOutcome.NotGrouped(billedDrg);
+            return Pend(context, SettingUnavailablePendCode,
+                "Could not determine whether this plan groups inpatient claims by MS-DRG or APR-DRG.");
+        }
+
+        if (IsAprDrg(classification.Value))
+        {
+            return await GroupByAprDrgAsync(context, billedDrg, ct).ConfigureAwait(false);
         }
 
         var request = BuildRequest(context, billedDrg);
@@ -246,6 +302,146 @@ public sealed class InpatientGroupingStage : IClaimAdjudicationStage
         }
 
         return ClaimAdjudicationStageResult.Pass(StageName);
+    }
+
+    private static bool IsAprDrg(string? settingValue) =>
+        string.Equals(settingValue?.Trim().Trim('"'), "aprDrg", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Groups the stay through the plan's licensed APR-DRG grouper and sets
+    /// the priced DRG to the "DRG-SOI" key state weight tables use. Fails
+    /// closed exactly as the MS-DRG path does: any answer short of a
+    /// validated group pends, and the billed DRG is never priced instead.
+    /// </summary>
+    private async Task<ClaimAdjudicationStageResult> GroupByAprDrgAsync(
+        ClaimAdjudicationContext context, string? billedDrg, CancellationToken ct)
+    {
+        if (_aprGrouper is null or NotConfiguredLicensedGrouper)
+        {
+            context.InpatientGrouping = InpatientGroupingOutcome.NotGrouped(billedDrg);
+            return Pend(context, GrouperUnavailablePendCode,
+                "This plan prices inpatient claims by APR-DRG and no licensed APR-DRG grouper is configured "
+                + "(LicensedGrouper:BaseUrl).");
+        }
+
+        var claim = context.Claim;
+        var asOf = claim.Institutional?.DischargeDate ?? claim.ServiceDateFrom;
+        var version = await _settings
+            .ResolveAsync(context.TenantId, AprDrgVersionSettingKey, context.SettingScopeForClaim(), asOf, ct)
+            .ConfigureAwait(false);
+        if (version.IsFallback)
+        {
+            // State weights are published per version; grouping in whatever
+            // version the grouper defaults to could price against the wrong
+            // weight table.
+            context.InpatientGrouping = InpatientGroupingOutcome.NotGrouped(billedDrg);
+            return Pend(context, SettingUnavailablePendCode,
+                "Could not determine which APR-DRG version this plan prices by.");
+        }
+
+        var msRequest = BuildRequest(context, billedDrg);
+        if (msRequest is null)
+        {
+            context.InpatientGrouping = InpatientGroupingOutcome.NotGrouped(billedDrg);
+            return Pend(context, GroupingPendCode,
+                "This plan prices inpatient claims by APR-DRG and the claim carries no principal diagnosis to group from.");
+        }
+
+        var request = BuildAprDrgRequest(context, msRequest, version.AsInt());
+
+        AprDrgGroupingResult result;
+        try
+        {
+            result = await _aprGrouper.GroupAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // The contract says the grouper never throws; a defect in an
+            // implementation still must not price the claim.
+            _logger.LogError(ex,
+                "The APR-DRG grouper threw for claim {ClaimVersionId}",
+                LogSanitizer.Sanitize(context.ClaimVersionId));
+            context.InpatientGrouping = InpatientGroupingOutcome.NotGrouped(billedDrg);
+            return Pend(context, GrouperUnavailablePendCode,
+                "APR-DRG grouping failed for this claim; it was not priced by the billed DRG.");
+        }
+
+        if (result.Status != LicensedGroupingStatus.Grouped || result.DrgSoiKey is null)
+        {
+            context.InpatientGrouping = new InpatientGroupingOutcome(
+                PricedDrg: null, billedDrg, Result: null, Grouped: false)
+            {
+                AprDrgResult = result,
+            };
+            var code = result.Status is LicensedGroupingStatus.NotConfigured or LicensedGroupingStatus.Unavailable
+                ? GrouperUnavailablePendCode
+                : GroupingPendCode;
+            var detail = result.Notes.Count > 0 ? string.Join("; ", result.Notes) : "no further detail";
+            return Pend(context, code, $"The stay could not be grouped by APR-DRG ({result.Status}): {detail}");
+        }
+
+        var outcome = new InpatientGroupingOutcome(
+            PricedDrg: result.DrgSoiKey, billedDrg, Result: null, Grouped: true)
+        {
+            AprDrgResult = result,
+        };
+        context.InpatientGrouping = outcome;
+
+        if (outcome.DisagreesWithFacility)
+        {
+            _logger.LogInformation(
+                "Claim {ClaimVersionId} grouped to APR-DRG {GroupedDrg}; the facility billed {BilledDrg}",
+                LogSanitizer.Sanitize(context.ClaimVersionId),
+                LogSanitizer.Sanitize(result.DrgSoiKey),
+                LogSanitizer.Sanitize(billedDrg));
+        }
+
+        return ClaimAdjudicationStageResult.Pass(StageName);
+    }
+
+    /// <summary>
+    /// The APR-DRG request: the same inputs the MS-DRG request is built from,
+    /// plus the admitting diagnosis, admission date and the state's version.
+    /// </summary>
+    internal static AprDrgGroupingRequest BuildAprDrgRequest(
+        ClaimAdjudicationContext context, MsDrgGroupingRequest stay, int version)
+    {
+        var claim = context.Claim;
+        var admitting = claim.DiagnosisCodes
+            .FirstOrDefault(d => string.Equals(d.CodeQualifier, "ABJ", StringComparison.OrdinalIgnoreCase));
+
+        return new AprDrgGroupingRequest
+        {
+            ClaimReference = context.ClaimVersionId,
+            PrincipalDiagnosis = stay.PrincipalDiagnosis,
+            // BuildRequest keeps every non-principal code, which includes the
+            // admitting diagnosis; it travels in its own field here.
+            SecondaryDiagnoses = admitting is null
+                ? stay.SecondaryDiagnoses
+                : stay.SecondaryDiagnoses
+                    .Where(d => !string.Equals(d.Code, Normalize(admitting.Code), StringComparison.Ordinal))
+                    .ToList(),
+            AdmittingDiagnosis = admitting is null || string.IsNullOrWhiteSpace(admitting.Code)
+                ? null
+                : Normalize(admitting.Code),
+            Procedures = stay.Procedures,
+            AdmissionDate = claim.Institutional?.AdmissionDate is { } admitted
+                ? DateOnly.FromDateTime(admitted.Date)
+                : null,
+            DischargeDate = stay.DischargeDate,
+            AgeYears = stay.AgeYears,
+            AgeDays = stay.AgeDays,
+            Sex = stay.Sex,
+            DischargeStatus = stay.DischargeStatus,
+            BirthWeightGrams = stay.BirthWeightGrams,
+            LengthOfStayDays = stay.LengthOfStayDays,
+            RequestedVersion = version > 0 ? version.ToString(System.Globalization.CultureInfo.InvariantCulture) : null,
+            BilledDrg = stay.BilledDrg,
+        };
     }
 
     /// <summary>
