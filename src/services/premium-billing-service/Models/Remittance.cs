@@ -120,6 +120,20 @@ public class RemittanceItem
 
     /// <summary>820 ADX adjustments reported with the item (amount, reason code).</summary>
     public List<RemittanceAdjustmentDetail> Adjustments { get; set; } = new();
+
+    /// <summary>
+    /// 820 REF segments that follow the item's RMR in the same remittance
+    /// detail loop (2300B), in file order. State Medicaid 820s carry the rate
+    /// cell, aid category or program here; which qualifier means what is per
+    /// state (see <c>StateCapitationProfile</c>).
+    /// </summary>
+    public List<RemittanceReference> References { get; set; } = new();
+}
+
+public class RemittanceReference
+{
+    public string Qualifier { get; set; } = string.Empty;
+    public string Value { get; set; } = string.Empty;
 }
 
 public class RemittanceAdjustmentDetail
