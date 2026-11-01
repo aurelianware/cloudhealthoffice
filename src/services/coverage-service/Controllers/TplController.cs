@@ -206,7 +206,7 @@ public sealed class TplController : ControllerBase
             _actor.UserId), ct);
 
         _logger.LogInformation("TPL {Mode} import ({Layout}, {State}, dryRun={DryRun}) by {Actor}",
-            mode, LogSanitizer.Sanitize(effectiveLayout.Id), resolvedState, dryRun, LogSanitizer.Sanitize(_actor.UserId));
+            mode, LogSanitizer.Sanitize(effectiveLayout.Id), LogSanitizer.Sanitize(resolvedState), dryRun, LogSanitizer.Sanitize(_actor.UserId));
 
         return report.Error is null ? Ok(report) : UnprocessableEntity(report);
     }
