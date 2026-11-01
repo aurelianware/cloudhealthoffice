@@ -13,7 +13,7 @@ plan templates: a plan loaded from its own data also needs its own PA list.
 | CRD (`order-select`, `order-sign`, ...) | `IPriorAuthRuleEngine` with the member's resolved state, LOB and program. A matching rule makes the card "authorization required". |
 | PAS `$submit` | `PasAutoAdjudicator` Rule 5, same engine. |
 | CMS-0057-F public list | `GET /api/v1/prior-auth-rules/required-services` (`format=csv` for posting). |
-| Claims adjudication | **Not yet.** Claims still use the plan's `benefits[].priorAuthRequired` + `cptCodes` (behind `ClaimsAdjudication:PriorAuth:UsePlanFlaggedCodes`, off by default) and the Medicaid inpatient POS 21 floor. Pointing claims at this rule set is the next step. |
+| Claims adjudication | With `ClaimsAdjudication:PriorAuth:UseRuleSet` (off by default), through the plan's program: see [CLAIMS-PA-RULE-SET.md](../operations/CLAIMS-PA-RULE-SET.md). Otherwise claims use the plan's `benefits[].priorAuthRequired` + `cptCodes` (`UsePlanFlaggedCodes`) and the Medicaid inpatient POS 21 floor. |
 
 CRD's per-tenant code classification (`PUT /api/v1/crd/code-classification`)
 is still read as well: a code it lists as auth-required, documentation-required
@@ -105,8 +105,6 @@ curl -sS "$CHO/api/v1/prior-auth-rules/required-services?stateCode=TX&lob=Medica
 
 ## Not covered yet
 
-- **Claims adjudication** reading this rule set (next PR), so CRD, PAS, the
-  public list and claim edits all give the same answer.
 - **Delegating the question** to the plan's UM or core system (Itiliti, QNXT)
   in real time, per plan, for plans whose list lives there.
 - Effective dates on rules: the import is the list as of now; load the new
