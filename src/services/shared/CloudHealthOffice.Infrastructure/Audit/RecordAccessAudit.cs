@@ -197,7 +197,9 @@ public sealed class RecordAccessAuditFilter : IAsyncActionFilter
         var statusCode = executed.Exception is not null && !executed.ExceptionHandled
             ? 500
             : executed.Result is IStatusCodeActionResult { StatusCode: { } code } ? code : 200;
-        var value = (executed.Result as ObjectResult)?.Value ?? (executed.Result as JsonResult)?.Value;
+        // A file download (a report's CSV) names its rows in HttpContext.Items.
+        var value = (executed.Result as ObjectResult)?.Value ?? (executed.Result as JsonResult)?.Value
+            ?? context.HttpContext.Items[Reporting.StandardReports.AuditedRowsItemsKey];
         if (audit.RecordedByAction) return;
         var subjects = statusCode is >= 200 and < 300
             ? RecordSubjects.From(value, audit.ResultIdProperty, audit.ResultMemberProperty, audit.ResultMembersCollection)
