@@ -50,4 +50,17 @@ public class StandardReportsTests
         Assert.NotNull(StandardReports.Period(asOf, asOf, asOf, TimeSpan.Zero, TimeSpan.FromDays(1)).Error);
         Assert.NotNull(StandardReports.Period(asOf.AddDays(-400), asOf, asOf, TimeSpan.Zero, TimeSpan.FromDays(366)).Error);
     }
+
+    [Fact]
+    public void Period_reads_a_date_without_an_offset_as_UTC_whatever_the_server_zone()
+    {
+        var asOf = new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var (from, to, _) = StandardReports.Period(
+            new DateTime(2026, 3, 1), new DateTime(2026, 5, 1), asOf, TimeSpan.Zero, TimeSpan.FromDays(366));
+
+        Assert.Equal(new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), from);
+        Assert.Equal(new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc), to);
+        Assert.Equal(DateTimeKind.Utc, from.Kind);
+    }
 }
