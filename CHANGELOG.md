@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Portal and token-service sign-in behind Google Cloud Identity-Aware Proxy: `Provider = GoogleIap` in `CloudflareAccess` (token-service) and `Authentication:CloudflareAccess` (portal). The services validate the ES256 `x-goog-iap-jwt-assertion` token from `https://cloud.google.com/iap` against the configured backend services, and sign-out clears the IAP cookie. Cloudflare Access stays the default. For the hosted HIPAA environment, where Cloudflare would need its own BAA.
+
+### Added
+
 - Hosted HIPAA profile for the Google Cloud Terraform (`hosted = true`, `infrastructure/gcp/hosted.tf`), for a separate project under a Google Cloud BAA: customer-managed Cloud KMS keys (90-day rotation) for Kubernetes secrets, node disks, every bucket and Artifact Registry; a private-node regional cluster on its own VPC with Cloud NAT, Shielded nodes, a least-privilege node account and a DNS control plane endpoint; project organization policies (US-only locations, no service account keys, no external VM addresses); and data access audit logs for every service, kept six years. Off by default, so the demo is unchanged. A new `terraform-gcp` workflow formats and validates the module. See `docs/deploy/GCP-HOSTED-HIPAA.md`.
 
 ## [6.2.0] - 2026-10-31

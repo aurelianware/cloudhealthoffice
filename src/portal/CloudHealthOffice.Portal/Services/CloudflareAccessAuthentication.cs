@@ -16,8 +16,9 @@ public static class PortalAuthMode
     public const string LocalDemo = "LocalDemo";
 
     /// <summary>
-    /// The portal sits behind Cloudflare Access, and the person Access signed in
-    /// is the portal user. The token service turns their Access token into a
+    /// The portal sits behind an identity-aware proxy (Cloudflare Access, or
+    /// Google Cloud IAP with <c>Authentication:CloudflareAccess:Provider</c> =
+    /// <c>GoogleIap</c>), and the person it signed in is the portal user. The token service turns their Access token into a
     /// CHO token, for the tenants it lets Access sign in to.
     /// </summary>
     public const string CloudflareAccess = "CloudflareAccess";
@@ -40,10 +41,22 @@ public static class PortalAuthMode
             : IsCloudflareAccess(configuration) ? CloudflareAccessSignInPath
             : "/MicrosoftIdentity/Account/SignIn";
 
+    /// <summary>Google Cloud IAP clears its session cookie on any path with this query.</summary>
+    public const string GoogleIapSignOutPath = "/?gcp-iap-mode=CLEAR_LOGIN_COOKIE";
+
     public static string SignOutPath(IConfiguration configuration)
         => IsLocalDemo(configuration) ? "/local-demo/sign-out"
-            : IsCloudflareAccess(configuration) ? CloudflareAccessSignOutPath
+            : IsCloudflareAccess(configuration)
+                ? (IsGoogleIap(configuration) ? GoogleIapSignOutPath : CloudflareAccessSignOutPath)
             : "/MicrosoftIdentity/Account/SignOut";
+
+    /// <summary>
+    /// The CloudflareAccess mode behind Google Cloud IAP instead of Cloudflare
+    /// (<c>Authentication:CloudflareAccess:Provider</c> = <c>GoogleIap</c>).
+    /// </summary>
+    public static bool IsGoogleIap(IConfiguration configuration)
+        => string.Equals(configuration[CloudflareAccessPortalRegistration.SectionName + ":Provider"],
+            nameof(EdgeAccessProvider.GoogleIap), StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -66,26 +79,31 @@ public sealed class CloudflareAccessAuthenticationHandler : AuthenticationHandle
     public const string AssertionClaim = "cf_access_assertion";
 
     private readonly ICloudflareAccessTokenValidator _validator;
+    private readonly CloudflareAccessOptions _access;
 
     public CloudflareAccessAuthenticationHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
         ILoggerFactory logger,
         UrlEncoder encoder,
-        ICloudflareAccessTokenValidator validator)
+        ICloudflareAccessTokenValidator validator,
+        CloudflareAccessOptions access)
         : base(options, logger, encoder)
-        => _validator = validator;
+    {
+        _validator = validator;
+        _access = access;
+    }
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var assertion = Request.Headers[CloudflareAccessOptions.AssertionHeader].ToString();
+        var assertion = Request.Headers[_access.Header].ToString();
         if (string.IsNullOrWhiteSpace(assertion))
             return AuthenticateResult.NoResult();
 
         var result = await _validator.ValidateAsync(assertion, Context.RequestAborted);
         if (result.Identity is not { } identity)
         {
-            Logger.LogWarning("Cloudflare Access token refused: {Reason}", result.Reason);
-            return AuthenticateResult.Fail("Cloudflare Access token refused: " + result.Reason);
+            Logger.LogWarning("{Proxy} token refused: {Reason}", _access.DisplayName, result.Reason);
+            return AuthenticateResult.Fail(_access.DisplayName + " token refused: " + result.Reason);
         }
 
         var claims = new[]
@@ -107,8 +125,8 @@ public sealed class CloudflareAccessAuthenticationHandler : AuthenticationHandle
         Response.StatusCode = StatusCodes.Status401Unauthorized;
         Response.ContentType = "text/plain; charset=utf-8";
         await Response.WriteAsync(
-            "Sign in through this portal's Cloudflare Access address. " +
-            "Requests that do not come through Cloudflare Access are not signed in.");
+            $"Sign in through this portal's {_access.DisplayName} address. " +
+            $"Requests that do not come through {_access.DisplayName} are not signed in.");
     }
 }
 

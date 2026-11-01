@@ -889,6 +889,27 @@ presents it to token-service; a plain HTTP request presents the fresh header.
 An Access token lasts the Access session (24 hours by default); after it
 expires the user reloads the page and Cloudflare renews it.
 
+### Behind Google Cloud IAP instead
+
+The same mode works behind Google Cloud Identity-Aware Proxy on an external
+Application Load Balancer, which the Google Cloud BAA covers (the hosted HIPAA
+environment, `docs/deploy/GCP-HOSTED-HIPAA.md`). Set `Provider` to
+`GoogleIap` in both sections, leave `TeamDomain` empty, and list the backend
+services as audiences:
+
+| Setting | Where | Value |
+|---|---|---|
+| `CloudflareAccess:Provider` | token-service, portal (`Authentication:CloudflareAccess:Provider`) | `GoogleIap` |
+| `CloudflareAccess:Audiences` | token-service, portal (`Authentication:CloudflareAccess:Audiences`) | `/projects/PROJECT_NUMBER/global/backendServices/SERVICE_ID` of the portal's backend service |
+
+The portal then reads `x-goog-iap-jwt-assertion` instead of
+`Cf-Access-Jwt-Assertion`. Both services accept only ES256 tokens issued by
+`https://cloud.google.com/iap`, signed with Google's keys from
+`https://www.gstatic.com/iap/verify/public_key-jwk`. Sign-out clears IAP's
+cookie (`/?gcp-iap-mode=CLEAR_LOGIN_COOKIE`). Every other rule above holds:
+opt-in tenants, an Active TenantUser with that email, and no linking. The
+audit line still says `idp=cloudflare-access`.
+
 ## Entra app registration changes (owner action)
 
 On the CHO API app registration (`api://cfada1ac-f251-48ea-9330-39212aa4c862`):

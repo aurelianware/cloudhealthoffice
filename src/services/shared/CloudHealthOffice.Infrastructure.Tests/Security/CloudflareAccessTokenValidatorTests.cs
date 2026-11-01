@@ -122,4 +122,82 @@ public sealed class CloudflareAccessTokenValidatorTests
         public Task<IReadOnlyCollection<SecurityKey>> GetAsync(bool refresh, CancellationToken ct)
             => throw new HttpRequestException("unreachable");
     }
+
+    // ── Google Cloud IAP ──
+
+    private const string IapAudience = "/projects/123456789012/global/backendServices/987654321";
+
+    private static ECDsaSecurityKey NewEcKey(string kid) => new(ECDsa.Create(ECCurve.NamedCurves.nistP256)) { KeyId = kid };
+
+    private static string IapJwks(ECDsaSecurityKey key)
+    {
+        var p = key.ECDsa.ExportParameters(false);
+        return JsonSerializer.Serialize(new
+        {
+            keys = new[] { new { kid = key.KeyId, kty = "EC", alg = "ES256", use = "sig", crv = "P-256", x = Base64UrlEncoder.Encode(p.Q.X), y = Base64UrlEncoder.Encode(p.Q.Y) } },
+        });
+    }
+
+    private static string IapToken(SecurityKey key, string algorithm, string issuer = CloudflareAccessOptions.GoogleIapIssuer, string audience = IapAudience)
+        => new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = issuer,
+            Audience = audience,
+            IssuedAt = DateTime.UtcNow.AddMinutes(-1),
+            Expires = DateTime.UtcNow.AddMinutes(9),
+            Claims = new Dictionary<string, object> { ["sub"] = "accounts.google.com:1234567890", ["email"] = "pat@acme.example" },
+            SigningCredentials = new SigningCredentials(key, algorithm),
+        });
+
+    private static CloudflareAccessOptions IapOptions() => new() { Provider = EdgeAccessProvider.GoogleIap, Audiences = { IapAudience } };
+
+    [Fact]
+    public async Task Google_iap_keys_come_from_gstatic_and_an_es256_token_names_the_person()
+    {
+        var key = NewEcKey("iap-1");
+        var endpoint = new CertsEndpoint { Body = IapJwks(key) };
+        var validator = CloudflareAccessTokenValidator.Create(IapOptions(), new HttpClient(endpoint));
+
+        var result = await validator.ValidateAsync(IapToken(key, SecurityAlgorithms.EcdsaSha256), default);
+
+        result.Identity.Should().Be(new CloudflareAccessIdentity("pat@acme.example", "accounts.google.com:1234567890", CloudflareAccessOptions.GoogleIapIssuer));
+        endpoint.Requests.Should().OnlyContain(u => u.AbsoluteUri == CloudflareAccessOptions.GoogleIapCertsUrl);
+    }
+
+    [Theory]
+    [InlineData("wrong_issuer")]
+    [InlineData("wrong_audience")]
+    [InlineData("bad_algorithm")]
+    public async Task Google_iap_tokens_must_come_from_iap_for_this_backend(string expected)
+    {
+        var ec = NewEcKey("iap-1");
+        var rsa = NewKey("iap-1");
+        var validator = new CloudflareAccessTokenValidator(IapOptions(), new StaticCloudflareAccessKeys(IapJwks(ec)));
+        var token = expected switch
+        {
+            "wrong_issuer" => IapToken(ec, SecurityAlgorithms.EcdsaSha256, issuer: "https://" + Team),
+            "wrong_audience" => IapToken(ec, SecurityAlgorithms.EcdsaSha256, audience: "/projects/123456789012/global/backendServices/1"),
+            _ => IapToken(rsa, SecurityAlgorithms.RsaSha256),
+        };
+
+        var result = await validator.ValidateAsync(token, default);
+
+        result.Identity.Should().BeNull();
+        if (expected != "bad_algorithm")
+            result.Reason.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Google_iap_configuration_needs_backend_service_audiences_and_no_team_domain()
+    {
+        IapOptions().Invoking(o => o.Validate("A")).Should().NotThrow();
+        new CloudflareAccessOptions { Provider = EdgeAccessProvider.GoogleIap, Audiences = { Aud } }
+            .Invoking(o => o.Validate("A")).Should().Throw<InvalidOperationException>().WithMessage("*backendServices*");
+        new CloudflareAccessOptions { Provider = EdgeAccessProvider.GoogleIap }
+            .Invoking(o => o.Validate("A")).Should().Throw<InvalidOperationException>();
+        new CloudflareAccessOptions { Provider = EdgeAccessProvider.GoogleIap, TeamDomain = Team, Audiences = { IapAudience } }
+            .Invoking(o => o.Validate("A")).Should().Throw<InvalidOperationException>().WithMessage("*TeamDomain*");
+        IapOptions().Header.Should().Be("x-goog-iap-jwt-assertion");
+        Options().Header.Should().Be("Cf-Access-Jwt-Assertion");
+    }
 }
