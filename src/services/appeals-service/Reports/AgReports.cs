@@ -20,6 +20,7 @@ public static class AgReportCatalog
     public const string CaseLog = "ag-case-log";
     public const string TimelinessByMonth = "ag-timeliness-by-month";
     public const string OpenByDeadline = "ag-open-by-deadline";
+    public const string GrievancesByCategory = "ag-grievances-by-category";
 
     private static readonly ReportParameter From = new("from", "date", false, "Start of the receipt period, inclusive (default: 30 days before to).");
     private static readonly ReportParameter To = new("to", "date", false, "End of the receipt period, exclusive (default: now).");
@@ -32,7 +33,7 @@ public static class AgReportCatalog
             "Every appeal and grievance received in [from, to): who, what level, received, due, resolved, resolution and whether it was on time.",
             Permission,
             [From, To, Lob, Kind],
-            ["AppealId", "AppealNumber", "Kind", "Level", "Expedited", "MemberId", "LineOfBusiness", "ReceivedAt", "DueAt", "Extended",
+            ["AppealId", "AppealNumber", "Kind", "Level", "GrievanceCategory", "Expedited", "MemberId", "LineOfBusiness", "ReceivedAt", "DueAt", "Extended",
              "Status", "ResolvedAt", "Resolution", "OnTime", "ClaimNumber", "DenialReasonCode", "ProviderNpi"],
             "42 CFR 438.416 (Medicaid managed care grievance and appeal records)"),
         new(TimelinessByMonth, "Appeal and grievance timeliness by month",
@@ -49,6 +50,12 @@ public static class AgReportCatalog
             ["AppealId", "AppealNumber", "Kind", "Level", "Expedited", "Status", "ReceivedAt", "DueAt", "DaysLeft", "Extended",
              "AssignedReviewerId", "LineOfBusiness"],
             null),
+        new(GrievancesByCategory, "Grievances by category",
+            "Grievances received in [from, to) by category: received, resolved on time, resolved late, closed without a decision, still open.",
+            Permission,
+            [From, To, Lob],
+            ["Category", "Received", "ResolvedOnTime", "ResolvedLate", "ClosedWithoutDecision", "Open", "PercentOnTime"],
+            "DHCS APL 24-001 grievance categories (Medi-Cal); other states' categories are recorded as given"),
     ];
 
     public static ReportDefinition Find(string id) => All.Single(d => d.Id == id);
@@ -64,6 +71,7 @@ public sealed record AgCaseRow(
     string AppealNumber,
     string Kind,
     string Level,
+    string? GrievanceCategory,
     bool Expedited,
     string MemberId,
     LineOfBusiness LineOfBusiness,
@@ -90,6 +98,15 @@ public sealed record AgMonthRow(
     decimal? PercentOnTime,
     int Overturned,
     decimal? PercentOverturned);
+
+public sealed record AgCategoryRow(
+    string Category,
+    int Received,
+    int ResolvedOnTime,
+    int ResolvedLate,
+    int ClosedWithoutDecision,
+    int Open,
+    decimal? PercentOnTime);
 
 public sealed record AgOpenRow(
     string AppealId,
@@ -140,7 +157,7 @@ public static class AgReportBuilder
             .OrderBy(ReceivedAt).ThenBy(a => a.Id, StringComparer.Ordinal);
 
     public static AgCaseRow Case(Appeal a, DateTime asOf) => new(
-        a.Id, a.AppealNumber, Kind(a), LevelKey(a), a.IsUrgent, a.MemberId, a.LineOfBusiness,
+        a.Id, a.AppealNumber, Kind(a), LevelKey(a), IsGrievance(a) ? Category(a) : null, a.IsUrgent, a.MemberId, a.LineOfBusiness,
         ReceivedAt(a), a.TargetResponseDate, a.DeadlineExtension is not null, a.Status,
         a.Status == AppealStatus.Closed ? DecidedAt(a) : null,
         a.Status == AppealStatus.Closed ? a.ClosureReasonCode?.ToString() : null,
@@ -148,6 +165,25 @@ public static class AgReportBuilder
         IsGrievance(a) || string.IsNullOrWhiteSpace(a.ClaimNumber) ? null : a.ClaimNumber,
         IsGrievance(a) ? null : a.DenialReasonCode,
         a.ProviderNPI);
+
+    public static string Category(Appeal a) =>
+        string.IsNullOrWhiteSpace(a.GrievanceCategory) ? GrievanceCategories.Uncategorized : a.GrievanceCategory.Trim();
+
+    /// <summary>Grievances by category, most received first; uncategorized ones are counted, not dropped.</summary>
+    public static IReadOnlyList<AgCategoryRow> ByCategory(IEnumerable<Appeal> received) =>
+        received.Where(IsGrievance)
+            .GroupBy(Category, StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                var onTime = g.Count(a => IsDecided(a) && IsOnTime(a));
+                var late = g.Count(a => IsDecided(a) && !IsOnTime(a));
+                var decided = onTime + late;
+                return new AgCategoryRow(g.Key, g.Count(), onTime, late,
+                    g.Count(a => a.Status == AppealStatus.Closed && !IsDecided(a)), g.Count(IsOpen),
+                    decided == 0 ? null : Math.Round((decimal)onTime / decided, 4));
+            })
+            .OrderByDescending(r => r.Received).ThenBy(r => r.Category, StringComparer.Ordinal)
+            .ToList();
 
     public static IEnumerable<Appeal> Open(IEnumerable<Appeal> open, LineOfBusiness? lob, string? kind) =>
         open

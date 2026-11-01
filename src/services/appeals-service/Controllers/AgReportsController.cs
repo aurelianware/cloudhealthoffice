@@ -70,7 +70,7 @@ public class AgReportsController : ControllerBase
             [
                 "The enrollee is identified by member id. The reason for the appeal or grievance is not included (it is held encrypted); open the case for it.",
                 "OnTime is blank for a case still open and not yet due, or closed without a decision (withdrawn, expired, administrative).",
-                "Grievance categories and acknowledgment dates are not recorded yet.",
+                "Acknowledgment dates are not recorded yet. GrievanceCategory is UNCATEGORIZED for a grievance recorded without one.",
             ]);
         return ReportResults.Respond(this, run, format);
     }
@@ -101,6 +101,30 @@ public class AgReportsController : ControllerBase
                 "On time is judged against each case's own deadline, including a lawful extension. A decided case with no deadline counts as late.",
                 "PercentOnTime and PercentOverturned are of decided cases; overturns are not counted for grievances.",
             ]);
+        return ReportResults.Respond(this, run, format);
+    }
+
+    /// <summary>Grievances received in [from, to) by category. Counts only, so not a record read.</summary>
+    [HttpGet(AgReportCatalog.GrievancesByCategory)]
+    public async Task<IActionResult> GrievancesByCategory(
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] LineOfBusiness? lineOfBusiness = null,
+        [FromQuery] string? format = null,
+        CancellationToken ct = default)
+    {
+        var asOf = _clock.GetUtcNow().UtcDateTime;
+        var (fromDate, toDate, error) = StandardReports.Period(from, to, asOf, TimeSpan.FromDays(90), TimeSpan.FromDays(400));
+        if (error is not null) return BadRequest(new { error });
+
+        var activity = await _appeals.ListInsightActivityAsync(TenantId, fromDate, toDate, ct);
+        var rows = AgReportBuilder.ByCategory(AgReportBuilder.Received(activity, fromDate, toDate, lineOfBusiness, AgReportBuilder.GrievanceKind));
+        var run = ReportRun<AgCategoryRow>.Of(AgReportCatalog.Find(AgReportCatalog.GrievancesByCategory), _actor.UserId, asOf, rows, int.MaxValue,
+            new Dictionary<string, string?>
+            {
+                ["from"] = fromDate.ToString("O"), ["to"] = toDate.ToString("O"), ["lineOfBusiness"] = lineOfBusiness?.ToString(),
+            },
+            ["Grievances recorded without a category are counted under UNCATEGORIZED."]);
         return ReportResults.Respond(this, run, format);
     }
 

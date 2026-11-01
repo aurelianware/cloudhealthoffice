@@ -87,6 +87,33 @@ public class AgReportBuilderTests
     }
 
     [Fact]
+    public void Grievances_by_category_count_uncategorized_and_skip_appeals()
+    {
+        var sept = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc);
+        var g1 = Case("g1", sept, 90, code: AppealClosureReasonCode.Approved, type: AppealType.Grievance);
+        g1.GrievanceCategory = "Quality of Care";
+        var g2 = Case("g2", sept, 30, decidedAfterDays: 40, type: AppealType.Grievance);
+        g2.GrievanceCategory = "Quality of Care";
+        var g3 = Case("g3", sept, 90, status: AppealStatus.InReview, decidedAfterDays: null, type: AppealType.Grievance);
+        var appeal = Case("a1", sept, 30);
+
+        var rows = AgReportBuilder.ByCategory([g1, g2, g3, appeal]);
+
+        Assert.Equal(new[] { "Quality of Care", GrievanceCategories.Uncategorized }, rows.Select(r => r.Category));
+        Assert.Equal((2, 1, 1, 0, 0.5m), (rows[0].Received, rows[0].ResolvedOnTime, rows[0].ResolvedLate, rows[0].Open, rows[0].PercentOnTime!.Value));
+        Assert.Equal((1, 1), (rows[1].Received, rows[1].Open));
+        Assert.Equal("Quality of Care", AgReportBuilder.Case(g1, Now).GrievanceCategory);
+        Assert.Null(AgReportBuilder.Case(appeal, Now).GrievanceCategory);
+    }
+
+    [Fact]
+    public void The_dhcs_list_has_the_25_apl_24_001_categories()
+    {
+        Assert.Equal(25, GrievanceCategories.DhcsMediCal.Count);
+        Assert.Equal(GrievanceCategories.DhcsMediCal.Count, GrievanceCategories.DhcsMediCal.Distinct().Count());
+    }
+
+    [Fact]
     public void Open_cases_are_soonest_deadline_first_and_no_deadline_last()
     {
         var open = new[]
@@ -205,6 +232,25 @@ public class AgReportsApiTests : IClassFixture<AppealsWebApplicationFactory>
         response.Content.Headers.ContentType?.MediaType.Should().Be("text/csv");
         (await response.Content.ReadAsStringAsync()).Should().StartWith("AppealId,AppealNumber,Kind,Level").And.Contain(a.Id);
         _log.All.Single(x => x.ActorId == "um-lead-1").RecordIds.Should().Contain(a.Id);
+    }
+
+    [Fact]
+    public async Task A_grievance_keeps_its_category_and_an_appeal_cannot_have_one()
+    {
+        var um = As("um-create", ChoRolePermissions.UMCoordinator);
+        CreateAppealRequest Request(AppealType type) => new()
+        {
+            ClaimId = "CLM-G", ClaimNumber = "CLM-G", MemberId = "M-G", PatientName = "Pat G", ProviderNPI = "1234567890",
+            AppealReason = "Long wait.", LineOfBusiness = LineOfBusiness.Medicaid, AppealType = type, AppealLevel = AppealLevel.FirstLevel,
+            GrievanceCategory = "Provider Availability / Scheduling",
+        };
+
+        var grievance = await um.PostAsJsonAsync("/api/appeals", Request(AppealType.Grievance), Json);
+        grievance.StatusCode.Should().Be(HttpStatusCode.Created, await grievance.Content.ReadAsStringAsync());
+        (await grievance.Content.ReadFromJsonAsync<Appeal>(Json))!.GrievanceCategory.Should().Be("Provider Availability / Scheduling");
+
+        var appeal = await um.PostAsJsonAsync("/api/appeals", Request(AppealType.Reconsideration), Json);
+        appeal.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]

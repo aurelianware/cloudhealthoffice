@@ -75,6 +75,14 @@ public class Appeal
     public string? DenialReasonCode { get; set; }
 
     /// <summary>
+    /// What a grievance is about, as the plan's state reports categorize it
+    /// (e.g. the DHCS Medi-Cal categories in <see cref="GrievanceCategories"/>).
+    /// A code, not free text; grievances only.
+    /// </summary>
+    [StringLength(80)]
+    public string? GrievanceCategory { get; set; }
+
+    /// <summary>
     /// Original denial reason description from the claim. Free text —
     /// encrypted at rest.
     /// </summary>
