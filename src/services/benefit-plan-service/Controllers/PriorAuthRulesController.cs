@@ -1,5 +1,6 @@
 using BenefitPlanService.Import.FeeSchedules;
 using BenefitPlanService.Import.PriorAuthRules;
+using BenefitPlanService.Import.PriorAuthRules.Tmppm;
 using BenefitPlanService.Services;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.PlanConfiguration;
@@ -21,6 +22,7 @@ public sealed class PriorAuthRulesController : ControllerBase
     private readonly ILogger<PriorAuthRulesController> _logger;
 
     private readonly IPriorAuthRuleImportService? _importer;
+    private readonly IStateManualPromotionService? _manualPromotion;
 
     /// <summary>A plan's PA list is a few thousand rows; 20 MB leaves room for long description columns.</summary>
     private const long MaxImportBytes = 20L * 1024 * 1024;
@@ -29,12 +31,14 @@ public sealed class PriorAuthRulesController : ControllerBase
         IPaRuleRepository repository,
         ICurrentActor actor,
         ILogger<PriorAuthRulesController> logger,
-        IPriorAuthRuleImportService? importer = null)
+        IPriorAuthRuleImportService? importer = null,
+        IStateManualPromotionService? manualPromotion = null)
     {
         _repository = repository;
         _actor = actor;
         _logger = logger;
         _importer = importer;
+        _manualPromotion = manualPromotion;
     }
 
     /// <summary>
@@ -106,6 +110,61 @@ public sealed class PriorAuthRulesController : ControllerBase
         catch (InvalidDataException ex)
         {
             return BadRequest(new { error = $"Could not read the upload: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Loads the state Medicaid provider manual's prior-auth rules (the TMPPM
+    /// for Texas, extracted monthly into terminology-service) as this tenant's
+    /// rules for one state, line of business and (optionally) program, beside
+    /// any list the plan imported itself. CRD, PAS <c>$submit</c>, the published
+    /// list and claims then read them. Re-running after a new edition disables
+    /// manual rules that dropped out. Dry run by default: the report is the
+    /// review of what would change. Tenant configuration: <c>settings:manage</c>.
+    /// See docs/integration/STATE-MANUAL-PA-RULES.md.
+    /// </summary>
+    [HttpPost("import/state-manual")]
+    [RequirePermission("settings:manage")]
+    [ProducesResponseType(typeof(StateManualPromotionReport), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> ImportStateManual(
+        [FromQuery] string? stateCode = "TX",
+        [FromQuery] PaLineOfBusiness lob = PaLineOfBusiness.Medicaid,
+        [FromQuery] string? program = null,
+        [FromQuery] bool keepExemptions = true,
+        [FromQuery] bool dryRun = true,
+        [FromQuery] bool includeCodes = false,
+        CancellationToken ct = default)
+    {
+        if (_manualPromotion is null)
+            return StatusCode(StatusCodes.Status501NotImplemented, new { error = "The state manual promotion is not registered." });
+        if (string.IsNullOrWhiteSpace(_actor.TenantId))
+            return BadRequest(new { error = "Tenant context missing." });
+
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(stateCode) || stateCode.Trim().Length != 2 || !stateCode.Trim().All(char.IsAsciiLetter))
+            errors.Add("Supply a two-letter state code.");
+        if (!Enum.IsDefined(lob)) errors.Add("Supply a line of business.");
+        if (program is not null && (program.Trim().Length is 0 or > 32 || !program.Trim().All(char.IsAsciiLetterOrDigit)))
+            errors.Add("A program code is letters and digits only.");
+        if (errors.Count > 0) return BadRequest(new { error = "Invalid state manual promotion.", details = errors });
+
+        try
+        {
+            return Ok(await _manualPromotion.PromoteAsync(new StateManualPromotionOptions
+            {
+                StateCode = stateCode!.Trim().ToUpperInvariant(),
+                LineOfBusiness = lob,
+                Program = string.IsNullOrWhiteSpace(program) ? null : program.Trim(),
+                KeepExemptions = keepExemptions,
+                DryRun = dryRun,
+                IncludeCodes = includeCodes,
+            }, _actor.TenantId, _actor.UserId, ct));
+        }
+        catch (StateManualRuleSourceException ex)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
         }
     }
 

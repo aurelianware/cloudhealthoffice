@@ -64,7 +64,10 @@ own category and priority for each.
 
 - The file is the **whole list** for its scope. Rules of an earlier import of
   the same tenant, state, LOB and program that the file no longer has are
-  disabled (`rulesDisabled`). Rules this importer did not write are untouched.
+  disabled (`rulesDisabled`). Rules this importer did not write are untouched,
+  and so are the state manual's rules loaded into the same scope
+  (`import:tmppm:*`, see [STATE-MANUAL-PA-RULES.md](STATE-MANUAL-PA-RULES.md)):
+  the two lists apply side by side.
 - The rule set resolver uses the most specific **non-empty** set and does not
   merge: tenant + program, then platform + program, then tenant + any, then
   platform + any. The imported set therefore **replaces** whatever set the

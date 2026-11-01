@@ -10,6 +10,8 @@ public interface ITmppmStore
 {
     Task<List<TmppmPaRule>> SearchByCodeAsync(string code, string? state, CancellationToken ct = default);
     Task<List<TmppmPaRule>> GetRulesByCategoryAsync(string category, string? state, CancellationToken ct = default);
+    /// <summary>Every rule of one state (benefit-plan-service promotes them into the PA rule store).</summary>
+    Task<List<TmppmPaRule>> GetRulesByStateAsync(string state, CancellationToken ct = default);
     Task<List<TmppmCategoryGroup>> GetCategoriesAsync(string state, CancellationToken ct = default);
     Task<List<string>> AutocompleteCodeAsync(string prefix, int maxResults, CancellationToken ct = default);
     Task<List<TmppmEdition>> GetEditionsAsync(int limit, CancellationToken ct = default);
@@ -96,6 +98,13 @@ public sealed class MongoTmppmStore : ITmppmStore
         await EnsureIndexesAsync();
         var filter = StateFilter(Builders<TmppmPaRule>.Filter.Eq(r => r.Category, category), state);
         return await _rules.Find(filter).SortBy(r => r.TmppmRef).ToListAsync(ct);
+    }
+
+    public async Task<List<TmppmPaRule>> GetRulesByStateAsync(string state, CancellationToken ct = default)
+    {
+        await EnsureIndexesAsync();
+        return await _rules.Find(Builders<TmppmPaRule>.Filter.Eq(r => r.State, state.Trim().ToUpperInvariant()))
+            .SortBy(r => r.RuleId).ToListAsync(ct);
     }
 
     public async Task<List<TmppmCategoryGroup>> GetCategoriesAsync(string state, CancellationToken ct = default)

@@ -231,7 +231,7 @@ public sealed class PriorAuthRuleImportServiceTests
     }
 
     /// <summary>Same contract as the Mongo repository: exact-key reads of enabled rules, writes keyed by full identity.</summary>
-    private sealed class FakeRepo : IPaRuleRepository
+    internal sealed class FakeRepo : IPaRuleRepository
     {
         private readonly Dictionary<string, PaRuleDocument> _docs = new();
         public int Writes { get; private set; }

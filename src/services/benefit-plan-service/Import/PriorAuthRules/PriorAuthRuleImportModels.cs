@@ -25,6 +25,15 @@ public sealed record PriorAuthRuleImportOptions
     public bool DryRun { get; init; } = true;
     /// <summary>Return every code of every rule, not the first 25.</summary>
     public bool IncludeCodes { get; init; }
+    /// <summary>
+    /// Keeps this import's rules apart from other lists loaded into the same
+    /// scope (e.g. <c>tmppm</c> for the state manual): rule ids become
+    /// <c>import:&lt;namespace&gt;:&lt;id&gt;</c>, and only that namespace's
+    /// earlier rules are disabled when they drop out. Null for the plan's own
+    /// list, which leaves namespaced rules alone. Must be one of
+    /// <see cref="PriorAuthRuleImportService.RuleNamespaces"/>.
+    /// </summary>
+    public string? RuleNamespace { get; init; }
 }
 
 public enum PriorAuthRuleImportOutcome

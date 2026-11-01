@@ -99,6 +99,11 @@ public sealed class TmppmApiTests : IAsyncLifetime
         var categories = await reader.GetFromJsonAsync<List<TmppmCategoryGroup>>("/api/v1/tmppm/categories?state=TX", Json);
         categories!.Select(g => g.Priority).Should().Equal("P1", "P2");
 
+        var byState = await reader.GetFromJsonAsync<List<TmppmPaRule>>("/api/v1/tmppm/rules?state=tx", Json);
+        byState!.Select(r => r.RuleId).Should().Equal("TX-1", "TX-2");
+        (await reader.GetAsync("/api/v1/tmppm/rules?state=Texas")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await reader.GetAsync("/api/v1/tmppm/rules")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
         (await reader.GetFromJsonAsync<List<string>>("/api/v1/tmppm/codes?prefix=995", Json))!.Should().Equal("99500", "99501");
         (await reader.GetFromJsonAsync<TmppmEdition>("/api/v1/tmppm/editions/current", Json))!.EditionId.Should().Be("2026-04");
 
