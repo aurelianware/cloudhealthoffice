@@ -1,5 +1,6 @@
 using BenefitPlanService.Import.FeeSchedules;
 using BenefitPlanService.Import.PriorAuthRules;
+using BenefitPlanService.Import.PriorAuthRules.MediCal;
 using BenefitPlanService.Import.PriorAuthRules.Tmppm;
 using BenefitPlanService.Services;
 using CloudHealthOffice.Infrastructure.Security;
@@ -23,6 +24,7 @@ public sealed class PriorAuthRulesController : ControllerBase
 
     private readonly IPriorAuthRuleImportService? _importer;
     private readonly IStateManualPromotionService? _manualPromotion;
+    private readonly IMediCalTarImportService? _mediCal;
 
     /// <summary>A plan's PA list is a few thousand rows; 20 MB leaves room for long description columns.</summary>
     private const long MaxImportBytes = 20L * 1024 * 1024;
@@ -32,13 +34,15 @@ public sealed class PriorAuthRulesController : ControllerBase
         ICurrentActor actor,
         ILogger<PriorAuthRulesController> logger,
         IPriorAuthRuleImportService? importer = null,
-        IStateManualPromotionService? manualPromotion = null)
+        IStateManualPromotionService? manualPromotion = null,
+        IMediCalTarImportService? mediCal = null)
     {
         _repository = repository;
         _actor = actor;
         _logger = logger;
         _importer = importer;
         _manualPromotion = manualPromotion;
+        _mediCal = mediCal;
     }
 
     /// <summary>
@@ -165,6 +169,71 @@ public sealed class PriorAuthRulesController : ControllerBase
         catch (StateManualRuleSourceException ex)
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Loads Medi-Cal's TAR and Non-Benefit List (the Provider Manual's Part 2
+    /// PDFs, one per CPT range, as multipart <c>files</c>, or a .zip of them)
+    /// as this tenant's CA rules for one line of business and (optionally)
+    /// program, beside any list the plan imported itself. Upload every range
+    /// each time: a code no longer listed stops needing a TAR. Dry run by
+    /// default. Tenant configuration: <c>settings:manage</c>.
+    /// See docs/integration/STATE-MANUAL-PA-RULES.md.
+    /// </summary>
+    [HttpPost("import/medi-cal-tar")]
+    [RequirePermission("settings:manage")]
+    [RequestSizeLimit(MaxImportBytes * 5)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxImportBytes * 5)]
+    [ProducesResponseType(typeof(MediCalTarImportReport), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ImportMediCalTar(
+        IFormFileCollection? files,
+        [FromQuery] PaLineOfBusiness lob = PaLineOfBusiness.Medicaid,
+        [FromQuery] string? program = null,
+        [FromQuery] bool nonBenefitNeedsTar = true,
+        [FromQuery] bool keepExemptions = true,
+        [FromQuery] bool dryRun = true,
+        [FromQuery] bool includeCodes = false,
+        CancellationToken ct = default)
+    {
+        if (_mediCal is null)
+            return StatusCode(StatusCodes.Status501NotImplemented, new { error = "The Medi-Cal TAR list import is not registered." });
+        if (string.IsNullOrWhiteSpace(_actor.TenantId))
+            return BadRequest(new { error = "Tenant context missing." });
+
+        var errors = new List<string>();
+        if (files is null || files.Count == 0 || files.All(f => f.Length == 0))
+            errors.Add("Upload the TAR and Non-Benefit List PDFs as 'files' (or a .zip of them).");
+        if (!Enum.IsDefined(lob)) errors.Add("Supply a line of business.");
+        if (program is not null && (program.Trim().Length is 0 or > 32 || !program.Trim().All(char.IsAsciiLetterOrDigit)))
+            errors.Add("A program code is letters and digits only.");
+        if (errors.Count > 0) return BadRequest(new { error = "Invalid Medi-Cal TAR list import.", details = errors });
+
+        var streams = files!.Where(f => f.Length > 0).Select(f => (f.FileName, f.OpenReadStream())).ToList();
+        try
+        {
+            return Ok(await _mediCal.ImportAsync(streams, new MediCalTarImportOptions
+            {
+                LineOfBusiness = lob,
+                Program = string.IsNullOrWhiteSpace(program) ? null : program.Trim(),
+                NonBenefitNeedsTar = nonBenefitNeedsTar,
+                KeepExemptions = keepExemptions,
+                DryRun = dryRun,
+                IncludeCodes = includeCodes,
+            }, _actor.TenantId, _actor.UserId, ct));
+        }
+        catch (PriorAuthRuleFormatException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidDataException ex)
+        {
+            return BadRequest(new { error = $"Could not read the upload: {ex.Message}" });
+        }
+        finally
+        {
+            foreach (var (_, s) in streams) await s.DisposeAsync();
         }
     }
 

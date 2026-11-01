@@ -46,7 +46,7 @@ public sealed class PriorAuthRuleImportService(
     /// <summary>Copied exemptions start with it (after <see cref="ImportedRuleIdPrefix"/>).</summary>
     public const string KeptExemptionMarker = "keep:";
     /// <summary>Lists loaded beside the plan's own list in one scope (<see cref="PriorAuthRuleImportOptions.RuleNamespace"/>).</summary>
-    public static readonly IReadOnlySet<string> RuleNamespaces = new HashSet<string>(StringComparer.Ordinal) { "tmppm" };
+    public static readonly IReadOnlySet<string> RuleNamespaces = new HashSet<string>(StringComparer.Ordinal) { "tmppm", "medi-cal" };
 
     public const int MaxHeaderSearchRows = 30;
 

@@ -128,6 +128,8 @@ builder.Services.AddHttpClient(BenefitPlanService.Import.PriorAuthRules.Tmppm.Ht
 });
 builder.Services.AddScoped<BenefitPlanService.Import.PriorAuthRules.Tmppm.IStateManualRuleSource, BenefitPlanService.Import.PriorAuthRules.Tmppm.HttpStateManualRuleSource>();
 builder.Services.AddScoped<BenefitPlanService.Import.PriorAuthRules.Tmppm.IStateManualPromotionService, BenefitPlanService.Import.PriorAuthRules.Tmppm.StateManualPromotionService>();
+// Medi-Cal's TAR and Non-Benefit List (Provider Manual PDFs) into the same store.
+builder.Services.AddScoped<BenefitPlanService.Import.PriorAuthRules.MediCal.IMediCalTarImportService, BenefitPlanService.Import.PriorAuthRules.MediCal.MediCalTarImportService>();
 // systemOfRecord=cho: the importer creates the legal contracts in
 // provider-contracts-service (with the caller's own token) and prices from
 // their projection.
