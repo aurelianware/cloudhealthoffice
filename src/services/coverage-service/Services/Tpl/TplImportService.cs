@@ -46,6 +46,8 @@ public sealed class TplImportReport
     public int Rejected { get; set; }
     public int Skipped { get; set; }
     public int UnknownMembers { get; set; }
+    /// <summary>Plan-discovered rows the state file now carries (adopted by the state source).</summary>
+    public int ConfirmedPlanDiscovered { get; set; }
     public int MembersWithTpl { get; set; }
     /// <summary>Coverage codes whose scope is CHO's reading; check them before relying on cost avoidance.</summary>
     public List<string> CodesNeedingVerification { get; set; } = new();
@@ -226,6 +228,24 @@ public sealed class TplImportService : ITplImportService
                 continue;
             }
 
+            if (current.Source == PlanDiscoveredSource)
+            {
+                // The state file now carries a policy the plan found itself:
+                // the state owns it from here, and the add report is moot.
+                var adopted = Track(current);
+                Apply(adopted, row, status);
+                adopted.Source = layout.Id;
+                adopted.StateConfirmedAt = DateTime.UtcNow;
+                if (adopted.PendingStateAction == TplStateAction.Add)
+                {
+                    adopted.PendingStateAction = null;
+                    adopted.StateReportDueBy = null;
+                }
+                Stamp(adopted);
+                report.ConfirmedPlanDiscovered++;
+                continue;
+            }
+
             if (Same(current, row, status))
             {
                 var confirmed = Track(current);
@@ -357,5 +377,12 @@ public sealed class TplImportService : ITplImportService
         LastConfirmedAt = p.LastConfirmedAt,
         LastUpdatedBy = p.LastUpdatedBy,
         NaturalKey = p.NaturalKey,
+        DiscoveredAt = p.DiscoveredAt,
+        PendingStateAction = p.PendingStateAction,
+        PendingStateActionReason = p.PendingStateActionReason,
+        StateReportDueBy = p.StateReportDueBy,
+        ReportedToStateAt = p.ReportedToStateAt,
+        StateReportReference = p.StateReportReference,
+        StateConfirmedAt = p.StateConfirmedAt,
     };
 }

@@ -32,14 +32,93 @@ public sealed class TplController : ControllerBase
     private readonly ITplPolicyRepository _policies;
     private readonly ICurrentActor _actor;
     private readonly ILogger<TplController> _logger;
+    private readonly ITplDiscoveryService? _discovery;
 
     public TplController(
-        ITplImportService importer, ITplPolicyRepository policies, ICurrentActor actor, ILogger<TplController> logger)
+        ITplImportService importer, ITplPolicyRepository policies, ICurrentActor actor, ILogger<TplController> logger,
+        ITplDiscoveryService? discovery = null)
     {
         _importer = importer;
         _policies = policies;
         _actor = actor;
         _logger = logger;
+        _discovery = discovery;
+    }
+
+    /// <summary>
+    /// Records coverage the plan found itself. It counts for cost avoidance
+    /// at once and is queued for the state report (California: due in 10
+    /// calendar days).
+    /// </summary>
+    [HttpPost("member/{memberId}/tpl")]
+    [ProducesResponseType(typeof(TplPolicy), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RecordDiscovery(
+        [FromRoute] string memberId, [FromBody] TplDiscoveryRequest? request, CancellationToken ct = default)
+    {
+        if (_discovery is null) return StatusCode(StatusCodes.Status501NotImplemented);
+        if (request is null) return BadRequest(new { message = "Body required." });
+        try
+        {
+            var policy = await _discovery.RecordDiscoveryAsync(HttpContext.GetTenantId(), memberId, request, _actor.UserId, ct);
+            return StatusCode(StatusCodes.Status201Created, policy);
+        }
+        catch (TplDiscoveryException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Asks the state to remove a TPL record the plan found to be wrong. The
+    /// record stays in force until the state's file drops it. A plan-found row
+    /// never reported is simply withdrawn.
+    /// </summary>
+    [HttpPost("tpl/{policyId}/removal-request")]
+    [ProducesResponseType(typeof(TplPolicy), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RequestRemoval(
+        [FromRoute] string policyId, [FromBody] TplRemovalRequest? request, CancellationToken ct = default)
+    {
+        if (_discovery is null) return StatusCode(StatusCodes.Status501NotImplemented);
+        try
+        {
+            var policy = await _discovery.RequestRemovalAsync(
+                HttpContext.GetTenantId(), policyId, request?.Reason ?? string.Empty, request?.DiscoveredAt, _actor.UserId, ct);
+            return policy is null ? NotFound() : Ok(policy);
+        }
+        catch (TplDiscoveryException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Additions and removal requests owed to the state, as CSV, with due dates and an overdue flag.</summary>
+    [HttpGet("tpl/state-report")]
+    [Produces("text/csv")]
+    public async Task<IActionResult> StateReport(
+        [FromQuery] string state, [FromQuery] bool includeReported = false, CancellationToken ct = default)
+    {
+        if (_discovery is null) return StatusCode(StatusCodes.Status501NotImplemented);
+        if (string.IsNullOrWhiteSpace(state) || state.Trim().Length != 2)
+            return BadRequest(new { message = "state (two letters) is required." });
+        var csv = await _discovery.BuildStateReportCsvAsync(HttpContext.GetTenantId(), state.Trim(), includeReported, DateTime.UtcNow, ct);
+        return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv",
+            $"tpl-state-report-{state.Trim().ToUpperInvariant()}-{DateTime.UtcNow:yyyyMMdd}.csv");
+    }
+
+    /// <summary>Marks rows as reported to the state, with the state's batch or form reference.</summary>
+    [HttpPost("tpl/state-report/mark-reported")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> MarkReported([FromBody] TplMarkReportedRequest? request, CancellationToken ct = default)
+    {
+        if (_discovery is null) return StatusCode(StatusCodes.Status501NotImplemented);
+        if (request?.PolicyIds is not { Count: > 0 } ids) return BadRequest(new { message = "policyIds required." });
+        var count = await _discovery.MarkReportedAsync(
+            HttpContext.GetTenantId(), ids, request.ReportedAt ?? DateTime.UtcNow, request.Reference, _actor.UserId, ct);
+        return Ok(new { marked = count });
     }
 
     /// <summary>The built-in layouts, their code tables and whether each has
@@ -183,3 +262,7 @@ public sealed class TplController : ControllerBase
         };
     }
 }
+
+public sealed record TplRemovalRequest(string? Reason, DateTime? DiscoveredAt);
+
+public sealed record TplMarkReportedRequest(IReadOnlyList<string>? PolicyIds, DateTime? ReportedAt, string? Reference);
