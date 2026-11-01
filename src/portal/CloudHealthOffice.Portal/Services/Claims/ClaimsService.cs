@@ -248,6 +248,97 @@ public class ClaimsService : IClaimsService
         }
     }
 
+    public async Task<List<ReportDefinitionView>> GetClaimReportCatalogAsync()
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            using var response = await _httpClient.GetAsync($"{baseUrl}/claims/reports");
+            if (response.StatusCode == HttpStatusCode.Forbidden)
+                return new List<ReportDefinitionView>();
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<List<ReportDefinitionView>>(JsonOptions) ?? new List<ReportDefinitionView>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
+    public async Task<ReportRunView> RunClaimReportAsync(string reportId, IReadOnlyDictionary<string, string?> parameters)
+    {
+        using var response = await GetReportAsync(reportId, parameters, csv: false);
+        return await response.Content.ReadFromJsonAsync<ReportRunView>(JsonOptions) ?? new ReportRunView();
+    }
+
+    public async Task<ReportFile> DownloadClaimReportCsvAsync(string reportId, IReadOnlyDictionary<string, string?> parameters)
+    {
+        using var response = await GetReportAsync(reportId, parameters, csv: true);
+        var fileName = response.Content.Headers.ContentDisposition?.FileNameStar?.Trim('"')
+                       ?? response.Content.Headers.ContentDisposition?.FileName?.Trim('"')
+                       ?? $"{reportId}.csv";
+        return new ReportFile(fileName, await response.Content.ReadAsByteArrayAsync());
+    }
+
+    /// <summary>
+    /// GET claims/reports/{id}: a 403 is <see cref="ReportForbiddenException"/>,
+    /// a 400 an <see cref="ArgumentException"/> with the service's reason.
+    /// </summary>
+    private async Task<HttpResponseMessage> GetReportAsync(string reportId, IReadOnlyDictionary<string, string?> parameters, bool csv)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        var query = string.Join("&", parameters
+            .Where(p => !string.IsNullOrWhiteSpace(p.Value))
+            .Append(new KeyValuePair<string, string?>("format", csv ? "csv" : null))
+            .Where(p => p.Value is not null)
+            .Select(p => $"{Uri.EscapeDataString(p.Key)}={Uri.EscapeDataString(p.Value!)}"));
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.GetAsync($"{baseUrl}/claims/reports/{Uri.EscapeDataString(reportId)}" + (query.Length > 0 ? "?" + query : ""));
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            response.Dispose();
+            throw new ReportForbiddenException(reportId);
+        }
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            var reason = await ReadErrorAsync(response);
+            response.Dispose();
+            throw new ArgumentException(reason);
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            var status = (int)response.StatusCode;
+            response.Dispose();
+            throw new ServiceUnavailableException("Claims Service", new HttpRequestException($"Report {reportId} failed with {status}."));
+        }
+        return response;
+    }
+
+    private static async Task<string> ReadErrorAsync(HttpResponseMessage response)
+    {
+        var text = await response.Content.ReadAsStringAsync();
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("error", out var e))
+                return e.GetString() ?? text;
+        }
+        catch (JsonException)
+        {
+        }
+        return string.IsNullOrWhiteSpace(text) ? "The report parameters were not accepted." : text;
+    }
+
     public async Task<ClaimSearchResult> SearchClaimsAsync(ClaimSearchRequest request)
     {
         var baseUrl = _configuration["Services:ClaimsService"];

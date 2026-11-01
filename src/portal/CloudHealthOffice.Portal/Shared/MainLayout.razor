@@ -195,6 +195,12 @@
                         <MudNavLink Href="/dashboard" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
                             Claims Dashboard
                         </MudNavLink>
+                        @if (_canRunReports)
+                        {
+                            <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Summarize">
+                                Reports
+                            </MudNavLink>
+                        }
                         <MudNavLink Href="/batch-adjudication" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment">
                             Batch Adjudication
                         </MudNavLink>
@@ -430,6 +436,7 @@
     private bool _canReadContracts;
     // Work management: My Work (pull) and its configuration (work-management-service).
     private bool _canWork;
+    private bool _canRunReports;
     private bool _canAdminWork;
     private bool _canPostNotices;
     private bool _canReadCorrespondence;
@@ -463,6 +470,7 @@
                 && (UserContextService.HasPermission("enrollment:read") || UserContextService.HasPermission("billing:read"));
             _canReadContracts = userContext != null && UserContextService.HasPermission("contracts:read");
             _canWork = userContext != null && UserContextService.HasPermission("workqueue:work");
+            _canRunReports = userContext != null && UserContextService.HasPermission("reports:claims");
             _canAdminWork = userContext != null && UserContextService.HasPermission("workqueue:admin");
             _canPostNotices = userContext != null && UserContextService.HasPermission("notices:write");
             _canReadCorrespondence = userContext != null && UserContextService.HasPermission("correspondence:read");
