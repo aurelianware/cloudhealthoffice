@@ -74,4 +74,26 @@ public class PriorAuthRequiredServicesTests
         typeof(PriorAuthRulesController).GetMethod(nameof(PriorAuthRulesController.RequiredServices))!
             .GetCustomAttributes<RequirePermissionAttribute>().Select(a => a.Permission).Should().Equal("benefits:read");
     }
+
+    [Fact]
+    public void Import_needs_settings_manage_permission()
+    {
+        typeof(PriorAuthRulesController).GetMethod(nameof(PriorAuthRulesController.ImportCsv))!
+            .GetCustomAttributes<RequirePermissionAttribute>().Select(a => a.Permission).Should().Equal("settings:manage");
+    }
+
+    [Theory]
+    [InlineData("Texas", PaLineOfBusiness.Medicaid, null)]
+    [InlineData("TX", (PaLineOfBusiness)0, null)]
+    [InlineData("TX", PaLineOfBusiness.Medicaid, "../STAR")]
+    public async Task Import_rejects_bad_scope(string state, PaLineOfBusiness lob, string? program)
+    {
+        var importer = new Mock<BenefitPlanService.Import.PriorAuthRules.IPriorAuthRuleImportService>(MockBehavior.Strict);
+        var controller = new PriorAuthRulesController(_repo.Object, _actor.Object,
+            NullLogger<PriorAuthRulesController>.Instance, importer.Object);
+        var bytes = System.Text.Encoding.UTF8.GetBytes("Code\n70551\n");
+        var file = new Microsoft.AspNetCore.Http.FormFile(new MemoryStream(bytes), 0, bytes.Length, "file", "list.csv");
+
+        (await controller.ImportCsv(file, state, lob, program)).Should().BeOfType<BadRequestObjectResult>();
+    }
 }
