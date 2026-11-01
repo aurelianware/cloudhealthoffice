@@ -91,6 +91,10 @@ public class RateResolutionService : IRateResolutionService
         PricingResult Result, FeeScheduleLine? RateLine, bool IsPerStay, bool LesserOfBilled,
         bool MultipleProcedureReduction = true);
 
+    private static bool HasPlanCode(PricingRequest request) =>
+        !string.IsNullOrWhiteSpace(request.PlanCode)
+        && !string.Equals(request.PlanCode, request.PlanId, StringComparison.Ordinal);
+
     /// <summary>
     /// Prices one line and also returns the matched rate line so batch pricing can
     /// honour per-line flags (e.g. <see cref="FeeScheduleLine.MultipleProcedureReductionApplies"/>).
@@ -105,8 +109,13 @@ public class RateResolutionService : IRateResolutionService
         CancellationToken ct)
     {
         // 1. Provider contract lookup
+        // A contract for this plan version wins; else one for the plan code,
+        // which follows the plan across amendments.
         var contract = await _contractRepo.GetContractAsync(
             request.TenantId, request.ProviderNpi, request.PlanId, request.ServiceDate, ct);
+        if (contract is null && HasPlanCode(request))
+            contract = await _contractRepo.GetContractAsync(
+                request.TenantId, request.ProviderNpi, request.PlanCode!, request.ServiceDate, ct);
 
         var networkStatus = contract?.NetworkStatus ?? NetworkStatus.Unknown;
 
@@ -156,6 +165,9 @@ public class RateResolutionService : IRateResolutionService
         {
             schedule = await _feeScheduleRepo.GetDefaultForPlanAsync(
                 request.TenantId, request.PlanId, request.ServiceDate, ct);
+            if (schedule is null && HasPlanCode(request))
+                schedule = await _feeScheduleRepo.GetDefaultForPlanAsync(
+                    request.TenantId, request.PlanCode!, request.ServiceDate, ct);
         }
 
         // 3. Find the rate line

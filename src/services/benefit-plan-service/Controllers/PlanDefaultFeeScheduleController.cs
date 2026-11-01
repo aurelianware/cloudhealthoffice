@@ -56,6 +56,9 @@ public sealed class PlanDefaultFeeScheduleController : ControllerBase
     /// <summary>Deterministic id of a plan's default schedule.</summary>
     public static string ScheduleId(string tenantId, Guid planId) => $"{tenantId}:plan-default:{planId:D}";
 
+    /// <summary>Plan default id for a plan key: a plan version id or a plan code (<see cref="Import.PlanPricingKey"/>).</summary>
+    public static string ScheduleId(string tenantId, string planKey) => $"{tenantId}:plan-default:{planKey}";
+
     /// <summary>The plan's default fee schedule, or 404 when none is configured.</summary>
     [HttpGet]
     [RequirePermission("benefits:read")]

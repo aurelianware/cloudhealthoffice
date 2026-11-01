@@ -19,7 +19,7 @@ public enum DuplicateRatePolicy
 }
 
 /// <summary>Options for one fee schedule CSV import.</summary>
-public sealed class FeeScheduleImportOptions
+public sealed record FeeScheduleImportOptions
 {
     /// <summary>Lines one schedule document may hold (a MongoDB document stays well under 16 MB).</summary>
     public const int MaxLines = 50_000;
@@ -43,8 +43,12 @@ public sealed class FeeScheduleImportOptions
     /// <summary>Two-letter state for a state schedule.</summary>
     public string? Jurisdiction { get; init; }
 
-    /// <summary>When set, the schedule becomes this benefit plan's default (one per plan; see PlanDefaultFeeScheduleController).</summary>
-    public Guid? PlanId { get; init; }
+    /// <summary>
+    /// When set, the schedule becomes this benefit plan's default (one per plan;
+    /// see PlanDefaultFeeScheduleController): a plan code for every version of
+    /// the plan, or a plan version id for that version only (<see cref="PlanPricingKey"/>).
+    /// </summary>
+    public string? PlanId { get; init; }
 
     /// <summary>Keep only rows whose column equals the value (case-insensitive), e.g. "Provider Type" = "Physician".</summary>
     public IReadOnlyList<(string Column, string Value)> Filters { get; init; } = [];

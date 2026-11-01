@@ -201,7 +201,7 @@ public sealed class ContractRosterImportService : IContractRosterImportService
                 planId = await ResolvePlanAsync(planText, tenantId);
                 planCache[planText] = planId;
             }
-            if (planId is null) { Reject($"plan '{planText}' is not a benefit plan id, or the code of a published plan, in this tenant"); continue; }
+            if (planId is null) { Reject($"plan '{planText}' is not a plan code or plan version id in this tenant"); continue; }
 
             if (!TryDate(r("effective"), out var effective)) { Reject("effective_date is required (yyyy-MM-dd or MM/dd/yyyy)"); continue; }
             DateTime? term = null;
@@ -478,15 +478,12 @@ public sealed class ContractRosterImportService : IContractRosterImportService
     }
 
     /// <summary>
-    /// The plan id claims are priced with: a plan id as given, or for a plan code the id of its
-    /// published version in effect today (what claims resolve a plan code to).
+    /// The plan key the contract is stored under (<see cref="PlanPricingKey"/>):
+    /// a plan code applies to every version of the plan, so the contract
+    /// survives an amendment; a plan version id is that version only.
     /// </summary>
-    private async Task<string?> ResolvePlanAsync(string planText, string tenantId)
-    {
-        if (Guid.TryParse(planText, out var guid))
-            return await _plans.GetByIdAsync(guid.ToString("D"), tenantId) is { } p ? p.Id : null;
-        return await _plans.GetByPlanIdAsync(planText, tenantId) is { } byCode ? byCode.Id : null;
-    }
+    private Task<string?> ResolvePlanAsync(string planText, string tenantId) =>
+        PlanPricingKey.ResolveAsync(_plans, planText, tenantId);
 
     internal static (ReimbursementTerm? Term, string? Error) BuildTerm(Func<string, string> r)
     {

@@ -48,7 +48,7 @@ below title rows. Column names are matched ignoring case and punctuation.
 | Column | Required | Values |
 |---|---|---|
 | `NPI` | yes | 10-digit NPI with a valid check digit. Claims are matched by rendering NPI, then billing NPI. |
-| `Plan` | yes | CHO benefit plan id, or a plan code (`planId` of a published plan, resolved to the version in effect today). |
+| `Plan` | yes | A plan code (`planId` of the benefit plan, e.g. `STAR-TX-01`): the contract applies to every version of the plan and survives an amendment. Or a plan version id (GUID): that version only, and it wins over a plan-code contract for claims on that version. |
 | `Network Status` | yes | `in`, `par`, `out`, `non-par`. |
 | `Effective Date` | yes | `yyyy-MM-dd` or `MM/dd/yyyy`. |
 | `Term Date` | no | Same formats. |
@@ -127,10 +127,11 @@ A dry run only looks contracts up; it creates and writes nothing.
 
 ## Limits
 
-- **Plan version ids.** Contracts and plan default schedules name the plan
-  version id that claims resolve to. Amending a published plan creates a
-  new version with a new id, so re-run this import (and the plan default
-  import) after a plan is amended.
+- **Plan versions.** Claims carry the plan version id and the plan code.
+  Pricing looks for a contract (and a plan default schedule) keyed to the
+  version first, then to the plan code. Rows given by plan code keep
+  pricing after the plan is amended; rows given by version id must be
+  re-imported for the new version.
 - Contracts not in a later file are not deleted.
 - **CHO mode, later portal edits.** A rate change made in the contracts
   portal after the import does not yet re-project to pricing by itself

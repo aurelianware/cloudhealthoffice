@@ -218,6 +218,7 @@ public sealed class PricingStage : IClaimAdjudicationStage
                     ? line.ServiceDateFrom
                     : claim.ServiceDateFrom,
                 PlanId = planId,
+                PlanCode = context.ResolvedPlan?.PlanCode,
                 // ChargeAmount is the line total (X12 837 SV102 / SV203), not a
                 // per-unit price — same billed amount BenefitCalculationStage
                 // reports, so billed − allowed (CO-45) lines up.

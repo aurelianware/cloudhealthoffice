@@ -1,4 +1,5 @@
 using BenefitPlanService.Models.Estimate;
+using BenefitPlanService.Repositories;
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
@@ -32,6 +33,7 @@ public class PaymentEstimateService : IPaymentEstimateService
     private readonly IOperatingModeProvider _operatingModeProvider;
     private readonly IClaimTypeRouter _claimTypeRouter;
     private readonly ILogger<PaymentEstimateService> _logger;
+    private readonly IBenefitPlanRepository? _plans;
 
     public PaymentEstimateService(
         IRateResolutionService rateEngine,
@@ -40,8 +42,10 @@ public class PaymentEstimateService : IPaymentEstimateService
         IPriorAuthRuleEngine priorAuthEngine,
         IOperatingModeProvider operatingModeProvider,
         IClaimTypeRouter claimTypeRouter,
-        ILogger<PaymentEstimateService> logger)
+        ILogger<PaymentEstimateService> logger,
+        IBenefitPlanRepository? plans = null)
     {
+        _plans = plans;
         _rateEngine = rateEngine;
         _benefitEngine = benefitEngine;
         _providerIntegrityGate = providerIntegrityGate;
@@ -78,6 +82,7 @@ public class PaymentEstimateService : IPaymentEstimateService
         var isInstitutional = claimTypeCode == "837I";
         var drgCode = isInstitutional && !string.IsNullOrWhiteSpace(request.DrgCode) ? request.DrgCode.Trim() : null;
         var lengthOfStay = isInstitutional ? NormalizeLengthOfStay(request.LengthOfStay) : null;
+        var planCode = await ResolvePlanCodeAsync(tenantId, request.BenefitPlanId);
         var pricingRequests = request.Lines.Select(line => new PricingRequest
         {
             TenantId = tenantId,
@@ -87,6 +92,7 @@ public class PaymentEstimateService : IPaymentEstimateService
             PlaceOfServiceCode = string.IsNullOrWhiteSpace(line.PlaceOfService) ? "11" : line.PlaceOfService,
             ServiceDate = request.ServiceDate.ToDateTime(TimeOnly.MinValue),
             PlanId = request.BenefitPlanId.ToString(),
+            PlanCode = planCode,
             BilledAmount = line.ChargeAmount,
             Units = line.Units,
             LineNumber = line.LineNumber,
@@ -754,4 +760,25 @@ public class PaymentEstimateService : IPaymentEstimateService
         3 or 4 => "STAR",
         _ => null
     };
+
+    /// <summary>
+    /// The plan's code, so the estimate finds contracts and plan default
+    /// schedules keyed to it (they follow the plan across amendments), as
+    /// adjudication does. Null when the plan cannot be read: the estimate then
+    /// prices from version-keyed rates only.
+    /// </summary>
+    private async Task<string?> ResolvePlanCodeAsync(string tenantId, Guid planId)
+    {
+        if (_plans is null) return null;
+        try
+        {
+            var plan = await _plans.GetByIdAsync(planId.ToString("D"), tenantId);
+            return string.IsNullOrWhiteSpace(plan?.PlanId) ? null : plan!.PlanId.Trim();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not read plan {PlanId} for its plan code; pricing by version id only", planId);
+            return null;
+        }
+    }
 }

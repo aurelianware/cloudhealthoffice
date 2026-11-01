@@ -382,6 +382,20 @@ public class PricingStageTests
     }
 
     [Fact]
+    public void BuildRequests_SendsThePlanCode_SoPlanCodeRatesSurviveAmendments()
+    {
+        var ctx = BuildContext();
+
+        var requests = PricingStage.BuildRequests(ctx);
+
+        Assert.All(requests, r =>
+        {
+            Assert.Equal(ctx.ResolvedPlan!.PlanGuid!.Value.ToString(), r.PlanId);
+            Assert.Equal("STAR-TX-01", r.PlanCode);
+        });
+    }
+
+    [Fact]
     public void BuildRequests_NoRenderingProvider_UsesBillingNpi()
     {
         var ctx = BuildContext();
@@ -609,7 +623,7 @@ public class PricingStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.ClaimVersionId,
             Claim = claim,
-            ResolvedPlan = new ResolvedBenefitPlan { Id = "PLAN-CODE", PlanGuid = planGuid },
+            ResolvedPlan = new ResolvedBenefitPlan { Id = "PLAN-CODE", PlanGuid = planGuid, PlanCode = "STAR-TX-01" },
         };
     }
 }

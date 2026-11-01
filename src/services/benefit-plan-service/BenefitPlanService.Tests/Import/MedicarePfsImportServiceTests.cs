@@ -260,7 +260,7 @@ public sealed class MedicarePfsImportServiceTests
         Localities = (localities ?? []).ToHashSet(StringComparer.OrdinalIgnoreCase),
         States = (states ?? []).ToHashSet(StringComparer.OrdinalIgnoreCase),
         DryRun = dryRun,
-        PlanId = planId,
+        PlanId = planId?.ToString("D"),
         Replace = replace,
         ConversionFactor = conversionFactor,
     };

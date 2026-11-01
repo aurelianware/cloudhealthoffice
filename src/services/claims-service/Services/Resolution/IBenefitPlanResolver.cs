@@ -38,6 +38,14 @@ public class ResolvedBenefitPlan
     /// </summary>
     public Guid? PlanGuid { get; init; }
 
+    /// <summary>
+    /// The plan's code (<c>BenefitPlan.PlanId</c>), the same across all of its
+    /// versions. Pricing falls back to contracts and plan default schedules
+    /// keyed to it when the version has none of its own, so they survive an
+    /// amendment (which gives the plan a new version id).
+    /// </summary>
+    public string? PlanCode { get; init; }
+
     public string? PlanName { get; init; }
     public string? PlanType { get; init; }
 

@@ -146,6 +146,39 @@ public sealed class FeeScheduleImportServiceTests
     }
 
     [Fact]
+    public async Task PlanDefault_ByPlanCode_FollowsThePlanAcrossAmendments()
+    {
+        var planId = Guid.NewGuid();
+        var (svc, repo, _) = Build(planId);
+
+        var report = await svc.ImportAsync(Csv(StateCsv),
+            Options(dryRun: false, filter: ("Provider Type", "Physician")) with { PlanId = " TX-STAR-TEST " }, Tenant, "admin");
+
+        report.DefaultForPlanId.Should().Be("TX-STAR-TEST");
+        repo.Stored.Single().Id.Should().Be($"{Tenant}:plan-default:TX-STAR-TEST");
+
+        var contracts = new Mock<IProviderContractRepository>();
+        var engine = new RateResolutionService(repo, contracts.Object, NullLogger<RateResolutionService>.Instance);
+        var amendedVersion = Guid.NewGuid().ToString("D");
+        var line = new PricingRequest
+        {
+            TenantId = Tenant, PlanId = amendedVersion, PlanCode = "TX-STAR-TEST", ProviderNpi = "1234567893",
+            ProcedureCode = "99213", PlaceOfServiceCode = "11", ServiceDate = new DateTime(2026, 10, 15), BilledAmount = 150m,
+        };
+        (await engine.ResolveAsync(line)).AllowedAmount.Should().Be(62.10m, "a later version of the plan still finds the plan-code default");
+    }
+
+    [Fact]
+    public async Task PlanDefault_UnknownPlanCode_Throws()
+    {
+        var (svc, _, _) = Build(Guid.NewGuid());
+
+        var act = () => svc.ImportAsync(Csv(StateCsv), Options(dryRun: false) with { PlanId = "NO-SUCH-PLAN" }, Tenant, "admin");
+
+        (await act.Should().ThrowAsync<FeeSchedulePlanNotFoundException>()).Which.PlanId.Should().Be("NO-SUCH-PLAN");
+    }
+
+    [Fact]
     public async Task PlanDefault_PlanInAnotherTenant_Throws()
     {
         var (svc, repo, _) = Build(Guid.NewGuid());
@@ -298,7 +331,7 @@ public sealed class FeeScheduleImportServiceTests
         SourceId = "tx-tmhp-physician",
         SourceVersion = "2026-10-01",
         Jurisdiction = "tx",
-        PlanId = planId,
+        PlanId = planId?.ToString("D"),
         Filters = filter is { } f ? [f] : [],
         OnDuplicate = onDuplicate,
         Replace = replace,

@@ -14,7 +14,7 @@ using CloudHealthOffice.ReferenceData.Domain;
 namespace BenefitPlanService.Import.FeeSchedules;
 
 /// <summary>Which Medicare PFS localities to load, and how.</summary>
-public sealed class MedicarePfsImportOptions
+public sealed record MedicarePfsImportOptions
 {
     /// <summary>Localities one request may write (each is one schedule document of ~19,000 lines).</summary>
     public const int MaxLocalities = 120;
@@ -40,8 +40,12 @@ public sealed class MedicarePfsImportOptions
     /// <summary>Every locality in the GPCI file.</summary>
     public bool AllLocalities { get; init; }
 
-    /// <summary>Make the one selected locality's schedule this plan's default (a Medicare Advantage plan in one locality).</summary>
-    public Guid? PlanId { get; init; }
+    /// <summary>
+    /// Make the one selected locality's schedule this plan's default (a Medicare
+    /// Advantage plan in one locality): a plan code for every version of the
+    /// plan, or a plan version id for that version only (<see cref="PlanPricingKey"/>).
+    /// </summary>
+    public string? PlanId { get; init; }
 
     public bool Replace { get; init; }
     public bool DryRun { get; init; } = true;
@@ -135,10 +139,11 @@ public sealed class MedicarePfsImportService : IMedicarePfsImportService
         Stream pprrvu, Stream gpci, MedicarePfsImportOptions options, string tenantId, string? actor,
         CancellationToken ct = default)
     {
-        if (options.PlanId is { } planId
-            && await _plans.GetByIdAsync(planId.ToString("D"), tenantId) is null)
+        if (!string.IsNullOrWhiteSpace(options.PlanId))
         {
-            throw new FeeSchedulePlanNotFoundException(planId);
+            var key = await PlanPricingKey.ResolveAsync(_plans, options.PlanId, tenantId)
+                ?? throw new FeeSchedulePlanNotFoundException(options.PlanId.Trim());
+            options = options with { PlanId = key };
         }
 
         var report = new MedicarePfsImportReport
@@ -164,7 +169,7 @@ public sealed class MedicarePfsImportService : IMedicarePfsImportService
             report.Errors.Add("No locality matched; choose localities, states or allLocalities=true.");
         if (selected.Count > MedicarePfsImportOptions.MaxLocalities)
             report.Errors.Add($"{selected.Count} localities selected; one request writes at most {MedicarePfsImportOptions.MaxLocalities}.");
-        if (options.PlanId is not null && selected.Count != 1)
+        if (!string.IsNullOrWhiteSpace(options.PlanId) && selected.Count != 1)
             report.Errors.Add("planId makes one locality's schedule the plan's default; select exactly one locality.");
 
         var rvus = MedicarePfsFiles.ReadPprrvu(pprrvu);
@@ -211,7 +216,7 @@ public sealed class MedicarePfsImportService : IMedicarePfsImportService
                 Locality = locality.Key,
                 State = locality.State,
                 Name = locality.Name,
-                ScheduleId = options.PlanId is { } pid
+                ScheduleId = options.PlanId is { Length: > 0 } pid
                     ? PlanDefaultFeeScheduleController.ScheduleId(tenantId, pid)
                     : ScheduleId(tenantId, options.Year, locality, options.Effective),
                 WorkGpci = locality.WorkGpci,
@@ -242,7 +247,7 @@ public sealed class MedicarePfsImportService : IMedicarePfsImportService
                 CodeSystem = "HCPCS",
                 IsGlobal = false,
                 LicenseClassification = LicenseClassification.Public,
-                DefaultForPlanId = options.PlanId?.ToString("D"),
+                DefaultForPlanId = string.IsNullOrWhiteSpace(options.PlanId) ? null : options.PlanId,
                 ConversionFactor = cf,
                 WorkGpci = locality.WorkGpci,
                 PeGpci = locality.PeGpci,
