@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using ClaimsService.Models;
+using CloudHealthOffice.Infrastructure.Data;
 using ClaimsService.Repositories;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
@@ -137,6 +138,7 @@ public sealed class ClaimExtractStoreMongo : IClaimExtractStore
             new FindOneAndUpdateOptions<ClaimExtractSettings> { IsUpsert = true, ReturnDocument = ReturnDocument.After }, ct);
     }
 
+    [CrossTenantQuery("ClaimExtractWorker (background): lists the tenants that turned the extract on; each tenant's run is scoped to its TenantId.")]
     public async Task<IReadOnlyList<ClaimExtractSettings>> ListEnabledAsync(CancellationToken ct = default)
         => await _settings.Find(s => s.Enabled).ToListAsync(ct);
 
@@ -162,7 +164,7 @@ public sealed class ClaimExtractStoreMongo : IClaimExtractStore
     }
 
     public Task SaveRunAsync(ClaimExtractRun run, CancellationToken ct = default)
-        => _runs.ReplaceOneAsync(r => r.Id == run.Id, run, new ReplaceOptions { IsUpsert = true }, ct);
+        => _runs.ReplaceOneAsync(r => r.TenantId == run.TenantId && r.Id == run.Id, run, new ReplaceOptions { IsUpsert = true }, ct);
 
     public async Task<IReadOnlyList<ClaimExtractRun>> ListRunsAsync(string tenantId, int limit, CancellationToken ct = default)
         => await _runs.Find(r => r.TenantId == tenantId).SortByDescending(r => r.StartedAt).Limit(limit).ToListAsync(ct);
@@ -303,4 +305,21 @@ public static class ClaimExtractVersions
             claim.VersionState = ClaimRepository.MapStatusToVersionState(claim.Status);
         return claim;
     }
+}
+
+/// <summary>An <see cref="IClaimExtractSource"/> over a list, answering as <see cref="ClaimExtractSourceMongo"/> does (tests, local runs).</summary>
+public sealed class InMemoryClaimExtractSource : IClaimExtractSource
+{
+    public List<Claim> Claims { get; } = [];
+
+    public Task<IReadOnlyList<Claim>> ReadAsync(
+        string tenantId, DateTime? from, DateTime to, (DateTime LastUpdated, string Id)? after, int limit, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<Claim>>(Claims
+            .Where(c => c.TenantId == tenantId && c.VersionState != ClaimVersionState.Draft)
+            .Where(c => c.LastUpdatedDate <= to && (from is null || c.LastUpdatedDate > from))
+            .Where(c => after is null || c.LastUpdatedDate > after.Value.LastUpdated
+                        || (c.LastUpdatedDate == after.Value.LastUpdated && string.CompareOrdinal(c.Id, after.Value.Id) > 0))
+            .OrderBy(c => c.LastUpdatedDate).ThenBy(c => c.Id, StringComparer.Ordinal)
+            .Take(limit)
+            .ToList());
 }

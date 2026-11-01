@@ -278,6 +278,9 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                     new global::ClaimsService.Import.Cpcds.Drop.InMemoryCpcdsDropRunRepository());
                 services.AddSingleton<global::ClaimsService.Import.Cpcds.Drop.ICpcdsDropTenantSettingsRepository>(
                     new global::ClaimsService.Import.Cpcds.Drop.InMemoryCpcdsDropTenantSettingsRepository());
+                // The claims warehouse extract's stores are Mongo too.
+                services.AddSingleton<global::ClaimsService.Extracts.IClaimExtractStore>(new global::ClaimsService.Extracts.InMemoryClaimExtractStore());
+                services.AddSingleton<global::ClaimsService.Extracts.IClaimExtractSource>(new global::ClaimsService.Extracts.InMemoryClaimExtractSource());
 
                 // The claim access log's Mongo repository is removed by the
                 // filter above; the audit filter's writer still needs one.

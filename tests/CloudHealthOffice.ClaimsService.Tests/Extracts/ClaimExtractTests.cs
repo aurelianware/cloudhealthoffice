@@ -23,7 +23,7 @@ public sealed class ClaimExtractTests : IDisposable
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "claim-extract-" + Guid.NewGuid().ToString("N"));
     private readonly InMemoryClaimExtractStore _store = new();
-    private readonly InMemorySource _source = new();
+    private readonly InMemoryClaimExtractSource _source = new();
     private readonly ClaimExtractOptions _options = new() { PageSize = 2, SettleDelay = TimeSpan.FromMinutes(5) };
     private readonly Clock _clock = new(Now);
 
@@ -297,22 +297,5 @@ public sealed class ClaimExtractTests : IDisposable
     {
         public DateTime Now { get; set; } = now;
         public override DateTimeOffset GetUtcNow() => new(Now, TimeSpan.Zero);
-    }
-
-    /// <summary>Answers as <see cref="ClaimExtractSourceMongo"/> does.</summary>
-    private sealed class InMemorySource : IClaimExtractSource
-    {
-        public List<Claim> Claims { get; } = [];
-
-        public Task<IReadOnlyList<Claim>> ReadAsync(
-            string tenantId, DateTime? from, DateTime to, (DateTime LastUpdated, string Id)? after, int limit, CancellationToken ct)
-            => Task.FromResult<IReadOnlyList<Claim>>(Claims
-                .Where(c => c.TenantId == tenantId && c.VersionState != ClaimVersionState.Draft)
-                .Where(c => c.LastUpdatedDate <= to && (from is null || c.LastUpdatedDate > from))
-                .Where(c => after is null || c.LastUpdatedDate > after.Value.LastUpdated
-                            || (c.LastUpdatedDate == after.Value.LastUpdated && string.CompareOrdinal(c.Id, after.Value.Id) > 0))
-                .OrderBy(c => c.LastUpdatedDate).ThenBy(c => c.Id, StringComparer.Ordinal)
-                .Take(limit)
-                .ToList());
     }
 }
