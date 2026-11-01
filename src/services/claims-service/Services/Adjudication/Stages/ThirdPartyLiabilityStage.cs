@@ -124,6 +124,10 @@ public sealed class ThirdPartyLiabilityStage : IClaimAdjudicationStage
             {
                 payAndChase.Add(new(line.LineNumber, "Pediatric preventive service: paid without regard to TPL (SSA 1902(a)(25)(E))."));
             }
+            else if (StatePaysAndChases(covering, line, claim, dob) is { } stateReason)
+            {
+                payAndChase.Add(new(line.LineNumber, stateReason));
+            }
             else
             {
                 costAvoid.Add(line.LineNumber);
@@ -198,6 +202,28 @@ public sealed class ThirdPartyLiabilityStage : IClaimAdjudicationStage
     {
         activity?.SetTag("tpl.decision", decision.ToString());
         activity?.SetTag("tpl.reason", reasonCode);
+        context.AdjudicationResult.ThirdPartyLiability = new ClaimTplRecord
+        {
+            Decision = decision.ToString(),
+            ReasonCode = reasonCode,
+            Message = message,
+            Resources = (drivers ?? []).Select(r => new ClaimTplResource
+            {
+                TplPolicyId = r.Id,
+                State = r.State,
+                CarrierCode = r.CarrierCode,
+                CarrierName = r.CarrierName,
+                PolicyNumber = r.PolicyNumber,
+                StateCoverageCode = r.StateCoverageCode,
+            }).ToList(),
+            CostAvoidLines = (costAvoid ?? []).ToList(),
+            PayAndChaseLines = (payAndChase ?? []).Select(p => new ClaimTplPayAndChaseLine
+            {
+                LineNumber = p.LineNumber,
+                Reason = p.Reason,
+            }).ToList(),
+            DecidedAt = DateTime.UtcNow,
+        };
         context.TplResult = new TplOutcome
         {
             Decision = decision,
@@ -247,6 +273,24 @@ public sealed class ThirdPartyLiabilityStage : IClaimAdjudicationStage
                 },
             })
             .ToList();
+    }
+
+    /// <summary>The state rule that has Medicaid pay this line first, if any.
+    /// The state is the covering TPL row's (the state file it came from).</summary>
+    private string? StatePaysAndChases(
+        IReadOnlyList<TplResource> covering, AdapterClaimLine line, AdapterClaim claim, DateTime? dob)
+    {
+        var serviceDate = line.ServiceDateFrom != default ? line.ServiceDateFrom : claim.ServiceDateFrom;
+        var underAge = dob is { } d && TplServiceRules.AgeOn(d, serviceDate) < _options.PediatricAgeLimit;
+        foreach (var state in covering.Select(r => r.State).Where(s => !string.IsNullOrWhiteSpace(s))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var rules = TplStateRules.For(state, _options.States);
+            if (rules.PaysAndChases(line.ProcedureCode, underAge))
+                return $"{state.ToUpperInvariant()} pays {line.ProcedureCode} without billing other insurance first" +
+                       (string.IsNullOrWhiteSpace(rules.Authority) ? "." : $" ({rules.Authority}).");
+        }
+        return null;
     }
 
     private bool IsMedicaidPrimaryPlan(ClaimAdjudicationContext context)

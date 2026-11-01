@@ -309,6 +309,133 @@ public class ThirdPartyLiabilityStageTests
     }
 }
 
+public class ThirdPartyLiabilityStateRuleTests
+{
+    private const string TenantId = "tenant-1";
+    private const string MemberId = "500000001";
+    private static readonly DateTime Dos = new(2026, 10, 15, 0, 0, 0, DateTimeKind.Utc);
+    private readonly ITplClient _tpl = Substitute.For<ITplClient>();
+
+    private ThirdPartyLiabilityStage Stage(Dictionary<string, TplStateRules>? states = null) =>
+        new(_tpl, Options.Create(new ThirdPartyLiabilityOptions
+        {
+            Mode = TplEnforcementMode.CostAvoid,
+            States = states ?? new(),
+        }), NullLogger<ThirdPartyLiabilityStage>.Instance);
+
+    private void OnFile(string state, TplServiceScope scope) =>
+        _tpl.GetActiveAsync(TenantId, MemberId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(new[]
+            {
+                new TplResource
+                {
+                    Id = "r1", State = state, CarrierName = "Carrier", Scope = scope,
+                    EffectiveDate = new DateTime(2026, 1, 1),
+                },
+            });
+
+    private static ClaimAdjudicationContext Context(ClaimType type, DateTime dob, params string[] codes) => new()
+    {
+        TenantId = TenantId,
+        ClaimVersionId = "v1",
+        Claim = new AdapterClaim
+        {
+            TenantId = TenantId,
+            MemberId = MemberId,
+            LineOfBusiness = LineOfBusiness.Medicaid,
+            ClaimType = type,
+            ServiceDateFrom = Dos,
+            ServiceDateTo = Dos,
+            ClaimLines = codes.Select((c, i) => new AdapterClaimLine
+            {
+                LineNumber = i + 1, ProcedureCode = c, ChargeAmount = 50m, ServiceDateFrom = Dos,
+            }).ToList(),
+        },
+        ResolvedMember = new ResolvedMember { MemberId = MemberId, DateOfBirth = dob },
+    };
+
+    [Fact]
+    public async Task Texas_ThStepsDentalCheckup_IsPaidAndChasedForAChild()
+    {
+        OnFile("TX", TplServiceScope.Dental);
+        var ctx = Context(ClaimType.Dental, new DateTime(2018, 1, 1), "D0120", "D1120");
+
+        var result = await Stage().ExecuteAsync(ctx, default);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.Equal(TplDecision.PayAndChase, ctx.TplResult!.Decision);
+        Assert.All(ctx.TplResult.PayAndChaseLines, l => Assert.Contains("TMPPM 8.3", l.Reason));
+        var record = ctx.AdjudicationResult.ThirdPartyLiability!;
+        Assert.Equal("PayAndChase", record.Decision);
+        Assert.Equal(2, record.PayAndChaseLines.Count);
+        Assert.Equal("r1", record.Resources.Single().TplPolicyId);
+    }
+
+    [Fact]
+    public async Task Texas_SameDentalCodesForAnAdult_AreCostAvoided()
+    {
+        OnFile("TX", TplServiceScope.Dental);
+        var ctx = Context(ClaimType.Dental, new DateTime(1980, 1, 1), "D0120");
+
+        var result = await Stage().ExecuteAsync(ctx, default);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
+        Assert.Equal("CostAvoided", ctx.AdjudicationResult.ThirdPartyLiability!.Decision);
+        Assert.Equal([1], ctx.AdjudicationResult.ThirdPartyLiability.CostAvoidLines);
+    }
+
+    [Fact]
+    public async Task Texas_CaseManagementForPregnantWomen_IsPaidAndChased()
+    {
+        OnFile("TX", TplServiceScope.Comprehensive);
+        var ctx = Context(ClaimType.Professional, new DateTime(1995, 1, 1), "G9012");
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, (await Stage().ExecuteAsync(ctx, default)).Outcome);
+    }
+
+    [Fact]
+    public async Task California_ConfiguredDirectBillCode_IsPaidAndChased()
+    {
+        OnFile("CA", TplServiceScope.Comprehensive);
+        var states = new Dictionary<string, TplStateRules>
+        {
+            ["CA"] = new() { PayAndChaseProcedureCodes = ["99999"], Authority = "DHCS direct-bill list" },
+        };
+        var ctx = Context(ClaimType.Professional, new DateTime(1980, 1, 1), "99999");
+
+        var result = await Stage(states).ExecuteAsync(ctx, default);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.Contains("DHCS direct-bill list", ctx.TplResult!.PayAndChaseLines.Single().Reason);
+    }
+
+    [Fact]
+    public async Task California_TexasRulesDoNotApply()
+    {
+        OnFile("CA", TplServiceScope.Comprehensive);
+        var ctx = Context(ClaimType.Professional, new DateTime(1995, 1, 1), "G9012");
+
+        Assert.Equal(ClaimAdjudicationOutcome.Deny, (await Stage().ExecuteAsync(ctx, default)).Outcome);
+    }
+
+    [Fact]
+    public void ConfiguredCodes_AddToBuiltIn_UnlessReplaced()
+    {
+        var merged = TplStateRules.For("TX", new Dictionary<string, TplStateRules>
+        {
+            ["tx"] = new() { PayAndChaseProcedureCodes = ["X1"] },
+        });
+        Assert.Contains("G9012", merged.PayAndChaseProcedureCodes);
+        Assert.Contains("X1", merged.PayAndChaseProcedureCodes);
+
+        var replaced = TplStateRules.For("TX", new Dictionary<string, TplStateRules>
+        {
+            ["TX"] = new() { PayAndChaseProcedureCodes = ["X1"], ReplaceBuiltIn = true },
+        });
+        Assert.DoesNotContain("G9012", replaced.PayAndChaseProcedureCodes);
+    }
+}
+
 public class TplServiceRulesTests
 {
     private static AdapterClaim Inst(string facilityType) => new()

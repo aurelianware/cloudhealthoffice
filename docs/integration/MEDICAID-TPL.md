@@ -13,8 +13,8 @@ Status by step:
 | --- | --- | --- |
 | 1 | TPL store and state file loader (this page) | Built |
 | 2 | Cost-avoid denial in adjudication when in-scope TPL is active | Built (off by default) |
-| 3 | State exempt-service lists, pay-and-chase recorded on the claim | Next (federal pediatric preventive and code A already pay) |
-| 4 | Recovery tracking (case per paid claim, 12-month CA clock, state reports) | Planned |
+| 3 | State exempt-service lists, TPL decision saved on the claim | Built |
+| 4 | Recovery tracking (case per paid claim, 12-month CA clock, state reports) | Next |
 
 ## The TPL store
 
@@ -172,20 +172,46 @@ SNF; B covers outpatient, professional and DME; C covers medical. Casualty
 covers a claim only when it is marked accident-related (CLM11 AA/EM/OA or an
 accident date).
 
-Exempt in this step: pediatric preventive services for members under 21
+Federal exemption: pediatric preventive services for members under 21
 (preventive visits 99381–99384 and 99391–99394 at any age; 99385/99395,
 immunization administration, developmental, vision, hearing and lead
 screening, fluoride varnish, and well-child or Z23 encounters under 21). Turn
 off with `PayPediatricPreventive=false` only if the state has found 90-day
-cost avoidance warranted. State lists (Texas THSteps, SHARS, ECI; California
-specifics) come next.
+cost avoidance warranted.
+
+### State pay-and-chase lists
+
+Built in, keyed by the TPL row's state; configured codes are added unless
+`ReplaceBuiltIn` is set:
+
+| State | Pays and chases | Authority |
+| --- | --- | --- |
+| TX | `G9012` case management for children and pregnant women; `T1017`, `H2014` ECI; THSteps dental checkup and preventive codes (`D0120`, `D0145`, `D0150`, `D1110`, `D1120`, `D1206`, `D1208`, `D1351`, `D1354`) under 21 | TMPPM 8.3 (codes are CHO's mapping; check against the THSteps and ECI handbooks) |
+| CA | nothing beyond federal by default | APL 21-002 refers to a DHCS direct-bill CPT/HCPCS list it does not reproduce; configure it |
+
+SHARS is carved out of Texas managed care, so it is not listed. Prenatal care
+stays cost-avoided in both states (federal law since 9 Feb 2018).
+
+```json
+"States": {
+  "CA": { "PayAndChaseProcedureCodes": [ "..." ], "Authority": "DHCS direct-bill list, <date>" }
+}
+```
+
+### On the claim
+
+Every decision is saved on the claim as `adjudicationResult.thirdPartyLiability`:
+decision, reason code, the TPL rows that applied (with their coverage-service
+ids), cost-avoided line numbers and pay-and-chase lines with the reason.
+Recovery tracking reads the pay-and-chase lines.
 
 ```json
 "Adjudication": {
   "ThirdPartyLiability": {
     "Mode": "SoftValidation",
     "MedicaidPrimaryPlanCodes": [ "STAR-HEALTH" ],
-    "PayPediatricPreventive": true
+    "PayPediatricPreventive": true,
+    "States": { "CA": { "PayAndChaseProcedureCodes": [] } }
   }
 }
 ```
