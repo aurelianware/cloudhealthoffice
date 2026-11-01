@@ -4,16 +4,19 @@ using Confluent.Kafka;
 using EncounterSubmissionService.Models;
 using EncounterSubmissionService.Models.Events;
 using EncounterSubmissionService.Services;
+using EncounterSubmissionService.StateRoutes;
 
 namespace EncounterSubmissionService.Workers;
 
 /// <summary>
-/// Background worker that runs every 4 hours (configurable) and for each
-/// FL MCO tenant:
-///   1. Flags submissions where deadline is within 7 days → DeadlineWarning
+/// Background worker that runs every 4 hours (configurable):
+///   1. Flags submissions where deadline is within 7 days → DeadlineWarning (all states)
 ///   2. Publishes encounter-deadline-warning Kafka event for each warning
-///   3. Auto-batches submissions due within 48 hours via BuildFmmisSubmissionBatch
-///   4. Writes batch files to Azure Blob staging
+///   3. Florida: auto-batches submissions due within 48 hours via BuildFmmisSubmissionBatch
+///      and writes the FMMIS staging file to Azure Blob (unchanged)
+///   4. Texas / California: batches every pending encounter on each enabled route, per
+///      tenant, into 837P / 837I files stored with the batch (and copied to blob staging
+///      when configured). Encounters that fail validation are held back for rework.
 /// </summary>
 public class EncounterSubmissionWorker : BackgroundService
 {
@@ -96,14 +99,14 @@ public class EncounterSubmissionWorker : BackgroundService
         var urgentCutoff = DateTime.UtcNow.AddHours(urgentHours);
         var urgentSubmissions = approaching
             .Where(s => s.SubmissionDeadline <= urgentCutoff &&
+                        IsFlorida(s) &&
                         s.Status is EncounterSubmissionStatus.Pending
                         or EncounterSubmissionStatus.DeadlineWarning)
             .ToList();
 
         if (urgentSubmissions.Count == 0)
         {
-            _logger.LogInformation("No urgent submissions requiring auto-batch");
-            return;
+            _logger.LogInformation("No urgent Florida submissions requiring auto-batch");
         }
 
         // Group by tenant for batch processing
@@ -136,6 +139,87 @@ public class EncounterSubmissionWorker : BackgroundService
                     tenantId, tenantSubmissions.Count);
             }
         }
+
+        // ── Step 3: state X12 routes (Texas, California) ─────────────
+        await RunStateRoutesAsync(
+            scope.ServiceProvider.GetRequiredService<IStateEncounterRouteRegistry>(),
+            scope.ServiceProvider.GetRequiredService<IStateEncounterBatchService>(),
+            ct);
+    }
+
+    private static bool IsFlorida(EncounterSubmission s) =>
+        string.IsNullOrWhiteSpace(s.StateCode)
+        || string.Equals(s.StateCode, StateEncounterRoute.Florida.StateCode, StringComparison.OrdinalIgnoreCase);
+
+    // ── State X12 routes (Texas, California) ─────────────────────────
+
+    /// <summary>
+    /// Batches every pending encounter on each enabled X12 route, tenant by tenant.
+    /// Public for unit testing.
+    /// </summary>
+    public async Task RunStateRoutesAsync(
+        IStateEncounterRouteRegistry registry, IStateEncounterBatchService stateService, CancellationToken ct = default)
+    {
+        var maxPerBatch = _configuration.GetValue("Worker:StateBatchMaxEncounters", 5000);
+
+        foreach (var route in StateEncounterRoute.All.Where(r => r.Format == EncounterRouteFormat.X12_837))
+        {
+            if (registry.GetOptions(route.StateCode) is not { Enabled: true }) continue;
+
+            var batchable = await stateService.GetBatchableAsync(route.StateCode, maxPerBatch * 10);
+            foreach (var tenantGroup in batchable.GroupBy(s => s.TenantId))
+            {
+                var tenantId = tenantGroup.Key;
+                if (registry.Resolve(route.StateCode, route.LineOfBusiness, tenantId, out var reason) is null)
+                {
+                    _logger.LogWarning(
+                        "{Count} {State} encounters for tenant {TenantId} are waiting but the route cannot be used: {Reason}",
+                        tenantGroup.Count(), route.StateCode, tenantId, reason);
+                    continue;
+                }
+
+                foreach (var chunk in tenantGroup.Chunk(maxPerBatch))
+                {
+                    try
+                    {
+                        var result = await stateService.BuildBatchAsync(route, chunk, tenantId, ct);
+                        foreach (var file in result.Files)
+                            await WriteStateFileToBlobStagingAsync(route, registry, file);
+
+                        _logger.LogInformation(
+                            "{State} batch {BatchId} for tenant {TenantId}: {Files} file(s), {Batched} encounters, {Held} held back",
+                            route.StateCode, result.BatchId, tenantId, result.Files.Count,
+                            result.BatchedSubmissionIds.Count, result.HeldBack.Count);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex,
+                            "Failed to build {State} encounter batch for tenant {TenantId} with {Count} submissions",
+                            route.StateCode, tenantId, chunk.Length);
+                    }
+                }
+            }
+        }
+    }
+
+    private async Task WriteStateFileToBlobStagingAsync(
+        StateEncounterRoute route, IStateEncounterRouteRegistry registry, StateEncounterFile file)
+    {
+        var connectionString = _configuration["AzureStorage:ConnectionString"];
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            _logger.LogInformation(
+                "Blob staging not configured; {FileName} is kept with the batch in encounter_state_files", file.FileName);
+            return;
+        }
+
+        var containerName = registry.GetOptions(route.StateCode)?.StagingContainer
+            ?? $"{route.FilePrefix.ToLowerInvariant()}-staging";
+        var container = new BlobServiceClient(connectionString).GetBlobContainerClient(containerName);
+        await container.CreateIfNotExistsAsync();
+        var blob = container.GetBlobClient($"{file.TenantId}/{file.FileName}");
+        using var stream = new MemoryStream(System.Text.Encoding.ASCII.GetBytes(file.Content));
+        await blob.UploadAsync(stream, overwrite: false);
     }
 
     // ── Kafka Deadline Warning Publisher ──────────────────────────────
