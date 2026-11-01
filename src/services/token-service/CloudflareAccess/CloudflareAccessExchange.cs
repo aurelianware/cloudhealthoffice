@@ -24,6 +24,9 @@ public sealed class CloudflareAccessExchangeOptions
 
     public bool Enabled { get; set; }
 
+    /// <inheritdoc cref="CloudflareAccessOptions.Provider"/>
+    public EdgeAccessProvider Provider { get; set; } = EdgeAccessProvider.Cloudflare;
+
     /// <inheritdoc cref="CloudflareAccessOptions.TeamDomain"/>
     public string TeamDomain { get; set; } = string.Empty;
 
@@ -38,6 +41,7 @@ public sealed class CloudflareAccessExchangeOptions
 
     public CloudflareAccessOptions ToValidatorOptions() => new()
     {
+        Provider = Provider,
         TeamDomain = TeamDomain,
         Audiences = Audiences,
         JwksJson = JwksJson,

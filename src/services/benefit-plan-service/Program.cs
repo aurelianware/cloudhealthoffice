@@ -116,6 +116,8 @@ builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IFeeScheduleIm
 builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IMedicarePfsImportService, BenefitPlanService.Import.FeeSchedules.MedicarePfsImportService>();
 // Provider contract roster importer (docs/integration/CONTRACT-ROSTER-IMPORTER.md).
 builder.Services.AddScoped<BenefitPlanService.Import.Contracts.IContractRosterImportService, BenefitPlanService.Import.Contracts.ContractRosterImportService>();
+// Plan prior-auth-required lists into the PA rule store CRD, PAS and the published list read.
+builder.Services.AddScoped<BenefitPlanService.Import.PriorAuthRules.IPriorAuthRuleImportService, BenefitPlanService.Import.PriorAuthRules.PriorAuthRuleImportService>();
 // systemOfRecord=cho: the importer creates the legal contracts in
 // provider-contracts-service (with the caller's own token) and prices from
 // their projection.
