@@ -10,6 +10,13 @@ public interface ICoverageRepository
     Task<Coverage?> GetByIdAsync(string tenantId, string id);
     Task<List<Coverage>> GetActiveCoverageByMemberIdAsync(string tenantId, string memberId, DateTime serviceDate, string? insuranceLineCode = null);
     Task<List<Coverage>> GetCoverageHistoryAsync(string tenantId, string memberId, bool includeTerminated = true);
+
+    /// <summary>
+    /// Which of <paramref name="memberIds"/> have any coverage row in the tenant,
+    /// active or not. Used by bulk loaders (the state TPL file) to report rows
+    /// for members the plan has never enrolled.
+    /// </summary>
+    Task<IReadOnlySet<string>> GetKnownMemberIdsAsync(string tenantId, IReadOnlyCollection<string> memberIds, CancellationToken ct = default);
     Task<(IEnumerable<Coverage> Items, string? ContinuationToken)> SearchAsync(
         string tenantId,
         string? memberId = null,
