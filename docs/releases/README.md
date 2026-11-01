@@ -4,9 +4,9 @@ This directory contains comprehensive release documentation for CloudHealthOffic
 
 ---
 
-## Next Release (in preparation)
+## Current Release
 
-### v6.2.0 — Dr. Strangelove (date TBD)
+### v6.2.0 — The Shining (October 2026)
 
 Loading a plan's data from its core admin system through a daily CPCDS file drop (members,
 coverage, claims, providers and prior authorizations), shadow adjudication, benefit plans from
@@ -14,12 +14,12 @@ public data, and Payer-to-Payer `$member-match` passing the Inferno PDex kit (13
 
 | Document | Description |
 |----------|-------------|
-| [v6.2.0 Release Notes](./RELEASE_NOTES_v6.2.0.md) | Draft: highlights, upgrading from 6.1, what is off by default |
-| [Changelog](../../CHANGELOG.md) | Itemized changes (Unreleased) |
+| [v6.2.0 Release Notes](./RELEASE_NOTES_v6.2.0.md) | Highlights, upgrading from 6.1, what is off by default |
+| [Changelog](../../CHANGELOG.md) | Itemized changes |
 
 ---
 
-## Current Release
+## Previous Releases
 
 ### v6.1.1 — Spartacus, patch (October 2026)
 
@@ -30,10 +30,6 @@ changes. All four nightly Inferno kits pass, apart from known kit issues.
 |----------|-------------|
 | [v6.1.1 Release Notes](./RELEASE_NOTES_v6.1.1.md) | The fix, and what the v6.1.0 tag also included |
 | [Changelog](../../CHANGELOG.md) | Itemized changes |
-
----
-
-## Previous Releases
 
 ### v6.1.0 — Spartacus (October 2026)
 

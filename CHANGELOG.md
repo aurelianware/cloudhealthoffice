@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.2.0] - 2026-10-31
+
 ### Added
 
 - Fee schedule CSV import (#1694). `POST /api/v1/fee-schedules/import/csv` (benefit-plan-service, `settings:manage`) loads a state Medicaid fee schedule or a plan's rate sheet into the `FeeSchedules` store that claims adjudication prices from, either as a plan's default schedule (`planId`) or as a standalone schedule a contract term names. Dry run by default; column aliases, row filters, duplicate-code policy and provenance are documented in docs/integration/FEE-SCHEDULE-IMPORTER.md.

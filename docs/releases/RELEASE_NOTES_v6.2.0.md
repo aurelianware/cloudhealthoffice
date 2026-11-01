@@ -1,6 +1,6 @@
-# v6.2.0 — Dr. Strangelove
+# v6.2.0 — The Shining
 
-**Release date:** TBD
+**Release date:** October 31, 2026
 **Previous release:** [v6.1.1](./RELEASE_NOTES_v6.1.1.md) (October 31, 2026)
 
 This release covers the pull requests merged since v6.1.1 (#1659 to #1695).
@@ -14,8 +14,8 @@ file drop, and Inferno checks the result. It also proves Payer-to-Payer with
 an outside test kit: the Inferno PDex kit now judges CHO's HRex
 `$member-match`.
 
-"How I learned to stop worrying and love the core": keep QNXT, Facets or
-whatever adjudicates today, and let CHO serve the APIs from its data.
+"The Shining", released on Halloween: the plan's core keeps adjudicating,
+and CHO lights up its data every day to serve the CMS-0057-F APIs from it.
 
 ---
 
