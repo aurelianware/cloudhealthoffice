@@ -40,7 +40,11 @@ public class TmppmController : ControllerBase
 
     private string? Actor => User.FindFirst(ChoClaimTypes.Subject)?.Value;
 
-    /// <summary>Rules for a procedure code (<c>code</c>) or a category (<c>category</c>), optionally one state.</summary>
+    /// <summary>
+    /// Rules for a procedure code (<c>code</c>) or a category (<c>category</c>),
+    /// optionally one state; with only <c>state</c>, every rule of that state
+    /// (what benefit-plan-service promotes into the PA rule store).
+    /// </summary>
     [HttpGet("rules")]
     public async Task<ActionResult<List<TmppmPaRule>>> GetRules(
         [FromQuery] string? code, [FromQuery] string? category, [FromQuery] string? state, CancellationToken ct)
@@ -49,7 +53,13 @@ public class TmppmController : ControllerBase
             return Ok(await _store.SearchByCodeAsync(code, state, ct));
         if (!string.IsNullOrWhiteSpace(category))
             return Ok(await _store.GetRulesByCategoryAsync(category, state, ct));
-        return BadRequest(new { error = "code or category is required" });
+        if (!string.IsNullOrWhiteSpace(state))
+        {
+            if (state.Trim().Length != 2 || !state.Trim().All(char.IsAsciiLetter))
+                return BadRequest(new { error = "state is a two-letter code" });
+            return Ok(await _store.GetRulesByStateAsync(state, ct));
+        }
+        return BadRequest(new { error = "code, category or state is required" });
     }
 
     [HttpGet("categories")]

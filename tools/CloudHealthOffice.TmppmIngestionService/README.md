@@ -1,5 +1,15 @@
 # CloudHealthOffice.TmppmIngestionService
 
+> **Current state (Nov 2026).** The extraction in this repo is regex only
+> (`Parsers/TmppmPdfParser.cs`, `Services/IngestionPipeline.cs`): every
+> 5-digit and HCPCS-shaped code in a "Prior Authorization" section's text is
+> taken. `LlmAssistedParser.cs` and `HybridParser.cs`, described below, are not
+> in the repo, and the diff step is a TODO. CRD, PAS and claims do not query
+> these rules or the ConceptMap overrides at runtime: a plan loads them into the
+> PA rule store they do read with `POST /api/v1/prior-auth-rules/import/state-manual`
+> on benefit-plan-service, after reviewing its dry run. See
+> [docs/integration/STATE-MANUAL-PA-RULES.md](../../docs/integration/STATE-MANUAL-PA-RULES.md).
+
 Automated ingestion pipeline for the Texas Medicaid Provider Procedures Manual (TMPPM). Downloads TMPPM chapters from TMHP, extracts prior authorization rules, and persists them to Cosmos DB as `ConceptMapEntry` overrides for the CHO TerminologyService and CRD Server.
 
 This is the operational moat: CHO tracks TMPPM changes monthly while Cognizant's customers do it by hand.

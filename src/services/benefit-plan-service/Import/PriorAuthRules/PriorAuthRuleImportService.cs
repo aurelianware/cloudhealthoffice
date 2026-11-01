@@ -45,6 +45,8 @@ public sealed class PriorAuthRuleImportService(
 
     /// <summary>Copied exemptions start with it (after <see cref="ImportedRuleIdPrefix"/>).</summary>
     public const string KeptExemptionMarker = "keep:";
+    /// <summary>Lists loaded beside the plan's own list in one scope (<see cref="PriorAuthRuleImportOptions.RuleNamespace"/>).</summary>
+    public static readonly IReadOnlySet<string> RuleNamespaces = new HashSet<string>(StringComparer.Ordinal) { "tmppm", "medi-cal" };
 
     public const int MaxHeaderSearchRows = 30;
 
@@ -104,6 +106,10 @@ public sealed class PriorAuthRuleImportService(
     public async Task<PriorAuthRuleImportReport> ImportAsync(
         Stream csv, PriorAuthRuleImportOptions options, string tenantId, string? actor, CancellationToken ct = default)
     {
+        var ns = options.RuleNamespace;
+        if (ns is not null && !RuleNamespaces.Contains(ns))
+            throw new ArgumentException($"Unknown rule namespace '{ns}'.", nameof(options));
+        var idPrefix = ImportedRuleIdPrefix + (ns is null ? "" : ns + ":");
         var state = options.StateCode.Trim().ToUpperInvariant();
         var lob = options.LineOfBusiness;
         var program = string.IsNullOrWhiteSpace(options.Program) ? null : options.Program.Trim();
@@ -242,7 +248,7 @@ public sealed class PriorAuthRuleImportService(
         var provenance = $"Imported from {(string.IsNullOrWhiteSpace(options.SourceName) ? "a CSV file" : options.SourceName)} " +
                          $"on {now:yyyy-MM-dd} by {(string.IsNullOrWhiteSpace(actor) ? "unknown" : actor)}.";
 
-        var imported = BuildRules(builders.Values, state, lob, program, tenantId, provenance);
+        var imported = BuildRules(builders.Values, idPrefix, state, lob, program, tenantId, provenance);
 
         // What requests for this scope resolve to without this tenant's imported rules:
         // the set the import replaces, and where the exemptions to keep come from.
@@ -269,7 +275,7 @@ public sealed class PriorAuthRuleImportService(
 
         var existing = (await repository.ListAsync(tenantId, state, ct))
             .Where(r => r.TenantId == tenantId && r.Lob == lob && r.Program == program
-                        && r.RuleId.StartsWith(ImportedRuleIdPrefix, StringComparison.Ordinal))
+                        && InNamespace(r.RuleId, ns))
             .ToList();
         var stale = existing.Where(r => r.IsEnabled && !newIds.Contains(r.RuleId)).ToList();
         var createdAt = existing.ToDictionary(r => r.RuleId, r => r.CreatedAt, StringComparer.Ordinal);
@@ -336,9 +342,21 @@ public sealed class PriorAuthRuleImportService(
 
     // ── Rules ─────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Whether an imported rule belongs to the list being loaded: a namespaced
+    /// list owns its own ids; the plan's own list owns every other imported id,
+    /// kept exemptions included.
+    /// </summary>
+    internal static bool InNamespace(string ruleId, string? ns)
+    {
+        if (!ruleId.StartsWith(ImportedRuleIdPrefix, StringComparison.Ordinal)) return false;
+        if (ns is not null) return ruleId.StartsWith(ImportedRuleIdPrefix + ns + ":", StringComparison.Ordinal);
+        return !RuleNamespaces.Any(n => ruleId.StartsWith(ImportedRuleIdPrefix + n + ":", StringComparison.Ordinal));
+    }
+
     private static List<PaRuleDocument> BuildRules(
-        IEnumerable<RuleBuilder> builders, string state, PaLineOfBusiness lob, string? program, string tenantId,
-        string provenance)
+        IEnumerable<RuleBuilder> builders, string idPrefix, string state, PaLineOfBusiness lob, string? program,
+        string tenantId, string provenance)
     {
         var rules = new List<PaRuleDocument>();
         // Rows sharing a rule id or name but differing in condition, place of service,
@@ -349,7 +367,7 @@ public sealed class PriorAuthRuleImportService(
             foreach (var builder in shapes)
             {
                 var s = builder.Shape;
-                var ruleId = ImportedRuleIdPrefix + s.BaseId + (shapes.Count == 1 ? "" : "-" + ShapeHash(s));
+                var ruleId = idPrefix + s.BaseId + (shapes.Count == 1 ? "" : "-" + ShapeHash(s));
                 var (ruleType, category, priority) = s.Condition switch
                 {
                     PaRequirementCondition.WithDiagnosis => Engine(new DiagnosisRequiredRule()),
