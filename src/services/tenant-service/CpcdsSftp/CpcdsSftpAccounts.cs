@@ -50,7 +50,7 @@ public sealed class CpcdsSftpAccount
     public int Port { get; set; }
     public string Username { get; set; } = string.Empty;
     public string InboundFolder { get; set; } = "/inbound";
-    public IReadOnlyList<string> ReadOnlyFolders { get; set; } = ["/processed", "/failed"];
+    public IReadOnlyList<string> ReadOnlyFolders { get; set; } = ["/processed", "/failed", "/outbound"];
     public IReadOnlyList<string> KeyFingerprints { get; set; } = [];
 }
 
@@ -71,8 +71,10 @@ public sealed class CpcdsSftpUnavailableException(string message, Exception? inn
 /// <summary>
 /// <see cref="ICpcdsSftpAccounts"/> over SFTPGo's REST API. Each tenant is one
 /// SFTPGo user named after the tenant, whose filesystem is the drop bucket
-/// under <c>{tenant}/</c>: <c>/inbound</c> read-write, <c>/processed</c> and
-/// <c>/failed</c> read-only, nothing else. Key sign-in only.
+/// under <c>{tenant}/</c>: <c>/inbound</c> read-write, <c>/processed</c>,
+/// <c>/failed</c> and <c>/outbound</c> (the extracts CHO delivers to the plan)
+/// read-only, nothing else. Key sign-in only. A login created before
+/// <c>/outbound</c> existed gets it the next time its keys are saved.
 ///
 /// <para>
 /// The admin credential stays inside this class: it buys a short-lived API
@@ -162,6 +164,8 @@ public sealed class SftpGoCpcdsSftpAccounts : ICpcdsSftpAccounts
             ["/inbound"] = ["list", "upload", "overwrite", "rename", "delete"],
             ["/processed"] = ["list", "download"],
             ["/failed"] = ["list", "download"],
+            // Warehouse extracts claims-service writes for the plan to collect.
+            ["/outbound"] = ["list", "download"],
         },
         Filesystem = new SftpGoFilesystem
         {

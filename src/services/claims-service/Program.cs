@@ -606,6 +606,27 @@ builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.CpcdsDropRunner>();
 builder.Services.AddScoped<ClaimsService.Import.Cpcds.Drop.CpcdsFreshnessReporter>();
 builder.Services.AddHostedService<ClaimsService.Import.Cpcds.Drop.CpcdsDropWorker>();
 
+// Claims warehouse extract: each tenant that turns it on (under a named
+// data-use agreement) gets the claim versions that changed, nightly, in its
+// drop under outbound/extracts/claims. The nightly run is off unless
+// ClaimExtract:Enabled. Uses the drop's storage (CpcdsDrop:Store/Root/Gcs).
+builder.Services.Configure<ClaimsService.Extracts.ClaimExtractOptions>(
+    builder.Configuration.GetSection(ClaimsService.Extracts.ClaimExtractOptions.SectionName));
+builder.Services.AddSingleton<ClaimsService.Extracts.IExtractDestination>(sp =>
+{
+    var drop = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ClaimsService.Import.Cpcds.Drop.CpcdsDropOptions>>().Value;
+    return drop.Store switch
+    {
+        ClaimsService.Import.Cpcds.Drop.CpcdsDropStoreKinds.Gcs => new ClaimsService.Extracts.GcsExtractDestination(
+            Google.Cloud.Storage.V1.StorageClient.Create(), drop.Gcs.Bucket),
+        _ => new ClaimsService.Extracts.FolderExtractDestination(drop.Root),
+    };
+});
+builder.Services.AddScoped<ClaimsService.Extracts.IClaimExtractStore, ClaimsService.Extracts.ClaimExtractStoreMongo>();
+builder.Services.AddScoped<ClaimsService.Extracts.IClaimExtractSource, ClaimsService.Extracts.ClaimExtractSourceMongo>();
+builder.Services.AddScoped<ClaimsService.Extracts.ClaimExtractRunner>();
+builder.Services.AddHostedService<ClaimsService.Extracts.ClaimExtractWorker>();
+
 var adjudicationMaxConcurrentCalls = Math.Max(
     1,
     builder.Configuration.GetValue<int?>("Messaging:AdjudicationMaxConcurrentCalls") ?? 16);

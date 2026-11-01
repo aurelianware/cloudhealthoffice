@@ -45,6 +45,10 @@ public sealed class ClaimIndexInitializer : IHostedService
             new CreateIndexModel<Claim>(new IndexKeysDefinitionBuilder<Claim>()
                 .Ascending(c => c.TenantId).Ascending("AttachmentReports.ControlNumber"),
                 new CreateIndexOptions { Name = "attachment_control_number" }),
+            // Warehouse extract: a tenant's claim versions changed in a window,
+            // read in (LastUpdatedDate, Id) order (ClaimExtractSourceMongo).
+            new CreateIndexModel<Claim>(keys.Ascending(c => c.TenantId).Ascending(c => c.LastUpdatedDate).Ascending(c => c.Id),
+                new CreateIndexOptions { Name = "claim_extract_changes" }),
             // Versioning chain key index — supports GetLatestVersion / ListVersions.
             new CreateIndexModel<Claim>(keys.Ascending(c => c.TenantId).Ascending(c => c.ClaimVersionId).Descending(c => c.VersionNumber)),
             // Accumulator rebuild indexes — support Redis cache-miss aggregation by owner/plan/year.
