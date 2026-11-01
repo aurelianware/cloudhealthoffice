@@ -73,6 +73,9 @@ builder.Services.AddScoped<IBillingRunRepository, BillingRunRepositoryMongo>();
 builder.Services.AddScoped<IEftDraftRepository, EftDraftRepositoryMongo>();
 builder.Services.AddScoped<IRemittanceBatchRepository, RemittanceBatchRepositoryMongo>();
 builder.Services.AddScoped<IRemittanceExceptionRepository, RemittanceExceptionRepositoryMongo>();
+// State Medicaid capitation revenue (state rate sheets, expected member-months, state 820s),
+// kept apart from group premium remittances.
+builder.Services.AddScoped<PremiumBillingService.StateCapitation.IStateCapitationStore, PremiumBillingService.StateCapitation.StateCapitationStoreMongo>();
 builder.Services.AddScoped<ISponsorAccountRepository, SponsorAccountRepositoryMongo>();
 // Immutable rate table versions.
 builder.Services.AddScoped<IRateTableRepository, RateTableRepositoryMongo>();

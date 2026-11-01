@@ -39,6 +39,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         Stages.InpatientGroupingStage.StageName,
         Stages.PricingStage.StageName,
         Stages.CoordinationOfBenefitsStage.StageName,
+        Stages.ThirdPartyLiabilityStage.StageName,
         Stages.BenefitCalculationStage.StageName,
         Stages.NcciEditsStage.StageName,
         Stages.PlanEditsStage.StageName,
