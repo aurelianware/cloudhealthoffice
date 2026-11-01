@@ -56,7 +56,14 @@ public sealed class PfsRvuFile
 public static class MedicarePfsFiles
 {
     internal const int Hcpcs = 0, Mod = 1, Status = 3, Work = 5, NonFacPe = 6, NonFacNa = 7,
-        FacPe = 8, FacNa = 9, Mp = 10, MultProc = 18, BilatSurg = 19, AsstSurg = 20, ConvFactor = 24;
+        FacPe = 8, FacNa = 9, Mp = 10, MultProc = 18, BilatSurg = 19, AsstSurg = 20;
+
+    /// <summary>
+    /// CONV FACTOR column in the CY2026 PPRRVU layout (after PRIC IND and ENDO
+    /// BASE). The header rows are read for it, so a release that moves it is
+    /// still read right.
+    /// </summary>
+    internal const int DefaultConvFactor = 25;
 
     /// <summary>
     /// Status codes CMS pays under the fee schedule: A active, R restricted
@@ -100,16 +107,25 @@ public static class MedicarePfsFiles
         var seen = new HashSet<(string, string)>();
         var anyCodeRow = false;
 
+        var convFactor = DefaultConvFactor;
+        var convFactorFromHeader = false;
+
         foreach (var (row, f) in Rows(csv))
         {
             if (f.Length == 0) continue;
             var code = f[Hcpcs].Trim().ToUpperInvariant();
+            if (!anyCodeRow && !convFactorFromHeader)
+            {
+                // Header rows split "CONV" / "FACTOR" over two lines; either names the column.
+                var at = Array.FindIndex(f, c => c.Trim().ToUpperInvariant() is "CONV" or "FACTOR" or "CONV FACTOR" or "CONVERSION FACTOR");
+                if (at > Work) { convFactor = at; convFactorFromHeader = true; }
+            }
             if (code.Length != 5 || !code.All(char.IsLetterOrDigit)) continue; // title, header and note rows
-            if (f.Length <= ConvFactor)
+            if (f.Length <= convFactor)
             {
                 if (!anyCodeRow && f.Length > Work && IsNumber(f[Work]))
                     throw new FeeScheduleFormatException(
-                        $"Row {row} has {f.Length} columns; a PPRRVU row has at least {ConvFactor + 1}. Check that the file is the PPRRVU CSV.");
+                        $"Row {row} has {f.Length} columns; a PPRRVU row has at least {convFactor + 1}. Check that the file is the PPRRVU CSV.");
                 continue;
             }
             if (!IsNumber(f[Work])) continue; // the "HCPCS" header cell
@@ -146,7 +162,7 @@ public static class MedicarePfsFiles
                 continue;
             }
 
-            if (decimal.TryParse(f[ConvFactor].Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var cf) && cf > 0m)
+            if (decimal.TryParse(f[convFactor].Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var cf) && cf > 0m)
                 result.ConversionFactors.Add(cf);
 
             var mpiText = f[MultProc].Trim();

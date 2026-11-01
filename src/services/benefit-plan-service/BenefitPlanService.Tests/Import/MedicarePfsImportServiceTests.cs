@@ -28,14 +28,17 @@ public sealed class MedicarePfsImportServiceTests
     private static string Row(string code, string mod, string status, decimal work, decimal nonFacPe, string nonFacNa,
         decimal facPe, string facNa, decimal mp, string multProc = "0", string bilat = "0", string asst = "0", decimal cf = Cf)
         => string.Join(",", code, mod, "\"synthetic\"", status, "", work, nonFacPe, nonFacNa, facPe, facNa, mp,
-            work + nonFacPe + mp, work + facPe + mp, "0", "000", "0", "0", "0", multProc, bilat, asst, "0", "0", "",
-            cf, "09", "", "88", "0", "0", "0");
+            work + nonFacPe + mp, work + facPe + mp, "0", "000", "0", "0", "0", multProc, bilat, asst, "0", "0", "9", "",
+            cf, "09", "0", "99", "0.00", "0.00", "0.00");
 
     private static string Pprrvu(decimal cf = Cf, string extra = "") =>
         "CPT codes and descriptions only are copyright AMA (synthetic test file)\n" +
-        ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\n" +
-        "HCPCS,MOD,DESCRIPTION,CODE,PAYMENT,WORK,NON-FAC,NON-FAC,FACILITY,FACILITY,MP,NON-FACILITY,FACILITY,PCTC,GLOB,PRE,INTRA,POST,MULT,BILAT,ASST,CO-,TEAM,ENDO,CONV,PHYSICIAN,CALCULATION,DIAGNOSTIC IMAGING,NON-FAC PE,FACILITY PE,MP\n" +
-        ",,,STATUS,POLICY INDICATOR,RVU,PE RVU,NA INDICATOR,PE RVU,NA INDICATOR,RVU,TOTAL,TOTAL,IND,DAYS,OP,OP,OP,PROC,SURG,SURG,SURG,SURG,BASE,FACTOR,SUPERVISION,FLAG,FAMILY INDICATOR,USED FOR OPPS,USED FOR OPPS,USED FOR OPPS\n" +
+        // The CY2026 PPRRVU header rows, as CMS publishes them (RVU26A).
+        ",, , ,,,,,,,,,,,,,,,,,,,,,,,,,,NON-FACILITY,FACILITY,\n" +
+        ",,,,NOT USED,,,,,,,,,,,,,,,,,,,,,,PHYSICIAN,,DIAGNOSTIC,PE USED,PE USED,MP USED\n" +
+        ",,,,FOR,,,NON-FAC,,FACILITY ,,,,,,,,,,,,,,,,,SUPERVISION OF,,IMAGING,FOR OPPS,FOR OPPS,FOR OPPS\n" +
+        ",,,STATUS,MEDICARE ,WORK,NON-FAC,NA,FACILITY,NA,MP,NON-FACILITY,FACILITY,PCTC,GLOB,PRE,INTRA,POST,MULT,BILAT,ASST,CO-,TEAM,PRIC,ENDO,CONV,DIAGNOSTIC,CALCULATION,FAMILY,PAYMENT,PAYMENT,PAYMENT\n" +
+        "HCPCS,MOD,DESCRIPTION,CODE,PAYMENT,RVU,PE RVU,INDICATOR,PE RVU,INDICATOR,RVU,TOTAL,TOTAL,IND,DAYS,OP,OP,OP,PROC,SURG,SURG,SURG,SURG,IND,BASE,FACTOR,PROCEDURES,FLAG,INDICATOR,AMOUNT,AMOUNT,AMOUNT\n" +
         Row("99213", "", "A", 1.30m, 1.20m, "", 0.55m, "", 0.10m, cf: cf) + "\n" +
         Row("71046", "", "A", 0.22m, 0.80m, "", 0.80m, "", 0.02m, multProc: "4", cf: cf) + "\n" +
         Row("71046", "26", "A", 0.22m, 0.08m, "", 0.08m, "", 0.01m, multProc: "4", cf: cf) + "\n" +
