@@ -11,8 +11,11 @@ namespace BenefitPlanService.Controllers;
 /// Imports a provider contract roster CSV into the contracts claims are priced
 /// from: each provider's terms (fee schedule, percent of Medicare, percent of
 /// billed, case rate, per diem) per plan. The contracts are a pricing copy of
-/// the plan's own, tagged <c>import:{source}</c>. Dry run by default; writing is
-/// tenant configuration (<c>settings:manage</c>).
+/// the core's own, tagged <c>import:{source}</c> (<c>systemOfRecord=core</c>,
+/// the default), or CHO's own legal contracts created in
+/// provider-contracts-service (<c>systemOfRecord=cho</c>, which also needs the
+/// caller's <c>contracts:write</c>). Dry run by default; writing is tenant
+/// configuration (<c>settings:manage</c>).
 /// See docs/integration/CONTRACT-ROSTER-IMPORTER.md.
 /// </summary>
 [ApiController]
@@ -43,6 +46,7 @@ public sealed class ContractRosterImportController : ControllerBase
         [FromQuery] bool replaceNonImported = false,
         [FromQuery] bool dryRun = true,
         [FromQuery] bool includeContracts = false,
+        [FromQuery] ContractSystemOfRecord systemOfRecord = ContractSystemOfRecord.Core,
         CancellationToken ct = default)
     {
         var tenantId = HttpContext.GetTenantId();
@@ -57,6 +61,7 @@ public sealed class ContractRosterImportController : ControllerBase
             ReplaceNonImported = replaceNonImported,
             DryRun = dryRun,
             IncludeContracts = includeContracts,
+            SystemOfRecord = systemOfRecord,
         };
 
         try

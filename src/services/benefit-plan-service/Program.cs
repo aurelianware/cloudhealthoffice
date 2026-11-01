@@ -116,6 +116,17 @@ builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IFeeScheduleIm
 builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IMedicarePfsImportService, BenefitPlanService.Import.FeeSchedules.MedicarePfsImportService>();
 // Provider contract roster importer (docs/integration/CONTRACT-ROSTER-IMPORTER.md).
 builder.Services.AddScoped<BenefitPlanService.Import.Contracts.IContractRosterImportService, BenefitPlanService.Import.Contracts.ContractRosterImportService>();
+// systemOfRecord=cho: the importer creates the legal contracts in
+// provider-contracts-service (with the caller's own token) and prices from
+// their projection.
+builder.Services.AddHttpClient(BenefitPlanService.Import.Contracts.HttpProviderContractsClient.ClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:ProviderContractsServiceUrl"]
+        ?? "http://provider-contracts-service/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
+builder.Services.AddScoped<BenefitPlanService.Import.Contracts.IProviderContractsClient, BenefitPlanService.Import.Contracts.HttpProviderContractsClient>();
 builder.Services.AddScoped<IBenefitViewService, BenefitViewService>();
 builder.Services.AddHttpContextAccessor();
 

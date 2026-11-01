@@ -27,9 +27,30 @@ public sealed class ContractRosterImportOptions
 
     public bool DryRun { get; init; } = true;
 
+    /// <summary>Where the contracts live: the plan's core (a pricing copy) or CHO's contracts service.</summary>
+    public ContractSystemOfRecord SystemOfRecord { get; init; } = ContractSystemOfRecord.Core;
+
     /// <summary>Return every contract in the report, not only a sample.</summary>
     public bool IncludeContracts { get; init; }
 }
+
+/// <summary>Which system holds the plan's provider contracts.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ContractSystemOfRecord
+{
+    /// <summary>The plan's core admin system (QNXT, Facets, ...); CHO holds a pricing copy tagged import:{source}.</summary>
+    Core,
+    /// <summary>CHO: the import creates the legal contracts in provider-contracts-service and prices from their projection.</summary>
+    Cho,
+}
+
+/// <summary>What happened to one CHO legal contract (CHO mode).</summary>
+public sealed record LegalContractResult(
+    [property: JsonPropertyName("contractNumber")] string ContractNumber,
+    [property: JsonPropertyName("npi")] string Npi,
+    [property: JsonPropertyName("legalContractId")] string? LegalContractId,
+    [property: JsonPropertyName("outcome")] string Outcome,
+    [property: JsonPropertyName("detail")] string? Detail = null);
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ContractImportOutcome { WouldCreate, WouldReplace, Created, Replaced, Unchanged, Protected }
@@ -55,6 +76,9 @@ public sealed class ContractRosterImportReport
     public List<string> Errors { get; } = new();
     public List<string> Warnings { get; } = new();
     public List<ProviderContract> ContractsSample { get; set; } = new();
+    public ContractSystemOfRecord SystemOfRecord { get; init; }
+    /// <summary>CHO mode: the legal contracts created or updated in provider-contracts-service.</summary>
+    public List<LegalContractResult> LegalContracts { get; } = new();
 }
 
 public interface IContractRosterImportService
@@ -82,6 +106,9 @@ public interface IContractRosterImportService
 public sealed class ContractRosterImportService : IContractRosterImportService
 {
     public const string OriginPrefix = "import:";
+
+    /// <summary>Origin the contracts service's pricing projection stamps on engine contracts.</summary>
+    public const string LegalOrigin = "legal";
     private const int SampleSize = 20;
 
     internal static readonly Dictionary<string, string[]> Aliases = new()
@@ -105,6 +132,8 @@ public sealed class ContractRosterImportService : IContractRosterImportService
         ["claimType"] = ["claimtype", "settingtype", "formtype"],
         ["lesserOf"] = ["lesserofbilled", "lesserof", "lesserofbilledcharges", "lessorof"],
         ["description"] = ["description", "termdescription", "notes"],
+        ["providerName"] = ["providername", "provider", "name", "practicename", "organizationname"],
+        ["providerType"] = ["providertype", "entitytype", "npitype"],
     };
 
     private static readonly string[] DateFormats =
@@ -114,11 +143,14 @@ public sealed class ContractRosterImportService : IContractRosterImportService
     private readonly IFeeScheduleRepository _schedules;
     private readonly IBenefitPlanRepository _plans;
     private readonly ILogger<ContractRosterImportService> _logger;
+    private readonly IProviderContractsClient? _legal;
 
     public ContractRosterImportService(
         IProviderContractRepository contracts, IFeeScheduleRepository schedules,
-        IBenefitPlanRepository plans, ILogger<ContractRosterImportService> logger)
+        IBenefitPlanRepository plans, ILogger<ContractRosterImportService> logger,
+        IProviderContractsClient? legal = null)
     {
+        _legal = legal;
         _contracts = contracts;
         _schedules = schedules;
         _plans = plans;
@@ -129,7 +161,14 @@ public sealed class ContractRosterImportService : IContractRosterImportService
         Stream csv, ContractRosterImportOptions options, string tenantId, string? actor, CancellationToken ct = default)
     {
         var source = Slug(options.Source);
-        var report = new ContractRosterImportReport { DryRun = options.DryRun, Origin = OriginPrefix + source };
+        var cho = options.SystemOfRecord == ContractSystemOfRecord.Cho;
+        var report = new ContractRosterImportReport
+        {
+            DryRun = options.DryRun,
+            Origin = cho ? LegalOrigin : OriginPrefix + source,
+            SystemOfRecord = options.SystemOfRecord,
+        };
+        var providers = new Dictionary<string, (string Name, string Type)>();
 
         var planCache = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var scheduleCache = new Dictionary<string, bool>(StringComparer.Ordinal);
@@ -147,6 +186,13 @@ public sealed class ContractRosterImportService : IContractRosterImportService
             }
 
             if (!IsValidNpi(npi)) { Reject("npi is not a valid 10-digit NPI"); continue; }
+            if (cho && r("contractNumber").Length == 0)
+            {
+                Reject("contract_number is required when CHO holds the contracts (rows with one number are one contract)");
+                continue;
+            }
+            if (!providers.ContainsKey(npi) || providers[npi].Name.Length == 0)
+                providers[npi] = (r("providerName"), r("providerType"));
 
             var planText = r("plan");
             if (planText.Length == 0) { Reject("plan is required (the CHO benefit plan id or plan code)"); continue; }
@@ -235,7 +281,11 @@ public sealed class ContractRosterImportService : IContractRosterImportService
             report.Warnings.Add("Some contracts have an unconditional term before other terms; the engine stops at the first match, so the later terms are never used.");
 
         var sample = new List<ProviderContract>();
-        if (report.Errors.Count == 0)
+        if (report.Errors.Count == 0 && cho)
+        {
+            await WriteChoContractsAsync(contracts, order, providers, options, report, tenantId, sample, ct);
+        }
+        else if (report.Errors.Count == 0)
         {
             foreach (var key in order)
             {
@@ -261,6 +311,152 @@ public sealed class ContractRosterImportService : IContractRosterImportService
 
         return report;
     }
+
+    /// <summary>
+    /// CHO mode: one legal contract per NPI and contract number in
+    /// provider-contracts-service (created, or its rate sheet replaced), activated,
+    /// then its pricing projection written to the engine store so claims price from it.
+    /// </summary>
+    private async Task WriteChoContractsAsync(
+        Dictionary<(string Npi, string Plan), ProviderContract> contracts, List<(string, string)> order,
+        Dictionary<string, (string Name, string Type)> providers, ContractRosterImportOptions options,
+        ContractRosterImportReport report, string tenantId, List<ProviderContract> sample, CancellationToken ct)
+    {
+        if (_legal is null)
+        {
+            report.Errors.Add("provider-contracts-service is not configured (Services:ProviderContractsServiceUrl).");
+            return;
+        }
+
+        var groups = order.Select(k => contracts[k])
+            .GroupBy(c => (c.ProviderNpi, Number: c.ContractNumber!))
+            .ToList();
+
+        foreach (var group in groups)
+        {
+            ct.ThrowIfCancellationRequested();
+            var (npi, number) = group.Key;
+            var first = group.First();
+            if (group.Any(c => TermsFingerprint(c.ReimbursementTerms) != TermsFingerprint(first.ReimbursementTerms)))
+            {
+                report.LegalContracts.Add(new(number, npi, null, "Rejected",
+                    "the plans under this contract number have different terms; a CHO contract has one rate sheet for all its plans"));
+                continue;
+            }
+
+            var terms = first.ReimbursementTerms
+                .Select((t, i) => { t.Id = TermId($"{tenantId}:{number}", i, t); return t; })
+                .ToList();
+            var planIds = group.Select(c => c.PlanId).Distinct().ToList();
+
+            try
+            {
+                var existing = await _legal.GetByNumberAsync(tenantId, number, ct);
+                if (existing is not null && existing.ProviderNpi != npi)
+                {
+                    report.LegalContracts.Add(new(number, npi, existing.Id, "Rejected",
+                        $"contract number {number} is already CHO's contract for NPI {existing.ProviderNpi}"));
+                    continue;
+                }
+                if (existing?.Status is LegalContractStatus.Terminated or LegalContractStatus.Expired)
+                {
+                    report.LegalContracts.Add(new(number, npi, existing.Id, "Rejected",
+                        $"the CHO contract is {existing.Status}; reinstate or renew it in the contracts portal"));
+                    continue;
+                }
+
+                var termsChanged = existing is null || TermsFingerprint(existing.ReimbursementTerms) != TermsFingerprint(terms);
+                var missingPlans = existing is null ? [] : planIds.Except(existing.PlanIds).ToList();
+                var detail = missingPlans.Count > 0
+                    ? $"plans {string.Join(", ", missingPlans)} are not on the CHO contract; add them in the contracts portal (the import changes rates only)"
+                    : null;
+
+                if (options.DryRun)
+                {
+                    report.LegalContracts.Add(new(number, npi, existing?.Id,
+                        existing is null ? "WouldCreate" : termsChanged ? "WouldReplaceRates" : "Unchanged", detail));
+                    continue;
+                }
+
+                var id = existing?.Id;
+                if (existing is null)
+                {
+                    var (name, type) = providers.GetValueOrDefault(npi);
+                    var created = await _legal.CreateAsync(tenantId, new LegalContractDto
+                    {
+                        ContractNumber = number,
+                        ProviderNpi = npi,
+                        ProviderName = string.IsNullOrWhiteSpace(name) ? npi : name,
+                        ProviderType = FeeScheduleCsvReader.Normalize(type) is "organization" or "org" or "2" or "facility" or "group"
+                            ? LegalProviderType.Organization : LegalProviderType.Individual,
+                        LineOfBusiness = ParseLob(first.LineOfBusiness),
+                        PlanIds = planIds,
+                        PaymentMethodology = LegalPaymentMethodology.FeeForService,
+                        NetworkStatus = first.NetworkStatus is NetworkStatus.OutOfNetwork or NetworkStatus.NonParticipating
+                            ? LegalNetworkStatus.NonParticipating : LegalNetworkStatus.Participating,
+                        EffectiveDate = first.EffectiveDate,
+                        TerminationDate = first.TermDate,
+                    }, ct);
+                    id = created.Id!;
+                }
+
+                if (termsChanged) await _legal.ReplaceTermsAsync(tenantId, id!, terms, ct);
+                if (existing is null || existing.Status is LegalContractStatus.Draft or LegalContractStatus.Suspended)
+                    await _legal.ActivateAsync(tenantId, id!, ct);
+
+                report.LegalContracts.Add(new(number, npi, id,
+                    existing is null ? "Created" : termsChanged ? "RatesReplaced" : "Unchanged", detail));
+
+                // Price from what the legal contract projects to: the contracts service's own derivation.
+                var projection = await _legal.GetPricingProjectionAsync(tenantId, id!, ct);
+                foreach (var engine in projection.Contracts.Where(c => !string.IsNullOrWhiteSpace(c.PlanId)))
+                {
+                    var stored = (await _contracts.ListByProviderAsync(tenantId, engine.ProviderNpi, ct))
+                        .FirstOrDefault(c => c.Id == engine.Id);
+                    var ours = stored is null
+                        || stored.Origin?.StartsWith(OriginPrefix, StringComparison.Ordinal) == true
+                        || (stored.Origin == LegalOrigin && stored.LegalContractId == id);
+                    ContractImportOutcome outcome;
+                    if (!ours && !options.ReplaceNonImported) outcome = ContractImportOutcome.Protected;
+                    else if (stored is not null && Fingerprint(stored) == Fingerprint(engine)) outcome = ContractImportOutcome.Unchanged;
+                    else
+                    {
+                        engine.CreatedDate = stored?.CreatedDate ?? DateTime.UtcNow;
+                        engine.Revision = stored?.Revision ?? 0;
+                        await _contracts.UpsertAsync(engine, ct);
+                        outcome = stored is null ? ContractImportOutcome.Created : ContractImportOutcome.Replaced;
+                    }
+                    report.Outcomes[outcome] = report.Outcomes.GetValueOrDefault(outcome) + 1;
+                    if (options.IncludeContracts || sample.Count < SampleSize) sample.Add(engine);
+                }
+                foreach (var w in projection.Warnings) report.Warnings.Add($"{number}: {w}");
+            }
+            catch (ProviderContractsCallException ex)
+            {
+                report.LegalContracts.Add(new(number, npi, null, "Failed", ex.Message));
+            }
+        }
+
+        if (report.LegalContracts.Any(l => l.Outcome is "Rejected" or "Failed"))
+            report.Warnings.Add("Some CHO contracts were not written; see legalContracts.");
+    }
+
+    private static LegalLineOfBusiness ParseLob(string? text) => FeeScheduleCsvReader.Normalize(text ?? string.Empty) switch
+    {
+        "medicaid" or "managedmedicaid" or "chip" => LegalLineOfBusiness.Medicaid,
+        "medicare" or "medicareadvantage" or "ma" or "mapd" => LegalLineOfBusiness.Medicare,
+        "exchange" or "marketplace" or "qhp" or "aca" => LegalLineOfBusiness.Exchange,
+        "tricare" => LegalLineOfBusiness.TRICARE,
+        "va" => LegalLineOfBusiness.VA,
+        _ => LegalLineOfBusiness.Commercial,
+    };
+
+    private static string TermsFingerprint(IEnumerable<ReimbursementTerm> terms) =>
+        Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(terms.Select(t => new
+        {
+            t.Method, t.FeeScheduleId, t.BaseScheduleId, t.Percent, t.Multiplier, t.LesserOfBilled, t.EffectiveDate, t.TermDate,
+            t.Scope.ProcedureCodeFrom, t.Scope.ProcedureCodeTo, t.Scope.ClaimType,
+        }))));
 
     private async Task<ContractImportOutcome> WriteAsync(
         ProviderContract contract, ProviderContract? existing, ContractRosterImportOptions options, CancellationToken ct)
