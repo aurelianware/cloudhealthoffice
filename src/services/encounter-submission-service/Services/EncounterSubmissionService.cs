@@ -373,6 +373,9 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
             SyntaxAcceptedWithErrors = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.SyntaxAcceptedWithErrors),
             Rejected = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.Rejected),
             DeadlineWarning = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.DeadlineWarning),
+            ValidationFailed = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.ValidationFailed),
+            StateFrontEndAccepted = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.StateFrontEndAccepted),
+            ClosedNotReportable = allForTenant.Count(s => s.Status == EncounterSubmissionStatus.ClosedNotReportable),
             Total = allForTenant.Count
         };
 

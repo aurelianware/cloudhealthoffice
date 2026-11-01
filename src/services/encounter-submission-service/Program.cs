@@ -108,6 +108,7 @@ builder.Services.AddSingleton<IStateEncounterRouteRegistry>(sp => new StateEncou
 builder.Services.AddScoped<IEncounterControlNumberSource, MongoEncounterControlNumberSource>();
 builder.Services.AddScoped<IStateEncounterBatchService, StateEncounterBatchService>();
 builder.Services.AddScoped<IStateResponseReconciler, StateResponseReconciler>();
+builder.Services.AddScoped<IEncounterReworkService, EncounterReworkService>();
 
 // Kafka consumer for adjudication-completed events
 var kafkaBootstrap = builder.Configuration["Kafka:BootstrapServers"];

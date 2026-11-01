@@ -61,5 +61,12 @@ public enum EncounterSubmissionStatus
     /// processing and, usually, assigned it a state claim reference. Final encounter
     /// acceptance (state edits, encounter quality reports) is not established.
     /// </summary>
-    StateFrontEndAccepted
+    StateFrontEndAccepted,
+
+    /// <summary>
+    /// Taken out of the rework queue without being reported (a duplicate, or a
+    /// service the state does not take encounters for). The reason is in the
+    /// record's rework history.
+    /// </summary>
+    ClosedNotReportable
 }

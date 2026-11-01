@@ -146,6 +146,10 @@ public class EncounterSubmission
     [JsonPropertyName("responseHistory")]
     public List<EncounterResponseEvent> ResponseHistory { get; set; } = new();
 
+    /// <summary>Rework actions taken on this record (requeued, closed), oldest first.</summary>
+    [JsonPropertyName("reworkHistory")]
+    public List<EncounterReworkEvent> ReworkHistory { get; set; } = new();
+
     /// <summary>Pre-submission validation failures that held the encounter back.</summary>
     [JsonPropertyName("validationErrors")]
     public List<string> ValidationErrors { get; set; } = new();
@@ -185,4 +189,25 @@ public class EncounterResponseEvent
 
     [JsonPropertyName("errors")]
     public List<string> Errors { get; set; } = new();
+}
+
+/// <summary>One rework action on an encounter submission.</summary>
+public class EncounterReworkEvent
+{
+    /// <summary>Requeued or Closed.</summary>
+    [JsonPropertyName("action")]
+    public string Action { get; set; } = string.Empty;
+
+    /// <summary>Why the record was in rework (VALIDATION, SYNTAX_REJECTED, STATE_REJECTED).</summary>
+    [JsonPropertyName("reasonCode")]
+    public string ReasonCode { get; set; } = string.Empty;
+
+    [JsonPropertyName("actorId")]
+    public string ActorId { get; set; } = string.Empty;
+
+    [JsonPropertyName("note")]
+    public string? Note { get; set; }
+
+    [JsonPropertyName("at")]
+    public DateTime At { get; set; }
 }
