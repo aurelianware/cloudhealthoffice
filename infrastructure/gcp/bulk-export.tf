@@ -59,6 +59,13 @@ resource "google_storage_bucket" "bulk_exports" {
     enabled = false
   }
 
+  dynamic "encryption" {
+    for_each = var.hosted ? [1] : []
+    content {
+      default_kms_key_name = local.storage_kms_key
+    }
+  }
+
   lifecycle_rule {
     condition {
       age = var.bulk_export_retention_days
@@ -68,7 +75,7 @@ resource "google_storage_bucket" "bulk_exports" {
     }
   }
 
-  depends_on = [google_project_service.required]
+  depends_on = [google_project_service.required, google_kms_crypto_key_iam_member.hosted_storage]
 }
 
 # fhir-service's Google identity when the managed FHIR store has not already

@@ -1,0 +1,41 @@
+name: terraform-gcp
+permissions:
+  contents: read
+
+# Format and validate the Google Cloud Terraform (demo and hosted profiles).
+# No credentials: init runs without a backend and validate makes no API calls.
+on:
+  pull_request:
+    paths:
+      - 'infrastructure/gcp/**'
+      - '.github/workflows/terraform-gcp.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'infrastructure/gcp/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure/gcp
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Format
+        run: terraform fmt -check -diff -recursive
+
+      - name: Init
+        run: terraform init -backend=false -input=false
+
+      - name: Validate
+        run: terraform validate

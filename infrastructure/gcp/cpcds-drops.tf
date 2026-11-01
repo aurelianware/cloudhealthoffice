@@ -15,8 +15,8 @@
 #     one address and pin one host key
 #
 # Not here, on purpose: a Google BAA, CMEK, a private cluster. Those are the
-# hosted environment's own work (Mode B); the bucket takes a CMEK key the day
-# cpcds_drop_kms_key_name is set.
+# hosted profile's (hosted.tf); with hosted = true the bucket encrypts with
+# its storage key, unless cpcds_drop_kms_key_name names another.
 
 variable "enable_cpcds_drops" {
   description = "Create the hosted CPCDS drop bucket, its two service accounts and the SFTP address."
@@ -77,14 +77,16 @@ resource "google_storage_bucket" "cpcds_drops" {
     }
   }
 
+  # An explicit cpcds_drop_kms_key_name wins; the hosted profile's storage
+  # key otherwise.
   dynamic "encryption" {
-    for_each = var.cpcds_drop_kms_key_name == "" ? [] : [var.cpcds_drop_kms_key_name]
+    for_each = var.cpcds_drop_kms_key_name != "" ? [var.cpcds_drop_kms_key_name] : var.hosted ? [local.storage_kms_key] : []
     content {
       default_kms_key_name = encryption.value
     }
   }
 
-  depends_on = [google_project_service.required]
+  depends_on = [google_project_service.required, google_kms_crypto_key_iam_member.hosted_storage]
 }
 
 resource "google_service_account" "cpcds_drop" {
