@@ -12,11 +12,13 @@ COPY src/Directory.Build.props src/
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/encounter-submission-service/encounter-submission-service.csproj src/services/encounter-submission-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.Events/CloudHealthOffice.Events.csproj src/services/shared/CloudHealthOffice.Events/
 RUN dotnet restore src/services/encounter-submission-service/encounter-submission-service.csproj
 
 # Copy source code and build
 COPY src/services/encounter-submission-service/ src/services/encounter-submission-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.Events/ src/services/shared/CloudHealthOffice.Events/
 RUN dotnet build src/services/encounter-submission-service/encounter-submission-service.csproj -c Release --no-restore
 
 # Publish stage

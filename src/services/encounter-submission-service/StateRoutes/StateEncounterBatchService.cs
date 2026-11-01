@@ -40,6 +40,9 @@ public sealed class StateEncounterBatchResult
 
     /// <summary>Submissions held back with <see cref="EncounterSubmissionStatus.ValidationFailed"/>, with why.</summary>
     public Dictionary<string, IReadOnlyList<string>> HeldBack { get; init; } = new();
+
+    /// <summary>Replacements and voids left Pending until the state's reference for their original arrives.</summary>
+    public List<string> WaitingOnOriginal { get; init; } = new();
 }
 
 public interface IStateEncounterBatchService
@@ -212,8 +215,29 @@ public sealed class StateEncounterBatchService : IStateEncounterBatchService
         var mapped = new List<(EncounterSubmission Submission, EncounterClaim Claim)>();
         var heldBack = new Dictionary<string, IReadOnlyList<string>>();
 
+        // ── Replacements and voids need the state's reference for the original ──
+        var linked = await ResolveLinkedAsync(submissions, tenantId, ct);
+        var waiting = new List<string>();
+
         foreach (var submission in submissions)
         {
+            var link = linked.GetValueOrDefault(submission.Id);
+            if (link is { Waiting: true })
+            {
+                waiting.Add(submission.Id);
+                continue;
+            }
+            if (link is { CloseReason: { } closeReason })
+            {
+                await CloseLinkedAsync(submission, tenantId, closeReason, ct);
+                continue;
+            }
+            if (link is { HoldReason: { } holdReason })
+            {
+                heldBack[submission.Id] = new[] { holdReason };
+                continue;
+            }
+
             var claim = await ReadRequiredAsync<ClaimRecord>(claimsClient,
                 $"/api/claims/{Uri.EscapeDataString(submission.ClaimId)}", tenantId, "Claim", ct);
             if (claim.Id != submission.ClaimId)
@@ -226,7 +250,11 @@ public sealed class StateEncounterBatchService : IStateEncounterBatchService
                 : await ReadOptionalAsync<ProviderRecord>(providerClient,
                     $"/api/v1/providers/npi/{Uri.EscapeDataString(claim.BillingProviderNPI)}", tenantId, "Provider", ct);
 
-            var encounter = EncounterClaimMapper.Map(submission.Id, claim, member, billing);
+            var encounter = EncounterClaimMapper.Map(submission.Id, claim, member, billing) with
+            {
+                FrequencyCode = link?.FrequencyCode ?? "1",
+                OriginalStateReference = link?.StateReference
+            };
             var errors = EncounterValidator.Validate(encounter).ToList();
             if (member is null) errors.Insert(0, "member record not found in member-service");
             if (billing is null) errors.Insert(0, "billing provider not found in provider-service by NPI");
@@ -258,7 +286,8 @@ public sealed class StateEncounterBatchService : IStateEncounterBatchService
         {
             BatchId = batchId,
             StateCode = route.StateCode,
-            HeldBack = heldBack
+            HeldBack = heldBack,
+            WaitingOnOriginal = waiting
         };
 
         // ── Write one interchange per form type ─────────────────────────
@@ -325,6 +354,7 @@ public sealed class StateEncounterBatchService : IStateEncounterBatchService
                         .Set(s => s.GroupControlNumber, placement.GroupControlNumber)
                         .Set(s => s.TransactionSetControlNumber, placement.TransactionSetControlNumber)
                         .Set(s => s.PatientControlNumber, placement.PatientControlNumber)
+                        .Set(s => s.FrequencyCode, group.First(g => g.Submission.Id == placement.SubmissionId).Claim.FrequencyCode)
                         .Set(s => s.ValidationErrors, new List<string>())
                         .Set(s => s.LastError, null)
                         .Set(s => s.UpdatedAt, now),
@@ -405,6 +435,75 @@ public sealed class StateEncounterBatchService : IStateEncounterBatchService
                 .Set(s => s.UpdatedAt, now),
             cancellationToken: ct);
         return file;
+    }
+
+    private sealed record LinkResolution(
+        string? FrequencyCode, string? StateReference, bool Waiting = false,
+        string? CloseReason = null, string? HoldReason = null);
+
+    /// <summary>
+    /// For each replacement (7) or void (8): the state reference to put in REF*F8, or
+    /// why it cannot go yet. An original the state rejected or that was closed was never
+    /// accepted, so its replacement goes as a new original and its void is closed.
+    /// </summary>
+    private async Task<Dictionary<string, LinkResolution>> ResolveLinkedAsync(
+        IReadOnlyList<EncounterSubmission> submissions, string tenantId, CancellationToken ct)
+    {
+        var result = new Dictionary<string, LinkResolution>(StringComparer.Ordinal);
+        var linked = submissions.Where(s => s.FrequencyCode is "7" or "8").ToList();
+        if (linked.Count == 0) return result;
+
+        var originalIds = linked.Select(s => s.OriginalSubmissionId).Where(id => id is not null).Distinct().ToList();
+        var originals = (await _submissions.Find(Builders<EncounterSubmission>.Filter.And(
+                    Builders<EncounterSubmission>.Filter.In(s => s.Id, originalIds),
+                    Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId)))
+                .ToListAsync(ct))
+            .ToDictionary(s => s.Id, StringComparer.Ordinal);
+
+        foreach (var s in linked)
+        {
+            if (s.OriginalSubmissionId is null || !originals.TryGetValue(s.OriginalSubmissionId, out var original))
+            {
+                result[s.Id] = new LinkResolution(s.FrequencyCode, null,
+                    HoldReason: "the original encounter record for this replacement or void was not found");
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(original.StateClaimReference))
+            {
+                result[s.Id] = new LinkResolution(s.FrequencyCode, original.StateClaimReference);
+            }
+            else if (original.Status is EncounterSubmissionStatus.Rejected or EncounterSubmissionStatus.ClosedNotReportable)
+            {
+                result[s.Id] = s.FrequencyCode == "7"
+                    ? new LinkResolution("1", null)
+                    : new LinkResolution("8", null, CloseReason: "the state never accepted the original encounter, so there is nothing to void");
+            }
+            else
+            {
+                result[s.Id] = new LinkResolution(s.FrequencyCode, null, Waiting: true);
+            }
+        }
+        return result;
+    }
+
+    private async Task CloseLinkedAsync(EncounterSubmission submission, string tenantId, string reason, CancellationToken ct)
+    {
+        var now = _clock.GetUtcNow().UtcDateTime;
+        await _submissions.UpdateOneAsync(
+            Builders<EncounterSubmission>.Filter.And(
+                Builders<EncounterSubmission>.Filter.Eq(s => s.Id, submission.Id),
+                Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId),
+                Builders<EncounterSubmission>.Filter.In(s => s.Status, Batchable)),
+            Builders<EncounterSubmission>.Update
+                .Set(s => s.Status, EncounterSubmissionStatus.ClosedNotReportable)
+                .Set(s => s.LastError, $"Closed without reporting: {reason}")
+                .Set(s => s.UpdatedAt, now)
+                .Push(s => s.ReworkHistory, new EncounterReworkEvent
+                {
+                    Action = "Closed", ReasonCode = "ORIGINAL_NOT_ACCEPTED", ActorId = "batch", Note = reason, At = now
+                }),
+            cancellationToken: ct);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────

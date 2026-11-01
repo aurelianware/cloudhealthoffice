@@ -109,12 +109,15 @@ builder.Services.AddScoped<IEncounterControlNumberSource, MongoEncounterControlN
 builder.Services.AddScoped<IStateEncounterBatchService, StateEncounterBatchService>();
 builder.Services.AddScoped<IStateResponseReconciler, StateResponseReconciler>();
 builder.Services.AddScoped<IEncounterReworkService, EncounterReworkService>();
+builder.Services.AddScoped<IEncounterLifecycleService, EncounterLifecycleService>();
 
 // Kafka consumer for adjudication-completed events
 var kafkaBootstrap = builder.Configuration["Kafka:BootstrapServers"];
 if (!string.IsNullOrEmpty(kafkaBootstrap))
 {
     builder.Services.AddHostedService<AdjudicationCompletedConsumer>();
+    // claims.finalized.v1: originals, replacements and voids for the state X12 routes.
+    builder.Services.AddHostedService<ClaimFinalizedEncounterConsumer>();
 }
 
 // Background worker for deadline monitoring and batching (every 4 hours)
