@@ -94,17 +94,43 @@ Files can be listed and downloaded with
 ISA13 control numbers come from an atomic per-tenant, per-state counter in
 `encounter_control_numbers`.
 
+## Hand-off and responses
+
+When a staged file has been handed to the state (SFTP drop, partner upload),
+record it with `POST /api/encounters/state/files/{id}/transmitted`. Its
+`Batched` encounters become `Submitted`.
+
+Apply each response file the state returns with
+`POST /api/encounters/state/{TX|CA}/responses` and a body of
+`{ "fileName": "...", "content": "<raw file>" }` (`encounters:write`). The
+file is stored in `encounter_state_responses` with what it matched, and each
+encounter keeps a `responseHistory`.
+
+| Response | Matched on | Result |
+| --- | --- | --- |
+| 999 | GS06 (AK1) and ST02 (AK2) | IK5 A → `SyntaxAccepted`, E → `SyntaxAcceptedWithErrors`, R/M/W/X → `Rejected` with the IK3/IK4 errors. A transaction the 999 does not list takes the AK9 group code. Applies only to `Batched` / `Submitted` records, so a late 999 never undoes a 277CA acceptance. |
+| 277CA (TX) / 277 (CA) | CLM01 (TRN02 at the patient level) | STC A1/A2 → `StateFrontEndAccepted` and the state's claim ID from REF*1K is saved as `stateClaimReference` (needed for replacements and voids). A3/A4/A6/A7/A8 → `Rejected` with the STC codes. Service-line STCs are not used. |
+| DHCS EVR (XML) | — | Refused with 422 until the EVR schema from the DHCS guide is implemented. |
+
+References in a file that match nothing are returned as `unmatched` and kept
+on the stored response. `StateFrontEndAccepted` means the state's front end
+took the encounter; it is not final encounter acceptance.
+
+The Florida `POST /api/encounters/{tenantId}/acknowledge` path now only
+touches Florida records.
+
 ## Not done yet
 
-- **Transport.** Nothing sends files to TMHP or DHCS. Files are staged for
-  the EDI lead or the partner hand-off (TX-02: "agree actual HHSC
-  destination/operator").
-- **Responses.** 999, 277CA / 277 and the DHCS EVR file are not reconciled
-  per record yet. The existing acknowledge endpoint is the Florida 999 path.
+- **Transport.** Nothing sends files to TMHP or DHCS or collects responses
+  from them. Files are staged for the EDI lead or the partner hand-off
+  (TX-02: "agree actual HHSC destination/operator"), and responses are
+  posted to the API.
+- **DHCS EVR file** and any HHSC encounter quality reports after the 277CA.
 - **Rework queue.** `ValidationFailed` and rejected records have no work
   queue or portal view yet.
 - **Replacements and voids.** The writer supports frequency 7/8 with REF*F8,
-  but nothing yet produces them from claim adjustments.
+  and the state reference is now captured, but nothing yet produces them from
+  claim adjustments.
 - **837D, capitated and delegated encounters, other-payer (TPL) loops** and
   any state-specific segments in the TMHP or DHCS companion guides.
 - **State acceptance.** Companion-guide review, partner test cycles and

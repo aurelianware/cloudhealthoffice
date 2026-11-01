@@ -54,5 +54,12 @@ public enum EncounterSubmissionStatus
     /// validation (missing member address, unbalanced line, and so on). Needs
     /// rework at the source before it can be batched.
     /// </summary>
-    ValidationFailed
+    ValidationFailed,
+
+    /// <summary>
+    /// The state's claim acknowledgment (277CA / 277) accepted the encounter for
+    /// processing and, usually, assigned it a state claim reference. Final encounter
+    /// acceptance (state edits, encounter quality reports) is not established.
+    /// </summary>
+    StateFrontEndAccepted
 }

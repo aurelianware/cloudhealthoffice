@@ -241,9 +241,12 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
         // A = Accepted, E = Accepted with errors (partial), R = Rejected
         var (ackCode, errors) = Parse999Acknowledgment(acknowledgmentContent);
 
+        // Florida only: Texas and California responses are reconciled per record by
+        // StateResponseReconciler, and must never be overwritten batch-wide here.
         var batchFilter = Builders<EncounterSubmission>.Filter.And(
             Builders<EncounterSubmission>.Filter.Eq(s => s.BatchId, batchId),
-            Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId)
+            Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId),
+            Builders<EncounterSubmission>.Filter.Eq(s => s.StateCode, "FL")
         );
         var submissions = await _collection.Find(batchFilter).ToListAsync();
 

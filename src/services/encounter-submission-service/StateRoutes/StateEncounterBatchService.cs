@@ -69,6 +69,13 @@ public interface IStateEncounterBatchService
     Task<IReadOnlyList<StateEncounterFile>> ListFilesAsync(string tenantId, string? stateCode, int limit = 50);
 
     Task<StateEncounterFile?> GetFileAsync(string tenantId, string fileId);
+
+    /// <summary>
+    /// Records that a staged file was handed to the state's transport: the file gets
+    /// <see cref="StateEncounterFile.TransmittedAt"/> and its Batched encounters become Submitted.
+    /// Returns null when the file does not exist for the tenant.
+    /// </summary>
+    Task<StateEncounterFile?> MarkTransmittedAsync(string tenantId, string fileId, CancellationToken ct = default);
 }
 
 public interface IEncounterControlNumberSource
@@ -369,6 +376,36 @@ public sealed class StateEncounterBatchService : IStateEncounterBatchService
         await _files.Find(Builders<StateEncounterFile>.Filter.And(
             Builders<StateEncounterFile>.Filter.Eq(f => f.Id, fileId),
             Builders<StateEncounterFile>.Filter.Eq(f => f.TenantId, tenantId))).FirstOrDefaultAsync();
+
+    public async Task<StateEncounterFile?> MarkTransmittedAsync(string tenantId, string fileId, CancellationToken ct = default)
+    {
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var file = await _files.FindOneAndUpdateAsync(
+            Builders<StateEncounterFile>.Filter.And(
+                Builders<StateEncounterFile>.Filter.Eq(f => f.Id, fileId),
+                Builders<StateEncounterFile>.Filter.Eq(f => f.TenantId, tenantId)),
+            Builders<StateEncounterFile>.Update.Set(f => f.TransmittedAt, now),
+            new FindOneAndUpdateOptions<StateEncounterFile>
+            {
+                ReturnDocument = ReturnDocument.After,
+                Projection = Builders<StateEncounterFile>.Projection.Exclude(f => f.Content)
+            },
+            ct);
+        if (file is null) return null;
+
+        await _submissions.UpdateManyAsync(
+            Builders<EncounterSubmission>.Filter.And(
+                Builders<EncounterSubmission>.Filter.In(s => s.Id, file.SubmissionIds),
+                Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId),
+                Builders<EncounterSubmission>.Filter.Eq(s => s.FileName, file.FileName),
+                Builders<EncounterSubmission>.Filter.Eq(s => s.Status, EncounterSubmissionStatus.Batched)),
+            Builders<EncounterSubmission>.Update
+                .Set(s => s.Status, EncounterSubmissionStatus.Submitted)
+                .Set(s => s.SubmittedAt, now)
+                .Set(s => s.UpdatedAt, now),
+            cancellationToken: ct);
+        return file;
+    }
 
     // ── Helpers ─────────────────────────────────────────────────────────
 
