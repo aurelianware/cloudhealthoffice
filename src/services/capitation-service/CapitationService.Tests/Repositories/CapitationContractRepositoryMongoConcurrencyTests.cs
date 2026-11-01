@@ -169,4 +169,39 @@ public sealed class CapitationContractRepositoryMongoConcurrencyTests(MongoRunne
         stored.WithholdPercentage.Should().Be(0.13m);
         stored.Revision.Should().Be(2);
     }
+
+    [Fact]
+    public async Task ParentFieldSync_UpdatesEveryChildOfTheContract_AndAStaleEditThenConflicts()
+    {
+        await SeedAsync("cap-sync-1");
+        await SeedAsync("cap-sync-2");
+        var staleRead = await ReadAsync("cap-sync-1");
+        var at = new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        var result = await Repo().SyncParentFieldsAsync("pc-1", new ParentContractFields
+        {
+            ContractNumber = "PC-1234567890-2026-A1",
+            ProviderNpi = "1234567890",
+            ProviderName = "Lone Star Pediatrics",
+            LineOfBusiness = LineOfBusiness.Medicaid,
+            SyncedBy = "provider-contracts-service"
+        }, at);
+
+        result.RateConfigsUpdated.Should().Be(2);
+        foreach (var id in new[] { "cap-sync-1", "cap-sync-2" })
+        {
+            var child = await ReadAsync(id);
+            child.ProviderName.Should().Be("Lone Star Pediatrics");
+            child.LineOfBusiness.Should().Be(LineOfBusiness.Medicaid);
+            child.ContractNumber.Should().Be("PC-1234567890-2026-A1");
+            child.LastDenormSyncAt.Should().Be(at);
+            child.Revision.Should().Be(1);
+        }
+        (await Repo().GetByContractIdAsync("pc-1")).Should().HaveCount(2);
+
+        staleRead.WithholdPercentage = 0.05m;
+        var stale = await Try(() => Repo().UpdateAsync(staleRead));
+        stale.Should().BeOfType<CapitationConcurrencyException>(
+            "an edit read before the sync would otherwise write the old provider name back");
+    }
 }
