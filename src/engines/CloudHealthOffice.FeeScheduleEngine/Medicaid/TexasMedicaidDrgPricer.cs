@@ -46,6 +46,16 @@ public sealed record TexasDrgPolicy
     /// codes, so a plan should confirm against its HHSC contract.
     /// </summary>
     public IReadOnlySet<string> TransferStatuses { get; init; } = DischargeStatuses.MedicareAcuteTransfer;
+
+    /// <summary>
+    /// Base APR-DRGs that are labor and delivery stays, which a rural
+    /// hospital is paid at its OB-GYN delivery SDA (§355.8052(e)(2)). The
+    /// rule names services, not DRGs: the default is the APR-DRG delivery
+    /// groups (540 cesarean, 541 vaginal with sterilization or D&amp;C, 542
+    /// vaginal with complicating procedures, 560 vaginal). Confirm against
+    /// the plan's HHSC guidance.
+    /// </summary>
+    public IReadOnlySet<string> DeliveryBaseDrgs { get; init; } = new HashSet<string>(StringComparer.Ordinal) { "540", "541", "542", "560" };
 }
 
 /// <summary>
@@ -83,8 +93,16 @@ public sealed class TexasMedicaidDrgPricer(TexasDrgPolicy policy) : IMedicaidDrg
 
         var steps = new List<string>();
         var sda = hospital.BaseRate;
+        var sdaLabel = "SDA";
+        var baseDrg = stay.DrgSoi.Split('-', 2)[0].Trim();
+        if (hospital.DeliveryBaseRate is { } deliverySda && deliverySda > 0 && _policy.DeliveryBaseDrgs.Contains(baseDrg))
+        {
+            sda = deliverySda;
+            sdaLabel = "OB-GYN delivery SDA";
+            steps.Add($"APR-DRG {baseDrg} is a labor and delivery stay; the hospital's delivery SDA applies (§355.8052(e)(2)).");
+        }
         var full = sda * weight.RelativeWeight;
-        steps.Add($"DRG payment = SDA {Money(sda)} × relative weight {weight.RelativeWeight} ({stay.DrgSoi}) = {Money(full)}.");
+        steps.Add($"DRG payment = {sdaLabel} {Money(sda)} × relative weight {weight.RelativeWeight} ({stay.DrgSoi}) = {Money(full)}.");
 
         var drgPayment = full;
         var transfer = _policy.TransferStatuses.Contains(DischargeStatuses.Normalize(stay.DischargeStatus) ?? "");

@@ -37,6 +37,30 @@ public class TexasMedicaidDrgPricerTests
         Assert.Contains(price.Steps, s => s.Contains("$6,000.00") && s.Contains("1.2"));
     }
 
+    [Theory]
+    [InlineData("560-1", 18000)] // delivery DRG: 12,000 delivery SDA x 1.5
+    [InlineData("540-2", 18000)]
+    [InlineData("139-2", 9000)]  // not a delivery: 6,000 SDA x 1.5
+    public void A_rural_delivery_stay_pays_the_ob_gyn_delivery_sda(string drgSoi, double expected)
+    {
+        var hospital = Hospital(TexasHospitalClass.Rural) with { DeliveryBaseRate = 12000m };
+        var stay = Stay() with { DrgSoi = drgSoi };
+        var weight = Weight(1.5m) with { DrgSoi = drgSoi };
+
+        var price = _pricer.Price(stay, weight, hospital);
+
+        Assert.True(price.Priced);
+        Assert.Equal((decimal)expected, price.AllowedAmount);
+    }
+
+    [Fact]
+    public void A_delivery_stay_at_a_hospital_without_a_delivery_sda_pays_the_regular_sda()
+    {
+        var price = _pricer.Price(Stay() with { DrgSoi = "560-1" }, Weight(1.5m) with { DrgSoi = "560-1" }, Hospital());
+
+        Assert.Equal(9000m, price.AllowedAmount);
+    }
+
     [Fact]
     public void An_adult_stay_needs_no_interim_rate_because_adults_have_no_outlier()
     {
