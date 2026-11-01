@@ -501,6 +501,12 @@ builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStage>();
 builder.Services.AddPlanEditService(builder.Configuration, builder.Environment);
 builder.Services.AddScoped<IClaimAdjudicationStage, PlanEditsStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStage>();
+// Medicaid third-party liability (Order=276): cost avoidance and pay-and-chase
+// against the state TPL file loaded into coverage-service. Off by default.
+builder.Services.Configure<ThirdPartyLiabilityOptions>(
+    builder.Configuration.GetSection(ThirdPartyLiabilityOptions.SectionName));
+builder.Services.AddScoped<ITplClient, HttpTplClient>();
+builder.Services.AddScoped<IClaimAdjudicationStage, ThirdPartyLiabilityStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, AiExaminationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PersistenceStage>();
 
