@@ -314,6 +314,13 @@ builder.Services.AddSingleton<IBenefitPlanResolver>(sp =>
     new CachingBenefitPlanResolver(
         sp.GetRequiredService<HttpBenefitPlanResolver>(),
         sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+// The plan's PA rule set (the one CRD and PAS read), for
+// ClaimsAdjudication:PriorAuth:UseRuleSet. Same benefit-plan-service client and cache TTL.
+builder.Services.AddSingleton<HttpPriorAuthRuleScopeClient>();
+builder.Services.AddSingleton<IPriorAuthRuleScopeClient>(sp =>
+    new CachingPriorAuthRuleScopeClient(
+        sp.GetRequiredService<HttpPriorAuthRuleScopeClient>(),
+        sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
 
 builder.Services.AddHttpClient(HttpMemberResolver.HttpClientName, client =>
 {

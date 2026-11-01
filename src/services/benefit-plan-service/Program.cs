@@ -264,6 +264,9 @@ builder.Services.AddProviderEnrollmentService(builder.Configuration)
 builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
     .UseMongoRepository().WithRuleCache()
     .WithPlatformRules().SeedOnStartup();
+// A plan's program (state, line of business, program code) keys its PA rule
+// set; claims-service asks for a plan's rule set by plan id (plans/{planId}/required-services).
+CloudHealthOffice.PlanConfiguration.ProgramDirectoryServiceCollectionExtensions.AddProgramDirectoryClient(builder.Services, builder.Configuration);
 
 // ── Operating Mode Provider ───────────────────────────────────────────────────
 // Fetches per-tenant operating mode configuration from tenant-service.
