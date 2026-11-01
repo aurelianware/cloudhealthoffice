@@ -1,6 +1,7 @@
 using Microsoft.OpenApi.Models;
 using EncounterSubmissionService.KafkaConsumers;
 using EncounterSubmissionService.Services;
+using EncounterSubmissionService.StateRoutes;
 using EncounterSubmissionService.Workers;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
@@ -23,9 +24,9 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "Encounter Submission Service API",
         Version = "v1",
-        Description = "Tracks the 60-day AHCA encounter submission window for FL Medicaid claims. " +
-                     "Batches adjudicated claims for FMMIS submission, processes 999 acknowledgments, " +
-                     "and fires deadline warning events."
+        Description = "Tracks state Medicaid encounter submission: Florida (FMMIS), and Texas (TMHP) " +
+                     "and California (DHCS) 837 routes once configured. Batches adjudicated claims, " +
+                     "processes 999 acknowledgments, and fires deadline warning events."
     });
 });
 
@@ -76,8 +77,36 @@ builder.Services.AddHttpClient("ReferenceDataService", client =>
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 }).SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
+builder.Services.AddHttpClient("MemberService", client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:MemberService"]
+        ?? "http://member-service:8080");
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+
+builder.Services.AddHttpClient("ProviderService", client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:ProviderService"]
+        ?? "http://provider-service:8080");
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+
 // Business services
 builder.Services.AddScoped<IEncounterSubmissionService, EncounterSubmissionServiceImpl>();
+
+// State encounter routes. EncounterRoutes:{STATE} configures each route; Texas and
+// California stay off until a route is enabled and a plan's state-issued identities
+// are configured under EncounterRoutes:{STATE}:Tenants:{tenantId}.
+builder.Services.Configure<Dictionary<string, StateEncounterRouteOptions>>(
+    builder.Configuration.GetSection("EncounterRoutes"));
+builder.Services.AddSingleton<IStateEncounterRouteRegistry>(sp => new StateEncounterRouteRegistry(
+    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Dictionary<string, StateEncounterRouteOptions>>>()));
+builder.Services.AddScoped<IEncounterControlNumberSource, MongoEncounterControlNumberSource>();
+builder.Services.AddScoped<IStateEncounterBatchService, StateEncounterBatchService>();
 
 // Kafka consumer for adjudication-completed events
 var kafkaBootstrap = builder.Configuration["Kafka:BootstrapServers"];

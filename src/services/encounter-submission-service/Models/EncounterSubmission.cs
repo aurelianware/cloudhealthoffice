@@ -4,8 +4,9 @@ using System.Text.Json.Serialization;
 namespace EncounterSubmissionService.Models;
 
 /// <summary>
-/// Document tracking the 60-day AHCA encounter submission window
-/// for a single adjudicated FL Medicaid claim. Partition key: <see cref="TenantId"/>.
+/// Document tracking one adjudicated Medicaid claim through state encounter
+/// submission: Florida (FMMIS), Texas (TMHP) or California (DHCS). Partition key:
+/// <see cref="TenantId"/>.
 /// Created automatically when the adjudication-completed Kafka event is received.
 /// </summary>
 public class EncounterSubmission
@@ -47,8 +48,9 @@ public class EncounterSubmission
     public string StateCode { get; set; } = "FL";
 
     /// <summary>
-    /// Calculated deadline by which the encounter must be submitted to FMMIS.
-    /// Equals <see cref="ClaimAdjudicatedAt"/> + 60 calendar days.
+    /// Deadline by which the encounter must reach the state, computed by the
+    /// state's route (Florida: adjudication + 60 days; Texas and California:
+    /// days after the end of the adjudication month).
     /// </summary>
     [JsonPropertyName("submissionDeadline")]
     public DateTime SubmissionDeadline { get; set; }
@@ -97,6 +99,41 @@ public class EncounterSubmission
     /// </summary>
     [JsonPropertyName("lastError")]
     public string? LastError { get; set; }
+
+    /// <summary>
+    /// Receiver the record is routed to (FMMIS, TMHP, DHCS). Null on records created
+    /// before state routes existed, which are all Florida.
+    /// </summary>
+    [JsonPropertyName("receiver")]
+    public string? Receiver { get; set; }
+
+    /// <summary>837 form the encounter was written as (Professional, Institutional).</summary>
+    [JsonPropertyName("formType")]
+    public string? FormType { get; set; }
+
+    /// <summary>Staged file the encounter was written to.</summary>
+    [JsonPropertyName("fileName")]
+    public string? FileName { get; set; }
+
+    /// <summary>ISA13 of the interchange that carried the encounter (X12 routes).</summary>
+    [JsonPropertyName("interchangeControlNumber")]
+    public string? InterchangeControlNumber { get; set; }
+
+    /// <summary>GS06 of the functional group; a 999 AK1 refers to it.</summary>
+    [JsonPropertyName("groupControlNumber")]
+    public string? GroupControlNumber { get; set; }
+
+    /// <summary>ST02 of the encounter's own transaction set; a 999 AK2/IK2 refers to it.</summary>
+    [JsonPropertyName("transactionSetControlNumber")]
+    public string? TransactionSetControlNumber { get; set; }
+
+    /// <summary>CLM01 as sent; a 277CA and state response files echo it.</summary>
+    [JsonPropertyName("patientControlNumber")]
+    public string? PatientControlNumber { get; set; }
+
+    /// <summary>Pre-submission validation failures that held the encounter back.</summary>
+    [JsonPropertyName("validationErrors")]
+    public List<string> ValidationErrors { get; set; } = new();
 
     /// <summary>
     /// Audit: document creation timestamp.
