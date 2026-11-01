@@ -24,4 +24,22 @@ public sealed class PriorAuthAdjudicationOptions
     /// </para>
     /// </summary>
     public bool UsePlanFlaggedCodes { get; set; }
+
+    /// <summary>
+    /// Also check lines the plan's PA rule set puts in scope: the rule set its
+    /// program resolves to in the prior-auth rule store, which CRD, PAS and the
+    /// CMS-0057-F required-services list read (benefit-plan-service
+    /// <c>GET api/v1/prior-auth-rules/plans/{planId}/required-services</c>).
+    /// Off by default for staged rollout, like <see cref="UsePlanFlaggedCodes"/>.
+    ///
+    /// <para>
+    /// Adds to the other sources, never removes from them. <c>Always</c> and
+    /// <c>WithDiagnosis</c> rules apply; quantity limits do not yet. When the
+    /// rule set has exemptions (gold card, provider type, member age), which
+    /// claims cannot evaluate, a line in scope only through the rule set that
+    /// has no valid authorization pends <c>NOAUTH</c> for review instead of
+    /// denying. A failed rule set lookup pends <c>PAUNAVAIL</c>.
+    /// </para>
+    /// </summary>
+    public bool UseRuleSet { get; set; }
 }
