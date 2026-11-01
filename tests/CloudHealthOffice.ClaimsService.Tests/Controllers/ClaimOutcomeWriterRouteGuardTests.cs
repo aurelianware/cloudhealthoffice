@@ -56,6 +56,7 @@ public class ClaimOutcomeWriterRouteGuardTests
             ["POST api/v1/claims/import/raw837/validate"] = (Kind.NoStatusChange, "validation only"),
             ["POST api/claims/search"] = (Kind.NoStatusChange, "read"),
             ["POST api/claims/authorization-usage"] = (Kind.NoStatusChange, "read: claim counts per prior authorization number"),
+            ["POST api/claims/finance/ibnr"] = (Kind.NoStatusChange, "read: paid-claims lag triangle and IBNR estimate (POST for the member-month body)"),
             ["PUT api/claims/{id}/ai-examination"] = (Kind.NoStatusChange, "advisory AI recommendation"),
             ["POST api/claims/{id}/ai-examination/agreement"] = (Kind.NoStatusChange, "examiner feedback on the AI recommendation"),
             ["POST api/claims/{claimId}/notes"] = (Kind.NoStatusChange, "appends a reviewer note; never touches the claim"),
