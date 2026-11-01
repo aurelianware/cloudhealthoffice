@@ -1451,4 +1451,34 @@ public class ClaimRepositoryMongo : IClaimRepository
 
         return items.Select(Hydrate).ToList();
     }
+
+    public async Task<IReadOnlyList<Finance.ClaimPaymentVersion>> GetPaymentVersionsAsync(
+        DateTime incurredFrom, DateTime incurredBefore, LineOfBusiness? lineOfBusiness, CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        var b = Builders<Claim>.Filter;
+        var filter = b.Eq(c => c.TenantId, tenantId)
+                     & b.Gte(c => c.ServiceDateFrom, incurredFrom)
+                     & b.Lt(c => c.ServiceDateFrom, incurredBefore);
+        if (lineOfBusiness.HasValue)
+            filter &= b.Eq(c => c.LineOfBusiness, lineOfBusiness.Value);
+
+        // Projected and streamed: a year of a large plan's claims is millions
+        // of versions, of which only five fields are needed.
+        var rows = await _collection.Find(filter)
+            .Project(c => new
+            {
+                c.ClaimNumber,
+                c.VersionNumber,
+                c.ServiceDateFrom,
+                c.PaidDate,
+                Paid = c.AdjudicationResult == null ? 0m : c.AdjudicationResult.PayerPayment,
+                c.Status,
+                c.VersionState
+            })
+            .ToListAsync(ct);
+        return rows.Select(r => new Finance.ClaimPaymentVersion(
+            r.ClaimNumber, r.VersionNumber, r.ServiceDateFrom, r.PaidDate, r.Paid,
+            r.Status == ClaimStatus.Voided || r.VersionState == ClaimVersionState.Voided)).ToList();
+    }
 }

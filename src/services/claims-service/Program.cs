@@ -21,6 +21,7 @@ using ClaimsService.Services.Migrations;
 using ClaimsService.Services.Resolution;
 using CloudHealthOffice.ClaimsScrubEngine.Configuration;
 using CloudHealthOffice.GrouperEngine.Services;
+using CloudHealthOffice.GrouperEngine.Licensed;
 using CloudHealthOffice.NcciEngine.Configuration;
 using CloudHealthOffice.PlanConfiguration;
 
@@ -491,6 +492,11 @@ builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>()
 // else — and AddPlanSettingsClient reads pricing.inpatient.groupDrg from
 // tenant-service.
 builder.Services.AddMsDrgGrouper(builder.Configuration);
+// The plan's licensed APR-DRG grouper, for lines of business whose
+// pricing.inpatient.drgClassification is aprDrg (Texas and California
+// Medicaid). With no LicensedGrouper:BaseUrl it answers NotConfigured and
+// such claims pend GROUPERUNAVAIL; nothing else reads it.
+builder.Services.AddLicensedGroupers(builder.Configuration);
 builder.Services.AddPlanSettingsClient(builder.Configuration);
 builder.Services.AddScoped<IClaimAdjudicationStage, InpatientGroupingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PricingStage>();

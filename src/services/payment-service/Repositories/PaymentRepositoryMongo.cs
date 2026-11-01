@@ -219,4 +219,19 @@ public class PaymentRepositoryMongo : IPaymentRepository
         await _collection.DeleteOneAsync(filter);
         _logger.LogInformation("Deleted payment {PaymentId}", id);
     }
+
+    public async Task<IReadOnlyList<Services.InformationReturns.IssuedPayment>> GetIssuedPaymentsAsync(DateTime from, DateTime before, CancellationToken ct = default)
+    {
+        var b = Builders<Payment>.Filter;
+        var filter = b.Eq(x => x.TenantId, GetTenantId())
+                     & b.Gte(x => x.PaymentDate, from)
+                     & b.Lt(x => x.PaymentDate, before)
+                     & b.Ne(x => x.RunId, null)
+                     & b.Eq(x => x.VoidedBeforePaymentAt, null);
+        var rows = await _collection.Find(filter)
+            .Project(x => new { x.PayeeNPI, x.PayeeName, x.TotalPaymentAmount, x.PaymentDate, x.IsReversal })
+            .ToListAsync(ct);
+        return rows.Select(r => new Services.InformationReturns.IssuedPayment(
+            r.PayeeNPI, r.PayeeName, r.TotalPaymentAmount, r.PaymentDate, r.IsReversal)).ToList();
+    }
 }

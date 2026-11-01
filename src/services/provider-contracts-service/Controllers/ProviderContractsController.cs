@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using ProviderContractsService.Models;
 using ProviderContractsService.Repositories;
+using ProviderContractsService.Services;
 using CloudHealthOffice.Infrastructure.Logging;
 // The engine declares a ProviderContract of its own (the pricing contract a
 // legal contract projects to), so the term type is aliased rather than the
@@ -138,7 +139,8 @@ public class ProviderContractsController : ControllerBase
     [HttpPut("{id}")]
     [ProducesResponseType(typeof(ProviderContract), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ProviderContract>> UpdateContract(string id, [FromBody] ProviderContract contract)
+    public async Task<ActionResult<ProviderContract>> UpdateContract(string id, [FromBody] ProviderContract contract,
+        [FromServices] ICapitationChildSync? childSync = null)
     {
         var existing = await _contractRepository.GetByIdAsync(id);
         if (existing == null)
@@ -176,9 +178,23 @@ public class ProviderContractsController : ControllerBase
         contract.ReimbursementTerms = existing.ReimbursementTerms;
         // CapitationRateConfigIds / FfsRateConfigIds stay editable here: no
         // other endpoint links rate configs to a contract (rate-configs is
-        // read-only and sync-children is a stub), and the portal sends them.
+        // read-only), and the portal sends them.
 
         var updated = await _contractRepository.UpdateAsync(contract);
+
+        // A change to a field the capitation rate configs copy is pushed to
+        // them now, so capitation runs and statements name the contract as it
+        // stands. The contract edit stands either way: a failed push is
+        // reported in X-Capitation-Sync and finished by PUT {id}/sync-children,
+        // which is safe to repeat.
+        if (childSync != null && ParentFieldsChanged(existing, updated))
+        {
+            var sync = await childSync.SyncAsync(updated, HttpContext?.RequestAborted ?? default);
+            if (HttpContext != null)
+                Response.Headers["X-Capitation-Sync"] = sync.Succeeded
+                    ? $"synced; rateConfigs={sync.RateConfigsUpdated}"
+                    : "failed; retry PUT sync-children";
+        }
         return Ok(updated);
     }
 
@@ -309,38 +325,52 @@ public class ProviderContractsController : ControllerBase
     }
 
     /// <summary>
-    /// Propagate denormalized fields to all child rate configs.
-    /// Calls capitation-service and ffs-service to update children.
+    /// Propagate the contract's denormalized fields (contract number, NPI,
+    /// provider name, line of business) to every capitation rate config whose
+    /// parent is this contract, in capitation-service. Idempotent: run it again
+    /// after a failure. Fee-for-service rates need nothing: they are
+    /// reimbursement terms on this contract (ADR 016 phase 2) and keep no copy.
     /// </summary>
+    /// <returns>200 with the number of rate configs updated; 502 when
+    /// capitation-service did not apply it (nothing should be assumed synced).</returns>
     [HttpPut("{id}/sync-children")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult> SyncChildren(string id)
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult> SyncChildren(string id, [FromServices] ICapitationChildSync childSync)
     {
         var contract = await _contractRepository.GetByIdAsync(id);
         if (contract == null)
             return NotFound(new { error = $"Contract {id} not found" });
 
-        // TODO: Propagate ContractNumber, ProviderNPI, ProviderName, LineOfBusiness
-        // to all CapitationRateConfig children via capitation-service
-        // /api/v1/capitation/rate-configs?contractId={id} PATCH endpoint.
-        // There is nothing to propagate to an FfsRateConfig any more: a
-        // fee-for-service rate is a reimbursement term on this contract
-        // (ADR 016 phase 2), so it carries no denormalized copy to sync.
-        // Until then, returns 501 so callers know propagation did not occur.
-        _logger.LogInformation("Sync-children requested for provider contract {ContractNumber}",
-            LogSanitizer.Sanitize(contract.ContractNumber));
-
-        return StatusCode(StatusCodes.Status501NotImplemented, new
+        var result = await childSync.SyncAsync(contract, HttpContext?.RequestAborted ?? default);
+        if (!result.Succeeded)
         {
-            message = "Child sync not yet implemented. ContractNumber, ProviderNPI, " +
-                      "ProviderName, and LineOfBusiness must be manually kept in sync " +
-                      "with child rate configs until this is implemented.",
+            _logger.LogWarning("Sync-children for provider contract {ContractNumber} failed: {Error}",
+                LogSanitizer.Sanitize(contract.ContractNumber), result.Error);
+            return StatusCode(StatusCodes.Status502BadGateway, new
+            {
+                error = "Capitation rate configs were not updated: " + result.Error + ". Retry; the sync is safe to repeat.",
+                contractId = id
+            });
+        }
+
+        _logger.LogInformation("Sync-children for provider contract {ContractNumber}: {Count} capitation rate configs",
+            LogSanitizer.Sanitize(contract.ContractNumber), result.RateConfigsUpdated);
+        return Ok(new
+        {
             contractId = id,
-            childCount = contract.CapitationRateConfigIds.Count + contract.FfsRateConfigIds.Count,
-            note = "FfsRateConfig children are superseded by this contract's reimbursementTerms."
+            capitationRateConfigsUpdated = result.RateConfigsUpdated,
+            syncedAt = result.SyncedAt
         });
     }
+
+    /// <summary>Whether an edit changed a field the capitation rate configs keep a copy of.</summary>
+    public static bool ParentFieldsChanged(ProviderContract before, ProviderContract after) =>
+        !string.Equals(before.ContractNumber, after.ContractNumber, StringComparison.Ordinal)
+        || !string.Equals(before.ProviderNPI, after.ProviderNPI, StringComparison.Ordinal)
+        || !string.Equals(before.ProviderName, after.ProviderName, StringComparison.Ordinal)
+        || before.LineOfBusiness != after.LineOfBusiness;
 
     /// <summary>
     /// Get rate config IDs (capitation + FFS) for this contract
