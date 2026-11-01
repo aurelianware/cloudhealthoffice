@@ -76,6 +76,15 @@ public interface IClaimRepository
     Task<ClaimInsights> GetInsightsAsync(DateTime from, DateTime to, LineOfBusiness? lineOfBusiness, DateTime asOf, CancellationToken ct = default)
         => throw new NotSupportedException("Claims Insights needs the MongoDB claim store.");
 
+    /// <summary>
+    /// Every version of every claim whose service began in
+    /// [<paramref name="incurredFrom"/>, <paramref name="incurredBefore"/>),
+    /// reduced to what the lag triangle needs (incurred date, paid date, plan
+    /// paid, voided).
+    /// </summary>
+    Task<IReadOnlyList<Finance.ClaimPaymentVersion>> GetPaymentVersionsAsync(DateTime incurredFrom, DateTime incurredBefore, LineOfBusiness? lineOfBusiness, CancellationToken ct = default)
+        => throw new NotSupportedException("The lag triangle needs the MongoDB claim store.");
+
     Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByIdsAsync(
         IReadOnlyCollection<string> claimIds,
         string? memberId,
