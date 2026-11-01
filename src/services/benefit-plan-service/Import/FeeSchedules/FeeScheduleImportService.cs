@@ -19,10 +19,10 @@ public interface IFeeScheduleImportService
 }
 
 /// <summary>A plan named by planId does not exist in the caller's tenant.</summary>
-public sealed class FeeSchedulePlanNotFoundException(Guid planId)
-    : Exception($"Benefit plan {planId:D} was not found in this tenant.")
+public sealed class FeeSchedulePlanNotFoundException(string planId)
+    : Exception($"Benefit plan {planId} was not found in this tenant.")
 {
-    public Guid PlanId { get; } = planId;
+    public string PlanId { get; } = planId;
 }
 
 /// <summary>
@@ -72,17 +72,18 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
 
     /// <summary>Schedule id: the plan-default id for a plan default, otherwise {tenant}:{name slug}:{effective}.</summary>
     public static string ScheduleId(string tenantId, FeeScheduleImportOptions options) =>
-        options.PlanId is { } planId
-            ? PlanDefaultFeeScheduleController.ScheduleId(tenantId, planId)
+        string.IsNullOrWhiteSpace(options.PlanId) is false
+            ? PlanDefaultFeeScheduleController.ScheduleId(tenantId, PlanPricingKey.Normalize(options.PlanId!))
             : FeeSchedule.MakeId(tenantId, Slug(options.Name), options.EffectiveDate);
 
     public async Task<FeeScheduleImportReport> ImportAsync(
         Stream csv, FeeScheduleImportOptions options, string tenantId, string? actor, CancellationToken ct = default)
     {
-        if (options.PlanId is { } planId
-            && await _plans.GetByIdAsync(planId.ToString("D"), tenantId) is null)
+        if (!string.IsNullOrWhiteSpace(options.PlanId))
         {
-            throw new FeeSchedulePlanNotFoundException(planId);
+            var key = await PlanPricingKey.ResolveAsync(_plans, options.PlanId, tenantId)
+                ?? throw new FeeSchedulePlanNotFoundException(options.PlanId.Trim());
+            options = options with { PlanId = key };
         }
 
         var report = new FeeScheduleImportReport
@@ -91,7 +92,7 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
             ScheduleId = ScheduleId(tenantId, options),
             Name = options.Name.Trim(),
             Type = options.Type,
-            DefaultForPlanId = options.PlanId?.ToString("D"),
+            DefaultForPlanId = string.IsNullOrWhiteSpace(options.PlanId) ? null : options.PlanId,
         };
 
         var lines = Parse(csv, options, report);
@@ -154,13 +155,13 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
             Type = options.Type,
             SourceType = options.SourceType
                 ?? (options.Type == FeeScheduleType.Medicaid ? FeeScheduleSourceType.PublicGovernment : FeeScheduleSourceType.PayerContract),
-            SourceId = options.SourceId?.Trim() ?? (options.PlanId is null ? "csv-import" : "plan-default"),
+            SourceId = options.SourceId?.Trim() ?? (string.IsNullOrWhiteSpace(options.PlanId) ? "csv-import" : "plan-default"),
             SourceVersion = options.SourceVersion?.Trim() ?? string.Empty,
             Jurisdiction = string.IsNullOrWhiteSpace(options.Jurisdiction) ? null : options.Jurisdiction.Trim().ToUpperInvariant(),
             CodeSystem = "HCPCS",
             Checksum = report.Checksum,
             LicenseClassification = existing?.LicenseClassification ?? LicenseClassification.Unknown,
-            DefaultForPlanId = options.PlanId?.ToString("D"),
+            DefaultForPlanId = string.IsNullOrWhiteSpace(options.PlanId) ? null : options.PlanId,
             EffectiveDate = Utc(options.EffectiveDate),
             TermDate = UtcOrNull(options.TermDate),
             Lines = lines,

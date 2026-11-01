@@ -49,7 +49,7 @@ public sealed class MedicarePfsImportController : ControllerBase
         [FromQuery] string? release = null,
         [FromQuery] decimal? conversionFactor = null,
         [FromQuery] bool qpp = false,
-        [FromQuery] Guid? planId = null,
+        [FromQuery] string? planId = null,
         [FromQuery] bool replace = false,
         [FromQuery] bool dryRun = true,
         CancellationToken ct = default)

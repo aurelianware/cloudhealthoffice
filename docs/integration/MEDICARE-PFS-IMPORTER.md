@@ -61,7 +61,7 @@ multipart, permission `settings:manage`. **Dry run by default.**
 | `release` | CMS release label, e.g. `RVU26A`, stored as the source version. |
 | `conversionFactor` | Overrides the file's. Required when the file holds more than one. |
 | `qpp` | Use the QPP PPRRVU file from the zip. |
-| `planId` | Make the one selected locality's schedule this plan's default. |
+| `planId` | Make the one selected locality's schedule this plan's default. Give the plan code (e.g. `MA-PPO-01`) so it applies to every version of the plan; a plan version id (GUID) pins it to that version. |
 | `replace` | Replace existing schedules whose values differ. |
 | `dryRun` | `false` to write. |
 

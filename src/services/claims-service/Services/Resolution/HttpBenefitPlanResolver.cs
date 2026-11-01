@@ -111,6 +111,7 @@ public class HttpBenefitPlanResolver : IBenefitPlanResolver
             {
                 Id = dto.Id ?? planId,
                 PlanGuid = planGuid,
+                PlanCode = string.IsNullOrWhiteSpace(dto.PlanId) ? null : dto.PlanId.Trim(),
                 PlanName = dto.PlanName,
                 PlanType = dto.PlanType,
                 NetworkTiers = tiers,
@@ -137,6 +138,7 @@ public class HttpBenefitPlanResolver : IBenefitPlanResolver
     private sealed class BenefitPlanDto
     {
         public string? Id { get; set; }
+        public string? PlanId { get; set; }
         public string? PlanName { get; set; }
         public string? PlanType { get; set; }
         public List<NetworkTierDto>? NetworkTiers { get; set; }

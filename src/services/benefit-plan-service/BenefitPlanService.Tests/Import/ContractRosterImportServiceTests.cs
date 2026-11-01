@@ -49,7 +49,8 @@ public sealed class ContractRosterImportServiceTests
         contracts.Writes.Should().Be(0);
 
         var pcp = report.ContractsSample.Single(c => c.ProviderNpi == ContractedNpi);
-        pcp.Id.Should().Be($"{Tenant}:{ContractedNpi}:{PlanGuid:D}", "the plan code resolves to the plan's id, as claims carry it");
+        pcp.Id.Should().Be($"{Tenant}:{ContractedNpi}:STAR-TX-01", "a plan code keys the contract to every version of the plan");
+        pcp.PlanId.Should().Be("STAR-TX-01");
         pcp.NetworkStatus.Should().Be(NetworkStatus.InNetwork);
         pcp.ContractNumber.Should().Be("C-100");
         pcp.ReimbursementTerms.Select(t => t.Method).Should().Equal(
@@ -76,7 +77,7 @@ public sealed class ContractRosterImportServiceTests
         var engine = new RateResolutionService(schedules, contracts, NullLogger<RateResolutionService>.Instance);
         PricingRequest Line(string npi, string code, string pos = "11") => new()
         {
-            TenantId = Tenant, PlanId = PlanGuid.ToString("D"), ProviderNpi = npi, ProcedureCode = code,
+            TenantId = Tenant, PlanId = PlanGuid.ToString("D"), PlanCode = "STAR-TX-01", ProviderNpi = npi, ProcedureCode = code,
             PlaceOfServiceCode = pos, ServiceDate = new DateTime(2026, 3, 1), BilledAmount = 200m,
         };
 
@@ -155,6 +156,39 @@ public sealed class ContractRosterImportServiceTests
 
     // ── helpers ──
 
+    [Fact]
+    public async Task PlanCodeContract_StillPricesAfterThePlanIsAmended()
+    {
+        var (svc, contracts, schedules) = await Build();
+        await svc.ImportAsync(Csv(Roster()), Options(dryRun: false), Tenant, "admin");
+
+        // An amendment publishes version 2 under a new id; claims now carry that id.
+        var amendedVersionId = Guid.NewGuid().ToString("D");
+        var engine = new RateResolutionService(schedules, contracts, NullLogger<RateResolutionService>.Instance);
+        PricingRequest Line(string npi, string? planCode) => new()
+        {
+            TenantId = Tenant, PlanId = amendedVersionId, PlanCode = planCode, ProviderNpi = npi, ProcedureCode = "99213",
+            PlaceOfServiceCode = "11", ServiceDate = new DateTime(2026, 3, 1), BilledAmount = 200m,
+        };
+
+        (await engine.ResolveAsync(Line(ContractedNpi, "STAR-TX-01"))).AllowedAmount
+            .Should().Be(75.00m, "the contract was imported by plan code, so it follows the plan to version 2");
+        (await engine.ResolveAsync(Line(ContractedNpi, null))).AllowedAmount
+            .Should().NotBe(75.00m, "without the plan code only version-keyed contracts are found");
+
+        // A contract keyed to the new version wins over the plan-code one.
+        await contracts.UpsertAsync(new ProviderContract
+        {
+            Id = ProviderContract.MakeId(Tenant, ContractedNpi, amendedVersionId), TenantId = Tenant,
+            ProviderNpi = ContractedNpi, PlanId = amendedVersionId, EffectiveDate = new DateTime(2026, 1, 1),
+            NetworkStatus = NetworkStatus.InNetwork, Origin = "import:test",
+            ReimbursementTerms = [new ReimbursementTerm { Id = "v2", Method = ReimbursementMethod.PercentOfBilled, Percent = 0.5m }],
+        });
+        (await engine.ResolveAsync(Line(ContractedNpi, "STAR-TX-01"))).AllowedAmount
+            .Should().Be(100.00m, "the version's own contract (50% of billed 200) is used first");
+    }
+
+
     // ── CHO as system of record: legal contracts in provider-contracts-service ──
 
     private static ContractRosterImportOptions ChoOptions(bool dryRun = true) =>
@@ -183,7 +217,7 @@ public sealed class ContractRosterImportServiceTests
         created.ProviderName.Should().Be("Acme Family Clinic");
         created.ProviderType.Should().Be(LegalProviderType.Organization);
         created.LineOfBusiness.Should().Be(LegalLineOfBusiness.Medicaid);
-        created.PlanIds.Should().Equal(PlanGuid.ToString("D"));
+        created.PlanIds.Should().Equal("STAR-TX-01");
         created.Status.Should().Be(LegalContractStatus.Active);
         created.ReimbursementTerms.Should().HaveCount(2);
 
@@ -194,7 +228,7 @@ public sealed class ContractRosterImportServiceTests
         var engine = new RateResolutionService(schedules, contracts, NullLogger<RateResolutionService>.Instance);
         var xray = await engine.ResolveAsync(new PricingRequest
         {
-            TenantId = Tenant, PlanId = PlanGuid.ToString("D"), ProviderNpi = ContractedNpi, ProcedureCode = "71046",
+            TenantId = Tenant, PlanId = PlanGuid.ToString("D"), PlanCode = "STAR-TX-01", ProviderNpi = ContractedNpi, ProcedureCode = "71046",
             PlaceOfServiceCode = "11", ServiceDate = new DateTime(2026, 3, 1), BilledAmount = 200m,
         });
         xray.AllowedAmount.Should().Be(44.00m, "the CHO contract's 110%-of-Medicare term prices it");
@@ -276,8 +310,8 @@ public sealed class ContractRosterImportServiceTests
         var (svc, contracts, _) = await Build(legal);
         await contracts.UpsertAsync(new ProviderContract
         {
-            Id = ProviderContract.MakeId(Tenant, ContractedNpi, PlanGuid.ToString("D")), TenantId = Tenant,
-            ProviderNpi = ContractedNpi, PlanId = PlanGuid.ToString("D"), Origin = "legal", LegalContractId = "legal-older",
+            Id = ProviderContract.MakeId(Tenant, ContractedNpi, "STAR-TX-01"), TenantId = Tenant,
+            ProviderNpi = ContractedNpi, PlanId = "STAR-TX-01", Origin = "legal", LegalContractId = "legal-older",
             EffectiveDate = new DateTime(2025, 1, 1),
         });
 

@@ -46,8 +46,10 @@ public class FeeSchedule
     public DateTime? TermDate { get; set; }
 
     /// <summary>
-    /// The benefit plan (its id, as claims carry it) this schedule is the
-    /// default for: <c>IFeeScheduleRepository.GetDefaultForPlanAsync</c>
+    /// The benefit plan this schedule is the default for, by version id (that
+    /// version only) or plan code (every version without a default of its
+    /// own; see <see cref="PricingRequest.PlanCode"/>):
+    /// <c>IFeeScheduleRepository.GetDefaultForPlanAsync</c>
     /// returns it for lines whose provider has no contracted schedule.
     /// Null = not a plan default. Stored as <c>defaultForPlanId</c> (the
     /// default-schedule query filters on it).
@@ -274,7 +276,11 @@ public class ProviderContract
     /// <summary>Group/organization TIN (optional; used when NPI lookup fails).</summary>
     public string? GroupTin { get; set; }
 
-    /// <summary>The benefit plan this contract applies to.</summary>
+    /// <summary>
+    /// The benefit plan this contract applies to: a plan version id (that
+    /// version only) or a plan code (every version of the plan without a
+    /// contract of its own; see <see cref="PricingRequest.PlanCode"/>).
+    /// </summary>
     public string PlanId { get; set; } = string.Empty;
 
     public DateTime EffectiveDate { get; set; }
@@ -423,6 +429,15 @@ public record PricingRequest
 
     /// <summary>Benefit plan ID — used to find the provider's contracted schedule.</summary>
     public string PlanId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// The plan's code (<c>BenefitPlan.PlanId</c>), the same across every
+    /// version of the plan, while <see cref="PlanId"/> is the version's own id
+    /// and changes when the plan is amended. A contract or plan default
+    /// schedule keyed to the version wins; one keyed to the plan code applies
+    /// to every version that has none of its own. Null = version only.
+    /// </summary>
+    public string? PlanCode { get; init; }
 
     /// <summary>Provider's billed charge for this line (used for UCR / PercentOfBilled).</summary>
     public decimal BilledAmount { get; init; }

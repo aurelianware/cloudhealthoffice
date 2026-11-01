@@ -57,7 +57,7 @@ public sealed class FeeScheduleImportController : ControllerBase
         [FromQuery] string? sourceId = null,
         [FromQuery] string? sourceVersion = null,
         [FromQuery] string? jurisdiction = null,
-        [FromQuery] Guid? planId = null,
+        [FromQuery] string? planId = null,
         [FromQuery(Name = "filter")] string[]? filter = null,
         [FromQuery] string? codeColumn = null,
         [FromQuery] string? rateColumn = null,
