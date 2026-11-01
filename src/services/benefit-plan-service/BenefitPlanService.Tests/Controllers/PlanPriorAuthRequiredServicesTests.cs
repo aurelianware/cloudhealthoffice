@@ -32,7 +32,7 @@ public class PlanPriorAuthRequiredServicesTests
     }
 
     private PriorAuthRulesController Controller() =>
-        new(_repo.Object, _actor.Object, NullLogger<PriorAuthRulesController>.Instance, _plans.Object, _programs.Object);
+        new(_repo.Object, _actor.Object, NullLogger<PriorAuthRulesController>.Instance);
 
     private void Plan(string? programId) =>
         _plans.Setup(p => p.GetPlanAsync("plan-1", "tenant-a")).ReturnsAsync(new BenefitPlan { Id = "plan-1", ProgramId = programId });
@@ -51,7 +51,7 @@ public class PlanPriorAuthRequiredServicesTests
         Plan("prog-1");
         Program();
 
-        var ok = (await Controller().PlanRequiredServices("plan-1", includeDrugs, default)).Should().BeOfType<OkObjectResult>().Subject;
+        var ok = (await Controller().PlanRequiredServices("plan-1", includeDrugs, _plans.Object, _programs.Object, default)).Should().BeOfType<OkObjectResult>().Subject;
         var body = ok.Value.Should().BeOfType<PlanPaRequiredServices>().Subject;
 
         body.Resolved.Should().BeTrue();
@@ -63,7 +63,7 @@ public class PlanPriorAuthRequiredServicesTests
     public async Task A_plan_without_a_program_is_unresolved_not_an_error()
     {
         Plan(null);
-        var body = ((OkObjectResult)await Controller().PlanRequiredServices("plan-1", false, default)).Value as PlanPaRequiredServices;
+        var body = ((OkObjectResult)await Controller().PlanRequiredServices("plan-1", false, _plans.Object, _programs.Object, default)).Value as PlanPaRequiredServices;
         body!.Resolved.Should().BeFalse();
         body.Reason.Should().Contain("no program");
     }
@@ -71,11 +71,11 @@ public class PlanPriorAuthRequiredServicesTests
     [Fact]
     public async Task Unknown_plan_is_404_and_a_program_outage_is_503()
     {
-        (await Controller().PlanRequiredServices("missing", false, default)).Should().BeOfType<NotFoundObjectResult>();
+        (await Controller().PlanRequiredServices("missing", false, _plans.Object, _programs.Object, default)).Should().BeOfType<NotFoundObjectResult>();
 
         Plan("prog-1");
         _programs.Setup(p => p.GetAsync("tenant-a", "prog-1", It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("down"));
-        (await Controller().PlanRequiredServices("plan-1", false, default)).Should().BeOfType<ObjectResult>()
+        (await Controller().PlanRequiredServices("plan-1", false, _plans.Object, _programs.Object, default)).Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(503);
     }
 }

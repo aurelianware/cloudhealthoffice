@@ -18,21 +18,14 @@ public sealed class PriorAuthRulesController : ControllerBase
     private readonly ICurrentActor _actor;
     private readonly ILogger<PriorAuthRulesController> _logger;
 
-    private readonly IBenefitPlanService? _plans;
-    private readonly IProgramDirectory? _programs;
-
     public PriorAuthRulesController(
         IPaRuleRepository repository,
         ICurrentActor actor,
-        ILogger<PriorAuthRulesController> logger,
-        IBenefitPlanService? plans = null,
-        IProgramDirectory? programs = null)
+        ILogger<PriorAuthRulesController> logger)
     {
         _repository = repository;
         _actor = actor;
         _logger = logger;
-        _plans = plans;
-        _programs = programs;
     }
 
     /// <summary>
@@ -55,25 +48,27 @@ public sealed class PriorAuthRulesController : ControllerBase
     [ProducesResponseType(typeof(PlanPaRequiredServices), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
-    public async Task<IActionResult> PlanRequiredServices(string planId, [FromQuery] bool includeDrugs, CancellationToken ct)
+    public async Task<IActionResult> PlanRequiredServices(string planId, [FromQuery] bool includeDrugs,
+        // Per action, not in the constructor: the plan service's dependencies
+        // (ACA limits file etc.) must not be built for the controller's other actions.
+        [FromServices] IBenefitPlanService plans, [FromServices] IProgramDirectory? programs, CancellationToken ct)
     {
-        if (_plans is null) return StatusCode(StatusCodes.Status501NotImplemented);
         var tenantId = _actor.TenantId;
         if (string.IsNullOrWhiteSpace(tenantId)) return BadRequest(new { error = "Tenant context missing." });
 
-        var plan = await _plans.GetPlanAsync(planId, tenantId);
+        var plan = await plans.GetPlanAsync(planId, tenantId);
         if (plan is null) return NotFound(new { error = "No such plan." });
 
         if (string.IsNullOrWhiteSpace(plan.ProgramId))
             return Ok(PlanPaRequiredServices.Unresolved(planId, null,
                 "The plan has no program, so its state and program are not stated."));
-        if (_programs is null)
+        if (programs is null)
             return Ok(PlanPaRequiredServices.Unresolved(planId, plan.ProgramId, "No program directory is configured."));
 
         ProgramDescriptor? program;
         try
         {
-            program = await _programs.GetAsync(tenantId, plan.ProgramId, ct);
+            program = await programs.GetAsync(tenantId, plan.ProgramId, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
