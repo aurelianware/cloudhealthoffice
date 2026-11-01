@@ -54,12 +54,39 @@ Two outputs feed the next steps: `hosted_disk_kms_key` (the encrypted StorageCla
 | # | Workstream | Status |
 | --- | --- | --- |
 | 1 | Infrastructure base: keys, private regional cluster, organization policies, audit log bucket | In this module |
-| 2 | State services: Managed Service for Apache Kafka with TLS and SASL, Memorystore for Redis, MongoDB on an encrypted SSD StorageClass with TLS | Next |
+| 2 | State services: Kafka (Strimzi) with a TLS-only listener and SCRAM-SHA-512, Redis with TLS, a password and an append-only file, MongoDB with TLS, all on encrypted disks | `HOSTED=true` in `scripts/deploy-gke.sh` (see Deploy) |
 | 3 | Ingress: Google external load balancer, managed certificates, Cloud Armor, Identity-Aware Proxy for the portal, public FHIR endpoints under SMART, the SFTP address | Next |
-| 4 | Production hosts and sign-in: a `hosted` mode in `scripts/deploy-gke.sh` (Production hosts, synthetic data refused, Cloud KMS token signing, staff sign-in from IAP or the plan's identity provider), and the deploy using the DNS endpoint | Next |
-| 5 | Secrets in Secret Manager behind the secret provider interface | Next |
+| 4 | Production hosts and sign-in: a `hosted` mode in `scripts/deploy-gke.sh` (Production hosts, synthetic data refused, Cloud KMS token signing, staff sign-in from IAP or the plan's identity provider), and the deploy using the DNS endpoint | `HOSTED=true` and the `deploy-gcp-hosted` workflow (see Deploy) |
+| 5 | Secrets in Secret Manager | Database passwords in Secret Manager (`hosted-secrets.tf`), copied into Kubernetes secrets encrypted with the `gke-secrets` key |
 | 6 | Alerts on IAM changes, key changes and repeated failed sign-ins | Next |
 | 7 | Backup for GKE (daily, 35 days) and a timed restore drill | Next |
 | 8 | Administrative safeguards: risk analysis, policies, training record, quarterly access review, plan BAA template | Next |
 
 Cloudflare Tunnel and Access stay on the demo only. Cloudflare decrypts traffic at its edge, so it would need its own BAA before it could carry PHI.
+
+## Deploy
+
+`scripts/deploy-gke.sh` with `HOSTED=true` deploys onto the hosted cluster. The `deploy-gcp-hosted` workflow runs it, and then `deploy/gcp/hosted/apply-ingress.sh`, from a manual run only. Every job runs in the GitHub environment `hosted`. Give that environment required reviewers so each deploy is approved, and keep the hosted secrets and variables there, never at repository level. The workflow's header lists each setting and the Terraform output it comes from.
+
+What hosted mode changes, compared with the demo:
+
+| Area | Hosted |
+| --- | --- |
+| Disks | StorageClass `cho-pd-cmek`: balanced disks encrypted with the `disks` key, kept when a claim is deleted (`Retain`) |
+| Kafka | `deploy/gcp/hosted/kafka-cluster.yaml`: one TLS listener on 9093 with SCRAM-SHA-512, brokers spread across zones, a five-year cluster CA. Every service signs in as KafkaUser `cho-services`; the script copies its password into `kafka-secret` |
+| MongoDB | TLS required (`requireTLS`), 100 GB encrypted disk |
+| Redis | `deploy/gcp/hosted/redis.yaml`: TLS only, a password, an append-only file fsynced every second on an encrypted disk. benefit-plan-service's accumulator state survives a restart |
+| Certificates | A private CA in Secret `cho-internal-ca` issues the MongoDB and Redis certificate (825 days, reissued 30 days before expiry). The services trust ConfigMap `cho-ca-bundle`: the public CAs, Kafka's cluster CA and the internal CA, mounted over each image's own bundle |
+| Passwords | Generated once, kept in Secret Manager (`cho-mongodb-password`, `cho-redis-password`, `cho-postgres-password`, `cho-pricing-admin-secret`), so a rebuilt or restored cluster gets the same ones. If the deployer can't read a secret, the deploy stops rather than make a new password |
+| Tenant | No demo tenant or synthetic member. The plan's tenant (`HOSTED_TENANT`) and a TenantAdmin for each `HOSTED_ADMIN_EMAILS` address |
+| Sign-in and hosts | Production hosts, Google Cloud IAP for staff, public FHIR and SMART hosts (`FHIR_HOST`, `AUTH_HOST`) behind the Google load balancer, whose GFE ranges are the only trusted proxies |
+| Refused | Cloudflare (tunnel and Access), the demo tenant or a demo cluster context, the small resource profile, Kafka off, the managed FHIR store copy, and the AI claims examiner unless `ANTHROPIC_BAA_CONFIRMED=true` (it sends claim data to Claude, so it needs a BAA with Anthropic) |
+
+The Kafka cluster CA renews 60 days before it expires. Deploy at least once in that window so `cho-ca-bundle` carries the new CA.
+
+Known limits:
+
+- MongoDB and Redis run one replica each. A zone outage stops them until the disk is reattached in another zone or restored from the daily backup.
+- Kafka authenticates every client but has no per-topic ACLs: all services share one Kafka identity.
+- PostgreSQL (reference-data-service) holds code sets, not member data. It uses the encrypted disk but not TLS.
+- `tests`: `python3 -m pytest deploy/gcp/hosted/test_deploy_gke_hosted.py` runs the script against stub `kubectl`, `helm` and `gcloud`. It checks what is applied, not a live cluster. The first real deploy is the proof.

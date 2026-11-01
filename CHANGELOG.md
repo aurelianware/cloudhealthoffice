@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Hosted mode for `scripts/deploy-gke.sh` (`HOSTED=true`) and a manual, approval-gated `deploy-gcp-hosted` workflow. Disks are encrypted with the hosted disks key. Kafka gets a TLS-only listener with SCRAM-SHA-512 sign-in. MongoDB and Redis serve TLS from an internal CA, and Redis gets a password and an append-only file. Database passwords are kept in Secret Manager (`infrastructure/gcp/hosted-secrets.tf`, its own CMEK key). The plan's tenant and administrators are seeded instead of the demo tenant. Cloudflare, demo tenants and the AI examiner without a BAA are refused. In hosted mode `render_manifests.py` gives every Kafka client the SASL credentials and sets `SSL_CERT_FILE` with the CA bundle. `CPCDS_DROP_BUCKET` and `CPCDS_DROP_SERVICE_ACCOUNT` now reach the renderer. See `docs/deploy/GCP-HOSTED-HIPAA.md`, "Deploy".
 - `render_manifests.py --hosted` for the hosted HIPAA environment. It renders Production hosts with synthetic data refused, keeps the FHIR data classified as PHI, and drops the demo seeding. Plan tenants must be named (never `demo`), and every Redis connection string is read from `redis-secret`. `--access-provider google-iap` signs the portal in through Google Cloud IAP. `--ca-bundle-configmap` gives every container a CA bundle that also trusts the in-cluster Kafka CA.
 
 ### Fixed
