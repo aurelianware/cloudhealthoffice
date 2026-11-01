@@ -160,7 +160,10 @@ public sealed class ClaimAccessAuditFilter : IAsyncActionFilter
             : executed.Result is ObjectResult { StatusCode: null } or JsonResult or ContentResult or FileResult or EmptyResult ? 200
             : 200;
         var value = (executed.Result as ObjectResult)?.Value ?? (executed.Result as JsonResult)?.Value;
-        var subjects = statusCode is >= 200 and < 300 ? ClaimSubjects.From(value) : [];
+        // A file download (a report's CSV) names its claims in HttpContext.Items.
+        var subjects = statusCode is >= 200 and < 300
+            ? ClaimSubjects.From(value ?? context.HttpContext.Items[ClaimSubjects.ItemsKey])
+            : [];
 
         await _writer.RecordAsync(context.HttpContext, audit, _actor, statusCode, null, subjects);
     }
@@ -196,6 +199,12 @@ public sealed class ClaimAccessDenialRecorder : IAuthorizationMiddlewareResultHa
 /// </summary>
 public static class ClaimSubjects
 {
+    /// <summary>
+    /// Where an endpoint whose response is not an object (a CSV file) puts
+    /// the rows it returned, so the access log still names their claims.
+    /// </summary>
+    public const string ItemsKey = "cho.claim-access.subjects";
+
     private static readonly string[] ListProperties = ["Items", "Claims", "Results", "Entries", "Entry", "Data", "ExplanationOfBenefits"];
 
     public static IReadOnlyList<ClaimSubject> From(object? value)

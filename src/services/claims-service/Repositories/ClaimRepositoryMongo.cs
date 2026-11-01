@@ -1234,6 +1234,24 @@ public class ClaimRepositoryMongo : IClaimRepository
         return result.ModifiedCount == 1;
     }
 
+    public async Task<IReadOnlyList<Claim>> FindFinalizedMedicaidAsync(
+        DateTime from, DateTime to, string? memberId, bool payAndChaseOnly, int limit, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(
+            b.Eq(c => c.TenantId, GetTenantId()),
+            b.Eq(c => c.LineOfBusiness, LineOfBusiness.Medicaid),
+            b.In(c => c.Status, new[] { ClaimStatus.Approved, ClaimStatus.PartiallyPaid, ClaimStatus.Paid }),
+            b.Gte(c => c.AdjudicatedDate, from),
+            b.Lt(c => c.AdjudicatedDate, to),
+            b.Eq(c => c.SupersededAt, null));
+        if (!string.IsNullOrWhiteSpace(memberId))
+            filter &= b.Eq(c => c.MemberId, memberId);
+        if (payAndChaseOnly)
+            filter &= b.Eq(c => c.AdjudicationResult!.ThirdPartyLiability!.Decision, "PayAndChase");
+        return (await _collection.Find(filter).SortBy(c => c.AdjudicatedDate).Limit(limit).ToListAsync(ct)).Select(Hydrate).ToList();
+    }
+
     public async Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(
         DateTime from, DateTime to, int limit, CancellationToken ct = default)
     {
@@ -1432,5 +1450,56 @@ public class ClaimRepositoryMongo : IClaimRepository
             .ToListAsync(ct);
 
         return items.Select(Hydrate).ToList();
+    }
+
+    public async Task<IReadOnlyList<(DateTime Received, DateTime? Adjudicated)>> GetReceiptToAdjudicationAsync(ClaimCriteria criteria, int limit, CancellationToken ct = default)
+    {
+        var rows = await _collection.Find(ClaimCriteriaFilter.Build(GetTenantId(), criteria))
+            .SortBy(c => c.SubmittedDate)
+            .Limit(Math.Max(limit, 1))
+            .Project(c => new { c.SubmittedDate, c.AdjudicatedDate })
+            .ToListAsync(ct);
+        return rows.Select(r => (r.SubmittedDate, r.AdjudicatedDate)).ToList();
+    }
+
+    public async Task<(IReadOnlyList<Claim> Rows, int TotalCount)> GetReportRowsAsync(ClaimCriteria criteria, int limit, CancellationToken ct = default)
+    {
+        var filter = ClaimCriteriaFilter.Build(GetTenantId(), criteria);
+        var total = (int)await _collection.CountDocumentsAsync(filter, cancellationToken: ct);
+        var docs = await _collection.Find(filter)
+            .SortBy(c => c.SubmittedDate).ThenBy(c => c.Id)
+            .Limit(Math.Max(limit, 1))
+            .ToListAsync(ct);
+        return (docs.Select(Hydrate).ToList(), total);
+    }
+
+    public async Task<IReadOnlyList<Finance.ClaimPaymentVersion>> GetPaymentVersionsAsync(
+        DateTime incurredFrom, DateTime incurredBefore, LineOfBusiness? lineOfBusiness, CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        var b = Builders<Claim>.Filter;
+        var filter = b.Eq(c => c.TenantId, tenantId)
+                     & b.Gte(c => c.ServiceDateFrom, incurredFrom)
+                     & b.Lt(c => c.ServiceDateFrom, incurredBefore);
+        if (lineOfBusiness.HasValue)
+            filter &= b.Eq(c => c.LineOfBusiness, lineOfBusiness.Value);
+
+        // Projected and streamed: a year of a large plan's claims is millions
+        // of versions, of which only five fields are needed.
+        var rows = await _collection.Find(filter)
+            .Project(c => new
+            {
+                c.ClaimNumber,
+                c.VersionNumber,
+                c.ServiceDateFrom,
+                c.PaidDate,
+                Paid = c.AdjudicationResult == null ? 0m : c.AdjudicationResult.PayerPayment,
+                c.Status,
+                c.VersionState
+            })
+            .ToListAsync(ct);
+        return rows.Select(r => new Finance.ClaimPaymentVersion(
+            r.ClaimNumber, r.VersionNumber, r.ServiceDateFrom, r.PaidDate, r.Paid,
+            r.Status == ClaimStatus.Voided || r.VersionState == ClaimVersionState.Voided)).ToList();
     }
 }

@@ -56,6 +56,7 @@ public class ClaimOutcomeWriterRouteGuardTests
             ["POST api/v1/claims/import/raw837/validate"] = (Kind.NoStatusChange, "validation only"),
             ["POST api/claims/search"] = (Kind.NoStatusChange, "read"),
             ["POST api/claims/authorization-usage"] = (Kind.NoStatusChange, "read: claim counts per prior authorization number"),
+            ["POST api/claims/finance/ibnr"] = (Kind.NoStatusChange, "read: paid-claims lag triangle and IBNR estimate (POST for the member-month body)"),
             ["PUT api/claims/{id}/ai-examination"] = (Kind.NoStatusChange, "advisory AI recommendation"),
             ["POST api/claims/{id}/ai-examination/agreement"] = (Kind.NoStatusChange, "examiner feedback on the AI recommendation"),
             ["POST api/claims/{claimId}/notes"] = (Kind.NoStatusChange, "appends a reviewer note; never touches the claim"),
@@ -71,6 +72,14 @@ public class ClaimOutcomeWriterRouteGuardTests
                 "saves the tenant's warehouse extract settings (extracts:manage); writes no claim"),
             ["POST api/claims/extracts/claims/runs"] = (Kind.NoStatusChange,
                 "starts a warehouse extract: reads claims and writes files to the tenant's drop; the claim is never written"),
+            ["POST api/v1/claims/tpl-recoveries/sync"] = (Kind.NoStatusChange,
+                "opens Medicaid TPL recovery cases in their own collection from paid claims; reads claims only"),
+            ["POST api/v1/claims/tpl-recoveries/retroactive"] = (Kind.NoStatusChange,
+                "opens TPL recovery cases for paid claims that later-found TPL covers; reads claims only"),
+            ["POST api/v1/claims/tpl-recoveries/{id}/events"] = (Kind.NoStatusChange,
+                "records a bill, payment, repayment plan or write-off on a recovery case; never touches the claim"),
+            ["POST api/v1/claims/tpl-recoveries/apply-clocks"] = (Kind.NoStatusChange,
+                "hands expired recovery cases to the state; never touches the claim"),
         };
 
     [Fact]

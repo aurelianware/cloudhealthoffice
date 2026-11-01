@@ -21,6 +21,7 @@ using ClaimsService.Services.Migrations;
 using ClaimsService.Services.Resolution;
 using CloudHealthOffice.ClaimsScrubEngine.Configuration;
 using CloudHealthOffice.GrouperEngine.Services;
+using CloudHealthOffice.GrouperEngine.Licensed;
 using CloudHealthOffice.NcciEngine.Configuration;
 using CloudHealthOffice.PlanConfiguration;
 
@@ -491,6 +492,11 @@ builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>()
 // else — and AddPlanSettingsClient reads pricing.inpatient.groupDrg from
 // tenant-service.
 builder.Services.AddMsDrgGrouper(builder.Configuration);
+// The plan's licensed APR-DRG grouper, for lines of business whose
+// pricing.inpatient.drgClassification is aprDrg (Texas and California
+// Medicaid). With no LicensedGrouper:BaseUrl it answers NotConfigured and
+// such claims pend GROUPERUNAVAIL; nothing else reads it.
+builder.Services.AddLicensedGroupers(builder.Configuration);
 builder.Services.AddPlanSettingsClient(builder.Configuration);
 builder.Services.AddScoped<IClaimAdjudicationStage, InpatientGroupingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PricingStage>();
@@ -501,6 +507,12 @@ builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStage>();
 builder.Services.AddPlanEditService(builder.Configuration, builder.Environment);
 builder.Services.AddScoped<IClaimAdjudicationStage, PlanEditsStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStage>();
+// Medicaid third-party liability (Order=276): cost avoidance and pay-and-chase
+// against the state TPL file loaded into coverage-service. Off by default.
+builder.Services.Configure<ThirdPartyLiabilityOptions>(
+    builder.Configuration.GetSection(ThirdPartyLiabilityOptions.SectionName));
+builder.Services.AddScoped<ITplClient, HttpTplClient>();
+builder.Services.AddScoped<IClaimAdjudicationStage, ThirdPartyLiabilityStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, AiExaminationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PersistenceStage>();
 
@@ -535,6 +547,10 @@ builder.Services.Configure<ClaimsService.Services.Adjudication.Shadow.ShadowAdju
     builder.Configuration.GetSection(ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationOptions.SectionName));
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationRepository,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationRepositoryMongo>();
+// Medicaid TPL recovery cases (pay-and-chase and retroactive), with the
+// state retention clock and monthly report.
+builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryRepository, ClaimsService.Services.Tpl.TplRecoveryRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryService, ClaimsService.Services.Tpl.TplRecoveryService>();
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationService,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationService>();
 

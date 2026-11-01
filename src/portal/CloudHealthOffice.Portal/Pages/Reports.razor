@@ -1,11 +1,302 @@
 @page "/reports"
+@using System.Globalization
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
+@inject IReportsService ReportsService
+@inject IUserContextService UserContext
+@inject IJSRuntime JS
 
 <PageTitle>Reports - Cloud Health Office</PageTitle>
 
-<RedesignNotice Title="Reports">
-    The reports here were never backed by a service. Reporting is being built to the design in
-    docs/architecture/portal-reporting.md: standard reports by module, regulatory reports and data
-    extracts, each with its own permission.
-</RedesignNotice>
+@*
+    Reports (docs/architecture/portal-reporting.md, layer 2: module standard
+    reports). Each module serves its own catalog and runs; the page lists the
+    reports the user may run, renders each report's parameters from its
+    definition, shows the rows and downloads the same run as CSV. The services
+    enforce the permissions and write every row-level run to the access log.
+*@
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" Class="mb-4">
+        <MudIcon Icon="@Icons.Material.Filled.Assessment" Class="mr-2" />
+        Reports
+    </MudText>
+
+    @if (_modules is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_modules.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" data-testid="reports-none">
+            You don't have permission to run any reports. Claims reports need reports:claims; prior authorization and
+            appeals reports need reports:um or reports:compliance.
+        </MudAlert>
+    }
+    else
+    {
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="3" data-testid="reports-catalog">
+                @foreach (var m in _modules)
+                {
+                    <MudText Typo="Typo.overline" Class="d-block mt-2" data-testid="reports-module">@m.Module.Title</MudText>
+                    @if (m.Error is not null)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Warning" Class="d-block" data-testid="reports-module-error">@m.Error</MudText>
+                    }
+                    <MudList T="string" Dense="true">
+                        @foreach (var r in m.Reports)
+                        {
+                            <MudListItem T="string" Href="@($"/reports?report={Uri.EscapeDataString(r.Id)}")" data-testid="reports-catalog-item">
+                                <MudText Typo="Typo.body2" Class="@(r.Id == _selected?.Report.Id ? "font-weight-bold" : null)">@r.Name</MudText>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
+                    Finance and state regulatory reports are being added.
+                </MudText>
+            </MudItem>
+
+            <MudItem xs="12" md="9">
+                @if (_selected is null)
+                {
+                    <MudText Color="Color.Secondary" data-testid="reports-pick">Pick a report.</MudText>
+                }
+                else
+                {
+                    var r = _selected.Report;
+                    <MudPaper Class="pa-4 mb-3" Elevation="1" data-testid="report-form">
+                        <MudText Typo="Typo.h5">@r.Name</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-1">@r.Description</MudText>
+                        @if (r.Regulation is not null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2" data-testid="report-regulation">Standard: @r.Regulation</MudText>
+                        }
+                        <div class="d-flex flex-wrap align-end gap-3 mt-2">
+                            @foreach (var p in r.Parameters)
+                            {
+                                var name = p.Name;
+                                @switch (Kind(p))
+                                {
+                                    case ParameterKind.Date:
+                                        <MudDatePicker Date="@DateValue(name)" DateChanged="@(d => SetDate(name, d))" Label="@Label(p)"
+                                                       Dense="true" Variant="Variant.Outlined" Style="max-width: 190px;" data-testid="@($"param-{name}")" />
+                                        break;
+                                    case ParameterKind.Choice:
+                                        <MudSelect T="string" Value="@(_values.GetValueOrDefault(name) ?? "")" ValueChanged="@(v => SetValue(name, v))"
+                                                   Label="@Label(p)" Dense="true" Variant="Variant.Outlined" Style="max-width: 200px;" data-testid="@($"param-{name}")">
+                                            <MudSelectItem T="string" Value="@("")">Any</MudSelectItem>
+                                            @foreach (var option in Options(p))
+                                            {
+                                                <MudSelectItem T="string" Value="@option.Value">@option.Label</MudSelectItem>
+                                            }
+                                        </MudSelect>
+                                        break;
+                                    case ParameterKind.Number:
+                                        <MudNumericField T="int?" Value="@IntValue(name)" ValueChanged="@(v => SetValue(name, v?.ToString(CultureInfo.InvariantCulture)))"
+                                                         Label="@Label(p)" Min="0" Dense="true" Variant="Variant.Outlined" Style="max-width: 170px;"
+                                                         data-testid="@($"param-{name}")" />
+                                        break;
+                                    default:
+                                        <MudTextField T="string" Value="@_values.GetValueOrDefault(name)" ValueChanged="@(v => SetValue(name, v))"
+                                                      Label="@Label(p)" Dense="true" Variant="Variant.Outlined" Style="max-width: 200px;"
+                                                      data-testid="@($"param-{name}")" />
+                                        break;
+                                }
+                            }
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RunAsync" Disabled="_running" data-testid="report-run">Run</MudButton>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download"
+                                       OnClick="DownloadAsync" Disabled="_running" data-testid="report-csv">CSV</MudButton>
+                        </div>
+                    </MudPaper>
+
+                    @if (_running)
+                    {
+                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+                    }
+                    @if (_runError is not null)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-2" data-testid="report-run-error">@_runError</MudAlert>
+                    }
+                    @if (_run is not null)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" data-testid="report-meta">
+                            @(_run.Truncated ? $"Showing {_run.Items.Count:N0} of {_run.TotalCount:N0}" : $"{_run.TotalCount:N0} rows")
+                            · run @_run.AsOf.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture) by @_run.RunBy
+                        </MudText>
+                        @if (_run.Truncated)
+                        {
+                            <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Text" data-testid="report-truncated">
+                                More rows match than one run returns. Narrow the parameters; full extracts are coming with the data warehouse feed.
+                            </MudAlert>
+                        }
+                        @foreach (var note in _run.Notes)
+                        {
+                            <MudText Typo="Typo.caption" Class="d-block" data-testid="report-note">@note</MudText>
+                        }
+                        <MudSimpleTable Dense="true" Hover="true" Striped="true" Class="mt-2" Style="overflow-x: auto;" data-testid="report-table">
+                            <thead>
+                                <tr>
+                                    @foreach (var c in _run.Columns)
+                                    {
+                                        <th>@ReportRunView.Header(c)</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (_run.Items.Count == 0)
+                                {
+                                    <tr><td colspan="@_run.Columns.Count" data-testid="report-empty">No rows.</td></tr>
+                                }
+                                @foreach (var row in _run.Items)
+                                {
+                                    <tr data-testid="report-row">
+                                        @foreach (var c in _run.Columns)
+                                        {
+                                            @if (ReportRunView.Link(row, c) is { } href)
+                                            {
+                                                <td><MudLink Href="@href">@ReportRunView.Cell(row, c)</MudLink></td>
+                                            }
+                                            else
+                                            {
+                                                <td>@ReportRunView.Cell(row, c)</td>
+                                            }
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                }
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private sealed record LoadedModule(ReportModule Module, List<ReportDefinitionView> Reports, string? Error);
+    private sealed record SelectedReport(ReportModule Module, ReportDefinitionView Report);
+    private enum ParameterKind { Text, Date, Choice, Number }
+
+    [SupplyParameterFromQuery(Name = "report")] public string? ReportId { get; set; }
+
+    private List<LoadedModule>? _modules;
+    private SelectedReport? _selected;
+
+    private readonly Dictionary<string, string?> _values = new();
+
+    private bool _running;
+    private ReportRunView? _run;
+    private string? _runError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UserContext.GetCurrentUserAsync();
+        var allowed = ReportModules.All.Where(m => m.Permissions.Any(UserContext.HasPermission)).ToList();
+        var loaded = await Task.WhenAll(allowed.Select(LoadAsync));
+        _modules = loaded.Where(m => m.Reports.Count > 0 || m.Error is not null).ToList();
+    }
+
+    private async Task<LoadedModule> LoadAsync(ReportModule module)
+    {
+        try
+        {
+            return new LoadedModule(module, await ReportsService.GetCatalogAsync(module), null);
+        }
+        catch (ServiceUnavailableException)
+        {
+            return new LoadedModule(module, new(), $"{module.Title} reports couldn't be loaded.");
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        var selected = _modules?
+            .SelectMany(m => m.Reports.Select(r => new SelectedReport(m.Module, r)))
+            .FirstOrDefault(s => string.Equals(s.Report.Id, ReportId, StringComparison.OrdinalIgnoreCase));
+        if (selected?.Report.Id == _selected?.Report.Id) return;
+        _selected = selected;
+        _values.Clear();
+        _run = null;
+        _runError = null;
+    }
+
+    private static ParameterKind Kind(ReportParameterView p) => p.Type switch
+    {
+        "date" => ParameterKind.Date,
+        "int" => ParameterKind.Number,
+        "bool" or "LineOfBusiness" => ParameterKind.Choice,
+        _ when p.Name is "requestType" or "kind" => ParameterKind.Choice,
+        _ => ParameterKind.Text,
+    };
+
+    private IEnumerable<(string Value, string Label)> Options(ReportParameterView p) => p switch
+    {
+        { Type: "bool" } => [("true", "Yes"), ("false", "No")],
+        { Type: "LineOfBusiness" } => _selected!.Module.LinesOfBusiness.Select(l => (l, l)),
+        { Name: "requestType" } => [("Standard", "Standard"), ("Expedited", "Expedited")],
+        { Name: "kind" } => [("Appeal", "Appeal"), ("Grievance", "Grievance")],
+        _ => [],
+    };
+
+    private static string Label(ReportParameterView p) => p.Name switch
+    {
+        "from" => "From",
+        "to" => "To (exclusive)",
+        "lineOfBusiness" => "Line of business",
+        "minAgeDays" => "At least (days old)",
+        _ => ReportRunView.Header(char.ToUpperInvariant(p.Name[0]) + p.Name[1..]),
+    };
+
+    private void SetValue(string name, string? value) =>
+        _values[name] = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private DateTime? DateValue(string name) =>
+        DateTime.TryParseExact(_values.GetValueOrDefault(name), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;
+
+    private void SetDate(string name, DateTime? date) =>
+        _values[name] = date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private int? IntValue(string name) =>
+        int.TryParse(_values.GetValueOrDefault(name), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : null;
+
+    private async Task RunAsync()
+    {
+        if (_selected is null) return;
+        _running = true;
+        _runError = null;
+        try
+        {
+            _run = await ReportsService.RunAsync(_selected.Module, _selected.Report.Id, new Dictionary<string, string?>(_values));
+        }
+        catch (Exception ex) when (ex is ReportForbiddenException or ArgumentException or ServiceUnavailableException)
+        {
+            _run = null;
+            _runError = ex.Message;
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    private async Task DownloadAsync()
+    {
+        if (_selected is null) return;
+        _running = true;
+        _runError = null;
+        try
+        {
+            var file = await ReportsService.DownloadCsvAsync(_selected.Module, _selected.Report.Id, new Dictionary<string, string?>(_values));
+            await JS.InvokeVoidAsync("downloadBase64File", file.FileName, "text/csv", Convert.ToBase64String(file.Content));
+        }
+        catch (Exception ex) when (ex is ReportForbiddenException or ArgumentException or ServiceUnavailableException)
+        {
+            _runError = ex.Message;
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+}

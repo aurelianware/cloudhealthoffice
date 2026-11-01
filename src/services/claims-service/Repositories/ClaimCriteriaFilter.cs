@@ -44,6 +44,8 @@ public static class ClaimCriteriaFilter
             filter &= b.In(x => x.Status, ClaimStatusSets.Open);
         if (c.Adjudicated)
             filter &= b.In(x => x.Status, ClaimStatusSets.Outcome);
+        if (c.Denied)
+            filter &= b.In(x => x.Status, ClaimStatusSets.Denied);
         if (c.ReceivedAfter.HasValue)
             filter &= b.Gt(x => x.SubmittedDate, c.ReceivedAfter.Value);
         if (c.ReceivedOnOrBefore.HasValue)
