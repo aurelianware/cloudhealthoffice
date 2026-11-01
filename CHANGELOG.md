@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Draft HIPAA administrative safeguards for the Aurelianware-hosted environment (`docs/compliance/hipaa-hosted/`): risk analysis and risk management plan, security policies, incident response and breach notification, contingency plan with a restore drill, training record and quarterly access review. The BAA template now names Google Cloud as the hosted environment's subcontractor and requires notice before a new one. These drafts must be adopted and signed before the hosted environment holds PHI.
 - Hosted HIPAA profile for the Google Cloud Terraform (`hosted = true`, `infrastructure/gcp/hosted.tf`), for a separate project under a Google Cloud BAA: customer-managed Cloud KMS keys (90-day rotation) for Kubernetes secrets, node disks, every bucket and Artifact Registry; a private-node regional cluster on its own VPC with Cloud NAT, Shielded nodes, a least-privilege node account and a DNS control plane endpoint; project organization policies (US-only locations, no service account keys, no external VM addresses); and data access audit logs for every service, kept six years. Off by default, so the demo is unchanged. A new `terraform-gcp` workflow formats and validates the module. See `docs/deploy/GCP-HOSTED-HIPAA.md`.
 
 ## [6.2.0] - 2026-10-31
