@@ -11,14 +11,14 @@ adding or upgrading a dependency.
 
 ## Summary
 
-- **Shipped .NET packages** (production projects, transitive included): 369
+- **Shipped .NET packages** (production projects, transitive included): 366
 - **Shipped npm packages** (production dependencies): 183
 - **Test and build tooling** (not shipped): 172 NuGet, 447 npm
 
 | Licence | Shipped packages |
 |---|---|
 | MIT | 435 |
-| Apache-2.0 | 81 |
+| Apache-2.0 | 78 |
 | BSD-3-Clause | 23 |
 | ISC | 5 |
 | BSD-2-Clause | 2 |
@@ -90,6 +90,7 @@ Files shipped inside CHO's own assemblies rather than as packages:
 | CsvHelper | 33.0.1 | MS-PL OR Apache-2.0 | [link](https://joshclose.github.io/CsvHelper/) |
 | DnsClient | 1.6.1 | Apache-2.0 | [link](http://dnsclient.michaco.net/) |
 | EphemeralMongo | 3.2.0 | Apache-2.0 | [link](https://github.com/asimmon/ephemeral-mongo) |
+| ExcelDataReader | 3.8.0 | MIT | [link](https://github.com/ExcelDataReader/ExcelDataReader) |
 | ExCSS | 4.2.3 | MIT | [link](https://github.com/TylerBrinks/ExCSS) |
 | Fhir.Metrics | 1.3.0 | BSD-3-Clause | [link](https://github.com/FirelyTeam/Fhir.Metrics) |
 | Fluid.Core | 2.31.0 | MIT | [link](https://github.com/sebastienros/fluid) |
@@ -97,11 +98,8 @@ Files shipped inside CHO's own assemblies rather than as packages:
 | Google.Api.Gax | 4.13.1 | BSD-3-Clause | [link](https://github.com/googleapis/gax-dotnet) |
 | Google.Api.Gax.Grpc | 4.13.1 | BSD-3-Clause | [link](https://github.com/googleapis/gax-dotnet) |
 | Google.Api.Gax.Rest | 4.13.1 | BSD-3-Clause | [link](https://github.com/googleapis/gax-dotnet) |
-| Google.Apis | 1.73.0 | Apache-2.0 | [link](https://github.com/googleapis/google-api-dotnet-client) |
 | Google.Apis | 1.76.0 | Apache-2.0 | [link](https://github.com/googleapis/google-api-dotnet-client) |
-| Google.Apis.Auth | 1.73.0 | Apache-2.0 | [link](https://github.com/googleapis/google-api-dotnet-client) |
 | Google.Apis.Auth | 1.76.0 | Apache-2.0 | [link](https://github.com/googleapis/google-api-dotnet-client) |
-| Google.Apis.Core | 1.73.0 | Apache-2.0 | [link](https://github.com/googleapis/google-api-dotnet-client) |
 | Google.Apis.Core | 1.76.0 | Apache-2.0 | [link](https://github.com/googleapis/google-api-dotnet-client) |
 | Google.Apis.Storage.v1 | 1.76.0.4250 | Apache-2.0 | [link](https://github.com/google/google-api-dotnet-client) |
 | Google.Cloud.Iam.V1 | 3.5.0 | Apache-2.0 | [link](https://github.com/googleapis/google-cloud-dotnet) |
@@ -364,7 +362,6 @@ Files shipped inside CHO's own assemblies rather than as packages:
 | System.Buffers | 4.6.1 | MIT | [link](https://github.com/dotnet/maintenance-packages) |
 | System.ClientModel | 1.1.0 | MIT | [link](https://github.com/Azure/azure-sdk-for-net/blob/System.ClientModel_1.1.0/sdk/core/System.ClientModel/README.md) |
 | System.ClientModel | 1.11.0 | MIT | [link](https://github.com/Azure/azure-sdk-for-net/blob/System.ClientModel_1.11.0/sdk/core/System.ClientModel/README.md) |
-| System.CodeDom | 4.4.0 | MIT | [link](https://dot.net/) |
 | System.CodeDom | 7.0.0 | MIT | [link](https://dot.net/) |
 | System.Collections.Immutable | 6.0.0 | MIT | [link](https://dot.net/) |
 | System.Collections.Immutable | 8.0.0 | MIT | [link](https://dot.net/) |
@@ -450,9 +447,9 @@ Files shipped inside CHO's own assemblies rather than as packages:
 | @azure/identity | 4.14.0 | MIT | [link](https://www.npmjs.com/package/@azure/identity) |
 | @azure/logger | 1.3.0 | MIT | [link](https://www.npmjs.com/package/@azure/logger) |
 | @azure/msal-browser | 5.6.1 | MIT | [link](https://www.npmjs.com/package/@azure/msal-browser) |
-| @azure/msal-common | 16.14.1 | MIT | [link](https://www.npmjs.com/package/@azure/msal-common) |
+| @azure/msal-common | 16.14.3 | MIT | [link](https://www.npmjs.com/package/@azure/msal-common) |
 | @azure/msal-common | 16.4.0 | MIT | [link](https://www.npmjs.com/package/@azure/msal-common) |
-| @azure/msal-node | 6.0.1 | MIT | [link](https://www.npmjs.com/package/@azure/msal-node) |
+| @azure/msal-node | 7.1.1 | MIT | [link](https://www.npmjs.com/package/@azure/msal-node) |
 | @azure/openai | 2.0.0 | MIT | [link](https://www.npmjs.com/package/@azure/openai) |
 | @azure/service-bus | 7.10.0 | MIT | [link](https://www.npmjs.com/package/@azure/service-bus) |
 | @azure/storage-blob | 12.34.0 | MIT | [link](https://www.npmjs.com/package/@azure/storage-blob) |
@@ -509,7 +506,7 @@ Files shipped inside CHO's own assemblies rather than as packages:
 | es-object-atoms | 1.1.1 | MIT | [link](https://www.npmjs.com/package/es-object-atoms) |
 | events | 3.3.0 | MIT | [link](https://www.npmjs.com/package/events) |
 | fast-deep-equal | 3.1.3 | MIT | [link](https://www.npmjs.com/package/fast-deep-equal) |
-| fast-uri | 3.1.8 | BSD-3-Clause | [link](https://www.npmjs.com/package/fast-uri) |
+| fast-uri | 3.1.9 | BSD-3-Clause | [link](https://www.npmjs.com/package/fast-uri) |
 | fast-xml-builder | 1.2.0 | MIT | [link](https://www.npmjs.com/package/fast-xml-builder) |
 | fast-xml-parser | 5.7.1 | MIT | [link](https://www.npmjs.com/package/fast-xml-parser) |
 | flatbuffers | 25.9.23 | Apache-2.0 | [link](https://www.npmjs.com/package/flatbuffers) |
@@ -1133,7 +1130,7 @@ Files shipped inside CHO's own assemblies rather than as packages:
 | lru-cache | 5.1.1 | ISC | [link](https://www.npmjs.com/package/lru-cache) |
 | make-dir | 4.0.0 | MIT | [link](https://www.npmjs.com/package/make-dir) |
 | make-error | 1.3.6 | ISC | [link](https://www.npmjs.com/package/make-error) |
-| markdown-it | 14.3.2 | MIT | [link](https://www.npmjs.com/package/markdown-it) |
+| markdown-it | 14.3.3 | MIT | [link](https://www.npmjs.com/package/markdown-it) |
 | markdownlint | 0.41.1 | MIT | [link](https://www.npmjs.com/package/markdownlint) |
 | markdownlint-cli | 0.49.1 | MIT | [link](https://www.npmjs.com/package/markdownlint-cli) |
 | mdurl | 2.0.0 | MIT | [link](https://www.npmjs.com/package/mdurl) |

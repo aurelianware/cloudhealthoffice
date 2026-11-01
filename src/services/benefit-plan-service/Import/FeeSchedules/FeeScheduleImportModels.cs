@@ -124,6 +124,9 @@ public sealed class FeeScheduleImportReport
     public int LinesLoaded { get; set; }
     public int LinesWithFacilityRate { get; set; }
 
+    /// <summary>Lines whose file gave only a facility rate, loaded with it as their rate too.</summary>
+    public int LinesPricedOnlyInFacility { get; set; }
+
     /// <summary>Skipped row counts by reason.</summary>
     public Dictionary<string, int> Skipped { get; } = new();
     public List<FeeScheduleSkippedRow> SkippedExamples { get; } = new();

@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.IO.Compression;
+using System.Text;
 using CsvHelper;
 using CsvHelper.Configuration;
+using ExcelDataReader;
 
 namespace BenefitPlanService.Import.FeeSchedules;
 
@@ -21,7 +23,8 @@ public sealed record FeeScheduleColumns(
     int? Description,
     int? EffectiveDate,
     int? EndDate,
-    int? MultipleProcedureIndicator)
+    int? MultipleProcedureIndicator,
+    int? TypeOfService = null)
 {
     /// <summary>Column name per role, for the import report.</summary>
     public IReadOnlyDictionary<string, string> Describe()
@@ -40,6 +43,7 @@ public sealed record FeeScheduleColumns(
         Add("effectiveDate", EffectiveDate);
         Add("endDate", EndDate);
         Add("multipleProcedureIndicator", MultipleProcedureIndicator);
+        Add("typeOfService", TypeOfService);
         return d;
     }
 }
@@ -75,14 +79,14 @@ public static class FeeScheduleCsvReader
 
     internal static readonly string[] RateAliases =
     [
-        "adjustedfee", "nonfacilityadjustedfee", "nonfacilityfee", "nonfacilityrate", "nonfacilityprice", "nonfacilityamount", "nonfacilityallowable", "nonfacility",
+        "adjustedfee", "nonfacilityadjustedfee", "adjustedfeeforreportdate", "nonfacilityadjustedfeeforreportdate", "nonfacilityfee", "nonfacilityrate", "nonfacilityprice", "nonfacilityamount", "nonfacilityallowable", "nonfacility",
         "nonfacilitypricingamount", "medicaidfee", "medicaidrate", "maximumallowable", "maximumallowablefee", "maxallowable",
         "maximumfee", "maxfee", "feescheduleamount", "feeamount", "allowedamount", "allowable", "allowed",
         "officefee", "basicrate", "rate", "fee", "amount", "price", "paymentrate", "reimbursementrate", "reimbursement", "negotiatedrate",
     ];
 
     internal static readonly string[] FacilityRateAliases =
-        ["facilityadjustedfee", "facilityfee", "facilityrate", "facilityprice", "facilityamount", "facilityallowable", "facilitypricingamount", "facility"];
+        ["facilityadjustedfee", "facilityadjustedfeeforreportdate", "facilityfee", "facilityrate", "facilityprice", "facilityamount", "facilityallowable", "facilitypricingamount", "facility"];
 
     internal static readonly string[] ModifierAliases =
         ["modifier", "modifier1", "mod", "mod1", "proceduremodifier", "procmod", "procmodifier"];
@@ -100,6 +104,9 @@ public static class FeeScheduleCsvReader
     internal static readonly string[] EndDateAliases =
         ["enddate", "rateenddate", "termdate", "terminationdate", "expirationdate", "thrudate", "throughdate", "todate"];
 
+    /// <summary>TMHP's one-character type of service; I and T rows become 26 and TC lines.</summary>
+    internal static readonly string[] TypeOfServiceAliases = ["tos", "typeofservice"];
+
     internal static readonly string[] MultipleProcedureAliases =
         ["multproc", "multipleprocedure", "multipleprocedureindicator", "multprocind", "mpi"];
 
@@ -107,7 +114,11 @@ public static class FeeScheduleCsvReader
     public static string Normalize(string header) =>
         new(header.Trim().TrimStart('﻿').ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
 
-    /// <summary>Opens the upload as CSV; a zip (by name or "PK" signature) yields its first .csv entry.</summary>
+    /// <summary>
+    /// Opens the upload as CSV. An Excel workbook (.xls or .xlsx) is read from its first sheet;
+    /// a zip (by name or "PK" signature) yields its first .csv entry, else its largest .txt,
+    /// else its one Excel workbook.
+    /// </summary>
     public static Stream OpenCsv(Stream content, string? fileName)
     {
         var seekable = content;
@@ -119,30 +130,94 @@ public static class FeeScheduleCsvReader
             seekable = copy;
         }
 
-        var isZip = fileName?.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) == true;
-        if (!isZip && seekable.Length >= 2)
-        {
-            var b0 = seekable.ReadByte();
-            var b1 = seekable.ReadByte();
-            seekable.Position = 0;
-            isZip = b0 == 'P' && b1 == 'K';
-        }
+        var head = new byte[4];
+        var headLength = seekable.Read(head, 0, head.Length);
+        seekable.Position = 0;
+        // An .xls (BIFF in an OLE compound file) starts D0 CF 11 E0.
+        if (headLength == 4 && head[0] == 0xD0 && head[1] == 0xCF && head[2] == 0x11 && head[3] == 0xE0)
+            return ExcelToCsv(seekable, fileName);
+
+        var isZip = fileName?.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) == true
+            || (headLength >= 2 && head[0] == 'P' && head[1] == 'K');
         if (!isZip) return seekable;
 
-        var archive = new ZipArchive(seekable, ZipArchiveMode.Read, leaveOpen: false);
+        var archive = new ZipArchive(seekable, ZipArchiveMode.Read, leaveOpen: true);
+        // An .xlsx is itself a zip.
+        if (archive.GetEntry("xl/workbook.xml") is not null)
+        {
+            archive.Dispose();
+            seekable.Position = 0;
+            return ExcelToCsv(seekable, fileName);
+        }
+
         // A .csv first; otherwise the largest .txt (DHCS's Medi-Cal zip holds rates_data.txt and the
-        // much smaller conv_data.txt).
+        // much smaller conv_data.txt); otherwise the zip's one Excel workbook.
         var entry = archive.Entries.FirstOrDefault(e => e.FullName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
             ?? archive.Entries.Where(e => e.FullName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(e => e.Length).FirstOrDefault()
-            ?? throw new FeeScheduleFormatException(
-                $"The zip '{fileName}' has no .csv or .txt file in it. Save an Excel fee schedule as CSV first.");
+                .OrderByDescending(e => e.Length).FirstOrDefault();
+        var excel = false;
+        if (entry is null)
+        {
+            var workbooks = archive.Entries
+                .Where(e => !e.FullName.StartsWith("__MACOSX/", StringComparison.Ordinal)
+                    && (e.FullName.EndsWith(".xls", StringComparison.OrdinalIgnoreCase)
+                        || e.FullName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+            if (workbooks.Count > 1)
+                throw new FeeScheduleFormatException(
+                    $"The zip '{fileName}' holds {workbooks.Count} Excel workbooks; upload the one fee schedule to import.");
+            entry = workbooks.FirstOrDefault()
+                ?? throw new FeeScheduleFormatException(
+                    $"The zip '{fileName}' has no .csv, .txt or Excel file in it.");
+            excel = true;
+        }
         // Copied out so the reader can look at the start of the file to tell tab from comma.
         var copyOut = new MemoryStream();
         using (var entryStream = entry.Open()) entryStream.CopyTo(copyOut);
         archive.Dispose();
         copyOut.Position = 0;
-        return copyOut;
+        return excel ? ExcelToCsv(copyOut, entry.Name) : copyOut;
+    }
+
+    /// <summary>
+    /// The first sheet of an .xls or .xlsx workbook as CSV text. Numbers are written in invariant
+    /// form and dates as MM/dd/yyyy, so the CSV reader sees what the sheet shows for the
+    /// columns it reads.
+    /// </summary>
+    internal static Stream ExcelToCsv(Stream workbook, string? fileName)
+    {
+        // .xls files carry Windows code page text.
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var csv = new MemoryStream();
+        try
+        {
+            using var excel = ExcelReaderFactory.CreateReader(workbook);
+            using (var writer = new StreamWriter(csv, new UTF8Encoding(false), leaveOpen: true))
+            using (var csvWriter = new CsvWriter(writer, CultureInfo.InvariantCulture))
+            {
+                while (excel.Read())
+                {
+                    for (var i = 0; i < excel.FieldCount; i++)
+                    {
+                        csvWriter.WriteField(excel.GetValue(i) switch
+                        {
+                            null => string.Empty,
+                            DateTime d => d.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture),
+                            double n => n.ToString("0.############", CultureInfo.InvariantCulture),
+                            IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
+                            var v => v.ToString() ?? string.Empty,
+                        });
+                    }
+                    csvWriter.NextRecord();
+                }
+            }
+        }
+        catch (Exception e) when (e is not FeeScheduleFormatException)
+        {
+            throw new FeeScheduleFormatException($"The Excel file '{fileName}' could not be read: {e.Message}");
+        }
+        csv.Position = 0;
+        return csv;
     }
 
     /// <summary>
@@ -178,6 +253,37 @@ public static class FeeScheduleCsvReader
             var record = parser.Record ?? [];
             searchedRows.Add((rowNumber, record));
             found = TryResolve(record, rowNumber, overrides);
+            // The second row of a two-row header whose top row alone is not a header (TMHP's
+            // hospital imaging schedule, priced under "Urban Hospitals" and "Rural Hospitals").
+            if (found is null && searchedRows.Count >= 2)
+            {
+                var (topRow, top) = searchedRows[^2];
+                if (TryResolve(CombineHeaderRows(top, record), topRow, overrides) is { } combined
+                    && IsHeaderContinuation(record, combined.Code))
+                {
+                    found = combined;
+                }
+            }
+        }
+
+        // A header over two rows (TMHP: "Non-facility" over "Total RVUs", "Medicaid Fee",
+        // "Adjusted Fee for Report Date", ...): the top row's group labels name the sub-columns
+        // below them. The top row alone can look like a header whose rate is a group label, so
+        // the combined header wins when it resolves.
+        var held = new List<(int Row, string[] Fields)>();
+        if (found is not null && parser.Read())
+        {
+            var next = parser.Record ?? [];
+            var top = found.Header.ToArray();
+            if (IsHeaderContinuation(next, found.Code)
+                && TryResolve(CombineHeaderRows(top, next), found.HeaderRowNumber, overrides) is { } combined)
+            {
+                found = combined;
+            }
+            else
+            {
+                held.Add((parser.Row, next));
+            }
         }
 
         // DHCS's Medi-Cal rates_data.txt has no header row: give it the columns of its Excel twin,
@@ -199,7 +305,7 @@ public static class FeeScheduleCsvReader
 
         columns(found);
 
-        foreach (var (row, record) in replay)
+        foreach (var (row, record) in replay.Concat(held))
         {
             if (record.All(string.IsNullOrWhiteSpace)) continue;
             yield return (row, record);
@@ -212,6 +318,35 @@ public static class FeeScheduleCsvReader
             if (record is null || record.All(string.IsNullOrWhiteSpace)) continue;
             yield return (rowNumber, record);
         }
+    }
+
+    /// <summary>
+    /// True when <paramref name="next"/> is the second row of a two-row header: nothing in the
+    /// code column, and at least two cells with letters in them (data rows have a code; a row
+    /// of footnote numbers has no letters).
+    /// </summary>
+    internal static bool IsHeaderContinuation(string[] next, int codeColumn) =>
+        (codeColumn >= next.Length || string.IsNullOrWhiteSpace(next[codeColumn]))
+        && next.Count(c => c.Any(char.IsLetter)) >= 2;
+
+    /// <summary>
+    /// One header from two rows: a sub-label is prefixed with the group label above it, carried
+    /// right across the blank cells of a merged group ("Non-facility" + "Adjusted Fee" →
+    /// "Non-facility Adjusted Fee"); a column with no sub-label keeps its top label.
+    /// </summary>
+    internal static string[] CombineHeaderRows(string[] top, string[] sub)
+    {
+        var width = Math.Max(top.Length, sub.Length);
+        var combined = new string[width];
+        var group = string.Empty;
+        for (var i = 0; i < width; i++)
+        {
+            var t = i < top.Length ? top[i].Trim() : string.Empty;
+            var s = i < sub.Length ? sub[i].Trim() : string.Empty;
+            if (t.Length > 0) group = t;
+            combined[i] = s.Length == 0 ? t : group.Length == 0 ? s : $"{group} {s}";
+        }
+        return combined;
     }
 
     /// <summary>The columns of DHCS's Medi-Cal Rates worksheet, which rates_data.txt has without a header.</summary>
@@ -304,6 +439,7 @@ public static class FeeScheduleCsvReader
             Description: Find(null, DescriptionAliases, code, rate, facility),
             EffectiveDate: Find(null, EffectiveDateAliases, code, rate, facility),
             EndDate: Find(null, EndDateAliases, code, rate, facility),
-            MultipleProcedureIndicator: Find(null, MultipleProcedureAliases, code, rate, facility));
+            MultipleProcedureIndicator: Find(null, MultipleProcedureAliases, code, rate, facility),
+            TypeOfService: Find(null, TypeOfServiceAliases, code, rate, facility, modifier));
     }
 }
