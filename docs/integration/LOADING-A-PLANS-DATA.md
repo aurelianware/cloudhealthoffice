@@ -64,6 +64,13 @@ uncontracted providers pend. Contracted providers' terms load with the
 [contract roster importer](CONTRACT-ROSTER-IMPORTER.md)
 (`POST /api/v1/pricing-contracts/import/csv`).
 
+The plan's list of services that need prior authorization loads with the
+[prior-auth list importer](PRIOR-AUTH-RULES-IMPORTER.md)
+(`POST /api/v1/prior-auth-rules/import/csv?stateCode=..&lob=..&program=..`).
+CRD, PAS and the CMS-0057-F public list answer from it. Without it they use
+the platform's state rule set, where one exists, and otherwise say the
+requirements are unknown.
+
 ## 2. Plan-code mappings
 
 The core names plans by its own codes: the 834 HD04 value, or the CPCDS
