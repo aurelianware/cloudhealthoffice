@@ -118,12 +118,20 @@ public static class StandardReports
     public static (DateTime From, DateTime To, string? Error) Period(
         DateTime? from, DateTime? to, DateTime asOf, TimeSpan defaultLength, TimeSpan maxLength)
     {
-        var toDate = (to ?? asOf).ToUniversalTime();
-        var fromDate = (from ?? toDate - defaultLength).ToUniversalTime();
+        var toDate = AsUtc(to ?? asOf);
+        var fromDate = AsUtc(from ?? toDate - defaultLength);
         if (fromDate >= toDate) return (fromDate, toDate, "from must be before to.");
         if (toDate - fromDate > maxLength) return (fromDate, toDate, $"The period can be at most {maxLength.TotalDays:0} days.");
         return (fromDate, toDate, null);
     }
+
+    /// <summary>
+    /// A query date with no offset (<c>2026-03-01</c>) is a UTC date, as report
+    /// periods are UTC: read it as one, not as the server's local time.
+    /// </summary>
+    public static DateTime AsUtc(DateTime value) => value.Kind == DateTimeKind.Unspecified
+        ? DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        : value.ToUniversalTime();
 
     /// <summary>The first instant of the UTC calendar month holding <paramref name="instant"/>.</summary>
     public static DateTime MonthOf(DateTime instant)
