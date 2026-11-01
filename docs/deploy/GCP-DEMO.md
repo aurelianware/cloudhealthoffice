@@ -184,7 +184,7 @@ The walkthrough, sample SQL and the Vertex AI remote model are in [Managed FHIR 
   - token signing and service identity as in [production security](#production-security), with staff signing in through the plan's own identity provider (Entra today) rather than Cloudflare Access
   - Google's managed services for state: Managed Service for Apache Kafka (configuration only, no code change), Cloud Storage behind the document store interface, and Google Secret Manager or HashiCorp Vault (the Vault provider already exists) behind the secret provider interface
 
-  Estimate: about 5–7 engineer-weeks.
+  Estimate: about 5–7 engineer-weeks. That build is under way as a separate project: see [GCP-HOSTED-HIPAA.md](GCP-HOSTED-HIPAA.md).
 - **A live connection to a legacy core.** QNXT, Facets and HealthEdge adapters are interfaces with stubs, built per engagement. Augment-mode comparison needs that adapter to supply the core's results.
 - **Production capacity evidence.** Benchmarks are reproducible local runs.
 

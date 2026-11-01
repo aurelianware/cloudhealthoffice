@@ -8,6 +8,8 @@ This Terraform module creates a demo environment for Cloud Health Office on Goog
 - an optional monthly budget alert
 
 > **Demo-grade, not production.** This environment has no Google BAA, customer-managed encryption keys, private cluster or Private Service Connect. Use synthetic data only. The production gaps are listed in [docs/deploy/GCP-DEMO.md](../../docs/deploy/GCP-DEMO.md).
+>
+> `hosted = true` builds the base of the hosted HIPAA environment instead (customer-managed keys, a private regional cluster, organization policies, six-year audit logs), in a separate project under a Google Cloud BAA. See [docs/deploy/GCP-HOSTED-HIPAA.md](../../docs/deploy/GCP-HOSTED-HIPAA.md). Never set it in the demo project.
 
 The Azure deployment (`infrastructure/azure/`, `.github/workflows/deploy-azure-aks.yml`) is unaffected.
 
