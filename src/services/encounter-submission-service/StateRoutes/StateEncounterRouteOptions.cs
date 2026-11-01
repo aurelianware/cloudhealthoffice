@@ -64,6 +64,12 @@ public sealed class StateEncounterRouteOptions
     /// </summary>
     public string UsageIndicator { get; set; } = "T";
 
+    /// <summary>
+    /// Also report denied claims as encounters. Off by default; turn on where the
+    /// state contract asks for denied encounters.
+    /// </summary>
+    public bool ReportDeniedClaims { get; set; }
+
     public EncounterDeadlineRule? DeadlineRule { get; set; }
     public int? DeadlineDays { get; set; }
 

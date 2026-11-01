@@ -119,6 +119,46 @@ took the encounter; it is not final encounter acceptance.
 The Florida `POST /api/encounters/{tenantId}/acknowledge` path now only
 touches Florida records.
 
+## Where encounters come from
+
+Texas and California encounter records are created from `claims.finalized.v1`,
+the event claims-service publishes when a claim is paid, denied or reversed.
+The service's older consumer listens on `adjudication-completed`, which no
+service in the repository publishes; it is left in place for Florida only.
+
+| Setting | Default |
+| --- | --- |
+| `Kafka:ClaimFinalized:Topic` | `claims.finalized.v1` |
+| `Kafka:ClaimFinalized:GroupId` | `encounter-submission-service.claims-finalized` |
+
+The consumer acts only for tenants enrolled on exactly one X12 route, and
+only for Medicaid claims (it reads `lineOfBusiness` from claims-service). The
+event carries no state, so a tenant enrolled on both Texas and California is
+refused with a warning until a member-state rule is added. Denied claims are
+reported only when the route sets `ReportDeniedClaims`. The offset is
+committed after the event is handled; a claims-service outage leaves the
+event to be redelivered, and redelivery finds the same records.
+
+## Replacements and voids
+
+A claim adjustment (`originalClaimId` on the event) or a reversal becomes
+encounter work against the original encounter:
+
+| Original encounter is | Adjustment | Reversal |
+| --- | --- | --- |
+| not yet sent (`Pending`, `ValidationFailed`) | original closed, adjusted claim goes as a new original | original closed, nothing sent |
+| rejected by the state, or closed | adjusted claim goes as a new original | original closed, nothing sent |
+| in flight (`Batched`, `Submitted`, `SyntaxAccepted`) | replacement (CLM05-3 `7`) created, waits | void (`8`) created, waits |
+| accepted, with the state's claim reference | replacement sent with `REF*F8` | void sent with `REF*F8` |
+
+A waiting replacement or void stays `Pending` and is listed under
+`waitingOnOriginal` in the batch result. When the original's 277 arrives it
+goes in the next batch with the state's reference in `REF*F8`; if the state
+rejects the original instead, the replacement goes as a new original and the
+void is closed. Records link both ways (`originalSubmissionId`,
+`supersededBySubmissionId`), and every automatic close is kept in
+`reworkHistory`.
+
 ## Rework queue
 
 `GET /api/encounters/state/rework?state=TX&reason=VALIDATION` lists the
@@ -157,9 +197,13 @@ queue.
 - **DHCS EVR file** and any HHSC encounter quality reports after the 277CA.
 - **Work distribution and portal.** The rework queue is an API; it is not
   yet a work type in work-management-service or a portal page.
-- **Replacements and voids.** The writer supports frequency 7/8 with REF*F8,
-  and the state reference is now captured, but nothing yet produces them from
-  claim adjustments.
+- **Florida on `claims.finalized.v1`.** Florida still depends on the
+  unpublished `adjudication-completed` topic; moving it is a separate change.
+- **Tenants on both Texas and California** need a member-state rule before
+  their claims can be routed.
+- **Companion-guide replacement rules.** Whether TMHP or DHCS want REF*F8 to
+  carry their ICN or another identifier, and whether a void must repeat the
+  original's lines, still has to be checked in the companion guides.
 - **837D, capitated and delegated encounters, other-payer (TPL) loops** and
   any state-specific segments in the TMHP or DHCS companion guides.
 - **State acceptance.** Companion-guide review, partner test cycles and

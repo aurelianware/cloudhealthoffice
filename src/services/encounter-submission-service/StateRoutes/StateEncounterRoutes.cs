@@ -134,6 +134,9 @@ public interface IStateEncounterRouteRegistry
     StateEncounterRouteOptions? GetOptions(string stateCode);
 
     StateEncounterTenantOptions? GetTenantOptions(string stateCode, string tenantId);
+
+    /// <summary>The X12 routes (TX, CA) this tenant is fully configured for.</summary>
+    IReadOnlyList<StateEncounterRoute> EnrolledX12Routes(string tenantId);
 }
 
 public sealed class StateEncounterRouteRegistry : IStateEncounterRouteRegistry
@@ -172,6 +175,12 @@ public sealed class StateEncounterRouteRegistry : IStateEncounterRouteRegistry
             if (string.Equals(key, tenantId, StringComparison.OrdinalIgnoreCase)) return value;
         return null;
     }
+
+    public IReadOnlyList<StateEncounterRoute> EnrolledX12Routes(string tenantId) =>
+        StateEncounterRoute.All
+            .Where(r => r.Format == EncounterRouteFormat.X12_837
+                        && Resolve(r.StateCode, r.LineOfBusiness, tenantId, out _) is not null)
+            .ToList();
 
     public StateEncounterRoute? Resolve(string? stateCode, string? lineOfBusiness, string tenantId, out string? reason)
     {

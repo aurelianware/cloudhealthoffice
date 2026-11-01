@@ -10,7 +10,7 @@ namespace CloudHealthOffice.EncounterSubmissionService.Tests.StateRoutes;
 
 public class StateEncounterBatchServiceTests
 {
-    private sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+    internal sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         public List<string> Paths { get; } = new();
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -20,7 +20,7 @@ public class StateEncounterBatchServiceTests
         }
     }
 
-    private sealed class FixedControlNumbers : IEncounterControlNumberSource
+    internal sealed class FixedControlNumbers : IEncounterControlNumberSource
     {
         private long _next = 100;
         public Task<long> NextInterchangeControlNumberAsync(string tenantId, string stateCode, CancellationToken ct = default) =>
@@ -36,9 +36,10 @@ public class StateEncounterBatchServiceTests
         public int SubmissionUpdates { get; set; }
     }
 
-    private static object ClaimJson(string id, string memberId = "M1", decimal paid = 120m) => new
+    internal static object ClaimJson(string id, string memberId = "M1", decimal paid = 120m, string lineOfBusiness = "Medicaid") => new
     {
         id,
+        lineOfBusiness,
         tenantId = "tenant-1",
         claimNumber = "CLM-" + id,
         memberId,
@@ -71,7 +72,7 @@ public class StateEncounterBatchServiceTests
         }
     };
 
-    private static object MemberJson(bool withAddress = true) => new
+    internal static object MemberJson(bool withAddress = true) => new
     {
         memberId = "M1",
         groupNumber = "STAR",
@@ -85,7 +86,7 @@ public class StateEncounterBatchServiceTests
         zipCode = "78701"
     };
 
-    private static readonly object ProviderJson = new
+    internal static readonly object ProviderJson = new
     {
         npi = BillingNpi,
         taxId = "741234567",
@@ -97,7 +98,7 @@ public class StateEncounterBatchServiceTests
         zipCode = "787014000"
     };
 
-    private static Func<HttpRequestMessage, HttpResponseMessage> Respond(
+    internal static Func<HttpRequestMessage, HttpResponseMessage> Respond(
         bool memberHasAddress = true, HttpStatusCode claimStatus = HttpStatusCode.OK) => r =>
     {
         var path = r.RequestUri!.AbsolutePath;

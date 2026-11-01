@@ -146,6 +146,18 @@ public class EncounterSubmission
     [JsonPropertyName("responseHistory")]
     public List<EncounterResponseEvent> ResponseHistory { get; set; } = new();
 
+    /// <summary>CLM05-3 this record is sent as: 1 original, 7 replacement, 8 void.</summary>
+    [JsonPropertyName("frequencyCode")]
+    public string FrequencyCode { get; set; } = "1";
+
+    /// <summary>For a replacement or void: the submission it replaces or voids.</summary>
+    [JsonPropertyName("originalSubmissionId")]
+    public string? OriginalSubmissionId { get; set; }
+
+    /// <summary>Set on an original when a replacement or void of it is created.</summary>
+    [JsonPropertyName("supersededBySubmissionId")]
+    public string? SupersededBySubmissionId { get; set; }
+
     /// <summary>Rework actions taken on this record (requeued, closed), oldest first.</summary>
     [JsonPropertyName("reworkHistory")]
     public List<EncounterReworkEvent> ReworkHistory { get; set; } = new();
