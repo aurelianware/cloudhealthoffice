@@ -801,6 +801,24 @@ def test_ca_bundle_replaces_every_containers_system_bundle(tmp_path):
         for container in spec["containers"]:
             assert {"name": "cho-ca-bundle", "mountPath": "/etc/ssl/certs/ca-certificates.crt",
                     "subPath": "ca-certificates.crt", "readOnly": True} in container["volumeMounts"], (name, container["name"])
+            assert {"name": "SSL_CERT_FILE", "value": "/etc/ssl/certs/ca-certificates.crt"} in container["env"], name
+
+
+def test_hosted_kafka_clients_sign_in_with_the_kafka_secret(tmp_path):
+    bootstrap = "cloudhealthoffice-kafka-kafka-bootstrap.kafka.svc:9093"
+    docs = render(*hosted_args(tmp_path, "--kafka-bootstrap", bootstrap))
+    for name, dep in deployments(docs).items():
+        for container in dep["spec"]["template"]["spec"]["containers"]:
+            entries = {e["name"]: e for e in container.get("env", [])}
+            if "Kafka__BootstrapServers" not in entries:
+                continue
+            assert entries["Kafka__BootstrapServers"]["value"] == bootstrap, name
+            for setting, key in (("Kafka__SaslUsername", "saslUsername"), ("Kafka__SaslPassword", "saslPassword")):
+                assert entries[setting] == {"name": setting, "valueFrom": {
+                    "secretKeyRef": {"name": "kafka-secret", "key": key}}}, (name, setting)
+    # Outside the hosted profile the manifests keep their own Kafka settings.
+    demo = render("--kafka-bootstrap", "kafka:9092")
+    assert "Kafka__SaslUsername" not in env(deployments(demo)["claims-service"])
 
 
 def test_hosted_refuses_the_demo_tenant_cloudflare_and_non_production_hosts(tmp_path):

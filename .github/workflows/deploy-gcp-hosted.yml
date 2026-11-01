@@ -1,0 +1,200 @@
+name: Deploy hosted environment to GKE
+
+# Builds every Cloud Health Office image into the hosted project's Artifact
+# Registry and deploys the hosted HIPAA environment (infrastructure/gcp with
+# hosted = true) with scripts/deploy-gke.sh HOSTED=true, then applies the
+# Google load balancer (deploy/gcp/hosted/apply-ingress.sh).
+# docs/deploy/GCP-HOSTED-HIPAA.md, "Deploy".
+#
+# Manual only, never on push. Every job runs in the GitHub environment
+# "hosted": give it required reviewers so each deploy is approved, and keep
+# its secrets and variables there, not at repository level, so the demo
+# workflow can never read them.
+#
+# Settings of the "hosted" environment (terraform outputs of the hosted apply):
+#   secrets   GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_DEPLOYER_SERVICE_ACCOUNT
+#             IAP_CLIENT_ID, IAP_CLIENT_SECRET (the IAP OAuth client; optional
+#               after the first run, which stores them in the cluster)
+#             ANTHROPIC_API_KEY (optional; used only with ANTHROPIC_BAA_CONFIRMED)
+#   variables GCP_PROJECT_ID, GKE_CLUSTER, GKE_LOCATION, GAR_REPOSITORY
+#             TOKEN_SIGNING_KEY_VERSION, TOKEN_SERVICE_GOOGLE_ACCOUNT, KUBERNETES_SA_ISSUER
+#             IAP_AUDIENCE, HOSTED_TENANT, HOSTED_TENANT_NAME, HOSTED_ADMIN_EMAILS
+#             PORTAL_HOST, FHIR_HOST, AUTH_HOST
+#             HOSTED_DISK_KMS_KEY, HOSTED_SECRETS_PROJECT
+#             DOCUMENTS_BUCKET, DOCUMENTS_SERVICE_ACCOUNT
+#             CPCDS_DROP_BUCKET, CPCDS_DROP_SERVICE_ACCOUNT
+#             BULK_EXPORT_BUCKET, FHIR_SERVICE_GOOGLE_ACCOUNT (optional)
+#             ADDRESS_NAME, SSL_POLICY, SECURITY_POLICY (hosted_ingress_address_name,
+#               hosted_ssl_policy, hosted_security_policy)
+#             ANTHROPIC_BAA_CONFIRMED (true only once a BAA with Anthropic is signed)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Deploy an existing image tag and skip the build (blank = build this commit)"
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy-gke-hosted
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY }}
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+  GKE_LOCATION: ${{ vars.GKE_LOCATION }}
+  IMAGE_TAG: ${{ inputs.image_tag != '' && inputs.image_tag || github.sha }}
+
+jobs:
+  plan:
+    name: Check settings and list images
+    runs-on: ubuntu-latest
+    environment: hosted
+    outputs:
+      matrix: ${{ steps.images.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check required settings
+        env:
+          HAS_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' }}
+          HAS_DEPLOYER: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT != '' }}
+        run: |
+          missing=()
+          for v in GAR_REPOSITORY GCP_PROJECT_ID GKE_CLUSTER GKE_LOCATION; do
+            [[ -n "${!v}" ]] || missing+=("vars.$v")
+          done
+          [[ "$HAS_PROVIDER" == true ]] || missing+=("secrets.GCP_WORKLOAD_IDENTITY_PROVIDER")
+          [[ "$HAS_DEPLOYER" == true ]] || missing+=("secrets.GCP_DEPLOYER_SERVICE_ACCOUNT")
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Missing settings in the hosted environment: ${missing[*]}. See docs/deploy/GCP-HOSTED-HIPAA.md."
+            exit 1
+          fi
+          if [[ "$GKE_CLUSTER" == *demo* || "$GCP_PROJECT_ID" == *demo* ]]; then
+            echo "::error::The hosted environment's settings name a demo project or cluster."
+            exit 1
+          fi
+
+      - name: List images to build
+        id: images
+        run: |
+          pip install --quiet pyyaml
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import json, subprocess
+          lines = subprocess.run(["python3", "deploy/gcp/render_manifests.py", "--list-images"],
+                                 check=True, capture_output=True, text=True).stdout.split("\n")
+          include = [{"name": n, "dockerfile": f} for n, f in (l.split() for l in lines if l.strip())]
+          print("matrix=" + json.dumps({"include": include}))
+          EOF
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: plan
+    if: ${{ (inputs.image_tag || '') == '' }}
+    runs-on: ubuntu-latest
+    environment: hosted
+    strategy:
+      fail-fast: true
+      max-parallel: 10
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${GAR_REPOSITORY%%/*}" --quiet
+
+      - uses: docker/setup-buildx-action@v4
+
+      # No shared build cache with the demo: hosted images are built from source.
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          build-args: REGISTRY=mcr.microsoft.com
+          push: true
+          tags: ${{ env.GAR_REPOSITORY }}/cloudhealthoffice-${{ matrix.name }}:${{ env.IMAGE_TAG }}
+
+  deploy:
+    name: Deploy hosted environment
+    needs: [plan, build]
+    if: ${{ always() && needs.plan.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: hosted
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials (DNS endpoint, checked with IAM)
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_LOCATION }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          dns_based_endpoint: true
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
+      - name: Deploy
+        env:
+          HOSTED: "true"
+          RESOURCE_PROFILE: default
+          ANTHROPIC_BAA_CONFIRMED: ${{ vars.ANTHROPIC_BAA_CONFIRMED || 'false' }}
+          ANTHROPIC_API_KEY: ${{ vars.ANTHROPIC_BAA_CONFIRMED == 'true' && secrets.ANTHROPIC_API_KEY || '' }}
+          TOKEN_SIGNING_KEY_VERSION: ${{ vars.TOKEN_SIGNING_KEY_VERSION }}
+          TOKEN_SERVICE_GOOGLE_ACCOUNT: ${{ vars.TOKEN_SERVICE_GOOGLE_ACCOUNT }}
+          KUBERNETES_SA_ISSUER: ${{ vars.KUBERNETES_SA_ISSUER }}
+          IAP_AUDIENCE: ${{ vars.IAP_AUDIENCE }}
+          HOSTED_TENANT: ${{ vars.HOSTED_TENANT }}
+          HOSTED_TENANT_NAME: ${{ vars.HOSTED_TENANT_NAME }}
+          HOSTED_ADMIN_EMAILS: ${{ vars.HOSTED_ADMIN_EMAILS }}
+          FHIR_HOST: ${{ vars.FHIR_HOST }}
+          AUTH_HOST: ${{ vars.AUTH_HOST }}
+          HOSTED_DISK_KMS_KEY: ${{ vars.HOSTED_DISK_KMS_KEY }}
+          HOSTED_SECRETS_PROJECT: ${{ vars.HOSTED_SECRETS_PROJECT }}
+          DOCUMENTS_BUCKET: ${{ vars.DOCUMENTS_BUCKET }}
+          DOCUMENTS_SERVICE_ACCOUNT: ${{ vars.DOCUMENTS_SERVICE_ACCOUNT }}
+          CPCDS_DROP_BUCKET: ${{ vars.CPCDS_DROP_BUCKET }}
+          CPCDS_DROP_SERVICE_ACCOUNT: ${{ vars.CPCDS_DROP_SERVICE_ACCOUNT }}
+          BULK_EXPORT_BUCKET: ${{ vars.BULK_EXPORT_BUCKET }}
+          FHIR_SERVICE_GOOGLE_ACCOUNT: ${{ vars.FHIR_SERVICE_GOOGLE_ACCOUNT }}
+        run: ./scripts/deploy-gke.sh
+
+      - name: Apply the load balancer
+        env:
+          PORTAL_HOST: ${{ vars.PORTAL_HOST }}
+          FHIR_HOST: ${{ vars.FHIR_HOST }}
+          AUTH_HOST: ${{ vars.AUTH_HOST }}
+          ADDRESS_NAME: ${{ vars.ADDRESS_NAME }}
+          SSL_POLICY: ${{ vars.SSL_POLICY }}
+          SECURITY_POLICY: ${{ vars.SECURITY_POLICY }}
+          IAP_CLIENT_ID: ${{ secrets.IAP_CLIENT_ID }}
+          IAP_CLIENT_SECRET: ${{ secrets.IAP_CLIENT_SECRET }}
+        run: ./deploy/gcp/hosted/apply-ingress.sh
+
+      - name: Pod status
+        if: always()
+        run: kubectl get pods -n cloudhealthoffice -o wide; kubectl get pods -n kafka

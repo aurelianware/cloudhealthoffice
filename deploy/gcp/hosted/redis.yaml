@@ -1,0 +1,135 @@
+# Redis for the hosted HIPAA environment (docs/deploy/GCP-HOSTED-HIPAA.md).
+# Replaces infrastructure/k8s/redis-dataprotection.yaml there, under the same
+# Service name so the connection strings don't change.
+#
+# Differs from the demo Redis:
+#   - TLS only (port 6379 serves TLS, the plaintext port is off), with the
+#     certificate deploy-gke.sh issues from the cluster's internal CA
+#   - a password (requirepass) from Secret redis-auth
+#   - an append-only file on a CMEK-encrypted disk, fsynced every second:
+#     benefit-plan-service keeps accumulator state here (commit journal,
+#     void/denial fences), so a restart must not lose it
+#   - noeviction, as in the demo (docs/architecture/claim-cob-pipeline.md,
+#     "Deploy notes (accumulator integrity)")
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-dataprotection
+  namespace: cloudhealthoffice
+  labels:
+    app: redis-dataprotection
+spec:
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis-tls
+  selector:
+    app: redis-dataprotection
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-dataprotection
+  namespace: cloudhealthoffice
+  labels:
+    app: redis-dataprotection
+spec:
+  serviceName: redis-dataprotection
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-dataprotection
+  template:
+    metadata:
+      labels:
+        app: redis-dataprotection
+    spec:
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args:
+            - redis-server
+            - --port
+            - "0"
+            - --tls-port
+            - "6379"
+            - --tls-cert-file
+            - /etc/cho-tls/tls.crt
+            - --tls-key-file
+            - /etc/cho-tls/tls.key
+            - --tls-ca-cert-file
+            - /etc/cho-tls/ca.crt
+            - --tls-auth-clients
+            - "no"
+            - --tls-protocols
+            - TLSv1.2 TLSv1.3
+            - --requirepass
+            - $(REDIS_PASSWORD)
+            - --dir
+            - /data
+            - --appendonly
+            - "yes"
+            - --appendfsync
+            - everysec
+            - --save
+            - ""
+            - --maxmemory
+            - "3072mb"
+            - --maxmemory-policy
+            - noeviction
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-auth
+                  key: password
+          ports:
+            - containerPort: 6379
+              name: redis-tls
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: 100m
+            limits:
+              memory: 4Gi
+              cpu: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: tls
+              mountPath: /etc/cho-tls
+              readOnly: true
+      volumes:
+        - name: tls
+          secret:
+            secretName: cho-internal-tls
+            defaultMode: 0440
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: cho-pd-cmek
+        resources:
+          requests:
+            storage: 10Gi

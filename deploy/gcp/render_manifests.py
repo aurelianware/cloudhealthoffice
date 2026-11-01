@@ -361,6 +361,9 @@ def mount_ca_bundle(spec: dict, configmap: str) -> None:
         if not any(m.get("name") == CA_BUNDLE_VOLUME for m in mounts):
             mounts.append({"name": CA_BUNDLE_VOLUME, "mountPath": CA_BUNDLE_PATH,
                            "subPath": "ca-certificates.crt", "readOnly": True})
+        # OpenSSL's default file differs between Debian and Alpine images;
+        # name it so every image reads the same bundle.
+        set_env(container, "SSL_CERT_FILE", CA_BUNDLE_PATH)
 
 
 def host_environment(service: str, args: argparse.Namespace | None = None) -> str:
@@ -535,6 +538,11 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
                 env_from.append({"configMapRef": {"name": "cho-service-tokens"}})
         if args.kafka_bootstrap:
             set_env(container, "Kafka__BootstrapServers", args.kafka_bootstrap)
+            if hosted(args):
+                # The hosted Kafka listener takes TLS and SCRAM-SHA-512 only;
+                # every client switches to SASL_SSL when a username is set.
+                set_env_from_secret(container, "Kafka__SaslUsername", "kafka-secret", "saslUsername")
+                set_env_from_secret(container, "Kafka__SaslPassword", "kafka-secret", "saslPassword")
         for entry in container.get("env", []) or []:
             if entry.get("name") == "Messaging__Backend" and entry.get("value") == "Auto":
                 entry["value"] = "InMemory"

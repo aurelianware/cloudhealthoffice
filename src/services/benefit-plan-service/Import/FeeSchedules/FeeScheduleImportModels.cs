@@ -16,6 +16,11 @@ public enum DuplicateRatePolicy
     Lowest,
     /// <summary>Keep the highest rate.</summary>
     Highest,
+    /// <summary>
+    /// Keep the row whose filter value comes first in the filter's "|" list, e.g.
+    /// filter "Proc Type" = "X|N|K" keeps a code's type X rate over its N or K one.
+    /// </summary>
+    FilterOrder,
 }
 
 /// <summary>Options for one fee schedule CSV import.</summary>
