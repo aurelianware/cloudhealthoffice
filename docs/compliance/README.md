@@ -20,6 +20,10 @@ or payer attestation artifacts.
 | CMS-0057-F Accelerator offer (maintained in a private repository) | The SKU we sell first (founding-partner price). |
 | [Diligence binder](../diligence/README.md) | CISO packet: BAA template, security one-pager, adapter status, data handling. |
 
+## Hosted HIPAA Environment
+
+Administrative safeguards for the environment Aurelianware hosts on Google Cloud: [hipaa-hosted/](hipaa-hosted/README.md). It holds the risk analysis, policies, incident response and breach notification, the contingency plan, the training record and the quarterly access review. All are drafts until the Security Officer and the CEO adopt them.
+
 ## Package Workflow
 
 1. Start with the canonical capability ledger for verified status, then use the readiness matrix for requirement and deployment context.

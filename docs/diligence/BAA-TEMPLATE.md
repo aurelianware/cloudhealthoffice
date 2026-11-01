@@ -26,7 +26,7 @@ Terms used but not defined here (including PHI, Electronic PHI, Unsecured PHI, B
 
 **“Services”** means the services in the Order Form, including FHIR APIs, SMART-on-FHIR enforcement, prior-authorization surfaces, audit logging, and implementation assistance.
 
-**“Pilot Environment”** means the Kubernetes / AKS (or equivalent) tenant identified on the Order Form.
+**“Pilot Environment”** means the environment identified on the Order Form: either the Business Associate–hosted environment on Google Cloud (a dedicated project in the United States, described in `docs/deploy/GCP-HOSTED-HIPAA.md`), or a Kubernetes environment the Covered Entity hosts.
 
 ## 3. Permitted uses and disclosures
 
@@ -49,13 +49,14 @@ Business Associate shall:
 - maintain tenant isolation for the Pilot Environment;
 - not use production PHI in logs, screenshots, issue trackers, or the public GitHub repository;
 - ensure workforce members with PHI access are authorized and trained;
-- report Security Incidents and Breaches as in Section 6.
+- report Security Incidents and Breaches as in Section 6;
+- for the Business Associate–hosted environment, maintain the safeguards described in `docs/compliance/hipaa-hosted/` (risk analysis, policies, incident response, contingency plan, training and quarterly access review) and make the adopted versions available to Covered Entity on request.
 
 Covered Entity acknowledges that Cloud Health Office is source-available. Source availability does not authorize Covered Entity to publish PHI, credentials, or production configurations.
 
 ## 5. Subcontractors
 
-Business Associate shall ensure that any subcontractor that creates, receives, maintains, or transmits PHI on its behalf agrees to restrictions and conditions at least as protective as this BAA. The default cloud subprocessor for a standard pilot is Microsoft Azure. Additional subprocessors are listed on the Order Form.
+Business Associate shall ensure that any subcontractor that creates, receives, maintains, or transmits PHI on its behalf agrees to restrictions and conditions at least as protective as this BAA. For the Business Associate–hosted environment the cloud subcontractor is Google Cloud, under Google's HIPAA Business Associate Addendum, with PHI kept in the United States. Where the Order Form names an Azure environment, the cloud subcontractor is Microsoft Azure. Any other subcontractor that would receive PHI (for example an AI model provider for the advisory claims examiner) is used only after it signs a business associate agreement and is listed on the Order Form. Business Associate gives Covered Entity thirty (30) days' notice before adding a subcontractor that receives PHI.
 
 ## 6. Breach and security incident notice
 
@@ -75,7 +76,7 @@ Business Associate shall make its internal practices, books, and records relatin
 
 This BAA is effective on the Effective Date and continues until the Services terminate.
 
-Upon termination, Business Associate shall return or destroy PHI remaining in its possession, if feasible, and retain no copies except as Required By Law or for dispute, audit, or backup cycles that are then purged on the documented schedule. If return or destruction is infeasible, Business Associate shall extend this BAA’s protections to the remaining PHI and limit further use to the purposes that make return infeasible.
+Upon termination, Business Associate shall return or destroy PHI remaining in its possession, if feasible, and retain no copies except as Required By Law or for dispute, audit, or backup cycles that are then purged on the documented schedule (for the Business Associate–hosted environment, backups expire 35 days after they are taken; audit logs that record access are kept six years as HIPAA documentation requires). If return or destruction is infeasible, Business Associate shall extend this BAA’s protections to the remaining PHI and limit further use to the purposes that make return infeasible.
 
 ## 10. Termination for cause
 
