@@ -47,5 +47,12 @@ public enum EncounterSubmissionStatus
     SyntaxAccepted,
 
     /// <summary>999 accepted with errors; final encounter acceptance is not established.</summary>
-    SyntaxAcceptedWithErrors
+    SyntaxAcceptedWithErrors,
+
+    /// <summary>
+    /// Held back before submission: the encounter failed implementation-guide
+    /// validation (missing member address, unbalanced line, and so on). Needs
+    /// rework at the source before it can be batched.
+    /// </summary>
+    ValidationFailed
 }
