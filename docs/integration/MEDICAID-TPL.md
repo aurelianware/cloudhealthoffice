@@ -12,8 +12,8 @@ Status by step:
 | Step | What | State |
 | --- | --- | --- |
 | 1 | TPL store and state file loader (this page) | Built |
-| 2 | Cost-avoid denial in adjudication when in-scope TPL is active | Next |
-| 3 | Pay-and-chase for exempt services and code-A members | Planned |
+| 2 | Cost-avoid denial in adjudication when in-scope TPL is active | Built (off by default) |
+| 3 | State exempt-service lists, pay-and-chase recorded on the claim | Next (federal pediatric preventive and code A already pay) |
 | 4 | Recovery tracking (case per paid claim, 12-month CA clock, state reports) | Planned |
 
 ## The TPL store
@@ -147,6 +147,53 @@ labor and delivery and postpartum care are cost-avoided; pediatric preventive
 services are paid without regard to TPL unless the state found 90-day cost
 avoidance warranted; claims tied to medical child support may be paid without
 regard to TPL for up to 100 days.
+
+## Cost avoidance in adjudication
+
+`ThirdPartyLiabilityStage` (claims-service, order 276, right after COB) reads
+the member's active TPL rows for the earliest service date and decides, for
+Medicaid claims only:
+
+| Situation | Outcome |
+| --- | --- |
+| The 837 carries the other payer's adjudication (2320 paid amount or CAS, 2430 lines) or bills this plan as a later payer | Pass; COB pays the balance |
+| Plan is Medicaid-primary (`MedicaidPrimaryPlanCodes`, e.g. Texas STAR Health) | Pass |
+| Every line covered by an active resource that is not pay-and-chase-only and not exempt | **Deny CO-22 / MA04** on every line (`CostAvoid` mode) or pend `TPL` (`Pend` mode) |
+| Some lines covered, others not | Pend `TPL` with the covered line numbers; the examiner denies those lines or approves |
+| Covered only by pay-and-chase resources (Medi-Cal OHC `A`) or exempt services | Pass; lines recorded as pay-and-chase for recovery |
+| TPL lookup failed | Pend (never a denial) |
+
+An examiner who approves the exact `TPL` pend turns every covered line into a
+pay-and-chase line. A scope matches a line by service category: inpatient or
+outpatient hospital (type of bill), nursing facility (21x–23x, 65x, 66x),
+professional, behavioral health (90785–90899, H-codes), DME (E, K, L, A4–A9),
+vision (V0–V2, 92002–92499) and dental (837D). Medicare A covers inpatient and
+SNF; B covers outpatient, professional and DME; C covers medical. Casualty
+covers a claim only when it is marked accident-related (CLM11 AA/EM/OA or an
+accident date).
+
+Exempt in this step: pediatric preventive services for members under 21
+(preventive visits 99381–99384 and 99391–99394 at any age; 99385/99395,
+immunization administration, developmental, vision, hearing and lead
+screening, fluoride varnish, and well-child or Z23 encounters under 21). Turn
+off with `PayPediatricPreventive=false` only if the state has found 90-day
+cost avoidance warranted. State lists (Texas THSteps, SHARS, ECI; California
+specifics) come next.
+
+```json
+"Adjudication": {
+  "ThirdPartyLiability": {
+    "Mode": "SoftValidation",
+    "MedicaidPrimaryPlanCodes": [ "STAR-HEALTH" ],
+    "PayPediatricPreventive": true
+  }
+}
+```
+
+Modes: `Off` (default), `SoftValidation` (records the decision, never changes
+the claim; use it first, and in shadow runs), `Pend`, `CostAvoid`. The stage
+is shadow-safe, so a shadow adjudication run shows what cost avoidance would
+have done to a plan's history.
 
 ## References
 

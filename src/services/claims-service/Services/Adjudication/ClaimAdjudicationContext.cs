@@ -240,6 +240,13 @@ public class ClaimAdjudicationContext
     public CobOutcome? CobResult { get; set; }
 
     /// <summary>
+    /// Medicaid third-party liability decision from
+    /// <see cref="Stages.ThirdPartyLiabilityStage"/>; null when the stage is
+    /// off or the claim is not Medicaid.
+    /// </summary>
+    public TplOutcome? TplResult { get; set; }
+
+    /// <summary>
     /// Set when this run re-adjudicates a pended claim an examiner approved
     /// (<see cref="IClaimApprovalReadjudicator"/>): review pends the examiner
     /// resolved pass, and the COB stage uses the payer order the examiner
