@@ -126,6 +126,17 @@ public class QuestionnairePackageTests
     }
 
     [Fact]
+    public async Task Every_versioned_questionnaire_names_its_version_algorithm_sdc_2()
+    {
+        var result = await Package(orders: [LumbarMri()]);
+        var questionnaires = Bundles(result).SelectMany(b => b.Entry).Select(e => e.Resource).OfType<Questionnaire>().ToList();
+
+        questionnaires.Should().NotBeEmpty();
+        questionnaires.Where(q => !string.IsNullOrEmpty(q.Version)).Should().OnlyContain(q =>
+            q.GetExtension(AdaptiveQuestionnaireEngine.VersionAlgorithmExtension) != null);
+    }
+
+    [Fact]
     public async Task Every_dependency_reference_in_the_package_is_version_specific()
     {
         var bundle = Bundles(await Package(orders: [LumbarMri()])).Single();
