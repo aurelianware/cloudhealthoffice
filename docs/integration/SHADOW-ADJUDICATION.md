@@ -69,6 +69,35 @@ the CPCDS import report). Runs synchronously over at most
 `GET .../runs/{runId}` returns one, and `GET .../runs/{runId}/results?kind=PaidVariance&limit=200`
 returns per-claim comparisons, largest paid difference first.
 
+### Run report
+
+`GET .../runs/{runId}/report?top=10` is what a plan reads after a run:
+
+| Field | Meaning |
+|---|---|
+| `comparableClaims`, `decidedClaims` | Claims whose core answer is final, and the ones CHO decided. |
+| `corePaidMore` | Decided claims where the core paid more than CHO would have (possible overpayments): claims and dollars. |
+| `corePaidLess` | Decided claims where the core paid less (possible underpayments). |
+| `byKind` | Every kind: claims, net and absolute paid variance, core paid. |
+| `undecidedByGap` | Why CHO could not decide, by gap code, most claims first, with the core-paid dollars CHO cannot check yet. This is the to-do list for loading inputs. |
+| `byChoStage` | The CHO stage behind each non-matching decision (its first finding; Pricing for an allowed difference and BenefitCalculation for a payment difference when no stage reported one), largest dollars first. |
+| `byDenialCodes` | Denial disagreements as `core CARC → CHO CARC` (`paid` when that side paid). |
+| `byProcedure` | Procedure codes (or `REV` revenue codes) on lines that differ, with line counts and line dollars. |
+| `byBillingProvider` | Billing NPIs on non-matching decided claims. |
+
+Each row carries up to five example claim numbers, biggest difference first.
+
+### Discrepancy CSV
+
+`GET .../runs/{runId}/discrepancies.csv?includeUndecided=false` downloads the
+differences for a payment-integrity team: one row per differing line, or one
+claim-level row when the claim differs but no single line does (an outcome
+mismatch with no line amounts, say). Matches and claims that were not
+comparable are left out. `includeUndecided=true` adds the claims CHO could not
+decide, with the gap code and no CHO amounts. Text fields that start with `=`,
+`+`, `-` or `@` get a leading apostrophe so a spreadsheet does not run them as
+formulas.
+
 ## Kinds
 
 One kind per claim, in this order of precedence:
@@ -124,8 +153,8 @@ pricing, provider, coverage, member, authorization), once per claim.
 
 1. **This change:** shadow mode in the pipeline, the comparer, the result
    store and the run endpoints.
-2. Run report: top reasons by count and dollars (CARC, CHO stage, pend code,
-   procedure, provider), CSV export of discrepant lines.
+2. Run report: top reasons by count and dollars (gap code, CHO stage, CARC,
+   procedure, provider) and the discrepancy CSV.
 3. Provider contract and custom fee schedule loader: the contract roster and
    fee schedule CSV importers.
 4. Accumulator baseline, seeded from a core accumulator extract or derived from
