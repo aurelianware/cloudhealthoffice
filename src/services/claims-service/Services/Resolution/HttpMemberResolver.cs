@@ -86,6 +86,11 @@ public class HttpMemberResolver : IMemberResolver
                 PlanChangeEffectiveDate = dto.PlanChangeEffectiveDate,
                 MedicaidSpendDownLiabilityAmount = dto.MedicaidSpendDownLiabilityAmount,
                 MedicaidSpendDownAmountMet = dto.MedicaidSpendDownAmountMet,
+                AidCodes = (dto.AidCodes ?? [])
+                    .Where(a => !string.IsNullOrWhiteSpace(a.Code) && a.EffectiveDate is not null)
+                    .Select(a => new CloudHealthOffice.Infrastructure.Programs.MediCal.AidCodeSpan(
+                        a.Code!.Trim(), a.EffectiveDate!.Value, a.EndDate))
+                    .ToList(),
             };
         }
         catch (Exception ex) when (ex is HttpRequestException
@@ -112,5 +117,13 @@ public class HttpMemberResolver : IMemberResolver
         public DateTime? PlanChangeEffectiveDate { get; set; }
         public decimal? MedicaidSpendDownLiabilityAmount { get; set; }
         public decimal MedicaidSpendDownAmountMet { get; set; }
+        public List<AidCodeDto>? AidCodes { get; set; }
+    }
+
+    private sealed class AidCodeDto
+    {
+        public string? Code { get; set; }
+        public DateTime? EffectiveDate { get; set; }
+        public DateTime? EndDate { get; set; }
     }
 }
