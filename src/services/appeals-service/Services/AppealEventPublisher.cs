@@ -42,6 +42,7 @@ public sealed class AppealEventPublisher : IAppealEventTransport, IHostedService
     public const string AppealAssignedType = "AppealAssigned";
     public const string AppealStatusMigratedType = "AppealStatusMigrated";
     public const string AppealDeadlineExtendedType = "AppealDeadlineExtended";
+    public const string AppealNoticeSentType = "AppealNoticeSent";
 
     private readonly ILogger<AppealEventPublisher> _logger;
     private readonly IConfiguration _configuration;
@@ -418,6 +419,22 @@ public sealed class AppealEventPublisher : IAppealEventTransport, IHostedService
         CorrelationId = correlationId
     };
 
+    internal static AppealNoticeSentEventPayload BuildNoticeSentPayload(
+        Appeal a, AppealNoticeKind notice, DateTime sentAt, string actor, string? correlationId) => new()
+    {
+        EventId = Guid.NewGuid().ToString(),
+        EventType = AppealNoticeSentType,
+        EventVersion = EventVersion,
+        OccurredAt = DateTime.UtcNow,
+        TenantId = a.TenantId,
+        AppealId = a.Id,
+        Notice = notice.ToString(),
+        SentAt = sentAt,
+        CurrentStatus = a.Status.ToString(),
+        Actor = actor,
+        CorrelationId = correlationId
+    };
+
     public async ValueTask DisposeAsync()
     {
         await StopAsync(CancellationToken.None);
@@ -590,6 +607,21 @@ public sealed record AppealDeadlineExtendedEventPayload
     public DateTime? TargetResponseDate { get; init; }
     public DateTime? WrittenNoticeSentAt { get; init; }
     public string? RegulatoryBasis { get; init; }
+    public string Actor { get; init; } = string.Empty;
+    public string? CorrelationId { get; init; }
+}
+
+public sealed record AppealNoticeSentEventPayload
+{
+    public string EventId { get; init; } = string.Empty;
+    public string EventType { get; init; } = string.Empty;
+    public string EventVersion { get; init; } = string.Empty;
+    public DateTime OccurredAt { get; init; }
+    public string TenantId { get; init; } = string.Empty;
+    public string AppealId { get; init; } = string.Empty;
+    public string Notice { get; init; } = string.Empty;
+    public DateTime SentAt { get; init; }
+    public string CurrentStatus { get; init; } = string.Empty;
     public string Actor { get; init; } = string.Empty;
     public string? CorrelationId { get; init; }
 }

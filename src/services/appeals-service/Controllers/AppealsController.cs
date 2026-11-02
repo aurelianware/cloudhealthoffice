@@ -780,6 +780,105 @@ public class AppealsController : ControllerBase
     }
 
     /// <summary>
+    /// Record when a member letter went out: the acknowledgment letter
+    /// (<see cref="Appeal.AcknowledgmentSentAt"/>) or the resolution letter
+    /// (<see cref="Appeal.ResolutionNoticeSentAt"/>). The plan's letter
+    /// vendor or staff send the letter; this records the date for the
+    /// grievance and appeal logs. Not a status transition — written as an
+    /// <c>AppealNoticeSent</c> audit event.
+    ///
+    /// The same date again is a no-op 200. A different date replaces the
+    /// recorded one (a correction); the audit row keeps the previous value.
+    ///
+    /// 400: <c>sentAt</c> in the future or before the case was submitted.
+    /// 409: acknowledgment on a draft, or resolution before the case is closed.
+    /// </summary>
+    [HttpPost("{id}/notices")]
+    [ProducesResponseType(typeof(Appeal), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RecordNoticeSent(
+        [FromRoute] string id,
+        [FromBody] RecordNoticeSentRequest request,
+        CancellationToken ct)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var appeal = await _appeals.GetByIdAsync(TenantId, id, ct);
+        if (appeal == null) return NotFound();
+
+        if (IsReplay(appeal, request.EventId)) return Ok(await DecryptForResponseAsync(appeal, ct));
+
+        var notice = request.Notice!.Value;
+        var sentAt = request.SentAt!.Value.ToUniversalTime();
+        var now = DateTime.UtcNow;
+
+        if (!Enum.IsDefined(notice))
+        {
+            ModelState.AddModelError(nameof(RecordNoticeSentRequest.Notice), $"Unknown notice {notice}.");
+        }
+        if (sentAt > now + NoticeClockSkew)
+        {
+            ModelState.AddModelError(nameof(RecordNoticeSentRequest.SentAt),
+                "SentAt is in the future; record the letter after it is sent.");
+        }
+        else if (sentAt < appeal.SubmittedDate.ToUniversalTime())
+        {
+            ModelState.AddModelError(nameof(RecordNoticeSentRequest.SentAt),
+                "SentAt precedes the case's submission.");
+        }
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+        if (notice == AppealNoticeKind.Acknowledgment && appeal.Status == AppealStatus.Draft)
+        {
+            return Problem(statusCode: StatusCodes.Status409Conflict, title: "Case not submitted",
+                detail: "An acknowledgment letter cannot be recorded for a draft case.");
+        }
+        if (notice == AppealNoticeKind.Resolution && appeal.Status != AppealStatus.Closed)
+        {
+            return Problem(statusCode: StatusCodes.Status409Conflict, title: "Case not resolved",
+                detail: $"A resolution letter can be recorded only once the case is closed (status is {appeal.Status}).");
+        }
+        if (notice == AppealNoticeKind.Resolution && appeal.ClosedAt is { } closedAt
+            && sentAt < closedAt.ToUniversalTime() - NoticeClockSkew)
+        {
+            ModelState.AddModelError(nameof(RecordNoticeSentRequest.SentAt),
+                "SentAt precedes the case's closure.");
+            return ValidationProblem(ModelState);
+        }
+
+        var previous = notice == AppealNoticeKind.Acknowledgment
+            ? appeal.AcknowledgmentSentAt
+            : appeal.ResolutionNoticeSentAt;
+        if (previous is { } p && p.ToUniversalTime() == sentAt)
+        {
+            return Ok(await DecryptForResponseAsync(appeal, ct));
+        }
+
+        var actor = Actor;
+        if (notice == AppealNoticeKind.Acknowledgment) appeal.AcknowledgmentSentAt = sentAt;
+        else appeal.ResolutionNoticeSentAt = sentAt;
+        appeal.UpdatedBy = actor;
+
+        var auditEvent = BuildEvent(appeal, AppealEventType.AppealNoticeSent,
+            fromStatus: null, toStatus: null, actor, request.EventId);
+        auditEvent.Payload = new JsonObject
+        {
+            ["notice"] = notice.ToString(),
+            ["sentAt"] = sentAt.ToString("o"),
+            ["previousSentAt"] = previous?.ToUniversalTime().ToString("o"),
+            ["currentStatus"] = appeal.Status.ToString()
+        };
+        AppealOutbox.NoticeSent(auditEvent, appeal, notice, sentAt, HttpContext.TraceIdentifier);
+
+        var updated = await _appeals.RecordNoticeSentAsync(appeal, auditEvent, ct);
+        await _outbox.NotifyChangedAsync(updated.TenantId, updated.Id, ct);
+
+        return Ok(await DecryptForResponseAsync(updated, ct));
+    }
+
+    /// <summary>
     /// The State a new case falls under, in order:
     /// <list type="number">
     ///   <item>The member's program: active coverage on the receipt date →
@@ -1338,6 +1437,8 @@ public class AppealsController : ControllerBase
             RulePackVersion = appeal.RulePackVersion,
             DeadlineExtension = appeal.DeadlineExtension,
             DecisionDate = appeal.DecisionDate,
+            AcknowledgmentSentAt = appeal.AcknowledgmentSentAt,
+            ResolutionNoticeSentAt = appeal.ResolutionNoticeSentAt,
             SubmittedBy = appeal.SubmittedBy,
             Notes = await DecryptNotesAsync(appeal.Notes, ct),
             AttachmentControlNumbers = appeal.AttachmentControlNumbers,
@@ -1656,6 +1757,18 @@ public class AssignReviewerRequest
 
     [StringLength(4000)]
     public string? ReassignmentReason { get; set; }
+
+    public string? EventId { get; set; }
+}
+
+public class RecordNoticeSentRequest
+{
+    [Required]
+    public AppealNoticeKind? Notice { get; set; }
+
+    /// <summary>When the letter was sent (mailed, emailed or posted to the member portal).</summary>
+    [Required]
+    public DateTime? SentAt { get; set; }
 
     public string? EventId { get; set; }
 }

@@ -188,6 +188,22 @@ public class Appeal
     public DateTime? DecisionDate { get; set; }
 
     /// <summary>
+    /// When the acknowledgment letter was sent to the member (for example
+    /// 42 CFR 438.406(b)(1), Medi-Cal 5 calendar days, Texas 5 business
+    /// days). Recorded by <c>POST /{id}/notices</c>; <c>null</c> until
+    /// then. The deadline itself is plan or state policy and is not
+    /// computed here.
+    /// </summary>
+    public DateTime? AcknowledgmentSentAt { get; set; }
+
+    /// <summary>
+    /// When the resolution (decision) letter was sent to the member
+    /// (42 CFR 438.408(d)). Recorded by <c>POST /{id}/notices</c> once the
+    /// case is closed; <c>null</c> until then.
+    /// </summary>
+    public DateTime? ResolutionNoticeSentAt { get; set; }
+
+    /// <summary>
     /// User who submitted the appeal.
     /// TODO(appeals-followup-personal-rep-integration): When filed on behalf
     /// of a member by a Personal Representative, the SubmittedBy field
@@ -415,6 +431,13 @@ public class AppealDecision
     /// </summary>
     [StringLength(8000)]
     public string? ReviewerNotes { get; set; }
+}
+
+/// <summary>Which member letter a <c>POST /{id}/notices</c> call records.</summary>
+public enum AppealNoticeKind
+{
+    Acknowledgment = 1,
+    Resolution = 2
 }
 
 /// <summary>

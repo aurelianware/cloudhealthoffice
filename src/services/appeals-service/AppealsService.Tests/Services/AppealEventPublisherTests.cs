@@ -272,6 +272,25 @@ public class AppealEventPublisherTests
         AssertNoEncryptedFieldValues(payload);
     }
 
+    [Fact]
+    public void AppealNoticeSent_FieldWhitelist()
+    {
+        var a = NewAppeal();
+        var sentAt = new DateTime(2026, 4, 22, 0, 0, 0, DateTimeKind.Utc);
+
+        var payload = AppealEventPublisher.BuildNoticeSentPayload(a, AppealNoticeKind.Acknowledgment, sentAt, "user1", "corr1");
+        JsonFields(payload).Should().BeEquivalentTo(new[]
+        {
+            "eventId", "eventType", "eventVersion", "occurredAt",
+            "tenantId", "appealId",
+            "notice", "sentAt", "currentStatus",
+            "actor", "correlationId"
+        });
+        payload.Notice.Should().Be("Acknowledgment");
+        payload.SentAt.Should().Be(sentAt);
+        AssertNoEncryptedFieldValues(payload);
+    }
+
     // ── Disabled mode: no silent drop ───────────────────────────────────
 
     [Fact]
