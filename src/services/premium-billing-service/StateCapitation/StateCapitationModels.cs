@@ -8,7 +8,13 @@ namespace PremiumBillingService.StateCapitation;
 public sealed record ExpectedMemberMonth(string MemberId, DateOnly Month, string RateCell, int? DaysEnrolled = null);
 
 /// <summary>The state's PMPM for a rate cell over an effective period (inclusive; null end is open).</summary>
-public sealed record StateCapitationRate(string RateCell, DateOnly EffectiveFrom, DateOnly? EffectiveTo, decimal Pmpm);
+/// <param name="WithholdPercent">
+/// Percent of the PMPM the state holds back from each monthly payment and
+/// releases later against the contract's terms (e.g. Medi-Cal Dental: 6%,
+/// 3% performance measures and 3% deliverables). 0 when the state pays the
+/// full rate.
+/// </param>
+public sealed record StateCapitationRate(string RateCell, DateOnly EffectiveFrom, DateOnly? EffectiveTo, decimal Pmpm, decimal WithholdPercent = 0m);
 
 /// <summary>
 /// One member-month the state paid (or took back) on an 820 line. A
@@ -61,7 +67,8 @@ public sealed record MemberMonthReconciliation(
     decimal Received,
     MemberMonthOutcome Outcome,
     IReadOnlyList<string> TraceNumbers,
-    IReadOnlyList<string> AdjustmentReasons)
+    IReadOnlyList<string> AdjustmentReasons,
+    decimal? Withheld = null)
 {
     /// <summary>Received minus expected (null when the expected amount is unknown).</summary>
     public decimal? Variance => Expected.HasValue ? Received - Expected.Value : null;
@@ -75,7 +82,8 @@ public sealed record RateCellMonthSummary(
     int PaidMembers,
     decimal Expected,
     decimal Received,
-    int Variances)
+    int Variances,
+    decimal Withheld = 0m)
 {
     public decimal Variance => Received - Expected;
 }
@@ -89,6 +97,9 @@ public sealed record StateCapitationReconciliation(
 {
     public decimal TotalExpected => Summary.Sum(s => s.Expected);
     public decimal TotalReceived => MemberMonths.Sum(m => m.Received);
+
+    /// <summary>Capitation the state held back for the months: a receivable until it is released.</summary>
+    public decimal TotalWithheld => Summary.Sum(s => s.Withheld);
 
     /// <summary>Member-months that need someone to look (anything but paid in full).</summary>
     public IEnumerable<MemberMonthReconciliation> Exceptions => MemberMonths.Where(m => m.Outcome != MemberMonthOutcome.PaidInFull);

@@ -47,7 +47,11 @@ public sealed class StateCapitationController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>Load (add or replace) state PMPM rates from a CSV: rate_cell, effective_from, effective_to, pmpm.</summary>
+    /// <summary>
+    /// Load (add or replace) state PMPM rates from a CSV: rate_cell,
+    /// effective_from, effective_to, pmpm, and optionally withhold_percent
+    /// (the share the state holds back each month, e.g. 6).
+    /// </summary>
     [HttpPost("rates")]
     [RequirePermission("finance:write")]
     [Consumes("text/csv", "text/plain", "application/octet-stream")]
@@ -170,6 +174,7 @@ public sealed class StateCapitationController : ControllerBase
             totalExpected = result.TotalExpected,
             totalReceived = result.TotalReceived,
             variance = result.TotalReceived - result.TotalExpected,
+            totalWithheld = result.TotalWithheld,
             memberMonths = result.MemberMonths.Count,
             outcomes = result.MemberMonths.GroupBy(m => m.Outcome).ToDictionary(g => g.Key.ToString(), g => g.Count()),
             summary = result.Summary,
@@ -211,7 +216,7 @@ public sealed class StateCapitationController : ControllerBase
         if (Window(from, to) is not { } window) return BadWindow();
 
         var result = await RunAsync(profile, window.From, window.To);
-        var csv = new StringBuilder("member_id,month,expected_rate_cell,received_rate_cell,expected,received,variance,outcome,trace_numbers,adjustment_reasons\n");
+        var csv = new StringBuilder("member_id,month,expected_rate_cell,received_rate_cell,expected,received,variance,outcome,trace_numbers,adjustment_reasons,withheld\n");
         foreach (var m in result.MemberMonths)
         {
             csv.Append(Csv(m.MemberId)).Append(',')
@@ -223,7 +228,8 @@ public sealed class StateCapitationController : ControllerBase
                .Append(m.Variance?.ToString("0.00", CultureInfo.InvariantCulture)).Append(',')
                .Append(m.Outcome).Append(',')
                .Append(Csv(string.Join(' ', m.TraceNumbers))).Append(',')
-               .Append(Csv(string.Join(' ', m.AdjustmentReasons))).Append('\n');
+               .Append(Csv(string.Join(' ', m.AdjustmentReasons))).Append(',')
+               .Append(m.Withheld?.ToString("0.00", CultureInfo.InvariantCulture)).Append('\n');
         }
         return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv",
             $"{profile.State.ToLowerInvariant()}-capitation-{window.From:yyyy-MM}-{window.To:yyyy-MM}.csv");
@@ -421,6 +427,7 @@ public sealed class StateCapitationController : ControllerBase
         m.Expected,
         m.Received,
         m.Variance,
+        m.Withheld,
         outcome = m.Outcome.ToString(),
         m.TraceNumbers,
         m.AdjustmentReasons

@@ -61,7 +61,8 @@ public static class StateCapitationReconciler
                 PaidMembers: g.Count(l => l.Received > 0),
                 Expected: g.Sum(l => l.Expected ?? 0m),
                 Received: g.Sum(l => l.Received),
-                Variances: g.Count(l => l.Outcome != MemberMonthOutcome.PaidInFull)))
+                Variances: g.Count(l => l.Outcome != MemberMonthOutcome.PaidInFull),
+                Withheld: g.Sum(l => l.Withheld ?? 0m)))
             .ToList();
 
         if (!profile.Verified)
@@ -82,6 +83,7 @@ public static class StateCapitationReconciler
         var reasons = got.SelectMany(g => g.AdjustmentReasons).Distinct().ToList();
 
         decimal? expectedAmount = null;
+        decimal? withheld = null;
         if (exp != null)
         {
             var rate = rates
@@ -90,12 +92,18 @@ public static class StateCapitationReconciler
                 .OrderByDescending(r => r.EffectiveFrom)
                 .FirstOrDefault();
             if (rate != null)
-                expectedAmount = MoneyRounding.ToCents(Prorate(profile, rate.Pmpm, month, exp.DaysEnrolled));
+            {
+                // Expected is what the state should pay now: the rate less
+                // any withhold, which it releases later.
+                var gross = MoneyRounding.ToCents(Prorate(profile, rate.Pmpm, month, exp.DaysEnrolled));
+                withheld = MoneyRounding.ToCents(gross * rate.WithholdPercent / 100m);
+                expectedAmount = gross - withheld.Value;
+            }
         }
 
         var outcome = Outcome(profile, exp, expectedAmount, got, received, receivedCell);
         return new MemberMonthReconciliation(memberId, month, exp?.RateCell, receivedCell,
-            expectedAmount, received, outcome, traces, reasons);
+            expectedAmount, received, outcome, traces, reasons, withheld);
     }
 
     private static MemberMonthOutcome Outcome(
