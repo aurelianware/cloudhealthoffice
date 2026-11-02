@@ -19,7 +19,7 @@ first, and close its gaps before moving on.
 | 3 | Providers and network | The core's provider and network tables, or credentialing | Providers and networks APIs; roster file import planned | Partly ships |
 | 4 | Members and coverage | CPCDS member and coverage files, or 834 | Enrollment import, or the daily drop | Ships |
 | 5 | Claims | CPCDS claim files | Claims import, or the daily drop | Ships |
-| 6 | Authorizations | The UM platform's export (CSV), or X12 278 | Authorization import | CSV ships; 278 in review ([#1685](https://github.com/aurelianware/cloudhealthoffice/pull/1685)) |
+| 6 | Authorizations | The UM platform's export (CSV), or X12 278 | Authorization import, or the daily drop | Ships |
 | 7 | Validate | | Inferno against the deployment | Ships |
 
 Every import shares these behaviors:
@@ -169,7 +169,8 @@ errors, and the files move to `processed` or `failed`.
   what is waiting now. See
   [CPCDS-FILE-DROP-IMPORTER.md](CPCDS-FILE-DROP-IMPORTER.md#in-the-portal).
 
-Authorization and roster files will join the drop when their imports do.
+Authorization files (CSV or X12 278) travel the same drop. Roster files will
+join it when their import ships.
 
 ## 7. Validate
 

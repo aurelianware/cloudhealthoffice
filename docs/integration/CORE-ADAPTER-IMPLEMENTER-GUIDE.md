@@ -3,8 +3,10 @@
 **Audience:** the engineer building a connector between CHO and a health plan's
 core administration system (QNXT, Facets, HealthEdge HealthRules Payer or a
 plan-built system).
-**Status:** written October 31, 2026 against `main` at 2c2342b. Re-check the
-interfaces named here before relying on a method list.
+**Status:** written October 31, 2026 against `main` at 2c2342b; refreshed
+November 2, 2026 after the CPCDS, authorization and shadow adjudication
+importers merged. Re-check the interfaces named here before relying on a
+method list.
 
 The [core adapter QRE](../features/questionnaires/qre-core-admin-adapter-questions.md)
 tells you what to find out from the plan. The
@@ -38,19 +40,28 @@ repositories directly:
 
 So a plan that wants CMS-0057-F compliance over QNXT needs hydration first.
 Implementing `QnxtClaimAdapter` would not put a single EOB on the Patient Access
-API. Prior authorization is the one CMS-0057-F path where a live seam
-(`IAuthorizationBackend`) matters.
+API. [Loading a plan's data](LOADING-A-PLANS-DATA.md) is the step-by-step
+hydration guide, and the [CPCDS file drop](CPCDS-FILE-DROP-IMPORTER.md) loads
+members, coverage and adjudicated claims from any core's daily extracts.
+
+Prior authorization no longer needs a live seam to be served either. The
+[authorization import](AUTHORIZATION-IMPORT.md) loads decisions made in the
+plan's UM system (CSV or X12 278, also through the drop), read-only and tagged
+with their source. `IAuthorizationBackend` is only needed when CHO must create
+or change authorizations in the core in real time.
 
 ## 2. What to build, in order
 
 | Tier | Goal | Work | Seams |
 | --- | --- | --- | --- |
-| 1. Foothold | CMS-0057-F APIs over the existing core | Initial load and change feed for members and coverage (834 through enrollment-import-service), providers, organizations and networks (provider-service APIs), benefit plans, and adjudicated claim history (CPCDS file drop, see [CPCDS-FILE-DROP-IMPORTER.md](CPCDS-FILE-DROP-IMPORTER.md)). Agree who answers prior authorization. | Hydration. `IAuthorizationBackend` only if PA stays authoritative in the core |
+| 1. Foothold | CMS-0057-F APIs over the existing core | Follow [Loading a plan's data](LOADING-A-PLANS-DATA.md): benefit plans, providers and networks (provider-service APIs; no bulk roster import yet), members, coverage and adjudicated claims (CPCDS file drop or 834), and prior authorizations decided in the plan's UM (authorization import). Pricing data (fee schedules, contract rosters) only if CHO will price claims. | Hydration through the importers. No live adapter |
 | 2. Live reads | Staff and portal see the core's current data, not yesterday's load | Read methods of the live adapters | `IClaimAdapter` reads, `IProviderAdapter`, `IOrganizationAdapter`, `IBenefitPlanAdapter`, `IEligibilityAdapter` |
-| 3. Writes and Augment | CHO writes to the core, or runs in shadow beside it | `SubmitClaimAsync`, authorization create and status writes, a legacy-result feed for comparison ([operating modes](../architecture/OPERATING-MODE.md)) | Agreed per engagement in the SOW |
+| 3. Writes and Augment | CHO writes to the core, or runs in shadow beside it | Shadow comparison now runs from the imported claims ([shadow adjudication](SHADOW-ADJUDICATION.md)), so Augment needs no live adapter. Writes remain: `SubmitClaimAsync`, real-time authorization create and status ([operating modes](../architecture/OPERATING-MODE.md)) | Agreed per engagement in the SOW |
 
-Most plans start and stay at tier 1 for the compliance date. Price and scope
-tier 2 and 3 separately.
+Most plans start and stay at tier 1 for the compliance date, and since the
+importers shipped a tier 1 plan needs no vendor connector code at all: the
+plan's core produces files, and the QXI or Open Access license matters only
+from tier 2. Price and scope tier 2 and 3 separately.
 
 ## 3. Rules every live adapter follows
 
@@ -233,16 +244,10 @@ stay vendor-neutral.
 Found while writing this guide. Each needs a decision before the first
 engagement relies on it.
 
-1. **No way to load claims the core adjudicated.** The CMS-0057-F EOB APIs read
-   `IClaimRepository`, but adjudication results are only written by CHO's own
-   adjudication pipeline (`PersistenceStage` through
-   `UpdateAdjudicationProjectionAsync`). A Foothold plan needs an import that
-   accepts claims with the core's adjudication results (allowed, paid, member
-   responsibility, CARC/RARC, adjustment links), probably from the core's
-   claim extract or 835s. This is the biggest gap for tier 1.
-   **Update:** the CPCDS file-drop importer
-   ([CPCDS-FILE-DROP-IMPORTER.md](CPCDS-FILE-DROP-IMPORTER.md)) is the first
-   load path. An X12 837/835 path is planned as the second.
+1. **Loading claims the core adjudicated: closed.** The
+   [CPCDS file drop](CPCDS-FILE-DROP-IMPORTER.md) loads them with the core's
+   adjudication results. An X12 837/835 source through the same pipeline is
+   planned as the second path.
 2. **Platform lookup falls back to CHO.** `TenantPlatformLookup` uses `cho`
    when tenant-service is unreachable or answers 5xx, and every adapter factory
    (claims, eligibility, benefit plan, provider, organization, ID card) uses
@@ -253,6 +258,10 @@ engagement relies on it.
    the request (or caching the last known platform) for tenants that name a
    vendor platform would match the ADR.
 3. **No core eligibility template.** See section 4.
-4. **Provider roster ignores `NetworkId`.** `ChoProviderAdapter.GetNetworkRosterAsync`
+4. **No bulk provider roster or network import.** Tier 1 providers and
+   networks still go through the per-record provider-service APIs. Providers
+   named on CPCDS claims are created reference-only and kept out of Plan-Net,
+   so they do not fill the directory.
+5. **Provider roster ignores `NetworkId`.** `ChoProviderAdapter.GetNetworkRosterAsync`
    filters by plan and line of business only, and `GetNetworkAsync` is not
    implemented. A vendor connector should not copy that limitation.
