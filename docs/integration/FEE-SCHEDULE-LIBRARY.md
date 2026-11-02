@@ -122,3 +122,17 @@ Recommended first library entries, all already proven against real files
   an entry, replace it with a `termDate`.
 - Child-age TMHP rates need their own entry, because the engine has no age dimension.
 - There is no bulk deploy across many plans at once.
+
+## Portal
+
+**Configuration → Fee Schedules** (`/fee-schedules`) uses this API:
+
+- **Library** tab: filter by state and open a schedule. Search its codes and
+  page through non-facility and facility amounts. The deploy panel takes a
+  percentage, a plan code (the tenant's plans are offered as chips) or a
+  standalone name, the dates, the CPT license confirmation when the schedule
+  needs one, and an option to replace an existing schedule. **Preview** runs a
+  dry run and shows common codes at the library and deployed amounts.
+  **Deploy** writes the copy.
+- **Your schedules** tab: the tenant's schedules and the plan each one is the
+  default for, with the same rate view.
