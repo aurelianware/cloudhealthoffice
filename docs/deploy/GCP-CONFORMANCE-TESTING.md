@@ -23,16 +23,18 @@ Without the two variables nothing changes.
 ## One-time setup
 
 1. **Cloudflare Access first.** In Zero Trust → Access → Applications, add a self-hosted application for each hostname (for example `fhir-test.cloudhealthoffice.com` and `auth-test.cloudhealthoffice.com`) with the same Allow policy as the demo. Then add these path-scoped applications, each with a single **Bypass** policy for Everyone:
-   - `auth-test…/.well-known/*`: discovery and keys, public by definition. fhir-service needs it to validate tokens, so leave this one on.
+   - `auth-test…/.well-known/openid-configuration` and `auth-test…/.well-known/jwks` (two exact paths, no wildcard): discovery and keys, public by definition. fhir-service fetches both from the public issuer URL to validate tokens, so leave this one on. smart-auth-service serves nothing else under `/.well-known/`, so a `/.well-known/*` wildcard adds no function and would bypass Access for anything added there later.
    - `auth-test…/connect/token`: the token endpoint. It authenticates every caller itself (`private_key_jwt` or a client secret). Turn it on only for a run.
    - `fhir-test…/fhir/r4/*`: the FHIR API. Every data route requires a token, but fhir-service runs as a Testing host and returns exception details. Turn it on only for a run.
 
    Leave `/connect/authorize` behind Access. In demo security, smart-auth-service offers the development sign-in there.
+
+   Cloudflare Security Insights reports every Bypass-for-Everyone policy as **Overprovisioned Access Policies**. For the discovery application that finding is expected: Access cannot let an anonymous caller through any other way, and the two paths hold only public metadata. Check that the application names the two exact paths, then archive the insight with a note pointing here. If it names `/connect/token` or `/fhir/r4/*` while no run is going on, a bypass was left open: turn it off.
 2. **Tunnel routes.** In Zero Trust → Networks → Tunnels → `cho-demo` → Public hostnames, add `fhir-test…` → `http://fhir-service.cloudhealthoffice.svc.cluster.local:80` and `auth-test…` → `http://smart-auth-service.cloudhealthoffice.svc.cluster.local:80`.
 3. **Bot protection.** Inferno is a script on a cloud IP, so Cloudflare's bot features answer it with a challenge page (`cf-mitigated: challenge`, HTTP 403) before it reaches CHO. On the Free plan, Bot Fight Mode cannot be skipped per hostname: turn it off for the run. Otherwise add a WAF custom rule, first in order, for `(http.host in {"fhir-test…" "auth-test…"})` with action **Skip** (remaining custom rules, Security Level, Browser Integrity Check, Super Bot Fight Mode).
 4. **TLS.** In SSL/TLS → Edge Certificates, set **Minimum TLS Version** to 1.2. Inferno's TLS test expects TLS 1.0 and 1.1 to be refused, and Cloudflare's default accepts them.
 5. **Repository variables.** Set `CONFORMANCE_FHIR_HOST` and `CONFORMANCE_AUTH_HOST` (bare hostnames), and optionally `TRUSTED_PROXY_NETWORKS` (comma-separated CIDRs). For the Bulk Data export groups, also set `BULK_EXPORT_BUCKET` and `FHIR_SERVICE_GOOGLE_ACCOUNT`. Then run **Deploy demo to GKE**.
-6. **Check discovery.** `curl https://fhir-test…/fhir/r4/.well-known/smart-configuration` should show `token_endpoint` `https://auth-test…/connect/token`, `private_key_jwt`, and `client-confidential-asymmetric`. A 503 means fhir-service could not read the issuer's discovery document: check the `/.well-known/*` bypass.
+6. **Check discovery.** `curl https://fhir-test…/fhir/r4/.well-known/smart-configuration` should show `token_endpoint` `https://auth-test…/connect/token`, `private_key_jwt`, and `client-confidential-asymmetric`. A 503 means fhir-service could not read the issuer's discovery document: check the discovery bypass (both `/.well-known/openid-configuration` and `/.well-known/jwks`).
 
 ## Each run
 
