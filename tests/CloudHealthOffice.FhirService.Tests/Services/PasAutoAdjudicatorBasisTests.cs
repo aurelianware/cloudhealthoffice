@@ -11,7 +11,7 @@ using Hl7.Fhir.Model;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
-using EnrollmentLob = CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness;
+using EnrollmentLob = CloudHealthOffice.ProviderEnrollmentService.Models.ProgramParticipation;
 
 namespace CloudHealthOffice.FhirService.Tests.Services;
 

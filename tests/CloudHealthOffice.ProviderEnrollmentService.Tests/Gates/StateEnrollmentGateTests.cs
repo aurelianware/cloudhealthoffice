@@ -64,7 +64,7 @@ public class StateEnrollmentGateTests
         Status = EnrollmentStatus.Active,
         EffectiveDate = DateOnly.FromDateTime(DateTime.Today).AddYears(-1),
         ProviderType = ProviderTypeClassification.PhysicianMD,
-        SupportedLobs = LineOfBusiness.Medicaid,
+        SupportedLobs = ProgramParticipation.Medicaid,
         EnrolledTaxonomies = [Taxonomy]
     };
 
@@ -106,7 +106,7 @@ public class StateEnrollmentGateTests
 
         var gate = BuildGate(httpContext: accessor, config: BuildConfig(EnrollmentGateMode.Enforce));
 
-        var act = () => gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var act = () => gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         await act.Should().ThrowAsync<TenantContextMissingException>();
         await _configRepo.DidNotReceive().GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -120,7 +120,7 @@ public class StateEnrollmentGateTests
 
         var gate = BuildGate(httpContext: accessor, config: BuildConfig(EnrollmentGateMode.Enforce));
 
-        var act = () => gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var act = () => gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         await act.Should().ThrowAsync<TenantContextMissingException>();
     }
@@ -139,7 +139,7 @@ public class StateEnrollmentGateTests
 
         var gate = BuildGate(httpContext: accessor, config: BuildConfig(EnrollmentGateMode.Enforce), record: null);
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         result.Passed.Should().BeFalse();
         result.DenialCode.Should().Be("PEMS-001");
@@ -158,7 +158,7 @@ public class StateEnrollmentGateTests
             httpContext: BuildHttpContext(TenantId),
             config: null);
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         result.Passed.Should().BeTrue();
         await _source.DidNotReceive()
@@ -176,7 +176,7 @@ public class StateEnrollmentGateTests
             httpContext: BuildHttpContext(TenantId),
             config: BuildConfig(EnrollmentGateMode.Disabled));
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         result.Passed.Should().BeTrue();
         await _source.DidNotReceive()
@@ -190,7 +190,7 @@ public class StateEnrollmentGateTests
         [
             new LobEnrollmentOverride
             {
-                Lob = LineOfBusiness.Marketplace,
+                Lob = ProgramParticipation.Marketplace,
                 GateMode = EnrollmentGateMode.Disabled
             }
         ]);
@@ -199,7 +199,7 @@ public class StateEnrollmentGateTests
             httpContext: BuildHttpContext(TenantId),
             config: config);
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Marketplace);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Marketplace);
 
         result.Passed.Should().BeTrue();
         await _source.DidNotReceive()
@@ -216,7 +216,7 @@ public class StateEnrollmentGateTests
             httpContext: BuildHttpContext(TenantId),
             config: config);
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         result.Passed.Should().BeTrue();
         await _source.DidNotReceive()
@@ -235,7 +235,7 @@ public class StateEnrollmentGateTests
             config: BuildConfig(EnrollmentGateMode.Enforce),
             record: null);
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         result.Passed.Should().BeFalse();
         result.DenialCode.Should().Be("PEMS-001");
@@ -249,7 +249,7 @@ public class StateEnrollmentGateTests
             config: BuildConfig(EnrollmentGateMode.Enforce),
             record: BuildActiveRecord() with { Status = EnrollmentStatus.Suspended });
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         result.Passed.Should().BeFalse();
         result.DenialCode.Should().Be("PEMS-003");
@@ -263,7 +263,7 @@ public class StateEnrollmentGateTests
             config: BuildConfig(EnrollmentGateMode.Enforce),
             record: BuildActiveRecord() with { Status = EnrollmentStatus.RevalidationRequired });
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         result.Passed.Should().BeFalse();
         result.DenialCode.Should().Be("PEMS-004");
@@ -277,7 +277,7 @@ public class StateEnrollmentGateTests
             config: BuildConfig(EnrollmentGateMode.Enforce),
             record: BuildActiveRecord() with { Status = EnrollmentStatus.Pending });
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         result.Passed.Should().BeFalse();
         result.DenialCode.Should().Be("PEMS-001");
@@ -291,7 +291,7 @@ public class StateEnrollmentGateTests
             config: BuildConfig(EnrollmentGateMode.Enforce),
             record: BuildActiveRecord() with { EffectiveDate = _today.AddDays(30) });
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         result.Passed.Should().BeFalse();
         result.DenialCode.Should().Be("PEMS-001");
@@ -305,7 +305,7 @@ public class StateEnrollmentGateTests
             config: BuildConfig(EnrollmentGateMode.Enforce),
             record: BuildActiveRecord() with { TerminationDate = _today.AddDays(-1) });
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         result.Passed.Should().BeFalse();
         result.DenialCode.Should().Be("PEMS-001");
@@ -319,7 +319,7 @@ public class StateEnrollmentGateTests
             config: BuildConfig(EnrollmentGateMode.Enforce),
             record: BuildActiveRecord()); // enrolled: 207Q00000X
 
-        var result = await gate.EvaluateAsync(Npi, "2084P0800X", StateCode, _today, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, "2084P0800X", StateCode, _today, ProgramParticipation.Medicaid);
 
         result.Passed.Should().BeFalse();
         result.DenialCode.Should().Be("PEMS-002");
@@ -333,7 +333,7 @@ public class StateEnrollmentGateTests
             config: BuildConfig(EnrollmentGateMode.Enforce),
             record: BuildActiveRecord()); // SupportedLobs = Medicaid only
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.CHIP);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.CHIP);
 
         result.Passed.Should().BeFalse();
         result.DenialCode.Should().Be("PEMS-005");
@@ -351,7 +351,7 @@ public class StateEnrollmentGateTests
             config: BuildConfig(EnrollmentGateMode.Enforce),
             record: BuildActiveRecord());
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         result.Passed.Should().BeTrue();
         result.DenialCode.Should().BeNull();
@@ -369,7 +369,7 @@ public class StateEnrollmentGateTests
             config: BuildConfig(EnrollmentGateMode.Warn),
             record: null);
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         result.Passed.Should().BeTrue();
 
@@ -389,7 +389,7 @@ public class StateEnrollmentGateTests
             config: BuildConfig(EnrollmentGateMode.Warn),
             record: BuildActiveRecord());
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.Medicaid);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.Medicaid);
 
         result.Passed.Should().BeTrue();
     }
@@ -406,14 +406,14 @@ public class StateEnrollmentGateTests
         [
             new LobEnrollmentOverride
             {
-                Lob = LineOfBusiness.STARPlus,
+                Lob = ProgramParticipation.STARPlus,
                 RevalidationWarningDays = 45
             }
         ]);
 
         var record = BuildActiveRecord() with
         {
-            SupportedLobs = LineOfBusiness.STARPlus | LineOfBusiness.Medicaid
+            SupportedLobs = ProgramParticipation.STARPlus | ProgramParticipation.Medicaid
         };
 
         var gate = BuildGate(
@@ -421,7 +421,7 @@ public class StateEnrollmentGateTests
             config: config,
             record: record);
 
-        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, LineOfBusiness.STARPlus);
+        var result = await gate.EvaluateAsync(Npi, Taxonomy, StateCode, _today, ProgramParticipation.STARPlus);
 
         result.Passed.Should().BeTrue();
     }

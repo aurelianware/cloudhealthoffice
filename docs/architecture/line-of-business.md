@@ -102,4 +102,7 @@ today, each with the PR that removes it:
    reads programs with its own identity (`ProgramDirectory:UseServiceIdentity`).
    Historical imports (CPCDS, the authorization CSV and X12 278 imports) keep the line of
    business they were given.
-7. ProviderEnrollmentService's flags enum is renamed `ProgramParticipation`.
+7. ProviderEnrollmentService's flags enum is renamed `ProgramParticipation` (done). It says
+   which state programs a provider is enrolled in, so it is not a line of business. Its
+   numbers and the JSON property names are unchanged, so stored enrollment records and Redis
+   cache entries read as before. The drift test has no known exceptions left.

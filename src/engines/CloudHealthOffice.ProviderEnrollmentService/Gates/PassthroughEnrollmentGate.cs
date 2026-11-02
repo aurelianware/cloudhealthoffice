@@ -16,7 +16,7 @@ public sealed class PassthroughEnrollmentGate : IEnrollmentDecisionGate
         string taxonomy,
         string stateCode,
         DateOnly serviceDate,
-        LineOfBusiness lob,
+        ProgramParticipation lob,
         CancellationToken ct = default)
         => Task.FromResult(GateResult.Pass());
 }

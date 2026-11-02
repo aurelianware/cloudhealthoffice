@@ -55,11 +55,11 @@ public async Task<ActionResult<ProviderEnrollmentValidationResponse>> ValidatePr
     // Map string LOB from the Argo workflow payload to the enrollment service enum
     var lob = request.LineOfBusiness?.ToUpperInvariant() switch
     {
-        "MEDICAID" or "STAR" or "STARPLUS" or "STARKIDS" => LineOfBusiness.Medicaid,
-        "CHIP"                                            => LineOfBusiness.CHIP,
-        "MARKETPLACE" or "EXCHANGE"                       => LineOfBusiness.Marketplace,
-        "MEDICARE"                                        => LineOfBusiness.Medicare,
-        _                                                 => LineOfBusiness.None
+        "MEDICAID" or "STAR" or "STARPLUS" or "STARKIDS" => ProgramParticipation.Medicaid,
+        "CHIP"                                            => ProgramParticipation.CHIP,
+        "MARKETPLACE" or "EXCHANGE"                       => ProgramParticipation.Marketplace,
+        "MEDICARE"                                        => ProgramParticipation.Medicare,
+        _                                                 => ProgramParticipation.None
     };
 
     var gateResult = await _enrollmentGate.EvaluateAsync(

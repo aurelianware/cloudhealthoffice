@@ -24,7 +24,7 @@ using CloudHealthOffice.Testing.Mongo;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using MongoDB.Driver;
-using EnrollmentLob = CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness;
+using EnrollmentLob = CloudHealthOffice.ProviderEnrollmentService.Models.ProgramParticipation;
 using PlanLob = CloudHealthOffice.Infrastructure.Programs.LineOfBusiness;
 using PlanType = BenefitPlanService.Models.PlanType;
 using FamilyAccumulatorModel = BenefitPlanService.Models.FamilyAccumulatorModel;

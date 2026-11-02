@@ -23,7 +23,7 @@ public interface IStateEnrollmentSource
     string SourceSystemName { get; }
 
     /// <summary>Lines of business this source can verify enrollment for.</summary>
-    LineOfBusiness SupportedLobs { get; }
+    ProgramParticipation SupportedLobs { get; }
 
     /// <summary>
     /// Real-time enrollment lookup for a single NPI as of a given date.
@@ -82,7 +82,7 @@ public interface IEnrollmentDecisionGate
         string taxonomy,
         string stateCode,
         DateOnly serviceDate,
-        LineOfBusiness lob,
+        ProgramParticipation lob,
         CancellationToken ct = default);
 }
 
