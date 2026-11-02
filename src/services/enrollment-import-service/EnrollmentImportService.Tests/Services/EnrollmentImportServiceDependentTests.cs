@@ -1043,6 +1043,7 @@ public partial class EnrollmentImportServiceDependentTests
             new ReportingCategory { Name = " ", ReferenceValue = " " },
         ];
         sub.Coverage = [new CoverageDetail { InsuranceLineCode = "HLT", PlanCoverageDescription = "STAR BEXAR", MaintenanceType = "021", BenefitBeginDate = "20260201" }];
+        sub.Demographics!.CountyCode = "029";
 
         await h.ImportAsync(new Enrollment834 { BatchId = "RC1", Enrollments = { sub } });
 
@@ -1051,6 +1052,8 @@ public partial class EnrollmentImportServiceDependentTests
             new RateCellCategory { Name = "RISK GROUP", Qualifier = "ZZ", Value = "STAR-ADULT", Date = "20260201" });
         subInputs.CoverageLines.Should().ContainSingle().Which.Should().BeEquivalentTo(
             new RateCellCoverageLine { InsuranceLineCode = "HLT", PlanCoverageDescription = "STAR BEXAR", MaintenanceType = "021", BenefitBeginDate = "20260201" });
+
+        (subInputs.DateOfBirth, subInputs.CountyCode, subInputs.Zip).Should().Be(("19850315", "029", "94102"));
 
         var childId = DependentId(child)!;
         h.Events.AllEvents.Single(e => e.MemberId == childId).RateCellInputs!.ReportingCategories

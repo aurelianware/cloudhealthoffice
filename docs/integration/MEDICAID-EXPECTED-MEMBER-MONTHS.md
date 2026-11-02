@@ -29,10 +29,13 @@ CHO does not assume either. The plan's crosswalk names the field it reads.
    {
      "reportingCategories": [ { "name": "RISK GROUP", "qualifier": "ZZ", "value": "STAR-ADULT", "date": "20260201" } ],
      "coverageLines": [ { "insuranceLineCode": "HLT", "planCoverageDescription": "STAR BEXAR",
-                          "maintenanceType": "021", "benefitBeginDate": "20260201", "benefitEndDate": null } ]
+                          "maintenanceType": "021", "benefitBeginDate": "20260201", "benefitEndDate": null } ],
+     "dateOfBirth": "20150610", "countyCode": "029", "zip": "78205"
    }
    ```
 
+   Date of birth (DMG02), county (N406 when N405 is `CY`, now parsed) and ZIP
+   come from the same transaction, for age bands and regional rate cells.
    A dependent's own loop 2750 is kept on the dependent's event. Values are
    trimmed and empty categories are dropped. Events are append-only and
    dated, so a change of category mid-enrollment is a new event, not an

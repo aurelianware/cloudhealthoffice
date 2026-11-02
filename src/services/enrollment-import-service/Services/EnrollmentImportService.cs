@@ -343,7 +343,13 @@ public class EnrollmentImportService : IEnrollmentImportService
                 BenefitEndDate = Trimmed(line.BenefitEndDate)
             });
         }
-        return inputs.ReportingCategories.Count == 0 && inputs.CoverageLines.Count == 0 ? null : inputs;
+        if (inputs.ReportingCategories.Count == 0 && inputs.CoverageLines.Count == 0) return null;
+        // Age bands and regions: rate cells usually cross the category with
+        // the member's age and county, as the same file states them.
+        inputs.DateOfBirth = Trimmed(e.Demographics?.DateOfBirth);
+        inputs.CountyCode = Trimmed(e.Demographics?.CountyCode);
+        inputs.Zip = Trimmed(e.Demographics?.Zip);
+        return inputs;
     }
 
     private static string? Trimmed(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -803,6 +809,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             City = dependent.City,
             State = dependent.State,
             Zip = dependent.Zip,
+            CountyCode = dependent.CountyCode,
             DateOfBirth = dependent.DateOfBirth,
             Gender = dependent.Gender
         },

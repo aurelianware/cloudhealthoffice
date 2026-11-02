@@ -175,6 +175,15 @@ public class EnrollmentRateCellInputs
 
     [JsonPropertyName("coverageLines")]
     public List<RateCellCoverageLine> CoverageLines { get; set; } = new();
+
+    /// <summary>DMG02 as sent (CCYYMMDD), for age bands.</summary>
+    [JsonPropertyName("dateOfBirth")] public string? DateOfBirth { get; set; }
+
+    /// <summary>N406 when N405 is CY, for regional rate cells.</summary>
+    [JsonPropertyName("countyCode")] public string? CountyCode { get; set; }
+
+    /// <summary>N403, for plans whose regions are drawn by ZIP.</summary>
+    [JsonPropertyName("zip")] public string? Zip { get; set; }
 }
 
 /// <summary>One loop 2750 reporting category: N1*75 name, REF qualifier and value, DTP date (CCYYMMDD).</summary>
