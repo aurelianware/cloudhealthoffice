@@ -4,7 +4,7 @@ using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 
-namespace PremiumBillingService.Mlr;
+namespace CloudHealthOffice.Infrastructure.Reporting;
 
 /// <summary>The upload is not an xlsx workbook this code can read, or it is too large once unzipped.</summary>
 public sealed class XlsxTemplateException(string message) : Exception(message);
@@ -168,6 +168,25 @@ public sealed class XlsxTemplate
         var cell = FindCell(Sheet(sheet), cellRef)!;
         cell.SetAttributeValue("t", "str");
         cell.Element(Main + "v")!.Value = value;
+    }
+
+    /// <summary>
+    /// Drops the cached results of every formula on the sheet, for a sheet
+    /// whose totals this code does not compute: a viewer that does not
+    /// recalculate then shows blanks rather than the template's stale zeros.
+    /// </summary>
+    public void ClearCachedValues(string sheet)
+    {
+        var doc = Sheet(sheet);
+        var changed = false;
+        foreach (var cell in doc.Root!.Element(Main + "sheetData")?.Elements(Main + "row").Elements(Main + "c") ?? [])
+        {
+            if (cell.Element(Main + "f") is null) continue;
+            cell.Element(Main + "v")?.Remove();
+            cell.Attribute("t")?.Remove();
+            changed = true;
+        }
+        if (changed) _changedSheets[_sheetPaths[sheet]] = doc;
     }
 
     /// <summary>The workbook with the changes, every other part as it was, set to recalculate on open.</summary>

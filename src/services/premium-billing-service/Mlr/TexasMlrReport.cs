@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Reporting;
 using System.Text.RegularExpressions;
 
 namespace PremiumBillingService.Mlr;

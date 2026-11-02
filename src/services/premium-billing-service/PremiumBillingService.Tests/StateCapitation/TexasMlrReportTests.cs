@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Reporting;
 using System.IO.Compression;
 using System.Security;
 using System.Text;
@@ -209,6 +210,19 @@ public class TexasMlrReportTests
         zip.Entries.Select(e => e.FullName).Should().Equal(
             "[Content_Types].xml", "xl/workbook.xml", "xl/_rels/workbook.xml.rels", "xl/sharedStrings.xml",
             "xl/worksheets/sheet1.xml", "xl/worksheets/sheet3.xml", "xl/worksheets/sheet2.xml");
+    }
+
+    [Fact]
+    public void Clearing_cached_values_keeps_formulas_and_drops_their_stale_results()
+    {
+        var workbook = XlsxTemplate.Open(Template());
+        workbook.ClearCachedValues(TexasMlrReport.Sheet);
+
+        var saved = XlsxTemplate.Open(workbook.Save());
+
+        saved.Formula(TexasMlrReport.Sheet, "G24").Should().NotBeNull();
+        saved.Text(TexasMlrReport.Sheet, "G24").Should().BeNull();
+        saved.Text(TexasMlrReport.Sheet, "B26").Should().StartWith("Gross revenues");
     }
 
     [Fact]
