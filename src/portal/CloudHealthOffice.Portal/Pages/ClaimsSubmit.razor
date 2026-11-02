@@ -1,29 +1,136 @@
 @page "/claims/submit"
+@inject IClaimsService ClaimsService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
 
-<PageTitle>Submit Claim - Cloud Health Office</PageTitle>
+@*
+    Manual entry of a professional (CMS-1500) claim: a paper claim a plan
+    keys, or a claim a provider phoned in. It goes through the same intake as
+    an 837 (POST /api/v1/claims) and the same adjudication pipeline, so a
+    keyed claim is priced, edited and paid exactly like an electronic one.
+*@
 
-<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudText Typo="Typo.h4" GutterBottom="true">
-        <MudIcon Icon="@Icons.Material.Filled.NoteAdd" Class="mr-2" />
-        Submit Claim
-    </MudText>
+<PageTitle>Enter Claim - Cloud Health Office</PageTitle>
 
-    <MudCard Elevation="0" Class="mt-4">
-        <MudCardContent Class="d-flex flex-column align-center pa-8">
-            <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Large" Color="Color.Primary" Class="mb-4" />
-            <MudText Typo="Typo.h6" GutterBottom="true">Claim Submission</MudText>
-            <MudText Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center">
-                The claim submission portal is being finalized and will be available shortly.
-                In the meantime, claims can be submitted via the X12 837 EDI interface or FHIR API.
-            </MudText>
-            <MudStack Row="true" Spacing="3" Class="mt-4">
-                <MudButton Href="/apis" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Api">
-                    View API Documentation
-                </MudButton>
-                <MudButton Href="/docs" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.MenuBook">
-                    EDI Integration Guide
-                </MudButton>
-            </MudStack>
-        </MudCardContent>
-    </MudCard>
-</MudContainer>
+<PermissionGate Permission="claims:work" RoleName="Claims Examiner">
+    <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4 mb-8">
+        <MudText Typo="Typo.h4" GutterBottom="true">
+            <MudIcon Icon="@Icons.Material.Filled.NoteAdd" Class="mr-2" />
+            Enter a claim
+        </MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+            Key a professional (CMS-1500) claim. It goes through the same intake and adjudication as an
+            837, so it's checked, priced and paid the same way. For volume, send 837 files instead
+            (<MudLink Href="/docs">EDI integration guide</MudLink>).
+        </MudText>
+
+        <MudPaper Class="pa-4 mb-4" Outlined="true">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6" md="4">
+                    <MudTextField @bind-Value="_model.ClaimNumber" Label="Patient account / claim number"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="38"
+                                  HelperText="CMS-1500 box 26" data-testid="enter-claim-number" />
+                </MudItem>
+                <MudItem xs="12" sm="6" md="4">
+                    <MudSelect T="int" @bind-Value="_model.LineOfBusiness" Label="Line of business"
+                               Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="enter-lob">
+                        @foreach (var (value, label) in LinesOfBusiness)
+                        {
+                            <MudSelectItem T="int" Value="@value">@label</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <ClaimEditor Model="_model" />
+
+        @if (_showProblems && _model.Validate() is { Count: > 0 } problems)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-4" data-testid="enter-problems">
+                <ul class="ma-0">
+                    @foreach (var p in problems) { <li>@p</li> }
+                </ul>
+            </MudAlert>
+        }
+        @if (_submitErrors.Count > 0)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4" data-testid="enter-submit-errors">
+                <ul class="ma-0">
+                    @foreach (var e in _submitErrors) { <li>@e</li> }
+                </ul>
+            </MudAlert>
+        }
+
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
+                       Disabled="_submitting" OnClick="SubmitAsync" data-testid="enter-submit">
+                @(_submitting ? "Submitting…" : "Submit claim")
+            </MudButton>
+            <MudButton Variant="Variant.Text" OnClick="Reset" Disabled="_submitting">Clear</MudButton>
+        </MudStack>
+    </MudContainer>
+</PermissionGate>
+
+@code {
+    /// <summary>The claims service's line-of-business values (CloudHealthOffice.Infrastructure.Programs.LineOfBusiness).</summary>
+    private static readonly (int Value, string Label)[] LinesOfBusiness =
+    {
+        (1, "Commercial"),
+        (2, "Medicare"),
+        (3, "Medicaid"),
+        (4, "Exchange (QHP)"),
+    };
+
+    private ClaimEditModel _model = NewClaim();
+    private bool _submitting;
+    private bool _showProblems;
+    private List<string> _submitErrors = new();
+
+    private static ClaimEditModel NewClaim() =>
+        ClaimEditModel.NewProfessional(DateTime.Today, 1, $"MAN-{DateTime.Now:yyyyMMddHHmmss}");
+
+    private void Reset()
+    {
+        _model = NewClaim();
+        _showProblems = false;
+        _submitErrors = new();
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_submitting) return;
+        _submitErrors = new();
+        if (_model.Validate().Count > 0 || string.IsNullOrWhiteSpace(_model.ClaimNumber))
+        {
+            _showProblems = true;
+            if (string.IsNullOrWhiteSpace(_model.ClaimNumber))
+                _submitErrors = new() { "Patient account / claim number is required." };
+            return;
+        }
+
+        _submitting = true;
+        try
+        {
+            var result = await ClaimsService.SubmitNewClaimAsync(_model.ApplyTo());
+            if (result.Success && !string.IsNullOrWhiteSpace(result.NewClaimId))
+            {
+                Snackbar.Add("Claim submitted. It's being adjudicated now.", Severity.Success);
+                NavigationManager.NavigateTo($"/claims/{Uri.EscapeDataString(result.NewClaimId)}");
+                return;
+            }
+
+            _submitErrors = result.Success
+                ? new() { "The claim was accepted but the service didn't return its id. Find it under Claims." }
+                : result.Errors.ToList();
+        }
+        catch (Exception ex)
+        {
+            _submitErrors = new() { $"The claim wasn't submitted: {ex.Message}" };
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

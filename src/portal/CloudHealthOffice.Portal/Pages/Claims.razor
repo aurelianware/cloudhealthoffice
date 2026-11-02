@@ -17,7 +17,11 @@
             <MudIcon Icon="@Icons.Material.Filled.Receipt" Class="mr-2" />
             Claims Management
         </MudText>
-        <ModuleViewSwitch ListHref="/claims" InsightsHref="/claims/insights" Active="list" />
+        <div class="d-flex align-center gap-2">
+            <MudButton Href="/claims/submit" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.NoteAdd" data-testid="enter-claim">Enter claim</MudButton>
+            <ModuleViewSwitch ListHref="/claims" InsightsHref="/claims/insights" Active="list" />
+        </div>
     </div>
     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
         Search and manage professional and institutional healthcare claims
