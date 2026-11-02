@@ -1,0 +1,235 @@
+@page "/claims/{ClaimId}/correct"
+@inject IClaimsService ClaimsService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+@*
+    Examiner correction of a finalized claim. The examiner edits the claim,
+    states why, reviews what changed, and submits. The service stores the
+    correction as an adjustment: a new claim version that supersedes this one
+    and runs the full adjudication pipeline (edits, pricing, benefits,
+    accumulators), so the payment difference is computed, not keyed.
+*@
+
+<PageTitle>Correct Claim - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="claims:adjust" RoleName="Claims Adjuster">
+    <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4 mb-8">
+        <MudBreadcrumbs Items="_breadcrumbs" Class="px-0" />
+
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        else if (_loadError is not null)
+        {
+            <MudAlert Severity="Severity.Error" data-testid="correct-load-error">@_loadError</MudAlert>
+        }
+        else if (_claim is null || _model is null)
+        {
+            <MudAlert Severity="Severity.Warning">Claim @ClaimId wasn't found.</MudAlert>
+        }
+        else if (!CanCorrect(_claim))
+        {
+            <MudAlert Severity="Severity.Info" data-testid="correct-not-allowed">
+                Only a paid or denied claim can be corrected with an adjustment. This claim is
+                <strong>@ClaimStatusDisplay.Label(_claim.Status)</strong>.
+                @if (ClaimStatusDisplay.IsReprocessable(_claim.Status))
+                {
+                    @: Resolve it from the claim's review instead.
+                }
+            </MudAlert>
+            <MudButton Href="@ClaimHref" Variant="Variant.Outlined" Class="mt-4"
+                       StartIcon="@Icons.Material.Filled.ArrowBack">Back to claim</MudButton>
+        }
+        else
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.h4">Correct claim @_claim.DisplayClaimNumber</MudText>
+                <MudChip T="string" Color="@ClaimStatusDisplay.Color(_claim.Status)" Size="Size.Small">
+                    @ClaimStatusDisplay.Label(_claim.Status)
+                </MudChip>
+            </MudStack>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+                @_claim.MemberName · @_claim.ProviderName · paid @_claim.PaidAmount.ToString("C") on
+                @_claim.TotalChargeAmount.ToString("C") billed.
+                Submitting creates a new version of this claim that is adjudicated again from scratch;
+                this version is superseded and the payment difference is settled in the next payment cycle.
+            </MudText>
+
+            @if (!string.Equals(_claim.ClaimType, "Professional", StringComparison.OrdinalIgnoreCase)
+                 && !string.IsNullOrWhiteSpace(_claim.ClaimType))
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+                    This is a @_claim.ClaimType.ToLowerInvariant() claim. The editor shows the professional fields;
+                    @_claim.ClaimType.ToLowerInvariant()-specific detail is kept as submitted.
+                </MudAlert>
+            }
+
+            <ClaimEditor Model="_model" />
+
+            <MudPaper Class="pa-4 mb-4" Outlined="true">
+                <MudText Typo="Typo.h6" GutterBottom="true">Why are you correcting it?</MudText>
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_reason" Label="Reason" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Required="true" MaxLength="500" Counter="500"
+                                      Placeholder="e.g. Provider called: line 2 units should be 1, not 3"
+                                      data-testid="correct-reason" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_notes" Label="Notes (optional)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      MaxLength="2000" Lines="2" data-testid="correct-notes" />
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            @if (_reviewing)
+            {
+                var changes = _model.Changes();
+                var problems = _model.Validate();
+                <MudPaper Class="pa-4 mb-4" Outlined="true" data-testid="correct-review">
+                    <MudText Typo="Typo.h6" GutterBottom="true">Review</MudText>
+                    @if (problems.Count > 0)
+                    {
+                        <MudAlert Severity="Severity.Warning" Class="mb-2" data-testid="correct-problems">
+                            <ul class="ma-0">
+                                @foreach (var p in problems) { <li>@p</li> }
+                            </ul>
+                        </MudAlert>
+                    }
+                    @if (changes.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Info" Class="mb-2" data-testid="correct-no-changes">Nothing has changed yet.</MudAlert>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Class="mb-1">What changes:</MudText>
+                        <ul data-testid="correct-changes">
+                            @foreach (var c in changes) { <li><MudText Typo="Typo.body2">@c</MudText></li> }
+                        </ul>
+                    }
+                    @if (_submitErrors.Count > 0)
+                    {
+                        <MudAlert Severity="Severity.Error" Class="mt-2" data-testid="correct-submit-errors">
+                            <ul class="ma-0">
+                                @foreach (var e in _submitErrors) { <li>@e</li> }
+                            </ul>
+                        </MudAlert>
+                    }
+                    <MudStack Row="true" Spacing="2" Class="mt-3">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
+                                   Disabled="@(_submitting || problems.Count > 0 || changes.Count == 0 || string.IsNullOrWhiteSpace(_reason))"
+                                   OnClick="SubmitAsync" data-testid="correct-submit">
+                            @(_submitting ? "Submitting…" : "Submit correction")
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" OnClick="@(() => _reviewing = false)" Disabled="_submitting">
+                            Keep editing
+                        </MudButton>
+                    </MudStack>
+                </MudPaper>
+            }
+            else
+            {
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FactCheck"
+                               OnClick="@(() => _reviewing = true)" data-testid="correct-review-button">
+                        Review correction
+                    </MudButton>
+                    <MudButton Href="@ClaimHref" Variant="Variant.Text">Cancel</MudButton>
+                </MudStack>
+            }
+        }
+    </MudContainer>
+</PermissionGate>
+
+@code {
+    [Parameter] public string ClaimId { get; set; } = string.Empty;
+
+    private ClaimDetails? _claim;
+    private ClaimEditModel? _model;
+    private bool _loading = true;
+    private string? _loadError;
+    private string _reason = string.Empty;
+    private string? _notes;
+    private bool _reviewing;
+    private bool _submitting;
+    private List<string> _submitErrors = new();
+    private string _idempotencyKey = Guid.NewGuid().ToString("N");
+    private List<BreadcrumbItem> _breadcrumbs = new();
+
+    private string ClaimHref => $"/claims/{Uri.EscapeDataString(ClaimId)}";
+
+    /// <summary>The claim's id; the route may carry its claim number instead.</summary>
+    private string ClaimKey => string.IsNullOrWhiteSpace(_claim?.ClaimId) ? ClaimId : _claim!.ClaimId;
+
+    /// <summary>The claims service adjusts Paid, PartiallyPaid and Denied claims only.</summary>
+    internal static bool CanCorrect(ClaimDetails claim) =>
+        ClaimStatusDisplay.IsFinalized(claim.Status) && !string.Equals(claim.Status, "Voided", StringComparison.OrdinalIgnoreCase);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _breadcrumbs = new()
+        {
+            new BreadcrumbItem("Claims", "/claims"),
+            new BreadcrumbItem(ClaimId, ClaimHref),
+            new BreadcrumbItem("Correct", null, disabled: true),
+        };
+
+        _loading = true;
+        _loadError = null;
+        try
+        {
+            _claim = await ClaimsService.GetClaimByIdAsync(ClaimId);
+            if (_claim is not null && CanCorrect(_claim))
+            {
+                var draft = await ClaimsService.GetCorrectionDraftAsync(ClaimKey);
+                _model = draft is null ? null : ClaimEditModel.FromJson(draft);
+            }
+            else if (_claim is not null)
+            {
+                _model = ClaimEditModel.FromJson(new System.Text.Json.Nodes.JsonObject());
+            }
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"The claim couldn't be loaded for correction: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_model is null || _submitting) return;
+        _submitting = true;
+        _submitErrors = new();
+        try
+        {
+            var result = await ClaimsService.SubmitCorrectionAsync(
+                ClaimKey, _reason.Trim(), _notes, _model.ApplyTo(), _idempotencyKey);
+            if (result.Success)
+            {
+                Snackbar.Add("Correction submitted. The new version is being adjudicated.", Severity.Success);
+                NavigationManager.NavigateTo(string.IsNullOrWhiteSpace(result.NewClaimId)
+                    ? ClaimHref
+                    : $"/claims/{Uri.EscapeDataString(result.NewClaimId)}");
+                return;
+            }
+
+            _submitErrors = result.Errors.ToList();
+            // A refused correction releases the claim; a fixed resubmission is a new request.
+            _idempotencyKey = Guid.NewGuid().ToString("N");
+        }
+        catch (Exception ex)
+        {
+            _submitErrors = new() { $"The correction wasn't submitted: {ex.Message}" };
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

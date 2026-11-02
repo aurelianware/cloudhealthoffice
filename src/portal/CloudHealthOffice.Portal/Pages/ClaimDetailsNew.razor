@@ -123,6 +123,17 @@
                                     ? "Finalized by the payment cycle: correct it with an adjustment, or reverse it."
                                     : "Finalized: correct it with an adjustment.")
                             </MudAlert>
+                            @if (_canAdjust && ClaimCorrect.CanCorrect(_claim))
+                            {
+                                <MudButton Variant="Variant.Filled"
+                                          Color="Color.Primary"
+                                          FullWidth="true"
+                                          StartIcon="@Icons.Material.Filled.EditNote"
+                                          Href="@($"/claims/{Uri.EscapeDataString(_claim.ClaimId)}/correct")"
+                                          data-testid="correct-claim">
+                                    Correct claim
+                                </MudButton>
+                            }
                             @if (ClaimStatusDisplay.IsReversible(_claim.Status))
                             {
                                 <MudButton Variant="Variant.Outlined"
@@ -1231,6 +1242,7 @@
     private string? TabQuery => string.IsNullOrWhiteSpace(FromRun) ? null : $"?fromRun={Uri.EscapeDataString(FromRun)}";
 
     private bool _canReadAccessLog;
+    private bool _canAdjust;
     private bool _canReadPayments;
     private List<ClaimAccessEntry>? _accessLog;
     private string? _accessLogError;
@@ -1305,11 +1317,13 @@
             await UserContextService.GetCurrentUserAsync();
             _canReadAccessLog = UserContextService.HasPermission("audit:read");
             _canReadPayments = UserContextService.HasPermission("payments:read");
+            _canAdjust = UserContextService.HasPermission("claims:adjust");
         }
         catch
         {
             _canReadAccessLog = false;
             _canReadPayments = false;
+            _canAdjust = false;
         }
     }
 

@@ -435,6 +435,83 @@ public class ClaimsService : IClaimsService
                ?? throw new InvalidOperationException("The note wasn't saved: empty response.");
     }
 
+    public async Task<System.Text.Json.Nodes.JsonObject?> GetCorrectionDraftAsync(string claimId)
+    {
+        var url = $"{GetClaimsServiceRootUrl()}/api/v1/claims/{Uri.EscapeDataString(claimId)}/correction-draft";
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.GetAsync(url);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            throw new InvalidOperationException("You don't have permission to correct claims.");
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"The claim couldn't be loaded for correction ({(int)response.StatusCode}).");
+
+        return await response.Content.ReadFromJsonAsync<System.Text.Json.Nodes.JsonObject>(JsonOptions);
+    }
+
+    public async Task<ClaimCorrectionResult> SubmitCorrectionAsync(
+        string claimId,
+        string reason,
+        string? notes,
+        System.Text.Json.Nodes.JsonObject correctedClaim,
+        string idempotencyKey)
+    {
+        var url = $"{GetClaimsServiceRootUrl()}/api/v1/claims/{Uri.EscapeDataString(claimId)}/adjustments";
+        var body = new System.Text.Json.Nodes.JsonObject
+        {
+            ["adjustmentReason"] = reason,
+            ["notes"] = string.IsNullOrWhiteSpace(notes) ? null : notes,
+            ["correctedClaim"] = correctedClaim.DeepClone(),
+        };
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = JsonContent.Create(body, options: JsonOptions),
+        };
+        request.Headers.Add("Idempotency-Key", idempotencyKey);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.SendAsync(request);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+
+        var text = await response.Content.ReadAsStringAsync();
+        if (response.IsSuccessStatusCode)
+        {
+            var created = string.IsNullOrWhiteSpace(text)
+                ? null
+                : System.Text.Json.JsonSerializer.Deserialize<ClaimCorrectionCreated>(text, JsonOptions);
+            return ClaimCorrectionResult.Ok(created?.Id ?? string.Empty, created?.NewClaimId ?? string.Empty);
+        }
+
+        return ClaimCorrectionResult.Fail(response.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Forbidden => new[] { "You don't have permission to correct claims." },
+            System.Net.HttpStatusCode.NotFound => new[] { "The claim wasn't found." },
+            _ => ClaimCorrectionResult.ReadErrors(text, (int)response.StatusCode),
+        });
+    }
+
+    private sealed class ClaimCorrectionCreated
+    {
+        public string Id { get; set; } = string.Empty;
+        public string NewClaimId { get; set; } = string.Empty;
+    }
+
     private string GetClaimsServiceRootUrl()
     {
         var baseUrl = (_configuration["Services:ClaimsService"] ?? string.Empty).TrimEnd('/');
