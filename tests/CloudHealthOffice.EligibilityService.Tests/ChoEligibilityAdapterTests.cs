@@ -92,6 +92,37 @@ public class ChoEligibilityAdapterTests
         Assert.Equal("FAM", result.CoverageLevel);
     }
 
+    [Theory]
+    [InlineData("1", LineOfBusiness.Commercial)]
+    [InlineData("2", LineOfBusiness.Medicare)]
+    [InlineData("4", LineOfBusiness.Exchange)]
+    [InlineData("6", LineOfBusiness.VA)]
+    [InlineData("\"TRICARE\"", LineOfBusiness.TRICARE)]
+    [InlineData("0", LineOfBusiness.Unknown)] // was reported as Commercial
+    public async Task VerifyEligibility_reports_coverages_line_of_business_without_renumbering(string sent, LineOfBusiness expected)
+    {
+        // coverage-service and eligibility-service now share the enum: 4 is Exchange in both.
+        var coverageArray = $$"""[{"id":"cov-001","memberId":"MBR-001","groupNumber":"GRP-100","planId":"PLAN-PPO-2025","effectiveDate":"2025-01-01","status":1,"lineOfBusiness":{{sent}}}]""";
+        var handler = new SequenceHandler(new[]
+        {
+            new FakeResponse(HttpStatusCode.OK, coverageArray),
+            new FakeResponse(HttpStatusCode.OK, "[]"),
+            new FakeResponse(HttpStatusCode.NotFound, ""),
+            new FakeResponse(HttpStatusCode.NotFound, ""),
+        });
+
+        var result = await CreateAdapter(handler).VerifyEligibilityAsync(new EligibilityAdapterRequest
+        {
+            TenantId = "test-tenant",
+            SubscriberId = "MBR-001",
+            ServiceDate = new DateTime(2025, 6, 15),
+            ServiceTypeCode = "30"
+        });
+
+        Assert.Equal(expected, result.LineOfBusiness);
+        Assert.Contains($"\"lineOfBusiness\":\"{expected}\"", JsonSerializer.Serialize(result, JsonOpts));
+    }
+
     [Fact]
     public async Task VerifyEligibility_CoverageReturnsTerminated_ReturnsNotEligible()
     {
