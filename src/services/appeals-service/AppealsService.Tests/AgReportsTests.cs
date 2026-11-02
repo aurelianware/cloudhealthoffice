@@ -67,6 +67,8 @@ public class AgReportBuilderTests
         resolved.CreatedBy = "csr-7";
         resolved.GrievanceCategory = "Scheduling";
         resolved.Decision = new AppealDecision { DecisionType = AppealDecisionType.Approved, DecisionMaker = "gna-lead", DecisionDate = sept.AddDays(10) };
+        resolved.AcknowledgmentSentAt = sept.AddDays(2);
+        resolved.ResolutionNoticeSentAt = sept.AddDays(11);
         var open = Case("g2", sept, 30, status: AppealStatus.InReview, decidedAfterDays: null, type: AppealType.Grievance);
         open.CreatedBy = null;
         open.SubmittedBy = "portal-member";
@@ -79,7 +81,10 @@ public class AgReportBuilderTests
             (row.FiledAt, row.MemberName, row.ReceivedBy, row.Category, row.Description, row.ActionTaken));
         Assert.Equal(("Approved: Appointment booked for 9/20.", "gna-lead", (DateTime?)sept.AddDays(10), (bool?)true),
             (row.Resolution, row.ResolvedBy, row.ResolvedAt, row.OnTime));
-        Assert.Null(row.MemberNotifiedAt);
+        Assert.Equal(((DateTime?)sept.AddDays(2), (DateTime?)sept.AddDays(11)), (row.AcknowledgedAt, row.MemberNotifiedAt));
+        Assert.Equal(((DateTime?)null, (DateTime?)null), (openRow.AcknowledgedAt, openRow.MemberNotifiedAt));
+        var caseRow = AgReportBuilder.Case(resolved, Now);
+        Assert.Equal(((DateTime?)sept.AddDays(2), (DateTime?)sept.AddDays(11)), (caseRow.AcknowledgedAt, caseRow.ResolutionNoticeSentAt));
         Assert.Equal(("portal-member", (string?)null, (string?)null, (string?)null, GrievanceCategories.Uncategorized),
             (openRow.ReceivedBy, openRow.MemberName, openRow.Resolution, openRow.ResolvedBy, openRow.Category));
     }

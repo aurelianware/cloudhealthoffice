@@ -65,6 +65,8 @@ public sealed class AppealDto
     public string? ProgramId { get; set; }
     public AppealDeadlineExtensionDto? DeadlineExtension { get; set; }
     public DateTime? DecisionDate { get; set; }
+    public DateTime? AcknowledgmentSentAt { get; set; }
+    public DateTime? ResolutionNoticeSentAt { get; set; }
 
     public string? SubmittedBy { get; set; }
 
