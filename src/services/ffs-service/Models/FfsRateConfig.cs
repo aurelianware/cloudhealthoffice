@@ -200,16 +200,3 @@ public enum FfsRateConfigStatus
     /// </summary>
     Expired = 5
 }
-
-/// <summary>
-/// Line of Business (matches other CHO services)
-/// </summary>
-public enum LineOfBusiness
-{
-    Commercial = 1,
-    Medicare = 2,
-    Medicaid = 3,
-    Exchange = 4,
-    TRICARE = 5,
-    VA = 6
-}

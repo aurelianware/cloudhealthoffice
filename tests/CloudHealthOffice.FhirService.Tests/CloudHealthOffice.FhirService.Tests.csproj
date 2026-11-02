@@ -39,4 +39,8 @@
     <Compile Include="..\Shared\FhirService\*.cs" Link="Shared\FhirService\%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The shared line of business (docs/architecture/line-of-business.md). -->
+    <Using Include="CloudHealthOffice.Infrastructure.Programs" />
+  </ItemGroup>
 </Project>

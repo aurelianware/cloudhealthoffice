@@ -91,7 +91,7 @@ public enum RuleScope
 }
 
 /// <summary>
-/// Line of business — matches AuthorizationService.Models.LineOfBusiness exactly.
+/// Line of business: the shared CloudHealthOffice.Infrastructure.Programs.LineOfBusiness values.
 /// Numeric values must stay in sync.
 /// </summary>
 public enum PaLineOfBusiness

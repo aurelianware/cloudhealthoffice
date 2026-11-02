@@ -26,7 +26,7 @@ using CloudHealthOffice.ProviderEnrollmentService.Models;
 using EnrollmentLob = CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness;
 using StoredAuthorization = authsvc::AuthorizationService.Models.Authorization;
 using StoredStatus = authsvc::AuthorizationService.Models.AuthorizationStatus;
-using StoredLineOfBusiness = authsvc::AuthorizationService.Models.LineOfBusiness;
+using StoredLineOfBusiness = CloudHealthOffice.Infrastructure.Programs.LineOfBusiness;
 
 namespace CloudHealthOffice.FhirService.Tests.Integration;
 

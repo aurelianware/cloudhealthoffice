@@ -1568,19 +1568,6 @@ public enum ClaimStatus
 }
 
 /// <summary>
-/// Line of Business enum (matches other services)
-/// </summary>
-public enum LineOfBusiness
-{
-    Commercial = 1,
-    Medicare = 2,
-    Medicaid = 3,
-    Exchange = 4,
-    TRICARE = 5,
-    VA = 6
-}
-
-/// <summary>
 /// Why a claim was placed in Pended status. Written by the adjudication workflow
 /// at the moment of the pend; never mutated by downstream consumers (the AI examiner
 /// service writes its output to AiExamination, not here).

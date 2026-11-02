@@ -196,7 +196,7 @@ public class PasSubmitTests
         stored.Status.Should().Be(AuthorizationService.Models.AuthorizationStatus.Approved);
         stored.ReviewDecision.Should().Be("A1");
         stored.MemberId.Should().Be("MBR-pat-001");
-        stored.LineOfBusiness.Should().Be(AuthorizationService.Models.LineOfBusiness.Medicaid);
+        stored.LineOfBusiness.Should().Be(CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Medicaid);
         stored.RequestingProviderNPI.Should().Be("1234567890");
         stored.CreatedBy.Should().Be("fhir-service");
         stored.StatusHistory.Select(h => h.Status).Should().Equal(

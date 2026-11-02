@@ -38,4 +38,8 @@
     <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
     <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The shared line of business (docs/architecture/line-of-business.md). -->
+    <Using Include="CloudHealthOffice.Infrastructure.Programs" />
+  </ItemGroup>
 </Project>

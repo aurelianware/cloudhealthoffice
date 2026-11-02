@@ -57,6 +57,8 @@ public class AdapterBenefitPlan
     public DateTime? TerminationDate { get; set; }
     public PlanType PlanType { get; set; }
     public MetalLevel? MetalLevel { get; set; }
+    // By name under any options, as when benefit-plan had its own enum carrying this attribute.
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
 
     /// <summary>See <see cref="BenefitPlan.ProgramId"/>; carried through GET / PUT so an edit never clears it.</summary>
