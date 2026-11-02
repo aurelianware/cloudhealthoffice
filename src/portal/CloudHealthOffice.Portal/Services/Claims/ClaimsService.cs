@@ -214,23 +214,6 @@ public class ClaimsService : IClaimsService
         return request;
     }
 
-    public async Task<string> SubmitClaimAsync(SubmitClaimRequest request)
-    {
-        var baseUrl = _configuration["Services:ClaimsService"];
-        try
-        {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/claims", request);
-            response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<SubmitClaimResponse>();
-            return result?.ClaimId ?? string.Empty;
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
-            throw new ServiceUnavailableException("Claims Service", ex);
-        }
-    }
-
     public async Task<ClaimInsightsView> GetClaimInsightsAsync(DateTime from, DateTime to, string? lineOfBusiness = null)
     {
         var baseUrl = _configuration["Services:ClaimsService"];
@@ -506,6 +489,37 @@ public class ClaimsService : IClaimsService
         });
     }
 
+    public async Task<ClaimCorrectionResult> SubmitNewClaimAsync(System.Text.Json.Nodes.JsonObject claim)
+    {
+        var url = $"{GetClaimsServiceRootUrl()}/api/v1/claims";
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.PostAsJsonAsync(url, claim, JsonOptions);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+
+        var text = await response.Content.ReadAsStringAsync();
+        if (response.IsSuccessStatusCode)
+        {
+            var created = string.IsNullOrWhiteSpace(text)
+                ? null
+                : System.Text.Json.JsonSerializer.Deserialize<ClaimCorrectionCreated>(text, JsonOptions);
+            return ClaimCorrectionResult.Ok(string.Empty, created?.Id ?? string.Empty);
+        }
+
+        return ClaimCorrectionResult.Fail(response.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Forbidden => new[] { "You don't have permission to submit claims." },
+            System.Net.HttpStatusCode.NotImplemented => new[] { "This tenant's claims system doesn't accept claims from CHO." },
+            _ => ClaimCorrectionResult.ReadErrors(text, (int)response.StatusCode),
+        });
+    }
+
     private sealed class ClaimCorrectionCreated
     {
         public string Id { get; set; } = string.Empty;
@@ -557,11 +571,6 @@ public class ClaimsService : IClaimsService
             _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
             throw new ServiceUnavailableException("Claims Service", ex);
         }
-    }
-
-    private class SubmitClaimResponse
-    {
-        public string ClaimId { get; set; } = string.Empty;
     }
 
     private static async Task<T?> ReadOptionalJsonAsync<T>(HttpResponseMessage response)

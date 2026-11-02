@@ -100,4 +100,33 @@ public class ClaimCorrectionClientTests
 
         result.Errors.Should().Equal("You don't have permission to correct claims.");
     }
+
+    [Fact]
+    public async Task New_claim_posts_to_v1_intake_and_returns_its_id()
+    {
+        string? body = null;
+        var handler = new FakeHandler(request =>
+        {
+            body = request.Content!.ReadAsStringAsync().Result;
+            return Json(HttpStatusCode.Created, """{"id":"claim-9","claimNumber":"MAN-1","status":1}""");
+        });
+
+        var result = await Service(handler).SubmitNewClaimAsync(new JsonObject { ["memberId"] = "MEM-1" });
+
+        handler.CapturedUrls.Single().Should().Be("http://claims/api/v1/claims");
+        JsonNode.Parse(body!)!["memberId"]!.GetValue<string>().Should().Be("MEM-1");
+        result.Success.Should().BeTrue();
+        result.NewClaimId.Should().Be("claim-9");
+    }
+
+    [Fact]
+    public async Task New_claim_validation_errors_come_back_in_the_services_words()
+    {
+        var handler = new FakeHandler(_ => Json(HttpStatusCode.BadRequest,
+            """{"errors":[{"field":"ServiceDateFrom","code":"Required","message":"ServiceDateFrom is required"}]}"""));
+
+        var result = await Service(handler).SubmitNewClaimAsync(new JsonObject());
+
+        result.Errors.Should().Equal("ServiceDateFrom: ServiceDateFrom is required");
+    }
 }

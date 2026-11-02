@@ -30,8 +30,14 @@ public sealed class ClaimEditModel
     public List<ClaimEditDiagnosis> Diagnoses { get; } = new();
     public List<ClaimEditLine> Lines { get; } = new();
 
-    /// <summary>Claim number shown in the header; never edited.</summary>
-    public string ClaimNumber { get; }
+    /// <summary>
+    /// The provider's claim number (patient control number, CLM01 / CMS-1500
+    /// box 26). Shown on correction, keyed on a new claim.
+    /// </summary>
+    public string ClaimNumber { get; set; }
+
+    /// <summary>Line of business (the service's enum value); only manual entry sets it.</summary>
+    public int LineOfBusiness { get; set; }
 
     public decimal TotalCharge => Lines.Sum(l => l.ChargeAmount);
 
@@ -39,6 +45,7 @@ public sealed class ClaimEditModel
     {
         _source = source;
         ClaimNumber = Str(source, "claimNumber") ?? string.Empty;
+        LineOfBusiness = Int(source, "lineOfBusiness") ?? 0;
         MemberId = Str(source, "memberId") ?? string.Empty;
         BillingProviderNpi = Str(source, "billingProviderNPI") ?? string.Empty;
         RenderingProviderNpi = Str(source, "renderingProviderNPI");
@@ -75,6 +82,32 @@ public sealed class ClaimEditModel
         return new ClaimEditModel((JsonObject)claim.DeepClone());
     }
 
+    /// <summary>
+    /// A blank professional claim for manual entry: one empty diagnosis and
+    /// one empty line dated <paramref name="serviceDate"/>, original
+    /// frequency (CLM05-3 = 1), office place of service.
+    /// </summary>
+    public static ClaimEditModel NewProfessional(DateTime serviceDate, int lineOfBusiness, string claimNumber)
+    {
+        var date = serviceDate.Date.ToString("yyyy-MM-dd'T'00:00:00", CultureInfo.InvariantCulture);
+        var claim = new JsonObject
+        {
+            ["claimNumber"] = claimNumber,
+            ["claimType"] = 1, // Professional
+            ["claimFrequencyCode"] = "1",
+            ["lineOfBusiness"] = lineOfBusiness,
+            ["placeOfServiceCode"] = "11",
+            ["serviceDateFrom"] = date,
+            ["serviceDateTo"] = date,
+            ["diagnosisCodes"] = new JsonArray(),
+            ["claimLines"] = new JsonArray(),
+        };
+        var model = new ClaimEditModel(claim);
+        model.AddDiagnosis();
+        model.AddLine();
+        return model;
+    }
+
     public void AddDiagnosis() => Diagnoses.Add(new ClaimEditDiagnosis());
 
     public void RemoveDiagnosis(ClaimEditDiagnosis diagnosis)
@@ -99,8 +132,8 @@ public sealed class ClaimEditModel
         var last = Lines.LastOrDefault();
         var line = new ClaimEditLine
         {
-            ServiceDateFrom = last?.ServiceDateFrom ?? DateTime.Today,
-            ServiceDateTo = last?.ServiceDateTo ?? DateTime.Today,
+            ServiceDateFrom = last?.ServiceDateFrom ?? Date(_source, "serviceDateFrom") ?? DateTime.Today,
+            ServiceDateTo = last?.ServiceDateTo ?? Date(_source, "serviceDateTo") ?? DateTime.Today,
             DiagnosisPointers = Diagnoses.Count > 0 ? new List<int> { 1 } : new List<int>(),
         };
         Lines.Add(line);
@@ -123,7 +156,7 @@ public sealed class ClaimEditModel
             errors.Add("Place of service is required.");
         if (Diagnoses.Count == 0 || Diagnoses.All(d => string.IsNullOrWhiteSpace(d.Code)))
             errors.Add("At least one diagnosis code is required.");
-        if (Diagnoses.Any(d => string.IsNullOrWhiteSpace(d.Code)) && Diagnoses.Count > 0)
+        else if (Diagnoses.Any(d => string.IsNullOrWhiteSpace(d.Code)))
             errors.Add("Remove empty diagnosis rows.");
         if (Lines.Count == 0)
             errors.Add("At least one service line is required.");
@@ -165,6 +198,10 @@ public sealed class ClaimEditModel
     {
         var claim = (JsonObject)_source.DeepClone();
 
+        if (!string.Equals(ClaimNumber, Str(_source, "claimNumber") ?? string.Empty, StringComparison.Ordinal))
+            Set(claim, "claimNumber", ClaimNumber.Trim());
+        if (LineOfBusiness != (Int(_source, "lineOfBusiness") ?? 0))
+            Set(claim, "lineOfBusiness", LineOfBusiness);
         Set(claim, "memberId", MemberId.Trim());
         Set(claim, "billingProviderNPI", BillingProviderNpi.Trim());
         Set(claim, "renderingProviderNPI", Blank(RenderingProviderNpi));

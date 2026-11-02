@@ -17,7 +17,6 @@ public interface IClaimsService
         int limit = 250,
         string? validationStatus = null,
         string? paymentStatus = null);
-    Task<string> SubmitClaimAsync(SubmitClaimRequest request);
     Task<bool> TryRecordAiExaminerAgreementAsync(
         string claimId,
         string agreement,
@@ -90,4 +89,12 @@ public interface IClaimsService
         string? notes,
         System.Text.Json.Nodes.JsonObject correctedClaim,
         string idempotencyKey);
+
+    /// <summary>
+    /// Submits a manually keyed claim (claims-service <c>POST /api/v1/claims</c>,
+    /// the same intake every 837 claim goes through). The created claim is
+    /// adjudicated by the pipeline. <see cref="ClaimCorrectionResult.NewClaimId"/>
+    /// carries the new claim's id.
+    /// </summary>
+    Task<ClaimCorrectionResult> SubmitNewClaimAsync(System.Text.Json.Nodes.JsonObject claim);
 }
