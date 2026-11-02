@@ -16,12 +16,41 @@ adjudication pends it. It is never paid at $0 or at charges.
 
 ## Status
 
-The formulas, the Texas file readers, and a rate store with an import endpoint are in place (see below). Still to come:
+The formulas, the Texas file readers, a rate store with an import endpoint, and Texas claim pricing are in place (see below). Still to come:
 
-- the Medi-Cal importers (DRG Pricing Calculator, Hospital Characteristics File);
-- wiring the formulas into `PricingStage`.
+- Texas interim rates (cost-to-charge ratios), so that stays for clients under 21 can be priced. Until they are loaded, those stays pend;
+- the Medi-Cal importers (DRG Pricing Calculator, Hospital Characteristics File) and Medi-Cal claim pricing.
 
-Until both land, no claim is priced by these formulas.
+A claim is priced by these formulas only on a plan that sets `pricing.inpatient.medicaidDrgMethod` (see "Claim pricing" below).
+
+## Claim pricing
+
+Three plan settings, set on the Medicaid line of business, turn it on:
+
+| Setting | Value |
+| --- | --- |
+| `pricing.inpatient.groupDrg` | `true` |
+| `pricing.inpatient.drgClassification` | `aprDrg` (the plan's licensed grouper assigns the DRG-SOI) |
+| `pricing.inpatient.medicaidDrgMethod` | `texas` (default `none`) |
+
+How a claim flows:
+
+1. `InpatientGroupingStage` groups the stay by APR-DRG and reads the method. If it can't read the method, the claim pends `CONFIGUNAVAIL`.
+2. `PricingStage` sends the method and the claim-level inputs on every line: the DRG-SOI, the billing (facility) NPI, the discharge status, the age at admission, the length of stay and the discharge date.
+3. In benefit-plan-service, `MedicaidDrgRateResolutionService` wraps the fee schedule engine. A claim without a method goes to the engine unchanged. A Texas claim is priced from the imported tables:
+   - the weight table and hospital SDA row in force on the discharge date;
+   - the hospital is looked up by the facility NPI, not the rendering physician;
+   - covered charges are the sum of the lines' billed charges;
+   - the universal mean comes from the weight table, or else the SDA file.
+4. The stay is paid once. The payment is allocated across the lines by billed charges, marked as a per-stay rate with `RateSource.Medicaid`, and each line carries the pricer's steps in `CalculationSteps`.
+
+It fails closed. Each of these marks every line unresolved with the reason, so the claim pends `NOCONTRACT`, and it is never priced by a contract instead:
+
+- the DRG is not a DRG-SOI key;
+- there is no weight or no SDA row (including a row held back at import);
+- the NPI has two SDA rows that disagree;
+- there is no length of stay;
+- the client is under 21 and no interim rate is loaded.
 
 ## Texas (1 TAC §355.8052(i))
 

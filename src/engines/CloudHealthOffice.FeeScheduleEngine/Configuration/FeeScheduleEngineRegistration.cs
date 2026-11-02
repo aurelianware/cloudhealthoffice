@@ -130,6 +130,38 @@ public class FeeScheduleEngineBuilder
         return this;
     }
 
+    /// <summary>
+    /// Prices inpatient stays by their state's Medicaid APR-DRG method when
+    /// the claim asks for one (<see cref="Models.PricingRequest.MedicaidDrgMethod"/>,
+    /// from the plan setting <c>pricing.inpatient.medicaidDrgMethod</c>), out
+    /// of the imported state tables. Every other claim prices exactly as before.
+    ///
+    /// <para>
+    /// It wraps whichever <see cref="IRateResolutionService"/> is registered
+    /// when it is called, so chain it last, after
+    /// <see cref="UseMongoRepositories"/> and <see cref="UseDualReadContracts"/>.
+    /// </para>
+    /// </summary>
+    public FeeScheduleEngineBuilder UseMedicaidDrgPricing()
+    {
+        var current = _services.LastOrDefault(d => d.ServiceType == typeof(IRateResolutionService))
+            ?? throw new InvalidOperationException("Call AddFeeScheduleEngine before UseMedicaidDrgPricing.");
+
+        Func<IServiceProvider, IRateResolutionService> createInner = current switch
+        {
+            { ImplementationFactory: { } factory } => sp => (IRateResolutionService)factory(sp),
+            { ImplementationType: { } type } => sp => (IRateResolutionService)ActivatorUtilities.CreateInstance(sp, type),
+            { ImplementationInstance: IRateResolutionService instance } => _ => instance,
+            _ => throw new InvalidOperationException("The registered IRateResolutionService cannot be decorated."),
+        };
+
+        _services.AddScoped<IRateResolutionService>(sp => new Medicaid.MedicaidDrgRateResolutionService(
+            createInner(sp),
+            sp.GetRequiredService<Medicaid.IMedicaidDrgRateRepository>(),
+            sp.GetRequiredService<ILogger<Medicaid.MedicaidDrgRateResolutionService>>()));
+        return this;
+    }
+
     private static CachingFeeScheduleRepository CreateFeeScheduleCache<TRepository>(IServiceProvider sp)
         where TRepository : class, IFeeScheduleRepository, IProviderContractRepository
     {
