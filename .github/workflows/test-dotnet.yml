@@ -350,10 +350,14 @@ jobs:
         if: ${{ hashFiles('TestResults/**/coverage.cobertura.xml') != '' }}
         run: |
           dotnet tool install --global dotnet-reportgenerator-globaltool --version 5.4.9
+          # Test assemblies referenced by other test projects (for example
+          # CloudHealthOffice.Infrastructure.Tests) get instrumented too; drop
+          # them so they don't show up as a 0% row in the summary.
           reportgenerator \
             "-reports:./TestResults/**/coverage.cobertura.xml" \
             "-targetdir:./MergedCoverage" \
             "-reporttypes:Cobertura" \
+            "-assemblyfilters:-*.Tests" \
             "-filefilters:-*Tests*"
 
       - name: Code Coverage Summary
