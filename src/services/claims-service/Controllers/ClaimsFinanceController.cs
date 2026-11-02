@@ -1,5 +1,7 @@
 using System.Globalization;
+using System.Text.Json;
 using ClaimsService.Finance;
+using CloudHealthOffice.Infrastructure.Reporting;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using CloudHealthOffice.Infrastructure.Security;
@@ -96,6 +98,125 @@ public sealed class ClaimsFinanceController : ControllerBase
             Notes = estimate.Notes
         });
     }
+
+    /// <summary>
+    /// HHSC's STAR Claims Lag Report (UMCM 5.6.2.11) figures for an SFY
+    /// quarter: Medicaid plan payments by risk group, month of service and
+    /// month of payment, through the quarter's last month. Each claim's risk
+    /// group is its member's rate cell in the month of service (from the
+    /// expected member-months loaded for capitation), mapped by
+    /// <c>rateCellRiskGroups</c>; claims that can't be placed are left out
+    /// and counted under <c>excluded</c>.
+    /// </summary>
+    [HttpPost("texas/claims-lag")]
+    [RequirePermission("finance:read")]
+    public async Task<ActionResult> TexasStarClaimsLag(
+        [FromBody] TexasClaimsLagRequest request,
+        [FromServices] IExpectedRateCellSource rateCells,
+        [FromServices] ICurrentActor actor,
+        CancellationToken ct)
+    {
+        var (lag, error) = await BuildTexasLagAsync(request, forWorkbook: false, rateCells, actor, ct);
+        return error ?? Ok(lag);
+    }
+
+    /// <summary>
+    /// The STAR Claims Lag Report workbook filled in: post HHSC's blank
+    /// 5.6.2.11 workbook as <c>template</c> and the request JSON as
+    /// <c>request</c>. The header and the payment cells are written; the
+    /// subtotals and totals stay the template's formulas. A workbook whose
+    /// sections or month labels can't be read, or that lacks a month the
+    /// report needs, is refused (422).
+    /// </summary>
+    [HttpPost("texas/claims-lag/workbook")]
+    [RequirePermission("finance:read")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(XlsxTemplate.MaxBytes + 1024 * 1024)]
+    public async Task<ActionResult> TexasClaimsLagWorkbook(
+        [FromForm] IFormFile? template,
+        [FromForm] string? request,
+        [FromServices] IExpectedRateCellSource rateCells,
+        [FromServices] ICurrentActor actor,
+        CancellationToken ct)
+    {
+        if (template is null || template.Length == 0)
+            return BadRequest(new { error = "Attach HHSC's blank STAR Claims Lag Report (UMCM 5.6.2.11) as 'template'" });
+        if (template.Length > XlsxTemplate.MaxBytes)
+            return StatusCode(StatusCodes.Status413PayloadTooLarge, new { error = $"The template exceeds {XlsxTemplate.MaxBytes} bytes" });
+
+        TexasClaimsLagRequest? body = null;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(request))
+                body = JsonSerializer.Deserialize<TexasClaimsLagRequest>(request, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
+        catch (JsonException) { }
+        if (body is null) return BadRequest(new { error = "'request' must be the claims lag request as JSON" });
+
+        XlsxTemplate workbook;
+        try
+        {
+            using var buffer = new MemoryStream();
+            await template.CopyToAsync(buffer, ct);
+            workbook = XlsxTemplate.Open(buffer.ToArray());
+        }
+        catch (XlsxTemplateException ex)
+        {
+            return UnprocessableEntity(new { error = ex.Message });
+        }
+
+        var (layout, problems) = TexasClaimsLagReport.ReadLayout(workbook);
+        if (layout is null)
+            return UnprocessableEntity(new { error = "This is not the STAR Claims Lag Report layout CHO fills; nothing was filled", problems });
+
+        var (lag, error) = await BuildTexasLagAsync(body, forWorkbook: true, rateCells, actor, ct);
+        if (error != null) return error;
+
+        var missing = TexasClaimsLagReport.Missing(layout, lag!);
+        if (missing.Count > 0)
+            return UnprocessableEntity(new { error = "The template does not cover every month the report needs; download the current version from HHSC", problems = missing });
+
+        var bytes = TexasClaimsLagReport.Fill(workbook, layout, lag!, body.Contractor!, body.ServiceArea!,
+            body.SubmissionDate ?? TexasToday(DateTime.UtcNow));
+        if (lag!.Excluded.Count > 0)
+            Response.Headers["X-Report-Excluded"] = string.Join("; ", lag.Excluded.Select(e => $"{e.Claims} claim(s), {e.Amount.ToString("0.00", CultureInfo.InvariantCulture)}: {e.Reason}"));
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"STAR-Claims-Lag-SFY{lag.StateFiscalYear}-Q{lag.Quarter}.xlsx");
+    }
+
+    private async Task<(TexasClaimsLag? Lag, ActionResult? Error)> BuildTexasLagAsync(
+        TexasClaimsLagRequest request, bool forWorkbook, IExpectedRateCellSource rateCells, ICurrentActor actor, CancellationToken ct)
+    {
+        var errors = request.Validate(forWorkbook, out var groups);
+        if (errors.Count > 0) return (null, BadRequest(new { error = "The claims lag request is not valid", errors }));
+
+        var through = TexasClaimsLagReport.QuarterEnd(request.StateFiscalYear, request.Quarter);
+        var from = TexasClaimsLagReport.FiscalYearStart(request.StateFiscalYear);
+        if (request.IncurredFrom != null) TexasClaimsLagReport.TryMonth(request.IncurredFrom, out from);
+        if (from > through || LagTriangle.MonthsBetween(from, through) >= MaxIncurredMonths)
+            return (null, BadRequest(new { error = $"incurredFrom must be on or before {through:yyyy-MM} and at most {MaxIncurredMonths} months earlier" }));
+
+        IReadOnlyList<ExpectedRateCell> cells;
+        try
+        {
+            cells = await rateCells.GetAsync(actor.TenantId, "TX", from, through, ct);
+        }
+        catch (ExpectedRateCellsUnavailableException ex)
+        {
+            return (null, StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message }));
+        }
+
+        var versions = await _claims.GetPaymentVersionsAsync(
+            from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+            through.AddMonths(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+            LineOfBusiness.Medicaid, ct);
+        return (TexasClaimsLagReport.Build(request.StateFiscalYear, request.Quarter, from,
+            LagTriangle.Increments(versions), cells, groups), null);
+    }
+
+    private static DateOnly TexasToday(DateTime utcNow) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc),
+            TimeZoneInfo.FindSystemTimeZoneById("America/Chicago")));
 
     private static bool TryMonth(string? value, out DateOnly month) =>
         DateOnly.TryParseExact(value + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out month);

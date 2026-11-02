@@ -512,6 +512,18 @@ builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStage>
 builder.Services.Configure<ThirdPartyLiabilityOptions>(
     builder.Configuration.GetSection(ThirdPartyLiabilityOptions.SectionName));
 builder.Services.AddScoped<ITplClient, HttpTplClient>();
+
+// Texas claims lag report: the members' rate cells come from the expected
+// member-months loaded in premium-billing-service. A quarter's report reads
+// one fiscal year or more of rows, so the timeout is generous.
+builder.Services.AddHttpClient(ClaimsService.Finance.HttpExpectedRateCellSource.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:PremiumBillingService"]
+        ?? "http://premium-billing-service:8080");
+    client.Timeout = TimeSpan.FromMinutes(2);
+}).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+builder.Services.AddScoped<ClaimsService.Finance.IExpectedRateCellSource, ClaimsService.Finance.HttpExpectedRateCellSource>();
 builder.Services.AddScoped<IClaimAdjudicationStage, ThirdPartyLiabilityStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, AiExaminationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PersistenceStage>();

@@ -113,9 +113,35 @@ public sealed class XlsxTemplate
     }
 
     /// <summary>The cell's text as Excel shows it before formatting: shared, inline or literal.</summary>
-    public string? Text(string sheet, string cellRef)
+    public string? Text(string sheet, string cellRef) => CellText(FindCell(Sheet(sheet), cellRef));
+
+    /// <summary>Every non-empty cell in one column, by row number.</summary>
+    public IReadOnlyDictionary<int, string> ColumnTexts(string sheet, string column)
     {
-        var cell = FindCell(Sheet(sheet), cellRef);
+        var result = new Dictionary<int, string>();
+        foreach (var row in Sheet(sheet).Root!.Element(Main + "sheetData")?.Elements(Main + "row") ?? [])
+        {
+            if (!int.TryParse((string?)row.Attribute("r"), NumberStyles.None, CultureInfo.InvariantCulture, out var r)) continue;
+            var cell = row.Elements(Main + "c").FirstOrDefault(c => (string?)c.Attribute("r") == column + r.ToString(CultureInfo.InvariantCulture));
+            if (CellText(cell) is { Length: > 0 } text) result[r] = text;
+        }
+        return result;
+    }
+
+    /// <summary>Every non-empty cell in one row, by column letters, left to right.</summary>
+    public IReadOnlyList<(string Column, string Text)> RowTexts(string sheet, int rowNumber)
+    {
+        var row = Sheet(sheet).Root!.Element(Main + "sheetData")?.Elements(Main + "row")
+            .FirstOrDefault(r => (int?)r.Attribute("r") == rowNumber);
+        return row?.Elements(Main + "c")
+            .Select(c => (Column: Split((string)c.Attribute("r")!).Column, Text: CellText(c)))
+            .Where(c => !string.IsNullOrEmpty(c.Text))
+            .Select(c => (c.Column, c.Text!))
+            .ToList() ?? [];
+    }
+
+    private string? CellText(XElement? cell)
+    {
         if (cell is null) return null;
         var type = (string?)cell.Attribute("t");
         if (type == "inlineStr") return string.Concat(cell.Element(Main + "is")?.Descendants(Main + "t").Select(t => t.Value) ?? []);

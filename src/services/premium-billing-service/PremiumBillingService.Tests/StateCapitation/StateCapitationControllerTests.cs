@@ -191,4 +191,14 @@ public class StateCapitationControllerTests
         body.GetProperty("mlr").GetProperty("unadjustedMlr").GetDecimal().Should().Be(0.7625m);
         body.GetProperty("mlr").GetProperty("credibility").GetInt32().Should().Be((int)PremiumBillingService.Mlr.MlrCredibility.NonCredible);
     }
+
+    [Fact]
+    public async Task ExpectedCsv_ListsTheLoadedRateCells_ForTheWindow()
+    {
+        await Controller("member_id,month,rate_cell\n91000001A,2027-01,LA-ACA-EXP\n91000002B,2027-02,LA-CHILD\n").LoadExpected("CA");
+
+        var file = (await Controller().ExpectedCsv("CA", "2027-02", "2027-03")).Should().BeOfType<FileContentResult>().Subject;
+
+        Encoding.UTF8.GetString(file.FileContents).Should().Be("member_id,month,rate_cell\n91000002B,2027-02,LA-CHILD\n");
+    }
 }
