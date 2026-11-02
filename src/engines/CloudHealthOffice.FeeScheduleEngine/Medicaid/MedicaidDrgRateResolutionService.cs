@@ -22,6 +22,15 @@ namespace CloudHealthOffice.FeeScheduleEngine.Medicaid;
 /// </para>
 ///
 /// <para>
+/// <b>Psychiatric hospitals.</b> Texas pays a freestanding psychiatric
+/// hospital its HHSC per diem, not a DRG. When the hospital (facility NPI)
+/// has a per diem loaded (<see cref="IMedicaidPsychiatricPerDiemRepository"/>),
+/// the stay is priced by <see cref="PsychiatricPerDiemPricer"/> instead:
+/// days × per diem on the room and board lines, ancillaries included, with
+/// the adult IMD monthly day limit.
+/// </para>
+///
+/// <para>
 /// <b>Fail closed.</b> Anything that stops the stay being priced (no
 /// DRG-SOI key, no weight table, no rate row for the hospital, two rows that
 /// disagree, an outlier that cannot be evaluated) marks every line
@@ -37,6 +46,8 @@ public sealed partial class MedicaidDrgRateResolutionService : IRateResolutionSe
     private readonly IRateResolutionService _inner;
     private readonly IMedicaidDrgRateRepository _rates;
     private readonly IMedicaidInterimRateRepository? _interimRates;
+    private readonly IMedicaidPsychiatricPerDiemRepository? _psychRates;
+    private readonly PsychiatricPerDiemPolicy _psychPolicy;
     private readonly ILogger<MedicaidDrgRateResolutionService> _logger;
 
     /// <param name="interimRates">
@@ -44,12 +55,22 @@ public sealed partial class MedicaidDrgRateResolutionService : IRateResolutionSe
     /// that can earn an outlier (Texas: clients under 21); without them those
     /// stays pend.
     /// </param>
+    /// <param name="psychRates">
+    /// Psychiatric hospital per diems. Without them a psychiatric hospital's
+    /// stay is priced by DRG like any other hospital, so load them before
+    /// enabling the Texas method for a plan that uses psychiatric hospitals.
+    /// </param>
+    /// <param name="psychPolicy">Psychiatric per diem rules; Texas defaults.</param>
     public MedicaidDrgRateResolutionService(
         IRateResolutionService inner,
         IMedicaidDrgRateRepository rates,
         ILogger<MedicaidDrgRateResolutionService> logger,
-        IMedicaidInterimRateRepository? interimRates = null)
+        IMedicaidInterimRateRepository? interimRates = null,
+        IMedicaidPsychiatricPerDiemRepository? psychRates = null,
+        PsychiatricPerDiemPolicy? psychPolicy = null)
     {
+        _psychRates = psychRates;
+        _psychPolicy = psychPolicy ?? PsychiatricPerDiemPolicy.Texas();
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _rates = rates ?? throw new ArgumentNullException(nameof(rates));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -91,6 +112,18 @@ public sealed partial class MedicaidDrgRateResolutionService : IRateResolutionSe
         if (method != MedicaidDrgMethods.Texas)
             return Unresolved(lines, $"Medicaid DRG method \"{method}\" is not supported (supported: {MedicaidDrgMethods.Texas})");
 
+        var tenantId = first.TenantId;
+        var facilityNpi = (first.FacilityNpi ?? first.ProviderNpi)?.Trim() ?? string.Empty;
+
+        // A freestanding psychiatric hospital is paid its per diem, not a DRG.
+        if (_psychRates is not null && facilityNpi.Length > 0)
+        {
+            var admission = lines.Min(r => r.ServiceDate).Date;
+            var perDiem = await _psychRates.FindAsync(tenantId, TexasState, facilityNpi, admission, ct).ConfigureAwait(false);
+            if (perDiem is not null)
+                return await PricePsychiatricStayAsync(lines, tenantId, facilityNpi, perDiem, ct).ConfigureAwait(false);
+        }
+
         var drgs = lines.Select(r => r.DrgCode?.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (drgs.Count > 1)
             return Unresolved(lines, "the claim's lines carry different DRGs; a stay is priced once, by one DRG");
@@ -110,8 +143,6 @@ public sealed partial class MedicaidDrgRateResolutionService : IRateResolutionSe
         if (first.LengthOfStay is not { } los || los < 0)
             return Unresolved(lines, "the stay has no length of stay (admission and discharge dates are needed)");
 
-        var tenantId = first.TenantId;
-        var facilityNpi = (first.FacilityNpi ?? first.ProviderNpi)?.Trim() ?? string.Empty;
         if (facilityNpi.Length == 0)
             return Unresolved(lines, "the claim has no facility NPI to look up the hospital's SDA");
 
@@ -186,6 +217,82 @@ public sealed partial class MedicaidDrgRateResolutionService : IRateResolutionSe
     }
 
     /// <summary>
+    /// Prices a psychiatric hospital stay at the hospital's per diem. Every
+    /// rate the hospital has in force across the stay is passed to the pricer,
+    /// so a stay spanning a new fiscal year's rate pays each line at the rate
+    /// in force on its dates.
+    /// </summary>
+    private async Task<PricingResultSet> PricePsychiatricStayAsync(
+        IReadOnlyList<PricingRequest> lines, string tenantId, string facilityNpi, MedicaidPsychiatricPerDiem atAdmission, CancellationToken ct)
+    {
+        var rates = new List<PsychiatricPerDiemRate> { atAdmission.ToRate() };
+        var lastDay = lines.Max(r => r.ServiceDate.Date.AddDays(Math.Max(0, (int)Math.Ceiling(r.Units) - 1)));
+        var latest = await _psychRates!.FindAsync(tenantId, TexasState, facilityNpi, lastDay, ct).ConfigureAwait(false);
+        if (latest is not null && latest.Id != atAdmission.Id)
+            rates.Add(latest.ToRate());
+        // Each rate runs until the next one starts.
+        rates = rates.OrderBy(r => r.EffectiveFrom).ToList();
+        for (var i = 0; i < rates.Count - 1; i++)
+            rates[i] = rates[i] with { EffectiveTo = rates[i + 1].EffectiveFrom.AddDays(-1) };
+
+        var claim = new PsychiatricStayClaim
+        {
+            FacilityNpi = facilityNpi,
+            AgeAtAdmission = lines[0].PatientAgeYears,
+            Lines = lines.Select(r => new PsychiatricStayLine
+            {
+                LineNumber = r.LineNumber,
+                RevenueCode = r.RevenueCode ?? string.Empty,
+                ServiceDate = DateOnly.FromDateTime(r.ServiceDate),
+                Days = (int)Math.Round(r.Units, MidpointRounding.AwayFromZero),
+                ChargeAmount = r.BilledAmount,
+            }).ToList(),
+        };
+
+        var price = new PsychiatricPerDiemPricer(_psychPolicy).Price(claim, rates);
+        var steps = new List<string>
+        {
+            $"Psychiatric hospital {facilityNpi} ({atAdmission.HospitalName}, {atAdmission.FacilityClass}) is paid its per diem, not a DRG. "
+            + "IMD days on the member's other claims are not yet counted toward the monthly limit.",
+        };
+        steps.AddRange(price.Steps);
+        if (!price.Priced)
+            return Unresolved(lines, $"Texas psychiatric hospital per diem: {price.UnpricedReason}", steps, FeeScheduleType.PerDiem);
+
+        var scheduleName = string.Create(CultureInfo.InvariantCulture,
+            $"Texas Medicaid psychiatric hospital per diem (effective {Day(atAdmission.EffectiveDate)})");
+
+        _logger.LogInformation(
+            "Priced a Texas psychiatric hospital stay by per diem: {Allowed} for {LineCount} line(s)",
+            price.TotalAllowed, lines.Count);
+
+        var byLine = price.Lines.ToDictionary(l => l.LineNumber);
+        return new PricingResultSet
+        {
+            LineResults = lines.Select(r =>
+            {
+                var priced = byLine[r.LineNumber];
+                return new PricingResult
+                {
+                    LineNumber = r.LineNumber,
+                    ProcedureCode = r.ProcedureCode,
+                    AllowedAmount = priced.Allowed,
+                    BaseAmount = price.TotalAllowed,
+                    BilledAmount = r.BilledAmount,
+                    FeeScheduleType = FeeScheduleType.PerDiem,
+                    RateSource = RateSource.Medicaid,
+                    NetworkStatus = NetworkStatus.Unknown,
+                    FeeScheduleId = atAdmission.Id,
+                    FeeScheduleName = scheduleName,
+                    // Cost sharing applies once to the stay (inpatient per diem).
+                    IsPerStayRate = true,
+                    CalculationSteps = steps,
+                };
+            }).ToList(),
+        };
+    }
+
+    /// <summary>
     /// Spreads the stay's allowed amount across the lines by billed charges:
     /// each line's share truncated to the cent, the remainder on the last
     /// line. Texas pays the DRG amount whatever the charges, so there is no
@@ -245,7 +352,8 @@ public sealed partial class MedicaidDrgRateResolutionService : IRateResolutionSe
     }
 
     private static PricingResultSet Unresolved(
-        IReadOnlyList<PricingRequest> lines, string reason, IReadOnlyList<string>? steps = null) => new()
+        IReadOnlyList<PricingRequest> lines, string reason, IReadOnlyList<string>? steps = null,
+        FeeScheduleType type = FeeScheduleType.Drg) => new()
         {
             LineResults = lines.Select(r => new PricingResult
             {
@@ -253,7 +361,7 @@ public sealed partial class MedicaidDrgRateResolutionService : IRateResolutionSe
                 ProcedureCode = r.ProcedureCode,
                 AllowedAmount = 0m,
                 BilledAmount = r.BilledAmount,
-                FeeScheduleType = FeeScheduleType.Drg,
+                FeeScheduleType = type,
                 RateSource = RateSource.Unresolved,
                 NetworkStatus = NetworkStatus.Unknown,
                 UnresolvedReason = reason,
