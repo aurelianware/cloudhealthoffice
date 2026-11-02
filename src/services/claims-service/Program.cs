@@ -480,6 +480,7 @@ builder.Services.AddScoped<IClaimAdjudicationStage, ScrubbingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, TimelyFilingStage>(); // Order=110
 builder.Services.AddScoped<IClaimAdjudicationStage, DuplicateClaimStage>(); // Order=120
 builder.Services.AddScoped<IClaimAdjudicationStage, ProviderIntegrityStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, StateOnlyAdultDentalStage>(); // Order=160, DHCS APL 26-009
 builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>();
 // Order=240: groups an inpatient stay so PricingStage prices by the grouped
 // DRG, when the plan setting says to (ADR 024 step 8). Both the grouper and

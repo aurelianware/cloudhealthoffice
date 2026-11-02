@@ -59,4 +59,10 @@ public class ResolvedMember
 
     /// <summary>Amount incurred so far toward <see cref="MedicaidSpendDownLiabilityAmount"/>.</summary>
     public decimal MedicaidSpendDownAmountMet { get; init; }
+
+    /// <summary>
+    /// The member's state Medicaid aid codes with their dates (member-service
+    /// <c>aidCodes</c>). Empty when member-service has none on file.
+    /// </summary>
+    public IReadOnlyList<CloudHealthOffice.Infrastructure.Programs.MediCal.AidCodeSpan> AidCodes { get; init; } = [];
 }
