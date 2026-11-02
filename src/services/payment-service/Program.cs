@@ -18,8 +18,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
+// Payment runs store their line of business by its shared name; registered before
+// any class map is built. A run still holding payment-service's old 0-3 number reads
+// as that old value until PaymentRunLineOfBusinessMigrationHostedService rewrites it.
+MongoDB.Bson.Serialization.BsonSerializer.TryRegisterSerializer(
+    new PaymentService.Models.PaymentRunLineOfBusinessBsonSerializer());
+
 builder.Services.AddControllers()
-    .AddCloudHealthOfficeJsonOptions();
+    .AddCloudHealthOfficeJsonOptions()
+    // Ahead of the generic enum converter: accepts the legacy "Marketplace" and writes "Exchange".
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Insert(0, new LineOfBusinessJsonConverter()));
 
 // ── Authentication ──────────────────────────────────────────────────
 // Every caller presents a CHO token; the tenant and the acting user come from
@@ -68,6 +76,10 @@ builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepositoryMongo>();
 builder.Services.AddScoped<IReversalRunRepository, ReversalRunRepositoryMongo>();
 builder.Services.AddScoped<IEraEnvelopeRepository, EraEnvelopeRepositoryMongo>();
 builder.Services.AddScoped<IClaimReservationRepository, ClaimReservationRepositoryMongo>();
+// Registered ahead of every other hosted service (the GL dispatcher and the
+// reservation job read runs): rewrites runs stored with the old 0-3 line-of-business
+// numbers to the shared names, once, before anything reads them.
+builder.Services.AddHostedService<PaymentService.HostedServices.PaymentRunLineOfBusinessMigrationHostedService>();
 builder.Services.AddScoped<IReservationAuditLog, ReservationAuditLogMongo>();
 builder.Services.AddScoped<IProviderReceivableRepository, ProviderReceivableRepositoryMongo>();
 

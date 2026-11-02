@@ -62,12 +62,13 @@ public class GlEventTests
     }
 
     [Theory]
-    [InlineData(global::PaymentService.Models.LineOfBusiness.Marketplace, "Exchange")]
-    [InlineData(global::PaymentService.Models.LineOfBusiness.Medicaid, "Medicaid")]
+    [InlineData(LineOfBusiness.Exchange, "Exchange")]
+    [InlineData(LineOfBusiness.Medicaid, "Medicaid")]
+    [InlineData(LineOfBusiness.TRICARE, "TRICARE")]
     [InlineData(null, null)]
-    public void The_accrual_names_the_line_of_business_as_the_rest_of_the_platform_does(global::PaymentService.Models.LineOfBusiness? lob, string? expected)
+    public void The_accrual_names_the_line_of_business_as_the_rest_of_the_platform_does(LineOfBusiness? lob, string? expected)
     {
-        // payment-service's own enum says Marketplace; claims, the GL and the shared enum say Exchange.
+        // payment-service once said Marketplace; claims, the GL and the shared enum say Exchange.
         var run = new PaymentRun { Id = "run-l", TenantId = "t1", PaymentRunNumber = "PR-L", Status = PaymentRunStatus.Completed,
             Criteria = new PaymentRunCriteria { LineOfBusiness = lob } };
         var issued = new List<Payment> { new() { Id = "p1", CheckNumber = "0000000001", PayeeNPI = Npi, PaymentMethod = "ACH", TotalPaymentAmount = 10m } };

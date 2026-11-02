@@ -14,8 +14,6 @@ public class LineOfBusinessDriftTests
     /// <summary>Enums that differ today, by repository path, and why. Remove an entry when its migration lands.</summary>
     private static readonly Dictionary<string, string> KnownExceptions = new()
     {
-        ["src/services/payment-service/Models/PaymentRun.cs"] =
-            "Unnumbered with Marketplace; stored run criteria need a one-time 0-3 to 1-4 migration (consolidation PR 3).",
         ["src/services/eligibility-service/Models/Eligibility.cs"] =
             "Unnumbered 0-5; stored records need a one-time migration to 1-6 (consolidation PR 4).",
         ["src/engines/CloudHealthOffice.ProviderEnrollmentService/Models/EnrollmentModels.cs"] =
