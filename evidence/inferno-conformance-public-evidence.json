@@ -1,13 +1,160 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "inferno-conformance",
-  "generatedAtUtc": "2026-11-01T06:53:33Z",
-  "sourceCommit": "f72b79f4a42f0e0e07cffd6ec8e050d3eba8bd46",
-  "sourceCommitShort": "f72b79f4a42f",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/f72b79f4a42f0e0e07cffd6ec8e050d3eba8bd46",
+  "generatedAtUtc": "2026-11-02T03:55:41Z",
+  "sourceCommit": "f2dc30d6730183be0058eb16739b7ab44aa0b7b0",
+  "sourceCommitShort": "f2dc30d67301",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/f2dc30d6730183be0058eb16739b7ab44aa0b7b0",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence and of the Da Vinci interoperability snapshot. A kit result never changes a CMS-0057-F scenario status, and no result here is CMS, ONC or HL7 certification.",
   "kits": [
+    {
+      "scenarioId": "INFERNO-DTR-PAYER-001",
+      "title": "Inferno DTR 2.2.0 payer-server suite against CHO",
+      "protocol": "DTR",
+      "regulatoryContext": "The Prior Authorization API CMS-0057-F requires by January 1, 2027, which must make the payer's documentation requirements available to providers. Da Vinci DTR is the implementation guide CMS recommends for that part, alongside CRD and PAS: the provider's EHR or DTR app fetches the payer's questionnaires and their prepopulation logic.",
+      "kit": {
+        "name": "inferno-framework/davinci-dtr-test-kit",
+        "key": "inferno-dtr",
+        "upstreamRepository": "https://github.com/inferno-framework/davinci-dtr-test-kit",
+        "tag": "v0.18.0",
+        "commit": "1b76dd3f565433a3157808da2d6d0c08a797b2f0",
+        "reference": "https://github.com/inferno-framework/davinci-dtr-test-kit@v0.18.0",
+        "implementationGuides": {
+          "DTR": "2.2.0",
+          "SMART App Launch": "2.0.0"
+        }
+      },
+      "suite": "dtr_payer_server_v220",
+      "groups": [
+        "dtr_payer_v220_discovery",
+        "dtr_payer_v220_backend_services",
+        "dtr_payer_server_v220_questionnaire_operations",
+        "dtr_payer_v220_log_questionnaire_error_support"
+      ],
+      "status": "Failed",
+      "statusReason": null,
+      "testedAtUtc": "2026-11-02T03:45:44.5758974+00:00",
+      "tests": {
+        "passed": 33,
+        "failed": 6,
+        "skipped": 1,
+        "omitted": 3,
+        "knownKitIssue": 3,
+        "total": 46
+      },
+      "failingTests": [
+        {
+          "test": "dtr_v220_payer_questionnaire_package_request_validation",
+          "result": "fail",
+          "message": "Non-conformant $questionnaire-package request. See Messages for details."
+        },
+        {
+          "test": "dtr_v220_payer_next_question_request_validation",
+          "result": "fail",
+          "message": "Non-conformant $next-question QuestionnaireResponse request. See Messages for details."
+        },
+        {
+          "test": "dtr_payer_v220_request_validation",
+          "result": "fail",
+          "message": "(no message)"
+        },
+        {
+          "test": "dtr_payer_v220_questionnaire_interactions",
+          "result": "fail",
+          "message": "(no message)"
+        },
+        {
+          "test": "dtr_v220_payer_questionnaire_response_validation",
+          "result": "fail",
+          "message": "Not all responses were valid. See messages for details."
+        },
+        {
+          "test": "dtr_payer_v220_questionnaire_package_support",
+          "result": "fail",
+          "message": "(no message)"
+        },
+        {
+          "test": "dtr_v220_payer_next_question_response_validation",
+          "result": "fail",
+          "message": "Not all responses were valid. See messages for details."
+        },
+        {
+          "test": "dtr_v220_payer_adaptive_questionnaire_response_validation",
+          "result": "fail",
+          "message": "[Resource 1] Resource does not conform to the profile: http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-questionnaire-adapt-search|2.2.0"
+        },
+        {
+          "test": "dtr_payer_v220_next_question_support",
+          "result": "fail",
+          "message": "(no message)"
+        },
+        {
+          "test": "dtr_payer_v220_questionnaire_design",
+          "result": "fail",
+          "message": "(no message)"
+        },
+        {
+          "test": "dtr_server_v220_payer_questionnaire_not_found",
+          "result": "fail",
+          "message": "Resource does not conform to the base Parameters profile."
+        },
+        {
+          "test": "dtr_payer_v220_error_handling",
+          "result": "fail",
+          "message": "(no message)"
+        },
+        {
+          "test": "dtr_payer_server_v220_must_support",
+          "result": "fail",
+          "message": "(no message)"
+        }
+      ],
+      "notRunTests": [
+        {
+          "test": "smart_backend_services_token_tls_version",
+          "result": "omit",
+          "message": "This test is disabled because INFERNO_DISABLE_TLS_TEST is present in env."
+        },
+        {
+          "test": "dtr_v220_payer_value_set_validation",
+          "result": "omit",
+          "message": "No external ValueSet referenced"
+        },
+        {
+          "test": "dtr_v220_payer_contained_binary",
+          "result": "omit",
+          "message": "No Binary resources were contained in QuestionnaireResponses"
+        },
+        {
+          "test": "dtr_v220_payer_value_set_expansion",
+          "result": "skip",
+          "message": "No ValueSet/$expand requests were made."
+        },
+        {
+          "test": "dtr_payer_v220_valueset_expand_support",
+          "result": "skip",
+          "message": "(no message)"
+        }
+      ],
+      "knownKitIssues": [
+        {
+          "test": "dtr_payer_server_v220_questionnaire_operations-dtr_payer_server_v220_must_support-dtr_v220_payer_questionnaire_base_must_support",
+          "reason": "In davinci-dtr-test-kit v0.18.0 (the latest release) the DTR Base Questionnaire must-support test requires every element its generated metadata lists (cross_suite/generated/v2.2.0/dtr_base_questionnaire/metadata.yml), and that list includes Questionnaire.extension:assemble-expectation and Questionnaire.item.extension:itemOptionalDisplay, which the DTR 2.2.0 dtr-base-questionnaire profile prohibits (max 0). No conformant Questionnaire can show them, so the test cannot pass. The returned Questionnaires are still validated against their DTR profiles by the package and next-question validation tests.",
+          "failedThisRun": false
+        },
+        {
+          "test": "dtr_payer_server_v220_questionnaire_operations-dtr_payer_server_v220_must_support-dtr_v220_payer_questionnaire_adaptive_search_must_support",
+          "reason": "In davinci-dtr-test-kit v0.18.0 (the latest release) the DTR Questionnaire for adaptive form search must-support test requires Questionnaire.item and its children and Questionnaire.extension:assemble-expectation (cross_suite/generated/v2.2.0/dtr_questionnaire_adapt_search/metadata.yml), and the DTR 2.2.0 dtr-questionnaire-adapt-search profile prohibits both (Questionnaire.item max 0, assemble-expectation max 0). An adaptive search form carries no items by design, so the test cannot pass. The search form is still validated against its profile by the package validation tests.",
+          "failedThisRun": false
+        },
+        {
+          "test": "dtr_payer_server_v220_questionnaire_operations-dtr_payer_v220_questionnaire_design-dtr_v220_payer_cql_library_validation",
+          "reason": "In davinci-dtr-test-kit v0.18.0 (the latest release) the CQL library test treats every relatedArtifact of type depends-on in a returned Library as a Library reference (depends_on_library_canonicals in server/v2.2.0/questionnaire_operation_validation.rb), and fails when no Library with that canonical is in the bundle. CHO's MRI prepopulation Library declares its two ValueSets as depends-on, as the CQL and CRMI IGs describe for terminology a library uses, and the package carries both ValueSets, so the test reports ValueSet canonicals as missing Libraries. The rest of the test (every Library carries CQL and ELM, one version per name, every cqf-library reference included) is what CHO's package tests check.",
+          "failedThisRun": false
+        }
+      ]
+    },
     {
       "scenarioId": "INFERNO-PDEX-SERVER-001",
       "title": "Inferno PDex 2.0.0 payer-server $member-match against CHO",
@@ -33,7 +180,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-01T06:47:19.2529033+00:00",
+      "testedAtUtc": "2026-11-02T03:49:45.3741520+00:00",
       "tests": {
         "passed": 13,
         "failed": 0,
@@ -70,7 +217,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-01T06:52:50.1329052+00:00",
+      "testedAtUtc": "2026-11-02T03:54:56.2448428+00:00",
       "tests": {
         "passed": 21,
         "failed": 0,
@@ -151,7 +298,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-01T06:43:55.1361052+00:00",
+      "testedAtUtc": "2026-11-02T03:38:00.4859890+00:00",
       "tests": {
         "passed": 41,
         "failed": 0,
@@ -306,7 +453,7 @@
       "groups": [],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-01T06:49:59.7852414+00:00",
+      "testedAtUtc": "2026-11-02T03:52:11.8228112+00:00",
       "tests": {
         "passed": 180,
         "failed": 0,
@@ -710,7 +857,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-01T06:40:50.1999644+00:00",
+      "testedAtUtc": "2026-11-02T03:35:01.8530967+00:00",
       "tests": {
         "passed": 31,
         "failed": 0,
@@ -736,18 +883,18 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-11-01T06:52:50.1350674+00:00",
+    "generatedAtUtc": "2026-11-02T03:54:56.2474869+00:00",
     "environment": "CI",
-    "choCommit": "f72b79f4a42f0e0e07cffd6ec8e050d3eba8bd46",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/f72b79f4a42f0e0e07cffd6ec8e050d3eba8bd46",
-    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41280848189",
+    "choCommit": "f2dc30d6730183be0058eb16739b7ab44aa0b7b0",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/f2dc30d6730183be0058eb16739b7ab44aa0b7b0",
+    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41379218880",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 5,
-      "failed": 0,
+      "failed": 1,
       "skipped": 0,
       "notRun": 0,
-      "total": 5
+      "total": 6
     }
   },
   "disclaimers": [
