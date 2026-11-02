@@ -18,6 +18,8 @@ using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
 using CloudHealthOffice.ProviderEnrollmentService.Models;
+// The enrollment flags enum (programs: STAR, CHIP ...), not the shared line of business.
+using LineOfBusiness = CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness;
 using BenefitPlanService.Middleware;
 using BenefitPlanService.Services;
 using Microsoft.AspNetCore.Mvc;

@@ -5,6 +5,8 @@ using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
 using CloudHealthOffice.ProviderEnrollmentService.Models;
+// The enrollment flags enum (programs), not the shared line of business.
+using LineOfBusiness = CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness;
 using FluentAssertions;
 using FhirService.Models;
 using FhirService.Services;
