@@ -150,7 +150,7 @@ public sealed class TenantEnrollmentConfigRepositoryMongo : ITenantEnrollmentCon
 
         public LobEnrollmentOverride ToModel() => new()
         {
-            Lob                     = Enum.Parse<LineOfBusiness>(Lob),
+            Lob                     = Enum.Parse<ProgramParticipation>(Lob),
             GateMode                = GateMode is null ? null : Enum.Parse<EnrollmentGateMode>(GateMode),
             EnabledStateCodes       = EnabledStateCodes,
             RevalidationWarningDays = RevalidationWarningDays,

@@ -26,6 +26,8 @@ public sealed class BenefitPlanTemplate
     /// <summary>[min, max] age in years, either end null when open; null when not age-based.</summary>
     [JsonPropertyName("ageRange")] public int?[]? AgeRange { get; set; }
 
+    // By name under any options, as when benefit-plan had its own enum carrying this attribute.
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     [JsonPropertyName("lineOfBusiness")] public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Medicaid;
     [JsonPropertyName("planType")] public PlanType PlanType { get; set; } = PlanType.Medicaid;
 

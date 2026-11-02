@@ -25,9 +25,9 @@ public sealed class DhcsPaveSource : IStateEnrollmentSource
 {
     public string StateCode         => "CA";
     public string SourceSystemName  => "PAVE";
-    public LineOfBusiness SupportedLobs =>
-        LineOfBusiness.Medicaid |
-        LineOfBusiness.CHIP;
+    public ProgramParticipation SupportedLobs =>
+        ProgramParticipation.Medicaid |
+        ProgramParticipation.CHIP;
 
     private readonly HttpClient _http;
     private readonly IEnrollmentRepository _cache;

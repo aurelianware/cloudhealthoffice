@@ -485,19 +485,6 @@ public static class InsuranceLineCodes
 }
 
 /// <summary>
-/// Line of Business - determines regulatory requirements and benefit rules
-/// </summary>
-public enum LineOfBusiness
-{
-    Commercial = 1,
-    Medicare = 2,
-    Medicaid = 3,
-    Exchange = 4,
-    TRICARE = 5,
-    VA = 6
-}
-
-/// <summary>
 /// How the PCP was assigned to the member
 /// </summary>
 public enum PcpAssignmentMethod

@@ -35,4 +35,8 @@
     <Compile Include="..\..\shared\CloudHealthOffice.BankReconciliation.Tests\Bai2Builder.cs" Link="Shared\Bai2Builder.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The shared line of business (docs/architecture/line-of-business.md). -->
+    <Using Include="CloudHealthOffice.Infrastructure.Programs" />
+  </ItemGroup>
 </Project>

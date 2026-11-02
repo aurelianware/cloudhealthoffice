@@ -23,10 +23,10 @@ using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
 using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using CloudHealthOffice.ProviderEnrollmentService.Models;
-using EnrollmentLob = CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness;
+using EnrollmentLob = CloudHealthOffice.ProviderEnrollmentService.Models.ProgramParticipation;
 using StoredAuthorization = authsvc::AuthorizationService.Models.Authorization;
 using StoredStatus = authsvc::AuthorizationService.Models.AuthorizationStatus;
-using StoredLineOfBusiness = authsvc::AuthorizationService.Models.LineOfBusiness;
+using StoredLineOfBusiness = CloudHealthOffice.Infrastructure.Programs.LineOfBusiness;
 
 namespace CloudHealthOffice.FhirService.Tests.Integration;
 

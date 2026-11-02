@@ -77,4 +77,8 @@
     <ProjectReference Include="..\..\src\services\consent-service\consent-service.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The shared line of business (docs/architecture/line-of-business.md). -->
+    <Using Include="CloudHealthOffice.Infrastructure.Programs" />
+  </ItemGroup>
 </Project>

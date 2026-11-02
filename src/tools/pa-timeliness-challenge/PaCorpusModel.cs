@@ -13,9 +13,12 @@ namespace CloudHealthOffice.Tools.PaTimelinessChallenge;
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum PaCohort { History, Live }
 
-/// <summary>Lines of business the corpus uses. Names match CHO's <c>LineOfBusiness</c> values.</summary>
+/// <summary>
+/// Lines of business the corpus uses: the shared <c>LineOfBusiness</c> names and numbers
+/// (docs/architecture/line-of-business.md). Written by name in the corpus.
+/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
-public enum PaLineOfBusiness { Commercial, Medicare, Medicaid, Exchange }
+public enum PaLineOfBusiness { Commercial = 1, Medicare = 2, Medicaid = 3, Exchange = 4 }
 
 /// <summary>A clinical decision. <see cref="Modified"/> is approved with changes and counts as approved.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]

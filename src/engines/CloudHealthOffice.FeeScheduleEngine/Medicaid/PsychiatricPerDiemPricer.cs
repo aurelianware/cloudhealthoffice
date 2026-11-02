@@ -105,6 +105,7 @@ public sealed record PsychiatricStayClaim
 }
 
 /// <summary>The result for one line.</summary>
+/// <param name="DailyRate">The per diem on the line's last day (a line crossing a rate change is paid at each).</param>
 public sealed record PsychiatricLinePrice(int LineNumber, int PaidDays, decimal DailyRate, decimal Allowed);
 
 /// <summary>A priced psychiatric hospital claim.</summary>
@@ -171,23 +172,36 @@ public sealed class PsychiatricPerDiemPricer(PsychiatricPerDiemPolicy policy)
                 return PsychiatricStayPrice.Unpriced($"Line {line.LineNumber} has no days.", steps);
 
             var lastDay = line.ServiceDate.AddDays(line.Days - 1);
-            var rate = rates.FirstOrDefault(r =>
-                string.Equals(r.Npi, claim.FacilityNpi, StringComparison.Ordinal)
-                && r.EffectiveFrom <= line.ServiceDate
-                && (r.EffectiveTo is null || r.EffectiveTo >= lastDay));
-            if (rate is null)
-                return PsychiatricStayPrice.Unpriced(
-                    $"No psychiatric per diem covers {line.ServiceDate:yyyy-MM-dd} to {lastDay:yyyy-MM-dd} for hospital {claim.FacilityNpi}.", steps);
 
+            // Each day at the rate in force that day, so a line that crosses
+            // a new fiscal year's rate pays each part at its own rate.
+            var parts = new List<(PsychiatricPerDiemRate Rate, int Days)>();
             for (var d = line.ServiceDate; d <= lastDay; d = d.AddDays(1))
             {
+                var day = d;
+                var rate = rates
+                    .Where(r => string.Equals(r.Npi, claim.FacilityNpi, StringComparison.Ordinal)
+                        && r.EffectiveFrom <= day && (r.EffectiveTo is null || r.EffectiveTo >= day))
+                    .OrderByDescending(r => r.EffectiveFrom)
+                    .FirstOrDefault();
+                if (rate is null)
+                    return PsychiatricStayPrice.Unpriced(
+                        $"No psychiatric per diem covers {day:yyyy-MM-dd} (line {line.LineNumber}) for hospital {claim.FacilityNpi}.", steps);
+
+                if (parts.Count > 0 && ReferenceEquals(parts[^1].Rate, rate))
+                    parts[^1] = (rate, parts[^1].Days + 1);
+                else
+                    parts.Add((rate, 1));
+
                 var month = new DateOnly(d.Year, d.Month, 1);
                 daysByMonth[month] = (daysByMonth.TryGetValue(month, out var n) ? n : 0) + 1;
             }
 
-            var allowed = MoneyRounding.ToCents(line.Days * rate.DailyRate);
-            results.Add(new PsychiatricLinePrice(line.LineNumber, line.Days, rate.DailyRate, allowed));
-            steps.Add($"Line {line.LineNumber}: {line.Days} day(s) × per diem {Money(rate.DailyRate)}{(rate.Source is null ? "" : $" ({rate.Source})")} = {Money(allowed)}.");
+            var allowed = MoneyRounding.ToCents(parts.Sum(p => p.Days * p.Rate.DailyRate));
+            results.Add(new PsychiatricLinePrice(line.LineNumber, line.Days, parts[^1].Rate.DailyRate, allowed));
+            steps.Add($"Line {line.LineNumber}: "
+                + string.Join(" + ", parts.Select(p => $"{p.Days} day(s) × per diem {Money(p.Rate.DailyRate)}{(p.Rate.Source is null ? "" : $" ({p.Rate.Source})")}"))
+                + $" = {Money(allowed)}.");
         }
 
         if (results.All(r => r.PaidDays == 0))

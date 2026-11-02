@@ -358,6 +358,93 @@ public class MedicaidDrgRateResolutionServiceTests
         Assert.Empty(result.Adjustments);
     }
 
+    private InMemoryMedicaidPsychiatricPerDiemRepository PsychRates(params (DateTime Effective, decimal Rate)[] rates)
+    {
+        var store = new InMemoryMedicaidPsychiatricPerDiemRepository();
+        store.UpsertAsync(rates.Select(r => new MedicaidPsychiatricPerDiem
+        {
+            Id = MedicaidPsychiatricPerDiem.MakeId(Tenant, "TX", Hospital, r.Effective),
+            TenantId = Tenant, State = "TX", Npi = Hospital, HospitalName = "Test Psychiatric Hospital",
+            FacilityClass = "Private Freestanding", EffectiveDate = r.Effective, DailyRate = r.Rate, SourceFile = "psych.pdf",
+        }).ToList()).GetAwaiter().GetResult();
+        return store;
+    }
+
+    private static List<PricingRequest> PsychStay(int age, DateTime admission, int days) =>
+    [
+        new()
+        {
+            TenantId = Tenant, ProcedureCode = string.Empty, RevenueCode = "0114", ProviderNpi = Physician, FacilityNpi = Hospital,
+            ServiceDate = admission, Units = days, BilledAmount = 9000m, LineNumber = 1, TotalLineCount = 2,
+            DrgCode = "753-2", LengthOfStay = days, IsInstitutional = true, MedicaidDrgMethod = MedicaidDrgMethods.Texas,
+            PatientAgeYears = age, DischargeDate = admission.AddDays(days),
+        },
+        new()
+        {
+            TenantId = Tenant, ProcedureCode = string.Empty, RevenueCode = "0250", ProviderNpi = Physician, FacilityNpi = Hospital,
+            ServiceDate = admission, Units = 3, BilledAmount = 600m, LineNumber = 2, TotalLineCount = 2,
+            DrgCode = "753-2", LengthOfStay = days, IsInstitutional = true, MedicaidDrgMethod = MedicaidDrgMethods.Texas,
+            PatientAgeYears = age, DischargeDate = admission.AddDays(days),
+        },
+    ];
+
+    [Fact]
+    public async Task A_psychiatric_hospital_is_paid_its_per_diem_not_a_drg()
+    {
+        var sut = new MedicaidDrgRateResolutionService(_engine, _rates, NullLogger<MedicaidDrgRateResolutionService>.Instance,
+            psychRates: PsychRates((new DateTime(2026, 9, 1), 563.36m)));
+
+        var result = await sut.ResolveBatchAsync(PsychStay(16, new DateTime(2026, 10, 1), 7));
+
+        var room = result.LineResults.Single(r => r.LineNumber == 1);
+        Assert.Equal(RateSource.Medicaid, room.RateSource);
+        Assert.Equal(FeeScheduleType.PerDiem, room.FeeScheduleType);
+        Assert.Equal(3943.52m, room.AllowedAmount); // 7 × 563.36
+        Assert.True(room.IsPerStayRate);
+        Assert.Equal(0m, result.LineResults.Single(r => r.LineNumber == 2).AllowedAmount);
+        Assert.Contains(room.CalculationSteps, s => s.Contains("not a DRG"));
+        Assert.Equal(0, _engine.BatchCalls);
+    }
+
+    [Fact]
+    public async Task A_psychiatric_stay_over_the_adult_imd_limit_pends()
+    {
+        var sut = new MedicaidDrgRateResolutionService(_engine, _rates, NullLogger<MedicaidDrgRateResolutionService>.Instance,
+            psychRates: PsychRates((new DateTime(2026, 9, 1), 563.36m)));
+
+        var result = await sut.ResolveBatchAsync(PsychStay(35, new DateTime(2026, 10, 1), 16));
+
+        Assert.All(result.LineResults, r =>
+        {
+            Assert.Equal(RateSource.Unresolved, r.RateSource);
+            Assert.Contains("15-day monthly limit", r.UnresolvedReason);
+        });
+    }
+
+    [Fact]
+    public async Task A_psychiatric_stay_across_a_new_fiscal_year_pays_each_day_at_its_rate()
+    {
+        var sut = new MedicaidDrgRateResolutionService(_engine, _rates, NullLogger<MedicaidDrgRateResolutionService>.Instance,
+            psychRates: PsychRates((new DateTime(2025, 9, 1), 529.59m), (new DateTime(2026, 9, 1), 563.36m)));
+
+        // Aug 28 for 7 days: 4 days at the SFY 2026 rate, 3 at SFY 2027.
+        var result = await sut.ResolveBatchAsync(PsychStay(16, new DateTime(2026, 8, 28), 7));
+
+        Assert.Equal(4 * 529.59m + 3 * 563.36m, result.LineResults.Single(r => r.LineNumber == 1).AllowedAmount);
+    }
+
+    [Fact]
+    public async Task A_hospital_without_a_per_diem_is_priced_by_drg()
+    {
+        var sut = new MedicaidDrgRateResolutionService(_engine, _rates, NullLogger<MedicaidDrgRateResolutionService>.Instance,
+            psychRates: new InMemoryMedicaidPsychiatricPerDiemRepository());
+
+        var result = await sut.ResolveBatchAsync(Stay());
+
+        Assert.All(result.LineResults, r => Assert.Equal(FeeScheduleType.Drg, r.FeeScheduleType));
+        Assert.Equal(7200m, result.LineResults.Sum(r => r.AllowedAmount));
+    }
+
     [Fact]
     public void The_builder_wraps_the_registered_engine()
     {
