@@ -27,6 +27,33 @@ prior-auth rules, then publishes. This follows the rule in
 every configured restriction needs a contract or policy citation, an effective
 version and clinical approval.
 
+## Portal: template gallery to published plan
+
+A tenant administrator can do the whole flow in the portal without calling the API:
+
+1. **Configuration → Plan Templates** (`/benefit-plans/templates`, also linked
+   from Benefit Plans as "Start from a template"). Filter by state, pick a
+   template, and read its plan cost sharing, its benefits with each value marked
+   `sourced` or `verify` (hover for the cited source), its carve-outs, and the
+   items CHO does not model.
+2. **Create draft**: plan id, payer, effective date, and optionally plan name,
+   termination date and program id. This calls `POST .../drafts` and opens the
+   Draft. A plan id that already exists is refused with the service's reason.
+3. **Review and publish** (`/benefit-plans/drafts/{planId}/{versionId}`): edit
+   the plan's deductibles, out-of-pocket maximums and premium, and each benefit's
+   coverage, copay, coinsurance, deductible, prior-auth flag, visit limit and
+   limitations. Each value the template marks `verify` has a checkbox, and
+   **Save and publish** stays disabled until all of them are checked. The Drafts
+   tab on the gallery lists every Draft in the tenant so review can resume later.
+
+The Draft page reads the stored version from `GET /api/v1/plans/{planId}/versions`
+and saves it with `PUT /api/v1/plans/{id}`, changing only the fields it shows.
+Fields it does not show, such as the plan year definition and accumulator
+targets, are saved back unchanged. Out-of-network cost sharing follows an
+in-network edit only when the two were equal, which is the case for every
+template Draft. Reading needs `benefits:read`; creating, saving and publishing
+need `settings:manage`.
+
 ## Template format
 
 Each template has:
