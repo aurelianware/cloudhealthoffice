@@ -303,6 +303,8 @@ builder.Services.AddScoped<IIdCardService, CloudHealthOffice.Portal.Services.IdC
 builder.Services.AddScoped<IProviderService, ProviderService>();
 builder.Services.AddScoped<IBenefitPlanService, BenefitPlanService>();
 builder.Services.AddScoped<IBenefitPlanValidationService, BenefitPlanValidationService>();
+// Guided plan onboarding: state program templates -> Draft -> publish (benefit-plan-service).
+builder.Services.AddScoped<IPlanTemplateService, PlanTemplateService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ISponsorService, SponsorService>();

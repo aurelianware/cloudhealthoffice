@@ -1,0 +1,382 @@
+@page "/benefit-plans/drafts/{PlanId}/{VersionId}"
+@using System.Text.Json.Nodes
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject IPlanTemplateService Templates
+@inject IUserContextService UserContextService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+@*
+    Guided plan onboarding, step 3: edit a Draft plan's cost sharing and
+    benefits, tick off every value its template marked verify, and publish.
+    The Draft is kept as the API's JSON and only the shown fields are
+    changed, so everything else on the plan is saved back as it was.
+*@
+
+<PageTitle>Draft plan - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="benefits:read">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudBreadcrumbs Items="_crumbs" Class="px-0" />
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_error != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" data-testid="draft-error">@_error</MudAlert>
+    }
+    else if (_plan != null)
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudText Typo="Typo.h4">@Str("planName")</MudText>
+            <MudChip Size="Size.Small" Color="@(IsDraft ? Color.Warning : Color.Success)" data-testid="draft-state">@Str("versionState")</MudChip>
+        </MudStack>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+            @PlanId · version @(_plan["versionNumber"]?.ToString()) · payer @Str("payer")
+            @if (_template != null) { <span> · from template <strong>@_template.PlanName</strong></span> }
+        </MudText>
+
+        @if (!IsDraft)
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-4" data-testid="not-draft">
+                This version is @Str("versionState") and can no longer be edited. Amend the plan to change it.
+            </MudAlert>
+        }
+
+        <MudPaper Class="pa-4 mb-4" Outlined="true">
+            <MudText Typo="Typo.h6" Class="mb-2">Plan</MudText>
+            <MudGrid Spacing="2">
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_planName" Label="Plan name" Variant="Variant.Outlined" Margin="Margin.Dense" ReadOnly="ReadOnly" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudDatePicker @bind-Date="_effective" Label="Effective date" Variant="Variant.Outlined" Margin="Margin.Dense" ReadOnly="ReadOnly" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudDatePicker @bind-Date="_termination" Label="Termination date" Variant="Variant.Outlined" Margin="Margin.Dense" ReadOnly="ReadOnly" />
+                </MudItem>
+                @foreach (var f in _costFields)
+                {
+                    <MudItem xs="6" md="2">
+                        <MudNumericField T="decimal" @bind-Value="f.Value" Label="@f.Label" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                         Min="0" Format="N2" ReadOnly="ReadOnly" HideSpinButtons="true" />
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudPaper>
+
+        <MudPaper Class="pa-4 mb-4" Outlined="true">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.h6">Benefits</MudText>
+                <MudSpacer />
+                @if (VerifyRows > 0)
+                {
+                    <MudChip Size="Size.Small" Color="@(VerifiedRows == VerifyRows ? Color.Success : Color.Warning)" data-testid="verify-progress">
+                        @VerifiedRows of @VerifyRows verify values checked
+                    </MudChip>
+                }
+            </MudStack>
+            <MudSimpleTable Dense="true" Hover="true" data-testid="draft-benefits">
+                <thead>
+                    <tr>
+                        <th>Service</th><th>Covered</th><th>Copay</th><th>Coinsurance %</th><th>Deductible</th><th>PA</th>
+                        <th>Visit limit</th><th>Limitations</th>
+                        @if (_template != null) { <th>Template</th> }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _rows)
+                    {
+                        <tr data-testid="draft-benefit">
+                            <td>@row.ServiceCategory</td>
+                            <td><MudCheckBox T="bool" @bind-Value="row.Covered" Dense="true" ReadOnly="ReadOnly" /></td>
+                            <td style="min-width: 90px;"><MudNumericField T="decimal?" @bind-Value="row.Copay" Margin="Margin.Dense" Min="0" HideSpinButtons="true" ReadOnly="ReadOnly" /></td>
+                            <td style="min-width: 90px;"><MudNumericField T="decimal?" @bind-Value="row.CoinsurancePercent" Margin="Margin.Dense" Min="0" Max="100" HideSpinButtons="true" ReadOnly="ReadOnly" /></td>
+                            <td><MudCheckBox T="bool" @bind-Value="row.DeductibleApplies" Dense="true" ReadOnly="ReadOnly" /></td>
+                            <td><MudCheckBox T="bool" @bind-Value="row.PriorAuthRequired" Dense="true" ReadOnly="ReadOnly" /></td>
+                            <td style="min-width: 80px;"><MudNumericField T="int?" @bind-Value="row.VisitLimit" Margin="Margin.Dense" Min="0" HideSpinButtons="true" ReadOnly="ReadOnly" /></td>
+                            <td style="min-width: 180px;"><MudTextField @bind-Value="row.Limitations" Margin="Margin.Dense" ReadOnly="ReadOnly" /></td>
+                            @if (_template != null)
+                            {
+                                <td>
+                                    @if (row.Template is { IsVerify: true })
+                                    {
+                                        <MudTooltip Text="@(_template.SourceFor(row.Template.Source)?.Title ?? "No source cited; check your contract")">
+                                            <MudCheckBox T="bool" @bind-Value="row.Checked" Color="Color.Warning" Label="verify" Dense="true"
+                                                         data-testid="verify-check" />
+                                        </MudTooltip>
+                                    }
+                                    else if (row.Template != null)
+                                    {
+                                        <MudTooltip Text="@(_template.SourceFor(row.Template.Source)?.Title ?? "")">
+                                            <MudChip Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success">sourced</MudChip>
+                                        </MudTooltip>
+                                    }
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+
+        @if (_template is { NotModeled.Count: > 0 })
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-4">
+                <MudText Typo="Typo.body2"><strong>Set up outside this plan:</strong>
+                    @string.Join("; ", _template.NotModeled.Select(n => n.Item))</MudText>
+            </MudAlert>
+        }
+
+        @if (_saveError != null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-2" data-testid="save-error">@_saveError</MudAlert>
+        }
+
+        @if (IsDraft)
+        {
+            @if (!_canManage)
+            {
+                <MudAlert Severity="Severity.Info" data-testid="edit-needs-permission">Saving and publishing need the settings:manage permission.</MudAlert>
+            }
+            else
+            {
+                <MudStack Row="true" Spacing="2" Class="mb-8">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="_busy" OnClick="SaveAsync" data-testid="save-draft">Save draft</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_busy || VerifiedRows < VerifyRows)"
+                               OnClick="PublishAsync" data-testid="publish-draft">Save and publish</MudButton>
+                    @if (VerifiedRows < VerifyRows)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="align-self-center">
+                            Check each value marked verify against your contract before publishing.
+                        </MudText>
+                    }
+                </MudStack>
+            }
+        }
+    }
+</MudContainer>
+</PermissionGate>
+
+@code {
+    [Parameter] public string PlanId { get; set; } = string.Empty;
+    [Parameter] public string VersionId { get; set; } = string.Empty;
+    [SupplyParameterFromQuery(Name = "template")] public string? TemplateId { get; set; }
+
+    private readonly List<BreadcrumbItem> _crumbs = new()
+    {
+        new("Benefit Plans", "/benefit-plans"),
+        new("Plan templates", "/benefit-plans/templates"),
+        new("Draft", null, disabled: true),
+    };
+
+    private JsonObject? _plan;
+    private PlanTemplateDetail? _template;
+    private List<BenefitRow> _rows = new();
+    private List<CostField> _costFields = new();
+    private string _planName = string.Empty;
+    private DateTime? _effective;
+    private DateTime? _termination;
+    private string? _error;
+    private string? _saveError;
+    private bool _loading = true;
+    private bool _busy;
+    private bool _canManage;
+
+    private bool IsDraft => string.Equals(Str("versionState"), "Draft", StringComparison.OrdinalIgnoreCase);
+    private bool ReadOnly => !IsDraft || !_canManage;
+    private int VerifyRows => _rows.Count(r => r.Template is { IsVerify: true });
+    private int VerifiedRows => _rows.Count(r => r.Template is { IsVerify: true } && r.Checked);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canManage = UserContextService.HasPermission("settings:manage");
+        if (!UserContextService.HasPermission("benefits:read"))
+        {
+            _loading = false;
+            return;
+        }
+        try
+        {
+            _plan = await Templates.GetVersionAsync(PlanId, VersionId);
+            if (_plan is null)
+            {
+                _error = $"Version {VersionId} of plan {PlanId} was not found.";
+                return;
+            }
+            if (!string.IsNullOrWhiteSpace(TemplateId))
+                _template = await Templates.GetTemplateAsync(TemplateId);
+            Load();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string Str(string key) => _plan?[key]?.ToString() ?? string.Empty;
+
+    private void Load()
+    {
+        _planName = Str("planName");
+        _effective = Date(_plan!["effectiveDate"]);
+        _termination = Date(_plan["terminationDate"]);
+
+        var cost = _plan["costSharing"] as JsonObject ?? new JsonObject();
+        _plan["costSharing"] = cost;
+        _costFields = new()
+        {
+            new(cost, "individualDeductible", "Deductible (ind.)"),
+            new(cost, "familyDeductible", "Deductible (fam.)"),
+            new(cost, "individualOutOfPocketMax", "OOP max (ind.)"),
+            new(cost, "familyOutOfPocketMax", "OOP max (fam.)"),
+            new(cost, "monthlyPremium", "Monthly premium"),
+        };
+
+        _rows = (_plan["benefits"] as JsonArray ?? new JsonArray())
+            .OfType<JsonObject>()
+            .Select(b => new BenefitRow(b, _template?.BenefitFor(b["serviceCategory"]?.ToString() ?? string.Empty)))
+            .ToList();
+    }
+
+    private static DateTime? Date(JsonNode? n) =>
+        n is JsonValue v && v.TryGetValue<DateTime>(out var d) ? d.Date : null;
+
+    private void Apply()
+    {
+        _plan!["planName"] = _planName;
+        if (_effective is { } e) _plan["effectiveDate"] = DateTime.SpecifyKind(e.Date, DateTimeKind.Utc);
+        _plan["terminationDate"] = _termination is { } t ? JsonValue.Create(DateTime.SpecifyKind(t.Date, DateTimeKind.Utc)) : null;
+        foreach (var f in _costFields) f.Apply();
+        foreach (var r in _rows) r.Apply();
+    }
+
+    private async Task<bool> SaveCoreAsync()
+    {
+        _saveError = null;
+        Apply();
+        var result = await Templates.SaveDraftAsync(_plan!);
+        if (!result.Success) _saveError = result.Error;
+        return result.Success;
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        try
+        {
+            if (await SaveCoreAsync()) Snackbar.Add("Draft saved.", Severity.Success);
+        }
+        catch (ServiceUnavailableException ex) { _saveError = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task PublishAsync()
+    {
+        _busy = true;
+        try
+        {
+            if (!await SaveCoreAsync()) return;
+            var result = await Templates.PublishAsync(PlanId, VersionId);
+            if (!result.Success)
+            {
+                _saveError = result.Error;
+                return;
+            }
+            Snackbar.Add($"Plan {PlanId} published. Claims and eligibility now use it from its effective date.", Severity.Success);
+            Navigation.NavigateTo("/benefit-plans");
+        }
+        catch (ServiceUnavailableException ex) { _saveError = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private sealed class CostField
+    {
+        private readonly JsonObject _cost;
+        private readonly string _key;
+        public CostField(JsonObject cost, string key, string label)
+        {
+            _cost = cost;
+            _key = key;
+            Label = label;
+            Value = BenefitRow.Dec(cost[key]) ?? 0m;
+        }
+        public string Label { get; }
+        public decimal Value { get; set; }
+        public void Apply() => _cost[_key] = Value;
+    }
+
+    /// <summary>
+    /// One benefit row. Coinsurance is a fraction on the plan (0.20) and a
+    /// percent on screen (20). A template Draft carries the same cost share
+    /// out of network as in network; an out-of-network value that matched the
+    /// in-network one follows the edit, and one set differently is left alone.
+    /// </summary>
+    internal sealed class BenefitRow
+    {
+        private readonly JsonObject _node;
+        private decimal? _originalCopay;
+        private decimal? _originalCoins;
+
+        public BenefitRow(JsonObject node, PlanTemplateBenefit? template)
+        {
+            _node = node;
+            Template = template;
+            ServiceCategory = node["serviceCategory"]?.ToString() ?? string.Empty;
+            Covered = Bool(node["isCovered"], true);
+            Copay = Dec(node["inNetworkCopay"]);
+            var coins = Dec(node["inNetworkCoinsurance"]);
+            CoinsurancePercent = coins is { } c ? Math.Round(c * 100m, 2) : null;
+            DeductibleApplies = Bool(node["deductibleApplies"], false);
+            PriorAuthRequired = Bool(node["priorAuthRequired"], false);
+            VisitLimit = Dec(node["visitLimit"]) is { } limit ? (int)limit : null;
+            Limitations = node["limitations"]?.ToString();
+            _originalCopay = Copay;
+            _originalCoins = coins;
+        }
+
+        public PlanTemplateBenefit? Template { get; }
+        public string ServiceCategory { get; }
+        public bool Covered { get; set; }
+        public decimal? Copay { get; set; }
+        public decimal? CoinsurancePercent { get; set; }
+        public bool DeductibleApplies { get; set; }
+        public bool PriorAuthRequired { get; set; }
+        public int? VisitLimit { get; set; }
+        public string? Limitations { get; set; }
+        public bool Checked { get; set; }
+
+        public void Apply()
+        {
+            var coins = CoinsurancePercent is { } p ? Math.Round(p / 100m, 4) : (decimal?)null;
+            if (Dec(_node["outNetworkCopay"]) == _originalCopay) _node["outNetworkCopay"] = Copay;
+            if (Dec(_node["outNetworkCoinsurance"]) == _originalCoins) _node["outNetworkCoinsurance"] = coins;
+            _node["isCovered"] = Covered;
+            _node["inNetworkCopay"] = Copay;
+            _node["inNetworkCoinsurance"] = coins;
+            _node["deductibleApplies"] = DeductibleApplies;
+            _node["priorAuthRequired"] = PriorAuthRequired;
+            _node["visitLimit"] = VisitLimit;
+            _node["limitations"] = string.IsNullOrWhiteSpace(Limitations) ? null : Limitations;
+            _originalCopay = Copay;
+            _originalCoins = coins;
+        }
+
+        private static bool Bool(JsonNode? n, bool fallback) =>
+            n is JsonValue v && v.TryGetValue<bool>(out var b) ? b : fallback;
+
+        // Read through the JSON text: a value set in code (an int) does not
+        // convert with TryGetValue<decimal>, only a parsed JsonElement does.
+        internal static decimal? Dec(JsonNode? n) =>
+            n is JsonValue v && decimal.TryParse(v.ToJsonString(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : null;
+    }
+}
