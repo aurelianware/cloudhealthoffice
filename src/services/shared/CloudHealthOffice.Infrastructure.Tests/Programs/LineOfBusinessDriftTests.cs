@@ -14,8 +14,6 @@ public class LineOfBusinessDriftTests
     /// <summary>Enums that differ today, by repository path, and why. Remove an entry when its migration lands.</summary>
     private static readonly Dictionary<string, string> KnownExceptions = new()
     {
-        ["src/engines/CloudHealthOffice.ProviderEnrollmentService/Models/EnrollmentModels.cs"] =
-            "A flags enum of programs (STAR, CHIP ...), to be renamed ProgramParticipation (consolidation PR 7).",
     };
 
     private static readonly Regex EnumDeclaration = new(

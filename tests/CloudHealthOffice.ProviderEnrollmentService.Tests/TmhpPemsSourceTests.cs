@@ -199,7 +199,7 @@ public class TmhpPemsSourceTests
         record.ProviderType.Should().Be(ProviderTypeClassification.PhysicianMD);
         record.EnrolledTaxonomies.Should().BeEquivalentTo(new[] { "207Q00000X", "208D00000X" });
         record.EnrolledCounties.Should().BeEquivalentTo(new[] { "Harris", "Travis" });
-        record.SupportedLobs.Should().Be(LineOfBusiness.Medicaid);
+        record.SupportedLobs.Should().Be(ProgramParticipation.Medicaid);
         record.McoParticipation.Should().BeEquivalentTo(new[] { "MCO-001", "MCO-002" });
     }
 

@@ -344,16 +344,16 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
         context.Meta?.Tag?.FirstOrDefault(t => t.System == "cho:tenant")?.Code ?? string.Empty;
 
     /// <summary>
-    /// Map FHIR-layer PaLineOfBusiness to the enrollment service's LineOfBusiness flags.
+    /// Map FHIR-layer PaLineOfBusiness to the enrollment service's ProgramParticipation flags.
     /// The enrollment service uses [Flags] enum; PaLineOfBusiness is a plain enum.
     /// </summary>
-    private static CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness
+    private static CloudHealthOffice.ProviderEnrollmentService.Models.ProgramParticipation
         MapToPaEnrollmentLob(PaLineOfBusiness lob) => lob switch
     {
-        PaLineOfBusiness.Medicaid  => CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness.Medicaid,
-        PaLineOfBusiness.Exchange  => CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness.Marketplace,
-        PaLineOfBusiness.Medicare  => CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness.Medicare,
-        _                          => CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness.None
+        PaLineOfBusiness.Medicaid  => CloudHealthOffice.ProviderEnrollmentService.Models.ProgramParticipation.Medicaid,
+        PaLineOfBusiness.Exchange  => CloudHealthOffice.ProviderEnrollmentService.Models.ProgramParticipation.Marketplace,
+        PaLineOfBusiness.Medicare  => CloudHealthOffice.ProviderEnrollmentService.Models.ProgramParticipation.Medicare,
+        _                          => CloudHealthOffice.ProviderEnrollmentService.Models.ProgramParticipation.None
     };
 
     // ── Decision factories (unchanged) ────────────────────────────

@@ -86,4 +86,7 @@ today, each with the PR that removes it:
    (prior-auth rule engine) and benefit-plan's `LegalLineOfBusiness` client type keep
    their names and already match.
 6. Coverage, claims and authorization intake take the line of business from the program.
-7. ProviderEnrollmentService's flags enum is renamed `ProgramParticipation`.
+7. ProviderEnrollmentService's flags enum is renamed `ProgramParticipation` (done). It says
+   which state programs a provider is enrolled in, so it is not a line of business. Its
+   numbers and the JSON property names are unchanged, so stored enrollment records and Redis
+   cache entries read as before. The drift test has no known exceptions left.

@@ -146,11 +146,11 @@ public class RedisTenantEnrollmentConfigRepositoryTests
     }
 
     [Theory]
-    [InlineData(LineOfBusiness.Marketplace, EnrollmentGateMode.Disabled)]
-    [InlineData(LineOfBusiness.Medicaid,    EnrollmentGateMode.Warn)]
-    [InlineData(LineOfBusiness.STAR,        EnrollmentGateMode.Warn)]
+    [InlineData(ProgramParticipation.Marketplace, EnrollmentGateMode.Disabled)]
+    [InlineData(ProgramParticipation.Medicaid,    EnrollmentGateMode.Warn)]
+    [InlineData(ProgramParticipation.STAR,        EnrollmentGateMode.Warn)]
     public void ResolveFor_LobOverride_WinsOverTenantDefault(
-        LineOfBusiness lob, EnrollmentGateMode expectedGateMode)
+        ProgramParticipation lob, EnrollmentGateMode expectedGateMode)
     {
         var config = new TenantEnrollmentConfig
         {
@@ -160,7 +160,7 @@ public class RedisTenantEnrollmentConfigRepositoryTests
             [
                 new LobEnrollmentOverride
                 {
-                    Lob      = LineOfBusiness.Marketplace,
+                    Lob      = ProgramParticipation.Marketplace,
                     GateMode = EnrollmentGateMode.Disabled
                 }
             ]
