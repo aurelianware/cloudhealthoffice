@@ -2,7 +2,7 @@
   "resourceType": "Questionnaire",
   "id": "q-imaging-mri",
   "meta": {
-    "versionId": "3",
+    "versionId": "4",
     "lastUpdated": "2026-10-31T00:00:00Z",
     "profile": [
       "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-std-questionnaire"
@@ -123,7 +123,7 @@
         {
           "valueCoding": {
             "system": "http://snomed.info/sct",
-            "code": "122495006",
+            "code": "69536005",
             "display": "Head"
           }
         },
