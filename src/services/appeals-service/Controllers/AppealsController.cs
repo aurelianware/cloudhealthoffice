@@ -6,6 +6,7 @@ using AppealsService.Middleware;
 using AppealsService.Models;
 using AppealsService.Repositories;
 using AppealsService.Services;
+using AppealsService.Services.RulePacks;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using CloudHealthOffice.Infrastructure.Logging;
@@ -54,6 +55,8 @@ public class AppealsController : ControllerBase
     private readonly ILogger<AppealsController> _logger;
     private readonly ICurrentActor _currentActor;
     private readonly IAppealHolidayCalendarProvider _holidays;
+    private readonly IRulePackCatalog _rulePacks;
+    private readonly IAppealJurisdictionProvider _jurisdictions;
 
     /// <summary>ProblemDetails type for a create-time deadline override past the regulatory maximum.</summary>
     public const string TargetResponseDateProblemType =
@@ -79,7 +82,9 @@ public class AppealsController : ControllerBase
         IAppealOutboxDispatcher outbox,
         ILogger<AppealsController> logger,
         ICurrentActor currentActor,
-        IAppealHolidayCalendarProvider holidays)
+        IAppealHolidayCalendarProvider holidays,
+        IRulePackCatalog rulePacks,
+        IAppealJurisdictionProvider jurisdictions)
     {
         _appeals = appeals;
         _events = events;
@@ -88,6 +93,8 @@ public class AppealsController : ControllerBase
         _logger = logger;
         _currentActor = currentActor;
         _holidays = holidays;
+        _rulePacks = rulePacks;
+        _jurisdictions = jurisdictions;
     }
 
     // ── Create / Read ───────────────────────────────────────────────────
@@ -113,18 +120,28 @@ public class AppealsController : ControllerBase
         // accepted as-is. Lengthening a running clock is the one-time
         // extension operation (POST /{id}/extend), never a create-time
         // override.
-        var regulatoryDeadline = AppealResponseDeadlinePolicy.ComputeTargetResponseDate(
-            now, request.LineOfBusiness, request.AppealType, request.AppealLevel, request.IsUrgent);
-        var enforceableMaximum = AppealResponseDeadlinePolicy.ComputeEnforceableMaximum(
-            now, request.LineOfBusiness, request.AppealType, request.AppealLevel, request.IsUrgent,
-            _holidays.ForTenant(TenantId));
+        //
+        // A case under a State with a rule pack runs on the tighter of the
+        // federal and State clocks (StateAppealDeadlinePolicy): a Medi-Cal
+        // grievance gets 30 days / 72 hours, not the federal 90 days.
+        if (request.State is not null && !ConfiguredAppealJurisdictionProvider.IsStateCode(request.State))
+        {
+            ModelState.AddModelError(nameof(CreateAppealRequest.State), "State must be a two-letter State code.");
+            return ValidationProblem(ModelState);
+        }
+        var state = _jurisdictions.Resolve(TenantId, request.State);
+        var deadlines = ResolveDeadlines(state, now, request.LineOfBusiness, request.AppealType,
+            request.AppealLevel, request.IsUrgent, TenantId);
+        var regulatoryDeadline = deadlines.DefaultTarget;
+        var enforceableMaximum = deadlines.EnforceableMaximum;
         if (request.TargetResponseDate.HasValue
             && enforceableMaximum.HasValue
             && request.TargetResponseDate.Value.ToUniversalTime() > enforceableMaximum.Value)
         {
             ModelState.AddModelError(nameof(CreateAppealRequest.TargetResponseDate),
                 $"TargetResponseDate exceeds the regulatory maximum of {enforceableMaximum.Value:o} " +
-                $"for {request.LineOfBusiness} {request.AppealType} at {request.AppealLevel} (urgent: {request.IsUrgent}).");
+                $"for {request.LineOfBusiness} {request.AppealType} at {request.AppealLevel} (urgent: {request.IsUrgent})" +
+                (deadlines.RulePack is { } packApplied ? $" under {packApplied}." : "."));
             return ValidationProblem(
                 detail: null, instance: null, statusCode: StatusCodes.Status400BadRequest,
                 title: "TargetResponseDate exceeds regulatory maximum",
@@ -160,6 +177,8 @@ public class AppealsController : ControllerBase
             Source = request.Source,
             SubmittedDate = now,
             TargetResponseDate = request.TargetResponseDate?.ToUniversalTime() ?? regulatoryDeadline,
+            State = state,
+            RulePackVersion = deadlines.RulePack,
             SubmittedBy = actor,
             IsUrgent = request.IsUrgent,
             ServiceDate = request.ServiceDate,
@@ -748,6 +767,21 @@ public class AppealsController : ControllerBase
         return Ok(view);
     }
 
+    /// <summary>
+    /// Federal deadlines, tightened by <paramref name="state"/>'s rule pack
+    /// in effect on the receipt date when one exists for the line of business.
+    /// </summary>
+    private AppealDeadlines ResolveDeadlines(
+        string? state, DateTime receivedAt, LineOfBusiness lineOfBusiness, AppealType appealType,
+        AppealLevel appealLevel, bool isUrgent, string tenantId)
+    {
+        var pack = state is null
+            ? null
+            : _rulePacks.Find(state, lineOfBusiness, DateOnly.FromDateTime(receivedAt));
+        return StateAppealDeadlinePolicy.Resolve(pack, receivedAt, lineOfBusiness, appealType, appealLevel,
+            isUrgent, _holidays.ForTenant(tenantId));
+    }
+
     // ── Deadline extension ──────────────────────────────────────────────
 
     /// <summary>
@@ -831,8 +865,10 @@ public class AppealsController : ControllerBase
                 "The response deadline has already been extended; only one extension is permitted.");
         }
 
-        var rule = AppealResponseDeadlinePolicy.GetExtensionRule(
-            appeal.LineOfBusiness, appeal.AppealType, appeal.AppealLevel, appeal.IsUrgent);
+        var receivedAt = (appeal.ReceivedDate ?? appeal.SubmittedDate).ToUniversalTime();
+        var deadlines = ResolveDeadlines(appeal.State, receivedAt, appeal.LineOfBusiness, appeal.AppealType,
+            appeal.AppealLevel, appeal.IsUrgent, appeal.TenantId);
+        var rule = deadlines.Extension;
         if (!rule.IsPermitted)
         {
             return ExtensionRefused(StatusCodes.Status422UnprocessableEntity, "not-permitted", appeal,
@@ -855,10 +891,7 @@ public class AppealsController : ControllerBase
 
         current = current.ToUniversalTime();
         var extended = current.AddDays(request.ExtensionDays);
-        var receivedAt = (appeal.ReceivedDate ?? appeal.SubmittedDate).ToUniversalTime();
-        var ceiling = AppealResponseDeadlinePolicy.ComputeMaxExtendedTargetResponseDate(
-            receivedAt, appeal.LineOfBusiness, appeal.AppealType, appeal.AppealLevel, appeal.IsUrgent,
-            _holidays.ForTenant(appeal.TenantId));
+        var ceiling = deadlines.MaxExtendedTarget;
         if (ceiling.HasValue && extended > ceiling.Value)
         {
             ModelState.AddModelError(nameof(ExtendDeadlineRequest.ExtensionDays),
@@ -1234,6 +1267,8 @@ public class AppealsController : ControllerBase
             SubmittedDate = appeal.SubmittedDate,
             ReceivedDate = appeal.ReceivedDate,
             TargetResponseDate = appeal.TargetResponseDate,
+            State = appeal.State,
+            RulePackVersion = appeal.RulePackVersion,
             DeadlineExtension = appeal.DeadlineExtension,
             DecisionDate = appeal.DecisionDate,
             SubmittedBy = appeal.SubmittedBy,
@@ -1425,6 +1460,13 @@ public class CreateAppealRequest
     [Required] public AppealLevel AppealLevel { get; set; } = AppealLevel.FirstLevel;
 
     [Required] public LineOfBusiness LineOfBusiness { get; set; }
+
+    /// <summary>
+    /// Two-letter State whose rules govern the case (e.g. <c>CA</c>). Optional:
+    /// defaults to the tenant's configured State, else federal rules only.
+    /// </summary>
+    [StringLength(2)]
+    public string? State { get; set; }
 
     [Required] [StringLength(8000)]
     public string AppealReason { get; set; } = string.Empty;
