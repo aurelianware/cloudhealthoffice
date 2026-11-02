@@ -21,6 +21,7 @@ public static class AgReportCatalog
     public const string TimelinessByMonth = "ag-timeliness-by-month";
     public const string OpenByDeadline = "ag-open-by-deadline";
     public const string GrievancesByCategory = "ag-grievances-by-category";
+    public const string MediCalGrievanceLog = "ag-grievance-log-medi-cal";
 
     private static readonly ReportParameter From = new("from", "date", false, "Start of the receipt period, inclusive (default: 30 days before to).");
     private static readonly ReportParameter To = new("to", "date", false, "End of the receipt period, exclusive (default: now).");
@@ -56,6 +57,13 @@ public static class AgReportCatalog
             [From, To, Lob],
             ["Category", "Received", "ResolvedOnTime", "ResolvedLate", "ClosedWithoutDecision", "Open", "PercentOnTime"],
             "DHCS Dental APL 25-008 grievance categories (Medi-Cal Dental); other programs' and states' categories are recorded as given"),
+        new(MediCalGrievanceLog, "Medi-Cal grievance log",
+            "Every grievance received in [from, to) with the grievance log fields California requires: filed, member, who received it, the complaint, the action taken, the resolution, who resolved it and when the member was told.",
+            Permission,
+            [From, To, Lob],
+            ["AppealId", "AppealNumber", "FiledAt", "MemberId", "MemberName", "ReceivedBy", "Category", "Expedited", "Description",
+             "ActionTaken", "Resolution", "ResolvedBy", "ResolvedAt", "MemberNotifiedAt", "Status", "OnTime"],
+            "22 CCR 53858(e)(1) grievance log; 28 CCR 1300.68(b)(5); 42 CFR 438.416"),
     ];
 
     public static ReportDefinition Find(string id) => All.Single(d => d.Id == id);
@@ -85,6 +93,33 @@ public sealed record AgCaseRow(
     string? ClaimNumber,
     string? DenialReasonCode,
     string ProviderNpi);
+
+/// <summary>
+/// One grievance in the California grievance log (22 CCR 53858(e)(1)(A) to
+/// (H)). Unlike the 438.416 case log, it carries the member's name and the
+/// free-text complaint, action and resolution, because the regulation asks
+/// for them; they are decrypted only for the rows returned.
+/// </summary>
+public sealed record AgCaGrievanceRow(
+    string AppealId,
+    string AppealNumber,
+    DateTime FiledAt,
+    string MemberId,
+    string? MemberName,
+    string? ReceivedBy,
+    string Category,
+    bool Expedited,
+    string? Description,
+    string? ActionTaken,
+    string? Resolution,
+    string? ResolvedBy,
+    DateTime? ResolvedAt,
+    DateTime? MemberNotifiedAt,
+    AppealStatus Status,
+    bool? OnTime);
+
+/// <summary>The free-text fields of a grievance, decrypted.</summary>
+public sealed record AgCaGrievanceText(string? MemberName, string? Description, string? ActionTaken, string? DecisionReason);
 
 public sealed record AgMonthRow(
     string ReceiptMonth,
@@ -165,6 +200,33 @@ public static class AgReportBuilder
         IsGrievance(a) || string.IsNullOrWhiteSpace(a.ClaimNumber) ? null : a.ClaimNumber,
         IsGrievance(a) ? null : a.DenialReasonCode,
         a.ProviderNPI);
+
+    /// <summary>
+    /// A grievance as a California log row. Who received it is the user who
+    /// recorded it (or who submitted it, for a portal filing); who resolved
+    /// it is the decision maker, else whoever closed it. The resolution is
+    /// the decision and its stated reason. The date the member was told is
+    /// not recorded yet, so it is blank.
+    /// </summary>
+    public static AgCaGrievanceRow CaGrievance(Appeal a, AgCaGrievanceText? text, DateTime asOf)
+    {
+        var closed = a.Status == AppealStatus.Closed;
+        string? resolution = null;
+        if (closed)
+        {
+            var outcome = a.Decision is { } d ? d.DecisionType.ToString() : a.ClosureReasonCode?.ToString();
+            resolution = string.IsNullOrWhiteSpace(text?.DecisionReason) ? outcome : $"{outcome}: {text!.DecisionReason!.Trim()}";
+        }
+        return new AgCaGrievanceRow(
+            a.Id, a.AppealNumber, ReceivedAt(a), a.MemberId, Blank(text?.MemberName),
+            Blank(a.CreatedBy) ?? Blank(a.SubmittedBy), Category(a), a.IsUrgent,
+            Blank(text?.Description), Blank(text?.ActionTaken), resolution,
+            closed ? Blank(a.Decision?.DecisionMaker) ?? Blank(a.ClosedBy) : null,
+            closed ? DecidedAt(a) : null,
+            null, a.Status, OnTime(a, asOf));
+    }
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     public static string Category(Appeal a) =>
         string.IsNullOrWhiteSpace(a.GrievanceCategory) ? GrievanceCategories.Uncategorized : a.GrievanceCategory.Trim();
