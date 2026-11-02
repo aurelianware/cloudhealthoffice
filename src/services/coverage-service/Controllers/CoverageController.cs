@@ -12,6 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CloudHealthOffice.Infrastructure.Logging;
 using CloudHealthOffice.Infrastructure.Audit;
+using CloudHealthOffice.PlanConfiguration;
 
 namespace CoverageService.Controllers;
 
@@ -29,6 +30,7 @@ public class CoverageController : ControllerBase
     private readonly ICareTeamProjector? _careTeamProjector;
     private readonly ICurrentActor _actor;
     private readonly ILogger<CoverageController> _logger;
+    private readonly IProgramDirectory? _programs;
 
     // Tenant from the validated token (shared TenantMiddleware via UseChoAuthentication).
     private string TenantId => HttpContext.GetTenantId();
@@ -38,9 +40,11 @@ public class CoverageController : ControllerBase
         ICurrentActor actor,
         ILogger<CoverageController> logger,
         IPcpAssignmentService? pcpService = null,
-        ICareTeamProjector? careTeamProjector = null)
+        ICareTeamProjector? careTeamProjector = null,
+        IProgramDirectory? programs = null)
     {
         _coverageRepository = coverageRepository;
+        _programs = programs;
         _actor = actor;
         _pcpService = pcpService;
         _careTeamProjector = careTeamProjector;
@@ -351,6 +355,8 @@ public class CoverageController : ControllerBase
             CreatedBy = _actor.UserId
         };
 
+        await TakeLineOfBusinessFromProgramAsync(coverage, HttpContext.RequestAborted);
+
         var created = await _coverageRepository.CreateAsync(coverage);
         return CreatedAtAction(nameof(GetCoverage), new { id = created.Id }, created);
     }
@@ -405,6 +411,7 @@ public class CoverageController : ControllerBase
         {
             coverage.PlanId = request.PlanId;
             coverage.PlanName = null;
+            await TakeLineOfBusinessFromProgramAsync(coverage, HttpContext.RequestAborted);
         }
         if (!string.IsNullOrWhiteSpace(request.PlanName)) coverage.PlanName = request.PlanName.Trim();
         if (request.CoverageLevel != null) coverage.CoverageLevel = request.CoverageLevel;
@@ -419,6 +426,21 @@ public class CoverageController : ControllerBase
 
         var updated = await _coverageRepository.UpdateAsync(coverage);
         return Ok(updated);
+    }
+
+    /// <summary>
+    /// Sets the coverage's line of business from its plan's program
+    /// (docs/architecture/line-of-business.md, step 6). The create body has no
+    /// line of business, so without a program every coverage was Commercial.
+    /// A plan with no program, or tenant-service not answering, keeps the
+    /// value the coverage already has.
+    /// </summary>
+    private async Task TakeLineOfBusinessFromProgramAsync(Coverage coverage, CancellationToken ct)
+    {
+        if (_programs is null) return;
+        if (await ProgramLineOfBusiness.ForBenefitPlanAsync(_programs, coverage.TenantId, coverage.PlanId, _logger, ct)
+            is not { } lob) return;
+        coverage.LineOfBusiness = lob;
     }
 
     /// <summary>

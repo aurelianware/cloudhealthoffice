@@ -32,6 +32,7 @@ public class AuthorizationsController : ControllerBase
     private readonly IPendedAuthorizationRfaiCoordinator? _rfai;
     private readonly ILogger<AuthorizationsController> _logger;
     private readonly ICurrentActor _currentActor;
+    private readonly IAuthorizationLineOfBusinessResolver? _lineOfBusiness;
 
     /// <summary>Decision actions: approve / modify / deny / pend / status transitions.</summary>
     public const string DecidePermission = "authorizations:decide";
@@ -51,9 +52,11 @@ public class AuthorizationsController : ControllerBase
         IWebHostEnvironment environment,
         ILogger<AuthorizationsController> logger,
         ICurrentActor currentActor,
-        IPendedAuthorizationRfaiCoordinator? rfai = null)
+        IPendedAuthorizationRfaiCoordinator? rfai = null,
+        IAuthorizationLineOfBusinessResolver? lineOfBusiness = null)
     {
         _currentActor = currentActor;
+        _lineOfBusiness = lineOfBusiness;
         _authorizationRepository = authorizationRepository;
         _backends = backends;
         _environment = environment;
@@ -147,6 +150,22 @@ public class AuthorizationsController : ControllerBase
         authorization.CreatedBy = Actor;
         authorization.LastUpdatedBy = Actor;
         ClearReviewOutcome(authorization);
+
+        // The line of business is the member's program's
+        // (docs/architecture/line-of-business.md, step 6): it picks the
+        // CMS-0057-F timeframes, so the submitter's value is kept only when
+        // the member's plans name no program, or name programs that disagree.
+        if (_lineOfBusiness is not null
+            && await _lineOfBusiness.ResolveAsync(
+                    authorization.TenantId, authorization.MemberId, authorization.RequestedServiceDateFrom,
+                    HttpContext.RequestAborted) is { } programLob
+            && programLob != authorization.LineOfBusiness)
+        {
+            _logger.LogInformation(
+                "Authorization line of business {Stated} replaced by the member's program's {Program}",
+                authorization.LineOfBusiness, programLob);
+            authorization.LineOfBusiness = programLob;
+        }
 
         // Persist via the operating-mode-selected backend. Replace = CHO-native
         // repository; Augment = configured external core. No vendor branching here.

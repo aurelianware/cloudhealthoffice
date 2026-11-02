@@ -81,6 +81,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=CoverageDB
+      - Services__TenantService=http://tenant-service:8080
     depends_on:
       mongo:
         condition: service_healthy
@@ -113,6 +114,7 @@ services:
       - MongoDb__DatabaseName=ClaimsDB
       - Kafka__BootstrapServers=kafka:9092
       - Kafka__ClientId=claims-service
+      - Services__TenantService=http://tenant-service:8080
     depends_on:
       mongo:
         condition: service_healthy
@@ -153,6 +155,7 @@ services:
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=AuthorizationDB
       - Services__ContactServiceUrl=http://contact-service:8080
+      - Services__TenantService=http://tenant-service:8080
     depends_on:
       mongo:
         condition: service_healthy

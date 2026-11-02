@@ -85,5 +85,21 @@ today, each with the PR that removes it:
    `PaLineOfBusiness` is numbered to match (it writes names). `PaLineOfBusiness`
    (prior-auth rule engine) and benefit-plan's `LegalLineOfBusiness` client type keep
    their names and already match.
-6. Coverage, claims and authorization intake take the line of business from the program.
+6. Coverage, claims and authorization intake take the line of business from the program
+   (done), through `ProgramLineOfBusiness` (`CloudHealthOffice.PlanConfiguration`):
+   - coverage-service: a coverage written through the API (or moved to another plan)
+     takes its plan's program's line of business. The create body has none, so before
+     this every such coverage was Commercial.
+   - claims-service: adjudication sets the claim's line of business from its benefit
+     plan's program, after an 837 claim's plan is found from the member's coverage. An
+     837 carries no line of business, so the mapper's Commercial is replaced.
+   - authorization-service: a submitted prior authorization takes the line of business
+     the member's programs on the requested service date agree on. A dual-eligible
+     member (Medicare and Medicaid plans the same day) keeps the submitter's value.
+
+   A plan with no program, or tenant-service or coverage-service not answering, keeps
+   the value the record already has, and intake is never refused for it. Each service
+   reads programs with its own identity (`ProgramDirectory:UseServiceIdentity`).
+   Historical imports (CPCDS, the authorization CSV and X12 278 imports) keep the line of
+   business they were given.
 7. ProviderEnrollmentService's flags enum is renamed `ProgramParticipation`.
