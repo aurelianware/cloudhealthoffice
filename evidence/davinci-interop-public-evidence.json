@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "davinci-interoperability",
-  "generatedAtUtc": "2026-11-02T01:58:13Z",
-  "sourceCommit": "996684a0627e2873e503261add56f4c4352e57e4",
-  "sourceCommitShort": "996684a0627e",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/996684a0627e2873e503261add56f4c4352e57e4",
+  "generatedAtUtc": "2026-11-02T03:25:26Z",
+  "sourceCommit": "a8d5379d1ae67049e1512022c87a57ed5cf5da63",
+  "sourceCommitShort": "a8d5379d1ae6",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/a8d5379d1ae67049e1512022c87a57ed5cf5da63",
   "inventoryReviewedUtc": "2026-10-23T00:00:00Z",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence. External interoperability results never change a CMS-0057-F scenario status, and CMS acceptance statuses never imply an interoperability result. See docs/interop/davinci.md and docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md.",
@@ -91,14 +91,15 @@
       "license": "Apache-2.0",
       "pin": {
         "kind": "releaseTag",
-        "reference": "https://github.com/inferno-framework/davinci-dtr-test-kit@v0.17.1",
-        "sourceCommit": "ed28c3a6a9742f4f81365f8747656e5c6add543c"
+        "reference": "https://github.com/inferno-framework/davinci-dtr-test-kit@v0.18.0",
+        "sourceCommit": "1b76dd3f565433a3157808da2d6d0c08a797b2f0"
       },
       "implementationGuides": {
-        "DTR": "see kit release notes for v0.17.1"
+        "DTR": "2.2.0",
+        "SMART App Launch": "2.0.0"
       },
-      "igVersionProvenance": null,
-      "exercised": false
+      "igVersionProvenance": "Read from lib/davinci_dtr_test_kit/server/v2.2.0/dtr_payer_server_suite.rb at the pinned tag (fhir_resource_validator igs 'hl7.fhir.us.davinci-dtr#2.2.0'; Backend Services group from smart_app_launch_test_kit 1.0.3) and the bundled igs/davinci_dtr_2.2.0.tgz.",
+      "exercised": true
     },
     {
       "name": "inferno-framework/carin-for-blue-button-test-kit",
@@ -260,13 +261,13 @@
     },
     {
       "id": "INFERNO-DTR-PAYER-001",
-      "title": "Inferno DTR payer-server suite against CHO",
+      "title": "Inferno DTR 2.2.0 payer-server suite against CHO",
       "protocol": "DTR",
       "choRole": "Server",
       "externalTarget": "inferno-dtr",
-      "implemented": false,
+      "implemented": true,
       "linkedFromScenario": null,
-      "description": "Run the davinci-dtr-test-kit dtr_payer_server suite with CHO's FHIR base as the suite input and map Inferno result statuses into InteropResult.",
+      "description": "Run the davinci-dtr-test-kit DTR 2.2.0 payer-server suite against the interop-cho profile, with the kit as a provider's DTR client (an EHR with native DTR, or a DTR app). It discovers CHO's DTR operations in the CapabilityStatement, obtains its own token with SMART Backend Services as the seed's dtrBackendClient (DTR spec-120), then calls $questionnaire-package once per input type: questionnaire canonicals (CHO's standard MRI form and its adaptive sleep-study form), a CRD context id alone (a coverage-assertion-id CHO's own CRD order-sign service issued for an MRI order before the run), and an order alone. It completes the adaptive form through $next-question with the answers in the QuestionnaireResponse template, expands any ValueSet sent unexpanded, validates every package against the DTR profiles, and checks the error cases: an unknown questionnaire is a warning (oper-9), an unknown context id is a 4xx with an OperationOutcome (spec-130), and an adaptive response answered against its own contained Questionnaire's rules is a 400 (spec-147). Last, $log-questionnaire-errors. The requests are built from the seed in tests/DaVinciInterop.Tests/Harness/DtrPayerServerRequests.cs.",
       "status": "NotRun",
       "linkedArtifact": null,
       "testedVersion": null
@@ -351,10 +352,10 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-11-02T01:25:01.4102214+00:00",
+    "generatedAtUtc": "2026-11-02T03:22:32.5753762+00:00",
     "environment": "CI",
-    "choCommit": "996684a0627e2873e503261add56f4c4352e57e4",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/996684a0627e2873e503261add56f4c4352e57e4",
+    "choCommit": "a8d5379d1ae67049e1512022c87a57ed5cf5da63",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/a8d5379d1ae67049e1512022c87a57ed5cf5da63",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 3,
