@@ -11,10 +11,11 @@ public sealed record ClaimPaymentVersion(
     DateTime IncurredDate,
     DateTime? PaidDate,
     decimal PlanPaid,
-    bool Voided);
+    bool Voided,
+    string? MemberId = null);
 
 /// <summary>Money the plan paid (or took back) for claims incurred in one month, in one later month.</summary>
-public sealed record PaidIncrement(string ClaimNumber, DateOnly IncurredMonth, DateOnly PaidMonth, decimal Amount);
+public sealed record PaidIncrement(string ClaimNumber, DateOnly IncurredMonth, DateOnly PaidMonth, decimal Amount, string? MemberId = null);
 
 /// <summary>One incurred month of the triangle: cumulative paid at each lag (0 = paid in the incurred month).</summary>
 public sealed record LagTriangleRow(DateOnly IncurredMonth, IReadOnlyList<decimal> CumulativePaid)
@@ -34,7 +35,8 @@ public sealed record LagTriangle(DateOnly ValuationMonth, IReadOnlyList<LagTrian
     /// paid, so an adjustment adds (or takes back) only the difference and a
     /// void takes back everything paid so far. A claim is placed in the month
     /// of its first version's service date, so an adjustment that moves the
-    /// date does not move money between rows.
+    /// date does not move money between rows (the member is likewise the
+    /// first version's).
     /// </summary>
     public static IReadOnlyList<PaidIncrement> Increments(IEnumerable<ClaimPaymentVersion> versions)
     {
@@ -43,13 +45,14 @@ public sealed record LagTriangle(DateOnly ValuationMonth, IReadOnlyList<LagTrian
         {
             var ordered = claim.OrderBy(v => v.VersionNumber).ToList();
             var incurred = FirstOfMonth(ordered[0].IncurredDate);
+            var member = ordered[0].MemberId;
             var paidSoFar = 0m;
             foreach (var v in ordered.Where(v => v.PaidDate != null))
             {
                 var total = v.Voided ? 0m : v.PlanPaid;
                 var delta = total - paidSoFar;
                 if (delta != 0m)
-                    result.Add(new PaidIncrement(claim.Key, incurred, FirstOfMonth(v.PaidDate!.Value), delta));
+                    result.Add(new PaidIncrement(claim.Key, incurred, FirstOfMonth(v.PaidDate!.Value), delta, member));
                 paidSoFar = total;
             }
         }

@@ -179,6 +179,28 @@ public sealed class StateCapitationController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// The expected member-months loaded for <paramref name="from"/> to
+    /// <paramref name="to"/> (yyyy-MM, inclusive) as CSV: member_id, month,
+    /// rate_cell. Reports that split claims by rate cell or risk group (the
+    /// Texas claims lag report) read it.
+    /// </summary>
+    [HttpGet("expected.csv")]
+    [RequirePermission("finance:read")]
+    [Produces("text/csv")]
+    public async Task<ActionResult> ExpectedCsv(string state, [FromQuery] string from, [FromQuery] string to)
+    {
+        if (Profile(state) is not { } profile) return UnknownState(state);
+        if (Window(from, to) is not { } window) return BadWindow();
+
+        var rows = await _store.GetExpectedAsync(profile.State, window.From, window.To);
+        var csv = new StringBuilder("member_id,month,rate_cell\n");
+        foreach (var r in rows.OrderBy(r => r.Month).ThenBy(r => r.MemberId, StringComparer.Ordinal))
+            csv.Append(Csv(r.MemberId)).Append(',').Append(r.Month.ToString("yyyy-MM")).Append(',').Append(Csv(r.RateCell)).Append('\n');
+        return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv",
+            $"{profile.State.ToLowerInvariant()}-expected-{window.From:yyyy-MM}-{window.To:yyyy-MM}.csv");
+    }
+
     /// <summary>Every member-month of the window as CSV, for the finance workpaper and state disputes.</summary>
     [HttpGet("reconciliation.csv")]
     [RequirePermission("finance:read")]

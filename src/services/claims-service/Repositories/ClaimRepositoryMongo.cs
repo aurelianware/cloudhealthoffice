@@ -1485,12 +1485,13 @@ public class ClaimRepositoryMongo : IClaimRepository
             filter &= b.Eq(c => c.LineOfBusiness, lineOfBusiness.Value);
 
         // Projected and streamed: a year of a large plan's claims is millions
-        // of versions, of which only five fields are needed.
+        // of versions, of which only these fields are needed.
         var rows = await _collection.Find(filter)
             .Project(c => new
             {
                 c.ClaimNumber,
                 c.VersionNumber,
+                c.MemberId,
                 c.ServiceDateFrom,
                 c.PaidDate,
                 Paid = c.AdjudicationResult == null ? 0m : c.AdjudicationResult.PayerPayment,
@@ -1500,6 +1501,6 @@ public class ClaimRepositoryMongo : IClaimRepository
             .ToListAsync(ct);
         return rows.Select(r => new Finance.ClaimPaymentVersion(
             r.ClaimNumber, r.VersionNumber, r.ServiceDateFrom, r.PaidDate, r.Paid,
-            r.Status == ClaimStatus.Voided || r.VersionState == ClaimVersionState.Voided)).ToList();
+            r.Status == ClaimStatus.Voided || r.VersionState == ClaimVersionState.Voided, r.MemberId)).ToList();
     }
 }

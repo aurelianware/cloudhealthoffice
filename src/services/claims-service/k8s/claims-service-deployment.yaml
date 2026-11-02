@@ -23,6 +23,7 @@ data:
   Services__MemberService: "http://member-service"
   Services__ProviderService: "http://provider-service"
   Services__AuthorizationService: "http://authorization-service"
+  Services__PremiumBillingService: "http://premium-billing-service"
   Services__BenefitPlanServiceTimeoutSeconds: "5"
   ClaimsImport__Raw837MaxConcurrency: "32"
   Messaging__AdjudicationMaxConcurrentCalls: "32"
