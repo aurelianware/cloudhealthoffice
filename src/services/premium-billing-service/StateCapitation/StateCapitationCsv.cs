@@ -34,7 +34,11 @@ public static class StateCapitationCsv
             }
             if (!decimal.TryParse(row["pmpm"], NumberStyles.Number, CultureInfo.InvariantCulture, out var pmpm) || pmpm < 0)
             { errs.Add($"Line {line}: pmpm '{row["pmpm"]}' is not an amount"); continue; }
-            result.Add(new StoredStateRate { RateCell = cell, EffectiveFrom = from, EffectiveTo = to, Pmpm = pmpm });
+            var withhold = 0m;
+            if (row.TryGetValue("withhold_percent", out var w) && w.Length > 0
+                && (!decimal.TryParse(w, NumberStyles.Number, CultureInfo.InvariantCulture, out withhold) || withhold < 0 || withhold >= 100))
+            { errs.Add($"Line {line}: withhold_percent '{w}' must be a percent from 0 to under 100 (e.g. 6)"); continue; }
+            result.Add(new StoredStateRate { RateCell = cell, EffectiveFrom = from, EffectiveTo = to, Pmpm = pmpm, WithholdPercent = withhold });
         }
         errors = errs;
         return errs.Count == 0 ? result : [];

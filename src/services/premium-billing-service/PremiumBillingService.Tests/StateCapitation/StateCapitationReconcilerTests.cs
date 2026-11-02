@@ -159,6 +159,42 @@ public class StateCapitationReconcilerTests
     }
 
     [Fact]
+    public void A_withhold_is_taken_off_what_the_state_should_pay_now_and_totalled_as_a_receivable()
+    {
+        // Medi-Cal Dental contracts withhold 6% of capitation (3% performance, 3% deliverables).
+        var rates = new[] { new StateCapitationRate("CHILD-SIS", new DateOnly(2027, 1, 1), null, 20.00m, WithholdPercent: 6m) };
+        var expected = new[]
+        {
+            new ExpectedMemberMonth("M1", Jan, "CHILD-SIS"),
+            new ExpectedMemberMonth("M2", Jan, "CHILD-SIS"),
+        };
+        var received = new[]
+        {
+            new ReceivedMemberMonth("M1", Jan, "CHILD-SIS", 18.80m, "T", null, []),
+            new ReceivedMemberMonth("M2", Jan, "CHILD-SIS", 20.00m, "T", null, []),
+        };
+
+        var result = StateCapitationReconciler.Reconcile(StateCapitationProfile.California, expected, rates, received);
+
+        var m1 = result.MemberMonths.Single(m => m.MemberId == "M1");
+        (m1.Expected, m1.Withheld, m1.Outcome).Should().Be((18.80m, 1.20m, MemberMonthOutcome.PaidInFull));
+        result.MemberMonths.Single(m => m.MemberId == "M2").Outcome.Should().Be(MemberMonthOutcome.Overpaid);
+        result.TotalWithheld.Should().Be(2.40m);
+        result.Summary.Single().Withheld.Should().Be(2.40m);
+    }
+
+    [Fact]
+    public void A_withhold_percent_is_read_from_the_rates_csv_and_checked()
+    {
+        var rates = StateCapitationCsv.ReadRates("rate_cell,effective_from,pmpm,withhold_percent\nCHILD-SIS,2027-01-01,20.00,6\nADULT-SIS,2027-01-01,30.00,\n", out var errors);
+        errors.Should().BeEmpty();
+        rates.Select(r => r.ToRate().WithholdPercent).Should().Equal(6m, 0m);
+
+        StateCapitationCsv.ReadRates("rate_cell,effective_from,pmpm,withhold_percent\nCHILD-SIS,2027-01-01,20.00,106\n", out errors);
+        errors.Should().ContainSingle().Which.Should().Contain("withhold_percent");
+    }
+
+    [Fact]
     public void ALineSpanningMonths_IsSplit_AndALineWithoutAPeriodIsReported()
     {
         var advice = new PremiumBillingService.Models.RemittanceAdvice

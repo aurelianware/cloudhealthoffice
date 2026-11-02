@@ -15,12 +15,15 @@ public sealed class StoredStateRate
     public DateTime EffectiveFrom { get; set; }
     public DateTime? EffectiveTo { get; set; }
     public decimal Pmpm { get; set; }
+
+    /// <summary>Percent of the PMPM the state withholds (0 to 100).</summary>
+    public decimal WithholdPercent { get; set; }
     public string? SourceFile { get; set; }
     public string? LoadedBy { get; set; }
     public DateTime LoadedAt { get; set; }
 
     public StateCapitationRate ToRate() => new(RateCell, DateOnly.FromDateTime(EffectiveFrom),
-        EffectiveTo == null ? null : DateOnly.FromDateTime(EffectiveTo.Value), Pmpm);
+        EffectiveTo == null ? null : DateOnly.FromDateTime(EffectiveTo.Value), Pmpm, WithholdPercent);
 }
 
 /// <summary>One expected member-month as stored; a reload of the month replaces it.</summary>
