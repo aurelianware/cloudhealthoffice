@@ -18,6 +18,10 @@ metadata:
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   MongoDb__DatabaseName: "CloudHealthOffice"
+  # DHCS APL 26-009 dental prior authorization check (plan setting, coverage, aid codes).
+  Services__TenantService: "http://tenant-service.cloudhealthoffice"
+  Services__CoverageService: "http://coverage-service.cloudhealthoffice"
+  Services__MemberService: "http://member-service.cloudhealthoffice"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -70,6 +74,21 @@ spec:
             configMapKeyRef:
               name: authorization-service-config
               key: MongoDb__DatabaseName
+        - name: Services__TenantService
+          valueFrom:
+            configMapKeyRef:
+              name: authorization-service-config
+              key: Services__TenantService
+        - name: Services__CoverageService
+          valueFrom:
+            configMapKeyRef:
+              name: authorization-service-config
+              key: Services__CoverageService
+        - name: Services__MemberService
+          valueFrom:
+            configMapKeyRef:
+              name: authorization-service-config
+              key: Services__MemberService
         resources:
           requests:
             cpu: 100m
