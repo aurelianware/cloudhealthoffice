@@ -54,6 +54,13 @@ public interface IAppealRepository
     Task<IReadOnlyList<Appeal>> ListInsightActivityAsync(string tenantId, DateTime from, DateTime to, CancellationToken ct = default)
         => throw new NotSupportedException("Appeals Insights needs the MongoDB appeal store.");
 
+    /// <summary>
+    /// The tenant's appeals and grievances received before <paramref name="monthEnd"/> and not closed
+    /// before <paramref name="monthStart"/> (drafts excluded): the cases a state's monthly file carries.
+    /// </summary>
+    Task<IReadOnlyList<Appeal>> ListForReportingMonthAsync(string tenantId, DateTime monthStart, DateTime monthEnd, CancellationToken ct = default)
+        => throw new NotSupportedException("State reporting needs the MongoDB appeal store.");
+
     /// <summary>The tenant's open appeals and grievances (Submitted, InReview, PendingInfo).</summary>
     Task<IReadOnlyList<Appeal>> ListOpenAsync(string tenantId, CancellationToken ct = default)
         => throw new NotSupportedException("Appeals Insights needs the MongoDB appeal store.");

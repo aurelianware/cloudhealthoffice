@@ -504,6 +504,7 @@ public sealed class AppealsWebApplicationFactory : WebApplicationFactory<Program
     // methods.
     public InMemoryAppealRepository Repo { get; } = new();
     public RecordingAppealEventPublisher Publisher { get; } = new();
+    public InMemoryTexasAgCodesStore TexasCodes { get; } = new();
 
     public void Reset()
     {
@@ -560,6 +561,8 @@ public sealed class AppealsWebApplicationFactory : WebApplicationFactory<Program
             services.RemoveAll<AppealOutboxDispatcher>();
             services.RemoveAll<IAppealOutboxStore>();
             services.RemoveAll<AppealRepositoryMongo>();
+            services.RemoveAll<ITexasAgCodesStore>();
+            services.AddSingleton<ITexasAgCodesStore>(TexasCodes);
 
             services.AddSingleton(Repo);
             services.AddSingleton<IAppealRepository>(sp => sp.GetRequiredService<InMemoryAppealRepository>());

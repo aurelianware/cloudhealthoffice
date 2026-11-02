@@ -88,6 +88,8 @@ builder.Services.AddSingleton<IAppealEventSink>(sp => (IAppealEventSink)sp.GetRe
 builder.Services.AddSingleton<AppealRepositoryMongo>();
 builder.Services.AddSingleton<IAppealRepository>(sp => sp.GetRequiredService<AppealRepositoryMongo>());
 builder.Services.AddSingleton<IAppealOutboxStore>(sp => sp.GetRequiredService<AppealRepositoryMongo>());
+// Texas HHSC reporting codes per case (UMCM 5.24.5 / 5.24.6 text files).
+builder.Services.AddSingleton<ITexasAgCodesStore, TexasAgCodesStoreMongo>();
 
 // Registration order matters for IHostedService.StartAsync sequencing:
 // migration runs first so the index initializer sees a consistent
