@@ -32,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Medi-Cal grievances were given the federal 90-day resolution deadline and a 14-day extension. California requires 30 days, 72 hours when expedited, with no extension (28 CCR 1300.68; DHCS APL 21-011). Appeals and grievances can now name their State (`state` on `POST api/appeals`, or a tenant default in `AppealJurisdictions:Tenants`), and grievances then run on that State's rule pack wherever it is stricter than the federal clock: the default deadline, the latest date a caller may set, and the extension. Texas grievances keep 90 days and the 14-day extension. Arizona, Florida, New York and Ohio grievances also get their shorter pack clocks. The appeal records `state` and `rulePackVersion`. Appeals keep the federal clocks until the case model can tell member appeals from provider claim disputes. Without a State nothing changes.
 - The plan settings change consumer authenticated to Kafka with SASL PLAIN while every other client uses SCRAM-SHA-512. It now uses SCRAM-SHA-512 too.
 
+### Changed
+
+- appeals-service uses the shared line of business. A Part D case is now `lineOfBusiness: Medicare` with `benefitType: PartDDrug` (same Part D clocks as before); `MedicarePartD` is refused on the API with a 400 that says so, and `Marketplace` is read as `Exchange`. TRICARE, VA and missing lines of business are refused at intake, since no appeal rules are modelled for them. Stored appeals are rewritten once at startup (`MedicarePartD` or 5 → Medicare + PartDDrug, `Marketplace` → Exchange). Appeal events and `AppealDto` gain `benefitType`, and their `lineOfBusiness` now says `Exchange` / `Medicare` where it said `Marketplace` / `MedicarePartD`. The FHIR `cho-appeal-line-of-business` codes are unchanged. Line-of-business filters on appeals search, insights and reports take the shared names; Medicare includes Part D. The portal's appeals report and insights filters now offer Commercial, Medicare, Medicaid and Exchange.
+
 ## [6.2.0] - 2026-10-31
 
 ### Added

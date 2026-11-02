@@ -14,10 +14,6 @@ public class LineOfBusinessDriftTests
     /// <summary>Enums that differ today, by repository path, and why. Remove an entry when its migration lands.</summary>
     private static readonly Dictionary<string, string> KnownExceptions = new()
     {
-        ["src/services/appeals-service/Models/Appeal.cs"] =
-            "Marketplace and MedicarePartD; moves to the shared enum plus a Part D benefit type (consolidation PR 2).",
-        ["src/services/shared/CloudHealthOffice.Appeals.Contracts/AppealDtoEnums.cs"] =
-            "Wire copy of the appeals enum (consolidation PR 2).",
         ["src/services/payment-service/Models/PaymentRun.cs"] =
             "Unnumbered with Marketplace; stored run criteria need a one-time 0-3 to 1-4 migration (consolidation PR 3).",
         ["src/services/eligibility-service/Models/Eligibility.cs"] =

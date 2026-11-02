@@ -99,8 +99,23 @@ public class Appeal
     [Required]
     public AppealLevel AppealLevel { get; set; } = AppealLevel.FirstLevel;
 
+    /// <summary>
+    /// The shared line of business (docs/architecture/line-of-business.md). Stored as its
+    /// name; documents written before the consolidation said Marketplace (now Exchange) and
+    /// MedicarePartD (now Medicare with <see cref="BenefitType"/> PartDDrug), which
+    /// <c>AppealLineOfBusinessMigrationHostedService</c> rewrites at startup.
+    /// </summary>
     [Required]
+    [MongoDB.Bson.Serialization.Attributes.BsonSerializer(typeof(LineOfBusinessBsonSerializer))]
     public LineOfBusiness LineOfBusiness { get; set; }
+
+    /// <summary>What the case is about within its line of business: a Part D drug case runs on Part D clocks.</summary>
+    public AppealBenefitType BenefitType { get; set; } = AppealBenefitType.MedicalOrService;
+
+    /// <summary>The line of business and benefit type the deadline rules read.</summary>
+    [MongoDB.Bson.Serialization.Attributes.BsonIgnore]
+    [System.Text.Json.Serialization.JsonIgnore]
+    public AppealCoverage Coverage => new(LineOfBusiness, BenefitType);
 
     [Required]
     public AppealStatus Status { get; set; } = AppealStatus.Draft;
@@ -546,18 +561,53 @@ public enum AttachmentStatus
 }
 
 /// <summary>
-/// <see cref="Medicare"/> is Medicare Advantage (Part C).
-/// <see cref="MedicarePartD"/> is Part D prescription drug coverage
+/// What an appeal is about within its line of business.
+/// <see cref="PartDDrug"/> is a Medicare Part D prescription drug case
 /// (stand-alone PDP or the drug benefit of an MA-PD), which runs on
-/// different appeal clocks (42 CFR 423.590).
+/// different appeal clocks (42 CFR 423.590). Only valid with
+/// <see cref="LineOfBusiness.Medicare"/>.
 /// </summary>
-public enum LineOfBusiness
+public enum AppealBenefitType
 {
-    Commercial = 1,
-    Medicare = 2,
-    Medicaid = 3,
-    Marketplace = 4,
-    MedicarePartD = 5
+    MedicalOrService = 0,
+    PartDDrug = 1
+}
+
+/// <summary>
+/// The line of business and benefit type that pick an appeal's federal clocks.
+/// <see cref="LineOfBusiness.Medicare"/> alone is Medicare Advantage (Part C);
+/// with <see cref="AppealBenefitType.PartDDrug"/> it is Part D.
+/// </summary>
+public readonly record struct AppealCoverage(LineOfBusiness LineOfBusiness, AppealBenefitType BenefitType = AppealBenefitType.MedicalOrService)
+{
+    /// <summary>A Medicare Part D drug case.</summary>
+    public static AppealCoverage PartD { get; } = new(LineOfBusiness.Medicare, AppealBenefitType.PartDDrug);
+
+    public bool IsPartD => LineOfBusiness == LineOfBusiness.Medicare && BenefitType == AppealBenefitType.PartDDrug;
+
+    /// <summary>A line of business with no benefit type is a medical or service case.</summary>
+    public static implicit operator AppealCoverage(LineOfBusiness lineOfBusiness) => new(lineOfBusiness);
+
+    public override string ToString() => IsPartD ? "Medicare Part D" : LineOfBusiness.ToString();
+}
+
+/// <summary>The lines of business appeals-service has rules for.</summary>
+public static class AppealLinesOfBusiness
+{
+    /// <summary>
+    /// TRICARE and VA appeals follow their own federal rules (32 CFR 199.10, 38 CFR part 20),
+    /// which are not modelled, and Unknown is not a line of business.
+    /// </summary>
+    public static bool IsSupported(LineOfBusiness lineOfBusiness) => lineOfBusiness is
+        LineOfBusiness.Commercial or LineOfBusiness.Medicare or LineOfBusiness.Medicaid or LineOfBusiness.Exchange;
+
+    /// <summary>Why a coverage cannot be taken, or null when it can.</summary>
+    public static string? Problem(AppealCoverage coverage) =>
+        !IsSupported(coverage.LineOfBusiness)
+            ? $"Appeals for line of business {coverage.LineOfBusiness} are not supported; use Commercial, Medicare, Medicaid or Exchange."
+            : coverage.BenefitType == AppealBenefitType.PartDDrug && coverage.LineOfBusiness != LineOfBusiness.Medicare
+                ? "benefitType PartDDrug is only valid with lineOfBusiness Medicare."
+                : null;
 }
 
 /// <summary>
