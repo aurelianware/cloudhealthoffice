@@ -22,6 +22,10 @@ using MongoDB.Bson.Serialization.Conventions;
 // human-readable strings rather than integers. Also future-proofs against
 // enum-value reordering: adding a new status value doesn't silently
 // re-map existing data.
+// The shared LineOfBusiness reads the names appeals stored before the
+// consolidation (Marketplace, MedicarePartD) as well as the canonical ones;
+// AppealLineOfBusinessMigrationHostedService rewrites them at startup.
+MongoDB.Bson.Serialization.BsonSerializer.TryRegisterSerializer(new LineOfBusinessBsonSerializer(BsonType.String));
 MongoDB.Bson.Serialization.Conventions.ConventionRegistry.Register(
     "appeals-enums-as-strings",
     new ConventionPack { new EnumRepresentationConvention(BsonType.String) },
@@ -35,7 +39,10 @@ builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.Services.AddControllers()
-    .AddCloudHealthOfficeJsonOptions();
+    .AddCloudHealthOfficeJsonOptions()
+    // Ahead of the generic enum converter: reads Marketplace as Exchange and
+    // refuses MedicarePartD (a Part D case is Medicare + benefitType PartDDrug).
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Insert(0, new AppealLineOfBusinessJsonConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -105,6 +112,7 @@ builder.Services.AddSingleton<IStateFileCatalog, HttpStateFileCatalog>();
 // schema and duplicate-AppealNumber warnings fire before the unique
 // index build.
 builder.Services.AddHostedService<AppealStatusMigrationHostedService>();
+builder.Services.AddHostedService<AppealLineOfBusinessMigrationHostedService>();
 builder.Services.AddHostedService<AppealIndexInitializer>();
 
 // ── Appeal body encryption ───────────────────────────────────────────

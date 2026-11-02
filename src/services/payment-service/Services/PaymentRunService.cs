@@ -593,7 +593,7 @@ public class PaymentRunService : IPaymentRunService
         var queryParams = new List<string>();
 
         if (criteria.LineOfBusiness.HasValue)
-            queryParams.Add($"lineOfBusiness={ClaimsServiceLineOfBusiness(criteria.LineOfBusiness.Value)}");
+            queryParams.Add($"lineOfBusiness={(int)criteria.LineOfBusiness.Value}");
         if (!string.IsNullOrEmpty(criteria.ProviderNPI))
             queryParams.Add($"providerNPI={criteria.ProviderNPI}");
         if (criteria.ServiceDateFrom.HasValue)
@@ -634,19 +634,6 @@ public class PaymentRunService : IPaymentRunService
 
         return claims;
     }
-
-    /// <summary>
-    /// claims-service's numeric <c>LineOfBusiness</c> for payment-service's
-    /// (whose values start at 0 and are persisted on runs, so are not renumbered).
-    /// </summary>
-    private static int ClaimsServiceLineOfBusiness(LineOfBusiness lob) => lob switch
-    {
-        LineOfBusiness.Commercial => 1,
-        LineOfBusiness.Medicare => 2,
-        LineOfBusiness.Medicaid => 3,
-        LineOfBusiness.Marketplace => 4, // claims-service Exchange
-        _ => throw new ArgumentOutOfRangeException(nameof(lob), lob, "Unknown line of business"),
-    };
 
     /// <summary>
     /// The duplicate-selection guard. Drops repeated claim ids, then every claim

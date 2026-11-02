@@ -66,10 +66,12 @@ public sealed record MedicaidDrgHospital
     public required decimal BaseRate { get; init; }
 
     /// <summary>
-    /// Texas rural hospitals only: the final SDA for labor and delivery stays
-    /// (§355.8052(e)(2), the "OB-GYN delivery SDA" column of the rural SDA
-    /// file). Used instead of <see cref="BaseRate"/> when the stay groups to
-    /// a delivery DRG; null means the hospital has no separate delivery SDA.
+    /// Texas only: the SDA for labor and delivery stays. Rural hospitals: the
+    /// "OB-GYN delivery SDA" (§355.8052(e)(2)), used for every delivery.
+    /// Children's hospitals: the "Adult Delivery SDA" (§355.8052(c)(4)(B)),
+    /// used only for patients 18 or older. Used instead of
+    /// <see cref="BaseRate"/> when the stay groups to a delivery DRG; null
+    /// means the hospital has no separate delivery SDA.
     /// </summary>
     public decimal? DeliveryBaseRate { get; init; }
 

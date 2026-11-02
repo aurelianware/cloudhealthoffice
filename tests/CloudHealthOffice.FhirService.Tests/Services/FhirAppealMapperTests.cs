@@ -25,7 +25,7 @@ public class FhirAppealMapperTests
         AppealReason = "Medical necessity",
         AppealType = AppealType.Reconsideration,
         AppealLevel = AppealLevel.FirstLevel,
-        LineOfBusiness = LineOfBusiness.Commercial,
+        LineOfBusiness = CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Commercial,
         Status = status,
         ClosureReasonCode = reason,
         Source = AppealSource.ProviderPortal,
@@ -186,15 +186,15 @@ public class FhirAppealMapperTests
     }
 
     [Theory]
-    [InlineData(LineOfBusiness.Commercial, "commercial")]
-    [InlineData(LineOfBusiness.Medicare, "medicare")]
-    [InlineData(LineOfBusiness.Medicaid, "medicaid")]
-    [InlineData(LineOfBusiness.Marketplace, "marketplace")]
-    [InlineData(LineOfBusiness.MedicarePartD, "medicare-part-d")]
-    public void LineOfBusiness_extension_is_profile_valueCoding_with_canonical_code(LineOfBusiness lob, string code)
+    [InlineData(AppealLineOfBusinessCode.Commercial, "commercial")]
+    [InlineData(AppealLineOfBusinessCode.Medicare, "medicare")]
+    [InlineData(AppealLineOfBusinessCode.Medicaid, "medicaid")]
+    [InlineData(AppealLineOfBusinessCode.Marketplace, "marketplace")]
+    [InlineData(AppealLineOfBusinessCode.MedicarePartD, "medicare-part-d")]
+    public void LineOfBusiness_extension_is_profile_valueCoding_with_canonical_code(AppealLineOfBusinessCode lob, string code)
     {
         var appeal = NewAppeal();
-        appeal.LineOfBusiness = lob;
+        (appeal.LineOfBusiness, appeal.BenefitType) = AppealLineOfBusinessCodes.ToCoverage(lob);
 
         var ext = Mapper.ToAppealTask(appeal).Extension
             .Single(e => e.Url == FhirAppealMapper.AppealLineOfBusinessExtensionUrl);
@@ -230,7 +230,7 @@ public class FhirAppealMapperTests
             CloudHealthOffice.FhirService.Tests.FhirArtifacts.TestArtifactFiles.ReadAllText(path));
         var codes = cs.Concept.Select(c => c.Code).ToHashSet();
 
-        foreach (var lob in Enum.GetValues<LineOfBusiness>())
+        foreach (var lob in Enum.GetValues<AppealLineOfBusinessCode>())
             codes.Should().Contain(FhirAppealMapper.ToCanonicalCode(lob), $"{lob} must be representable");
     }
 }

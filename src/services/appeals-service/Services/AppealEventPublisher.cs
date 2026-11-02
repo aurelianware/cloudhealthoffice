@@ -256,6 +256,7 @@ public sealed class AppealEventPublisher : IAppealEventTransport, IHostedService
         AppealType = a.AppealType.ToString(),
         AppealLevel = a.AppealLevel.ToString(),
         LineOfBusiness = a.LineOfBusiness.ToString(),
+        BenefitType = a.BenefitType.ToString(),
         Source = a.Source.ToString(),
         TargetResponseDate = a.TargetResponseDate,
         IsUrgent = a.IsUrgent,
@@ -408,6 +409,7 @@ public sealed class AppealEventPublisher : IAppealEventTransport, IHostedService
         AppealId = a.Id,
         CurrentStatus = (a.DeadlineExtension?.StatusAtExtension ?? a.Status).ToString(),
         LineOfBusiness = a.LineOfBusiness.ToString(),
+        BenefitType = a.BenefitType.ToString(),
         Reason = a.DeadlineExtension?.Reason.ToString(),
         ExtensionDays = a.DeadlineExtension?.ExtensionDays,
         PreviousTargetResponseDate = a.DeadlineExtension?.PreviousTargetResponseDate,
@@ -445,7 +447,10 @@ public sealed record AppealCreatedEventPayload
     public string ProviderNPI { get; init; } = string.Empty;
     public string AppealType { get; init; } = string.Empty;
     public string AppealLevel { get; init; } = string.Empty;
+    /// <summary>The shared line-of-business name (Exchange, not Marketplace; Part D is Medicare).</summary>
     public string LineOfBusiness { get; init; } = string.Empty;
+    /// <summary>MedicalOrService or PartDDrug (a Medicare Part D drug case).</summary>
+    public string BenefitType { get; init; } = string.Empty;
     public string Source { get; init; } = string.Empty;
     public DateTime? TargetResponseDate { get; init; }
     public bool IsUrgent { get; init; }
@@ -583,7 +588,10 @@ public sealed record AppealDeadlineExtendedEventPayload
     public string TenantId { get; init; } = string.Empty;
     public string AppealId { get; init; } = string.Empty;
     public string CurrentStatus { get; init; } = string.Empty;
+    /// <summary>The shared line-of-business name (Exchange, not Marketplace; Part D is Medicare).</summary>
     public string LineOfBusiness { get; init; } = string.Empty;
+    /// <summary>MedicalOrService or PartDDrug (a Medicare Part D drug case).</summary>
+    public string BenefitType { get; init; } = string.Empty;
     public string? Reason { get; init; }
     public int? ExtensionDays { get; init; }
     public DateTime? PreviousTargetResponseDate { get; init; }
