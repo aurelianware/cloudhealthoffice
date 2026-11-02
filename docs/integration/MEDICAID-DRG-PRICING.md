@@ -75,7 +75,9 @@ To verify with a plan or HHSC:
 - **Downgraded DRGs.** Where a DRG was downgraded for a preventable adverse event, the rule pays the lesser of the original and downgraded outliers. This is not implemented yet.
 - **MCO contracts.** These set what an MCO actually pays. The rural hospital minimum fee schedule is one example.
 
-- **Rural labor and delivery.** A rural hospital is paid its OB-GYN delivery SDA instead of its final SDA for labor and delivery stays (§355.8052(e)(2)). The rule names services, not DRGs. The default list is APR-DRGs 540, 541, 542 and 560 (`TexasDrgPolicy.DeliveryBaseDrgs`), which is a guess to confirm.
+- **Rural labor and delivery.** A rural hospital is paid its OB-GYN delivery SDA instead of its final SDA for labor and delivery stays (§355.8052(e)(2)).
+- **Children's hospital adult deliveries.** A children's hospital is paid its adult delivery SDA for delivery stays of clients aged 18 or older (§355.8052(c)(4)(B)); younger clients get the final SDA. A children's hospital delivery stay with no patient age pends.
+- **Which DRGs are deliveries.** HHSC's inpatient delivery-related DRG list (`2021-inpatient-delivery-related-drg.pdf`) names APR-DRGs 539, 540, 541, 542 and 560 at every severity. That is the default `TexasDrgPolicy.DeliveryBaseDrgs`.
 
 ### Texas SDA files
 
@@ -83,19 +85,20 @@ HHSC Provider Finance publishes each fiscal year's SDAs as PDFs, one per hospita
 
 - **Urban:** base SDA, supplemental funds base adjustment, then the wage index, IME, trauma and safety-net add-ons, giving the SDA with applicable add-ons.
 - **Rural:** SDA, add-on, SDA with add-on, and the OB-GYN delivery SDA.
+- **Children's:** 2015 SDA, safety-net add-on, final SDA, and the adult delivery SDA.
 - **Title block:** the class, the state fiscal year, and the universal mean with its effective date. The universal mean feeds `TexasDrgPolicy.UniversalMean`.
 
-Every row's arithmetic is checked: the parts must add up to the final SDA, and the delivery SDA can't be below it.
+Every row's arithmetic is checked: the parts must add up to the final SDA. A rural delivery SDA can't be below the final SDA (a children's adult delivery SDA is lower, as published), and a delivery SDA must be above zero.
 
 - A row that reads cleanly but contradicts itself is HHSC's error, not a misread. It is held back as a discrepancy, so that hospital's stays pend, and the rest of the file loads.
 - A row that can't be read at all, or a layout with an unexpected number of dollar columns, refuses the whole file.
-- Children's hospital files are refused until their layout has been seen.
 
 The interim rate (needed only for outliers) is not in these files.
 
 Results on the SFY 2027 files (effective September 1, 2026, universal mean $10,161.08):
 
 - **Urban:** 298 hospitals, none held back.
+- **Children's:** 16 hospitals, none held back.
 - **Rural:** 138 hospitals loaded, 1 held back. HHSC prints Memorial Hospital of Polk County (TPI 112697106) with a $576.53 add-on, but its SDA with add-on ($12,435.40) equals the SDA alone. Its delivery SDA ($17,750.68) is consistent with no add-on. The plan should confirm the right SDA with HHSC.
 
 ### Texas APR-DRG weight tables
@@ -119,14 +122,27 @@ What the files Mark uploaded show:
 
 ### Texas interim rates
 
-A hospital's interim rate is its cost-to-charge ratio. TMHP sets it from the hospital's cost report and sends it to that hospital, so HHSC publishes no single table. Inpatient pricing uses it to estimate cost for outliers, which Texas pays only for clients under 21. The outpatient method (§355.8061(b)) uses the outpatient rate.
+A hospital's interim rate is its cost-to-charge ratio. TMHP sets it from the hospital's cost report. Inpatient pricing uses it to estimate cost for outliers, which Texas pays only for clients under 21. The outpatient method (§355.8061(b)) uses the outpatient rate.
 
-Possible sources: an HHSC Provider Finance file if one exists, the plan's HHSC/TMHP contact, or each hospital's interim rate letter or contract.
+HHSC Provider Finance publishes the inpatient rates monthly as a PDF, `{yyyy}-{m}-inp-rcc.pdf` ("Inpatient Ratio of Cost to Charges Effective MM/DD/YYYY"). The endpoint below reads it as published. Outpatient rates are not in it; for those, use a CSV or Excel file from the plan's HHSC/TMHP contact or the hospitals' rate letters.
 
 ```
 POST /api/v1/medicaid-drg/import/texas/interim-rates?dryRun=true&replace=false[&effectiveDate=2026-09-01]
-Content-Type: multipart/form-data   file=<CSV or Excel>
+Content-Type: multipart/form-data   file=<HHSC RCC PDF, CSV or Excel>
 ```
+
+**HHSC RCC PDF** (`TexasRccFileReader`): one row per TPI with NPI, name, address, county, the rate's effective date, the rate as a whole percentage and the hospital class. Each row loads as an inpatient rate effective on its own date.
+
+- Some rows print the effective date as an Excel serial, either as a percentage (`4626600%`) or bare after the rate (`50% 41072`). These are read as dates and counted in a warning.
+- One NPI can bill under several TPIs. If they all carry the same rate, one rate is stored per date. If they differ, pricing (which finds the hospital by NPI) can't choose, so that NPI is held back and listed in the report's `heldBack`; its under-21 stays pend.
+- A row that can't be read refuses the whole file.
+
+Results on the files Mark uploaded:
+
+- **09/01/2026:** 526 rows, 526 rates, none held back.
+- **10/01/2026:** 1,498 rows, 545 rates, 4 NPIs held back: University Medical Center of El Paso (1316936990), Hunt Regional (1598750721), Houston Methodist Physical Therapy & Rehabilitation (1184179194) and Houston Methodist Hospital (1548387418). Each has one or more TPIs with a different rate from the rest.
+
+**CSV or Excel:**
 
 - **Columns** are found by header name, below any title rows:
   - `NPI` (required);

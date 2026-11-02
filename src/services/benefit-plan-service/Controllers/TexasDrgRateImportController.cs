@@ -73,7 +73,8 @@ public sealed class TexasDrgRateImportController : ControllerBase
 
     /// <summary>
     /// Loads hospital interim rates (inpatient and outpatient cost-to-charge
-    /// ratios) from a CSV or Excel sheet: NPI, inpatient and/or outpatient
+    /// ratios) from HHSC's monthly inpatient RCC PDF ({yyyy}-{m}-inp-rcc.pdf),
+    /// or from a CSV or Excel sheet: NPI, inpatient and/or outpatient
     /// rate (0.452 or 45.2%), effective date (or <paramref name="effectiveDate"/>
     /// for the whole file), and optionally TPI and hospital name. Texas DRG
     /// pricing uses the inpatient rate for outliers (clients under 21).
@@ -95,7 +96,7 @@ public sealed class TexasDrgRateImportController : ControllerBase
         if (string.IsNullOrWhiteSpace(tenantId))
             return BadRequest(new { message = "Tenant context missing." });
         if (file is null || file.Length == 0)
-            return BadRequest(new { message = "Upload the interim rate sheet (CSV or Excel) as 'file'." });
+            return BadRequest(new { message = "Upload HHSC's inpatient RCC PDF, or an interim rate sheet (CSV or Excel), as 'file'." });
 
         try
         {

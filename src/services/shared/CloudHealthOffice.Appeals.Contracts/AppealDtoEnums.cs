@@ -51,13 +51,16 @@ public enum AttachmentStatus
     Error = 5
 }
 
-public enum LineOfBusiness
+/// <summary>
+/// What an appeal is about within its line of business. The line of business itself is the
+/// shared <c>CloudHealthOffice.Infrastructure.Programs.LineOfBusiness</c>.
+/// <see cref="PartDDrug"/> is a Medicare Part D prescription drug case (stand-alone PDP or
+/// the drug benefit of an MA-PD), which runs on Part D clocks (42 CFR 423.590).
+/// </summary>
+public enum AppealBenefitType
 {
-    Commercial = 1,
-    Medicare = 2,
-    Medicaid = 3,
-    Marketplace = 4,
-    MedicarePartD = 5
+    MedicalOrService = 0,
+    PartDDrug = 1
 }
 
 public enum AppealExtensionReason

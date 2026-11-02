@@ -449,6 +449,7 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         AppealType = a.AppealType,
         AppealLevel = a.AppealLevel,
         LineOfBusiness = a.LineOfBusiness,
+        BenefitType = a.BenefitType,
         Status = a.Status,
         AppealReason = a.AppealReason,
         Source = a.Source,
