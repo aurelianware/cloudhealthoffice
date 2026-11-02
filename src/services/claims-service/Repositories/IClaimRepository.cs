@@ -101,6 +101,14 @@ public interface IClaimRepository
     Task<IReadOnlyList<Finance.ClaimPaymentVersion>> GetPaymentVersionsAsync(DateTime incurredFrom, DateTime incurredBefore, LineOfBusiness? lineOfBusiness, CancellationToken ct = default)
         => throw new NotSupportedException("The lag triangle needs the MongoDB claim store.");
 
+    /// <summary>
+    /// Medicaid claim versions adjudicated in [<paramref name="adjudicatedFrom"/>,
+    /// <paramref name="adjudicatedBefore"/>) that were cost avoided for TPL or
+    /// carry another payer's payment, for the Texas TPL/TPR report.
+    /// </summary>
+    Task<IReadOnlyList<Finance.TplReportClaim>> GetTplReportClaimsAsync(DateTime adjudicatedFrom, DateTime adjudicatedBefore, CancellationToken ct = default)
+        => throw new NotSupportedException("The TPL/TPR report needs the MongoDB claim store.");
+
     Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByIdsAsync(
         IReadOnlyCollection<string> claimIds,
         string? memberId,

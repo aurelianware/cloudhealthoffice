@@ -90,6 +90,22 @@ public sealed class TplRecoveryEvent
     public string? Reference { get; set; }
     public string? Note { get; set; }
     public string? By { get; set; }
+
+    /// <summary>
+    /// Who a payment came from: the other insurer, or the provider (a refund
+    /// or recoupment because the other insurer paid). HHSC reports the two on
+    /// separate lines (UMCM 5.3.4.2). Null on payments recorded before this
+    /// was asked.
+    /// </summary>
+    public TplRecoverySource? Source { get; set; }
+}
+
+public enum TplRecoverySource
+{
+    /// <summary>The other insurance carrier paid the plan back.</summary>
+    Carrier,
+    /// <summary>The provider refunded, or the plan recouped from the provider.</summary>
+    Provider,
 }
 
 public enum TplRecoveryOrigin

@@ -214,6 +214,135 @@ public sealed class ClaimsFinanceController : ControllerBase
             LagTriangle.Increments(versions), cells, groups), null);
     }
 
+    /// <summary>
+    /// HHSC's TPL/TPR Report (UMCM 5.3.4.1) figures for an SFY quarter: per
+    /// program and plan code, each month of the SFY through the quarter, the
+    /// Medicaid allowable cost avoided on denied claims, other insurance
+    /// credits, recoveries from carriers and providers, and the tort
+    /// recoveries entered in the request. A claim's plan code is its member's
+    /// rate cell in the month of service, mapped by <c>rateCellPlanCodes</c>;
+    /// amounts that can't be placed are left out and counted under
+    /// <c>excluded</c>.
+    /// </summary>
+    [HttpPost("texas/tpr")]
+    [RequirePermission("finance:read")]
+    public async Task<ActionResult> TexasTprFigures(
+        [FromBody] TexasTprRequest request,
+        [FromServices] IExpectedRateCellSource rateCells,
+        [FromServices] ClaimsService.Services.Tpl.ITplRecoveryRepository recoveries,
+        [FromServices] ICurrentActor actor,
+        CancellationToken ct)
+    {
+        var (report, error) = await BuildTexasTprAsync(request, forWorkbook: false, rateCells, recoveries, actor, ct);
+        return error ?? Ok(report);
+    }
+
+    /// <summary>
+    /// The TPL/TPR Report workbook filled in: post HHSC's blank 5.3.4.1
+    /// workbook as <c>template</c> and the request JSON as <c>request</c>.
+    /// Each program sheet with plan codes gets its header, plan codes and the
+    /// five lines for every month through the quarter (zero where there is
+    /// nothing); totals stay HHSC's formulas. A workbook whose program sheets
+    /// can't be read is refused (422).
+    /// </summary>
+    [HttpPost("texas/tpr/workbook")]
+    [RequirePermission("finance:read")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(XlsxTemplate.MaxBytes + 1024 * 1024)]
+    public async Task<ActionResult> TexasTprWorkbook(
+        [FromForm] IFormFile? template,
+        [FromForm] string? request,
+        [FromServices] IExpectedRateCellSource rateCells,
+        [FromServices] ClaimsService.Services.Tpl.ITplRecoveryRepository recoveries,
+        [FromServices] ICurrentActor actor,
+        CancellationToken ct)
+    {
+        if (template is null || template.Length == 0)
+            return BadRequest(new { error = "Attach HHSC's blank TPL/TPR Report (UMCM 5.3.4.1) as 'template'" });
+        if (template.Length > XlsxTemplate.MaxBytes)
+            return StatusCode(StatusCodes.Status413PayloadTooLarge, new { error = $"The template exceeds {XlsxTemplate.MaxBytes} bytes" });
+
+        TexasTprRequest? body = null;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(request))
+                body = JsonSerializer.Deserialize<TexasTprRequest>(request, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
+        catch (JsonException) { }
+        if (body is null) return BadRequest(new { error = "'request' must be the TPL/TPR request as JSON" });
+
+        XlsxTemplate workbook;
+        try
+        {
+            using var buffer = new MemoryStream();
+            await template.CopyToAsync(buffer, ct);
+            workbook = XlsxTemplate.Open(buffer.ToArray());
+        }
+        catch (XlsxTemplateException ex)
+        {
+            return UnprocessableEntity(new { error = ex.Message });
+        }
+
+        var (report, error) = await BuildTexasTprAsync(body, forWorkbook: true, rateCells, recoveries, actor, ct);
+        if (error != null) return error;
+
+        var (layouts, problems) = TexasTprReport.ReadLayouts(workbook, report!);
+        if (problems.Count > 0)
+            return UnprocessableEntity(new { error = "This is not the TPL/TPR Report layout CHO fills; nothing was filled", problems });
+
+        var bytes = TexasTprReport.Fill(workbook, layouts, report!, body.Contractor!,
+            body.SubmissionDate ?? TexasTprReport.TexasToday(DateTime.UtcNow));
+        if (report!.Excluded.Count > 0)
+            Response.Headers["X-Report-Excluded"] = string.Join("; ", report.Excluded.Select(e => $"{e.Items} item(s), {e.Amount.ToString("0.00", CultureInfo.InvariantCulture)}: {e.Reason}"));
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            TexasTprReport.FileName(report, body.McoCode));
+    }
+
+    private const int MaxTprRecoveryCases = 100_000;
+
+    private async Task<(TexasTpr? Report, ActionResult? Error)> BuildTexasTprAsync(
+        TexasTprRequest request, bool forWorkbook, IExpectedRateCellSource rateCells,
+        ClaimsService.Services.Tpl.ITplRecoveryRepository recoveries, ICurrentActor actor, CancellationToken ct)
+    {
+        var errors = request.Validate(forWorkbook, out var planCodes);
+        if (errors.Count > 0) return (null, BadRequest(new { error = "The TPL/TPR request is not valid", errors }));
+
+        var (fromUtc, beforeUtc) = TexasTprReport.Window(request.StateFiscalYear, request.Quarter);
+        var claims = await _claims.GetTplReportClaimsAsync(fromUtc, beforeUtc, ct);
+        var cases = await recoveries.ListAsync(actor.TenantId,
+            new ClaimsService.Services.Tpl.TplRecoveryQuery(State: "TX", Limit: MaxTprRecoveryCases), ct);
+        if (cases.Count >= MaxTprRecoveryCases)
+            return (null, StatusCode(StatusCodes.Status422UnprocessableEntity,
+                new { error = $"More than {MaxTprRecoveryCases} Texas recovery cases; the report can't read them all in one request" }));
+
+        // Rate cells are needed for each item's month of service, which can
+        // be well before the SFY: read from the earliest one, at most
+        // MaxIncurredMonths back from the quarter's last month.
+        var through = TexasTprReport.QuarterEnd(request.StateFiscalYear, request.Quarter);
+        var serviceDates = claims.Select(c => c.ServiceDateFrom)
+            .Concat(cases.Where(c => c.Events.Any(e => e.At >= fromUtc && e.At < beforeUtc)).Select(c => c.ServiceDateFrom));
+        var earliest = TexasTprReport.FiscalYearStart(request.StateFiscalYear);
+        foreach (var d in serviceDates)
+        {
+            var month = new DateOnly(d.Year, d.Month, 1);
+            if (month < earliest) earliest = month;
+        }
+        var floor = through.AddMonths(-(MaxIncurredMonths - 1));
+        if (earliest < floor) earliest = floor;
+
+        IReadOnlyList<ExpectedRateCell> cells;
+        try
+        {
+            cells = await rateCells.GetAsync(actor.TenantId, "TX", earliest, through, ct);
+        }
+        catch (ExpectedRateCellsUnavailableException ex)
+        {
+            return (null, StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message }));
+        }
+
+        return (TexasTprReport.Build(request.StateFiscalYear, request.Quarter, claims, cases, cells, planCodes, request.TortRecoveries), null);
+    }
+
     private static DateOnly TexasToday(DateTime utcNow) =>
         DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc),
             TimeZoneInfo.FindSystemTimeZoneById("America/Chicago")));
