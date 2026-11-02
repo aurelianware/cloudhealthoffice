@@ -418,16 +418,3 @@ public static class RelationshipCodes
     public const string DomesticPartner = "53";
     public const string Other = "G8";
 }
-
-/// <summary>
-/// Line of Business - determines regulatory requirements and benefit rules
-/// </summary>
-public enum LineOfBusiness
-{
-    Commercial = 1,
-    Medicare = 2,
-    Medicaid = 3,
-    Exchange = 4,
-    TRICARE = 5,
-    VA = 6
-}

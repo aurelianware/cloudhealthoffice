@@ -78,6 +78,12 @@ today, each with the PR that removes it:
    `EligibilityLineOfBusinessMigrationHostedService`, and read correctly until then
    through the shared `LegacyLineOfBusinessBsonSerializer`. The API takes names
    (`Marketplace` reads as `Exchange`) and refuses numbers.
-5. The services whose enums already match: type swaps, no data change.
+5. The services whose enums already matched (done): authorization, ar, benefit-plan,
+   capitation, claims, coverage, encounter, ffs, member, premium-billing, provider,
+   provider-contracts, risk-adjustment and sponsor use the shared type. Same names and
+   numbers, so stored data and JSON are unchanged. The PA Timeliness Challenge tool's
+   `PaLineOfBusiness` is numbered to match (it writes names). `PaLineOfBusiness`
+   (prior-auth rule engine) and benefit-plan's `LegalLineOfBusiness` client type keep
+   their names and already match.
 6. Coverage, claims and authorization intake take the line of business from the program.
 7. ProviderEnrollmentService's flags enum is renamed `ProgramParticipation`.

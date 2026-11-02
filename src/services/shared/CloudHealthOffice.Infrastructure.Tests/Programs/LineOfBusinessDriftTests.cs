@@ -5,7 +5,7 @@ namespace CloudHealthOffice.Infrastructure.Tests.Programs;
 
 /// <summary>
 /// Every service-local line-of-business enum must match the shared
-/// <see cref="LineOfBusiness"/> (same names, same numbers) until it is replaced by it
+/// <see cref="LineOfBusiness"/> (same names, same numbers; a subset is fine) until it is replaced by it
 /// (docs/architecture/line-of-business.md). The known exceptions are listed with the
 /// migration that removes them; the list may only shrink.
 /// </summary>
@@ -38,7 +38,7 @@ public class LineOfBusinessDriftTests
             .ToList();
 
         drifted.Should().BeEmpty(
-            "a line-of-business enum must use the shared names and numbers (Commercial=1, Medicare=2, Medicaid=3, Exchange=4, TRICARE=5, VA=6, optional Unknown=0). " +
+            "a line-of-business enum must use the shared names and numbers (Commercial=1, Medicare=2, Medicaid=3, Exchange=4, TRICARE=5, VA=6, optional Unknown=0; a subset is fine). " +
             "Better: use CloudHealthOffice.Infrastructure.Programs.LineOfBusiness instead of a local enum.");
     }
 
@@ -54,10 +54,17 @@ public class LineOfBusinessDriftTests
         stale.Should().BeEmpty("these enums now match the shared one or are gone, so take them off KnownExceptions");
     }
 
+    /// <summary>
+    /// Every member is a shared name with its shared number (or Unknown=0). A subset is
+    /// allowed: a tool or engine that only handles some lines of business (the PA corpus
+    /// uses four) cannot disagree with the shared enum, only a wrong name or number can.
+    /// </summary>
     private static bool Matches(IReadOnlyList<(string Name, int Value)> members)
     {
         var withoutUnknown = members.Where(m => !(m.Name == "Unknown" && m.Value == 0)).ToList();
-        return withoutUnknown.SequenceEqual(Canonical);
+        return withoutUnknown.Count > 0
+            && withoutUnknown.All(Canonical.Contains)
+            && withoutUnknown.Distinct().Count() == withoutUnknown.Count;
     }
 
     private sealed record LocalEnum(string Path, string Name, IReadOnlyList<(string Name, int Value)> Members);

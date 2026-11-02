@@ -198,16 +198,6 @@ public enum BillingRunStatus
     Cancelled
 }
 
-public enum LineOfBusiness
-{
-    Commercial = 1,
-    Medicare = 2,
-    Medicaid = 3,
-    Exchange = 4,
-    TRICARE = 5,
-    VA = 6
-}
-
 public enum BillingFrequency
 {
     Monthly = 1,

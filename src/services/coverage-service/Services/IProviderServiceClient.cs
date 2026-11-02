@@ -52,14 +52,14 @@ public sealed class ProviderDto
 public sealed class NetworkParticipationDto
 {
     public string? PlanId { get; set; }
-    public Models.LineOfBusiness LineOfBusiness { get; set; }
+    public LineOfBusiness LineOfBusiness { get; set; }
     public string NetworkTier { get; set; } = "Tier1";
     public DateTime EffectiveDate { get; set; }
     public DateTime? TerminationDate { get; set; }
     public bool AcceptingNewPatients { get; set; } = true;
     public int? PanelLimit { get; set; }
     public bool? PanelAccepted { get; set; }
-    public List<Models.LineOfBusiness> AcceptedLobs { get; set; } = new();
+    public List<LineOfBusiness> AcceptedLobs { get; set; } = new();
     public int? MinAcceptedAgeYears { get; set; }
     public int? MaxAcceptedAgeYears { get; set; }
 }

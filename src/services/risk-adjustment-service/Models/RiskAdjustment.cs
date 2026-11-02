@@ -313,16 +313,3 @@ public enum ScoreStatus
     /// <summary>Score was rejected and needs correction.</summary>
     Rejected = 6
 }
-
-/// <summary>
-/// Line of Business (consistent with other services).
-/// </summary>
-public enum LineOfBusiness
-{
-    Commercial = 1,
-    Medicare = 2,
-    Medicaid = 3,
-    Exchange = 4,
-    TRICARE = 5,
-    VA = 6
-}
