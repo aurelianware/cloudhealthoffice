@@ -49,6 +49,7 @@ public class FeeScheduleEngineBuilder
         _services.AddScoped<IFeeScheduleRepository>(CreateFeeScheduleCache<FeeScheduleRepositoryMongo>);
         _services.AddScoped<IProviderContractRepository>(CreateFeeScheduleCache<FeeScheduleRepositoryMongo>);
         _services.AddScoped<Medicaid.IMedicaidDrgRateRepository, Medicaid.MedicaidDrgRateRepositoryMongo>();
+        _services.AddScoped<Medicaid.IMedicaidInterimRateRepository, Medicaid.MedicaidInterimRateRepositoryMongo>();
         return this;
     }
 
@@ -158,7 +159,8 @@ public class FeeScheduleEngineBuilder
         _services.AddScoped<IRateResolutionService>(sp => new Medicaid.MedicaidDrgRateResolutionService(
             createInner(sp),
             sp.GetRequiredService<Medicaid.IMedicaidDrgRateRepository>(),
-            sp.GetRequiredService<ILogger<Medicaid.MedicaidDrgRateResolutionService>>()));
+            sp.GetRequiredService<ILogger<Medicaid.MedicaidDrgRateResolutionService>>(),
+            sp.GetService<Medicaid.IMedicaidInterimRateRepository>()));
         return this;
     }
 

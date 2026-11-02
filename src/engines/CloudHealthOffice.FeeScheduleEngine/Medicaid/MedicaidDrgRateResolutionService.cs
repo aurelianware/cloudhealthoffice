@@ -36,16 +36,24 @@ public sealed partial class MedicaidDrgRateResolutionService : IRateResolutionSe
 
     private readonly IRateResolutionService _inner;
     private readonly IMedicaidDrgRateRepository _rates;
+    private readonly IMedicaidInterimRateRepository? _interimRates;
     private readonly ILogger<MedicaidDrgRateResolutionService> _logger;
 
+    /// <param name="interimRates">
+    /// Hospital interim rates (cost-to-charge ratios). Needed only for stays
+    /// that can earn an outlier (Texas: clients under 21); without them those
+    /// stays pend.
+    /// </param>
     public MedicaidDrgRateResolutionService(
         IRateResolutionService inner,
         IMedicaidDrgRateRepository rates,
-        ILogger<MedicaidDrgRateResolutionService> logger)
+        ILogger<MedicaidDrgRateResolutionService> logger,
+        IMedicaidInterimRateRepository? interimRates = null)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _rates = rates ?? throw new ArgumentNullException(nameof(rates));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _interimRates = interimRates;
     }
 
     /// <inheritdoc />
@@ -144,10 +152,26 @@ public sealed partial class MedicaidDrgRateResolutionService : IRateResolutionSe
             DischargeStatus = first.DischargeStatus,
         };
 
-        // The interim rate (cost-to-charge ratio) is not in the SDA files, so
-        // a stay that needs an outlier evaluated (a client under 21) pends
-        // until interim rates are loaded.
-        var price = new TexasMedicaidDrgPricer(policy).Price(stay, weights.Find(drgSoi), match.ToPricerHospital());
+        // The interim rate (the hospital's inpatient cost-to-charge ratio) is
+        // only used for outliers, which Texas pays to clients under 21, so it
+        // is looked up only for them. Without one such a stay pends.
+        MedicaidInterimRate? interim = null;
+        if (first.PatientAgeYears is { } age && age < policy.OutlierAgeLimit && _interimRates is not null)
+        {
+            interim = await _interimRates
+                .FindAsync(tenantId, TexasState, facilityNpi, InterimRateKind.Inpatient, dischargeDate, ct)
+                .ConfigureAwait(false);
+        }
+
+        var price = new TexasMedicaidDrgPricer(policy).Price(
+            stay, weights.Find(drgSoi), match.ToPricerHospital(interim?.InpatientRate));
+        if (interim is not null)
+        {
+            price = price with
+            {
+                Steps = [$"Inpatient interim rate {interim.InpatientRate} effective {Day(interim.EffectiveDate)} (from {interim.SourceFile}).", .. price.Steps],
+            };
+        }
         if (!price.Priced)
             return Unresolved(lines, $"Texas Medicaid APR-DRG: {price.UnpricedReason}", price.Steps);
 

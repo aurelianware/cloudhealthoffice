@@ -115,6 +115,7 @@ builder.Services.AddScoped<BenefitPlanService.Import.QhpPuf.IQhpPufImportService
 builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IFeeScheduleImportService, BenefitPlanService.Import.FeeSchedules.FeeScheduleImportService>();
 builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IMedicarePfsImportService, BenefitPlanService.Import.FeeSchedules.MedicarePfsImportService>();
 builder.Services.AddScoped<BenefitPlanService.Import.MedicaidDrg.ITexasDrgRateImportService, BenefitPlanService.Import.MedicaidDrg.TexasDrgRateImportService>();
+builder.Services.AddScoped<BenefitPlanService.Import.MedicaidDrg.ITexasInterimRateImportService, BenefitPlanService.Import.MedicaidDrg.TexasInterimRateImportService>();
 // Provider contract roster importer (docs/integration/CONTRACT-ROSTER-IMPORTER.md).
 builder.Services.AddScoped<BenefitPlanService.Import.Contracts.IContractRosterImportService, BenefitPlanService.Import.Contracts.ContractRosterImportService>();
 // Plan prior-auth-required lists into the PA rule store CRD, PAS and the published list read.
