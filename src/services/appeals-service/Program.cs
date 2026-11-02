@@ -149,9 +149,19 @@ builder.Services.AddSingleton<IAppealHolidayCalendarProvider>(sp =>
 // ── State rule packs ─────────────────────────────────────────────────
 // Embedded, versioned State appeal and grievance rules, validated against
 // the federal floor. Resolved right after Build() so a bad pack fails
-// startup. Read-only today: GET api/appeals/rule-packs.
+// startup. Served at GET api/appeals/rule-packs, and applied to appeal and
+// grievance deadlines when the case names a State (StateAppealDeadlinePolicy).
 builder.Services.AddSingleton<AppealsService.Services.RulePacks.IRulePackCatalog>(_ =>
     AppealsService.Services.RulePacks.RulePackCatalog.FromEmbeddedResources());
+
+// ── Appeal jurisdiction (State) ──────────────────────────────────────
+// A tenant's default State, used when a create request names none, so its
+// cases run on that State's rule pack (Medi-Cal grievances: 30 days, not
+// the federal 90). Resolved right after Build() so a bad code fails startup.
+builder.Services.AddSingleton<IAppealJurisdictionProvider>(sp =>
+    new ConfiguredAppealJurisdictionProvider(
+        sp.GetRequiredService<IConfiguration>().GetSection(AppealJurisdictionOptions.SectionName).Get<AppealJurisdictionOptions>()
+        ?? new AppealJurisdictionOptions()));
 
 // ── Kafka consumer (X12 275 attachment ingress) ──────────────────────
 // Subscribes to the attachments-in topic, routes appeal-context 275s to
@@ -202,6 +212,7 @@ var app = builder.Build();
 
 _ = app.Services.GetRequiredService<IAppealHolidayCalendarProvider>();
 _ = app.Services.GetRequiredService<AppealsService.Services.RulePacks.IRulePackCatalog>();
+_ = app.Services.GetRequiredService<IAppealJurisdictionProvider>();
 
 app.UseChoObservability();
 

@@ -140,11 +140,29 @@ public class Appeal
 
     /// <summary>
     /// Regulatory deadline. Drives the read-time overdue projection.
-    /// Computed by <see cref="Services.AppealResponseDeadlinePolicy"/>;
+    /// Computed by <see cref="Services.StateAppealDeadlinePolicy"/> (federal
+    /// clocks, tightened by the <see cref="State"/>'s rule pack);
     /// moved later only by the one-time extension operation, which records
     /// the prior value on <see cref="DeadlineExtension"/>.
     /// </summary>
     public DateTime? TargetResponseDate { get; set; }
+
+    /// <summary>
+    /// Two-letter State whose rules govern the case, upper case, or
+    /// <c>null</c> when federal rules alone apply. From the create request,
+    /// else the tenant's default (<see cref="Services.AppealJurisdictionOptions"/>).
+    /// </summary>
+    [StringLength(2)]
+    public string? State { get; set; }
+
+    /// <summary>
+    /// The State rule pack that set the deadlines, as <c>id:version</c>
+    /// (e.g. <c>ca-medicaid:2026.10.1</c>), or <c>null</c> when only the
+    /// federal clocks of <see cref="Services.AppealResponseDeadlinePolicy"/>
+    /// applied. Recorded at create for audit.
+    /// </summary>
+    [StringLength(100)]
+    public string? RulePackVersion { get; set; }
 
     /// <summary>
     /// The one-time regulatory extension of <see cref="TargetResponseDate"/>

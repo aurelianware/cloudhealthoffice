@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Medi-Cal grievances were given the federal 90-day resolution deadline and a 14-day extension. California requires 30 days, 72 hours when expedited, with no extension (28 CCR 1300.68; DHCS APL 21-011). Appeals and grievances can now name their State (`state` on `POST api/appeals`, or a tenant default in `AppealJurisdictions:Tenants`), and grievances then run on that State's rule pack wherever it is stricter than the federal clock: the default deadline, the latest date a caller may set, and the extension. Texas grievances keep 90 days and the 14-day extension. Arizona, Florida, New York and Ohio grievances also get their shorter pack clocks. The appeal records `state` and `rulePackVersion`. Appeals keep the federal clocks until the case model can tell member appeals from provider claim disputes. Without a State nothing changes.
 - The plan settings change consumer authenticated to Kafka with SASL PLAIN while every other client uses SCRAM-SHA-512. It now uses SCRAM-SHA-512 too.
 
 ## [6.2.0] - 2026-10-31
