@@ -16,6 +16,15 @@ public sealed class InMemoryFeeScheduleRepository : IFeeScheduleRepository
     public Task<FeeSchedule?> GetDefaultForPlanAsync(string tenantId, string planId, DateTime serviceDate, CancellationToken ct = default)
         => Task.FromResult(_docs.Values.FirstOrDefault(s => s.TenantId == tenantId && s.DefaultForPlanId == planId));
 
+    public Task<IReadOnlyList<FeeSchedule>> GetSupplementalSchedulesAsync(
+        string tenantId, IReadOnlyCollection<string> planKeys, DateTime serviceDate, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<FeeSchedule>>(_docs.Values
+            .Where(s => s.TenantId == tenantId
+                        && s.Type == CloudHealthOffice.FeeScheduleEngine.Domain.FeeScheduleType.Supplemental
+                        && (s.SupplementalForPlanIds ?? []).Intersect(planKeys).Any()
+                        && s.EffectiveDate <= serviceDate)
+            .ToList());
+
     public Task<FeeScheduleLine?> GetLineAsync(string feeScheduleId, string procedureCode, string? modifier, CancellationToken ct = default)
         => Task.FromResult<FeeScheduleLine?>(null);
 

@@ -83,7 +83,7 @@ public class AppealEventPublisherTests
             "eventId", "eventType", "eventVersion", "occurredAt",
             "tenantId", "appealId",
             "appealNumber", "claimId", "claimNumber", "memberId", "providerNPI",
-            "appealType", "appealLevel", "lineOfBusiness", "source",
+            "appealType", "appealLevel", "lineOfBusiness", "benefitType", "source",
             "targetResponseDate", "isUrgent",
             "actor", "correlationId"
         });
@@ -262,13 +262,32 @@ public class AppealEventPublisherTests
         {
             "eventId", "eventType", "eventVersion", "occurredAt",
             "tenantId", "appealId",
-            "currentStatus", "lineOfBusiness", "reason", "extensionDays",
+            "currentStatus", "lineOfBusiness", "benefitType", "reason", "extensionDays",
             "previousTargetResponseDate", "targetResponseDate", "writtenNoticeSentAt",
             "regulatoryBasis",
             "actor", "correlationId"
         });
         payload.Reason.Should().Be("PlanNeedsInfo");
         payload.ExtensionDays.Should().Be(14);
+        AssertNoEncryptedFieldValues(payload);
+    }
+
+    [Fact]
+    public void AppealNoticeSent_FieldWhitelist()
+    {
+        var a = NewAppeal();
+        var sentAt = new DateTime(2026, 4, 22, 0, 0, 0, DateTimeKind.Utc);
+
+        var payload = AppealEventPublisher.BuildNoticeSentPayload(a, AppealNoticeKind.Acknowledgment, sentAt, "user1", "corr1");
+        JsonFields(payload).Should().BeEquivalentTo(new[]
+        {
+            "eventId", "eventType", "eventVersion", "occurredAt",
+            "tenantId", "appealId",
+            "notice", "sentAt", "currentStatus",
+            "actor", "correlationId"
+        });
+        payload.Notice.Should().Be("Acknowledgment");
+        payload.SentAt.Should().Be(sentAt);
         AssertNoEncryptedFieldValues(payload);
     }
 

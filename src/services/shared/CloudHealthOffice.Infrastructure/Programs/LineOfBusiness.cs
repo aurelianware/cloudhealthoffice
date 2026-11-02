@@ -86,6 +86,12 @@ public static class LineOfBusinessNames
         return false;
     }
 
+    /// <summary>
+    /// The line of business for a shared number (1-6, as coverage-service and claims-service
+    /// send it); Unknown for 0 or anything out of range.
+    /// </summary>
+    public static LineOfBusiness FromNumber(long n) => n >= 1 && n <= Known.Length ? (LineOfBusiness)n : LineOfBusiness.Unknown;
+
     /// <summary>The line of business for <paramref name="value"/>, or Unknown when it is not one.</summary>
     public static LineOfBusiness Parse(string? value) => TryParse(value, out var lob) ? lob : LineOfBusiness.Unknown;
 

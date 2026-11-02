@@ -3,6 +3,7 @@ using AuthorizationService.Backends;
 using AuthorizationService.Controllers;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
+using AuthorizationService.Reports;
 using AuthorizationService.Services.Cms0057;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Hosting;
@@ -242,6 +243,52 @@ public class Cms0057ReportingTests
             SourceSystem = "um-core", EvidenceReference = "ext:1",
         });
         Cms0057Reporting.ComputeMetrics(new[] { auth }, Jan1, Dec31, null).Standard.ExtendedThenApproved.Should().Be(1);
+    }
+
+    private static Authorization SourcedExtension(string number, LineOfBusiness lob, double decidedAfterHours,
+        double grantedAfterHours = 100, double extendedDays = 14)
+    {
+        var auth = Auth(number, AuthorizationStatus.Approved, decidedAfterHours: decidedAfterHours, lob: lob);
+        AuthorizationDeadlinePolicy.Initialize(auth);
+        PaReportingEvidence.Initialize(auth, auth.SubmittedDate);
+        var original = auth.SubmittedDate.AddHours(168);
+        auth.ReportingLedger!.Facts.Add(new PaReportingFact
+        {
+            EventId = "ext-" + number, Kind = PaReportingFactKind.ReviewExtension,
+            EffectiveAt = auth.SubmittedDate.AddHours(grantedAfterHours),
+            OriginalDueAt = original, ExtendedDueAt = original.AddDays(extendedDays),
+            SourceSystem = "um-core", EvidenceReference = "ext:" + number,
+        });
+        return auth;
+    }
+
+    [Theory]
+    [InlineData(LineOfBusiness.Medicaid, true)]
+    [InlineData(LineOfBusiness.Medicare, true)]
+    [InlineData(LineOfBusiness.Commercial, false)]
+    [InlineData(LineOfBusiness.Exchange, false)]
+    public void SourcedExtension_MovesTheDeadline_OnlyWhereTheRuleProvidesOne(LineOfBusiness lob, bool onTime)
+    {
+        // Imported, extended in the source system, decided on day 12: inside a lawful 14-day extension.
+        var auth = SourcedExtension("SRC-" + lob, lob, decidedAfterHours: 12 * 24);
+
+        Cms0057Reporting.DecidedWithinTimeframe(auth).Should().Be(onTime);
+        Cms0057Reporting.DeadlineHours(auth).Should().Be(onTime ? 168 + 14 * 24 : 168);
+        var m = Cms0057Reporting.ComputeMetrics(new[] { auth }, Jan1, Dec31, null);
+        m.Standard.DecidedWithinTimeframe.Should().Be(onTime ? 1 : 0);
+        UmReportBuilder.WithinTimeframe(auth, Dec31).Should().Be(onTime);
+    }
+
+    [Fact]
+    public void SourcedExtension_IsCappedAtFourteenDays_AndIgnoredWhenGrantedAfterTheDeadline()
+    {
+        var tooLong = SourcedExtension("SRC-LONG", LineOfBusiness.Medicaid, decidedAfterHours: 30 * 24, extendedDays: 40);
+        Cms0057Reporting.DeadlineHours(tooLong).Should().Be(168 + 14 * 24);
+        Cms0057Reporting.DecidedWithinTimeframe(tooLong).Should().BeFalse();
+
+        var afterDeadline = SourcedExtension("SRC-LATE", LineOfBusiness.Medicaid, decidedAfterHours: 10 * 24, grantedAfterHours: 200);
+        Cms0057Reporting.DeadlineHours(afterDeadline).Should().Be(168);
+        Cms0057Reporting.DecidedWithinTimeframe(afterDeadline).Should().BeFalse();
     }
 
     [Fact]

@@ -109,6 +109,45 @@ public class EnrollmentEventRepository : IEnrollmentEventRepository
         return (last?.Version ?? 0) + 1;
     }
 
+    public async Task<IReadOnlyList<MemberRateCellHistory>> ListRateCellInputsAsync(
+        string tenantId, string? afterMemberId, int memberLimit, CancellationToken ct = default)
+    {
+        var builder = Builders<EnrollmentEvent>.Filter;
+        var filter = builder.Eq(x => x.TenantId, tenantId) & builder.Ne(x => x.RateCellInputs, null);
+        if (!string.IsNullOrEmpty(afterMemberId))
+            filter &= builder.Gt(x => x.MemberId, afterMemberId);
+
+        var limit = Math.Clamp(memberLimit, 1, 5000);
+        var result = new List<MemberRateCellHistory>();
+        string? currentMember = null;
+        var snapshots = new List<RateCellSnapshot>();
+
+        // Walks (tenantId, memberId, version) in index order and stops once
+        // the page is full, so a member's events are never split.
+        using var cursor = await _collection.Find(filter)
+            .Sort(Builders<EnrollmentEvent>.Sort.Ascending(x => x.MemberId).Ascending(x => x.Version))
+            .ToCursorAsync(ct);
+        while (await cursor.MoveNextAsync(ct))
+        {
+            foreach (var e in cursor.Current)
+            {
+                if (e.MemberId != currentMember)
+                {
+                    if (currentMember is not null)
+                    {
+                        result.Add(new MemberRateCellHistory(currentMember, snapshots));
+                        if (result.Count == limit) return result;
+                    }
+                    currentMember = e.MemberId;
+                    snapshots = new List<RateCellSnapshot>();
+                }
+                snapshots.Add(new RateCellSnapshot(e.Version, e.OccurredAt, e.EventDate, e.EventType, e.MaintenanceType, e.RateCellInputs!));
+            }
+        }
+        if (currentMember is not null) result.Add(new MemberRateCellHistory(currentMember, snapshots));
+        return result;
+    }
+
     private static void Normalize(EnrollmentEvent evt)
     {
         if (string.IsNullOrEmpty(evt.EventId))

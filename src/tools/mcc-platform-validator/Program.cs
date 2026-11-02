@@ -59,6 +59,7 @@ Console.WriteLine($"  Parallelism: {options.Parallelism:N0}");
 Console.WriteLine($"  Seed workers:{options.SeedParallelism:N0}");
 Console.WriteLine($"  LOB:         {LineOfBusinessName(options.LineOfBusiness)} ({options.LineOfBusiness})");
 Console.WriteLine($"  PA scenarios:{(options.PriorAuthScenariosEnabled ? $" enabled ({options.PriorAuthScenarioRate:P0})" : " disabled")}");
+Console.WriteLine($"  TPL scenarios:{(options.TplScenariosEnabled ? " enabled (TX + CA; needs claims-service Adjudication:ThirdPartyLiability:Mode=CostAvoid)" : " disabled")}");
 Console.WriteLine($"  Auth fixtures:{(options.SeedAuthorizations ? " enabled" : " disabled")}");
 Console.WriteLine("  Adjudication: Service Bus only (persisted pipeline outcome)");
 Console.WriteLine(
@@ -178,6 +179,11 @@ if (options.SeedMembers)
     {
         var members = await SeedMembersAsync(http, options, claims, validationPlanId, json);
         var coverage = await SeedCoverageAsync(http, options, claims, validationPlanId, json);
+        if (options.TplScenariosEnabled)
+        {
+            await SeedTplAsync(http, options, claims, validationPlanId, json);
+        }
+
         return (members, coverage);
     });
 }
@@ -1022,6 +1028,7 @@ static async Task<List<SyntheticClaim>> GenerateClaimsAsync(ValidatorOptions opt
     InjectCleanPaidScenarios(claims);
     InjectExcludedProviderScenarios(claims, options.Seed);
     InjectUncoveredServiceScenarios(claims);
+    InjectTplScenarios(claims, options);
     InjectPriorAuthScenarios(claims, options);
     NormalizeBehavioralHealthCarveOutScenarios(claims);
     return claims;
@@ -1121,6 +1128,51 @@ static void InjectUncoveredServiceScenarios(List<SyntheticClaim> claims)
     }
 
     Console.WriteLine($"Uncovered service scenarios: injected {injected:N0} professional claims expected to deny");
+}
+
+static void InjectTplScenarios(List<SyntheticClaim> claims, ValidatorOptions options)
+{
+    if (!options.TplScenariosEnabled)
+    {
+        return;
+    }
+
+    if (options.LineOfBusiness != 3)
+    {
+        Console.WriteLine("TPL scenarios: skipped (Medicaid TPL only runs on Medicaid claims; use --line-of-business 3)");
+        return;
+    }
+
+    var candidates = claims
+        .Where(c =>
+            c.ClaimType.Equals("Professional", StringComparison.OrdinalIgnoreCase)
+            && c.EdgeCase is null
+            && !string.Equals(c.BenefitPlanId, MccWorkflowValidation.CleanProfessionalPaidPlanId, StringComparison.Ordinal)
+            && !string.Equals(c.BenefitPlanId, MccWorkflowValidation.ExcludedProviderPlanId, StringComparison.Ordinal)
+            && !string.Equals(c.BenefitPlanId, MccWorkflowValidation.UncoveredServicePlanId, StringComparison.Ordinal))
+        .OrderBy(c => c.ClaimId, StringComparer.Ordinal)
+        .ToList();
+
+    if (candidates.Count == 0)
+    {
+        Console.WriteLine("TPL scenarios: skipped (no remaining professional claims generated)");
+        return;
+    }
+
+    var requested = Math.Min(MccTplScenarios.RequestedCount(claims.Count), candidates.Count);
+    var injected = new Dictionary<string, int>(StringComparer.Ordinal);
+    for (var i = 0; i < requested; i++)
+    {
+        var claim = candidates[i];
+        var scenario = MccTplScenarios.All[i % MccTplScenarios.All.Count];
+        ForceCleanProfessionalPaidScenario(claim);
+        MccTplScenarios.Apply(claim, scenario);
+        injected[scenario.Name] = injected.GetValueOrDefault(scenario.Name) + 1;
+    }
+
+    Console.WriteLine(
+        $"TPL scenarios: injected {requested:N0} professional claims with a TX/CA TPL row (" +
+        string.Join(", ", injected.Select(kv => $"{kv.Key} {kv.Value}")) + ")");
 }
 
 static void InjectPriorAuthScenarios(List<SyntheticClaim> claims, ValidatorOptions options)
@@ -1750,6 +1802,122 @@ static async Task<FixtureCount> SeedCoverageAsync(
 
     Console.WriteLine($"seeded: {created:N0} COB coverage rows ({existing:N0} already present)");
     return new FixtureCount(created, existing);
+}
+
+static async Task SeedTplAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    IReadOnlyCollection<SyntheticClaim> claims,
+    Guid validationPlanId,
+    JsonSerializerOptions json)
+{
+    var tplClaims = claims
+        .Where(MccTplScenarios.IsTplScenario)
+        .OrderBy(claim => claim.ClaimId, StringComparer.Ordinal)
+        .ToList();
+
+    if (tplClaims.Count == 0)
+    {
+        Console.WriteLine("seeded: 0 TPL rows (no TPL scenarios)");
+        return;
+    }
+
+    var created = 0;
+    var existing = 0;
+    foreach (var claim in tplClaims)
+    {
+        var scenario = MccTplScenarios.ForPlanId(claim.BenefitPlanId)!;
+        var memberId = claim.Member.MemberId;
+
+        // coverage-service records plan-found TPL only for members it has a
+        // coverage row for. A plain row, with no other insurance, so the COB
+        // stage sees nothing.
+        if (!await CoverageRowExistsAsync(http, options, memberId))
+        {
+            await CreatePlainCoverageAsync(http, options, claim, validationPlanId, json);
+        }
+
+        using var response = await http.PostAsJsonAsync(
+            $"{options.CoverageUrl}/api/v1/coverage/member/{Uri.EscapeDataString(memberId)}/tpl",
+            MccTplScenarios.DiscoveryRequest(claim, scenario),
+            json);
+        var body = await response.Content.ReadAsStringAsync();
+        if (response.IsSuccessStatusCode)
+        {
+            created++;
+            continue;
+        }
+
+        // Same seed, same member and policy: the row is already there from an earlier run.
+        if (response.StatusCode == System.Net.HttpStatusCode.BadRequest
+            && body.Contains("already on file", StringComparison.OrdinalIgnoreCase))
+        {
+            existing++;
+            continue;
+        }
+
+        throw new InvalidOperationException(
+            $"TPL seed failed ({memberId}, {scenario.Name}): {(int)response.StatusCode} {body}");
+    }
+
+    Console.WriteLine($"seeded: {created:N0} TPL rows ({existing:N0} already present)");
+}
+
+static async Task<bool> CoverageRowExistsAsync(HttpClient http, ValidatorOptions options, string memberId)
+{
+    using var response = await http.GetAsync(
+        $"{options.CoverageUrl}/api/v1/coverage/member/{Uri.EscapeDataString(memberId)}/history");
+
+    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+    {
+        return false;
+    }
+
+    var body = await response.Content.ReadAsStringAsync();
+    if (!response.IsSuccessStatusCode)
+    {
+        throw new InvalidOperationException($"coverage lookup failed ({memberId}): {(int)response.StatusCode} {body}");
+    }
+
+    using var document = JsonDocument.Parse(body);
+    return document.RootElement.ValueKind == JsonValueKind.Array
+        ? document.RootElement.GetArrayLength() > 0
+        : true;
+}
+
+static async Task CreatePlainCoverageAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    SyntheticClaim claim,
+    Guid validationPlanId,
+    JsonSerializerOptions json)
+{
+    var member = claim.Member;
+    var effectiveDate = DateTime.SpecifyKind(
+        member.CoverageEffectiveDate != default && member.CoverageEffectiveDate.Date <= claim.DateOfService.Date
+            ? member.CoverageEffectiveDate.Date
+            : claim.DateOfService.Date.AddYears(-1),
+        DateTimeKind.Utc);
+    var payload = new
+    {
+        memberId = member.MemberId,
+        groupNumber = NullIfWhiteSpace(member.GroupNumber) ?? "MCC-GRP-001",
+        planId = validationPlanId.ToString(),
+        coverageLevel = "EMP",
+        insuranceLineCode = "HLT",
+        effectiveDate,
+        terminationDate = (DateTime?)null,
+        isCOBRA = false,
+        maintenanceTypeCode = "021",
+        maintenanceReasonCode = "EC"
+    };
+
+    using var response = await http.PostAsJsonAsync($"{options.CoverageUrl}/api/v1/coverage", payload, json);
+    var body = await response.Content.ReadAsStringAsync();
+    if (!response.IsSuccessStatusCode)
+    {
+        throw new InvalidOperationException($"coverage seed failed ({member.MemberId}): {(int)response.StatusCode} {body}");
+    }
 }
 
 static bool IsCobPendScenario(SyntheticClaim claim)
@@ -3452,6 +3620,8 @@ static void PrintUsage()
       --line-of-business <code>  Adjudication line of business: 1 Commercial, 2 Medicare, 3 Medicaid, 4 CHIP, 5 Exchange (default: 3)
       --no-prior-auth-scenarios  Disable deterministic PA-required claim scenarios
       --prior-auth-rate <rate>   Fraction of generated claims forced into PA-required scenarios (default: 0.02)
+      --tpl-scenarios            Add Texas and California Medicaid TPL scenarios (about 1% of claims). Needs
+                                 claims-service Adjudication:ThirdPartyLiability:Mode=CostAvoid
       --summary-json <path>      Write machine-readable validation summary JSON
       --no-publish-summary       Do not publish the completed run to claims-service
       --claim-results-limit <n>  Number of per-claim results to publish with the run (default: 1000)

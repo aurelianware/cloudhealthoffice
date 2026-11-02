@@ -28,6 +28,8 @@ public static class TestOutbox
         AppealEventType.AppealOverdueObserved => AppealOutbox.OverdueObserved(e, a, e.CorrelationId),
         AppealEventType.AppealAssigned => AppealOutbox.Assigned(e, a, null, e.CorrelationId),
         AppealEventType.AppealDeadlineExtended => AppealOutbox.DeadlineExtended(e, a, e.CorrelationId),
+        AppealEventType.AppealNoticeSent => AppealOutbox.NoticeSent(
+            e, a, AppealNoticeKind.Acknowledgment, a.AcknowledgmentSentAt ?? e.OccurredAt, e.CorrelationId),
         AppealEventType.AppealStatusMigrated => AppealOutbox.StatusMigrated(
             e, a, "Approved", AppealClosureReasonCode.Approved, e.CorrelationId),
         _ => throw new ArgumentOutOfRangeException(nameof(e), e.EventType, null)

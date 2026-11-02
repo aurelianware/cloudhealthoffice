@@ -44,7 +44,32 @@ public static class Cms0057Reporting
 
     /// <summary>Hours from receipt to this request's deadline, including a lawful extension.</summary>
     public static double DeadlineHours(Authorization auth) =>
-        (AuthorizationDeadlinePolicy.Deadline(auth) - AuthorizationDeadlinePolicy.Receipt(auth)).TotalHours;
+        (ReportingDeadline(auth) - AuthorizationDeadlinePolicy.Receipt(auth)).TotalHours;
+
+    /// <summary>
+    /// The deadline a report judges this request against. It is the native
+    /// deadline (<see cref="AuthorizationDeadlinePolicy.Deadline"/>, which already
+    /// includes an extension CHO granted), moved by a sourced review-extension
+    /// fact when the record carries one instead: an imported request extended in
+    /// its source system. The sourced extension is honored only as the rule
+    /// allows one: on Medicare Advantage or Medicaid, granted by the native
+    /// deadline, and capped at 14 days past it. Otherwise the native deadline stands.
+    /// </summary>
+    public static DateTime ReportingDeadline(Authorization auth)
+    {
+        var deadline = AuthorizationDeadlinePolicy.Deadline(auth);
+        if (auth.DecisionExtension is not null || !AuthorizationDeadlinePolicy.AllowsExtension(auth.LineOfBusiness))
+            return deadline;
+        var sourced = (auth.ReportingLedger?.Facts ?? new())
+            .Where(f => f.Kind == PaReportingFactKind.ReviewExtension && f.ExtendedDueAt is not null
+                && f.EffectiveAt <= deadline)
+            .Select(f => f.ExtendedDueAt!.Value)
+            .ToList();
+        if (sourced.Count == 0) return deadline;
+        var extended = sourced.Max();
+        var latest = deadline + AuthorizationDeadlinePolicy.MaxExtension;
+        return extended <= deadline ? deadline : extended > latest ? latest : extended;
+    }
 
     /// <summary>True when the decision timeframe was extended, natively or by sourced evidence.</summary>
     public static bool WasExtended(Authorization auth) =>

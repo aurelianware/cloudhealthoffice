@@ -128,6 +128,11 @@ public class AppealsController : ControllerBase
         // federal and State clocks (StateAppealDeadlinePolicy): a Medi-Cal
         // grievance gets 30 days / 72 hours, not the federal 90 days. The
         // State comes from the member's program (ResolveJurisdictionAsync).
+        if (AppealLinesOfBusiness.Problem(request.Coverage) is { } coverageProblem)
+        {
+            ModelState.AddModelError(nameof(CreateAppealRequest.LineOfBusiness), coverageProblem);
+            return ValidationProblem(ModelState);
+        }
         if (request.State is not null && !ConfiguredAppealJurisdictionProvider.IsStateCode(request.State))
         {
             ModelState.AddModelError(nameof(CreateAppealRequest.State), "State must be a two-letter State code.");
@@ -140,7 +145,7 @@ public class AppealsController : ControllerBase
             return ValidationProblem(ModelState);
         }
         var state = jurisdiction.State;
-        var deadlines = ResolveDeadlines(state, now, request.LineOfBusiness, request.AppealType,
+        var deadlines = ResolveDeadlines(state, now, request.Coverage, request.AppealType,
             request.AppealLevel, request.IsUrgent, TenantId);
         var regulatoryDeadline = deadlines.DefaultTarget;
         var enforceableMaximum = deadlines.EnforceableMaximum;
@@ -150,7 +155,7 @@ public class AppealsController : ControllerBase
         {
             ModelState.AddModelError(nameof(CreateAppealRequest.TargetResponseDate),
                 $"TargetResponseDate exceeds the regulatory maximum of {enforceableMaximum.Value:o} " +
-                $"for {request.LineOfBusiness} {request.AppealType} at {request.AppealLevel} (urgent: {request.IsUrgent})" +
+                $"for {request.Coverage} {request.AppealType} at {request.AppealLevel} (urgent: {request.IsUrgent})" +
                 (deadlines.RulePack is { } packApplied ? $" under {packApplied}." : "."));
             return ValidationProblem(
                 detail: null, instance: null, statusCode: StatusCodes.Status400BadRequest,
@@ -183,6 +188,7 @@ public class AppealsController : ControllerBase
             AppealType = request.AppealType,
             AppealLevel = request.AppealLevel,
             LineOfBusiness = request.LineOfBusiness,
+            BenefitType = request.BenefitType,
             Status = AppealStatus.Draft,
             Source = request.Source,
             SubmittedDate = now,
@@ -780,6 +786,105 @@ public class AppealsController : ControllerBase
     }
 
     /// <summary>
+    /// Record when a member letter went out: the acknowledgment letter
+    /// (<see cref="Appeal.AcknowledgmentSentAt"/>) or the resolution letter
+    /// (<see cref="Appeal.ResolutionNoticeSentAt"/>). The plan's letter
+    /// vendor or staff send the letter; this records the date for the
+    /// grievance and appeal logs. Not a status transition — written as an
+    /// <c>AppealNoticeSent</c> audit event.
+    ///
+    /// The same date again is a no-op 200. A different date replaces the
+    /// recorded one (a correction); the audit row keeps the previous value.
+    ///
+    /// 400: <c>sentAt</c> in the future or before the case was submitted.
+    /// 409: acknowledgment on a draft, or resolution before the case is closed.
+    /// </summary>
+    [HttpPost("{id}/notices")]
+    [ProducesResponseType(typeof(Appeal), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RecordNoticeSent(
+        [FromRoute] string id,
+        [FromBody] RecordNoticeSentRequest request,
+        CancellationToken ct)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var appeal = await _appeals.GetByIdAsync(TenantId, id, ct);
+        if (appeal == null) return NotFound();
+
+        if (IsReplay(appeal, request.EventId)) return Ok(await DecryptForResponseAsync(appeal, ct));
+
+        var notice = request.Notice!.Value;
+        var sentAt = request.SentAt!.Value.ToUniversalTime();
+        var now = DateTime.UtcNow;
+
+        if (!Enum.IsDefined(notice))
+        {
+            ModelState.AddModelError(nameof(RecordNoticeSentRequest.Notice), $"Unknown notice {notice}.");
+        }
+        if (sentAt > now + NoticeClockSkew)
+        {
+            ModelState.AddModelError(nameof(RecordNoticeSentRequest.SentAt),
+                "SentAt is in the future; record the letter after it is sent.");
+        }
+        else if (sentAt < appeal.SubmittedDate.ToUniversalTime())
+        {
+            ModelState.AddModelError(nameof(RecordNoticeSentRequest.SentAt),
+                "SentAt precedes the case's submission.");
+        }
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+        if (notice == AppealNoticeKind.Acknowledgment && appeal.Status == AppealStatus.Draft)
+        {
+            return Problem(statusCode: StatusCodes.Status409Conflict, title: "Case not submitted",
+                detail: "An acknowledgment letter cannot be recorded for a draft case.");
+        }
+        if (notice == AppealNoticeKind.Resolution && appeal.Status != AppealStatus.Closed)
+        {
+            return Problem(statusCode: StatusCodes.Status409Conflict, title: "Case not resolved",
+                detail: $"A resolution letter can be recorded only once the case is closed (status is {appeal.Status}).");
+        }
+        if (notice == AppealNoticeKind.Resolution && appeal.ClosedAt is { } closedAt
+            && sentAt < closedAt.ToUniversalTime() - NoticeClockSkew)
+        {
+            ModelState.AddModelError(nameof(RecordNoticeSentRequest.SentAt),
+                "SentAt precedes the case's closure.");
+            return ValidationProblem(ModelState);
+        }
+
+        var previous = notice == AppealNoticeKind.Acknowledgment
+            ? appeal.AcknowledgmentSentAt
+            : appeal.ResolutionNoticeSentAt;
+        if (previous is { } p && p.ToUniversalTime() == sentAt)
+        {
+            return Ok(await DecryptForResponseAsync(appeal, ct));
+        }
+
+        var actor = Actor;
+        if (notice == AppealNoticeKind.Acknowledgment) appeal.AcknowledgmentSentAt = sentAt;
+        else appeal.ResolutionNoticeSentAt = sentAt;
+        appeal.UpdatedBy = actor;
+
+        var auditEvent = BuildEvent(appeal, AppealEventType.AppealNoticeSent,
+            fromStatus: null, toStatus: null, actor, request.EventId);
+        auditEvent.Payload = new JsonObject
+        {
+            ["notice"] = notice.ToString(),
+            ["sentAt"] = sentAt.ToString("o"),
+            ["previousSentAt"] = previous?.ToUniversalTime().ToString("o"),
+            ["currentStatus"] = appeal.Status.ToString()
+        };
+        AppealOutbox.NoticeSent(auditEvent, appeal, notice, sentAt, HttpContext.TraceIdentifier);
+
+        var updated = await _appeals.RecordNoticeSentAsync(appeal, auditEvent, ct);
+        await _outbox.NotifyChangedAsync(updated.TenantId, updated.Id, ct);
+
+        return Ok(await DecryptForResponseAsync(updated, ct));
+    }
+
+    /// <summary>
     /// The State a new case falls under, in order:
     /// <list type="number">
     ///   <item>The member's program: active coverage on the receipt date →
@@ -837,13 +942,13 @@ public class AppealsController : ControllerBase
     /// in effect on the receipt date when one exists for the line of business.
     /// </summary>
     private AppealDeadlines ResolveDeadlines(
-        string? state, DateTime receivedAt, LineOfBusiness lineOfBusiness, AppealType appealType,
+        string? state, DateTime receivedAt, AppealCoverage coverage, AppealType appealType,
         AppealLevel appealLevel, bool isUrgent, string tenantId)
     {
         var pack = state is null
             ? null
-            : _rulePacks.Find(state, lineOfBusiness, DateOnly.FromDateTime(receivedAt));
-        return StateAppealDeadlinePolicy.Resolve(pack, receivedAt, lineOfBusiness, appealType, appealLevel,
+            : _rulePacks.Find(state, coverage.LineOfBusiness, DateOnly.FromDateTime(receivedAt));
+        return StateAppealDeadlinePolicy.Resolve(pack, receivedAt, coverage, appealType, appealLevel,
             isUrgent, _holidays.ForTenant(tenantId));
     }
 
@@ -931,13 +1036,13 @@ public class AppealsController : ControllerBase
         }
 
         var receivedAt = (appeal.ReceivedDate ?? appeal.SubmittedDate).ToUniversalTime();
-        var deadlines = ResolveDeadlines(appeal.State, receivedAt, appeal.LineOfBusiness, appeal.AppealType,
+        var deadlines = ResolveDeadlines(appeal.State, receivedAt, appeal.Coverage, appeal.AppealType,
             appeal.AppealLevel, appeal.IsUrgent, appeal.TenantId);
         var rule = deadlines.Extension;
         if (!rule.IsPermitted)
         {
             return ExtensionRefused(StatusCodes.Status422UnprocessableEntity, "not-permitted", appeal,
-                $"No deadline extension is permitted for {appeal.LineOfBusiness} {appeal.AppealType} " +
+                $"No deadline extension is permitted for {appeal.Coverage} {appeal.AppealType} " +
                 $"at {appeal.AppealLevel} (urgent: {appeal.IsUrgent}). {rule.RegulatoryBasis}",
                 rule.RegulatoryBasis);
         }
@@ -1108,6 +1213,7 @@ public class AppealsController : ControllerBase
         problem.Extensions["extensionRefusal"] = refusal;
         problem.Extensions["fromStatus"] = appeal.Status.ToString();
         problem.Extensions["lineOfBusiness"] = appeal.LineOfBusiness.ToString();
+        problem.Extensions["benefitType"] = appeal.BenefitType.ToString();
         if (regulatoryBasis != null) problem.Extensions["regulatoryBasis"] = regulatoryBasis;
         return StatusCode(statusCode, problem);
     }
@@ -1324,6 +1430,7 @@ public class AppealsController : ControllerBase
             AppealType = appeal.AppealType,
             AppealLevel = appeal.AppealLevel,
             LineOfBusiness = appeal.LineOfBusiness,
+            BenefitType = appeal.BenefitType,
             Status = appeal.Status,
             Source = appeal.Source,
             Attachments = await DecryptAttachmentsAsync(appeal.Attachments, ct),
@@ -1338,6 +1445,8 @@ public class AppealsController : ControllerBase
             RulePackVersion = appeal.RulePackVersion,
             DeadlineExtension = appeal.DeadlineExtension,
             DecisionDate = appeal.DecisionDate,
+            AcknowledgmentSentAt = appeal.AcknowledgmentSentAt,
+            ResolutionNoticeSentAt = appeal.ResolutionNoticeSentAt,
             SubmittedBy = appeal.SubmittedBy,
             Notes = await DecryptNotesAsync(appeal.Notes, ct),
             AttachmentControlNumbers = appeal.AttachmentControlNumbers,
@@ -1526,7 +1635,18 @@ public class CreateAppealRequest
 
     [Required] public AppealLevel AppealLevel { get; set; } = AppealLevel.FirstLevel;
 
+    /// <summary>
+    /// Commercial, Medicare, Medicaid or Exchange (Marketplace is read as Exchange). A Part D
+    /// drug case is Medicare with <see cref="BenefitType"/> PartDDrug; the old MedicarePartD
+    /// value is refused so a Part D case is never silently put on Part C clocks.
+    /// </summary>
     [Required] public LineOfBusiness LineOfBusiness { get; set; }
+
+    /// <summary>MedicalOrService (default) or PartDDrug (Medicare only).</summary>
+    public AppealBenefitType BenefitType { get; set; } = AppealBenefitType.MedicalOrService;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public AppealCoverage Coverage => new(LineOfBusiness, BenefitType);
 
     /// <summary>
     /// Two-letter State whose rules govern the case (e.g. <c>CA</c>). Optional:
@@ -1656,6 +1776,18 @@ public class AssignReviewerRequest
 
     [StringLength(4000)]
     public string? ReassignmentReason { get; set; }
+
+    public string? EventId { get; set; }
+}
+
+public class RecordNoticeSentRequest
+{
+    [Required]
+    public AppealNoticeKind? Notice { get; set; }
+
+    /// <summary>When the letter was sent (mailed, emailed or posted to the member portal).</summary>
+    [Required]
+    public DateTime? SentAt { get; set; }
 
     public string? EventId { get; set; }
 }

@@ -117,5 +117,14 @@ public enum AppealEventType
     /// <c>newTargetResponseDate</c>, <c>writtenNoticeSentAt</c>,
     /// <c>regulatoryBasis</c> and <c>currentStatus</c>.
     /// </summary>
-    AppealDeadlineExtended = 10
+    AppealDeadlineExtended = 10,
+
+    /// <summary>
+    /// A member letter went out: the acknowledgment letter or the
+    /// resolution (decision) letter. Not a status transition. Payload
+    /// carries <c>notice</c>, <c>sentAt</c> and <c>currentStatus</c>.
+    /// Sets <see cref="Appeal.AcknowledgmentSentAt"/> or
+    /// <see cref="Appeal.ResolutionNoticeSentAt"/>.
+    /// </summary>
+    AppealNoticeSent = 11
 }

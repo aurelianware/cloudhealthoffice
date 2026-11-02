@@ -70,7 +70,20 @@ public enum FeeScheduleType
     /// Capitation — provider receives a fixed PMPM; claims are tracking-only.
     /// AllowedAmount = 0 (no fee-for-service payment).
     /// </summary>
-    Capitation
+    Capitation,
+
+    /// <summary>
+    /// A state supplemental payment paid on top of a line's allowed amount
+    /// for listed procedures, such as Medi-Cal Proposition 56 dental
+    /// supplemental payments. Never a line's base rate: the engine reads it
+    /// only through <c>IFeeScheduleRepository.GetSupplementalSchedulesAsync</c>
+    /// and reports it as <c>PricingResult.SupplementalAmount</c>, apart from
+    /// <c>AllowedAmount</c>. Line.Rate is the flat add-on per unit; the
+    /// schedule's EffectiveDate and TermDate bound the dates of service it
+    /// pays for, and <c>FeeSchedule.ClaimsRunoutMonths</c> how long after the
+    /// date of service a claim may still be received to be paid it.
+    /// </summary>
+    Supplemental
 }
 
 /// <summary>

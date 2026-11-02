@@ -55,6 +55,21 @@ public sealed class CachingFeeScheduleRepository : IFeeScheduleRepository, IProv
         return cached.Value;
     }
 
+    public async Task<IReadOnlyList<FeeSchedule>> GetSupplementalSchedulesAsync(
+        string tenantId,
+        IReadOnlyCollection<string> planKeys,
+        DateTime serviceDate,
+        CancellationToken ct = default)
+    {
+        var keys = string.Join("|", planKeys.Where(k => !string.IsNullOrWhiteSpace(k)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
+        var key = $"fee-schedule:supplemental:{tenantId}:{keys}:{serviceDate.Date:yyyyMMdd}";
+        var cached = await GetOrCreateAsync<IReadOnlyList<FeeSchedule>>(
+            key,
+            async () => await _feeSchedules.GetSupplementalSchedulesAsync(tenantId, planKeys, serviceDate, ct),
+            _defaultLookupKeys);
+        return cached.Value ?? Array.Empty<FeeSchedule>();
+    }
+
     public Task<FeeScheduleLine?> GetLineAsync(
         string feeScheduleId,
         string procedureCode,
@@ -67,6 +82,7 @@ public sealed class CachingFeeScheduleRepository : IFeeScheduleRepository, IProv
         var saved = await _feeSchedules.UpsertAsync(schedule, ct);
         _cache.Remove($"fee-schedule:id:{schedule.TenantId}:{schedule.Id}");
         InvalidateByPrefix(_defaultLookupKeys, $"fee-schedule:default:{schedule.TenantId}:");
+        InvalidateByPrefix(_defaultLookupKeys, $"fee-schedule:supplemental:{schedule.TenantId}:");
         return saved;
     }
 

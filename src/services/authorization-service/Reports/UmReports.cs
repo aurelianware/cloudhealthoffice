@@ -128,7 +128,7 @@ public static class UmReportBuilder
     {
         if (Cms0057Reporting.IsDecided(a))
             return Cms0057Reporting.DecisionHours(a) is { } hours ? hours <= Cms0057Reporting.DeadlineHours(a) : null;
-        return asOf > AuthorizationDeadlinePolicy.Deadline(a) ? false : null;
+        return asOf > Cms0057Reporting.ReportingDeadline(a) ? false : null;
     }
 
     public static UmDecisionRow Decision(Authorization a, DateTime asOf)
@@ -137,7 +137,7 @@ public static class UmReportBuilder
         var hours = Cms0057Reporting.DecisionHours(a);
         return new UmDecisionRow(
             a.Id, a.AuthorizationNumber, RequestType(a),
-            AuthorizationDeadlinePolicy.Receipt(a), AuthorizationDeadlinePolicy.Deadline(a),
+            AuthorizationDeadlinePolicy.Receipt(a), Cms0057Reporting.ReportingDeadline(a),
             decided ? a.ReviewedDate : null,
             (decided ? Cms0057Reporting.DecisionStatus(a) : a.Status).ToString(),
             hours is { } h ? Math.Round(h, 1) : null,
@@ -149,7 +149,7 @@ public static class UmReportBuilder
 
     public static UmPendingRow Pending(Authorization a, DateTime asOf)
     {
-        var due = AuthorizationDeadlinePolicy.Deadline(a);
+        var due = Cms0057Reporting.ReportingDeadline(a);
         return new UmPendingRow(
             a.Id, a.AuthorizationNumber, RequestType(a), a.Status,
             AuthorizationDeadlinePolicy.Receipt(a), due,
@@ -166,7 +166,7 @@ public static class UmReportBuilder
             .Where(PriorAuthorizationApiScope.IsInScope)
             .Where(a => lob is null || a.LineOfBusiness == lob)
             .Where(a => requestType is null || string.Equals(RequestType(a), requestType, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(AuthorizationDeadlinePolicy.Deadline).ThenBy(a => a.Id, StringComparer.Ordinal);
+            .OrderBy(Cms0057Reporting.ReportingDeadline).ThenBy(a => a.Id, StringComparer.Ordinal);
 
     /// <summary>One row per receipt month and request type in [from, to); empty months show zeros.</summary>
     public static IReadOnlyList<UmMonthRow> ByMonth(IEnumerable<Authorization> received, DateTime from, DateTime to, DateTime asOf)

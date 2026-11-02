@@ -44,7 +44,8 @@ public sealed class AppealDto
 
     public AppealType AppealType { get; set; } = AppealType.Reconsideration;
     public AppealLevel AppealLevel { get; set; } = AppealLevel.FirstLevel;
-    public LineOfBusiness LineOfBusiness { get; set; }
+    public CloudHealthOffice.Infrastructure.Programs.LineOfBusiness LineOfBusiness { get; set; }
+    public AppealBenefitType BenefitType { get; set; }
     public AppealStatus Status { get; set; } = AppealStatus.Draft;
 
     public string AppealReason { get; set; } = string.Empty;
@@ -64,6 +65,8 @@ public sealed class AppealDto
     public string? ProgramId { get; set; }
     public AppealDeadlineExtensionDto? DeadlineExtension { get; set; }
     public DateTime? DecisionDate { get; set; }
+    public DateTime? AcknowledgmentSentAt { get; set; }
+    public DateTime? ResolutionNoticeSentAt { get; set; }
 
     public string? SubmittedBy { get; set; }
 

@@ -48,14 +48,22 @@ public sealed record TexasDrgPolicy
     public IReadOnlySet<string> TransferStatuses { get; init; } = DischargeStatuses.MedicareAcuteTransfer;
 
     /// <summary>
-    /// Base APR-DRGs that are labor and delivery stays, which a rural
-    /// hospital is paid at its OB-GYN delivery SDA (§355.8052(e)(2)). The
-    /// rule names services, not DRGs: the default is the APR-DRG delivery
-    /// groups (540 cesarean, 541 vaginal with sterilization or D&amp;C, 542
-    /// vaginal with complicating procedures, 560 vaginal). Confirm against
-    /// the plan's HHSC guidance.
+    /// Base APR-DRGs that are labor and delivery stays, paid at a rural
+    /// hospital's OB-GYN delivery SDA (§355.8052(e)(2)) or a children's
+    /// hospital's adult delivery SDA (§355.8052(c)(4)(B)). The default is
+    /// HHSC's published "Delivery DRGs" list (2021-inpatient-delivery-related-drg.pdf):
+    /// 539 cesarean with sterilization, 540 cesarean, 541 vaginal with
+    /// sterilization or D&amp;C, 542 vaginal with complicating procedures,
+    /// 560 vaginal, each at every severity.
     /// </summary>
-    public IReadOnlySet<string> DeliveryBaseDrgs { get; init; } = new HashSet<string>(StringComparer.Ordinal) { "540", "541", "542", "560" };
+    public IReadOnlySet<string> DeliveryBaseDrgs { get; init; } = new HashSet<string>(StringComparer.Ordinal) { "539", "540", "541", "542", "560" };
+
+    /// <summary>
+    /// A children's hospital is paid its adult delivery SDA only for patients
+    /// this age or older (§355.8052(c)(4)(B)); younger patients' deliveries
+    /// are paid at its final SDA.
+    /// </summary>
+    public int ChildrensAdultDeliveryMinimumAge { get; init; } = 18;
 }
 
 /// <summary>
@@ -97,9 +105,29 @@ public sealed class TexasMedicaidDrgPricer(TexasDrgPolicy policy) : IMedicaidDrg
         var baseDrg = stay.DrgSoi.Split('-', 2)[0].Trim();
         if (hospital.DeliveryBaseRate is { } deliverySda && deliverySda > 0 && _policy.DeliveryBaseDrgs.Contains(baseDrg))
         {
-            sda = deliverySda;
-            sdaLabel = "OB-GYN delivery SDA";
-            steps.Add($"APR-DRG {baseDrg} is a labor and delivery stay; the hospital's delivery SDA applies (§355.8052(e)(2)).");
+            if (hospital.TexasClass == TexasHospitalClass.Childrens)
+            {
+                var minimum = _policy.ChildrensAdultDeliveryMinimumAge;
+                if (stay.AgeYearsAtAdmission is not { } deliveryAge)
+                    return MedicaidDrgPrice.Unpriced(
+                        $"APR-DRG {baseDrg} is a delivery at a children's hospital, whose adult delivery SDA applies only to patients {minimum} or older, and the patient's age is unknown.");
+                if (deliveryAge >= minimum)
+                {
+                    sda = deliverySda;
+                    sdaLabel = "adult delivery SDA";
+                    steps.Add($"APR-DRG {baseDrg} is a labor and delivery stay for a patient aged {deliveryAge} at a children's hospital; its adult delivery SDA applies (§355.8052(c)(4)(B)).");
+                }
+                else
+                {
+                    steps.Add($"APR-DRG {baseDrg} is a delivery for a patient aged {deliveryAge}, under {minimum}; the children's hospital's final SDA applies.");
+                }
+            }
+            else
+            {
+                sda = deliverySda;
+                sdaLabel = "OB-GYN delivery SDA";
+                steps.Add($"APR-DRG {baseDrg} is a labor and delivery stay; the hospital's delivery SDA applies (§355.8052(e)(2)).");
+            }
         }
         var full = sda * weight.RelativeWeight;
         steps.Add($"DRG payment = {sdaLabel} {Money(sda)} × relative weight {weight.RelativeWeight} ({stay.DrgSoi}) = {Money(full)}.");

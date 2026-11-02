@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CloudHealthOffice.Tools.PaTimelinessChallenge</RootNamespace>
+    <AssemblyName>pa-timeliness-challenge</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CloudHealthOffice.PaTimelinessChallenge.Tests" />
+  </ItemGroup>
+
+  <!--
+    Deliberately no reference to authorization-service: the answer key is
+    computed from the regulation's timeframes and the corpus's own script, never
+    from CHO's reporting code, so a defect there cannot also hide in the key.
+    The test project references both to prove the import contract.
+  -->
+
+</Project>
