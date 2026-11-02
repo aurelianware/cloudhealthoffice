@@ -53,6 +53,39 @@ public class AuthorizationRecordTests : TestContext
     }
 
     [Fact]
+    public void Documents_tab_links_the_dtr_forms_the_request_carried()
+    {
+        var catalog = new Mock<IDocumentCatalogService>();
+        catalog.Setup(c => c.GetForSubjectAsync(It.IsAny<DocumentSubjectKind>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DocumentSubjectListing.Empty);
+        Services.AddSingleton(catalog.Object);
+        _auths.Setup(a => a.GetAuthorizationByIdAsync("PA-79")).ReturnsAsync(new AuthorizationDetails
+        {
+            AuthorizationNumber = "PA-79", MemberId = "M3", PatientFirstName = "Ana", PatientLastName = "Rivera",
+            SubmittedDate = DateTime.UtcNow.AddDays(-1),
+            ClinicalAttachments =
+            {
+                new ClinicalAttachmentView
+                {
+                    AttachmentType = "03", Description = "Prior authorization: advanced imaging (MRI)",
+                    QuestionnaireResponseId = "qr-0123abcd", UploadedDate = new DateTime(2026, 11, 1),
+                },
+                // A PWK attachment that is not a DTR form is not listed here.
+                new ClinicalAttachmentView { AttachmentType = "77", Description = "Fax" },
+            },
+        });
+
+        var cut = RenderComponent<AuthorizationRecordView>(p => p
+            .Add(x => x.AuthorizationId, "PA-79").Add(x => x.Tab, "documents").Add(x => x.BaseHref, "/authorizations/PA-79"));
+
+        cut.WaitForAssertion(() => cut.FindAll("[data-testid=authorization-dtr-forms]").Should().ContainSingle());
+        var link = cut.Find("[data-testid=authorization-dtr-forms] a");
+        link.GetAttribute("href").Should().Be("/dtr/responses/qr-0123abcd");
+        link.TextContent.Should().Be("Prior authorization: advanced imaging (MRI)");
+        cut.Find("[data-testid=authorization-dtr-forms]").TextContent.Should().NotContain("Fax");
+    }
+
+    [Fact]
     public void Honours_the_tab_in_the_url()
     {
         var cut = Render("review");

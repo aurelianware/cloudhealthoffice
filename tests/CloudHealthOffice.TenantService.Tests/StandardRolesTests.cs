@@ -13,6 +13,8 @@ public class StandardRolesTests
 {
     [Theory]
     [InlineData("UMCoordinator", "clinical:read", true)]
+    // The PA documentation page looks up the member's Coverage for DTR.
+    [InlineData("UMCoordinator", "coverage:read", true)]
     [InlineData("TenantAdmin", "clinical:read", true)]
     [InlineData("ComplianceOfficer", "clinical:read", true)]
     [InlineData("MemberServices", "clinical:read", false)]

@@ -293,6 +293,8 @@ builder.Services.AddScoped<IDataDropService, DataDropService>();
 builder.Services.AddScoped<IEligibilityService, EligibilityService>();
 builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
 builder.Services.AddScoped<ICms0057Service, Cms0057Service>();
+// DTR questionnaire page (fhir-service): hand-entry forms for providers without an EHR DTR client.
+builder.Services.AddScoped<CloudHealthOffice.Portal.Services.Dtr.IDtrPortalService, CloudHealthOffice.Portal.Services.Dtr.DtrPortalService>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
 builder.Services.AddScoped<IUnmatchedAttachmentService, UnmatchedAttachmentService>();
 builder.Services.AddScoped<IMemberDocumentService, MemberDocumentService>();

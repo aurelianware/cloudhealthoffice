@@ -211,6 +211,60 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
     }
 
     [Fact]
+    public async Task DtrForms_AreKeptAsClinicalAttachments()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var body = WithDocumentation(Body(outcome: "Pended", withApprovedPeriod: false), "qr-0123abcd");
+
+        var response = await client.PostAsJsonAsync(Path, body, Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var attachment = Assert.Single(_stored!.ClinicalAttachments);
+        Assert.Equal("qr-0123abcd", attachment.QuestionnaireResponseId);
+        Assert.Equal("https://cloudhealthoffice.com/fhir/Questionnaire/pa-imaging-mri|1.0.0", attachment.Questionnaire);
+        Assert.Equal("Prior authorization: advanced imaging (MRI)", attachment.Description);
+        Assert.Equal("03", attachment.AttachmentType);
+        Assert.Equal("EL", attachment.TransmissionCode);
+    }
+
+    [Fact]
+    public async Task NoDtrForms_StoreNoAttachments()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, Body(), Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Empty(_stored!.ClinicalAttachments);
+    }
+
+    [Theory]
+    [InlineData("../../etc")]
+    [InlineData("")]
+    public async Task DtrForm_WithAMalformedId_Returns400(string id)
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, WithDocumentation(Body(), id), Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    private static System.Text.Json.Nodes.JsonNode WithDocumentation(object body, string questionnaireResponseId)
+    {
+        var node = JsonSerializer.SerializeToNode(body, Json)!;
+        node["documentation"] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject
+        {
+            ["questionnaireResponseId"] = questionnaireResponseId,
+            ["questionnaire"] = "https://cloudhealthoffice.com/fhir/Questionnaire/pa-imaging-mri|1.0.0",
+            ["title"] = "Prior authorization: advanced imaging (MRI)",
+            ["authored"] = "2026-11-01T15:30:00Z",
+        });
+        return node;
+    }
+
+    [Fact]
     public async Task Denial_KeepsCodeAndReason()
     {
         using var client = ClientWithToken(ServiceToken("fhir-service"));

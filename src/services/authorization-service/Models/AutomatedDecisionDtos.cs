@@ -98,6 +98,34 @@ public sealed class AutomatedDecisionRecordRequest
 
     [Required]
     public AutomatedDecision? Decision { get; set; }
+
+    /// <summary>
+    /// The completed DTR forms (QuestionnaireResponses) the PAS request
+    /// carried, already stored by fhir-service. Kept on the record as
+    /// <see cref="ClinicalAttachment"/>s so the reviewer opens them with the
+    /// request.
+    /// </summary>
+    [MaxLength(10, ErrorMessage = "At most 10 documentation forms accompany one request.")]
+    public List<AutomatedDecisionDocumentation>? Documentation { get; set; }
+}
+
+/// <summary>One completed DTR form that accompanied the request.</summary>
+public sealed class AutomatedDecisionDocumentation
+{
+    /// <summary>Id of the QuestionnaireResponse in fhir-service's store.</summary>
+    [Required]
+    [RegularExpression("^[A-Za-z0-9\\-\\.]{1,64}$", ErrorMessage = "QuestionnaireResponseId is 1-64 letters, digits, '-' and '.'.")]
+    public string QuestionnaireResponseId { get; set; } = string.Empty;
+
+    /// <summary>The Questionnaire canonical it answers.</summary>
+    [Required]
+    [StringLength(500)]
+    public string Questionnaire { get; set; } = string.Empty;
+
+    [StringLength(200)]
+    public string? Title { get; set; }
+
+    public DateTime? Authored { get; set; }
 }
 
 /// <summary>The outcome the automated adjudicator reached.</summary>

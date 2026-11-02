@@ -1,0 +1,91 @@
+@page "/dtr/responses/{ResponseId}"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services.Dtr
+@attribute [Authorize]
+@inject IDtrPortalService Dtr
+
+@* A completed DTR form, read only: what a prior authorization request carried. *@
+
+<PageTitle>Documentation - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="authorizations:read" RoleName="UMCoordinator">
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4" data-testid="dtr-response-page">
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@_error</MudAlert>
+    }
+    else if (_lines is null)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" data-testid="dtr-response-not-found">
+            This documentation was not found, or you cannot see it.
+        </MudAlert>
+    }
+    else
+    {
+        <MudText Typo="Typo.h5" GutterBottom="true">@_title</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+            @_status @(string.IsNullOrEmpty(_authored) ? null : $"· answered {_authored}")
+        </MudText>
+        <MudPaper Outlined="true" Class="pa-4">
+            @foreach (var line in _lines)
+            {
+                <div class="mb-2" style="@($"margin-left: {line.Depth * 16}px")" data-testid="dtr-response-line">
+                    @if (line.Answer is null)
+                    {
+                        <MudText Typo="Typo.subtitle2">@line.Label</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@line.Label</MudText>
+                        <MudText Typo="Typo.body1">@line.Answer</MudText>
+                    }
+                </div>
+            }
+        </MudPaper>
+    }
+</MudContainer>
+</PermissionGate>
+
+@code {
+    [Parameter] public string ResponseId { get; set; } = string.Empty;
+
+    private bool _loading = true;
+    private string? _error;
+    private IReadOnlyList<ResponseLine>? _lines;
+    private string _title = "Documentation questionnaire";
+    private string? _status;
+    private string? _authored;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+        _lines = null;
+        try
+        {
+            if (await Dtr.GetResponseAsync(ResponseId) is { } found)
+            {
+                _lines = ResponseLines.From(found.Response, found.Questionnaire);
+                _title = found.Questionnaire?.Title ?? found.Response.Questionnaire ?? _title;
+                _status = found.Response.Status?.ToString();
+                _authored = found.Response.Authored;
+            }
+        }
+        catch (DtrRequestException ex)
+        {
+            _error = string.Join(" ", ex.Problems);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

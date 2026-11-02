@@ -25,6 +25,25 @@ public class AuthorizationDetails : AuthorizationSummary
     /// <summary>The requested lines and each line's decision, as authorization-service stores them.</summary>
     public List<AuthorizationLineView> RequestedServices { get; set; } = new();
     public List<AuthorizationDiagnosisView> DiagnosisCodes { get; set; } = new();
+
+    /// <summary>
+    /// Clinical attachments on the record. The DTR forms a PAS request carried
+    /// are here with their QuestionnaireResponse id.
+    /// </summary>
+    public List<ClinicalAttachmentView> ClinicalAttachments { get; set; } = new();
+}
+
+/// <summary>authorization-service <c>ClinicalAttachment</c> (278 PWK).</summary>
+public class ClinicalAttachmentView
+{
+    public string AttachmentType { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public DateTime? UploadedDate { get; set; }
+
+    /// <summary>For a DTR form: the completed QuestionnaireResponse in fhir-service.</summary>
+    public string? QuestionnaireResponseId { get; set; }
+
+    public string? Questionnaire { get; set; }
 }
 
 /// <summary>One requested service line and its decision (278 2000F; HCR01 in ServiceStatus).</summary>

@@ -690,6 +690,17 @@ public class ClinicalAttachment
     /// Upload date
     /// </summary>
     public DateTime? UploadedDate { get; set; }
+
+    /// <summary>
+    /// For a DTR form: the id of the completed QuestionnaireResponse in
+    /// fhir-service (GET /fhir/r4/QuestionnaireResponse/{id}).
+    /// </summary>
+    [StringLength(64)]
+    public string? QuestionnaireResponseId { get; set; }
+
+    /// <summary>For a DTR form: the Questionnaire canonical it answers.</summary>
+    [StringLength(500)]
+    public string? Questionnaire { get; set; }
 }
 
 /// <summary>
