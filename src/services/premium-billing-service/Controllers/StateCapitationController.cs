@@ -1,5 +1,7 @@
+using CloudHealthOffice.Infrastructure.Reporting;
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PremiumBillingService.Edi;
@@ -262,6 +264,119 @@ public sealed class StateCapitationController : ControllerBase
             warnings
         });
     }
+
+    /// <summary>
+    /// The figures for HHSC's MLR Report (UMCM 5.3.13.2) for one state fiscal
+    /// year, line by line with the cell each goes in: the same arithmetic as
+    /// the template's formulas, plus the partial credibility adjustment.
+    /// Gross revenue defaults to the state capitation on recorded 820s for the
+    /// fiscal year; member-months to the expected member-months loaded.
+    /// </summary>
+    [HttpPost("mlr/texas")]
+    [RequirePermission("finance:read")]
+    public async Task<ActionResult> TexasMlr(string state, [FromBody] TexasMlrRequest request)
+    {
+        if (!IsTexas(state)) return NotTexas();
+        var errors = request.Validate(forWorkbook: false);
+        if (errors.Count > 0) return BadRequest(new { error = "The MLR request is not valid", errors });
+
+        var (figures, warnings, error) = await ComputeTexasMlrAsync(request);
+        if (error != null) return BadRequest(new { error });
+        return Ok(new { state = "TX", templateVersion = TexasMlrReport.TemplateVersion, figures, warnings });
+    }
+
+    /// <summary>
+    /// HHSC's MLR Report Template filled in: post the blank workbook from the
+    /// UMCM Chapter 5 page as <c>template</c> and the <see cref="TexasMlrRequest"/>
+    /// as JSON in <c>request</c>. The MLR Report sheet's header and input
+    /// cells are written; formulas, the attestation and the expense
+    /// methodology sheet are left for the MCO. A workbook whose labels or
+    /// formulas differ from version 2.4 is refused (422) rather than filled.
+    /// </summary>
+    [HttpPost("mlr/texas/workbook")]
+    [RequirePermission("finance:read")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(XlsxTemplate.MaxBytes + 1024 * 1024)]
+    public async Task<ActionResult> TexasMlrWorkbook(string state, [FromForm] IFormFile? template, [FromForm] string? request)
+    {
+        if (!IsTexas(state)) return NotTexas();
+        if (template is null || template.Length == 0)
+            return BadRequest(new { error = "Attach HHSC's blank MLR Report Template (UMCM 5.3.13.2) as 'template'" });
+        if (template.Length > XlsxTemplate.MaxBytes)
+            return StatusCode(StatusCodes.Status413PayloadTooLarge, new { error = $"The template exceeds {XlsxTemplate.MaxBytes} bytes" });
+
+        TexasMlrRequest? body;
+        try
+        {
+            body = string.IsNullOrWhiteSpace(request) ? null
+                : JsonSerializer.Deserialize<TexasMlrRequest>(request, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
+        catch (JsonException)
+        {
+            body = null;
+        }
+        if (body is null) return BadRequest(new { error = "'request' must be the MLR request as JSON" });
+        var errors = body.Validate(forWorkbook: true);
+        if (errors.Count > 0) return BadRequest(new { error = "The MLR request is not valid", errors });
+
+        XlsxTemplate workbook;
+        try
+        {
+            using var buffer = new MemoryStream();
+            await template.CopyToAsync(buffer, HttpContext.RequestAborted);
+            workbook = XlsxTemplate.Open(buffer.ToArray());
+        }
+        catch (XlsxTemplateException ex)
+        {
+            return UnprocessableEntity(new { error = ex.Message });
+        }
+
+        var layout = TexasMlrReport.CheckLayout(workbook);
+        if (layout.Count > 0)
+            return UnprocessableEntity(new
+            {
+                error = $"This is not the MLR Report layout CHO fills (UMCM 5.3.13.2 version {TexasMlrReport.TemplateVersion}); nothing was filled",
+                templateVersion = TexasMlrReport.Version(workbook),
+                problems = layout
+            });
+
+        var (figures, warnings, error) = await ComputeTexasMlrAsync(body);
+        if (error != null) return BadRequest(new { error });
+
+        var bytes = TexasMlrReport.Fill(workbook, figures!, body.McoName!, body.SubmissionDate ?? TexasMlrReport.TexasToday(DateTime.UtcNow));
+        _logger.LogInformation("Filled the Texas MLR template for SFY {Sfy} for {Actor}", body.StateFiscalYear, _actor.UserId);
+        Response.Headers["X-Template-Version"] = TexasMlrReport.Version(workbook) ?? "unknown";
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"MLR-Report-SFY{body.StateFiscalYear}.xlsx");
+    }
+
+    private async Task<(TexasMlrFigures? Figures, List<string> Warnings, string? Error)> ComputeTexasMlrAsync(TexasMlrRequest request)
+    {
+        var profile = Profile("TX")!;
+        var (from, to) = TexasMlrReport.FiscalYear(request.StateFiscalYear);
+        var warnings = new List<string>();
+        var capitation = request.GrossRevenue is null
+            ? StateCapitationReconciler.ReadReceived(profile, await _store.GetPaymentsAsync(profile.State), warnings)
+                .Where(r => r.Month >= from && r.Month <= to)
+                .Sum(r => r.Amount)
+            : 0m;
+        var memberMonths = request.MemberMonths is null
+            ? (await _store.GetExpectedAsync(profile.State, from, new DateOnly(to.Year, to.Month, 1))).Count
+            : 0;
+        try
+        {
+            return (TexasMlrReport.Compute(request, capitation, memberMonths, MlrStandard.Texas), warnings, null);
+        }
+        catch (ArgumentException ex)
+        {
+            return (null, warnings, ex.Message);
+        }
+    }
+
+    private static bool IsTexas(string state) => string.Equals(state, "TX", StringComparison.OrdinalIgnoreCase);
+
+    private NotFoundObjectResult NotTexas() =>
+        NotFound(new { error = "The HHSC MLR Report is for TX only; use POST mlr for other states." });
 
     private async Task<StateCapitationReconciliation> RunAsync(StateCapitationProfile profile, DateOnly from, DateOnly to)
     {
