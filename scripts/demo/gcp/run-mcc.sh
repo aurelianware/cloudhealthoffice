@@ -7,7 +7,9 @@
 # the portal's Mass Adjudication console and in the job log.
 #
 # Required: GAR_REPOSITORY, IMAGE_TAG (same values the deploy used)
-# Optional: CLAIMS (default 2000), PARALLELISM (default 10)
+# Optional: CLAIMS (default 2000), PARALLELISM (default 10),
+#           TPL_SCENARIOS=true (Texas/California Medicaid TPL scenarios; turns
+#           claims-service TPL cost avoidance on for the run, then restores it)
 
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"

@@ -315,7 +315,11 @@ public class PaymentRun
 public class PaymentRunCriteria
 {
     /// <summary>
-    /// Line of Business filter
+    /// Line of Business filter: the platform's shared line of business
+    /// (docs/architecture/line-of-business.md), stored by name and sent to
+    /// claims-service as its number. Runs stored before the consolidation held
+    /// payment-service's old 0-3 numbers; <c>PaymentRunLineOfBusinessMigrationHostedService</c>
+    /// rewrites them at startup.
     /// </summary>
     public LineOfBusiness? LineOfBusiness { get; set; }
 
@@ -417,17 +421,6 @@ public enum ClaimStatus
     /// <see cref="Denied"/> (finalized).
     /// </summary>
     Deny = 10
-}
-
-/// <summary>
-/// Line of Business enumeration
-/// </summary>
-public enum LineOfBusiness
-{
-    Commercial,
-    Medicare,
-    Medicaid,
-    Marketplace
 }
 
 public enum PaymentRunStatus

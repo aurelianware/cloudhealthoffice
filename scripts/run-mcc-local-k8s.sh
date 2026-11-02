@@ -33,6 +33,12 @@ PEND_OBSERVATION_INTERVAL_MS="${PEND_OBSERVATION_INTERVAL_MS:-1000}"
 # of whether the JSON artifact itself is copied out of the pod.
 PEND_DIAGNOSTICS_PATH="${PEND_DIAGNOSTICS_PATH:-}"
 PEND_DIAGNOSTICS_NCCI_SAMPLE="${PEND_DIAGNOSTICS_NCCI_SAMPLE:-200}"
+# Off by default. true adds the Texas and California Medicaid TPL scenarios
+# (validator --tpl-scenarios) and runs claims-service with
+# Adjudication:ThirdPartyLiability:Mode=CostAvoid for the run, restoring the
+# previous value afterwards. The mode is service-wide, so every Medicaid claim
+# in the run does a TPL lookup; run it separately from a baseline.
+TPL_SCENARIOS="${TPL_SCENARIOS:-false}"
 PARALLELISM="${PARALLELISM:-10}"
 SEED_PARALLELISM="${SEED_PARALLELISM:-$PARALLELISM}"
 PROGRESS_EVERY="${PROGRESS_EVERY:-500}"
@@ -49,6 +55,8 @@ SKIP_BUILD="${SKIP_BUILD:-false}"
 # No CI workflow invokes this script, so the default is local-only.
 JOB_TIMEOUT="${JOB_TIMEOUT:-120m}"
 ORIGINAL_ADJUDICATION_MAX_CONCURRENT_CALLS=""
+TPL_MODE_CHANGED=false
+ORIGINAL_TPL_MODE=""
 
 log() {
   printf '\033[1;34m==>\033[0m %s\n' "$*"
@@ -104,6 +112,20 @@ restore_claims_concurrency() {
   local exit_code=$?
   trap - EXIT INT TERM HUP
 
+  if [[ "$TPL_MODE_CHANGED" == "true" ]]; then
+    if [[ -n "$ORIGINAL_TPL_MODE" ]]; then
+      log "Restoring claims-service TPL mode to ${ORIGINAL_TPL_MODE}"
+      kubectl set env deployment/claims-service -n "$NAMESPACE" \
+        "Adjudication__ThirdPartyLiability__Mode=${ORIGINAL_TPL_MODE}" >/dev/null \
+        || echo "WARNING: failed to restore claims-service TPL mode to ${ORIGINAL_TPL_MODE}" >&2
+    else
+      log "Removing the run's claims-service TPL mode override"
+      kubectl set env deployment/claims-service -n "$NAMESPACE" \
+        "Adjudication__ThirdPartyLiability__Mode-" >/dev/null \
+        || echo "WARNING: failed to remove claims-service Adjudication__ThirdPartyLiability__Mode" >&2
+    fi
+  fi
+
   if [[ -n "$ORIGINAL_ADJUDICATION_MAX_CONCURRENT_CALLS" \
     && "$ORIGINAL_ADJUDICATION_MAX_CONCURRENT_CALLS" != "$ADJUDICATION_MAX_CONCURRENT_CALLS" ]]; then
     log "Restoring claims-service Service Bus concurrency to ${ORIGINAL_ADJUDICATION_MAX_CONCURRENT_CALLS} per replica"
@@ -153,10 +175,22 @@ if kubectl get deployment -n "$NAMESPACE" claims-service >/dev/null 2>&1; then
     kubectl rollout restart deployment/claims-service -n "$NAMESPACE" >/dev/null
   fi
 
+  claims_env=("Services__BenefitPlanServiceTimeoutSeconds=${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS}")
+  if [[ "$TPL_SCENARIOS" == "true" ]]; then
+    ORIGINAL_TPL_MODE="$(
+      kubectl get deployment claims-service -n "$NAMESPACE" \
+        -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="Adjudication__ThirdPartyLiability__Mode")].value}'
+    )"
+    TPL_MODE_CHANGED=true
+    trap restore_claims_concurrency EXIT INT TERM HUP
+    log "Setting claims-service TPL mode to CostAvoid for this run (was: ${ORIGINAL_TPL_MODE:-unset})"
+    claims_env+=("Adjudication__ThirdPartyLiability__Mode=CostAvoid")
+  fi
+
   log "Setting claims-service benefit-plan timeout to ${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS}s"
   kubectl set env deployment/claims-service \
     -n "$NAMESPACE" \
-    "Services__BenefitPlanServiceTimeoutSeconds=${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS}" >/dev/null
+    "${claims_env[@]}" >/dev/null
   kubectl rollout status deployment/claims-service -n "$NAMESPACE" --timeout="${ROLLOUT_TIMEOUT:-120s}" >/dev/null
 fi
 
@@ -236,6 +270,7 @@ spec:
             - "${PEND_OBSERVATION_TIMEOUT_SECONDS}"
             - --pend-observation-interval-ms
             - "${PEND_OBSERVATION_INTERVAL_MS}"
+            $(if [[ "$TPL_SCENARIOS" == "true" ]]; then printf -- '- --tpl-scenarios\n'; fi)
             $(if [[ -n "$PEND_DIAGNOSTICS_PATH" ]]; then printf -- '- --pend-diagnostics\n            - "%s"\n            - --pend-diagnostics-ncci-sample\n            - "%s"\n' "$PEND_DIAGNOSTICS_PATH" "$PEND_DIAGNOSTICS_NCCI_SAMPLE"; fi)
             - --progress-every
             - "${PROGRESS_EVERY}"

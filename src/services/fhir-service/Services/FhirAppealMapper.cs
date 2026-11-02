@@ -126,7 +126,8 @@ public sealed class FhirAppealMapper
             new Extension
             {
                 Url = AppealLineOfBusinessExtensionUrl,
-                Value = new Coding(AppealLineOfBusinessCodeSystem, ToCanonicalCode(appeal.LineOfBusiness))
+                Value = new Coding(AppealLineOfBusinessCodeSystem,
+                    ToCanonicalCode(AppealLineOfBusinessCodes.FromCoverage(appeal.LineOfBusiness, appeal.BenefitType)))
             }
         ];
 
@@ -417,4 +418,45 @@ public sealed class FhirAppealMapper
             null => "Appeal closed.",
             _ => "Appeal closed."
         };
+}
+
+/// <summary>
+/// Codes of the published <c>cho-appeal-line-of-business</c> CodeSystem
+/// (<c>commercial</c>, <c>medicare</c>, <c>medicaid</c>, <c>marketplace</c>,
+/// <c>medicare-part-d</c>). The FHIR wire keeps these codes; inside CHO an
+/// appeal carries the shared line of business plus a benefit type, so
+/// <c>marketplace</c> is Exchange and <c>medicare-part-d</c> is Medicare with
+/// <see cref="AppealBenefitType.PartDDrug"/>.
+/// </summary>
+public enum AppealLineOfBusinessCode
+{
+    Commercial,
+    Medicare,
+    Medicaid,
+    Marketplace,
+    MedicarePartD
+}
+
+public static class AppealLineOfBusinessCodes
+{
+    public static (CloudHealthOffice.Infrastructure.Programs.LineOfBusiness LineOfBusiness, AppealBenefitType BenefitType) ToCoverage(
+        AppealLineOfBusinessCode code) => code switch
+    {
+        AppealLineOfBusinessCode.Medicare => (CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Medicare, AppealBenefitType.MedicalOrService),
+        AppealLineOfBusinessCode.MedicarePartD => (CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Medicare, AppealBenefitType.PartDDrug),
+        AppealLineOfBusinessCode.Medicaid => (CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Medicaid, AppealBenefitType.MedicalOrService),
+        AppealLineOfBusinessCode.Marketplace => (CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Exchange, AppealBenefitType.MedicalOrService),
+        _ => (CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Commercial, AppealBenefitType.MedicalOrService),
+    };
+
+    /// <summary>The CodeSystem code for an appeal. Lines of business with no code (TRICARE, VA) fall back to commercial; appeals-service refuses them at intake.</summary>
+    public static AppealLineOfBusinessCode FromCoverage(
+        CloudHealthOffice.Infrastructure.Programs.LineOfBusiness lineOfBusiness, AppealBenefitType benefitType) => lineOfBusiness switch
+    {
+        CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Medicare when benefitType == AppealBenefitType.PartDDrug => AppealLineOfBusinessCode.MedicarePartD,
+        CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Medicare => AppealLineOfBusinessCode.Medicare,
+        CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Medicaid => AppealLineOfBusinessCode.Medicaid,
+        CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Exchange => AppealLineOfBusinessCode.Marketplace,
+        _ => AppealLineOfBusinessCode.Commercial,
+    };
 }

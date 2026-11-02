@@ -295,7 +295,7 @@ public class RulePackFloorTests
     [Fact]
     public void A_line_of_business_with_no_floor_is_refused_rather_than_guessed_at()
     {
-        RulePackValidator.Validate(Minimal(LineOfBusiness.Marketplace, null))
+        RulePackValidator.Validate(Minimal(LineOfBusiness.Exchange, null))
             .Should().ContainSingle().Which.Should().Contain("no federal floor");
     }
 }

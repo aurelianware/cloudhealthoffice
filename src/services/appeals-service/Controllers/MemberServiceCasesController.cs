@@ -140,8 +140,9 @@ public sealed class MemberServiceCasesController(
             return BadRequest("The contact receipt time is invalid.");
         var id = ContactIntakeIdentity.For(actor.TenantId, c.Id);
         if (await store.GetAsync(actor.TenantId, id, ct) is { } existing) return Ok(existing.Receipt);
-        if (!Enum.TryParse<LineOfBusiness>(intent.LineOfBusiness, out var lob)
-            || !Enum.IsDefined(lob)) return BadRequest("Unknown line of business.");
+        if (!LineOfBusinessNames.TryParse(intent.LineOfBusiness, out var lob)
+            || LineOfBusinessNames.IsPartD(intent.LineOfBusiness)
+            || !AppealLinesOfBusiness.IsSupported(lob)) return BadRequest("Unknown line of business.");
         var pack = catalog.Find(intent.State, lob, DateOnly.FromDateTime(c.StartedAt));
         if (pack is null) return UnprocessableEntity("No effective rule pack is available for this jurisdiction and line of business.");
         var isAppeal = c.Classification.EndsWith("Appeal", StringComparison.Ordinal);
