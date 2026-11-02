@@ -9,9 +9,17 @@ Texas pays freestanding psychiatric hospitals a daily rate per hospital. HHSC Pr
 | Pricer | `PsychiatricPerDiemPricer` (FeeScheduleEngine, `Medicaid/`) | Done |
 | Rate store | `IMedicaidPsychiatricPerDiemRepository`, collection `MedicaidPsychiatricPerDiems` | Done |
 | HHSC PDF import | `POST /api/v1/medicaid-drg/import/texas/psychiatric-per-diems` | Done |
-| Claim pricing | Psychiatric hospital claims priced through the claims pipeline | Next PR |
+| Claim pricing | `MedicaidDrgRateResolutionService` (the Texas Medicaid inpatient decorator) | Done |
 
 ## How a claim is priced
+
+A claim reaches this pricer through the Texas inpatient path: the plan sets `pricing.inpatient.medicaidDrgMethod` to `texas`, and the stay is grouped by APR-DRG as usual (see [MEDICAID-DRG-PRICING.md](MEDICAID-DRG-PRICING.md)). Before pricing by DRG, the decorator looks up the facility NPI in the psychiatric per diem store on the admission date. If the hospital has a per diem, the stay is priced by it instead of the DRG; otherwise it is priced by DRG as before. Load the per diems before turning on the Texas method for a plan that uses psychiatric hospitals, or their stays will be priced by DRG.
+
+- Each line's days are its units, starting on the line's service date.
+- A line that crosses a new fiscal year's rate pays each day at the rate in force that day.
+- Cost sharing applies once to the stay, as for any inpatient per diem.
+- A stay that can't be priced pends the whole claim (`Unresolved`), with the reason.
+
 
 - **Days:** each accommodation line (revenue codes 0100-0219) pays days × the hospital's per diem in force on the line's dates.
 - **Ancillaries:** lines such as pharmacy or lab are allowed at $0, because the per diem covers the hospital's services for the day (`AncillariesIncludedInPerDiem`). Turn this off and an ancillary line leaves the claim unpriced.
@@ -50,5 +58,7 @@ Results on the files Mark uploaded:
 ## Not covered yet
 
 - **Psychiatric units of general hospitals.** These are paid by APR-DRG like other acute stays (see [MEDICAID-DRG-PRICING.md](MEDICAID-DRG-PRICING.md)), not by this per diem.
+- **IMD days on the member's other claims** are not yet passed in from claims history, so the monthly limit counts only this claim's days. The pricer accepts them (`ImdDaysAlreadyPaid`); feeding them from paid claims is a follow-up.
+- **The pay-over-the-limit choice** (`OverLimitAction = Pay`) is not yet a plan setting; claims use the default (pend).
 - **The under-22 continuation.** A client admitted before 21 keeps the under-21 benefit until 22. Using the age at admission covers this for a single stay; a readmission after 21 is checked as an adult.
 - **Medi-Cal.** Psychiatric inpatient services are carved out to county mental health plans, so a Medi-Cal managed care plan does not price them.
