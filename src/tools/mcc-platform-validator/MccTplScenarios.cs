@@ -85,12 +85,10 @@ public static class MccTplScenarios
         member.Relationship = "Self";
         member.RelationshipCode = "18";
         member.IsSubscriber = true;
-        member.EnrollmentStatus = "Active";
-        member.CoverageTermDate = null;
-        if (member.CoverageEffectiveDate == default || member.CoverageEffectiveDate.Date > serviceDate.AddDays(-30))
-        {
-            member.CoverageEffectiveDate = serviceDate.AddYears(-1);
-        }
+        // Active, effective a year before the visit, every coverage span too
+        // (what the clean-paid fixture does for its own plan marker, which
+        // this claim no longer carries).
+        MccCleanPaidFixture.NormalizeMember(member, serviceDate);
 
         if (scenario.PediatricWellChild)
         {
