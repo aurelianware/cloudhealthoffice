@@ -31,6 +31,12 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
             .ToList());
     }
 
+    public Task<IReadOnlyList<Appeal>> ListForReportingMonthAsync(string tenantId, DateTime monthStart, DateTime monthEnd, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Appeal>>(_appeals.Values
+            .Where(a => a.TenantId == tenantId && a.Status != AppealStatus.Draft && (a.ReceivedDate ?? a.SubmittedDate) < monthEnd)
+            .Where(a => !(a.Status == AppealStatus.Closed && (a.DecisionDate ?? a.ClosedAt) is { } r && r < monthStart))
+            .ToList());
+
     public Task<IReadOnlyList<Appeal>> ListOpenAsync(string tenantId, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<Appeal>>(_appeals.Values
             .Where(a => a.TenantId == tenantId && a.Status is AppealStatus.Submitted or AppealStatus.InReview or AppealStatus.PendingInfo)

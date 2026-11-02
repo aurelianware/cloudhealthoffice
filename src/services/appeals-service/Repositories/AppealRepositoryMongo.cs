@@ -140,6 +140,18 @@ public sealed class AppealRepositoryMongo : IAppealRepository, IAppealOutboxStor
         return await _appeals.Find(filter).ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<Appeal>> ListForReportingMonthAsync(string tenantId, DateTime monthStart, DateTime monthEnd, CancellationToken ct = default)
+    {
+        var b = Builders<Appeal>.Filter;
+        var receivedByEnd = b.Lt(a => a.ReceivedDate, monthEnd)
+                            | (b.Eq(a => a.ReceivedDate, null) & b.Lt(a => a.SubmittedDate, monthEnd));
+        // Closed before the month began: decided then, or (no decision date) closed then.
+        var closedBefore = b.Eq(a => a.Status, AppealStatus.Closed)
+                           & (b.Lt(a => a.DecisionDate, monthStart) | (b.Eq(a => a.DecisionDate, null) & b.Lt(a => a.ClosedAt, monthStart)));
+        var filter = b.Eq(a => a.TenantId, tenantId) & b.Ne(a => a.Status, AppealStatus.Draft) & receivedByEnd & b.Not(closedBefore);
+        return await _appeals.Find(filter).ToListAsync(ct);
+    }
+
     public async Task<IReadOnlyList<Appeal>> ListOpenAsync(string tenantId, CancellationToken ct = default)
     {
         var b = Builders<Appeal>.Filter;
