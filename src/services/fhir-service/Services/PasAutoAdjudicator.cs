@@ -127,7 +127,7 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
             // evaluated. Only for the lines of business the enrollment service
             // knows: a Commercial, TRICARE or VA request is never gated on
             // state Medicaid enrollment.
-            if (enrollmentLob != CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness.None
+            if (enrollmentLob != CloudHealthOffice.ProviderEnrollmentService.Models.ProgramParticipation.None
                 && !string.IsNullOrEmpty(providerNpi) && !string.IsNullOrEmpty(stateCode))
             {
                 consumed.State = true;
@@ -358,16 +358,16 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
     }
 
     /// <summary>
-    /// Map FHIR-layer PaLineOfBusiness to the enrollment service's LineOfBusiness flags.
+    /// Map FHIR-layer PaLineOfBusiness to the enrollment service's ProgramParticipation flags.
     /// The enrollment service uses [Flags] enum; PaLineOfBusiness is a plain enum.
     /// </summary>
-    private static CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness
+    private static CloudHealthOffice.ProviderEnrollmentService.Models.ProgramParticipation
         MapToPaEnrollmentLob(PaLineOfBusiness lob) => lob switch
     {
-        PaLineOfBusiness.Medicaid  => CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness.Medicaid,
-        PaLineOfBusiness.Exchange  => CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness.Marketplace,
-        PaLineOfBusiness.Medicare  => CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness.Medicare,
-        _                          => CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness.None
+        PaLineOfBusiness.Medicaid  => CloudHealthOffice.ProviderEnrollmentService.Models.ProgramParticipation.Medicaid,
+        PaLineOfBusiness.Exchange  => CloudHealthOffice.ProviderEnrollmentService.Models.ProgramParticipation.Marketplace,
+        PaLineOfBusiness.Medicare  => CloudHealthOffice.ProviderEnrollmentService.Models.ProgramParticipation.Medicare,
+        _                          => CloudHealthOffice.ProviderEnrollmentService.Models.ProgramParticipation.None
     };
 
     // ── Decision factories (unchanged) ────────────────────────────
