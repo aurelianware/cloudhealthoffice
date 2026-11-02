@@ -134,6 +134,17 @@ builder.Services.AddHttpClient(AuthorizationService.Services.StatePrograms.HttpS
 });
 builder.Services.AddScoped<AuthorizationService.Services.StatePrograms.IStateDentalMemberLookup,
     AuthorizationService.Services.StatePrograms.HttpStateDentalMemberLookup>();
+// A prior authorization's line of business comes from the member's program
+// (coverage -> benefit plan -> program in tenant-service,
+// docs/architecture/line-of-business.md). Read as this service: the provider
+// submitting a request need not read plan configuration.
+var programDirectoryOptions = builder.Configuration.GetSection(CloudHealthOffice.PlanConfiguration.ProgramDirectoryOptions.SectionName)
+    .Get<CloudHealthOffice.PlanConfiguration.ProgramDirectoryOptions>() ?? new CloudHealthOffice.PlanConfiguration.ProgramDirectoryOptions();
+programDirectoryOptions.UseServiceIdentity = true;
+builder.Services.AddSingleton(programDirectoryOptions);
+CloudHealthOffice.PlanConfiguration.ProgramDirectoryServiceCollectionExtensions.AddProgramDirectoryClient(builder.Services, builder.Configuration);
+builder.Services.AddScoped<AuthorizationService.Services.IAuthorizationLineOfBusinessResolver,
+    AuthorizationService.Services.ProgramAuthorizationLineOfBusinessResolver>();
 builder.Services.AddScoped<AuthorizationService.Services.StatePrograms.IStateOnlyAdultDentalPaCheck,
     AuthorizationService.Services.StatePrograms.StateOnlyAdultDentalPaCheck>();
 

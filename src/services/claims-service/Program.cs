@@ -499,6 +499,14 @@ builder.Services.AddMsDrgGrouper(builder.Configuration);
 // such claims pend GROUPERUNAVAIL; nothing else reads it.
 builder.Services.AddLicensedGroupers(builder.Configuration);
 builder.Services.AddPlanSettingsClient(builder.Configuration);
+// A claim's line of business comes from its plan's program in tenant-service
+// (docs/architecture/line-of-business.md). Adjudication reads it as this service:
+// an examiner re-running a claim need not read plan configuration.
+var programDirectoryOptions = builder.Configuration.GetSection(ProgramDirectoryOptions.SectionName)
+    .Get<ProgramDirectoryOptions>() ?? new ProgramDirectoryOptions();
+programDirectoryOptions.UseServiceIdentity = true;
+builder.Services.AddSingleton(programDirectoryOptions);
+builder.Services.AddProgramDirectoryClient(builder.Configuration);
 builder.Services.AddScoped<IClaimAdjudicationStage, InpatientGroupingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PricingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();

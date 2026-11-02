@@ -7,6 +7,7 @@ using ClaimsService.Services.Resolution;
 using CloudHealthOffice.Infrastructure.Messaging;
 using Microsoft.Extensions.Options;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.PlanConfiguration;
 
 namespace ClaimsService.Services.Adjudication;
 
@@ -59,6 +60,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     private readonly ILogger<ClaimAdjudicationOrchestrator> _logger;
     private readonly IAccumulatorOutboxProcessor? _outbox;
     private readonly IClaimWorkEventPublisher? _workEvents;
+    private readonly IProgramDirectory? _programs;
 
     public ClaimAdjudicationOrchestrator(
         ClaimAdapterFactory adapterFactory,
@@ -73,9 +75,11 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         IOptions<AdjudicationPipelineOptions> options,
         ILogger<ClaimAdjudicationOrchestrator> logger,
         IAccumulatorOutboxProcessor? outbox = null,
-        IClaimWorkEventPublisher? workEvents = null)
+        IClaimWorkEventPublisher? workEvents = null,
+        IProgramDirectory? programs = null)
     {
         _outbox = outbox;
+        _programs = programs;
         _workEvents = workEvents;
         _adapterFactory = adapterFactory;
         _planResolver = planResolver;
@@ -214,6 +218,22 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             {
                 claim.BenefitPlanId = coverage!.PlanId;
             }
+        }
+
+        // The line of business is the plan's program's
+        // (docs/architecture/line-of-business.md, step 6). An 837 carries
+        // none, so the mapper writes Commercial; a JSON claim may say one
+        // thing while the member's plan is another. A plan with no program,
+        // or tenant-service not answering, keeps the claim's own value.
+        if (_programs is not null
+            && await ProgramLineOfBusiness.ForBenefitPlanAsync(_programs, tenantId, claim.BenefitPlanId, _logger, ct)
+                .ConfigureAwait(false) is { } programLob
+            && programLob != claim.LineOfBusiness)
+        {
+            _logger.LogInformation(
+                "Claim {ClaimVersionId} line of business {Stated} replaced by its plan's program's {Program}",
+                LogSanitizer.Sanitize(claimVersionId), claim.LineOfBusiness, programLob);
+            claim.LineOfBusiness = programLob;
         }
 
         if (!string.IsNullOrWhiteSpace(claim.BenefitPlanId))

@@ -8,6 +8,7 @@ using ClaimsService.Services.Adjudication;
 using ClaimsService.Services.Adjudication.Stages;
 using ClaimsService.Services.Resolution;
 using CloudHealthOffice.Infrastructure.Messaging;
+using CloudHealthOffice.PlanConfiguration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -105,6 +106,77 @@ public class ClaimAdjudicationOrchestratorTests
         await BuildOrchestrator(stages).AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
 
         Assert.Equal(expected, seen);
+    }
+
+    // Line of business from the plan's program (docs/architecture/line-of-business.md, step 6).
+
+    private static ProgramDescriptor Program(string lineOfBusiness) => new()
+    {
+        Id = "prog-1", Code = "STAR", Name = "STAR", CarrierId = "car-1",
+        LineOfBusiness = lineOfBusiness, StateCode = "TX",
+    };
+
+    private async Task<LineOfBusiness> LineOfBusinessTheStagesSee(AdapterClaim claim, IProgramDirectory? programs)
+    {
+        var seen = LineOfBusiness.Unknown;
+        var stages = new IClaimAdjudicationStage[]
+        {
+            new RecordingStage("BenefitCalculation", 300, isRequired: false, [], ctx =>
+            {
+                seen = ctx.Claim.LineOfBusiness;
+                return ClaimAdjudicationStageResult.Pass("BenefitCalculation");
+            }),
+            new RecordingStage("Persistence", 999, isRequired: true, []),
+        };
+        SetupAdapterReturning(claim);
+        await BuildOrchestrator(stages, programs: programs)
+            .AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
+        return seen;
+    }
+
+    [Fact]
+    public async Task A_claim_takes_its_line_of_business_from_its_plans_program()
+    {
+        // An 837 carries no line of business, so the mapper writes Commercial.
+        var claim = BuildAdapterClaim();
+        var programs = new InMemoryProgramDirectory();
+        programs.Add("tenant-1", Program("Medicaid"), claim.BenefitPlanId!);
+
+        Assert.Equal(LineOfBusiness.Medicaid, await LineOfBusinessTheStagesSee(claim, programs));
+    }
+
+    [Fact]
+    public async Task A_claim_whose_plan_has_no_program_keeps_its_own_line_of_business()
+    {
+        var claim = BuildAdapterClaim();
+        claim.LineOfBusiness = LineOfBusiness.Medicare;
+
+        Assert.Equal(LineOfBusiness.Medicare, await LineOfBusinessTheStagesSee(claim, new InMemoryProgramDirectory()));
+    }
+
+    [Fact]
+    public async Task A_claim_keeps_its_own_line_of_business_when_tenant_service_does_not_answer()
+    {
+        var claim = BuildAdapterClaim();
+        claim.LineOfBusiness = LineOfBusiness.Medicare;
+        var programs = new InMemoryProgramDirectory { Unavailable = true };
+        programs.Add("tenant-1", Program("Medicaid"), claim.BenefitPlanId!);
+
+        Assert.Equal(LineOfBusiness.Medicare, await LineOfBusinessTheStagesSee(claim, programs));
+    }
+
+    [Fact]
+    public async Task An_837_claim_takes_the_line_of_business_of_the_plan_its_coverage_names()
+    {
+        var claim = BuildAdapterClaim();
+        claim.BenefitPlanId = null;
+        _coverageResolver.ResolveCoverageAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>(),
+                Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new CoverageResolution("PLAN-STAR", "GRP-1"));
+        var programs = new InMemoryProgramDirectory();
+        programs.Add("tenant-1", Program("Medicaid"), "PLAN-STAR");
+
+        Assert.Equal(LineOfBusiness.Medicaid, await LineOfBusinessTheStagesSee(claim, programs));
     }
 
     [Fact]
@@ -931,7 +1003,8 @@ public class ClaimAdjudicationOrchestratorTests
     private ClaimAdjudicationOrchestrator BuildOrchestrator(
         IEnumerable<IClaimAdjudicationStage> stages,
         AdjudicationPipelineOptions? options = null,
-        IClaimAdjustmentService? adjustmentService = null)
+        IClaimAdjustmentService? adjustmentService = null,
+        IProgramDirectory? programs = null)
     {
         return new ClaimAdjudicationOrchestrator(
             _factory,
@@ -944,7 +1017,8 @@ public class ClaimAdjudicationOrchestratorTests
             new AdjudicationTenantContext(),
             adjustmentService ?? Substitute.For<IClaimAdjustmentService>(),
             Options.Create(options ?? new AdjudicationPipelineOptions()),
-            NullLogger<ClaimAdjudicationOrchestrator>.Instance);
+            NullLogger<ClaimAdjudicationOrchestrator>.Instance,
+            programs: programs);
     }
 
     private void SetupAdapterReturningClaim()
