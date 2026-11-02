@@ -15,6 +15,9 @@ namespace CloudHealthOffice.Infrastructure.Programs;
 /// </summary>
 public class LineOfBusinessJsonConverter(bool allowNumbers = false) : JsonConverter<LineOfBusiness>
 {
+    /// <summary>Names only; usable from <c>[JsonConverter(typeof(LineOfBusinessJsonConverter))]</c>.</summary>
+    public LineOfBusinessJsonConverter() : this(false) { }
+
     public override LineOfBusiness Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         string? text = reader.TokenType switch
@@ -83,6 +86,5 @@ public sealed class LineOfBusinessBsonSerializer(BsonType representation = BsonT
         else context.Writer.WriteString(value.ToString());
     }
 
-    private static LineOfBusiness FromNumber(long n) =>
-        n >= 1 && n <= LineOfBusinessNames.All.Count ? (LineOfBusiness)n : LineOfBusiness.Unknown;
+    private static LineOfBusiness FromNumber(long n) => LineOfBusinessNames.FromNumber(n);
 }

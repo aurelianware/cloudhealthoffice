@@ -71,7 +71,13 @@ today, each with the PR that removes it:
    old enum, so reads never depend on the rewrite having run. Both are shared
    (`LegacyLineOfBusinessStorage.cs`) for the next service with stored numbers.
    The API reads `Marketplace` as `Exchange` and now writes `Exchange`.
-4. eligibility-service: one-time migration of stored records from 0-5 to 1-6.
+4. eligibility-service (done): the shared enum on inquiries, 271 results and temporal
+   eligibility. The off-by-one conversions from coverage-service's numbers are gone; a
+   coverage with no line of business (0) now reports `Unknown`, not `Commercial`. Stored
+   inquiries' 0-5 numbers are rewritten to names at startup by
+   `EligibilityLineOfBusinessMigrationHostedService`, and read correctly until then
+   through the shared `LegacyLineOfBusinessBsonSerializer`. The API takes names
+   (`Marketplace` reads as `Exchange`) and refuses numbers.
 5. The services whose enums already match: type swaps, no data change.
 6. Coverage, claims and authorization intake take the line of business from the program.
 7. ProviderEnrollmentService's flags enum is renamed `ProgramParticipation`.

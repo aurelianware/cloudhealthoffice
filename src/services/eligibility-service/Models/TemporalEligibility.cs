@@ -29,7 +29,7 @@ public class TemporalCoverage
     public DateTime EffectiveDate { get; set; }
     public DateTime? TerminationDate { get; set; }
 
-    [JsonConverter(typeof(JsonStringEnumConverter))]
+    [JsonConverter(typeof(LineOfBusinessJsonConverter))]
     public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
 
     /// <summary>
