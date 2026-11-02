@@ -2,6 +2,7 @@ using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services;
 using AuthorizationService.Services.BenefitExclusion;
+using AuthorizationService.Services.StatePrograms;
 
 namespace AuthorizationService.Backends;
 
@@ -22,6 +23,7 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
 
     private readonly IAuthorizationRepository _repository;
     private readonly IAuthorizationExclusionService? _exclusionService;
+    private readonly IStateOnlyAdultDentalPaCheck? _stateDentalCheck;
 
     /// <param name="repository">The authoritative CHO record store (Mongo in production).</param>
     /// <param name="exclusionService">
@@ -31,13 +33,24 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
     /// denial rather than an approvable request. When absent, no plan exclusions
     /// are configured and every submission follows the ordinary path.
     /// </param>
+    /// <param name="stateDentalCheck">
+    /// Optional DHCS APL 26-009 check (Medi-Cal adult dental for members not
+    /// eligible for federally funded full-scope Medi-Cal, from July 1, 2027).
+    /// Runs after the exclusion check: a carved-out member's dental request is
+    /// denied, and a request the rule cannot clear is pended for review.
+    /// </param>
     public ChoAuthorizationBackend(
         IAuthorizationRepository repository,
-        IAuthorizationExclusionService? exclusionService = null)
+        IAuthorizationExclusionService? exclusionService = null,
+        IStateOnlyAdultDentalPaCheck? stateDentalCheck = null)
     {
         _repository = repository;
         _exclusionService = exclusionService;
+        _stateDentalCheck = stateDentalCheck;
     }
+
+    /// <summary>History source of a decision made by the APL 26-009 check.</summary>
+    public const string StateDentalSource = "state-program:medi-cal-apl-26-009";
 
     public string BackendKey => Key;
 
@@ -74,7 +87,39 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
 
         // Record the opening lifecycle entry so history survives persistence.
         AppendHistory(authorization, authorization.Status, authorization.ReviewDecision, reason: null);
+
+        // APL 26-009: a carved-out member's dental request is denied, and one
+        // the rule cannot clear (non-emergency, aid code unknown) is pended.
+        if (await StateDentalAsync(authorization, ct) is { } stateDental)
+        {
+            ApplyStateDental(authorization, stateDental, DateTime.UtcNow);
+            AppendHistory(authorization, authorization.Status, authorization.ReviewDecision, stateDental.Reason);
+        }
         return await _repository.CreateAsync(authorization);
+    }
+
+    private async Task<StateDentalPaDetermination?> StateDentalAsync(Authorization authorization, CancellationToken ct) =>
+        _stateDentalCheck is null ? null : await _stateDentalCheck.EvaluateAsync(authorization, ct);
+
+    /// <summary>Sets the request's whole decision from the APL 26-009 check.</summary>
+    private static void ApplyStateDental(Authorization authorization, StateDentalPaDetermination determination, DateTime decidedAt)
+    {
+        if (determination.Outcome == StateDentalPaOutcome.Deny)
+        {
+            authorization.Status = AuthorizationStatus.Denied;
+            authorization.ReviewDecision = "A3";
+            authorization.DenialReasonCode = determination.DenialReasonCode;
+            authorization.DenialReason = determination.Reason;
+            authorization.ReviewedDate = decidedAt;
+        }
+        else
+        {
+            authorization.Status = AuthorizationStatus.Pended;
+            authorization.ReviewDecision = "A4";
+            authorization.PendReason = determination.Reason;
+        }
+        authorization.LastUpdatedDate = DateTime.UtcNow;
+        ApplyWholeRequestDecision(authorization);
     }
 
     public async Task<Authorization> RecordAutomatedDecisionAsync(
@@ -117,6 +162,28 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
                 ChangedBy = authorization.CreatedBy,
                 Source = "benefit-exclusion",
                 LineDecisions = AuthorizationDecisionPolicy.Snapshot(authorization),
+            });
+            return await _repository.CreateAsync(authorization);
+        }
+
+        // APL 26-009 outranks an automated approval: a carved-out member's
+        // dental request is denied whatever the rule decided, and a request the
+        // check cannot clear is pended instead of approved. An automated denial
+        // or pend stands.
+        var stateDental = await StateDentalAsync(authorization, ct);
+        if (stateDental is not null
+            && (stateDental.Outcome == StateDentalPaOutcome.Deny || decision.Outcome == AutomatedDecisionOutcome.Approved))
+        {
+            ApplyStateDental(authorization, stateDental, decidedAt);
+            authorization.StatusHistory.Add(new AuthorizationStatusChange
+            {
+                LineDecisions = AuthorizationDecisionPolicy.Snapshot(authorization),
+                Status = authorization.Status,
+                ReviewDecision = authorization.ReviewDecision,
+                Reason = stateDental.Reason,
+                ChangedAt = decidedAt,
+                ChangedBy = authorization.CreatedBy,
+                Source = StateDentalSource,
             });
             return await _repository.CreateAsync(authorization);
         }

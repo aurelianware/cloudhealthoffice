@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+    <ProjectReference Include="..\shared\CloudHealthOffice.PlanConfiguration\CloudHealthOffice.PlanConfiguration.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.PriorAuthRuleEngine\CloudHealthOffice.PriorAuthRuleEngine.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.ClinicalCriteria\CloudHealthOffice.ClinicalCriteria.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.OperatingMode\CloudHealthOffice.OperatingMode.csproj" />

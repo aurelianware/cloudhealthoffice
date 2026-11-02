@@ -12,6 +12,7 @@ COPY src/Directory.Build.props src/
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/authorization-service/authorization-service.csproj src/services/authorization-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/CloudHealthOffice.PlanConfiguration.csproj src/services/shared/CloudHealthOffice.PlanConfiguration/
 COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/CloudHealthOffice.ProviderEnrollmentService.csproj src/engines/CloudHealthOffice.ProviderEnrollmentService/
 COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/CloudHealthOffice.PriorAuthRuleEngine.csproj src/engines/CloudHealthOffice.PriorAuthRuleEngine/
 COPY src/engines/CloudHealthOffice.OperatingMode/CloudHealthOffice.OperatingMode.csproj src/engines/CloudHealthOffice.OperatingMode/
@@ -21,6 +22,7 @@ RUN dotnet restore src/services/authorization-service/authorization-service.cspr
 # Copy source code and build
 COPY src/services/authorization-service/ src/services/authorization-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/ src/services/shared/CloudHealthOffice.PlanConfiguration/
 COPY src/engines/CloudHealthOffice.ProviderEnrollmentService/ src/engines/CloudHealthOffice.ProviderEnrollmentService/
 COPY src/engines/CloudHealthOffice.PriorAuthRuleEngine/ src/engines/CloudHealthOffice.PriorAuthRuleEngine/
 COPY src/engines/CloudHealthOffice.OperatingMode/ src/engines/CloudHealthOffice.OperatingMode/

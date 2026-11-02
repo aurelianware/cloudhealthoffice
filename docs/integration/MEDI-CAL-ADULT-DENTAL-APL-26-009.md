@@ -20,6 +20,7 @@ otherwise on the first of the following month.
 | The rule: dates, age, aging-out date, outcome | `StateOnlyAdultDentalRule` (CloudHealthOffice.Infrastructure, `Programs/MediCal`) |
 | Which aid codes are state-only, which are exceptions, which CDT codes are emergencies | Plan setting `eligibility.mediCal.stateOnlyAdultDental` (JSON), at the tenant, line of business or benefit plan |
 | Claims | `StateOnlyAdultDentalStage`, Order 160, on CDT lines (D0000–D9999) |
+| Prior authorization | `StateOnlyAdultDentalPaCheck` in authorization-service, run by the CHO backend on REST and PAS requests with a CDT code |
 
 The setting is `"off"` by default:
 
@@ -46,11 +47,35 @@ The setting is `"off"` by default:
 
 An examiner approval passes a reviewed `STATEDENTAL` or `AIDCODE` pend.
 
+## Prior authorization
+
+authorization-service applies the same rule when a dental request arrives, for requests with a CDT code and a
+requested start date on or after July 1, 2027. It reads the setting at the request's line of business and the
+member's benefit plan: the plan of the coverage the request names when that coverage is active on the date,
+otherwise the member's only active plan. With several active plans and none named, only the tenant and line of
+business levels apply. It then reads the member's aid codes and date of birth from member-service.
+
+| Outcome | PA decision |
+|---|---|
+| `CarveOut`, every requested code is CDT | Denied (A3), reason code `STATEDENTAL-FFS`: request it from Medi-Cal Dental FFS |
+| `CarveOut`, dental and other codes on one request | Pended (A4) for a reviewer |
+| `EmergencyOnly`, procedures not on the emergency list | Pended, naming them; approve only if the service treats an emergency |
+| No aid code or date of birth on file | Pended |
+| Coverage-service, member-service or tenant-service unreachable, or the setting unreadable | Pended |
+| Under 19, federally funded aid code, exception aid code, emergency procedures, or setting off | No change |
+
+On a PAS request with an automated decision, the carve-out denial outranks an automated approval, and a pend
+replaces an automated approval. An automated denial or pend stands. The decision's history entry has the source
+`state-program:medi-cal-apl-26-009`.
+
+These reads use authorization-service's own identity, so the provider submitting the request needs no access to
+plan configuration, coverage or member records. authorization-service needs `Services:TenantService`,
+`Services:CoverageService` and `Services:MemberService`.
+
 ## Not done yet
 
 - **Loading aid codes from the 834.** Where the DHCS 834 carries the aid code needs the DHCS 834 companion guide.
   Until then, the eligibility feed or an operator calls the aid-codes endpoint.
-- **Prior authorization.** Dental PA requests for these members are not checked yet.
 - **The DHCS aid code lists.** No aid codes are in the repository. The plan sets them from DHCS's aid code master chart.
 - **Member outreach.** The APL's 30-day notice, three outbound call attempts by June 1, 2027, and the 60/30-day
   aging-out notices from the August 2027 month of eligibility are not built.
