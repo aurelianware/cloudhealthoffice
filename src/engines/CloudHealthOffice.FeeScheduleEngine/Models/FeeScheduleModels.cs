@@ -499,6 +499,58 @@ public record PricingRequest
     /// "13"), not a CMS place of service. Callers set it from the claim type.
     /// </summary>
     public bool IsInstitutional { get; init; }
+
+    // ── Medicaid APR-DRG fields ──────────────────────────────────
+
+    /// <summary>
+    /// The state Medicaid APR-DRG method the stay is priced by, from the plan
+    /// setting <c>pricing.inpatient.medicaidDrgMethod</c>: one of
+    /// <see cref="MedicaidDrgMethods"/>. Null or <c>none</c> prices the claim by
+    /// its contract or fee schedule as before. When set, every line of the
+    /// claim must carry the same value, and <see cref="DrgCode"/> must be the
+    /// "DRG-SOI" key the licensed APR-DRG grouper assigned (e.g. <c>139-3</c>).
+    /// </summary>
+    public string? MedicaidDrgMethod { get; init; }
+
+    /// <summary>
+    /// The facility's (billing provider's) NPI. State hospital rate files are
+    /// keyed by the hospital, not the rendering physician, so Medicaid DRG
+    /// pricing looks the hospital up by this. Null falls back to
+    /// <see cref="ProviderNpi"/>.
+    /// </summary>
+    public string? FacilityNpi { get; init; }
+
+    /// <summary>UB-04 patient discharge status (837I CL103); identifies a transfer.</summary>
+    public string? DischargeStatus { get; init; }
+
+    /// <summary>The patient's age in whole years at admission. Texas outliers are for clients under 21.</summary>
+    public int? PatientAgeYears { get; init; }
+
+    /// <summary>
+    /// Discharge date (or the statement through date on an interim bill). It
+    /// selects the state weight table and hospital rate table in force. Null
+    /// falls back to <see cref="ServiceDate"/>.
+    /// </summary>
+    public DateTime? DischargeDate { get; init; }
+}
+
+/// <summary>Values of <see cref="PricingRequest.MedicaidDrgMethod"/>.</summary>
+public static class MedicaidDrgMethods
+{
+    /// <summary>Not priced by a state Medicaid DRG method.</summary>
+    public const string None = "none";
+
+    /// <summary>Texas Medicaid, 1 TAC §355.8052, from the imported HHSC weight and SDA tables.</summary>
+    public const string Texas = "texas";
+
+    /// <summary>Whether the value names a state method (anything but null, blank or <see cref="None"/>).</summary>
+    public static bool IsSet(string? method) =>
+        !string.IsNullOrWhiteSpace(method)
+        && !string.Equals(method.Trim().Trim('"'), None, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Lower-cased, unquoted value, or null when not set.</summary>
+    public static string? Normalize(string? method) =>
+        IsSet(method) ? method!.Trim().Trim('"').ToLowerInvariant() : null;
 }
 
 /// <summary>
@@ -564,6 +616,13 @@ public record PricingResult
     /// indicator names a reduction rule the engine does not yet implement.
     /// </summary>
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// For a stay priced by a state Medicaid DRG method: each step of the
+    /// arithmetic in words (base rate × weight, transfer, outlier), the same
+    /// on every line of the claim. Empty otherwise.
+    /// </summary>
+    public IReadOnlyList<string> CalculationSteps { get; init; } = Array.Empty<string>();
 }
 
 /// <summary>

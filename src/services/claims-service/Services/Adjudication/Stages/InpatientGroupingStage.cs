@@ -4,6 +4,7 @@ using CloudHealthOffice.GrouperEngine.Hac;
 using CloudHealthOffice.GrouperEngine.Licensed;
 using CloudHealthOffice.GrouperEngine.Models;
 using CloudHealthOffice.GrouperEngine.Services;
+using CloudHealthOffice.FeeScheduleEngine.Models;
 using CloudHealthOffice.Infrastructure.Logging;
 using CloudHealthOffice.PlanConfiguration;
 
@@ -39,6 +40,14 @@ public sealed record InpatientGroupingOutcome(
     /// (e.g. <c>139-3</c>) and <see cref="Result"/> is null.
     /// </summary>
     public AprDrgGroupingResult? AprDrgResult { get; init; }
+
+    /// <summary>
+    /// The state Medicaid APR-DRG method the stay is paid by
+    /// (<c>pricing.inpatient.medicaidDrgMethod</c>), set only when the stay
+    /// grouped by APR-DRG and the plan names a method. Null prices it by the
+    /// contract or fee schedule.
+    /// </summary>
+    public string? MedicaidDrgMethod { get; init; }
 
     /// <summary>Grouping did not run: the billed DRG stands.</summary>
     public static InpatientGroupingOutcome NotGrouped(string? billedDrg) =>
@@ -134,6 +143,9 @@ public sealed class InpatientGroupingStage : IClaimAdjudicationStage
 
     /// <summary>The plan setting naming the APR-DRG version the state prices by.</summary>
     public static readonly string AprDrgVersionSettingKey = PlanSettings.AprDrgVersion.Key;
+
+    /// <summary>The state Medicaid APR-DRG method an APR-DRG-grouped stay is paid by.</summary>
+    public static readonly string MedicaidDrgMethodSettingKey = PlanSettings.MedicaidDrgMethod.Key;
 
     private readonly IMsDrgGrouper _grouper;
     private readonly IAprDrgGrouper? _aprGrouper;
@@ -384,10 +396,28 @@ public sealed class InpatientGroupingStage : IClaimAdjudicationStage
             return Pend(context, code, $"The stay could not be grouped by APR-DRG ({result.Status}): {detail}");
         }
 
+        var method = await _settings
+            .ResolveAsync(context.TenantId, MedicaidDrgMethodSettingKey, context.SettingScopeForClaim(), asOf, ct)
+            .ConfigureAwait(false);
+        if (method.IsFallback)
+        {
+            // Not knowing whether the stay is paid by the state method or by
+            // the contract would price it by whichever the default says, which
+            // for a Texas Medicaid line is the wrong one.
+            context.InpatientGrouping = new InpatientGroupingOutcome(
+                PricedDrg: null, billedDrg, Result: null, Grouped: false)
+            {
+                AprDrgResult = result,
+            };
+            return Pend(context, SettingUnavailablePendCode,
+                "Could not determine whether this plan pays inpatient stays by a state Medicaid APR-DRG method.");
+        }
+
         var outcome = new InpatientGroupingOutcome(
             PricedDrg: result.DrgSoiKey, billedDrg, Result: null, Grouped: true)
         {
             AprDrgResult = result,
+            MedicaidDrgMethod = MedicaidDrgMethods.Normalize(method.Value),
         };
         context.InpatientGrouping = outcome;
 
@@ -548,7 +578,7 @@ public sealed class InpatientGroupingStage : IClaimAdjudicationStage
     private static DateOnly? DateOnlyOrNull(DateTime? value) =>
         value is { } date ? DateOnly.FromDateTime(date.Date) : null;
 
-    private static int? AgeYearsAt(DateTime? dateOfBirth, DateTime? admission)
+    internal static int? AgeYearsAt(DateTime? dateOfBirth, DateTime? admission)
     {
         if (dateOfBirth is not { } born || admission is not { } admitted
             || admitted.Date < born.Date)

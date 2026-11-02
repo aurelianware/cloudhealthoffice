@@ -238,7 +238,10 @@ builder.Services.AddFeeScheduleEngine()
     .UseMongoRepositories()
     // ADR 016 phase 4: a no-op until a deployment names a tenant for the
     // dual-read window. Inside it, claims price twice and pay on legacy.
-    .UseDualReadContracts(builder.Configuration);
+    .UseDualReadContracts(builder.Configuration)
+    // State Medicaid APR-DRG pricing for plans that set
+    // pricing.inpatient.medicaidDrgMethod. Wraps the engine above, so it stays last.
+    .UseMedicaidDrgPricing();
 builder.Services.AddClaimsScrubEngine();
 builder.Services.AddNcciEngine().UseMongoRepository();
 builder.Services.AddScoped<IAccumulatorAuditWriter, MongoAccumulatorAuditWriter>();

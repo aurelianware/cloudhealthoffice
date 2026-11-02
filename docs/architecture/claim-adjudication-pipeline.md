@@ -480,10 +480,14 @@ chooses between them per line of business, benefit plan or sponsor, once
   grouper.
 - The priced DRG is the "DRG-SOI" key state weight tables use, such as `139-3`.
   The whole APR-DRG answer is kept on `InpatientGroupingOutcome.AprDrgResult`.
+- It then reads `pricing.inpatient.medicaidDrgMethod` (`none` or `texas`). With
+  `texas`, `PricingStage` asks for the stay to be priced from the imported HHSC
+  tables instead of the contract
+  (`docs/integration/MEDICAID-DRG-PRICING.md`, "Claim pricing").
 - It fails closed in the same way as MS-DRG:
   - a refused or invalid answer pends `DRGREVIEW`;
   - a missing or unreachable grouper pends `GROUPERUNAVAIL`;
-  - a classification or version setting that cannot be read pends `CONFIGUNAVAIL`.
+  - a classification, version or Medicaid method setting that cannot be read pends `CONFIGUNAVAIL`.
 - A host with a licensed grouper configured counts as able to group. When it
   cannot read `groupDrg`, it pends instead of pricing the billed DRG.
 

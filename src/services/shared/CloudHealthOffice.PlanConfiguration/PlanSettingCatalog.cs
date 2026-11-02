@@ -180,6 +180,37 @@ public static class PlanSettings
     };
 
     /// <summary>
+    /// The state Medicaid APR-DRG method an inpatient stay is paid by:
+    /// <c>none</c> (the default: the contract or fee schedule prices it) or
+    /// <c>texas</c> (1 TAC §355.8052, out of the imported HHSC weight and SDA
+    /// tables). It needs <see cref="GroupInpatientDrg"/> on and
+    /// <see cref="InpatientDrgClassification"/> <c>aprDrg</c>, because the
+    /// state tables are keyed by the grouped "DRG-SOI".
+    ///
+    /// <para>
+    /// Set it on the Medicaid line of business. Changing it changes what
+    /// every inpatient stay on that line pays, so it is effective-dated and
+    /// needs a reason like the other inpatient pricing settings.
+    /// </para>
+    /// </summary>
+    public static readonly SettingDefinition MedicaidDrgMethod = new()
+    {
+        Key = "pricing.inpatient.medicaidDrgMethod",
+        Type = SettingType.Enum,
+        Owner = "claims-service",
+        Description = "Pay inpatient stays by a state Medicaid APR-DRG method (texas) instead of the contract or fee schedule (none).",
+        Default = "\"none\"",
+        AllowedLevels = new HashSet<SettingLevel>
+        {
+            SettingLevel.Tenant,
+            SettingLevel.LineOfBusiness,
+            SettingLevel.BenefitPlan,
+        },
+        Constraints = new SettingConstraints { AllowedValues = ["none", "texas"] },
+        ChangeControl = ChangeControl.ReasonRequired,
+    };
+
+    /// <summary>
     /// Whether releasing money needs a second user (maker-checker):
     /// capitation disbursements and premium drafts cannot be released by the
     /// person who prepared them (plan-configuration.md §12 step 2b).
@@ -232,6 +263,7 @@ public static class PlanSettings
         GroupInpatientDrg,
         InpatientDrgClassification,
         AprDrgVersion,
+        MedicaidDrgMethod,
         PaymentEnforceSeparationOfDuties,
         PersonalRepresentativeRequireSecondUserActivation,
     ];
