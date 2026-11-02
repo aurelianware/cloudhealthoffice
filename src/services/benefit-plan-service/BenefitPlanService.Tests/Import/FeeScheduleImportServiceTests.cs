@@ -487,6 +487,75 @@ public sealed class FeeScheduleImportServiceTests
 
     private static MemoryStream Csv(string text) => new(Encoding.UTF8.GetBytes(text));
 
+    // Shaped like a Prop 56 dental supplemental list: CDT code and add-on amount.
+    private const string Prop56Csv =
+        "Procedure Code,Description,Supplemental Amount\n" +
+        "D1120,Prophylaxis child,10.00\n" +
+        "D2391,Resin one surface posterior,25.50\n";
+
+    private const string Prop56Notice =
+        "Prop 56 supplemental payments are discontinued for dates of service on or after July 1, 2027.";
+
+    private static FeeScheduleImportOptions Prop56Options(DateTime? termDate = null, bool replace = false) => new()
+    {
+        Name = "Medi-Cal Dental Prop 56",
+        EffectiveDate = new DateTime(2017, 7, 1),
+        TermDate = termDate,
+        Type = FeeScheduleType.Supplemental,
+        SourceId = "ca-dhcs-prop56-dental",
+        Jurisdiction = "ca",
+        SupplementalForPlanIds = [" TX-STAR-TEST "],
+        ClaimsRunoutMonths = 12,
+        DiscontinuedNotice = Prop56Notice,
+        Columns = new FeeScheduleColumnOverrides(null, "Supplemental Amount", null, null, null),
+        Replace = replace,
+        DryRun = false,
+    };
+
+    [Fact]
+    public async Task Supplemental_StoresItsPlansRunoutAndNotice_AndThenEndDatingItIsAChange()
+    {
+        var (svc, repo, _) = Build(Guid.NewGuid());
+
+        var created = await svc.ImportAsync(Csv(Prop56Csv), Prop56Options(), Tenant, "admin");
+
+        created.Outcome.Should().Be(FeeScheduleImportOutcome.Created);
+        var stored = repo.Stored.Single();
+        stored.Type.Should().Be(FeeScheduleType.Supplemental);
+        stored.DefaultForPlanId.Should().BeNull("a supplemental is never a plan's base rate");
+        stored.SupplementalForPlanIds.Should().Equal("TX-STAR-TEST");
+        stored.ClaimsRunoutMonths.Should().Be(12);
+        stored.DiscontinuedNotice.Should().Be(Prop56Notice);
+
+        var same = await svc.ImportAsync(Csv(Prop56Csv), Prop56Options(), Tenant, "admin");
+        same.Outcome.Should().Be(FeeScheduleImportOutcome.Unchanged);
+
+        var ended = await svc.ImportAsync(Csv(Prop56Csv), Prop56Options(new DateTime(2027, 7, 1), replace: true), Tenant, "admin");
+        ended.Outcome.Should().Be(FeeScheduleImportOutcome.Replaced);
+        repo.Stored.Single().TermDate.Should().Be(new DateTime(2027, 7, 1));
+
+        var engine = new RateResolutionService(repo, new Mock<IProviderContractRepository>().Object, NullLogger<RateResolutionService>.Instance);
+        PricingRequest Line(DateTime dos) => new()
+        {
+            TenantId = Tenant, PlanId = Guid.NewGuid().ToString("D"), PlanCode = "TX-STAR-TEST", ProviderNpi = "1234567893",
+            ProcedureCode = "D2391", PlaceOfServiceCode = "11", ServiceDate = dos, BilledAmount = 150m, ClaimReceivedDate = dos.AddDays(10),
+        };
+        (await engine.ResolveAsync(Line(new DateTime(2027, 6, 30)))).SupplementalAmount.Should().Be(25.50m);
+        var after = await engine.ResolveAsync(Line(new DateTime(2027, 7, 1)));
+        after.SupplementalAmount.Should().Be(0m);
+        after.PaymentNotices.Should().Equal(Prop56Notice);
+    }
+
+    [Fact]
+    public async Task Supplemental_UnknownPlan_Throws()
+    {
+        var (svc, _, _) = Build(Guid.NewGuid());
+
+        var act = () => svc.ImportAsync(Csv(Prop56Csv), Prop56Options() with { SupplementalForPlanIds = ["NO-SUCH-PLAN"] }, Tenant, "admin");
+
+        (await act.Should().ThrowAsync<FeeSchedulePlanNotFoundException>()).Which.PlanId.Should().Be("NO-SUCH-PLAN");
+    }
+
     private static FeeScheduleImportOptions Options(
         bool dryRun = true,
         (string, string)? filter = null,

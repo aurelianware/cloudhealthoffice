@@ -1235,6 +1235,35 @@ public class AdjudicationResult
     /// not run (off, or not a Medicaid claim).
     /// </summary>
     public ClaimTplRecord? ThirdPartyLiability { get; set; }
+
+    /// <summary>
+    /// State supplemental payments worked out for the claim's lines (Medi-Cal
+    /// Prop 56 dental, for example), on top of the allowed amount and kept out
+    /// of it. Recorded for the state's supplemental reporting and the payment
+    /// that follows; set by the pricing stage. Empty when none applied.
+    /// </summary>
+    public List<ClaimSupplementalPayment> SupplementalPayments { get; set; } = new();
+
+    /// <summary>
+    /// Text the provider and member EOB must carry, such as APL 26-008's
+    /// "Prop 56 supplemental payments are discontinued for dates of service
+    /// on or after July 1, 2027." Empty when there is none.
+    /// </summary>
+    public List<string> PaymentNotices { get; set; } = new();
+}
+
+/// <summary>One state supplemental payment on a claim line (<see cref="AdjudicationResult.SupplementalPayments"/>).</summary>
+public class ClaimSupplementalPayment
+{
+    public int LineNumber { get; set; }
+    public string ProcedureCode { get; set; } = string.Empty;
+
+    /// <summary>The supplemental fee schedule that pays it.</summary>
+    public string FeeScheduleId { get; set; } = string.Empty;
+    public string FeeScheduleName { get; set; } = string.Empty;
+    public decimal Rate { get; set; }
+    public decimal Units { get; set; }
+    public decimal Amount { get; set; }
 }
 
 /// <summary>

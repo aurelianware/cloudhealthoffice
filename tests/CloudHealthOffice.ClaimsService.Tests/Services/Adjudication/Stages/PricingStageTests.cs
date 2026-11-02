@@ -536,6 +536,57 @@ public class PricingStageTests
         Assert.Contains("line 1 (rev 0120)", result.Reason);
     }
 
+    [Fact]
+    public async Task Execute_SendsTheReceivedDate_AndRecordsSupplementalPaymentsAndNotices()
+    {
+        var ctx = BuildContext();
+        ctx.Claim.ReceivedDate = new DateTime(2026, 4, 20, 0, 0, 0, DateTimeKind.Utc);
+        ctx.AdjudicationResult.SupplementalPayments.Add(new ClaimSupplementalPayment { LineNumber = 9, Amount = 1m });
+        IReadOnlyList<PricingRequest>? captured = null;
+        const string notice = "Prop 56 supplemental payments are discontinued for dates of service on or after July 1, 2027.";
+        _client.ResolveBatchAsync("tenant-1", Arg.Any<IReadOnlyList<PricingRequest>>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                captured = ci.ArgAt<IReadOnlyList<PricingRequest>>(1);
+                return new PricingResultSet
+                {
+                    LineResults = new[]
+                    {
+                        Priced(1, 85m, 200m) with
+                        {
+                            ProcedureCode = "99213",
+                            SupplementalAmount = 12.5m,
+                            SupplementalPayments = [new SupplementalPayment
+                            {
+                                FeeScheduleId = "FS-P56", FeeScheduleName = "Prop 56", Rate = 12.5m, Units = 1m, Amount = 12.5m,
+                            }],
+                        },
+                        Priced(2, 20m, 60m) with { PaymentNotices = [notice] },
+                    },
+                };
+            });
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.All(captured!, r => Assert.Equal(ctx.Claim.ReceivedDate, r.ClaimReceivedDate));
+        var payment = Assert.Single(ctx.AdjudicationResult.SupplementalPayments);
+        Assert.Equal(1, payment.LineNumber);
+        Assert.Equal("FS-P56", payment.FeeScheduleId);
+        Assert.Equal(12.5m, payment.Amount);
+        Assert.Equal(notice, Assert.Single(ctx.AdjudicationResult.PaymentNotices));
+        // The supplemental stays out of the allowed amount benefits are calculated on.
+        Assert.Equal(85m, ctx.PricingResult!.AllowedAmounts[1]);
+    }
+
+    [Fact]
+    public void ReceivedDate_FallsBackToTheSubmittedDate()
+    {
+        var claim = new AdapterClaim { SubmittedDate = new DateTime(2026, 5, 1) };
+        Assert.Equal(new DateTime(2026, 5, 1), PricingStage.ReceivedDate(claim));
+        Assert.Null(PricingStage.ReceivedDate(new AdapterClaim()));
+    }
+
     private static PricingResult Drg(int line, decimal allowed, decimal billed) => new()
     {
         LineNumber = line,
