@@ -33,7 +33,7 @@ public static class SupplementalPaymentCalculator
     public static PricingResult Apply(
         PricingResult result, PricingRequest request, IReadOnlyList<FeeSchedule> schedules)
     {
-        if (schedules.Count == 0 || string.IsNullOrWhiteSpace(request.ProcedureCode))
+        if (schedules is null || schedules.Count == 0 || string.IsNullOrWhiteSpace(request.ProcedureCode))
             return result;
 
         var serviceDate = request.ServiceDate.Date;

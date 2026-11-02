@@ -66,8 +66,10 @@ public class RateResolutionService : IRateResolutionService
         var planKeys = SupplementalPaymentCalculator.PlanKeys(request);
         if (planKeys.Count == 0) return result;
 
+        // A store that predates supplemental schedules (or a loose test double)
+        // can answer null: no supplemental schedules.
         var schedules = await _feeScheduleRepo.GetSupplementalSchedulesAsync(
-            request.TenantId, planKeys, request.ServiceDate, ct);
+            request.TenantId, planKeys, request.ServiceDate, ct) ?? [];
         return SupplementalPaymentCalculator.Apply(result, request, schedules);
     }
 
