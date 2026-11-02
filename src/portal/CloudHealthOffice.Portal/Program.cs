@@ -303,6 +303,8 @@ builder.Services.AddScoped<IIdCardService, CloudHealthOffice.Portal.Services.IdC
 builder.Services.AddScoped<IProviderService, ProviderService>();
 builder.Services.AddScoped<IBenefitPlanService, BenefitPlanService>();
 builder.Services.AddScoped<IBenefitPlanValidationService, BenefitPlanValidationService>();
+// Fee schedule library: browse, preview and deploy reference schedules at a percentage (benefit-plan-service).
+builder.Services.AddScoped<IFeeScheduleLibraryService, FeeScheduleLibraryService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ISponsorService, SponsorService>();

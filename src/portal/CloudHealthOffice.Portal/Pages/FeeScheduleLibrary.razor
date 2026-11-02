@@ -1,0 +1,371 @@
+@page "/fee-schedules"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject IFeeScheduleLibraryService Library
+@inject IBenefitPlanService BenefitPlans
+@inject IUserContextService UserContextService
+@inject ISnackbar Snackbar
+
+@*
+    Guided fee schedule onboarding: browse the shared library (Medicare PFS by
+    locality, state Medicaid schedules), open a schedule's rates, preview it at
+    a percentage and deploy a copy as a plan's default schedule or a standalone
+    schedule. "Your schedules" shows what the tenant prices from today.
+    Reads need benefits:read; deploying needs settings:manage.
+*@
+
+<PageTitle>Fee schedules - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="benefits:read">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.PriceChange" Class="mr-2" />
+        Fee schedules
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        Start from a reference schedule in the library, set your percentage, preview the rates and deploy it as a plan's default schedule.
+    </MudText>
+
+    @if (_error != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" data-testid="fees-error">@_error</MudAlert>
+    }
+
+    <MudTabs Elevation="1" Rounded="true" PanelClass="pt-4" ActivePanelIndexChanged="OnTabAsync">
+        <MudTabPanel Text="Library" data-testid="tab-library">
+            <MudGrid>
+                <MudItem xs="12" md="5">
+                    <MudSelect T="string" @bind-Value="_state" Label="State" Variant="Variant.Outlined" Margin="Margin.Dense"
+                               Clearable="true" Class="mb-2" Style="max-width: 160px;">
+                        @foreach (var s in _states)
+                        {
+                            <MudSelectItem Value="@s">@s</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudTable Items="FilteredLibrary" Dense="true" Hover="true" Loading="_loading" T="FeeScheduleSummaryView"
+                              OnRowClick="@(e => OpenAsync(true, e.Item!))" data-testid="library-list">
+                        <HeaderContent>
+                            <MudTh>Schedule</MudTh>
+                            <MudTh>Effective</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd data-testid="library-row">
+                                <MudText Typo="Typo.body2"><strong>@context.Name</strong></MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@(context.Jurisdiction ?? "National") · @context.Type · @context.SourceVersion</MudText>
+                            </MudTd>
+                            <MudTd>@context.EffectiveDate.ToString("MM/dd/yyyy")</MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <MudText Class="pa-4" data-testid="library-empty">The library has no schedules yet. Aurelianware loads Medicare and state schedules into it.</MudText>
+                        </NoRecordsContent>
+                    </MudTable>
+                </MudItem>
+                <MudItem xs="12" md="7">
+                    @if (_detail is { } d && _detailIsLibrary)
+                    {
+                        @Detail(d)
+                        <MudPaper Class="pa-4 mt-3" Outlined="true" data-testid="deploy-panel">
+                            <MudText Typo="Typo.h6" Class="mb-2">Deploy to your plan</MudText>
+                            @if (!_canManage)
+                            {
+                                <MudAlert Severity="Severity.Info" Dense="true" data-testid="deploy-needs-permission">
+                                    Deploying a fee schedule needs the settings:manage permission (tenant administrator).
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudGrid Spacing="2">
+                                    <MudItem xs="12" sm="4">
+                                        <MudNumericField T="decimal" @bind-Value="_input.Percent" Label="Percent of library rates" Min="1" Max="1000"
+                                                         Adornment="Adornment.End" AdornmentText="%" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         data-testid="deploy-percent" />
+                                    </MudItem>
+                                    <MudItem xs="12" sm="8">
+                                        <MudRadioGroup T="bool" @bind-Value="_asPlanDefault">
+                                            <MudRadio T="bool" Value="true" Dense="true">Plan default schedule</MudRadio>
+                                            <MudRadio T="bool" Value="false" Dense="true">Standalone (for contracts)</MudRadio>
+                                        </MudRadioGroup>
+                                    </MudItem>
+                                    @if (_asPlanDefault)
+                                    {
+                                        <MudItem xs="12" sm="6">
+                                            <MudTextField @bind-Value="_input.PlanId" Label="Plan code" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                          Immediate="true" HelperText="Every version of the plan prices from it" data-testid="deploy-plan" />
+                                            @foreach (var planCode in _planCodes.Take(8))
+                                            {
+                                                <MudChip Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => _input.PlanId = planCode)" data-testid="plan-chip">@planCode</MudChip>
+                                            }
+                                        </MudItem>
+                                    }
+                                    <MudItem xs="12" sm="6">
+                                        <MudTextField @bind-Value="_input.Name" Label="@(_asPlanDefault ? "Name (optional)" : "Schedule name")"
+                                                      Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" data-testid="deploy-name" />
+                                    </MudItem>
+                                    <MudItem xs="12" sm="6">
+                                        <MudDatePicker @bind-Date="_input.EffectiveDate" Label="Effective date" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                    </MudItem>
+                                    <MudItem xs="12" sm="6">
+                                        <MudDatePicker @bind-Date="_input.TermDate" Label="Termination date (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                    </MudItem>
+                                    @if (NeedsCpt(d.Schedule))
+                                    {
+                                        <MudItem xs="12">
+                                            <MudCheckBox T="bool" @bind-Value="_input.LicenseAcknowledged" Color="Color.Primary" data-testid="deploy-license"
+                                                         Label="Our organization holds its own AMA CPT license for these codes." />
+                                        </MudItem>
+                                    }
+                                    <MudItem xs="12">
+                                        <MudCheckBox T="bool" @bind-Value="_input.Replace" Label="Replace the existing schedule if there is one" Dense="true" />
+                                    </MudItem>
+                                </MudGrid>
+
+                                @if (_deploy is { } r)
+                                {
+                                    @if (r.Error != null)
+                                    {
+                                        <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2" data-testid="deploy-error">@r.Error</MudAlert>
+                                    }
+                                    else
+                                    {
+                                        <MudAlert Severity="@(r.Written ? Severity.Success : r.Outcome == "Exists" ? Severity.Warning : Severity.Info)" Dense="true" Class="mt-2" data-testid="deploy-result">
+                                            @if (r.Written) { <span>Deployed @r.LineCount lines as <strong>@r.TargetName</strong>.</span> }
+                                            else if (r.Outcome == "Exists") { <span>@string.Join(" ", r.Warnings)</span> }
+                                            else { <span>Preview: @r.LineCount lines would be written as <strong>@r.TargetName</strong>.</span> }
+                                        </MudAlert>
+                                        @foreach (var w in r.Warnings.Where(_ => r.Outcome != "Exists"))
+                                        {
+                                            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-1">@w</MudAlert>
+                                        }
+                                        @if (r.Preview.Count > 0)
+                                        {
+                                            <MudSimpleTable Dense="true" Class="mt-2" data-testid="deploy-preview">
+                                                <thead><tr><th>Code</th><th>Library</th><th>At @(r.Percent.ToString("0.##"))%</th></tr></thead>
+                                                <tbody>
+                                                    @foreach (var p in r.Preview)
+                                                    {
+                                                        <tr data-testid="deploy-preview-row"><td>@p.ProcedureCode@(p.Modifier is null ? "" : "-" + p.Modifier)</td><td>@Money(p.LibraryAmount)</td><td>@Money(p.DeployedAmount)</td></tr>
+                                                    }
+                                                </tbody>
+                                            </MudSimpleTable>
+                                        }
+                                    }
+                                }
+
+                                <MudStack Row="true" Spacing="2" Class="mt-3">
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="_busy" OnClick="@(() => DeployAsync(true))" data-testid="deploy-preview-button">Preview</MudButton>
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_busy || !CanDeploy(d.Schedule))" OnClick="@(() => DeployAsync(false))" data-testid="deploy-button">Deploy</MudButton>
+                                </MudStack>
+                            }
+                        </MudPaper>
+                    }
+                    else
+                    {
+                        <MudPaper Class="pa-6" Outlined="true"><MudText Color="Color.Secondary">Choose a library schedule to see its rates.</MudText></MudPaper>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Your schedules" data-testid="tab-tenant">
+            <MudGrid>
+                <MudItem xs="12" md="5">
+                    <MudTable Items="_tenant" Dense="true" Hover="true" T="FeeScheduleSummaryView"
+                              OnRowClick="@(e => OpenAsync(false, e.Item!))" data-testid="tenant-list">
+                        <HeaderContent>
+                            <MudTh>Schedule</MudTh>
+                            <MudTh>Plan default</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd data-testid="tenant-row">
+                                <MudText Typo="Typo.body2"><strong>@context.Name</strong></MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Type · from @context.EffectiveDate.ToString("MM/dd/yyyy")</MudText>
+                            </MudTd>
+                            <MudTd>@(context.DefaultForPlanId ?? "-")</MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent><MudText Class="pa-4">No fee schedules yet. Deploy one from the library.</MudText></NoRecordsContent>
+                    </MudTable>
+                </MudItem>
+                <MudItem xs="12" md="7">
+                    @if (_detail is { } td && !_detailIsLibrary)
+                    {
+                        @Detail(td)
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private const int PageSize = 50;
+
+    private List<FeeScheduleSummaryView> _library = new();
+    private List<FeeScheduleSummaryView> _tenant = new();
+    private List<string> _states = new();
+    private List<string> _planCodes = new();
+    private FeeScheduleDetailView? _detail;
+    private bool _detailIsLibrary;
+    private string? _code;
+    private int _skip;
+    private string? _state;
+    private string? _error;
+    private bool _loading = true;
+    private bool _busy;
+    private bool _canManage;
+    private bool _asPlanDefault = true;
+    private FeeScheduleDeployInput _input = new();
+    private FeeScheduleDeployView? _deploy;
+
+    private IEnumerable<FeeScheduleSummaryView> FilteredLibrary =>
+        _library.Where(s => _state is null || string.Equals(s.Jurisdiction, _state, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canManage = UserContextService.HasPermission("settings:manage");
+        if (!UserContextService.HasPermission("benefits:read"))
+        {
+            _loading = false;
+            return;
+        }
+        try
+        {
+            _library = await Library.ListLibraryAsync();
+            _states = _library.Select(s => s.Jurisdiction).OfType<string>().Distinct().OrderBy(s => s).ToList();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnTabAsync(int index)
+    {
+        _detail = null;
+        if (index != 1) return;
+        try { _tenant = await Library.ListTenantAsync(); }
+        catch (ServiceUnavailableException ex) { _error = ex.Message; }
+    }
+
+    private async Task OpenAsync(bool library, FeeScheduleSummaryView s)
+    {
+        _code = null;
+        _skip = 0;
+        _deploy = null;
+        _detailIsLibrary = library;
+        if (library)
+        {
+            _input = new FeeScheduleDeployInput { SourceId = s.Id, EffectiveDate = new DateTime(DateTime.Today.Year + 1, 1, 1) };
+            await LoadPlanCodesAsync();
+        }
+        await LoadDetailAsync(s.Id);
+    }
+
+    private async Task LoadDetailAsync(string id)
+    {
+        try { _detail = await Library.GetAsync(_detailIsLibrary, id, _code, _skip, PageSize); }
+        catch (ServiceUnavailableException ex) { _error = ex.Message; }
+    }
+
+    private async Task LoadPlanCodesAsync()
+    {
+        if (_planCodes.Count > 0 || !_canManage) return;
+        try { _planCodes = (await BenefitPlans.SearchBenefitPlansAsync()).Select(p => p.PlanId).Distinct().OrderBy(p => p).ToList(); }
+        catch (ServiceUnavailableException) { /* the plan code can still be typed */ }
+    }
+
+    private async Task SearchCodeAsync(string? code)
+    {
+        _code = code;
+        _skip = 0;
+        if (_detail is not null) await LoadDetailAsync(_detail.Schedule.Id);
+    }
+
+    private async Task PageAsync(int delta)
+    {
+        _skip = Math.Max(0, _skip + delta * PageSize);
+        if (_detail is not null) await LoadDetailAsync(_detail.Schedule.Id);
+    }
+
+    private static bool NeedsCpt(FeeScheduleSummaryView s) =>
+        s.Type == "MedicareMpfs"
+        || s.CodeSystem.Contains("CPT", StringComparison.OrdinalIgnoreCase)
+        || s.CodeSystem.Contains("HCPCS", StringComparison.OrdinalIgnoreCase);
+
+    private bool CanDeploy(FeeScheduleSummaryView s) =>
+        (!NeedsCpt(s) || _input.LicenseAcknowledged)
+        && (_asPlanDefault ? !string.IsNullOrWhiteSpace(_input.PlanId) : !string.IsNullOrWhiteSpace(_input.Name))
+        && _input.EffectiveDate is not null;
+
+    private async Task DeployAsync(bool dryRun)
+    {
+        _busy = true;
+        try
+        {
+            var input = new FeeScheduleDeployInput
+            {
+                SourceId = _input.SourceId,
+                Percent = _input.Percent,
+                PlanId = _asPlanDefault ? _input.PlanId?.Trim() : null,
+                Name = string.IsNullOrWhiteSpace(_input.Name) ? null : _input.Name.Trim(),
+                EffectiveDate = _input.EffectiveDate?.Date,
+                TermDate = _input.TermDate?.Date,
+                LicenseAcknowledged = _input.LicenseAcknowledged,
+                Replace = _input.Replace,
+                DryRun = dryRun,
+            };
+            _deploy = await Library.DeployAsync(input);
+            if (_deploy.Written)
+                Snackbar.Add($"Deployed {_deploy.TargetName}. Claims for this plan now price from it.", Severity.Success);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _deploy = new FeeScheduleDeployView { Error = ex.Message };
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string Money(decimal? v) => v is { } m ? m.ToString("$#,##0.00") : "-";
+
+    private RenderFragment Detail(FeeScheduleDetailView d) => __builder =>
+    {
+        <MudPaper Class="pa-4" Outlined="true" data-testid="schedule-detail">
+            <MudText Typo="Typo.h5">@d.Schedule.Name</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                @d.Schedule.Type · @(d.Schedule.Jurisdiction ?? "National")@(d.Schedule.Locality is null ? "" : " locality " + d.Schedule.Locality)
+                · @d.Schedule.SourceId @d.Schedule.SourceVersion · @d.LineCount.ToString("N0") lines
+                @if (d.Schedule.ConversionFactor is { } cf) { <span> · conversion factor @cf.ToString("0.0000")</span> }
+            </MudText>
+            <MudTextField T="string" Value="_code" ValueChanged="SearchCodeAsync" Placeholder="Find a code (prefix)" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Style="max-width: 260px;" Class="mb-2" data-testid="code-search" />
+            <MudSimpleTable Dense="true" Hover="true" data-testid="schedule-lines">
+                <thead><tr><th>Code</th><th>Mod</th><th>Rev</th><th>Non-facility</th><th>Facility</th></tr></thead>
+                <tbody>
+                    @foreach (var l in d.Lines)
+                    {
+                        <tr data-testid="schedule-line">
+                            <td>@l.ProcedureCode</td><td>@l.Modifier</td><td>@l.RevenueCode</td>
+                            <td>@(l.Amount is null ? l.RateType : Money(l.Amount))</td><td>@Money(l.FacilityAmount)</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-2">
+                <MudText Typo="Typo.caption">
+                    @(d.MatchingCount == 0 ? "No lines" : $"{_skip + 1}-{Math.Min(_skip + PageSize, d.MatchingCount)} of {d.MatchingCount:N0}")
+                </MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small" Disabled="@(_skip == 0)" OnClick="@(() => PageAsync(-1))" />
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" Disabled="@(_skip + PageSize >= d.MatchingCount)" OnClick="@(() => PageAsync(1))" />
+            </MudStack>
+        </MudPaper>
+    };
+}
