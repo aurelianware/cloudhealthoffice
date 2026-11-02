@@ -1256,6 +1256,15 @@ public class ClaimTplRecord
     public List<ClaimTplResource> Resources { get; set; } = new();
     public List<int> CostAvoidLines { get; set; } = new();
     public List<ClaimTplPayAndChaseLine> PayAndChaseLines { get; set; } = new();
+
+    /// <summary>
+    /// The Medicaid allowable amount of the cost-avoid lines as priced before
+    /// the denial (what Medicaid would have paid): HHSC reports cost avoidance
+    /// at this amount, not billed charges (UMCM 5.3.4.2). Null when the lines
+    /// were not priced.
+    /// </summary>
+    public decimal? CostAvoidedAllowedAmount { get; set; }
+
     public DateTime DecidedAt { get; set; }
 }
 

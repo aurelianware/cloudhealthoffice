@@ -14,6 +14,22 @@ public sealed record ClaimPaymentVersion(
     bool Voided,
     string? MemberId = null);
 
+/// <summary>
+/// One adjudicated Medicaid claim version that touches the Texas TPL/TPR
+/// report: cost avoided for other insurance, or carrying another payer's
+/// payment (a credit applied to the claim).
+/// </summary>
+public sealed record TplReportClaim(
+    string ClaimNumber,
+    int VersionNumber,
+    string MemberId,
+    DateTime ServiceDateFrom,
+    DateTime AdjudicatedDate,
+    bool Denied,
+    string? TplDecision,
+    decimal? CostAvoidedAllowedAmount,
+    decimal OtherPayerPaid);
+
 /// <summary>Money the plan paid (or took back) for claims incurred in one month, in one later month.</summary>
 public sealed record PaidIncrement(string ClaimNumber, DateOnly IncurredMonth, DateOnly PaidMonth, decimal Amount, string? MemberId = null);
 

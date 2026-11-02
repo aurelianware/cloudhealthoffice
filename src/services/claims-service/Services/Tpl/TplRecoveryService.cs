@@ -17,7 +17,8 @@ public sealed record TplRetroactiveResult(int MembersChecked, int ClaimsChecked,
 public sealed record TplClockResult(int CasesChecked, int TransferredToState, int KeptUnderRepaymentPlan);
 
 public sealed record TplRecoveryEventRequest(
-    TplRecoveryEventType Type, decimal? Amount, DateTime? At, string? Reference, string? Note);
+    TplRecoveryEventType Type, decimal? Amount, DateTime? At, string? Reference, string? Note,
+    TplRecoverySource? Source = null);
 
 public interface ITplRecoveryService
 {
@@ -200,6 +201,7 @@ public sealed class TplRecoveryService : ITplRecoveryService
         c.Events.Add(new TplRecoveryEvent
         {
             Type = request.Type, At = at, Amount = request.Amount, Reference = request.Reference, Note = request.Note, By = actor,
+            Source = request.Type == TplRecoveryEventType.PaymentReceived ? request.Source : null,
         });
         c.UpdatedAt = DateTime.UtcNow;
     }

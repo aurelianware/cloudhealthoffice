@@ -248,7 +248,7 @@ claim and origin, under `api/v1/claims/tpl-recoveries` (`claims:read` to read,
 | --- | --- | --- |
 | `POST sync?from=&to=` | Opens a case for each Medicaid claim adjudicated in the window whose pay-and-chase lines were paid. Idempotent. | Daily, or after each payment cycle |
 | `POST retroactive` `{ "memberIds": [...] }` | Re-checks those members' paid Medicaid claims (last 12 months, `RetroactiveLookbackMonths`) against their TPL now and opens a case for lines other coverage turns out to have covered. Claims already cost-avoided, paid-and-chased or billed to the other payer are skipped. | After a TPL file load, for the members it added coverage for |
-| `POST {id}/events` | `Billed`, `PaymentReceived` (amount), `RepaymentPlanAgreed`, `CarrierDenied`, `WrittenOff` (amount), `Note` | As the recovery team works the case |
+| `POST {id}/events` | `Billed`, `PaymentReceived` (amount, and `source`: `Carrier` or `Provider`), `RepaymentPlanAgreed`, `CarrierDenied`, `WrittenOff` (amount), `Note` | As the recovery team works the case |
 | `POST apply-clocks` | Hands open cases past the state's window to the state | Daily |
 | `GET report?state=CA&month=2027-02-01` | Month's CSV: cases handed to the state, recoveries received | Monthly |
 | `GET ?state=&status=&openOnly=&deadlineBefore=&memberId=` | Work list | Any time |
@@ -256,6 +256,10 @@ claim and origin, under `api/v1/claims/tpl-recoveries` (`claims:read` to read,
 Each case holds the lines, what Medicaid paid on them, the TPL rows to
 recover from, amounts recovered and written off, and every event with who
 recorded it.
+
+Record `source` on each payment: Texas reports money from the other insurer
+and refunds or recoupments from the provider on separate lines of the
+TPL/TPR Report (see [TEXAS-TPR-REPORT.md](TEXAS-TPR-REPORT.md)).
 
 **Retention window.** `RecoveryRetentionMonths` is per state; California is
 12 (APL 21-002): the plan keeps recoveries made within 12 months of payment,

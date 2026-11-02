@@ -1503,4 +1503,42 @@ public class ClaimRepositoryMongo : IClaimRepository
             r.ClaimNumber, r.VersionNumber, r.ServiceDateFrom, r.PaidDate, r.Paid,
             r.Status == ClaimStatus.Voided || r.VersionState == ClaimVersionState.Voided, r.MemberId)).ToList();
     }
+
+    public async Task<IReadOnlyList<Finance.TplReportClaim>> GetTplReportClaimsAsync(
+        DateTime adjudicatedFrom, DateTime adjudicatedBefore, CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        var b = Builders<Claim>.Filter;
+        var filter = b.Eq(c => c.TenantId, tenantId)
+                     & b.Eq(c => c.LineOfBusiness, LineOfBusiness.Medicaid)
+                     & b.Gte(c => c.AdjudicatedDate, adjudicatedFrom)
+                     & b.Lt(c => c.AdjudicatedDate, adjudicatedBefore)
+                     & (b.Eq(c => c.AdjudicationResult!.ThirdPartyLiability!.Decision, "CostAvoided")
+                        // Not "> 0": decimals may be stored as strings, so the
+                        // amount is checked after reading.
+                        | b.ElemMatch(c => c.OtherPayers, p => p.PaidAmount != null));
+
+        var rows = await _collection.Find(filter)
+            .Project(c => new
+            {
+                c.ClaimNumber,
+                c.VersionNumber,
+                c.MemberId,
+                c.ServiceDateFrom,
+                c.AdjudicatedDate,
+                c.Status,
+                Decision = c.AdjudicationResult == null || c.AdjudicationResult.ThirdPartyLiability == null
+                    ? null : c.AdjudicationResult.ThirdPartyLiability.Decision,
+                Allowed = c.AdjudicationResult == null || c.AdjudicationResult.ThirdPartyLiability == null
+                    ? null : c.AdjudicationResult.ThirdPartyLiability.CostAvoidedAllowedAmount,
+                c.OtherPayers,
+            })
+            .ToListAsync(ct);
+        return rows.Select(r => new Finance.TplReportClaim(
+            r.ClaimNumber, r.VersionNumber, r.MemberId, r.ServiceDateFrom, r.AdjudicatedDate!.Value,
+            r.Status == ClaimStatus.Denied, r.Decision, r.Allowed,
+            r.OtherPayers.Sum(p => p.PaidAmount ?? 0m)))
+            .Where(r => r.TplDecision == "CostAvoided" || r.OtherPayerPaid != 0m)
+            .ToList();
+    }
 }

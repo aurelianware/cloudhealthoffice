@@ -217,6 +217,7 @@ public sealed class ThirdPartyLiabilityStage : IClaimAdjudicationStage
                 StateCoverageCode = r.StateCoverageCode,
             }).ToList(),
             CostAvoidLines = (costAvoid ?? []).ToList(),
+            CostAvoidedAllowedAmount = CostAvoidedAllowed(context, costAvoid),
             PayAndChaseLines = (payAndChase ?? []).Select(p => new ClaimTplPayAndChaseLine
             {
                 LineNumber = p.LineNumber,
@@ -235,6 +236,14 @@ public sealed class ThirdPartyLiabilityStage : IClaimAdjudicationStage
             PayAndChaseLines = payAndChase ?? [],
         };
         return ClaimAdjudicationStageResult.Pass(StageName);
+    }
+
+    /// <summary>What pricing allowed on the cost-avoid lines; null when none of them priced.</summary>
+    private static decimal? CostAvoidedAllowed(ClaimAdjudicationContext context, IReadOnlyList<int>? costAvoid)
+    {
+        if (costAvoid is not { Count: > 0 } || context.PricingResult?.AllowedAmounts is not { } allowed) return null;
+        var priced = costAvoid.Where(allowed.ContainsKey).ToList();
+        return priced.Count == 0 ? null : priced.Sum(n => allowed[n]);
     }
 
     private static bool ApprovedByExaminer(ClaimAdjudicationContext context, string reason)

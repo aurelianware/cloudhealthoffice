@@ -125,6 +125,30 @@ public class ThirdPartyLiabilityStageTests
     }
 
     [Fact]
+    public async Task CostAvoidance_SavesTheMedicaidAllowableOfTheAvoidedLines()
+    {
+        // HHSC's TPL/TPR Report counts cost avoidance at the Medicaid allowable, not billed charges.
+        OnFile(Resource(TplServiceScope.Comprehensive));
+        var ctx = Context(Claim("99213", "85025"));
+        ctx.PricingResult = new PricingOutcome { AllowedAmounts = new Dictionary<int, decimal> { [1] = 61.20m, [2] = 8.75m } };
+
+        await Stage().ExecuteAsync(ctx, default);
+
+        Assert.Equal(69.95m, ctx.AdjudicationResult.ThirdPartyLiability!.CostAvoidedAllowedAmount);
+    }
+
+    [Fact]
+    public async Task CostAvoidance_WithoutPricing_LeavesTheAllowableEmpty()
+    {
+        OnFile(Resource(TplServiceScope.Comprehensive));
+        var ctx = Context(Claim("99213"));
+
+        await Stage().ExecuteAsync(ctx, default);
+
+        Assert.Null(ctx.AdjudicationResult.ThirdPartyLiability!.CostAvoidedAllowedAmount);
+    }
+
+    [Fact]
     public async Task PendMode_PendsInsteadOfDenying()
     {
         OnFile(Resource(TplServiceScope.Comprehensive));
