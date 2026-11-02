@@ -100,7 +100,12 @@ const REGULATORY_CONTEXT = {
   PDex:
     'The Payer-to-Payer API CMS-0057-F requires by January 1, 2027: a new payer finds a member at the prior payer ' +
     'with the HRex $member-match operation, under the member\'s consent. Da Vinci PDex is the implementation ' +
-    'guide CMS recommends.'
+    'guide CMS recommends.',
+  DTR:
+    'The Prior Authorization API CMS-0057-F requires by January 1, 2027, which must make the payer\'s ' +
+    'documentation requirements available to providers. Da Vinci DTR is the implementation guide CMS recommends ' +
+    'for that part, alongside CRD and PAS: the provider\'s EHR or DTR app fetches the payer\'s questionnaires and ' +
+    'their prepopulation logic.'
 };
 
 // Groups the kit declares without an id are named by the runnable id Inferno
@@ -275,7 +280,8 @@ const BADGE_LABELS = {
   'CARIN BB': 'Inferno CARIN BB',
   'Plan-Net': 'Inferno Plan-Net',
   'Bulk Data': 'Inferno Bulk Data',
-  PDex: 'Inferno PDex'
+  PDex: 'Inferno PDex',
+  DTR: 'Inferno DTR'
 };
 
 function badgeFor(kit) {

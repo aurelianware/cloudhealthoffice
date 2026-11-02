@@ -45,13 +45,41 @@
     },
     {
       "id": "INFERNO-DTR-PAYER-001",
-      "title": "Inferno DTR payer-server suite against CHO",
+      "title": "Inferno DTR 2.2.0 payer-server suite against CHO",
       "protocol": "DTR",
       "choRole": "Server",
       "externalTarget": "inferno-dtr",
-      "requiredServices": ["cho-fhir-service", "inferno-dtr"],
-      "implemented": false,
-      "description": "Run the davinci-dtr-test-kit dtr_payer_server suite with CHO's FHIR base as the suite input and map Inferno result statuses into InteropResult."
+      "requiredServices": [
+        "cho-fhir-service",
+        "cho-smart-auth-service",
+        "cho-member-service",
+        "cho-coverage-service",
+        "inferno-dtr"
+      ],
+      "implemented": true,
+      "infernoSuite": "dtr_payer_server_v220",
+      "infernoGroups": [
+        "dtr_payer_v220_discovery",
+        "dtr_payer_v220_backend_services",
+        "dtr_payer_server_v220_questionnaire_operations",
+        "dtr_payer_v220_log_questionnaire_error_support"
+      ],
+      "infernoInputs": [
+        "url",
+        "backend_services_smart_auth_info",
+        "questionnaire_package_request_parameters",
+        "questionnaire_response_templates",
+        "invalid_questionnaire_response",
+        "source_data_error_request",
+        "questionnaire_canonical"
+      ],
+      "infernoKnownKitIssues": [
+        { "test": "dtr_payer_server_v220_questionnaire_operations-dtr_payer_server_v220_must_support-dtr_v220_payer_questionnaire_base_must_support", "reason": "In davinci-dtr-test-kit v0.18.0 (the latest release) the DTR Base Questionnaire must-support test requires every element its generated metadata lists (cross_suite/generated/v2.2.0/dtr_base_questionnaire/metadata.yml), and that list includes Questionnaire.extension:assemble-expectation and Questionnaire.item.extension:itemOptionalDisplay, which the DTR 2.2.0 dtr-base-questionnaire profile prohibits (max 0). No conformant Questionnaire can show them, so the test cannot pass. The returned Questionnaires are still validated against their DTR profiles by the package and next-question validation tests." },
+        { "test": "dtr_payer_server_v220_questionnaire_operations-dtr_payer_server_v220_must_support-dtr_v220_payer_questionnaire_adaptive_search_must_support", "reason": "In davinci-dtr-test-kit v0.18.0 (the latest release) the DTR Questionnaire for adaptive form search must-support test requires Questionnaire.item and its children and Questionnaire.extension:assemble-expectation (cross_suite/generated/v2.2.0/dtr_questionnaire_adapt_search/metadata.yml), and the DTR 2.2.0 dtr-questionnaire-adapt-search profile prohibits both (Questionnaire.item max 0, assemble-expectation max 0). An adaptive search form carries no items by design, so the test cannot pass. The search form is still validated against its profile by the package validation tests." },
+        { "test": "dtr_payer_server_v220_questionnaire_operations-dtr_payer_v220_questionnaire_design-dtr_v220_payer_cql_library_validation", "reason": "In davinci-dtr-test-kit v0.18.0 (the latest release) the CQL library test treats every relatedArtifact of type depends-on in a returned Library as a Library reference (depends_on_library_canonicals in server/v2.2.0/questionnaire_operation_validation.rb), and fails when no Library with that canonical is in the bundle. CHO's MRI prepopulation Library declares its two ValueSets as depends-on, as the CQL and CRMI IGs describe for terminology a library uses, and the package carries both ValueSets, so the test reports ValueSet canonicals as missing Libraries. The rest of the test (every Library carries CQL and ELM, one version per name, every cqf-library reference included) is what CHO's package tests check." }
+      ],
+      "infernoAuth": "dtrClientBackendServices",
+      "description": "Run the davinci-dtr-test-kit DTR 2.2.0 payer-server suite against the interop-cho profile, with the kit as a provider's DTR client (an EHR with native DTR, or a DTR app). It discovers CHO's DTR operations in the CapabilityStatement, obtains its own token with SMART Backend Services as the seed's dtrBackendClient (DTR spec-120), then calls $questionnaire-package once per input type: questionnaire canonicals (CHO's standard MRI form and its adaptive sleep-study form), a CRD context id alone (a coverage-assertion-id CHO's own CRD order-sign service issued for an MRI order before the run), and an order alone. It completes the adaptive form through $next-question with the answers in the QuestionnaireResponse template, expands any ValueSet sent unexpanded, validates every package against the DTR profiles, and checks the error cases: an unknown questionnaire is a warning (oper-9), an unknown context id is a 4xx with an OperationOutcome (spec-130), and an adaptive response answered against its own contained Questionnaire's rules is a 400 (spec-147). Last, $log-questionnaire-errors. The requests are built from the seed in tests/DaVinciInterop.Tests/Harness/DtrPayerServerRequests.cs."
     },
     {
       "id": "INFERNO-PDEX-SERVER-001",

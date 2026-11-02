@@ -79,7 +79,7 @@ public class DtrControllerTests
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
         var bundle = okResult.Value.Should().BeOfType<Bundle>().Subject;
         bundle.Type.Should().Be(Bundle.BundleType.Searchset);
-        bundle.Entry.Should().HaveCount(5); // 5 seed questionnaires
+        bundle.Entry.Should().HaveCount(6); // 6 seed questionnaires (one adaptive)
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class DtrControllerTests
 
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
         var bundle = okResult.Value.Should().BeOfType<Bundle>().Subject;
-        bundle.Entry.Should().HaveCount(4); // 4 active, 1 draft excluded
+        bundle.Entry.Should().HaveCount(5); // 5 active, 1 draft excluded
     }
 
     // ── Questionnaire Create ─────────────────────────────────────────────────

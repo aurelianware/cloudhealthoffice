@@ -97,7 +97,8 @@ public static class InfernoSuiteScenario
             var fixture = ChoSeedFixture.Load();
 
             if (remote is null
-                && scenario.InfernoAuth is InfernoAuthModes.BackendServices or InfernoAuthModes.PayerBackendServices)
+                && scenario.InfernoAuth is InfernoAuthModes.BackendServices or InfernoAuthModes.PayerBackendServices
+                    or InfernoAuthModes.DtrClientBackendServices)
             {
                 run.Record(InteropFinding.Info(
                     "inferno.auth.backendClient",
@@ -117,7 +118,19 @@ public static class InfernoSuiteScenario
                     $"patient launch; smart-auth-service bound the token to Patient/{patient}"));
             }
 
-            var inputs = remote?.BuildInputs(scenario) ?? BuildInputs(scenario, fixture, patientToken);
+            DtrSourceData? dtrSource = null;
+            if (remote is null && scenario.InfernoInputs.Contains("questionnaire_package_request_parameters"))
+            {
+                dtrSource = await DtrPayerServerRequests.ObtainAsync(
+                    fixture, ChoUnderTest.HostRootUrl, cancellationToken);
+                run.Record(InteropFinding.Info(
+                    "inferno.dtr.sourceData",
+                    $"The DTR requests name the member's Coverage/{dtrSource.CoverageId}, read from CHO, and the " +
+                    $"coverage-assertion-id {dtrSource.ContextId} CHO's CRD order-sign service issued for CPT " +
+                    $"{DtrPayerServerRequests.MriOrderCode}."));
+            }
+
+            var inputs = remote?.BuildInputs(scenario) ?? BuildInputs(scenario, fixture, patientToken, dtrSource);
 
             var suiteId = scenario.RequiredInfernoSuite;
             var sessionId = await runner.CreateSessionAsync(suiteId, cancellationToken);
@@ -249,8 +262,13 @@ public static class InfernoSuiteScenario
     /// declares them under.
     /// </summary>
     public static List<InfernoInput> BuildInputs(
-        InteropScenarioDefinition scenario, ChoSeedFixture fixture, string? patientToken = null)
+        InteropScenarioDefinition scenario, ChoSeedFixture fixture, string? patientToken = null,
+        DtrSourceData? dtrSource = null)
     {
+        DtrSourceData Dtr() => dtrSource ?? throw new InteropEnvironmentException(
+            $"Scenario '{scenario.Id}' declares DTR request inputs, and no DTR source data (Coverage id and CRD " +
+            "context id) was read from CHO.");
+
         var token = scenario.InfernoAuth == InfernoAuthModes.PatientApp
             ? patientToken ?? throw new InteropEnvironmentException(
                 $"Scenario '{scenario.Id}' authenticates as the patient app, and no patient token was obtained.")
@@ -260,7 +278,27 @@ public static class InfernoSuiteScenario
         {
             "url" or "bulk_server_url" => new InfernoInput { Name = name, Value = ChoUnderTest.ContainerBaseUrl(scenario.ChoSurface) },
             "patient_ids" => new InfernoInput { Name = "patient_ids", Value = fixture.Member.MemberId },
-            "smart_auth_info" => SmartAuthInfo(scenario, fixture, token),
+            "smart_auth_info" or "backend_services_smart_auth_info" => SmartAuthInfo(name, scenario, fixture, token),
+            "questionnaire_package_request_parameters" => new InfernoInput
+            {
+                Name = name, Value = DtrPayerServerRequests.PackageRequests(fixture, Dtr()).ToJsonString(),
+            },
+            "questionnaire_response_templates" => new InfernoInput
+            {
+                Name = name, Value = DtrPayerServerRequests.ResponseTemplates().ToJsonString(),
+            },
+            "invalid_questionnaire_response" => new InfernoInput
+            {
+                Name = name, Value = DtrPayerServerRequests.InvalidQuestionnaireResponse(fixture, Dtr()).ToJsonString(),
+            },
+            "source_data_error_request" => new InfernoInput
+            {
+                Name = name, Value = DtrPayerServerRequests.SourceDataErrorRequest(fixture, Dtr()).ToJsonString(),
+            },
+            "questionnaire_canonical" => new InfernoInput
+            {
+                Name = name, Value = DtrPayerServerRequests.MriQuestionnaire,
+            },
             "group_id" => new InfernoInput { Name = "group_id", Value = fixture.BackendClient.ProviderId },
             "bulk_timeout" => new InfernoInput { Name = "bulk_timeout", Value = BulkTimeoutSeconds },
             "lines_to_validate" => new InfernoInput { Name = "lines_to_validate", Value = BulkLinesToValidate },
@@ -338,22 +376,25 @@ public static class InfernoSuiteScenario
         return carried;
     }
 
-    private static InfernoInput SmartAuthInfo(InteropScenarioDefinition scenario, ChoSeedFixture fixture, string token)
+    private static InfernoInput SmartAuthInfo(
+        string name, InteropScenarioDefinition scenario, ChoSeedFixture fixture, string token)
         => scenario.InfernoAuth switch
         {
-            InfernoAuthModes.ChoToken or InfernoAuthModes.PatientApp => InfernoInput.AccessToken("smart_auth_info", token),
-            InfernoAuthModes.BackendServices or InfernoAuthModes.PayerBackendServices => InfernoInput.BackendServices(
-                "smart_auth_info",
+            InfernoAuthModes.ChoToken or InfernoAuthModes.PatientApp => InfernoInput.AccessToken(name, token),
+            InfernoAuthModes.BackendServices or InfernoAuthModes.PayerBackendServices
+                or InfernoAuthModes.DtrClientBackendServices => InfernoInput.BackendServices(
+                name,
                 ChoUnderTest.ContainerTokenUrl,
                 BackendClientFor(scenario, fixture).ClientId,
                 string.Join(' ', BackendClientFor(scenario, fixture).Scopes),
-                // The Bulk Data kit runs SMART Backend Services tests that
-                // obtain the token; the PDex server suite has none.
+                // The Bulk Data and DTR kits run SMART Backend Services tests
+                // that obtain the token; the PDex server suite has none.
                 startExpired: scenario.InfernoAuth == InfernoAuthModes.PayerBackendServices),
             _ => throw new InteropEnvironmentException(
                 $"Scenario '{scenario.Id}' declares infernoAuth '{scenario.InfernoAuth}', which the harness " +
                 $"does not know. Known: {InfernoAuthModes.ChoToken}, {InfernoAuthModes.BackendServices}, " +
-                $"{InfernoAuthModes.PayerBackendServices}, {InfernoAuthModes.PatientApp}."),
+                $"{InfernoAuthModes.PayerBackendServices}, {InfernoAuthModes.DtrClientBackendServices}, " +
+                $"{InfernoAuthModes.PatientApp}."),
         };
 
     /// <summary>
@@ -361,14 +402,26 @@ public static class InfernoSuiteScenario
     /// inferno_core's <c>/jwks.json</c>. The PDex server suite publishes no JWKS
     /// route of its own; its auth_info input signs with the core keys.
     /// </summary>
-    public static string? JwksSuiteFor(InteropScenarioDefinition scenario)
-        => scenario.InfernoAuth == InfernoAuthModes.PayerBackendServices ? null : scenario.RequiredInfernoSuite;
+    public static string? JwksSuiteFor(InteropScenarioDefinition scenario) => scenario.InfernoAuth switch
+    {
+        InfernoAuthModes.PayerBackendServices => null,
+        // The DTR suite's Backend Services group is the SMART App Launch kit's,
+        // which signs with the keys that kit serves under its smart_stu2 suite.
+        InfernoAuthModes.DtrClientBackendServices => SmartAppLaunchJwksSuite,
+        _ => scenario.RequiredInfernoSuite,
+    };
+
+    /// <summary>The SMART App Launch suite whose JWKS route the DTR kit's Backend Services group signs with.</summary>
+    public const string SmartAppLaunchJwksSuite = "smart_stu2";
 
     /// <summary>The backend client a self-authenticating kit is registered as: a provider's, or a requesting payer's.</summary>
     public static ChoSeedBackendClient BackendClientFor(InteropScenarioDefinition scenario, ChoSeedFixture fixture)
-        => scenario.InfernoAuth == InfernoAuthModes.PayerBackendServices
-            ? fixture.PayerBackendClient
-            : fixture.BackendClient;
+        => scenario.InfernoAuth switch
+        {
+            InfernoAuthModes.PayerBackendServices => fixture.PayerBackendClient,
+            InfernoAuthModes.DtrClientBackendServices => fixture.DtrBackendClient,
+            _ => fixture.BackendClient,
+        };
 
     private static async Task<InfernoTestRun> ExecuteAsync(
         InfernoRunner runner,
@@ -509,6 +562,7 @@ public static class InfernoSuiteScenario
         "Plan-Net" => "1.2.0",
         "Bulk Data" => "2.0.0",
         "PDex" => "2.1.0",
+        "DTR" => "2.2.0",
         _ => null,
     };
 

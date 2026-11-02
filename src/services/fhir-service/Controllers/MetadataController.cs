@@ -292,9 +292,15 @@ public class MetadataController : FhirControllerBase
                         ],
                         supportedProfiles:
                         [
-                            "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-std-questionnaire"
+                            "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-std-questionnaire",
+                            "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-questionnaire-adapt-search"
                         ],
-                        operations: [QuestionnairePackageOperation]),
+                        operations:
+                        [
+                            QuestionnairePackageOperation,
+                            NextQuestionOperation,
+                            LogQuestionnaireErrorsOperation,
+                        ]),
                         BuildResource("QuestionnaireResponse",
                         [
                             ("_id",            SearchParamType.Token),
@@ -323,7 +329,10 @@ public class MetadataController : FhirControllerBase
                         BuildResource("ValueSet",
                         [
                             ("_id", SearchParamType.Token),
-                        ]),
+                        ],
+                        // DTR ValueSet/$expand (DtrController) for the
+                        // ValueSets DTR questionnaires use.
+                        operations: [ValueSetExpandOperation]),
                         BuildResource("OperationDefinition",
                         [
                             ("_id", SearchParamType.Token),
@@ -464,6 +473,18 @@ public class MetadataController : FhirControllerBase
     /// <summary>DTR <c>$questionnaire-package</c>, the canonical the DTR payer-server kit looks for.</summary>
     internal static readonly (string Name, string Definition) QuestionnairePackageOperation =
         ("questionnaire-package", "http://hl7.org/fhir/us/davinci-dtr/OperationDefinition/questionnaire-package");
+
+    /// <summary>DTR <c>$next-question</c> (adaptive forms; AdaptiveQuestionnaireEngine).</summary>
+    internal static readonly (string Name, string Definition) NextQuestionOperation =
+        ("next-question", "http://hl7.org/fhir/us/davinci-dtr/OperationDefinition/DTR-Questionnaire-next-question");
+
+    /// <summary>DTR <c>$log-questionnaire-errors</c>.</summary>
+    internal static readonly (string Name, string Definition) LogQuestionnaireErrorsOperation =
+        ("log-questionnaire-errors", "http://hl7.org/fhir/us/davinci-dtr/OperationDefinition/log-questionnaire-errors");
+
+    /// <summary>DTR's profile of <c>ValueSet/$expand</c>.</summary>
+    internal static readonly (string Name, string Definition) ValueSetExpandOperation =
+        ("expand", "http://hl7.org/fhir/us/davinci-dtr/OperationDefinition/DTR-ValueSet-expand");
 
     private static readonly (string Name, string Definition) PatientExportOperation =
         ("export", "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/patient-export");

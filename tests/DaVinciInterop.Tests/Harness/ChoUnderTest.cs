@@ -30,7 +30,10 @@ public static class ChoUnderTest
     public const string ContainerFhirBaseUrl = "http://cho-fhir-service:8080/fhir/r4";
 
     /// <summary>fhir-service, from the host.</summary>
-    public static string HostFhirBaseUrl => $"{Host("INTEROP_CHO_FHIR_PORT", 18023)}/fhir/r4";
+    public static string HostFhirBaseUrl => $"{HostRootUrl}/fhir/r4";
+
+    /// <summary>fhir-service's root from the host, where CDS Hooks (<c>/cds-services</c>) is served.</summary>
+    public static string HostRootUrl => Host("INTEROP_CHO_FHIR_PORT", 18023);
 
     /// <summary>
     /// smart-auth-service, as a kit on the Compose network addresses it. It is

@@ -92,7 +92,7 @@ public sealed class MongoDtrResourceStoreTests : IAsyncLifetime
         var defaults = await Questionnaires
             .Find(Builders<BsonDocument>.Filter.Eq("tenantId", DtrService.DefaultLibraryTenant))
             .ToListAsync();
-        defaults.Should().HaveCount(5);
+        defaults.Should().HaveCount(6);
         defaults.Select(d => d["resourceId"].AsString).Should().Contain("q-imaging-mri");
 
         var mri = await NewService().GetQuestionnaireAsync("q-imaging-mri", Tenant);
@@ -368,7 +368,7 @@ public sealed class MongoDtrResourceStoreTests : IAsyncLifetime
         await System.Threading.Tasks.Task.WhenAll(Enumerable.Range(0, 6).Select(_ =>
             System.Threading.Tasks.Task.Run(() => NewService())));
         (await Questionnaires.CountDocumentsAsync(Builders<BsonDocument>.Filter.Eq("tenantId", DtrService.DefaultLibraryTenant)))
-            .Should().Be(5);
+            .Should().Be(6);
     }
 
     [Fact]

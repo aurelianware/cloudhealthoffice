@@ -117,9 +117,9 @@
       "license": "Apache-2.0",
       "pin": {
         "kind": "releaseTag",
-        "tag": "v0.17.1",
-        "commit": "ed28c3a6a9742f4f81365f8747656e5c6add543c",
-        "reference": "https://github.com/inferno-framework/davinci-dtr-test-kit@v0.17.1"
+        "tag": "v0.18.0",
+        "commit": "1b76dd3f565433a3157808da2d6d0c08a797b2f0",
+        "reference": "https://github.com/inferno-framework/davinci-dtr-test-kit@v0.18.0"
       },
       "compose": { "service": "inferno-dtr", "profiles": ["interop-dtr-inferno"] },
       "endpoints": {
@@ -130,16 +130,17 @@
       "auth": { "mode": "None", "note": "Same as the PDex kit: CHO is the system under test and supplies endpoint configuration as suite input." },
       "inferno": {
         "apiBaseUrl": "http://127.0.0.1:14568/api",
-        "suites": ["dtr_payer_server", "dtr_full_ehr", "dtr_light_ehr", "dtr_smart_app"],
+        "suites": ["dtr_payer_server", "dtr_payer_server_v220", "dtr_full_ehr", "dtr_full_ehr_v220", "dtr_light_ehr", "dtr_smart_app"],
         "runner": "docker compose build && docker compose up (upstream run.sh) from a checkout at the pinned tag"
       },
-      "implementationGuides": { "DTR": "see kit release notes for v0.17.1" },
+      "implementationGuides": { "DTR": "2.2.0", "SMART App Launch": "2.0.0" },
       "requiredEgress": [
         "https://github.com — the kit is fetched at the pinned tag during explicit setup",
         "https://rubygems.org and Docker Hub — the kit image is built locally from upstream's Dockerfile",
         "https://packages.fhir.org — the bundled hl7_validator_service loads IG packages"
       ],
-      "startupNotes": "Not started in this PR. Same integration seam as the PDex kit."
+      "igVersionProvenance": "Read from lib/davinci_dtr_test_kit/server/v2.2.0/dtr_payer_server_suite.rb at the pinned tag (fhir_resource_validator igs 'hl7.fhir.us.davinci-dtr#2.2.0'; Backend Services group from smart_app_launch_test_kit 1.0.3) and the bundled igs/davinci_dtr_2.2.0.tgz.",
+      "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Started by INFERNO-DTR-PAYER-001, which runs the dtr_payer_server_v220 suite. v0.18.0 replaced v0.17.1, whose dtr_payer_server suite tests DTR 2.0.1 and requires CQL as text/cql where CHO, following DTR 2.2.0, names it text/cql-identifier."
     },
     {
       "name": "inferno-framework/carin-for-blue-button-test-kit",

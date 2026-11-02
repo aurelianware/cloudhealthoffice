@@ -43,6 +43,7 @@ public sealed class ScenarioInventoryTests
                 "BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001",
                 "INFERNO-USCORE-SERVER-001", "INFERNO-C4BB-SERVER-001",
                 "INFERNO-PLANNET-SERVER-001", "INFERNO-BULK-SERVER-001", "INFERNO-PDEX-SERVER-001",
+                "INFERNO-DTR-PAYER-001",
             ]);
     }
 
@@ -183,8 +184,11 @@ public sealed class ScenarioInventoryTests
                 {
                     // A group the kit declares without an id is named by its runnable
                     // id (c4bb_v200-Group02); its tests carry the suite's prefix.
+                    // A kit whose test ids do not carry their group's prefix (DTR) is
+                    // named by its runnable path below the suite, group first.
                     scenario.InfernoGroups.Should().Contain(
                         group => issue.Test.StartsWith(group + "_", StringComparison.Ordinal)
+                                 || issue.Test.StartsWith(group + "-", StringComparison.Ordinal)
                                  || (group.Contains('-') && issue.Test.StartsWith(group.Substring(0, group.IndexOf('-')) + "_", StringComparison.Ordinal)),
                         $"'{issue.Test}' must belong to a group '{scenario.Id}' runs");
                 }
@@ -232,6 +236,9 @@ public sealed class ScenarioInventoryTests
                 ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_professional_non_clinician_validation_test"),
                 ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_inpatient_institutional_validation_test"),
                 ("INFERNO-C4BB-SERVER-001", "c4bb_v200_eob_outpatient_institutional_validation_test"),
+                ("INFERNO-DTR-PAYER-001", "dtr_payer_server_v220_questionnaire_operations-dtr_payer_server_v220_must_support-dtr_v220_payer_questionnaire_base_must_support"),
+                ("INFERNO-DTR-PAYER-001", "dtr_payer_server_v220_questionnaire_operations-dtr_payer_server_v220_must_support-dtr_v220_payer_questionnaire_adaptive_search_must_support"),
+                ("INFERNO-DTR-PAYER-001", "dtr_payer_server_v220_questionnaire_operations-dtr_payer_v220_questionnaire_design-dtr_v220_payer_cql_library_validation"),
             }), "adding one is a change of claim, so it should be seen here too");
     }
 
@@ -244,11 +251,13 @@ public sealed class ScenarioInventoryTests
         {
             // A patient-app suite is given the token the launch obtains; any value stands in here.
             var patientToken = scenario.InfernoAuth == InfernoAuthModes.PatientApp ? "patient-app-token" : null;
-            var act = () => InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken);
+            // A DTR suite is given the Coverage and CRD context the run reads from CHO; any ids stand in here.
+            var dtrSource = new DtrSourceData("coverage-id", "context-id");
+            var act = () => InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken, dtrSource);
 
             act.Should().NotThrow($"'{scenario.Id}' declares inputs [{string.Join(", ", scenario.InfernoInputs)}]");
 
-            InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken)
+            InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken, dtrSource)
                 .Select(input => input.Name)
                 .Should().BeEquivalentTo(scenario.InfernoInputs);
         }
@@ -512,7 +521,7 @@ public sealed class ScenarioInventoryTests
         {
             scenario.InfernoAuth.Should().BeOneOf(
                 InfernoAuthModes.ChoToken, InfernoAuthModes.BackendServices, InfernoAuthModes.PayerBackendServices,
-                InfernoAuthModes.PatientApp);
+                InfernoAuthModes.DtrClientBackendServices, InfernoAuthModes.PatientApp);
         }
     }
 

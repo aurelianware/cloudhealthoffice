@@ -53,6 +53,16 @@ public static class SmartScopes
     /// </summary>
     public const string SystemPayerToPayerRead = "system/PayerToPayer.read";
 
+    // ── DTR (Da Vinci Documentation Templates and Rules) ──────────────────────
+    // What a provider's DTR client (an EHR with native DTR, or a DTR app)
+    // needs from the payer and nothing more: Questionnaire for
+    // $questionnaire-package, $next-question and $log-questionnaire-errors, and
+    // ValueSet for $expand. None reads member data.
+    public const string UserQuestionnaireRead = "user/Questionnaire.read";
+    public const string SystemQuestionnaireRead = "system/Questionnaire.read";
+    public const string UserValueSetRead = "user/ValueSet.read";
+    public const string SystemValueSetRead = "system/ValueSet.read";
+
     // ── Write scopes ──────────────────────────────────────────────────────────
     // The FHIR surface serves genuine writes — Da Vinci PAS Claim/$submit, the
     // CDex $submit-attachment response, DTR questionnaire responses — and a read
@@ -118,6 +128,10 @@ public static class SmartScopes
         (SystemEncounterRead,    "System: read Encounter"),
         (SystemClaimRead,        "System: read Claim"),
         (SystemPayerToPayerRead, "System: Payer-to-Payer member match and data export"),
+        (UserQuestionnaireRead,   "User: read documentation questionnaires (DTR)"),
+        (SystemQuestionnaireRead, "System: read documentation questionnaires (DTR)"),
+        (UserValueSetRead,        "User: expand questionnaire value sets (DTR)"),
+        (SystemValueSetRead,      "System: expand questionnaire value sets (DTR)"),
 
         // Writes. Without these the FHIR surface's write operations —
         // PAS Claim/$submit, CDex $submit-attachment, DTR responses — are
