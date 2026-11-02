@@ -107,10 +107,14 @@ public class AgReportBuilderTests
     }
 
     [Fact]
-    public void The_dhcs_list_has_the_25_apl_24_001_categories()
+    public void The_dhcs_dental_lists_have_the_apl_25_008_categories()
     {
-        Assert.Equal(25, GrievanceCategories.DhcsMediCal.Count);
-        Assert.Equal(GrievanceCategories.DhcsMediCal.Count, GrievanceCategories.DhcsMediCal.Distinct().Count());
+        Assert.Equal(37, GrievanceCategories.DhcsMediCalDental.Count);
+        Assert.Equal(GrievanceCategories.DhcsMediCalDental.Count, GrievanceCategories.DhcsMediCalDental.Distinct().Count());
+        Assert.Equal("Continuity of Care", GrievanceCategories.DhcsMediCalDental[0]);
+        Assert.Equal("Provider Direct Member Billing", GrievanceCategories.DhcsMediCalDental[^1]);
+        Assert.Equal(5, GrievanceCategories.DhcsMediCalDentalAppeals.Count);
+        Assert.Equal("Out of Network Appeals", GrievanceCategories.DhcsMediCalDentalAppeals[3]);
     }
 
     [Fact]

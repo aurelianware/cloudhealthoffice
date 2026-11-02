@@ -55,7 +55,7 @@ public static class AgReportCatalog
             Permission,
             [From, To, Lob],
             ["Category", "Received", "ResolvedOnTime", "ResolvedLate", "ClosedWithoutDecision", "Open", "PercentOnTime"],
-            "DHCS APL 24-001 grievance categories (Medi-Cal); other states' categories are recorded as given"),
+            "DHCS Dental APL 25-008 grievance categories (Medi-Cal Dental); other programs' and states' categories are recorded as given"),
     ];
 
     public static ReportDefinition Find(string id) => All.Single(d => d.Id == id);
