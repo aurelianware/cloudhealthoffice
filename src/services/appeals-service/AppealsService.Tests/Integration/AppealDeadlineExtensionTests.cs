@@ -38,7 +38,7 @@ public class AppealDeadlineExtensionTests : IClassFixture<AppealsWebApplicationF
     }
 
     private static CreateAppealRequest BuildCreate(
-        LineOfBusiness lob,
+        AppealCoverage lob,
         bool urgent = false,
         AppealType type = AppealType.Reconsideration,
         AppealLevel level = AppealLevel.FirstLevel) => new()
@@ -49,7 +49,8 @@ public class AppealDeadlineExtensionTests : IClassFixture<AppealsWebApplicationF
         PatientName = "Jane Doe",
         ProviderNPI = "1234567890",
         AppealReason = "Denied service was medically necessary.",
-        LineOfBusiness = lob,
+        LineOfBusiness = lob.LineOfBusiness,
+        BenefitType = lob.BenefitType,
         AppealType = type,
         AppealLevel = level,
         IsUrgent = urgent
@@ -227,15 +228,15 @@ public class AppealDeadlineExtensionTests : IClassFixture<AppealsWebApplicationF
 
     [Theory]
     [InlineData(LineOfBusiness.Commercial, AppealType.Reconsideration, AppealLevel.FirstLevel)]
-    [InlineData(LineOfBusiness.Marketplace, AppealType.Reconsideration, AppealLevel.FirstLevel)]
-    [InlineData(LineOfBusiness.MedicarePartD, AppealType.Reconsideration, AppealLevel.FirstLevel)]
+    [InlineData(LineOfBusiness.Exchange, AppealType.Reconsideration, AppealLevel.FirstLevel)]
+    [InlineData(LineOfBusiness.Medicare, AppealType.Reconsideration, AppealLevel.FirstLevel, AppealBenefitType.PartDDrug)]
     [InlineData(LineOfBusiness.Medicare, AppealType.Reconsideration, AppealLevel.ExternalReview)]
     [InlineData(LineOfBusiness.Medicaid, AppealType.ExternalReview, AppealLevel.ExternalReview)]
-    public async Task Extension_Not_Permitted_Returns422(LineOfBusiness lob, AppealType type, AppealLevel level)
+    public async Task Extension_Not_Permitted_Returns422(LineOfBusiness lob, AppealType type, AppealLevel level, AppealBenefitType benefit = AppealBenefitType.MedicalOrService)
     {
         _factory.Reset();
         var client = NewClient();
-        var appeal = await CreateSubmittedAsync(client, BuildCreate(lob, type: type, level: level));
+        var appeal = await CreateSubmittedAsync(client, BuildCreate(new AppealCoverage(lob, benefit), type: type, level: level));
 
         var response = await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/extend", Extend(), JsonOptions);
 
@@ -367,20 +368,20 @@ public class AppealDeadlineExtensionTests : IClassFixture<AppealsWebApplicationF
 
     [Theory]
     [InlineData(LineOfBusiness.Commercial, AppealType.ExternalReview, AppealLevel.ExternalReview, 45)]
-    [InlineData(LineOfBusiness.Marketplace, AppealType.Reconsideration, AppealLevel.ExternalReview, 45)]
+    [InlineData(LineOfBusiness.Exchange, AppealType.Reconsideration, AppealLevel.ExternalReview, 45)]
     [InlineData(LineOfBusiness.Medicaid, AppealType.ExternalReview, AppealLevel.FirstLevel, 90)]
     [InlineData(LineOfBusiness.Medicare, AppealType.Reconsideration, AppealLevel.ExternalReview, 30)]
-    [InlineData(LineOfBusiness.MedicarePartD, AppealType.Reconsideration, AppealLevel.FirstLevel, 7)]
-    [InlineData(LineOfBusiness.MedicarePartD, AppealType.Reconsideration, AppealLevel.ExternalReview, 7)]
+    [InlineData(LineOfBusiness.Medicare, AppealType.Reconsideration, AppealLevel.FirstLevel, 7, AppealBenefitType.PartDDrug)]
+    [InlineData(LineOfBusiness.Medicare, AppealType.Reconsideration, AppealLevel.ExternalReview, 7, AppealBenefitType.PartDDrug)]
     public async Task Create_Defaults_TargetResponseDate_To_Tier_Clock(
-        LineOfBusiness lob, AppealType type, AppealLevel level, int days)
+        LineOfBusiness lob, AppealType type, AppealLevel level, int days, AppealBenefitType benefit = AppealBenefitType.MedicalOrService)
     {
         _factory.Reset();
         var client = NewClient();
 
         var before = DateTime.UtcNow;
         var appeal = await ReadAppealAsync(await client.PostAsJsonAsync(
-            "/api/appeals", BuildCreate(lob, type: type, level: level), JsonOptions));
+            "/api/appeals", BuildCreate(new AppealCoverage(lob, benefit), type: type, level: level), JsonOptions));
         var after = DateTime.UtcNow;
 
         appeal.TargetResponseDate!.Value.ToUniversalTime()
@@ -411,13 +412,13 @@ public class AppealDeadlineExtensionTests : IClassFixture<AppealsWebApplicationF
     [InlineData(LineOfBusiness.Commercial, AppealLevel.ExternalReview, false, 50 * 24)]  // > 45 days
     [InlineData(LineOfBusiness.Commercial, AppealLevel.ExternalReview, true, 96)]        // > 72 hours
     [InlineData(LineOfBusiness.Medicaid, AppealLevel.ExternalReview, false, 95 * 24)]    // > 90 days
-    [InlineData(LineOfBusiness.MedicarePartD, AppealLevel.FirstLevel, false, 10 * 24)]   // > 7 days
+    [InlineData(LineOfBusiness.Medicare, AppealLevel.FirstLevel, false, 10 * 24, AppealBenefitType.PartDDrug)]   // > 7 days
     public async Task Create_Override_Beyond_Tier_Clock_Returns400_With_Problem_Type(
-        LineOfBusiness lob, AppealLevel level, bool urgent, int hours)
+        LineOfBusiness lob, AppealLevel level, bool urgent, int hours, AppealBenefitType benefit = AppealBenefitType.MedicalOrService)
     {
         _factory.Reset();
         var client = NewClient();
-        var body = BuildCreate(lob, urgent: urgent, level: level);
+        var body = BuildCreate(new AppealCoverage(lob, benefit), urgent: urgent, level: level);
         body.TargetResponseDate = DateTime.UtcNow.AddHours(hours);
 
         var response = await client.PostAsJsonAsync("/api/appeals", body, JsonOptions);
@@ -431,13 +432,13 @@ public class AppealDeadlineExtensionTests : IClassFixture<AppealsWebApplicationF
     }
 
     [Theory]
-    [InlineData(LineOfBusiness.MedicarePartD, AppealType.Grievance, AppealLevel.FirstLevel, true, 20 * 24)]       // 24h default, 30d ceiling
+    [InlineData(LineOfBusiness.Medicare, AppealType.Grievance, AppealLevel.FirstLevel, true, 20 * 24, AppealBenefitType.PartDDrug)]       // 24h default, 30d ceiling
     public async Task Create_Override_Beyond_Default_But_Within_Enforceable_Maximum_Is_Honored(
-        LineOfBusiness lob, AppealType type, AppealLevel level, bool urgent, int hours)
+        LineOfBusiness lob, AppealType type, AppealLevel level, bool urgent, int hours, AppealBenefitType benefit = AppealBenefitType.MedicalOrService)
     {
         _factory.Reset();
         var client = NewClient();
-        var body = BuildCreate(lob, urgent: urgent, type: type, level: level);
+        var body = BuildCreate(new AppealCoverage(lob, benefit), urgent: urgent, type: type, level: level);
         var requested = DateTime.UtcNow.AddHours(hours);
         requested = new DateTime(requested.Ticks - requested.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
         body.TargetResponseDate = requested;

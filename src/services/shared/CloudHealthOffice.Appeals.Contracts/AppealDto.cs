@@ -44,7 +44,8 @@ public sealed class AppealDto
 
     public AppealType AppealType { get; set; } = AppealType.Reconsideration;
     public AppealLevel AppealLevel { get; set; } = AppealLevel.FirstLevel;
-    public LineOfBusiness LineOfBusiness { get; set; }
+    public CloudHealthOffice.Infrastructure.Programs.LineOfBusiness LineOfBusiness { get; set; }
+    public AppealBenefitType BenefitType { get; set; }
     public AppealStatus Status { get; set; } = AppealStatus.Draft;
 
     public string AppealReason { get; set; } = string.Empty;

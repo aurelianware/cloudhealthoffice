@@ -80,6 +80,50 @@ public class PaymentRunsControllerTests : IClassFixture<PaymentApiFactory>
         Assert.Equal(PaymentRunStatus.Pending, created.Status);
     }
 
+    [Theory]
+    [InlineData("Exchange", LineOfBusiness.Exchange)]
+    [InlineData("Marketplace", LineOfBusiness.Exchange)] // payment-service's old name
+    [InlineData("medicaid", LineOfBusiness.Medicaid)]
+    [InlineData("TRICARE", LineOfBusiness.TRICARE)]
+    public async Task CreatePaymentRun_reads_the_shared_line_of_business_and_its_old_name(string sent, LineOfBusiness expected)
+    {
+        PaymentRunCriteria? received = null;
+        _runService.CreatePaymentRunAsync(Arg.Do<PaymentRunCriteria>(c => received = c), Arg.Any<string?>())
+            .Returns(CreatePendingRun());
+
+        using var body = new StringContent("{\"criteria\":{\"lineOfBusiness\":\"" + sent + "\"}}", System.Text.Encoding.UTF8, "application/json");
+        var response = await _client.PostAsync("/api/paymentruns", body);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(expected, received?.LineOfBusiness);
+    }
+
+    [Theory]
+    [InlineData("\"Unknown\"")]
+    [InlineData("\"MedicarePartE\"")]
+    [InlineData("3")] // numbers meant different things in different services
+    public async Task CreatePaymentRun_refuses_what_is_not_a_line_of_business(string sent)
+    {
+        using var body = new StringContent("{\"criteria\":{\"lineOfBusiness\":" + sent + "}}", System.Text.Encoding.UTF8, "application/json");
+        var response = await _client.PostAsync("/api/paymentruns", body);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_payment_run_names_its_line_of_business_Exchange()
+    {
+        var run = CreatePendingRun();
+        run.Criteria.LineOfBusiness = LineOfBusiness.Exchange;
+        _runService.CreatePaymentRunAsync(Arg.Any<PaymentRunCriteria>(), Arg.Any<string?>()).Returns(run);
+
+        var response = await _client.PostAsJsonAsync("/api/paymentruns",
+            new CreatePaymentRunRequest { Criteria = new PaymentRunCriteria { LineOfBusiness = LineOfBusiness.Exchange } }, Json);
+
+        var json = await response.Content.ReadAsStringAsync();
+        Assert.Contains("\"lineOfBusiness\":\"Exchange\"", json);
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // FEATURE 2: EXECUTE PAYMENT RUN
     // ═══════════════════════════════════════════════════════════════════

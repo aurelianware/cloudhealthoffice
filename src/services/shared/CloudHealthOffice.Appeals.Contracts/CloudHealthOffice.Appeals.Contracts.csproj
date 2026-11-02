@@ -28,6 +28,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The shared LineOfBusiness type (docs/architecture/line-of-business.md). -->
+    <ProjectReference Include="..\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="CloudHealthOffice.Appeals.Contracts.Tests" />
   </ItemGroup>
 

@@ -22,6 +22,10 @@ public static class ReportModules
 {
     private static readonly string[] CoreLines = ["Commercial", "Medicare", "Medicaid", "Exchange", "TRICARE", "VA"];
 
+    // appeals-service takes cases for these four (shared line-of-business names); a Part D
+    // case is a Medicare case with benefit type PartDDrug.
+    private static readonly string[] AppealLines = ["Commercial", "Medicare", "Medicaid", "Exchange"];
+
     public static readonly ReportModule Claims = new(
         "claims", "Claims", "Claims Service", "Services:ClaimsService", "claims/reports", ["reports:claims"], CoreLines);
 
@@ -31,7 +35,7 @@ public static class ReportModules
 
     public static readonly ReportModule AppealsAndGrievances = new(
         "appeals", "Appeals and grievances", "Appeals Service", "Services:AppealsService", "appeals/reports",
-        ["reports:um", "reports:compliance"], ["Commercial", "Medicare", "Medicaid", "Marketplace", "MedicarePartD"]);
+        ["reports:um", "reports:compliance"], AppealLines);
 
     public static readonly IReadOnlyList<ReportModule> All = [Claims, UtilizationManagement, AppealsAndGrievances];
 }

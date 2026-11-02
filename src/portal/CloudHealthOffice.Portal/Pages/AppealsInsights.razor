@@ -188,7 +188,8 @@
 
 @code {
     private static readonly int[] PeriodChoices = [30, 90, 365];
-    private static readonly string[] LinesOfBusiness = ["Commercial", "Medicare", "Medicaid", "Exchange", "TRICARE", "VA"];
+    // The lines of business appeals-service takes cases for (Part D is under Medicare).
+    private static readonly string[] LinesOfBusiness = ["Commercial", "Medicare", "Medicaid", "Exchange"];
 
     [SupplyParameterFromQuery(Name = "days")] public int? DaysParam { get; set; }
     [SupplyParameterFromQuery(Name = "lob")] public string? LineOfBusiness { get; set; }

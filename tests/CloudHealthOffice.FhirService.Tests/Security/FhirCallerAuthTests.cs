@@ -335,7 +335,7 @@ public class FhirCallerAuthTests : IClassFixture<FhirTestWebAppFactory>
         var appeal = appeals.Submitted.Should().ContainSingle().Subject.Appeal;
         appeal.AppealType.Should().Be(AppealType.ExternalReview);
         appeal.AppealLevel.Should().Be(AppealLevel.ExternalReview);
-        appeal.LineOfBusiness.Should().Be(LineOfBusiness.Marketplace);
+        appeal.LineOfBusiness.Should().Be(CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Exchange);
         appeal.TargetResponseDate.Should().Be(target.UtcDateTime);
     }
 

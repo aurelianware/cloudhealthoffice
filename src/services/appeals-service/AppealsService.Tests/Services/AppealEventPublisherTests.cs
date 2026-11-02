@@ -83,7 +83,7 @@ public class AppealEventPublisherTests
             "eventId", "eventType", "eventVersion", "occurredAt",
             "tenantId", "appealId",
             "appealNumber", "claimId", "claimNumber", "memberId", "providerNPI",
-            "appealType", "appealLevel", "lineOfBusiness", "source",
+            "appealType", "appealLevel", "lineOfBusiness", "benefitType", "source",
             "targetResponseDate", "isUrgent",
             "actor", "correlationId"
         });
@@ -262,7 +262,7 @@ public class AppealEventPublisherTests
         {
             "eventId", "eventType", "eventVersion", "occurredAt",
             "tenantId", "appealId",
-            "currentStatus", "lineOfBusiness", "reason", "extensionDays",
+            "currentStatus", "lineOfBusiness", "benefitType", "reason", "extensionDays",
             "previousTargetResponseDate", "targetResponseDate", "writtenNoticeSentAt",
             "regulatoryBasis",
             "actor", "correlationId"

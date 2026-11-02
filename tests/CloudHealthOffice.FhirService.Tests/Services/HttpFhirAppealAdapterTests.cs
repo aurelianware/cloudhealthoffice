@@ -80,7 +80,7 @@ public class HttpFhirAppealAdapterTests
         AppealReason = "medically necessary",
         AppealType = AppealType.Reconsideration,
         AppealLevel = AppealLevel.FirstLevel,
-        LineOfBusiness = LineOfBusiness.Commercial,
+        LineOfBusiness = CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Commercial,
         Status = AppealStatus.Draft
     };
 
