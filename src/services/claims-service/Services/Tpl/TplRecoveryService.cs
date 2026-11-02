@@ -216,7 +216,9 @@ public sealed class TplRecoveryService : ITplRecoveryService
         {
             if (c.HasActiveRepaymentPlan) { kept++; continue; }
             Apply(c, new TplRecoveryEventRequest(TplRecoveryEventType.TransferredToState, null,
-                c.RetentionDeadline!.Value.AddDays(1), null,
+                // The deadline is a calendar date: pin the transfer to that UTC day so the
+                // server's time zone never shifts it (Apply converts the time to UTC).
+                DateTime.SpecifyKind(c.RetentionDeadline!.Value.Date.AddDays(1), DateTimeKind.Utc), null,
                 $"Plan's recovery window closed {c.RetentionDeadline:yyyy-MM-dd}; the state recovers from here."), actor);
             await _cases.SaveAsync(c, ct).ConfigureAwait(false);
             transferred++;

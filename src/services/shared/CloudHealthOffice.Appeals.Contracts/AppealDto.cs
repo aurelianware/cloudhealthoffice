@@ -34,6 +34,9 @@ public sealed class AppealDto
     public string? ProviderName { get; set; }
 
     public string? DenialReasonCode { get; set; }
+
+    /// <summary>What a grievance is about, as the plan's state reports categorize it. Grievances only.</summary>
+    public string? GrievanceCategory { get; set; }
     public string? DenialReason { get; set; }
 
     public decimal DeniedAmount { get; set; }
