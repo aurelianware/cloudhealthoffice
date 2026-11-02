@@ -253,6 +253,66 @@ public class MedicaidDrgRateResolutionServiceTests
     }
 
     [Fact]
+    public async Task A_client_under_21_is_priced_once_the_interim_rate_is_loaded()
+    {
+        var interim = new InMemoryMedicaidInterimRateRepository();
+        await interim.UpsertAsync([new MedicaidInterimRate
+        {
+            Id = MedicaidInterimRate.MakeId(Tenant, "TX", Hospital, new DateTime(2026, 9, 1)),
+            TenantId = Tenant, State = "TX", Npi = Hospital, EffectiveDate = new DateTime(2026, 9, 1),
+            InpatientRate = 0.5m, SourceFile = "interim.csv",
+        }]);
+        var sut = new MedicaidDrgRateResolutionService(_engine, _rates, NullLogger<MedicaidDrgRateResolutionService>.Instance, interim);
+
+        // 4 days, below the day outlier threshold. Cost = $4,000 × 0.5 = $2,000,
+        // far below the cost outlier threshold, so no outlier: the DRG payment alone.
+        var result = await sut.ResolveBatchAsync(Stay(age: 15));
+
+        Assert.Equal(7200m, result.TotalAllowedAmount);
+        Assert.All(result.LineResults, r =>
+        {
+            Assert.Equal(RateSource.Medicaid, r.RateSource);
+            Assert.StartsWith("Inpatient interim rate 0.5 effective 2026-09-01", r.CalculationSteps[0]);
+        });
+    }
+
+    [Fact]
+    public async Task A_high_cost_child_stay_earns_a_cost_outlier_from_the_interim_rate()
+    {
+        var interim = new InMemoryMedicaidInterimRateRepository();
+        await interim.UpsertAsync([new MedicaidInterimRate
+        {
+            Id = MedicaidInterimRate.MakeId(Tenant, "TX", Hospital, new DateTime(2026, 9, 1)),
+            TenantId = Tenant, State = "TX", Npi = Hospital, EffectiveDate = new DateTime(2026, 9, 1),
+            InpatientRate = 0.5m, SourceFile = "interim.csv",
+        }]);
+        var sut = new MedicaidDrgRateResolutionService(_engine, _rates, NullLogger<MedicaidDrgRateResolutionService>.Instance, interim);
+
+        // Threshold = max(11.14 × min(10,161.08, 6,000), 1.5 × 7,200) = $66,840.
+        // Cost = $200,000 × 0.5 = $100,000; outlier = (100,000 − 66,840) × 60% × 90% = $17,906.40.
+        var result = await sut.ResolveBatchAsync(Stay(age: 15, billed: [200000m]));
+
+        Assert.Equal(7200m + 17906.40m, result.TotalAllowedAmount);
+    }
+
+    [Fact]
+    public async Task An_interim_rate_effective_after_discharge_is_not_used()
+    {
+        var interim = new InMemoryMedicaidInterimRateRepository();
+        await interim.UpsertAsync([new MedicaidInterimRate
+        {
+            Id = MedicaidInterimRate.MakeId(Tenant, "TX", Hospital, new DateTime(2026, 11, 1)),
+            TenantId = Tenant, State = "TX", Npi = Hospital, EffectiveDate = new DateTime(2026, 11, 1),
+            InpatientRate = 0.5m, SourceFile = "interim.csv",
+        }]);
+        var sut = new MedicaidDrgRateResolutionService(_engine, _rates, NullLogger<MedicaidDrgRateResolutionService>.Instance, interim);
+
+        var result = await sut.ResolveBatchAsync(Stay(age: 15));
+
+        Assert.All(result.LineResults, r => Assert.Contains("interim rate", r.UnresolvedReason));
+    }
+
+    [Fact]
     public async Task An_adult_transfer_is_paid_the_per_diem()
     {
         var result = await Sut().ResolveBatchAsync(Stay(status: "02", los: 2));

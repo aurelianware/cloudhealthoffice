@@ -16,9 +16,8 @@ adjudication pends it. It is never paid at $0 or at charges.
 
 ## Status
 
-The formulas, the Texas file readers, a rate store with an import endpoint, and Texas claim pricing are in place (see below). Still to come:
+The formulas, the Texas file readers, a rate store with an import endpoint, Texas interim rates, and Texas claim pricing are in place (see below). Still to come:
 
-- Texas interim rates (cost-to-charge ratios), so that stays for clients under 21 can be priced. Until they are loaded, those stays pend;
 - the Medi-Cal importers (DRG Pricing Calculator, Hospital Characteristics File) and Medi-Cal claim pricing.
 
 A claim is priced by these formulas only on a plan that sets `pricing.inpatient.medicaidDrgMethod` (see "Claim pricing" below).
@@ -50,7 +49,7 @@ It fails closed. Each of these marks every line unresolved with the reason, so t
 - there is no weight or no SDA row (including a row held back at import);
 - the NPI has two SDA rows that disagree;
 - there is no length of stay;
-- the client is under 21 and no interim rate is loaded.
+- the client is under 21 and no inpatient interim rate is loaded for the hospital on the discharge date (see "Texas interim rates").
 
 ## Texas (1 TAC §355.8052(i))
 
@@ -117,6 +116,29 @@ What the files Mark uploaded show:
 
 - **Weights barely change.** The V38 (2021), V40 2024, 2025 and 2026 tables have the same values for every DRG-SOI they share. V40 only adds APR-DRG 011 (CAR-T). The universal mean has been $10,161.08 throughout.
 - **One year is missing.** No table was uploaded for SFY 2024 (V40, effective September 1, 2023). Discharges from then to August 31, 2024 fall back to the V38 table of October 1, 2022, which has no APR-DRG 011. Load that year's file before pricing claims from that period.
+
+### Texas interim rates
+
+A hospital's interim rate is its cost-to-charge ratio. TMHP sets it from the hospital's cost report and sends it to that hospital, so HHSC publishes no single table. Inpatient pricing uses it to estimate cost for outliers, which Texas pays only for clients under 21. The outpatient method (§355.8061(b)) uses the outpatient rate.
+
+Possible sources: an HHSC Provider Finance file if one exists, the plan's HHSC/TMHP contact, or each hospital's interim rate letter or contract.
+
+```
+POST /api/v1/medicaid-drg/import/texas/interim-rates?dryRun=true&replace=false[&effectiveDate=2026-09-01]
+Content-Type: multipart/form-data   file=<CSV or Excel>
+```
+
+- **Columns** are found by header name, below any title rows:
+  - `NPI` (required);
+  - inpatient and/or outpatient interim rate, at least one per row;
+  - effective date, or `effectiveDate` on the request for the whole file;
+  - optionally TPI and hospital name.
+- **Rate format:** a fraction (`0.452`) or a percentage (`45.2%`). A bare number above 2 is refused as a percentage typed without the sign. A rate above 100% loads with a warning.
+- **Storage:** one record per hospital and effective date, in collection `MedicaidHospitalInterimRates`. Pricing uses the hospital's latest rate effective on or before the discharge date, separately for inpatient and outpatient, so a letter that sets only one rate leaves the other in force.
+- **All or nothing:** a bad NPI, rate or date, or two different rates for the same hospital and date, refuses the file and lists the rows.
+- **Outcomes and permission:** the same outcomes and `settings:manage` permission as the endpoint below.
+
+Each priced child stay's `CalculationSteps` starts with the interim rate used and the file it came from.
 
 ### Rate store and import endpoint
 
