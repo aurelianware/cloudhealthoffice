@@ -142,6 +142,16 @@ builder.Services.AddHttpClient(MemberServiceClient.HttpClientName, client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
+// enrollment-import-service's 834 rate cell inputs, for building expected
+// capitation member-months (HttpRateCellInputSource uses the service identity).
+builder.Services.AddHttpClient(HttpRateCellInputSource.HttpClientName, client =>
+{
+    var enrollmentUrl = builder.Configuration["EnrollmentImportService:BaseUrl"] ?? "http://enrollment-import-service:8080";
+    client.BaseAddress = new Uri(enrollmentUrl);
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
+builder.Services.AddScoped<IRateCellInputSource, HttpRateCellInputSource>();
+
 builder.Services.AddHttpClient(SponsorServiceClient.HttpClientName, client =>
 {
     var sponsorServiceUrl = builder.Configuration["SponsorService:BaseUrl"] ?? "http://sponsor-service:8080";

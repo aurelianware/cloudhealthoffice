@@ -75,6 +75,56 @@ public static class StateCapitationCsv
         return errs.Count == 0 ? result : [];
     }
 
+    /// <summary>
+    /// A rate cell crosswalk: <c>rate_cell</c> and any of <c>plan_id</c>,
+    /// <c>field</c> (<c>category:&lt;name&gt;</c> or <c>hd04</c>), <c>value</c>,
+    /// <c>age_min</c>, <c>age_max</c>, <c>county</c>, <c>effective_from</c>,
+    /// <c>effective_to</c> (months yyyy-MM). A row with a field needs a value.
+    /// </summary>
+    public static IReadOnlyList<RateCellCrosswalkRow> ReadCrosswalk(string content, out IReadOnlyList<string> errors)
+    {
+        var errs = new List<string>();
+        var result = new List<RateCellCrosswalkRow>();
+        foreach (var (line, row) in Rows(content, ["rate_cell"], errs))
+        {
+            string? Opt(string name) => row.TryGetValue(name, out var v) && v.Length > 0 ? v : null;
+            var cell = row["rate_cell"];
+            if (cell.Length == 0) { errs.Add($"Line {line}: rate_cell is empty"); continue; }
+            var field = Opt("field");
+            var value = Opt("value");
+            if (field is not null
+                && !string.Equals(field, RateCellCrosswalkRow.HdField, StringComparison.OrdinalIgnoreCase)
+                && !(field.StartsWith(RateCellCrosswalkRow.CategoryPrefix, StringComparison.OrdinalIgnoreCase)
+                     && field.Length > RateCellCrosswalkRow.CategoryPrefix.Length))
+            { errs.Add($"Line {line}: field '{field}' must be hd04 or category:<reporting category name>"); continue; }
+            if ((field is null) != (value is null)) { errs.Add($"Line {line}: field and value go together"); continue; }
+            int? ageMin = null, ageMax = null;
+            var bad = false;
+            foreach (var (name, set) in new (string, Action<int>)[] { ("age_min", v => ageMin = v), ("age_max", v => ageMax = v) })
+            {
+                if (Opt(name) is not { } text) continue;
+                if (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var n) || n > 150)
+                { errs.Add($"Line {line}: {name} '{text}' is not an age in years"); bad = true; break; }
+                set(n);
+            }
+            if (bad) continue;
+            if (ageMin > ageMax) { errs.Add($"Line {line}: age_min is above age_max"); continue; }
+            DateOnly? from = null, to = null;
+            foreach (var (name, set) in new (string, Action<DateOnly>)[] { ("effective_from", v => from = v), ("effective_to", v => to = v) })
+            {
+                if (Opt(name) is not { } text) continue;
+                if (!DateOnly.TryParseExact(text + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var m))
+                { errs.Add($"Line {line}: {name} '{text}' is not yyyy-MM"); bad = true; break; }
+                set(m);
+            }
+            if (bad) continue;
+            if (from > to) { errs.Add($"Line {line}: effective_to is before effective_from"); continue; }
+            result.Add(new RateCellCrosswalkRow(cell, Opt("plan_id"), field, value, ageMin, ageMax, Opt("county"), from, to));
+        }
+        errors = errs;
+        return errs.Count == 0 ? result : [];
+    }
+
     private static bool TryDate(string text, out DateTime date)
     {
         var ok = DateTime.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture,
