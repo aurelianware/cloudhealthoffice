@@ -102,14 +102,16 @@ public class ClaimStatusDisplayTests
 public class ClaimDetailsPhaseHeaderTests : TestContext
 {
     private readonly Mock<IClaimsService> _claims = new();
+    private readonly Mock<IUserContextService> _user = new();
 
     public ClaimDetailsPhaseHeaderTests()
     {
         Services.AddMudServices();
         Services.AddSingleton(_claims.Object);
         Services.AddSingleton(Mock.Of<IWorkQueueService>());
-        Services.AddSingleton(Mock.Of<IUserContextService>());
+        Services.AddSingleton(_user.Object);
         JSInterop.Mode = JSRuntimeMode.Loose;
+        _user.Setup(u => u.HasPermission("claims:void")).Returns(true);
         _claims.Setup(c => c.GetDuplicateMatchesAsync(It.IsAny<string>()))
             .ReturnsAsync(new List<ClaimDuplicateMatch>());
         _claims.Setup(c => c.GetAdjudicationDataAsync(It.IsAny<string>()))
@@ -135,7 +137,7 @@ public class ClaimDetailsPhaseHeaderTests : TestContext
 
         cut.Find("[data-testid=claim-phase-hint]").TextContent.Should().Be(ClaimStatusDisplay.AwaitingPaymentCycle);
         Buttons(cut).Should().Contain(new[] { "Pay", "Deny" });
-        Buttons(cut).Should().NotContain("Initiate Reversal");
+        Buttons(cut).Should().NotContain("Reverse claim");
     }
 
     [Fact]
@@ -152,8 +154,27 @@ public class ClaimDetailsPhaseHeaderTests : TestContext
         var cut = Render("Paid");
 
         cut.Find("[data-testid=claim-phase-hint]").TextContent.Should().Be(ClaimStatusDisplay.Finalized);
-        Buttons(cut).Should().Contain("Initiate Reversal");
+        Buttons(cut).Should().Contain("Reverse claim");
         Buttons(cut).Should().NotContain(new[] { "Pay", "Deny" });
+    }
+
+    [Fact]
+    public void PaidClaim_WithoutClaimsVoid_HasNoReverseButton()
+    {
+        _user.Setup(u => u.HasPermission("claims:void")).Returns(false);
+
+        var cut = Render("Paid");
+
+        Buttons(cut).Should().NotContain("Reverse claim");
+    }
+
+    [Fact]
+    public void VoidedClaim_SaysItCantBeCorrected()
+    {
+        var cut = Render("Voided");
+
+        Buttons(cut).Should().NotContain("Reverse claim");
+        cut.Markup.Should().Contain("can't be corrected");
     }
 
     [Fact]
@@ -162,7 +183,7 @@ public class ClaimDetailsPhaseHeaderTests : TestContext
         var cut = Render("Denied");
 
         cut.Find("[data-testid=claim-phase-hint]").TextContent.Should().Be(ClaimStatusDisplay.Finalized);
-        Buttons(cut).Should().NotContain(new[] { "Pay", "Deny", "Initiate Reversal" });
+        Buttons(cut).Should().NotContain(new[] { "Pay", "Deny", "Reverse claim" });
         cut.Markup.Should().Contain("correct it with an adjustment");
     }
 }

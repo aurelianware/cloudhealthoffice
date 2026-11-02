@@ -129,4 +129,32 @@ public class ClaimCorrectionClientTests
 
         result.Errors.Should().Equal("ServiceDateFrom: ServiceDateFrom is required");
     }
+
+    [Fact]
+    public async Task Void_posts_the_reason_to_the_claims_void_route()
+    {
+        string? body = null;
+        var handler = new FakeHandler(request =>
+        {
+            body = request.Content!.ReadAsStringAsync().Result;
+            return Json(HttpStatusCode.OK, """{"id":"claim-1","status":7}""");
+        });
+
+        var refusal = await Service(handler).VoidClaimAsync("claim-1", "paid twice");
+
+        refusal.Should().BeNull();
+        handler.CapturedUrls.Single().Should().Be("http://claims/api/claims/claim-1/void");
+        JsonNode.Parse(body!)!["reason"]!.GetValue<string>().Should().Be("paid twice");
+    }
+
+    [Fact]
+    public async Task Void_refusal_returns_the_services_message()
+    {
+        var handler = new FakeHandler(_ => Json(HttpStatusCode.UnprocessableEntity,
+            """{"message":"Claim must be Paid to void","currentStatus":"Pended"}"""));
+
+        var refusal = await Service(handler).VoidClaimAsync("c", "r");
+
+        refusal.Should().Be("Claim must be Paid to void");
+    }
 }
