@@ -61,6 +61,23 @@ public class GlEventTests
         Assert.Equal(("Failed", 80m, 20m), (payload.RunStatus, payload.TotalNetAmount, payload.TotalReceivableOffsetAmount));
     }
 
+    [Theory]
+    [InlineData(global::PaymentService.Models.LineOfBusiness.Marketplace, "Exchange")]
+    [InlineData(global::PaymentService.Models.LineOfBusiness.Medicaid, "Medicaid")]
+    [InlineData(null, null)]
+    public void The_accrual_names_the_line_of_business_as_the_rest_of_the_platform_does(global::PaymentService.Models.LineOfBusiness? lob, string? expected)
+    {
+        // payment-service's own enum says Marketplace; claims, the GL and the shared enum say Exchange.
+        var run = new PaymentRun { Id = "run-l", TenantId = "t1", PaymentRunNumber = "PR-L", Status = PaymentRunStatus.Completed,
+            Criteria = new PaymentRunCriteria { LineOfBusiness = lob } };
+        var issued = new List<Payment> { new() { Id = "p1", CheckNumber = "0000000001", PayeeNPI = Npi, PaymentMethod = "ACH", TotalPaymentAmount = 10m } };
+
+        GlEventOutbox.AttachPaymentRunExecuted(run, issued, DateTime.UtcNow);
+
+        var payload = JsonSerializer.Deserialize<PaymentRunExecutedEvent>(Assert.Single(run.GlOutbox).PayloadJson, GlEventTypes.Json)!;
+        Assert.Equal(expected, payload.LineOfBusiness);
+    }
+
     [Fact]
     public async Task A_run_whose_completed_save_fails_reports_the_status_it_was_saved_with()
     {
