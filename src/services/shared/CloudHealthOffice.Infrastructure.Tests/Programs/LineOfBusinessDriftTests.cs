@@ -14,8 +14,6 @@ public class LineOfBusinessDriftTests
     /// <summary>Enums that differ today, by repository path, and why. Remove an entry when its migration lands.</summary>
     private static readonly Dictionary<string, string> KnownExceptions = new()
     {
-        ["src/services/eligibility-service/Models/Eligibility.cs"] =
-            "Unnumbered 0-5; stored records need a one-time migration to 1-6 (consolidation PR 4).",
         ["src/engines/CloudHealthOffice.ProviderEnrollmentService/Models/EnrollmentModels.cs"] =
             "A flags enum of programs (STAR, CHIP ...), to be renamed ProgramParticipation (consolidation PR 7).",
     };

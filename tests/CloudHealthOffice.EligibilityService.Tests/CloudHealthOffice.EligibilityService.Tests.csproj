@@ -7,6 +7,9 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
+    <Using Include="CloudHealthOffice.Infrastructure.Programs" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="EphemeralMongo" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

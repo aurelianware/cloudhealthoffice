@@ -80,6 +80,12 @@ flowchart LR
    GAR_REPOSITORY=<vars.GAR_REPOSITORY> IMAGE_TAG=<deployed tag> ./scripts/demo/gcp/run-mcc.sh
    ```
 
+   For the CMS-0057-F story, also run the PA Timeliness Challenge. It loads a synthetic prior-authorization corpus into its own tenant (`pa-timeliness`), decides the live cases through PAS `$submit`, and scores the CMS-0057-F metrics, UM timeliness report and annual draft against an answer key computed from the rule. See `src/tools/pa-timeliness-challenge/README.md`.
+
+   ```bash
+   GAR_REPOSITORY=<vars.GAR_REPOSITORY> IMAGE_TAG=<deployed tag> ./scripts/demo/gcp/run-pa-timeliness.sh
+   ```
+
 ## Demo script (25 minutes)
 
 Rehearse twice. Record a backup video of the claim, examiner and benchmark segments, and keep saved output of each command in case the cluster misbehaves.

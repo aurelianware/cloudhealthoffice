@@ -79,7 +79,7 @@ public class TemporalEligibilityService : ITemporalEligibilityService
                 InsuranceLineCode = dto.InsuranceLineCode,
                 EffectiveDate = dto.EffectiveDate,
                 TerminationDate = dto.TerminationDate,
-                LineOfBusiness = MapLineOfBusiness(dto.LineOfBusiness),
+                LineOfBusiness = LineOfBusinessNames.FromNumber(dto.LineOfBusiness),
                 CobOrder = i + 1,
                 CoverageSequence = SequenceFromOrder(i),
                 IsCOBRA = dto.Status == 5 || dto.IsCOBRA,
@@ -154,15 +154,6 @@ public class TemporalEligibilityService : ITemporalEligibilityService
         2 => "T",
         _ => "O"
     };
-
-    private static LineOfBusiness MapLineOfBusiness(int raw)
-    {
-        // coverage-service stores 1..N; eligibility LineOfBusiness is 0..N
-        var index = Math.Max(0, raw - 1);
-        return Enum.IsDefined(typeof(LineOfBusiness), index)
-            ? (LineOfBusiness)index
-            : LineOfBusiness.Commercial;
-    }
 
     internal class CoverageDto
     {
