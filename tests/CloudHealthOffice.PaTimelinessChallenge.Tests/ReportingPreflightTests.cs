@@ -68,3 +68,55 @@ public sealed class ReportingPreflightTests
         ? Math.Abs(w - g) <= 0.1 + 1e-9
         : Equals(want, got);
 }
+
+/// <summary>In-process preflight for the annual public-reporting draft (final outcomes, bitemporal ledger).</summary>
+public sealed class AnnualDraftPreflightTests
+{
+    [Fact]
+    public async Task Cho_annual_draft_matches_the_answer_key_for_every_line_of_business()
+    {
+        var store = await ImportContractTests.ImportAsync();
+        var history = CorpusFixture.Cases.Where(c => c.Cohort == PaCohort.History).ToList();
+        foreach (var f in PaCorpusWriter.ReportingFacts(history))
+        {
+            var a = store.Values.Single(x => x.AuthorizationNumber == f.AuthorizationNumber);
+            a.ReportingLedger!.Facts.Add(PaReportingEvidence.Prepare(a, ImportContractTests.Command(f),
+                "pa-timeliness-challenge", CorpusFixture.AsOf.UtcDateTime));
+        }
+
+        var year = history[0].ReceivedAt.UtcDateTime.Year;
+        Assert.All(history, c => Assert.Equal(year, c.ReceivedAt.UtcDateTime.Year));
+        var diffs = new List<string>();
+        foreach (var lob in Enum.GetValues<PaLineOfBusiness>())
+        {
+            var report = new AnnualPaReporting(year, "UTC", Enum.Parse<LineOfBusiness>(lob.ToString()),
+                CorpusFixture.AsOf.UtcDateTime, CorpusFixture.AsOf.UtcDateTime);
+            foreach (var a in store.Values) report.Add(a);
+            var actual = report.Finish();
+            var expected = PaExpectedAnnual.Compute(history, lob, year);
+            Assert.Equal(0, actual.LegacyRecordsWithoutEvidence);
+            foreach (var (name, want, got) in new[] { ("Standard", expected.Standard, actual.Standard), ("Expedited", expected.Expedited, actual.Expedited) })
+            {
+                void Check(string field, object? w, object? g)
+                {
+                    var same = w is double wd && g is double gd ? Math.Abs(wd - gd) <= 0.0001 + 1e-9 : Equals(w, g);
+                    if (!same) diffs.Add($"{lob} {name}.{field}: expected {w}, CHO {g}");
+                }
+                Check("Requests", want.Requests, got.Requests);
+                Check("Approved", want.Approved, got.Approved);
+                Check("Denied", want.Denied, got.Denied);
+                Check("Undecided", want.Undecided, got.Undecided);
+                Check("ApprovedAfterAppeal", want.ApprovedAfterAppeal, got.ApprovedAfterAppeal);
+                Check("ExtendedThenApproved", want.ExtendedThenApproved, got.ExtendedThenApproved);
+                Check("ApprovedPercent", want.ApprovedPercent, got.ApprovedPercent);
+                Check("DeniedPercent", want.DeniedPercent, got.DeniedPercent);
+                Check("ApprovedAfterAppealPercent", want.ApprovedAfterAppealPercent, got.ApprovedAfterAppealPercent);
+                Check("AverageInitialDecisionHours", want.AverageInitialDecisionHours, got.AverageInitialDecisionHours);
+                Check("MedianInitialDecisionHours", want.MedianInitialDecisionHours, got.MedianInitialDecisionHours);
+                Check("InitialDecisionTimingUnavailable", 0, got.InitialDecisionTimingUnavailable);
+                Check("ConflictingFinalOutcomes", 0, got.ConflictingFinalOutcomes);
+            }
+        }
+        Assert.True(diffs.Count == 0, string.Join("\n", diffs));
+    }
+}

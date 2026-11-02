@@ -12,9 +12,9 @@ All data is synthetic. Nothing here is a CMS attestation.
 
 | Part | What | State |
 |---|---|---|
-| 1 | Corpus generator and answer key (this tool), in-process preflight test | This PR |
-| 2 | Validator: import history, submit live cases through PAS `$submit`, act as reviewer, score the reports | Next |
-| 3 | GCP runner script and evidence page | After |
+| 1 | Corpus generator and answer key, in-process preflight test | #1778 |
+| 2 | `run`: import history, submit live cases through PAS `$submit`, act as reviewer, score the reports | This PR |
+| 3 | GCP runner script and evidence page | Next |
 
 ## Generate a corpus
 
@@ -23,8 +23,9 @@ dotnet run --project src/tools/pa-timeliness-challenge -- generate \
   --out ./ptc-corpus --count 10000 --seed 57 --as-of 2026-11-02T00:00:00Z
 ```
 
-Options: `--period-start`, `--period-end` (history receipt window; default
-1 January of the as-of year to 60 days before as-of), `--live-fraction`
+Options: `--period-start`, `--period-end` (history receipt window; default the
+whole calendar year before as-of, the year a plan reports on; it must end at
+least 60 days before as-of), `--live-fraction`
 (default 0.05), `--expedited-fraction` (default 0.25). The same options give
 the same files, byte for byte. Without `--as-of` the corpus is pinned to the
 current time, so pass it for a reproducible run.
@@ -37,6 +38,48 @@ Output:
 | `history/reporting-facts.jsonl` | Sourced extension and appeal facts to record after the import: `POST api/authorizations/cms-0057/{id}/facts`. Keyed by authorization number. |
 | `live/requests.jsonl` | The live cohort: one case per line for the validator to submit through PAS and decide. |
 | `answer-key.json` | Every case's expectation, and the expected metrics for the history cohort (all lines of business, then each). |
+
+## Run it against a stack
+
+```bash
+export CHO_BEARER_TOKEN="$(TENANT_ID=pa-timeliness python3 scripts/demo/gcp/cho_demo.py token)"
+dotnet run --project src/tools/pa-timeliness-challenge -- run --out ./ptc-run \
+  --auth-url http://localhost:5006 --fhir-url http://localhost:5023 --tenant pa-timeliness \
+  --count 10000 --seed 57
+```
+
+On the GKE demo, run `scripts/demo/gcp/port-forward.sh` first. The token's tenant
+must match `--tenant`. A dedicated tenant (the default, `pa-timeliness`) keeps the
+score clean: the metrics endpoints count every request in the tenant, so the run
+checks the history period before it loads anything and says so if the tenant
+already holds other requests there. A rerun with the same seed is idempotent
+(the import reports them unchanged, the facts are keyed by event id).
+
+What it does, in order:
+
+1. **History.** Imports `authorizations.csv`, records the extension and appeal facts,
+   then scores `GET api/authorizations/cms-0057/metrics` (all lines of business and
+   each one), every request's on-time and extension flags in the UM report
+   `um-decision-timeliness` (in 7-day windows, under its 1,000-row cap), and
+   `cms-0057/annual-draft` per line of business and receipt year.
+2. **Live.** Submits each live case through PAS `Claim/$submit` (no service state,
+   so state-specific rules pend it), reads it back by its `preAuthRef`, takes the
+   scripted extension (`decision-extension`: 200 on Medicare Advantage and Medicaid,
+   409 on Commercial), records the reviewer's decision with line decisions
+   (`/response`), and reads it back. Each case scores line of business, urgency,
+   outcome, per-line denial reasons and the extension behavior. A case a rule
+   decided on submit is reported as not reviewable rather than scored as the
+   reviewer's outcome. Then the live window's metrics are checked against what
+   CHO recorded for those requests (drug requests out, arithmetic right).
+
+It writes `run-summary.json`, `run-summary.md` and the corpus under `--out`,
+and exits 0 when every check passes, 1 when any fails, 2 when it could not run.
+`--history-only` and `--live-only` run one phase; `--parallelism` (default 8)
+bounds concurrent requests.
+
+PAS has no claim filing code for an Exchange (QHP) plan, so live Exchange
+requests are sent as `CI` and CHO records them as Commercial. The run expects
+that and says so in its notes.
 
 ## Two cohorts
 
@@ -80,6 +123,18 @@ request's own deadline.
 Percentages and hours are rounded to one decimal place, half away from zero. CHO
 rounds half to even, so a value at an exact midpoint can differ by 0.1. The
 preflight test allows that one step, and counts must match exactly.
+
+## Tests
+
+- **Preflight** (below): the answer key against CHO's reporting code, in process.
+- **Contract**: every live request passes fhir-service's real PAS compliance check
+  and `PasAuthorizationMapper` (member, NPI, urgency, lines, line of business).
+- **End to end over HTTP**: the history phase and the live phase run against the
+  real authorization-service pipeline (authentication, permissions, import, facts,
+  extension, 278 response, metrics, UM report, annual draft) with an in-memory
+  store. Building them found two contract errors in the runner before any deployed
+  run: authorization-service reads enums by name only, and the UM report id is
+  `um-decision-timeliness`.
 
 ## Preflight
 
