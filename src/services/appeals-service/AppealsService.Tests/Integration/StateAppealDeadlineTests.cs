@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AppealsService.Controllers;
 using AppealsService.Models;
+using AppealsService.Services;
+using CloudHealthOffice.PlanConfiguration;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 
@@ -157,6 +159,83 @@ public class StateAppealDeadlineTests : IClassFixture<AppealsWebApplicationFacto
 
         Window(appeal).Should().BeCloseTo(TimeSpan.FromDays(30), TimeSpan.FromSeconds(1));
         appeal.State.Should().Be("CA");
+        appeal.StateSource.Should().Be(AppealStateSources.TenantDefault);
+    }
+
+    // ── State from the member's program ─────────────────────────────────
+
+    private static ProgramDescriptor Program(string state, string code, string lob = LinesOfBusiness.Medicaid) => new()
+    {
+        Id = $"tenant-state|CARRIER|{code}",
+        Code = code,
+        Name = code,
+        CarrierId = "CARRIER",
+        LineOfBusiness = lob,
+        StateCode = state
+    };
+
+    [Fact]
+    public async Task The_members_program_sets_the_state()
+    {
+        _factory.Reset();
+        _factory.MemberPrograms.Add("M-0001", Program("CA", "MEDI-CAL"));
+
+        var appeal = await CreateSubmittedAsync(NewClient(), Grievance(null));
+
+        Window(appeal).Should().BeCloseTo(TimeSpan.FromDays(30), TimeSpan.FromSeconds(1));
+        appeal.State.Should().Be("CA");
+        appeal.StateSource.Should().Be(AppealStateSources.Program);
+        appeal.ProgramId.Should().Be("tenant-state|CARRIER|MEDI-CAL");
+    }
+
+    [Fact]
+    public async Task The_members_program_wins_over_the_tenant_default()
+    {
+        _factory.Reset();
+        _factory.MemberPrograms.Add("M-0001", Program("TX", "STAR"));
+
+        var appeal = await CreateSubmittedAsync(NewClient(CaliforniaTenant, californiaDefault: true), Grievance(null));
+
+        appeal.State.Should().Be("TX");
+        Window(appeal).Should().BeCloseTo(TimeSpan.FromDays(90), TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task A_request_state_that_disagrees_with_the_program_is_refused()
+    {
+        _factory.Reset();
+        _factory.MemberPrograms.Add("M-0001", Program("TX", "STAR"));
+
+        var response = await NewClient().PostAsJsonAsync("/api/appeals", Grievance("CA"), JsonOptions);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("STAR").And.Contain("TX");
+    }
+
+    [Fact]
+    public async Task A_program_of_another_line_of_business_is_not_used()
+    {
+        // A dual-eligible member's Medicare program says nothing about a Medicaid grievance.
+        _factory.Reset();
+        _factory.MemberPrograms.Add("M-0001", Program("TX", "MAPD", LinesOfBusiness.Medicare));
+
+        var appeal = await CreateSubmittedAsync(NewClient(), Grievance("CA"));
+
+        appeal.State.Should().Be("CA");
+        appeal.StateSource.Should().Be(AppealStateSources.Request);
+        appeal.ProgramId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task An_unreachable_lookup_falls_back_instead_of_refusing_intake()
+    {
+        _factory.Reset();
+        _factory.MemberPrograms.Unavailable = true;
+
+        var appeal = await CreateSubmittedAsync(NewClient(CaliforniaTenant, californiaDefault: true), Grievance(null));
+
+        appeal.State.Should().Be("CA");
+        appeal.StateSource.Should().Be(AppealStateSources.TenantDefault);
     }
 
     [Fact]

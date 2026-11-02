@@ -3,10 +3,10 @@ using System.Text.RegularExpressions;
 namespace AppealsService.Services;
 
 /// <summary>
-/// Default State for each tenant's appeals and grievances, used when a
-/// create request names none. A single-State Medicaid plan configures its
-/// State once here instead of on every request; a multi-State tenant leaves
-/// it unset and sends <c>state</c> per case.
+/// Default State for each tenant's appeals and grievances: the last
+/// fallback, used when the member has no program (coverage → benefit plan →
+/// program) and the create request names no State. Meant for a single-State
+/// plan whose benefit plans are not yet linked to programs.
 ///
 /// <code>
 /// "AppealJurisdictions": {
@@ -14,6 +14,14 @@ namespace AppealsService.Services;
 /// }
 /// </code>
 /// </summary>
+/// <summary>Values of <see cref="Models.Appeal.StateSource"/>.</summary>
+public static class AppealStateSources
+{
+    public const string Program = "program";
+    public const string Request = "request";
+    public const string TenantDefault = "tenantDefault";
+}
+
 public sealed class AppealJurisdictionOptions
 {
     public const string SectionName = "AppealJurisdictions";

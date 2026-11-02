@@ -57,6 +57,7 @@ public class AppealsController : ControllerBase
     private readonly IAppealHolidayCalendarProvider _holidays;
     private readonly IRulePackCatalog _rulePacks;
     private readonly IAppealJurisdictionProvider _jurisdictions;
+    private readonly IMemberProgramResolver _memberPrograms;
 
     /// <summary>ProblemDetails type for a create-time deadline override past the regulatory maximum.</summary>
     public const string TargetResponseDateProblemType =
@@ -84,7 +85,8 @@ public class AppealsController : ControllerBase
         ICurrentActor currentActor,
         IAppealHolidayCalendarProvider holidays,
         IRulePackCatalog rulePacks,
-        IAppealJurisdictionProvider jurisdictions)
+        IAppealJurisdictionProvider jurisdictions,
+        IMemberProgramResolver memberPrograms)
     {
         _appeals = appeals;
         _events = events;
@@ -95,6 +97,7 @@ public class AppealsController : ControllerBase
         _holidays = holidays;
         _rulePacks = rulePacks;
         _jurisdictions = jurisdictions;
+        _memberPrograms = memberPrograms;
     }
 
     // ── Create / Read ───────────────────────────────────────────────────
@@ -123,13 +126,20 @@ public class AppealsController : ControllerBase
         //
         // A case under a State with a rule pack runs on the tighter of the
         // federal and State clocks (StateAppealDeadlinePolicy): a Medi-Cal
-        // grievance gets 30 days / 72 hours, not the federal 90 days.
+        // grievance gets 30 days / 72 hours, not the federal 90 days. The
+        // State comes from the member's program (ResolveJurisdictionAsync).
         if (request.State is not null && !ConfiguredAppealJurisdictionProvider.IsStateCode(request.State))
         {
             ModelState.AddModelError(nameof(CreateAppealRequest.State), "State must be a two-letter State code.");
             return ValidationProblem(ModelState);
         }
-        var state = _jurisdictions.Resolve(TenantId, request.State);
+        var jurisdiction = await ResolveJurisdictionAsync(request, now, ct);
+        if (jurisdiction.Conflict is { } conflict)
+        {
+            ModelState.AddModelError(nameof(CreateAppealRequest.State), conflict);
+            return ValidationProblem(ModelState);
+        }
+        var state = jurisdiction.State;
         var deadlines = ResolveDeadlines(state, now, request.LineOfBusiness, request.AppealType,
             request.AppealLevel, request.IsUrgent, TenantId);
         var regulatoryDeadline = deadlines.DefaultTarget;
@@ -178,6 +188,8 @@ public class AppealsController : ControllerBase
             SubmittedDate = now,
             TargetResponseDate = request.TargetResponseDate?.ToUniversalTime() ?? regulatoryDeadline,
             State = state,
+            StateSource = jurisdiction.Source,
+            ProgramId = jurisdiction.ProgramId,
             RulePackVersion = deadlines.RulePack,
             SubmittedBy = actor,
             IsUrgent = request.IsUrgent,
@@ -768,6 +780,59 @@ public class AppealsController : ControllerBase
     }
 
     /// <summary>
+    /// The State a new case falls under, in order:
+    /// <list type="number">
+    ///   <item>The member's program: active coverage on the receipt date →
+    ///   benefit plan → program, of the case's line of business. This is the
+    ///   State the plan was sold in. A <c>state</c> on the request that
+    ///   disagrees with it is refused, never silently overridden.</item>
+    ///   <item>The <c>state</c> on the request.</item>
+    ///   <item>The tenant's configured default.</item>
+    /// </list>
+    /// When coverage-service or tenant-service cannot be asked, the lookup
+    /// is skipped with a warning and the next source answers: intake is not
+    /// refused because a lookup service is down.
+    /// </summary>
+    private async Task<ResolvedJurisdiction> ResolveJurisdictionAsync(
+        CreateAppealRequest request, DateTime receivedAt, CancellationToken ct)
+    {
+        var requested = request.State?.Trim().ToUpperInvariant();
+
+        CloudHealthOffice.PlanConfiguration.ProgramDescriptor? program = null;
+        try
+        {
+            program = await _memberPrograms.ResolveAsync(
+                TenantId, request.MemberId, request.LineOfBusiness, receivedAt, ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex,
+                "Could not read the member's program for a new {LineOfBusiness} {AppealType}; the State falls back to the request or tenant default",
+                request.LineOfBusiness, request.AppealType);
+        }
+
+        if (program is not null)
+        {
+            var programState = program.StateCode.Trim().ToUpperInvariant();
+            if (requested is not null && requested != programState)
+            {
+                return new ResolvedJurisdiction(null, null, null,
+                    $"State {requested} disagrees with the member's {program.Code} program, which is in {programState}.");
+            }
+            return new ResolvedJurisdiction(programState, AppealStateSources.Program, program.Id);
+        }
+
+        if (requested is not null)
+            return new ResolvedJurisdiction(requested, AppealStateSources.Request, null);
+
+        return _jurisdictions.Resolve(TenantId, null) is { } tenantDefault
+            ? new ResolvedJurisdiction(tenantDefault, AppealStateSources.TenantDefault, null)
+            : new ResolvedJurisdiction(null, null, null);
+    }
+
+    private sealed record ResolvedJurisdiction(string? State, string? Source, string? ProgramId, string? Conflict = null);
+
+    /// <summary>
     /// Federal deadlines, tightened by <paramref name="state"/>'s rule pack
     /// in effect on the receipt date when one exists for the line of business.
     /// </summary>
@@ -1268,6 +1333,8 @@ public class AppealsController : ControllerBase
             ReceivedDate = appeal.ReceivedDate,
             TargetResponseDate = appeal.TargetResponseDate,
             State = appeal.State,
+            StateSource = appeal.StateSource,
+            ProgramId = appeal.ProgramId,
             RulePackVersion = appeal.RulePackVersion,
             DeadlineExtension = appeal.DeadlineExtension,
             DecisionDate = appeal.DecisionDate,
@@ -1463,7 +1530,9 @@ public class CreateAppealRequest
 
     /// <summary>
     /// Two-letter State whose rules govern the case (e.g. <c>CA</c>). Optional:
-    /// defaults to the tenant's configured State, else federal rules only.
+    /// the member's program (coverage → benefit plan → program) sets it, and
+    /// a value here that disagrees with the program is refused. Used when
+    /// the member has no program; the tenant's default answers when neither does.
     /// </summary>
     [StringLength(2)]
     public string? State { get; set; }

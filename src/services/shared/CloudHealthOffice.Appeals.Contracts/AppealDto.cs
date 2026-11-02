@@ -60,6 +60,8 @@ public sealed class AppealDto
     public DateTime? TargetResponseDate { get; set; }
     public string? State { get; set; }
     public string? RulePackVersion { get; set; }
+    public string? StateSource { get; set; }
+    public string? ProgramId { get; set; }
     public AppealDeadlineExtensionDto? DeadlineExtension { get; set; }
     public DateTime? DecisionDate { get; set; }
 

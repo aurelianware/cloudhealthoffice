@@ -1,3 +1,4 @@
+using CloudHealthOffice.PlanConfiguration;
 using CloudHealthOffice.Infrastructure.Contacts;
 using AppealsService.HostedServices;
 using CloudHealthOffice.Infrastructure.Extensions;
@@ -162,6 +163,25 @@ builder.Services.AddSingleton<IAppealJurisdictionProvider>(sp =>
     new ConfiguredAppealJurisdictionProvider(
         sp.GetRequiredService<IConfiguration>().GetSection(AppealJurisdictionOptions.SectionName).Get<AppealJurisdictionOptions>()
         ?? new AppealJurisdictionOptions()));
+
+// The member's program (coverage → benefit plan → program) is the first
+// source of a case's State: coverage-service for the active plan, then
+// tenant-service's program directory.
+// The lookup is this service's own: the caller filing a case need not be
+// allowed to read plan configuration.
+var programDirectoryOptions = builder.Configuration.GetSection(ProgramDirectoryOptions.SectionName)
+    .Get<ProgramDirectoryOptions>() ?? new ProgramDirectoryOptions();
+programDirectoryOptions.UseServiceIdentity = true;
+builder.Services.AddSingleton(programDirectoryOptions);
+builder.Services.AddProgramDirectoryClient(builder.Configuration);
+builder.Services.AddHttpClient(HttpMemberProgramResolver.CoverageClientName, client =>
+{
+    client.BaseAddress = new Uri((builder.Configuration["Services:CoverageService"]
+        ?? HttpMemberProgramResolver.DefaultCoverageServiceUrl).TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+builder.Services.AddScoped<IMemberProgramResolver, HttpMemberProgramResolver>();
 
 // ── Kafka consumer (X12 275 attachment ingress) ──────────────────────
 // Subscribes to the attachments-in topic, routes appeal-context 275s to
