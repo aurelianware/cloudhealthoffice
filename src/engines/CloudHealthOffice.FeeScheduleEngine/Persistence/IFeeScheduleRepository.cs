@@ -40,7 +40,7 @@ public interface IFeeScheduleRepository
     /// </summary>
     Task<FeeSchedule> UpsertAsync(FeeSchedule schedule, CancellationToken ct = default);
 
-    /// <summary>List all schedules for a tenant (for admin UI).</summary>
+    /// <summary>List all schedules for a tenant (for admin UI), without their lines; read one with <see cref="GetByIdAsync"/> for its lines.</summary>
     Task<IReadOnlyList<FeeSchedule>> ListAsync(
         string tenantId, int page = 1, int pageSize = 50, CancellationToken ct = default);
 }

@@ -114,6 +114,8 @@ builder.Services.AddScoped<BenefitPlanService.Import.QhpPuf.IQhpPufImportService
 // Fee schedule CSV importer (docs/integration/FEE-SCHEDULE-IMPORTER.md).
 builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IFeeScheduleImportService, BenefitPlanService.Import.FeeSchedules.FeeScheduleImportService>();
 builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IMedicarePfsImportService, BenefitPlanService.Import.FeeSchedules.MedicarePfsImportService>();
+// Shared fee schedule library: browse, deploy at a percentage, platform publish (docs/integration/FEE-SCHEDULE-LIBRARY.md).
+builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IFeeScheduleLibraryService, BenefitPlanService.Import.FeeSchedules.FeeScheduleLibraryService>();
 builder.Services.AddScoped<BenefitPlanService.Import.MedicaidDrg.ITexasDrgRateImportService, BenefitPlanService.Import.MedicaidDrg.TexasDrgRateImportService>();
 builder.Services.AddScoped<BenefitPlanService.Import.MedicaidDrg.ITexasInterimRateImportService, BenefitPlanService.Import.MedicaidDrg.TexasInterimRateImportService>();
 // Provider contract roster importer (docs/integration/CONTRACT-ROSTER-IMPORTER.md).

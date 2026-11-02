@@ -117,8 +117,11 @@ public class FeeScheduleRepositoryMongo : IFeeScheduleRepository, IProviderContr
         var filter = Builders<FeeSchedule>.Filter.Eq(x => x.TenantId, tenantId);
         var sort = Builders<FeeSchedule>.Sort.Descending(x => x.EffectiveDate);
 
+        // The list is for admin screens: a schedule can hold ~10,000 lines, so
+        // they are left out here and read with GetByIdAsync for one schedule.
         var results = await _scheduleCollection
             .Find(filter)
+            .Project<FeeSchedule>(Builders<FeeSchedule>.Projection.Exclude(x => x.Lines))
             .Sort(sort)
             .Skip((page - 1) * pageSize)
             .Limit(pageSize)
