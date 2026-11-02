@@ -1,92 +1,85 @@
 @using CloudHealthOffice.Portal.Services
+@inject IClaimsService ClaimsService
+
+@*
+    Reverse (void) a paid claim through claims-service POST /claims/{id}/void
+    (claims:void). The void is the claim's terminal transition: the claim
+    shows as Reversed, its accumulator reversal is saved with the void, and
+    the void is recorded on the claim's version history. To pay it
+    differently instead, correct it with an adjustment.
+*@
 
 <MudDialog>
     <DialogContent>
-        <MudText Typo="Typo.h6" GutterBottom="true">Initiate Claim Reversal</MudText>
         <MudText Typo="Typo.body2" Class="mb-4">
-            A claim reversal creates a negative adjustment to return the system to the pre-claim state. This is typically used for claims submitted in error or duplicate submissions.
+            Reversing voids the whole claim: it is marked <strong>Reversed</strong>, the amounts it applied
+            to the member's deductible and out-of-pocket are reversed, and the void is recorded in the
+            claim's history. Use it for a claim paid in error or a duplicate. To change what was paid,
+            correct the claim instead.
         </MudText>
 
-        <MudAlert Severity="Severity.Warning" Class="mb-4">
-            Once initiated, this reversal may require approval from the claims manager and will generate audit trail entries.
-        </MudAlert>
+        <MudTextField @bind-Value="_reason"
+                      Label="Reason"
+                      Variant="Variant.Outlined"
+                      Lines="3"
+                      MaxLength="500"
+                      Placeholder="e.g. Duplicate of claim CLM-1042, paid twice"
+                      Required="true"
+                      Disabled="_submitting"
+                      data-testid="reversal-reason" />
 
-        <MudSelect @bind-Value="_reversalType"
-                  Label="Reversal Type"
-                  Variant="Variant.Outlined"
-                  AnchorOrigin="Origin.BottomCenter"
-                  Class="mb-4">
-            <MudSelectItem Value="@("Full Reversal")">Full Reversal (entire claim)</MudSelectItem>
-            <MudSelectItem Value="@("Partial Reversal")">Partial Reversal (selected lines)</MudSelectItem>
-            <MudSelectItem Value="@("Duplicate Adjustment")">Duplicate Adjustment</MudSelectItem>
-        </MudSelect>
-
-        @if (_reversalType == "Partial Reversal")
+        @if (_error is not null)
         {
-            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">Select Lines to Reverse</MudText>
-            <MudCheckBox T="bool" @bind-Value="_reversalAllLines" Label="Select All Lines" Class="mb-2" />
-            <!-- Lines would be populated from the claim -->
+            <MudAlert Severity="Severity.Error" Class="mt-4" data-testid="reversal-error">@_error</MudAlert>
         }
-
-        <MudTextField @bind-Value="_reversalReason"
-                     Label="Reversal Reason"
-                     Variant="Variant.Outlined"
-                     Multiline="true"
-                     Lines="3"
-                     Placeholder="Explain why this reversal is being initiated..."
-                     Class="mb-4"
-                     Required="true" />
-
-        <MudSelect @bind-Value="_reversalMethod"
-                  Label="Reversal Method"
-                  Variant="Variant.Outlined"
-                  AnchorOrigin="Origin.BottomCenter"
-                  Class="mb-4">
-            <MudSelectItem Value="@("Zero Payment")">Zero Payment Reversal (set payment to $0)</MudSelectItem>
-            <MudSelectItem Value="@("Negative Adjustment")">Negative Adjustment (issue credit)</MudSelectItem>
-        </MudSelect>
-
-        <MudCheckBox T="bool" @bind-Value="_notifyProvider" Label="Notify Provider of Reversal" Class="mb-4" />
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Warning" 
-                  Variant="Variant.Filled" 
-                  OnClick="Submit"
-                  Disabled="string.IsNullOrWhiteSpace(_reversalReason)">
-            Initiate Reversal
+        <MudButton OnClick="Cancel" Disabled="_submitting">Cancel</MudButton>
+        <MudButton Color="Color.Warning"
+                   Variant="Variant.Filled"
+                   OnClick="SubmitAsync"
+                   Disabled="@(_submitting || string.IsNullOrWhiteSpace(_reason))"
+                   data-testid="reversal-submit">
+            @(_submitting ? "Reversing…" : "Reverse claim")
         </MudButton>
     </DialogActions>
 </MudDialog>
 
 @code {
-    [CascadingParameter] 
+    [CascadingParameter]
     MudDialogInstance MudDialog { get; set; } = null!;
 
     [Parameter]
     public string ClaimId { get; set; } = string.Empty;
 
-    private string _reversalType = "Full Reversal";
-    private string _reversalReason = string.Empty;
-    private string _reversalMethod = "Zero Payment";
-    private bool _reversalAllLines = true;
-    private bool _notifyProvider = true;
+    private string _reason = string.Empty;
+    private string? _error;
+    private bool _submitting;
 
-    private void Cancel()
-    {
-        MudDialog.Cancel();
-    }
+    private void Cancel() => MudDialog.Cancel();
 
-    private void Submit()
+    private async Task SubmitAsync()
     {
-        var reversalData = new
+        if (_submitting || string.IsNullOrWhiteSpace(_reason)) return;
+        _submitting = true;
+        _error = null;
+        try
         {
-            ClaimId,
-            ReversalType = _reversalType,
-            Reason = _reversalReason,
-            Method = _reversalMethod,
-            NotifyProvider = _notifyProvider
-        };
-        MudDialog.Close(DialogResult.Ok(reversalData));
+            var refusal = await ClaimsService.VoidClaimAsync(ClaimId, _reason.Trim());
+            if (refusal is null)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+                return;
+            }
+            _error = refusal;
+        }
+        catch (Exception ex)
+        {
+            _error = $"The claim wasn't reversed: {ex.Message}";
+        }
+        finally
+        {
+            _submitting = false;
+        }
     }
 }

@@ -97,4 +97,11 @@ public interface IClaimsService
     /// carries the new claim's id.
     /// </summary>
     Task<ClaimCorrectionResult> SubmitNewClaimAsync(System.Text.Json.Nodes.JsonObject claim);
+
+    /// <summary>
+    /// Reverses (voids) a paid claim (claims-service <c>POST /claims/{id}/void</c>,
+    /// needs <c>claims:void</c>). Returns null when the claim is voided (or
+    /// already was), otherwise the service's reason for refusing.
+    /// </summary>
+    Task<string?> VoidClaimAsync(string claimId, string reason);
 }

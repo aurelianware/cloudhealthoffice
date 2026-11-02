@@ -520,6 +520,44 @@ public class ClaimsService : IClaimsService
         });
     }
 
+    public async Task<string?> VoidClaimAsync(string claimId, string reason)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.PostAsJsonAsync(
+                $"{baseUrl}/claims/{Uri.EscapeDataString(claimId)}/void", new { reason }, JsonOptions);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+
+        if (response.IsSuccessStatusCode) return null;
+        if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            return "You don't have permission to reverse claims.";
+
+        var text = await response.Content.ReadAsStringAsync();
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("message", out var message)
+                && message.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(message.GetString()))
+            {
+                return message.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+            // Not JSON: fall through.
+        }
+        return $"The claim wasn't reversed ({(int)response.StatusCode}).";
+    }
+
     private sealed class ClaimCorrectionCreated
     {
         public string Id { get; set; } = string.Empty;
