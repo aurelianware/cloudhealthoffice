@@ -178,6 +178,37 @@ public class TenantManagementService : ITenantService
         _logger.LogWarning("Suspended tenant {TenantId}", LogSanitizer.Sanitize(tenantId));
     }
 
+    /// <summary>Attempts before a concurrent-edit conflict propagates.</summary>
+    public const int MaxBillingWriteAttempts = 5;
+
+    public async Task<Tenant> RecordStripeBillingAsync(string tenantId, string stripeCustomerId, string? stripeSubscriptionId = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stripeCustomerId);
+        for (var attempt = 1; ; attempt++)
+        {
+            var tenant = await _repository.GetByTenantIdAsync(tenantId)
+                ?? throw new KeyNotFoundException($"Tenant {tenantId} not found");
+
+            tenant.Billing ??= new BillingInfo();
+            tenant.Billing.StripeCustomerId = stripeCustomerId;
+            if (!string.IsNullOrWhiteSpace(stripeSubscriptionId))
+                tenant.Billing.StripeSubscriptionId = stripeSubscriptionId;
+            if (string.IsNullOrEmpty(tenant.Billing.BillingEmail))
+                tenant.Billing.BillingEmail = tenant.ContactInfo?.Email ?? string.Empty;
+            tenant.UpdatedBy = Actor;
+
+            try
+            {
+                return await _repository.UpdateAsync(tenant);
+            }
+            catch (TenantChangedConcurrentlyException) when (attempt < MaxBillingWriteAttempts)
+            {
+                _logger.LogInformation("Tenant {TenantId} changed while its Stripe ids were saved (attempt {Attempt}); re-reading",
+                    LogSanitizer.Sanitize(tenantId), attempt);
+            }
+        }
+    }
+
     public async Task DeleteTenantAsync(string tenantId)
     {
         await _repository.DeleteAsync(tenantId);

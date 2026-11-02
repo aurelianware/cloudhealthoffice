@@ -12,6 +12,12 @@ public interface ITenantService
     Task ActivateTenantAsync(string tenantId);
     Task SuspendTenantAsync(string tenantId);
     Task DeleteTenantAsync(string tenantId);
+
+    /// <summary>
+    /// Saves the tenant's Stripe customer id and, when given, its subscription
+    /// id. Re-reads and re-applies on a concurrent edit so neither is lost.
+    /// </summary>
+    Task<Tenant> RecordStripeBillingAsync(string tenantId, string stripeCustomerId, string? stripeSubscriptionId = null);
     
     Task<ApiKeyResponse> CreateApiKeyAsync(string tenantId, CreateApiKeyRequest request);
     Task<IEnumerable<ApiKey>> GetApiKeysAsync(string tenantId);
