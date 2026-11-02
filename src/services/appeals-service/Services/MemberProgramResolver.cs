@@ -67,16 +67,10 @@ public sealed class HttpMemberProgramResolver(
 
     /// <summary>
     /// The program line-of-business name (<see cref="LinesOfBusiness"/>) an
-    /// appeal's line of business falls under. Part D is a Medicare program;
-    /// the appeal model's Marketplace is the program model's Exchange.
+    /// appeal's line of business falls under: the same name, since both use
+    /// the shared <see cref="LineOfBusiness"/>. Part D is a Medicare program.
     /// </summary>
-    public static string ProgramLineOfBusiness(LineOfBusiness lineOfBusiness) => lineOfBusiness switch
-    {
-        LineOfBusiness.Medicare or LineOfBusiness.MedicarePartD => LinesOfBusiness.Medicare,
-        LineOfBusiness.Medicaid => LinesOfBusiness.Medicaid,
-        LineOfBusiness.Marketplace => LinesOfBusiness.Exchange,
-        _ => LinesOfBusiness.Commercial
-    };
+    public static string ProgramLineOfBusiness(LineOfBusiness lineOfBusiness) => lineOfBusiness.ToString();
 
     private async Task<IReadOnlyList<string>> ActivePlanIdsAsync(
         string tenantId, string memberId, DateTime asOf, CancellationToken ct)

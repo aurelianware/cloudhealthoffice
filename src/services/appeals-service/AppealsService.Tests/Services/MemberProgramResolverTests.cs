@@ -76,7 +76,7 @@ public class MemberProgramResolverTests
         var (resolver, _) = Build(programs, _ => Coverages("PLAN-MA", "PLAN-STAR"));
 
         (await resolver.ResolveAsync(Tenant, "M1", LineOfBusiness.Medicaid, AsOf, default))!.Code.Should().Be("STAR");
-        (await resolver.ResolveAsync(Tenant, "M1", LineOfBusiness.MedicarePartD, AsOf, default))!.Code.Should().Be("MAPD");
+        (await resolver.ResolveAsync(Tenant, "M1", LineOfBusiness.Medicare, AsOf, default))!.Code.Should().Be("MAPD");
         (await resolver.ResolveAsync(Tenant, "M1", LineOfBusiness.Commercial, AsOf, default)).Should().BeNull();
     }
 

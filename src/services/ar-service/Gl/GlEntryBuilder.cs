@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CloudHealthOffice.Finance.Contracts;
 using CloudHealthOffice.Infrastructure.Money;
+using CloudHealthOffice.Infrastructure.Programs;
 
 namespace ArService.Gl;
 
@@ -110,7 +111,8 @@ public static class GlEntryBuilder
             SourceDocumentId = e.PaymentRunId,
             SourceReference = e.PaymentRunNumber,
             EntryDate = e.ExecutedAt.Date,
-            LineOfBusiness = e.LineOfBusiness,
+            // Canonical name: older payment-service events say Marketplace for Exchange.
+            LineOfBusiness = LineOfBusinessNames.Normalize(e.LineOfBusiness) ?? e.LineOfBusiness,
             Description = $"Claims accrual, payment run {e.PaymentRunNumber} ({e.RunStatus})",
             PostedBy = e.ExecutedBy,
             ClaimedAmount = net,
