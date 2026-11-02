@@ -73,7 +73,8 @@ public class AgReportsController : ControllerBase
             [
                 "The enrollee is identified by member id. The reason for the appeal or grievance is not included (it is held encrypted); open the case for it.",
                 "OnTime is blank for a case still open and not yet due, or closed without a decision (withdrawn, expired, administrative).",
-                "Acknowledgment dates are not recorded yet. GrievanceCategory is UNCATEGORIZED for a grievance recorded without one.",
+                "AcknowledgedAt and ResolutionNoticeSentAt are the dates recorded for the letters (POST /api/appeals/{id}/notices); blank means none was recorded.",
+                "GrievanceCategory is UNCATEGORIZED for a grievance recorded without one.",
             ]);
         return ReportResults.Respond(this, run, format);
     }
@@ -173,7 +174,7 @@ public class AgReportsController : ControllerBase
             [
                 "This log includes the member's name and the complaint text, as 22 CCR 53858(e) requires. Handle the file as PHI.",
                 "ReceivedBy is the user who recorded the grievance (or who submitted it through a portal). ActionTaken is the reviewer's notes on the decision.",
-                "MemberNotifiedAt is blank: CHO does not record when the resolution letter was sent yet.",
+                "MemberNotifiedAt is when the resolution letter was sent and AcknowledgedAt when the acknowledgment letter was sent, as recorded on the case (POST /api/appeals/{id}/notices); blank means none was recorded.",
             ]);
         return ReportResults.Respond(this, run, format);
     }
