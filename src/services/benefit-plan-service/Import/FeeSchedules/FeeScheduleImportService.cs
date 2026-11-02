@@ -86,6 +86,18 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
             options = options with { PlanId = key };
         }
 
+        if (options.SupplementalForPlanIds.Count > 0)
+        {
+            var keys = new List<string>();
+            foreach (var plan in options.SupplementalForPlanIds)
+            {
+                var key = await PlanPricingKey.ResolveAsync(_plans, plan, tenantId)
+                    ?? throw new FeeSchedulePlanNotFoundException(plan.Trim());
+                if (!keys.Contains(key, StringComparer.Ordinal)) keys.Add(key);
+            }
+            options = options with { SupplementalForPlanIds = keys };
+        }
+
         var report = new FeeScheduleImportReport
         {
             DryRun = options.DryRun,
@@ -124,7 +136,8 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
             && existing.Name == report.Name
             && existing.Type == options.Type
             && existing.EffectiveDate == Utc(options.EffectiveDate)
-            && existing.TermDate == UtcOrNull(options.TermDate);
+            && existing.TermDate == UtcOrNull(options.TermDate)
+            && SameSupplementalTerms(existing, options);
 
         if (sameContent)
         {
@@ -164,6 +177,11 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
             DefaultForPlanId = string.IsNullOrWhiteSpace(options.PlanId) ? null : options.PlanId,
             EffectiveDate = Utc(options.EffectiveDate),
             TermDate = UtcOrNull(options.TermDate),
+            SupplementalForPlanIds = options.Type == FeeScheduleType.Supplemental ? options.SupplementalForPlanIds.ToList() : null,
+            ClaimsRunoutMonths = options.Type == FeeScheduleType.Supplemental ? options.ClaimsRunoutMonths : null,
+            DiscontinuedNotice = options.Type == FeeScheduleType.Supplemental && !string.IsNullOrWhiteSpace(options.DiscontinuedNotice)
+                ? options.DiscontinuedNotice.Trim()
+                : null,
             Lines = lines,
             CreatedDate = existing?.CreatedDate ?? DateTime.UtcNow,
             Revision = existing?.Revision ?? 0,
@@ -178,6 +196,21 @@ public sealed partial class FeeScheduleImportService : IFeeScheduleImportService
             lines.Count, LogSanitizer.Sanitize(schedule.SourceId, 256), LogSanitizer.Sanitize(actor, 256));
 
         return report;
+    }
+
+    /// <summary>
+    /// Whether a stored supplemental schedule already has these plans, runout
+    /// and notice, so re-importing the same file with a new notice or plan is
+    /// a change, not "unchanged". Always true for other schedule types.
+    /// </summary>
+    private static bool SameSupplementalTerms(FeeSchedule existing, FeeScheduleImportOptions options)
+    {
+        if (options.Type != FeeScheduleType.Supplemental) return true;
+        var notice = string.IsNullOrWhiteSpace(options.DiscontinuedNotice) ? null : options.DiscontinuedNotice.Trim();
+        return (existing.SupplementalForPlanIds ?? []).Order(StringComparer.Ordinal)
+                   .SequenceEqual(options.SupplementalForPlanIds.Order(StringComparer.Ordinal), StringComparer.Ordinal)
+               && existing.ClaimsRunoutMonths == options.ClaimsRunoutMonths
+               && existing.DiscontinuedNotice == notice;
     }
 
     // ── Parsing ───────────────────────────────────────────────────

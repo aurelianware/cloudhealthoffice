@@ -143,6 +143,7 @@ public sealed class PricingStage : IClaimAdjudicationStage
 
         var outcome = Evaluate(claim, requests, priced);
         context.PricingResult = outcome;
+        RecordSupplementalPayments(context, priced);
 
         if (!outcome.IsFullyPriced)
         {
@@ -252,7 +253,43 @@ public sealed class PricingStage : IClaimAdjudicationStage
                 DischargeStatus = inpatientDetails?.PatientStatusCode,
                 PatientAgeYears = ageAtAdmission,
                 DischargeDate = dischargeDate,
+                ClaimReceivedDate = ReceivedDate(claim),
             })
+            .ToList();
+    }
+
+    /// <summary>
+    /// The date the plan received the claim, for a supplemental payment's
+    /// claims runout: the received date when intake recorded one, otherwise
+    /// the submitted date. Null when neither is set.
+    /// </summary>
+    internal static DateTime? ReceivedDate(AdapterClaim claim) =>
+        claim.ReceivedDate ?? (claim.SubmittedDate == default ? null : claim.SubmittedDate);
+
+    /// <summary>
+    /// Copies the engine's state supplemental payments and EOB notices onto
+    /// the claim's adjudication result (replacing any from an earlier run).
+    /// </summary>
+    internal static void RecordSupplementalPayments(ClaimAdjudicationContext context, PricingResultSet priced)
+    {
+        var result = context.AdjudicationResult;
+        result.SupplementalPayments = priced.LineResults
+            .OrderBy(r => r.LineNumber)
+            .SelectMany(r => r.SupplementalPayments.Select(p => new ClaimSupplementalPayment
+            {
+                LineNumber = r.LineNumber,
+                ProcedureCode = r.ProcedureCode,
+                FeeScheduleId = p.FeeScheduleId,
+                FeeScheduleName = p.FeeScheduleName,
+                Rate = p.Rate,
+                Units = p.Units,
+                Amount = p.Amount,
+            }))
+            .ToList();
+        result.PaymentNotices = priced.LineResults
+            .SelectMany(r => r.PaymentNotices)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.Ordinal)
             .ToList();
     }
 

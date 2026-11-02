@@ -28,7 +28,7 @@ public sealed class FeeScheduleImportController : ControllerBase
     private const long MaxUploadBytes = 200L * 1024 * 1024;
 
     private static readonly FeeScheduleType[] ImportableTypes =
-        [FeeScheduleType.Medicaid, FeeScheduleType.Commercial, FeeScheduleType.Custom];
+        [FeeScheduleType.Medicaid, FeeScheduleType.Commercial, FeeScheduleType.Custom, FeeScheduleType.Supplemental];
 
     private readonly IFeeScheduleImportService _importer;
     private readonly ICurrentActor _actor;
@@ -58,6 +58,9 @@ public sealed class FeeScheduleImportController : ControllerBase
         [FromQuery] string? sourceVersion = null,
         [FromQuery] string? jurisdiction = null,
         [FromQuery] string? planId = null,
+        [FromQuery(Name = "supplementalForPlan")] string[]? supplementalForPlan = null,
+        [FromQuery] int? claimsRunoutMonths = null,
+        [FromQuery] string? discontinuedNotice = null,
         [FromQuery(Name = "filter")] string[]? filter = null,
         [FromQuery] string? codeColumn = null,
         [FromQuery] string? rateColumn = null,
@@ -81,7 +84,21 @@ public sealed class FeeScheduleImportController : ControllerBase
         if (effectiveDate is null) errors.Add("effectiveDate is required (the date the rates take effect).");
         if (termDate is { } t && effectiveDate is { } e && t.Date <= e.Date) errors.Add("termDate must be after effectiveDate.");
         if (!ImportableTypes.Contains(type))
-            errors.Add($"type must be Medicaid, Commercial or Custom; {type} schedules are not flat-rate files.");
+            errors.Add($"type must be Medicaid, Commercial, Custom or Supplemental; {type} schedules are not flat-rate files.");
+        var supplementalPlans = (supplementalForPlan ?? []).Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()).ToList();
+        if (type == FeeScheduleType.Supplemental)
+        {
+            if (!string.IsNullOrWhiteSpace(planId))
+                errors.Add("A Supplemental schedule is never a plan's default rate; name its plans with supplementalForPlan, not planId.");
+            if (supplementalPlans.Count == 0)
+                errors.Add("A Supplemental schedule needs supplementalForPlan: the plan code(s) or version id(s) whose claims it pays.");
+            if (claimsRunoutMonths is <= 0)
+                errors.Add("claimsRunoutMonths must be a positive number of months.");
+        }
+        else if (supplementalPlans.Count > 0 || claimsRunoutMonths is not null || !string.IsNullOrWhiteSpace(discontinuedNotice))
+        {
+            errors.Add("supplementalForPlan, claimsRunoutMonths and discontinuedNotice apply only to type=Supplemental.");
+        }
         if (!string.IsNullOrWhiteSpace(jurisdiction) && jurisdiction.Trim().Length != 2)
             errors.Add("jurisdiction is a two-letter state code.");
 
@@ -105,6 +122,9 @@ public sealed class FeeScheduleImportController : ControllerBase
             SourceVersion = sourceVersion,
             Jurisdiction = jurisdiction,
             PlanId = planId,
+            SupplementalForPlanIds = supplementalPlans,
+            ClaimsRunoutMonths = claimsRunoutMonths,
+            DiscontinuedNotice = discontinuedNotice,
             Filters = filters,
             Columns = new FeeScheduleColumnOverrides(codeColumn, rateColumn, facilityRateColumn, modifierColumn, revenueCodeColumn),
             OnDuplicate = onDuplicate,
