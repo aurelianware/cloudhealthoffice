@@ -128,6 +128,11 @@ public class AppealsController : ControllerBase
         // federal and State clocks (StateAppealDeadlinePolicy): a Medi-Cal
         // grievance gets 30 days / 72 hours, not the federal 90 days. The
         // State comes from the member's program (ResolveJurisdictionAsync).
+        if (AppealLinesOfBusiness.Problem(request.Coverage) is { } coverageProblem)
+        {
+            ModelState.AddModelError(nameof(CreateAppealRequest.LineOfBusiness), coverageProblem);
+            return ValidationProblem(ModelState);
+        }
         if (request.State is not null && !ConfiguredAppealJurisdictionProvider.IsStateCode(request.State))
         {
             ModelState.AddModelError(nameof(CreateAppealRequest.State), "State must be a two-letter State code.");
@@ -140,7 +145,7 @@ public class AppealsController : ControllerBase
             return ValidationProblem(ModelState);
         }
         var state = jurisdiction.State;
-        var deadlines = ResolveDeadlines(state, now, request.LineOfBusiness, request.AppealType,
+        var deadlines = ResolveDeadlines(state, now, request.Coverage, request.AppealType,
             request.AppealLevel, request.IsUrgent, TenantId);
         var regulatoryDeadline = deadlines.DefaultTarget;
         var enforceableMaximum = deadlines.EnforceableMaximum;
@@ -150,7 +155,7 @@ public class AppealsController : ControllerBase
         {
             ModelState.AddModelError(nameof(CreateAppealRequest.TargetResponseDate),
                 $"TargetResponseDate exceeds the regulatory maximum of {enforceableMaximum.Value:o} " +
-                $"for {request.LineOfBusiness} {request.AppealType} at {request.AppealLevel} (urgent: {request.IsUrgent})" +
+                $"for {request.Coverage} {request.AppealType} at {request.AppealLevel} (urgent: {request.IsUrgent})" +
                 (deadlines.RulePack is { } packApplied ? $" under {packApplied}." : "."));
             return ValidationProblem(
                 detail: null, instance: null, statusCode: StatusCodes.Status400BadRequest,
@@ -183,6 +188,7 @@ public class AppealsController : ControllerBase
             AppealType = request.AppealType,
             AppealLevel = request.AppealLevel,
             LineOfBusiness = request.LineOfBusiness,
+            BenefitType = request.BenefitType,
             Status = AppealStatus.Draft,
             Source = request.Source,
             SubmittedDate = now,
@@ -837,13 +843,13 @@ public class AppealsController : ControllerBase
     /// in effect on the receipt date when one exists for the line of business.
     /// </summary>
     private AppealDeadlines ResolveDeadlines(
-        string? state, DateTime receivedAt, LineOfBusiness lineOfBusiness, AppealType appealType,
+        string? state, DateTime receivedAt, AppealCoverage coverage, AppealType appealType,
         AppealLevel appealLevel, bool isUrgent, string tenantId)
     {
         var pack = state is null
             ? null
-            : _rulePacks.Find(state, lineOfBusiness, DateOnly.FromDateTime(receivedAt));
-        return StateAppealDeadlinePolicy.Resolve(pack, receivedAt, lineOfBusiness, appealType, appealLevel,
+            : _rulePacks.Find(state, coverage.LineOfBusiness, DateOnly.FromDateTime(receivedAt));
+        return StateAppealDeadlinePolicy.Resolve(pack, receivedAt, coverage, appealType, appealLevel,
             isUrgent, _holidays.ForTenant(tenantId));
     }
 
@@ -931,13 +937,13 @@ public class AppealsController : ControllerBase
         }
 
         var receivedAt = (appeal.ReceivedDate ?? appeal.SubmittedDate).ToUniversalTime();
-        var deadlines = ResolveDeadlines(appeal.State, receivedAt, appeal.LineOfBusiness, appeal.AppealType,
+        var deadlines = ResolveDeadlines(appeal.State, receivedAt, appeal.Coverage, appeal.AppealType,
             appeal.AppealLevel, appeal.IsUrgent, appeal.TenantId);
         var rule = deadlines.Extension;
         if (!rule.IsPermitted)
         {
             return ExtensionRefused(StatusCodes.Status422UnprocessableEntity, "not-permitted", appeal,
-                $"No deadline extension is permitted for {appeal.LineOfBusiness} {appeal.AppealType} " +
+                $"No deadline extension is permitted for {appeal.Coverage} {appeal.AppealType} " +
                 $"at {appeal.AppealLevel} (urgent: {appeal.IsUrgent}). {rule.RegulatoryBasis}",
                 rule.RegulatoryBasis);
         }
@@ -1108,6 +1114,7 @@ public class AppealsController : ControllerBase
         problem.Extensions["extensionRefusal"] = refusal;
         problem.Extensions["fromStatus"] = appeal.Status.ToString();
         problem.Extensions["lineOfBusiness"] = appeal.LineOfBusiness.ToString();
+        problem.Extensions["benefitType"] = appeal.BenefitType.ToString();
         if (regulatoryBasis != null) problem.Extensions["regulatoryBasis"] = regulatoryBasis;
         return StatusCode(statusCode, problem);
     }
@@ -1324,6 +1331,7 @@ public class AppealsController : ControllerBase
             AppealType = appeal.AppealType,
             AppealLevel = appeal.AppealLevel,
             LineOfBusiness = appeal.LineOfBusiness,
+            BenefitType = appeal.BenefitType,
             Status = appeal.Status,
             Source = appeal.Source,
             Attachments = await DecryptAttachmentsAsync(appeal.Attachments, ct),
@@ -1526,7 +1534,18 @@ public class CreateAppealRequest
 
     [Required] public AppealLevel AppealLevel { get; set; } = AppealLevel.FirstLevel;
 
+    /// <summary>
+    /// Commercial, Medicare, Medicaid or Exchange (Marketplace is read as Exchange). A Part D
+    /// drug case is Medicare with <see cref="BenefitType"/> PartDDrug; the old MedicarePartD
+    /// value is refused so a Part D case is never silently put on Part C clocks.
+    /// </summary>
     [Required] public LineOfBusiness LineOfBusiness { get; set; }
+
+    /// <summary>MedicalOrService (default) or PartDDrug (Medicare only).</summary>
+    public AppealBenefitType BenefitType { get; set; } = AppealBenefitType.MedicalOrService;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public AppealCoverage Coverage => new(LineOfBusiness, BenefitType);
 
     /// <summary>
     /// Two-letter State whose rules govern the case (e.g. <c>CA</c>). Optional:

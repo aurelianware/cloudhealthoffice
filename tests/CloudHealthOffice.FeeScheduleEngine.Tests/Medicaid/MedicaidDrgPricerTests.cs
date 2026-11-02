@@ -40,6 +40,7 @@ public class TexasMedicaidDrgPricerTests
     [Theory]
     [InlineData("560-1", 18000)] // delivery DRG: 12,000 delivery SDA x 1.5
     [InlineData("540-2", 18000)]
+    [InlineData("539-4", 18000)] // cesarean with sterilization, on HHSC's delivery list
     [InlineData("139-2", 9000)]  // not a delivery: 6,000 SDA x 1.5
     public void A_rural_delivery_stay_pays_the_ob_gyn_delivery_sda(string drgSoi, double expected)
     {
@@ -51,6 +52,42 @@ public class TexasMedicaidDrgPricerTests
 
         Assert.True(price.Priced);
         Assert.Equal((decimal)expected, price.AllowedAmount);
+    }
+
+    [Theory]
+    [InlineData(18, 4500)]  // adult: 3,000 adult delivery SDA x 1.5
+    [InlineData(25, 4500)]
+    [InlineData(17, 18000)] // under 18: the children's hospital's 12,000 SDA x 1.5
+    public void A_childrens_hospital_pays_its_adult_delivery_sda_only_from_age_18(int age, double expected)
+    {
+        var hospital = Hospital(TexasHospitalClass.Childrens, sda: 12000m) with { DeliveryBaseRate = 3000m };
+        var stay = Stay(age: age) with { DrgSoi = "560-2" };
+
+        var price = _pricer.Price(stay, Weight(1.5m) with { DrgSoi = "560-2" }, hospital);
+
+        Assert.True(price.Priced);
+        Assert.Equal((decimal)expected, price.AllowedAmount);
+    }
+
+    [Fact]
+    public void A_childrens_hospital_delivery_with_no_age_pends()
+    {
+        var hospital = Hospital(TexasHospitalClass.Childrens, sda: 12000m) with { DeliveryBaseRate = 3000m };
+
+        var price = _pricer.Price(Stay(age: null) with { DrgSoi = "560-2" }, Weight(1.5m) with { DrgSoi = "560-2" }, hospital);
+
+        Assert.False(price.Priced);
+        Assert.Contains("18 or older", price.UnpricedReason);
+    }
+
+    [Fact]
+    public void A_childrens_hospital_stay_that_is_not_a_delivery_ignores_the_adult_delivery_sda()
+    {
+        var hospital = Hospital(TexasHospitalClass.Childrens, sda: 12000m) with { DeliveryBaseRate = 3000m };
+
+        var price = _pricer.Price(Stay(age: 30), Weight(1.5m), hospital);
+
+        Assert.Equal(18000m, price.AllowedAmount);
     }
 
     [Fact]

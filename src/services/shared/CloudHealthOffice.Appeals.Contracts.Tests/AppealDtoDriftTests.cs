@@ -87,7 +87,7 @@ public class AppealDtoDriftTests
     [InlineData(typeof(AppealsService.Models.AppealStatus), typeof(AppealStatus))]
     [InlineData(typeof(AppealsService.Models.AppealDecisionType), typeof(AppealDecisionType))]
     [InlineData(typeof(AppealsService.Models.AttachmentStatus), typeof(AttachmentStatus))]
-    [InlineData(typeof(AppealsService.Models.LineOfBusiness), typeof(LineOfBusiness))]
+    [InlineData(typeof(AppealsService.Models.AppealBenefitType), typeof(AppealBenefitType))]
     [InlineData(typeof(AppealsService.Models.AppealClosureReasonCode), typeof(AppealClosureReasonCode))]
     [InlineData(typeof(AppealsService.Models.AppealSource), typeof(AppealSource))]
     [InlineData(typeof(AppealsService.Models.AppealExtensionReason), typeof(AppealExtensionReason))]

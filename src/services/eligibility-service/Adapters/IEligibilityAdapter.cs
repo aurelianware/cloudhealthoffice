@@ -75,7 +75,7 @@ public class EligibilityAdapterResponse
     public DateTime? CoverageBeginDate { get; set; }
     public DateTime? CoverageEndDate { get; set; }
 
-    [JsonConverter(typeof(JsonStringEnumConverter))]
+    [JsonConverter(typeof(LineOfBusinessJsonConverter))]
     public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
 
     // Benefits

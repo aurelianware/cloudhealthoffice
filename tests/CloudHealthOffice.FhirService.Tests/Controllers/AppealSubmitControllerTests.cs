@@ -244,7 +244,8 @@ public class AppealSubmitControllerTests
 
         dto.AppealType.Should().Be(AppealType.Reconsideration);
         dto.AppealLevel.Should().Be(AppealLevel.FirstLevel);
-        dto.LineOfBusiness.Should().Be(LineOfBusiness.Commercial);
+        dto.LineOfBusiness.Should().Be(CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Commercial);
+        dto.BenefitType.Should().Be(AppealBenefitType.MedicalOrService);
     }
 
     [Theory]
@@ -304,20 +305,23 @@ public class AppealSubmitControllerTests
     }
 
     [Theory]
-    [InlineData("MedicarePartD", LineOfBusiness.MedicarePartD)]
-    [InlineData("medicare-part-d", LineOfBusiness.MedicarePartD)]
-    [InlineData("PartD", LineOfBusiness.MedicarePartD)]
-    [InlineData("Medicare", LineOfBusiness.Medicare)]
-    [InlineData("medicare-advantage", LineOfBusiness.Medicare)]
-    [InlineData("Medicaid", LineOfBusiness.Medicaid)]
-    [InlineData("exchange", LineOfBusiness.Marketplace)]
-    public void LineOfBusiness_extension_maps_including_PartD(string code, LineOfBusiness expected)
+    [InlineData("MedicarePartD", AppealLineOfBusinessCode.MedicarePartD)]
+    [InlineData("medicare-part-d", AppealLineOfBusinessCode.MedicarePartD)]
+    [InlineData("PartD", AppealLineOfBusinessCode.MedicarePartD)]
+    [InlineData("Medicare", AppealLineOfBusinessCode.Medicare)]
+    [InlineData("medicare-advantage", AppealLineOfBusinessCode.Medicare)]
+    [InlineData("Medicaid", AppealLineOfBusinessCode.Medicaid)]
+    [InlineData("exchange", AppealLineOfBusinessCode.Marketplace)]
+    public void LineOfBusiness_extension_maps_including_PartD(string code, AppealLineOfBusinessCode expected)
     {
         var task = BuildValidTask();
         task.Extension.Add(new Extension(FhirAppealMapper.AppealLineOfBusinessExtensionUrl, new Code(code)));
 
-        AppealSubmitController.TaskToAppealDto(task, BuildValidPatient(), claim: null)
-            .LineOfBusiness.Should().Be(expected);
+        var dto = AppealSubmitController.TaskToAppealDto(task, BuildValidPatient(), claim: null);
+
+        // marketplace is the shared Exchange; medicare-part-d is Medicare with a Part D benefit type.
+        (dto.LineOfBusiness, dto.BenefitType).Should().Be(AppealLineOfBusinessCodes.ToCoverage(expected));
+        AppealLineOfBusinessCodes.FromCoverage(dto.LineOfBusiness, dto.BenefitType).Should().Be(expected);
     }
 
     [Theory]
@@ -359,7 +363,8 @@ public class AppealSubmitControllerTests
         var dto = AppealSubmitController.TaskToAppealDto(task, BuildValidPatient(), claim: null);
 
         dto.AppealLevel.Should().Be(AppealLevel.ExternalReview);
-        dto.LineOfBusiness.Should().Be(LineOfBusiness.MedicarePartD);
+        dto.LineOfBusiness.Should().Be(CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Medicare);
+        dto.BenefitType.Should().Be(AppealBenefitType.PartDDrug);
     }
 
     [Theory]
@@ -403,18 +408,20 @@ public class AppealSubmitControllerTests
     [Fact]
     public void Mapper_output_round_trips_through_the_submit_parser()
     {
-        foreach (var lob in Enum.GetValues<LineOfBusiness>())
+        foreach (var code in Enum.GetValues<AppealLineOfBusinessCode>())
         foreach (var level in Enum.GetValues<AppealLevel>())
         {
+            var (lob, benefit) = AppealLineOfBusinessCodes.ToCoverage(code);
             var mapped = new FhirAppealMapper().ToAppealTask(new AppealDto
             {
                 Id = "apl-1", MemberId = "p1", ClaimId = "c1", ProviderNPI = "prov-1",
                 AppealType = AppealType.Reconsideration, AppealLevel = level, LineOfBusiness = lob,
-                Status = AppealStatus.InReview
+                BenefitType = benefit, Status = AppealStatus.InReview
             });
 
             var dto = AppealSubmitController.TaskToAppealDto(mapped, BuildValidPatient(), claim: null);
             dto.LineOfBusiness.Should().Be(lob);
+            dto.BenefitType.Should().Be(benefit);
             dto.AppealLevel.Should().Be(level);
         }
     }

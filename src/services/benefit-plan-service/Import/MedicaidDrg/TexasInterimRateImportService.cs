@@ -50,6 +50,12 @@ public sealed class InterimRateImportReport
 
     /// <summary>Things that did not stop the import but deserve a look, e.g. a rate above 100%.</summary>
     public List<string> Warnings { get; } = [];
+
+    /// <summary>
+    /// Hospitals left out because the file contradicts itself about them
+    /// (HHSC RCC PDF: one NPI's TPIs carry different rates). Their stays pend.
+    /// </summary>
+    public List<TexasRccHeldBack> HeldBack { get; } = [];
 }
 
 public interface ITexasInterimRateImportService
@@ -60,8 +66,9 @@ public interface ITexasInterimRateImportService
 
 /// <summary>
 /// Loads Texas hospital interim rates (each hospital's inpatient and
-/// outpatient cost-to-charge ratio, which TMHP sends the hospital) from a
-/// CSV or Excel sheet with one row per hospital:
+/// outpatient cost-to-charge ratio, set by TMHP). Takes HHSC's published
+/// "Inpatient Ratio of Cost to Charges" PDF (see <see cref="TexasRccFileReader"/>),
+/// or a CSV or Excel sheet with one row per hospital:
 ///
 /// <list type="bullet">
 /// <item><b>NPI</b> (required).</item>
@@ -95,18 +102,48 @@ public sealed class TexasInterimRateImportService(IMedicaidInterimRateRepository
         ArgumentNullException.ThrowIfNull(content);
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
 
-        Stream csv;
-        try
-        {
-            csv = FeeScheduleCsvReader.OpenCsv(content, fileName);
-        }
-        catch (FeeScheduleFormatException e)
-        {
-            throw new InterimRateFormatException(e.Message);
-        }
+        var buffered = new MemoryStream();
+        await content.CopyToAsync(buffered, ct);
+        buffered.Position = 0;
 
-        var (columns, parsed) = Parse(csv, options.EffectiveDate);
-        var report = new InterimRateImportReport { DryRun = options.DryRun, FileName = fileName, Columns = columns };
+        InterimRateImportReport report;
+        List<ParsedRow> parsed;
+        if (IsPdf(buffered))
+        {
+            // HHSC's published "Inpatient Ratio of Cost to Charges" PDF.
+            var rcc = TexasRccFileReader.Read(buffered);
+            parsed = rcc.Rates
+                .Select(r => new ParsedRow(0, r.Npi, r.Tpi, r.ProviderName, r.RateEffectiveDate, r.Rate, null))
+                .ToList();
+            report = new InterimRateImportReport
+            {
+                DryRun = options.DryRun,
+                FileName = fileName,
+                Columns = new Dictionary<string, string>
+                {
+                    ["format"] = $"HHSC inpatient RCC PDF effective {rcc.FileEffectiveDate:yyyy-MM-dd}",
+                    ["rows"] = rcc.Rows.Count.ToString(CultureInfo.InvariantCulture),
+                },
+            };
+            report.HeldBack.AddRange(rcc.HeldBack);
+            if (rcc.SerialDatesRepaired > 0)
+                report.Warnings.Add($"{rcc.SerialDatesRepaired} row(s) printed the rate effective date as an Excel serial (e.g. 4626600%); read as dates.");
+        }
+        else
+        {
+            Stream csv;
+            try
+            {
+                csv = FeeScheduleCsvReader.OpenCsv(buffered, fileName);
+            }
+            catch (FeeScheduleFormatException e)
+            {
+                throw new InterimRateFormatException(e.Message);
+            }
+
+            (var columns, parsed) = Parse(csv, options.EffectiveDate);
+            report = new InterimRateImportReport { DryRun = options.DryRun, FileName = fileName, Columns = columns };
+        }
 
         var now = DateTime.UtcNow;
         var records = parsed.Select(p => new MedicaidInterimRate
@@ -163,6 +200,12 @@ public sealed class TexasInterimRateImportService(IMedicaidInterimRateRepository
             await repository.UpsertAsync(toWrite, ct);
 
         return report;
+    }
+
+    private static bool IsPdf(MemoryStream stream)
+    {
+        var head = stream.Length >= 4 ? stream.GetBuffer().AsSpan(0, 4) : [];
+        return head.SequenceEqual("%PDF"u8);
     }
 
     internal sealed record ParsedRow(int Row, string Npi, string? Tpi, string? Name, DateTime EffectiveDate, decimal? Inpatient, decimal? Outpatient);
