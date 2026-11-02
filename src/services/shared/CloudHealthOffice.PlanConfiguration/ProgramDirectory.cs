@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -60,6 +61,15 @@ public sealed class ProgramDirectoryOptions
     /// state or line of business, which is why it is minutes and not hours.
     /// </summary>
     public int CacheSeconds { get; set; } = 300;
+
+    /// <summary>
+    /// Ask with this service's own identity even inside a request whose
+    /// caller holds a CHO token (<see cref="ChoOutboundTokenHandlerExtensions.UseChoServiceIdentity"/>).
+    /// For a host that reads a member's program for its own pipeline, where
+    /// the caller need not be allowed to read plan configuration (appeals-service
+    /// working out a case's State). Off by default: the caller's token is forwarded.
+    /// </summary>
+    public bool UseServiceIdentity { get; set; }
 }
 
 /// <summary>Reads through tenant-service's <c>api/v1/programs</c>, cached per tenant.</summary>
@@ -91,6 +101,7 @@ public sealed class HttpProgramDirectory(
         using var request = new HttpRequestMessage(HttpMethod.Get, path);
         // With no caller, ChoOutboundTokenHandler mints a service token for this tenant.
         request.Headers.Add("X-Tenant-ID", tenantId);
+        if (options.UseServiceIdentity) request.UseChoServiceIdentity();
         using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
 
         ProgramDescriptor? program;

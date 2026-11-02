@@ -165,6 +165,18 @@ public class Appeal
     public string? RulePackVersion { get; set; }
 
     /// <summary>
+    /// Where <see cref="State"/> came from: <c>program</c> (the member's
+    /// coverage → benefit plan → program), <c>request</c>, or
+    /// <c>tenantDefault</c>. See <see cref="Services.AppealStateSources"/>.
+    /// </summary>
+    [StringLength(20)]
+    public string? StateSource { get; set; }
+
+    /// <summary>The tenant-service program that set <see cref="State"/>, when it came from one.</summary>
+    [StringLength(200)]
+    public string? ProgramId { get; set; }
+
+    /// <summary>
     /// The one-time regulatory extension of <see cref="TargetResponseDate"/>
     /// (42 CFR 422.590(f), 422.564(e)(2), 423.564(e)(2), 438.408(c)).
     /// <c>null</c> until the <c>POST /{id}/extend</c> endpoint succeeds; a

@@ -460,6 +460,8 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         TargetResponseDate = a.TargetResponseDate,
         State = a.State,
         RulePackVersion = a.RulePackVersion,
+        StateSource = a.StateSource,
+        ProgramId = a.ProgramId,
         DeadlineExtension = a.DeadlineExtension == null ? null : CloneExtension(a.DeadlineExtension),
         DecisionDate = a.DecisionDate,
         SubmittedBy = a.SubmittedBy,

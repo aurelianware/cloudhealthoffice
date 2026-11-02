@@ -388,6 +388,8 @@ services:
       - MongoDb__DatabaseName=AppealsDB
       - Services__ContactServiceUrl=http://contact-service:8080
       - Services__AuthorizationServiceUrl=http://authorization-service:8080
+      - Services__CoverageService=http://coverage-service:8080
+      - Services__TenantService=http://tenant-service:8080
     depends_on:
       mongo:
         condition: service_healthy
