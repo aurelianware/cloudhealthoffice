@@ -182,6 +182,62 @@ public class CrdDtrLinkTests
     }
 
     [Fact]
+    public async Task Without_a_dtr_app_but_with_the_portal_page_the_card_links_to_it_without_patient_data()
+    {
+        var result = await Service(portalUrl: "https://portal.example-plan.com/dtr/questionnaire")
+            .EvaluateCoverageRequirementsAsync(Hook("72148"), Tenant);
+        var card = result.Cards.Single();
+        var id = Values(OnlyExtension(result), "coverage-assertion-id", "valueString").Single()!;
+
+        var link = card.Links.Should().ContainSingle().Subject;
+        link.Type.Should().Be("absolute");
+        link.AppContext.Should().BeNull();
+        card.Suggestions.Should().BeEmpty();
+        card.Detail.Should().Contain("provider portal");
+
+        var uri = new Uri(link.Url);
+        uri.GetLeftPart(UriPartial.Path).Should().Be("https://portal.example-plan.com/dtr/questionnaire");
+        var query = uri.Query.TrimStart('?').Split('&')
+            .Select(p => p.Split('=', 2))
+            .Select(p => (Key: p[0], Value: Uri.UnescapeDataString(p[1])))
+            .ToList();
+        query.Should().Contain(("questionnaire", MriCanonical));
+        query.Should().Contain(("context", id));
+        query.Should().Contain(("code", $"{Cpt}|72148"));
+        // The URL leaves the EHR: no patient, Coverage or order ids.
+        link.Url.Should().NotContain("cov-").And.NotContain("sr-").And.NotContain("Patient");
+    }
+
+    [Fact]
+    public async Task The_dtr_app_wins_over_the_portal_page()
+    {
+        var card = (await Service(launchUrl: "https://dtr.example.org/launch", portalUrl: "https://portal.example-plan.com/dtr/questionnaire")
+            .EvaluateCoverageRequirementsAsync(Hook("72148"), Tenant)).Cards.Single();
+
+        card.Links.Should().ContainSingle().Which.Type.Should().Be("smart");
+    }
+
+    [Theory]
+    [InlineData("http://portal.example-plan.com/dtr/questionnaire")]
+    [InlineData("not a url")]
+    public async Task A_portal_page_that_is_not_an_https_url_is_not_linked(string portalUrl)
+    {
+        var card = (await Service(portalUrl: portalUrl).EvaluateCoverageRequirementsAsync(Hook("72148"), Tenant)).Cards.Single();
+
+        card.Links.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task With_no_form_to_complete_the_portal_page_is_not_linked()
+    {
+        // 97110 needs documentation, but no shipped questionnaire lists it.
+        var card = (await Service(portalUrl: "https://portal.example-plan.com/dtr/questionnaire")
+            .EvaluateCoverageRequirementsAsync(Hook("97110"), Tenant)).Cards.Single();
+
+        card.Links.Should().BeEmpty();
+    }
+
+    [Fact]
     public void An_absolute_link_never_serializes_an_app_context()
     {
         // CDS Hooks: appContext only on smart links.
@@ -304,7 +360,7 @@ public class CrdDtrLinkTests
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private CrdService Service(string? launchUrl = null, ICrdAssertionStore? store = null) => new(
+    private CrdService Service(string? launchUrl = null, ICrdAssertionStore? store = null, string? portalUrl = null) => new(
         new UnavailableTerminology(),
         _engine.Object,
         Options.Create(Config),
@@ -313,7 +369,7 @@ public class CrdDtrLinkTests
         NullLogger<CrdService>.Instance,
         _dtr,
         store ?? _assertions,
-        Options.Create(new DtrConfig { DtrLaunchUrl = launchUrl }));
+        Options.Create(new DtrConfig { DtrLaunchUrl = launchUrl, PortalQuestionnaireUrl = portalUrl }));
 
     /// <summary>Runs CRD for one code against Coverage/cov-1 and returns the assertion id.</summary>
     private async Task<string> AssertAsync(string code)

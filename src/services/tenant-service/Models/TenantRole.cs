@@ -138,7 +138,7 @@ public static class StandardRoles
             "appeals:read", "appeals:write",
             "rfai:read", "rfai:write",
             "correspondence:read", "correspondence:write",
-            "members:read", "claims:read",
+            "members:read", "claims:read", "coverage:read",
             "documents:read", "documents:write", "documents:read-sensitive",
             "clinical:read"
         }

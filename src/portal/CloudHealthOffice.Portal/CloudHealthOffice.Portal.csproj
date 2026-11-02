@@ -12,6 +12,8 @@
     <PackageReference Include="Microsoft.Identity.Web" />
     <PackageReference Include="Microsoft.Identity.Web.UI" />
     <PackageReference Include="MudBlazor" />
+    <!-- DTR questionnaire page: Questionnaire, QuestionnaireResponse and the PAS Bundle. -->
+    <PackageReference Include="Hl7.Fhir.R4" />
     <PackageReference Include="Blazored.LocalStorage" />
     <PackageReference Include="System.Net.Http.Json" />
     <PackageReference Include="MongoDB.Driver" />

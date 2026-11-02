@@ -229,6 +229,9 @@ public static class ChoRolePermissions
                 "rfai:read", "rfai:write",
                 CorrespondenceRead, CorrespondenceWrite,
                 "members:read", "claims:read",
+                // The member's Coverage: DTR $questionnaire-package takes it,
+                // and the PA documentation page looks it up to send the forms.
+                "coverage:read",
                 "terminology:read", "reference-data:read",
                 "attachments:read", "attachments:write", "benefits:read", "consent:read",
                 // Clinical review reads records the sensitive tags cover

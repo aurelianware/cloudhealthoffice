@@ -230,7 +230,7 @@ CAP-linked entries summarize reconciled behavior. Other entries retain the dated
 | Pended → final via R5-backport topic-based Subscription | M | No Subscription / SubscriptionTopic anywhere. | G-15 |
 | Update / cancel of a submitted request | M | Only `$submit` / `$inquire` exist. | G-16 |
 | Additional information (CDex, attachments) | I+T | PAS-07 (42 tests). Never triggered by PAS pends. | G-16 |
-| QuestionnaireResponse in the PAS Bundle used in adjudication | M | Allowed as an entry, never read (`PasController.cs:437`). | G-16 |
+| QuestionnaireResponse in the PAS Bundle used in adjudication | P | Read from `Claim.supportingInfo`, stored and recorded on the authorization as a clinical attachment for the reviewer (`PasDocumentationTests`). Not yet an input to the automated decision. | G-16 |
 | X12 278 request → PAS / authorization | S | Argo/Python tokenizer; no consumer. | G-50 |
 | PAS / authorization → X12 278 response | M | 277 encoder only. | G-50 |
 | 278 inquiry (X215 / X217) | M | JSON schemas referenced only by docs. | G-51 |
@@ -252,7 +252,7 @@ CAP-linked entries summarize reconciled behavior. Other entries retain the dated
 | FHIR fallback via `fhirAuthorization` | M | Field not modelled; no EHR FHIR client. | G-46 |
 | `coverage-information` extension via systemActions (covered, pa-needed, doc-needed, info-needed, billingCode, reason, coverage-assertion-id, questionnaire) | I+T | Emitted per draft order against CRD 2.2.1, carrying `coverage`, `covered`, `pa-needed`, `doc-needed`, `doc-purpose`, `questionnaire` (the canonical of each active DTR form whose `focus` use context lists the code, on doc-needed answers only, resp-38), `billingCode`, `reason`, `date` and `coverage-assertion-id`. All nine `crd-ci-*` invariants asserted on the emitted JSON (`CrdCoverageInformationTests`, `CrdDtrLinkTests`). Each assertion is kept (`crd_coverage_assertions`, 90 days, `Cms0057:Crd:AssertionRetentionDays`) so its id resolves as a DTR context. Not emitted: `info-needed`, `detail`, `dependency`, `satisfied-pa-id`, `contact`, `expiry-date`. | G-44 |
 | Card: coverage / instructions | P | Free text; topic codes in a `temp` code system. | G-44 |
-| Card: launch DTR SMART app | I+T | CHO ships no DTR app (Q-6), so by default a documentation-required answer is an instructions card (no link) and the provider uses the EHR's own DTR (resp-40). A tenant that runs a DTR app sets `Cms0057:Dtr:DtrLaunchUrl`; the card then follows CRDHooksResponse-launchSMART (smart link, a suggestion without actions) with an `appContext` JSON string carrying `questionnaire`, `context` (the coverage-assertion-id), `order` and `coverage` (`CrdDtrLinkTests`). The old card linked to a URL that served nothing. | G-56 |
+| Card: launch DTR SMART app | I+T | CHO ships no DTR app (Q-6), so by default a documentation-required answer is an instructions card (no link) and the provider uses the EHR's own DTR (resp-40). A tenant that runs a DTR app sets `Cms0057:Dtr:DtrLaunchUrl`; the card then follows CRDHooksResponse-launchSMART (smart link, a suggestion without actions) with an `appContext` JSON string carrying `questionnaire`, `context` (the coverage-assertion-id), `order` and `coverage` (`CrdDtrLinkTests`). The old card linked to a URL that served nothing. With no DTR app, `Cms0057:Dtr:PortalQuestionnaireUrl` makes the card carry an `absolute` link to the provider portal's hand-entry page (forms, context and service code only, no patient data). | G-56 |
 | Card: propose alternate request | M | — | G-45 |
 | Card: request form completion | M | — | G-45 |
 | CDS client authentication (EHR-signed JWT, JWKS / `jku`, `jti`) | M | Requires a CHO-issued SMART token instead (`CrdController.cs:84-132`). That substitute is I+T. | G-43 |
@@ -275,7 +275,7 @@ CAP-linked entries summarize reconciled behavior. Other entries retain the dated
 | Adaptive forms (`$next-question`) | M | — | G-57 |
 | CQL engine (for a CHO-hosted DTR app, if built) | M | — | G-56 (decision) |
 | QuestionnaireResponse storage | P | Submission, id reads and tenant/patient-filtered searches use durable store inputs across instances (CAP-04). Submission resolves `questionnaire` by canonical, so a response naming the `url\|version` from a package is accepted. Answer validation against the form is still open. | G-53 |
-| QuestionnaireResponse linked to the PAS request | M | — | G-16 |
+| QuestionnaireResponse linked to the PAS request | I+T | The authorization record names each stored QuestionnaireResponse id (`ClinicalAttachment.QuestionnaireResponseId`); the portal's authorization Documents tab links it. | G-16 |
 | DTR SMART app launch (`fhirContext`, `appContext`) | M | `LaunchContext` has patient/encounter only. | G-40, G-56 |
 | Native EHR DTR support | P | Raw forms only. | G-54, G-55 |
 | CHO tested as a DTR payer server against RI / Inferno | M | — | G-60 |

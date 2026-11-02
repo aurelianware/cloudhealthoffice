@@ -1,0 +1,467 @@
+@page "/dtr/questionnaire"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services.Dtr
+@using Fhir = Hl7.Fhir.Model
+@attribute [Authorize]
+@inject IDtrPortalService Dtr
+@inject NavigationManager Navigation
+
+@*
+    DTR without an EHR DTR client: the provider portal's fallback for small
+    practices, dental offices and EHRs without DTR. It renders CHO's DTR
+    Questionnaire packages for hand entry (no CQL, no EHR prefill: decision
+    Q-6), saves the completed QuestionnaireResponse and submits the PAS
+    request that carries it. A CRD documentation card links here
+    (Cms0057:Dtr:PortalQuestionnaireUrl) with ?questionnaire=...&code=...;
+    the link never names the patient, so the member is looked up here.
+*@
+
+<PageTitle>Complete documentation - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="authorizations:write" RoleName="UMCoordinator">
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4" data-testid="dtr-page">
+    <MudText Typo="Typo.h4" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.Assignment" Class="mr-2" />
+        Complete prior authorization documentation
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        Answer the plan's documentation questions, then send them with the prior authorization request.
+        Answers are typed here; nothing is filled in from an EHR.
+    </MudText>
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true"
+                  CloseIconClicked="() => _error = null" data-testid="dtr-error">@_error</MudAlert>
+    }
+
+    @* ── 1. Member ─────────────────────────────────────────────────────── *@
+    <MudPaper Class="pa-4 mb-4" Outlined="true">
+        <MudText Typo="Typo.h6">1. Member</MudText>
+        <div class="d-flex flex-wrap align-center gap-2">
+            <MudTextField T="string" @bind-Value="_memberId" Label="Member ID" Variant="Variant.Outlined"
+                          Disabled="_member is not null" data-testid="dtr-member-id" Style="max-width: 320px;"
+                          OnKeyUp="@(e => e.Key == "Enter" ? FindMember() : Task.CompletedTask)" Immediate="true" />
+            @if (_member is null)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="FindMember"
+                           Disabled="_busy || string.IsNullOrWhiteSpace(_memberId)" data-testid="dtr-find-member">Find member</MudButton>
+            }
+            else
+            {
+                <MudButton Variant="Variant.Text" OnClick="ResetMember" Disabled="_busy">Change member</MudButton>
+            }
+        </div>
+        @if (_memberNotFound)
+        {
+            <MudText Color="Color.Warning" Class="mt-2" data-testid="dtr-member-not-found">No member was found with that ID.</MudText>
+        }
+        @if (_member is not null)
+        {
+            <MudText Class="mt-2" data-testid="dtr-member-name">
+                <strong>@_member.DisplayName</strong>
+                @if (!string.IsNullOrEmpty(_member.Patient.BirthDate))
+                {
+                    <span> &middot; born @_member.Patient.BirthDate</span>
+                }
+            </MudText>
+            @if (_member.Coverages.Count == 0)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2" data-testid="dtr-no-coverage">
+                    This member has no coverage on file, so no documentation can be requested.
+                </MudAlert>
+            }
+            else
+            {
+                <MudSelect T="string" Label="Coverage" Value="_coverageId" ValueChanged="SelectCoverage"
+                           Variant="Variant.Outlined" Class="mt-2" Style="max-width: 480px;" Disabled="_saved.Count > 0">
+                    @foreach (var coverage in _member.Coverages)
+                    {
+                        <MudSelectItem Value="@coverage.Id">@CoverageLabel(coverage)</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+        }
+    </MudPaper>
+
+    @* ── 2. Documentation ──────────────────────────────────────────────── *@
+    @if (Coverage is not null)
+    {
+        <MudPaper Class="pa-4 mb-4" Outlined="true">
+            <MudText Typo="Typo.h6">2. Documentation</MudText>
+
+            @if (_forms.Count == 0)
+            {
+                @if (_requested.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mb-2">Choose the form for the service you are requesting.</MudText>
+                    <div class="d-flex flex-wrap align-center gap-2">
+                        <MudSelect T="string" Label="Documentation form" @bind-Value="_chosenCanonical"
+                                   Variant="Variant.Outlined" Style="min-width: 360px;" data-testid="dtr-form-choice">
+                            @foreach (var q in _library)
+                            {
+                                <MudSelectItem Value="@Canonical(q)">@(q.Title ?? q.Name ?? q.Url)</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenChosenForm"
+                                   Disabled="_busy || string.IsNullOrEmpty(_chosenCanonical)">Open form</MudButton>
+                    </div>
+                }
+                @foreach (var message in _packageMessages)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">@message</MudAlert>
+                }
+            }
+
+            @foreach (var (form, index) in _forms.Select((f, i) => (f, i)))
+            {
+                <div class="mt-3" data-testid="dtr-form">
+                    <MudText Typo="Typo.subtitle1"><strong>@form.Form.Title</strong></MudText>
+                    @if (form.Saved is not null)
+                    {
+                        <MudChip Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.Check" data-testid="dtr-form-saved">Saved</MudChip>
+                    }
+                    @foreach (var item in form.Form.Items)
+                    {
+                        <QuestionnaireItemField Form="form.Form" Item="item" ReadOnly="form.Saved is not null" Changed="StateHasChanged" />
+                    }
+                </div>
+                @if (index < _forms.Count - 1)
+                {
+                    <MudDivider Class="my-4" />
+                }
+            }
+
+            @if (_forms.Count > 0)
+            {
+                @foreach (var problem in _formProblems)
+                {
+                    <MudText Color="Color.Error" Typo="Typo.body2" data-testid="dtr-form-problem">@problem</MudText>
+                }
+                <div class="d-flex gap-2 mt-4">
+                    @if (_saved.Count == 0)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAnswers" Disabled="_busy"
+                                   data-testid="dtr-save">Save answers</MudButton>
+                    }
+                    else if (_submitted is null)
+                    {
+                        <MudButton Variant="Variant.Outlined" OnClick="ChangeAnswers" Disabled="_busy">Change answers</MudButton>
+                    }
+                </div>
+            }
+        </MudPaper>
+    }
+
+    @* ── 3. Prior authorization request ────────────────────────────────── *@
+    @if (_saved.Count > 0 && _member is not null && Coverage is not null)
+    {
+        <MudPaper Class="pa-4 mb-4" Outlined="true" data-testid="dtr-pa-section">
+            <MudText Typo="Typo.h6">3. Send with a prior authorization request</MudText>
+            @if (_submitted is { Accepted: true } done)
+            {
+                <MudAlert Severity="@(done.Decision == "Denied" ? Severity.Warning : Severity.Success)" Class="mt-2" data-testid="dtr-submitted">
+                    Request <strong>@done.AuthorizationNumber</strong> was received with the documentation attached.
+                    @if (!string.IsNullOrEmpty(done.Decision))
+                    {
+                        <span> Status: <strong>@done.Decision</strong>.</span>
+                    }
+                    @if (!string.IsNullOrEmpty(done.Disposition))
+                    {
+                        <span> @done.Disposition</span>
+                    }
+                </MudAlert>
+            }
+            else
+            {
+                <MudGrid Spacing="2" Class="mt-1">
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" @bind-Value="_entry.RequestingNpi" Label="Requesting provider NPI *" Variant="Variant.Outlined"
+                                      MaxLength="10" InputMode="InputMode.numeric" data-testid="dtr-npi" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" @bind-Value="_entry.RequestingName" Label="Provider or practice name" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudCheckBox T="bool" @bind-Value="_entry.RequestingIsOrganization" Label="The NPI is a practice or facility (organization), not an individual clinician" Dense="true" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        @if (_serviceChoices.Count > 0)
+                        {
+                            <MudSelect T="string" Label="Service *" Value="_serviceKey" ValueChanged="SelectService" Variant="Variant.Outlined" data-testid="dtr-service">
+                                @foreach (var choice in _serviceChoices)
+                                {
+                                    <MudSelectItem Value="@choice.Key">@choice.Label</MudSelectItem>
+                                }
+                            </MudSelect>
+                        }
+                        else
+                        {
+                            <MudTextField T="string" Value="_entry.ServiceCode" ValueChanged="SetServiceCode" Label="Procedure code (CPT, HCPCS or CDT) *"
+                                          Variant="Variant.Outlined" data-testid="dtr-service" />
+                        }
+                    </MudItem>
+                    <MudItem xs="12" sm="2">
+                        <MudNumericField T="decimal" @bind-Value="_entry.Quantity" Label="Quantity" Variant="Variant.Outlined" Min="1" />
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudCheckBox T="bool" @bind-Value="_entry.Urgent" Label="Expedited (urgent) request" Dense="true" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudDatePicker @bind-Date="_entry.ServiceDateFrom" Label="Planned service date *" Variant="Variant.Outlined" Editable="true" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudDatePicker @bind-Date="_entry.ServiceDateTo" Label="Through (optional)" Variant="Variant.Outlined" Editable="true" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField T="string" @bind-Value="_diagnoses" Label="Diagnosis codes (ICD-10-CM, principal first, comma separated)" Variant="Variant.Outlined" />
+                    </MudItem>
+                </MudGrid>
+
+                @foreach (var problem in _submitProblems)
+                {
+                    <MudText Color="Color.Error" Typo="Typo.body2" data-testid="dtr-submit-problem">@problem</MudText>
+                }
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SubmitRequest" Disabled="_busy"
+                           data-testid="dtr-submit">Submit prior authorization request</MudButton>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
+                    The saved answers stay on file for this member either way. They reach the plan's reviewer when they are sent with a request.
+                </MudText>
+            }
+        </MudPaper>
+    }
+
+    @if (_busy)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+</MudContainer>
+</PermissionGate>
+
+@code {
+    /// <summary>Questionnaire canonicals to open (from the CRD card).</summary>
+    [SupplyParameterFromQuery(Name = "questionnaire")] public string[]? QuestionnaireQuery { get; set; }
+
+    /// <summary>The service the CRD card was about, <c>system|code</c>.</summary>
+    [SupplyParameterFromQuery(Name = "code")] public string? CodeQuery { get; set; }
+
+    private sealed class OpenForm(QuestionnaireForm form, IReadOnlyList<Fhir.Extension> extensions)
+    {
+        public QuestionnaireForm Form { get; } = form;
+        public IReadOnlyList<Fhir.Extension> Extensions { get; } = extensions;
+        public Fhir.QuestionnaireResponse? Saved { get; set; }
+    }
+
+    private sealed record ServiceChoice(string Key, string Label, Fhir.Coding Coding);
+
+    private string? _memberId;
+    private DtrMember? _member;
+    private bool _memberNotFound;
+    private string? _coverageId;
+    private List<string> _requested = [];
+    private Fhir.Coding? _requestedCode;
+    private IReadOnlyList<Fhir.Questionnaire> _library = [];
+    private string? _chosenCanonical;
+    private readonly List<OpenForm> _forms = [];
+    private IReadOnlyList<string> _packageMessages = [];
+    private IReadOnlyList<string> _formProblems = [];
+    private readonly List<Fhir.QuestionnaireResponse> _saved = [];
+    private readonly PriorAuthEntry _entry = new();
+    private string? _diagnoses;
+    private List<ServiceChoice> _serviceChoices = [];
+    private string? _serviceKey;
+    private IReadOnlyList<string> _submitProblems = [];
+    private PasSubmitOutcome? _submitted;
+    private bool _busy;
+    private string? _error;
+
+    private Fhir.Coverage? Coverage => _member?.Coverages.FirstOrDefault(c => c.Id == _coverageId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _requested = (QuestionnaireQuery ?? [])
+            .Where(q => !string.IsNullOrWhiteSpace(q) && q.Length <= 500)
+            .Select(q => q.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .Take(10)
+            .ToList();
+        _requestedCode = ParseCode(CodeQuery);
+
+        if (_requested.Count == 0 && _requestedCode is null)
+        {
+            await Run(async () => _library = await Dtr.ListQuestionnairesAsync());
+        }
+    }
+
+    internal static Fhir.Coding? ParseCode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 300) return null;
+        var bar = value.LastIndexOf('|');
+        var (system, code) = bar < 0 ? ((string?)null, value.Trim()) : (value[..bar].Trim(), value[(bar + 1)..].Trim());
+        return code.Length is 0 or > 64 ? null : new Fhir.Coding(system, code);
+    }
+
+    private async Task FindMember()
+    {
+        if (string.IsNullOrWhiteSpace(_memberId)) return;
+        _memberNotFound = false;
+        await Run(async () =>
+        {
+            _member = await Dtr.FindMemberAsync(_memberId);
+            _memberNotFound = _member is null;
+            _coverageId = _member?.Coverages.FirstOrDefault()?.Id;
+            if (Coverage is not null && (_requested.Count > 0 || _requestedCode is not null))
+                await LoadPackage(_requested);
+        });
+    }
+
+    private void ResetMember()
+    {
+        _member = null;
+        _coverageId = null;
+        _forms.Clear();
+        _saved.Clear();
+        _submitted = null;
+        _packageMessages = [];
+        _formProblems = [];
+        _submitProblems = [];
+    }
+
+    private async Task SelectCoverage(string? coverageId)
+    {
+        _coverageId = coverageId;
+        _forms.Clear();
+        if (Coverage is not null && (_requested.Count > 0 || _requestedCode is not null))
+            await Run(() => LoadPackage(_requested));
+    }
+
+    private Task OpenChosenForm()
+        => string.IsNullOrEmpty(_chosenCanonical) ? Task.CompletedTask : Run(() => LoadPackage([_chosenCanonical]));
+
+    private async Task LoadPackage(IReadOnlyList<string> canonicals)
+    {
+        var coverage = (Fhir.Coverage)Coverage!.DeepCopy();
+        coverage.Beneficiary ??= new Fhir.ResourceReference($"Patient/{_member!.Patient.Id}");
+
+        var package = await Dtr.GetPackageAsync(coverage, canonicals, canonicals.Count == 0 ? _requestedCode : null);
+        _forms.Clear();
+        foreach (var packaged in package.Forms)
+            _forms.Add(new OpenForm(new QuestionnaireForm(packaged.Questionnaire, packaged.ValueSets), packaged.ResponseExtensions));
+        _packageMessages = package.Messages;
+        if (_forms.Count == 0 && _packageMessages.Count == 0)
+            _packageMessages = ["The plan has no documentation form for this request."];
+        PrepareServiceChoices();
+    }
+
+    private async Task SaveAnswers()
+    {
+        _formProblems = _forms.SelectMany(f => f.Form.Validate()).ToList();
+        if (_formProblems.Count > 0) return;
+
+        await Run(async () =>
+        {
+            var subject = new Fhir.ResourceReference($"Patient/{_member!.Patient.Id}");
+            foreach (var form in _forms.Where(f => f.Saved is null))
+            {
+                var response = form.Form.ToResponse(subject, form.Extensions, DateTimeOffset.UtcNow);
+                form.Saved = await Dtr.SaveResponseAsync(response);
+                _saved.Add(form.Saved);
+            }
+        });
+    }
+
+    private void ChangeAnswers()
+    {
+        // A saved response is not edited in place: the changed answers are
+        // saved as a new response, which is what a request will carry.
+        foreach (var form in _forms) form.Saved = null;
+        _saved.Clear();
+    }
+
+    private void PrepareServiceChoices()
+    {
+        var codes = new List<Fhir.Coding>();
+        if (_requestedCode is not null) codes.Add(_requestedCode);
+        codes.AddRange(_forms.SelectMany(f => f.Form.FocusCodes));
+
+        _serviceChoices = codes
+            .GroupBy(c => $"{c.System}|{c.Code}", StringComparer.Ordinal)
+            .Select(g => g.FirstOrDefault(c => !string.IsNullOrEmpty(c.Display)) ?? g.First())
+            .Select(c => new ServiceChoice($"{c.System}|{c.Code}", string.IsNullOrEmpty(c.Display) ? c.Code : $"{c.Code} - {c.Display}", c))
+            .ToList();
+
+        var first = _requestedCode is not null
+            ? _serviceChoices.FirstOrDefault(s => s.Coding.Code == _requestedCode.Code)
+            : _serviceChoices.Count == 1 ? _serviceChoices[0] : null;
+        SelectService(first?.Key);
+    }
+
+    private void SelectService(string? key)
+    {
+        _serviceKey = key;
+        var choice = _serviceChoices.FirstOrDefault(s => s.Key == key);
+        if (choice is null) return;
+        _entry.ServiceCode = choice.Coding.Code;
+        _entry.ServiceSystem = string.IsNullOrEmpty(choice.Coding.System) ? PasRequestBuilder.GuessSystem(choice.Coding.Code) : choice.Coding.System;
+        _entry.ServiceDisplay = choice.Coding.Display;
+    }
+
+    private void SetServiceCode(string? code)
+    {
+        _entry.ServiceCode = code?.Trim() ?? string.Empty;
+        _entry.ServiceSystem = PasRequestBuilder.GuessSystem(_entry.ServiceCode);
+        _entry.ServiceDisplay = null;
+    }
+
+    private async Task SubmitRequest()
+    {
+        _entry.DiagnosisCodes = (_diagnoses ?? string.Empty)
+            .Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        _submitProblems = PasRequestBuilder.Validate(_entry);
+        if (_submitProblems.Count > 0) return;
+
+        await Run(async () =>
+        {
+            var bundle = PasRequestBuilder.Build(_member!.Patient.Id, _member.Patient, Coverage!, _entry, _saved, DateTimeOffset.UtcNow);
+            var outcome = await Dtr.SubmitPriorAuthAsync(bundle);
+            if (outcome.Accepted) _submitted = outcome;
+            else _submitProblems = outcome.Problems;
+        });
+    }
+
+    private async Task Run(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await action();
+        }
+        catch (DtrRequestException ex)
+        {
+            _error = string.Join(" ", ex.Problems);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string Canonical(Fhir.Questionnaire q) => q.Version is { Length: > 0 } v ? $"{q.Url}|{v}" : q.Url;
+
+    private static string CoverageLabel(Fhir.Coverage coverage)
+    {
+        var plan = coverage.Class?.FirstOrDefault(c => c.Type?.Coding?.Any(t => t.Code == "plan") == true)?.Name
+                   ?? coverage.Type?.Text
+                   ?? coverage.Type?.Coding?.FirstOrDefault()?.Display
+                   ?? "Coverage";
+        var status = coverage.Status?.ToString() ?? "unknown";
+        var start = coverage.Period?.Start;
+        return string.IsNullOrEmpty(start) ? $"{plan} ({status})" : $"{plan} ({status}, from {start})";
+    }
+}

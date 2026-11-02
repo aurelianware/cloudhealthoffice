@@ -261,6 +261,24 @@
                    catalog carries the same files plus everything else filed
                    against this authorization, and its links actually open. *@
                 <div data-testid="authorization-tab-documents">
+                    @if (_authorization.ClinicalAttachments.Where(a => !string.IsNullOrEmpty(a.QuestionnaireResponseId)).ToList() is { Count: > 0 } forms)
+                    {
+                        @* DTR forms the PAS request carried (stored by fhir-service). *@
+                        <MudPaper Outlined="true" Class="pa-3 mb-4" data-testid="authorization-dtr-forms">
+                            <MudText Typo="Typo.subtitle1" Class="mb-1"><strong>Documentation questionnaires</strong></MudText>
+                            @foreach (var form in forms)
+                            {
+                                <div class="d-flex align-center gap-2">
+                                    <MudIcon Icon="@Icons.Material.Filled.Assignment" Size="Size.Small" />
+                                    <MudLink Href="@($"/dtr/responses/{Uri.EscapeDataString(form.QuestionnaireResponseId!)}")">@(form.Description ?? "Documentation questionnaire")</MudLink>
+                                    @if (form.UploadedDate is { } answered)
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">answered @answered.ToString("MMM d, yyyy")</MudText>
+                                    }
+                                </div>
+                            }
+                        </MudPaper>
+                    }
                     <DocumentsPanel SubjectKind="DocumentSubjectKind.Authorization" SubjectId="@AuthorizationId"
                                     Title="Authorization documents" />
                 </div>
