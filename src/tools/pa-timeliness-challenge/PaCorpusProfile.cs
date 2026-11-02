@@ -6,13 +6,19 @@ public sealed record PaCorpusProfile
     public int Count { get; init; } = 10_000;
     public int Seed { get; init; } = 57;
 
-    /// <summary>Earliest history receipt (UTC). Default: 1 January of <see cref="AsOf"/>'s year.</summary>
+    /// <summary>
+    /// Earliest history receipt (UTC). Default: 1 January of the calendar year
+    /// before <see cref="AsOf"/>, the year a plan reports on by 31 March. A past
+    /// year also keeps a rerun's live submissions out of the history cohort's
+    /// annual draft.
+    /// </summary>
     public DateTimeOffset? PeriodStart { get; init; }
 
     /// <summary>
-    /// Latest history receipt (UTC). Default: <see cref="AsOf"/> minus
-    /// <see cref="MinimumSettlingDays"/>, so every scripted decision, extension
-    /// and appeal lands before <see cref="AsOf"/> (CHO refuses future evidence).
+    /// End of the history receipt window (UTC, exclusive). Default: 1 January of
+    /// <see cref="AsOf"/>'s year. It must be at least <see cref="MinimumSettlingDays"/>
+    /// before <see cref="AsOf"/>, so every scripted decision, extension and appeal
+    /// lands before it (CHO refuses future evidence).
     /// </summary>
     public DateTimeOffset? PeriodEnd { get; init; }
 
@@ -71,10 +77,10 @@ public sealed record PaCorpusProfile
     public IReadOnlyDictionary<PaScenario, int> LiveWeights { get; init; } = DefaultLiveWeights;
 
     public DateTimeOffset ResolvedPeriodStart =>
-        (PeriodStart ?? new DateTimeOffset(AsOf.UtcDateTime.Year, 1, 1, 0, 0, 0, TimeSpan.Zero)).ToUniversalTime();
+        (PeriodStart ?? new DateTimeOffset(AsOf.UtcDateTime.Year - 1, 1, 1, 0, 0, 0, TimeSpan.Zero)).ToUniversalTime();
 
     public DateTimeOffset ResolvedPeriodEnd =>
-        (PeriodEnd ?? AsOf.ToUniversalTime().AddDays(-MinimumSettlingDays)).ToUniversalTime();
+        (PeriodEnd ?? new DateTimeOffset(AsOf.UtcDateTime.Year, 1, 1, 0, 0, 0, TimeSpan.Zero)).ToUniversalTime();
 
     public void Validate()
     {
@@ -84,9 +90,11 @@ public sealed record PaCorpusProfile
         if (ResolvedPeriodEnd <= ResolvedPeriodStart)
             throw new ArgumentException(
                 $"The history period is empty ({ResolvedPeriodStart:O} to {ResolvedPeriodEnd:O}). " +
-                $"Receipts must end at least {MinimumSettlingDays} days before as-of; pass an earlier period start or a later as-of.");
+                $"Receipts must end at least {MinimumSettlingDays} days before as-of; pass --period-start and --period-end.");
         if (ResolvedPeriodEnd > AsOf.ToUniversalTime().AddDays(-MinimumSettlingDays))
-            throw new ArgumentException($"The history period must end at least {MinimumSettlingDays} days before as-of.");
+            throw new ArgumentException(
+                $"The history period must end at least {MinimumSettlingDays} days before as-of ({ResolvedPeriodEnd:yyyy-MM-dd} is too late); " +
+                "early in a year, pass --period-start and --period-end.");
         if (LiveWeights.ContainsKey(PaScenario.LateDecision) || LiveWeights.ContainsKey(PaScenario.DecidedAtDeadline)
             || LiveWeights.ContainsKey(PaScenario.DecidedOneMinuteLate) || LiveWeights.ContainsKey(PaScenario.ExtendedDecidedLate)
             || LiveWeights.ContainsKey(PaScenario.DeniedThenApprovedOnAppeal))

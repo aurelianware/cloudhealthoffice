@@ -11,7 +11,9 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Moq" />
+    <PackageReference Include="NSubstitute" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
@@ -20,6 +22,12 @@
     <ProjectReference Include="..\..\src\tools\pa-timeliness-challenge\pa-timeliness-challenge.csproj" />
     <!-- Only to prove the corpus against CHO's real import and reporting code. -->
     <ProjectReference Include="..\..\src\services\authorization-service\authorization-service.csproj" />
+    <!-- Only to prove the live PAS request against CHO's real PAS mapper. Aliased so the
+         two services' top-level Program types and namespaces do not collide. -->
+    <ProjectReference Include="..\..\src\services\fhir-service\fhir-service.csproj" Aliases="fhirsvc" />
+    <!-- fhir-service reaches Azure.Core, which needs 10.x (as in CloudHealthOffice.FhirService.Tests). -->
+    <PackageReference Include="System.Text.Json" VersionOverride="10.0.3" />
+    <PackageReference Include="Hl7.Fhir.R4" />
   </ItemGroup>
 
   <ItemGroup>

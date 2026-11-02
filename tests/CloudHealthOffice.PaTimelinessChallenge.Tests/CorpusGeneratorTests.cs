@@ -109,7 +109,7 @@ public sealed class CorpusGeneratorTests
     {
         foreach (var c in Cases.Where(c => c.Cohort == PaCohort.History))
         {
-            Assert.InRange(c.ReceivedAt, CorpusFixture.AsOf.AddYears(-1), CorpusFixture.AsOf.AddDays(-PaCorpusProfile.MinimumSettlingDays));
+            Assert.InRange(c.ReceivedAt, new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
             foreach (var after in new[] { c.Decision?.After, c.Extension?.GrantedAfter, c.Appeal?.DecidedAfter }.OfType<TimeSpan>())
             {
                 Assert.True(after >= TimeSpan.Zero);
