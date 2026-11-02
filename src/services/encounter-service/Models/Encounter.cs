@@ -436,16 +436,3 @@ public enum SubmissionType
     Resubmission = 3,
     Void = 4
 }
-
-/// <summary>
-/// Line of Business enum (consistent with Claims Service).
-/// </summary>
-public enum LineOfBusiness
-{
-    Commercial = 1,
-    Medicare = 2,
-    Medicaid = 3,
-    Exchange = 4,
-    TRICARE = 5,
-    VA = 6
-}

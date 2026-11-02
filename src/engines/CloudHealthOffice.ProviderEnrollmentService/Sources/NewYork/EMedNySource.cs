@@ -23,11 +23,11 @@ public sealed class EMedNySource : IStateEnrollmentSource
 {
     public string StateCode         => "NY";
     public string SourceSystemName  => "eMedNY";
-    public LineOfBusiness SupportedLobs =>
-        LineOfBusiness.Medicaid |
-        LineOfBusiness.CHIP     |
-        LineOfBusiness.LTSS     |
-        LineOfBusiness.BehavioralHealth;
+    public ProgramParticipation SupportedLobs =>
+        ProgramParticipation.Medicaid |
+        ProgramParticipation.CHIP     |
+        ProgramParticipation.LTSS     |
+        ProgramParticipation.BehavioralHealth;
 
     private readonly HttpClient _http;
     private readonly IEnrollmentRepository _cache;

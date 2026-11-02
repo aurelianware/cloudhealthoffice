@@ -33,7 +33,7 @@ public class MultiStateEnrollmentAggregatorTests
         var source = Substitute.For<IStateEnrollmentSource>();
         source.StateCode.Returns(stateCode);
         source.SourceSystemName.Returns(sourceSystem);
-        source.SupportedLobs.Returns(LineOfBusiness.All);
+        source.SupportedLobs.Returns(ProgramParticipation.All);
 
         if (singleResult is not null)
             source.GetEnrollmentAsync(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
@@ -58,7 +58,7 @@ public class MultiStateEnrollmentAggregatorTests
         Status              = status,
         EffectiveDate       = new DateOnly(2023, 1, 1),
         ProviderType        = ProviderTypeClassification.PhysicianMD,
-        SupportedLobs       = LineOfBusiness.Medicaid,
+        SupportedLobs       = ProgramParticipation.Medicaid,
         RevalidationDueDate = revalidationDue
     };
 

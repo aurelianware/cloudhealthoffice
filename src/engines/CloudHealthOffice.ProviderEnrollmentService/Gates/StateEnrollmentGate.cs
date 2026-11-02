@@ -72,7 +72,7 @@ public sealed partial class StateEnrollmentGate : IEnrollmentDecisionGate
         string taxonomy,
         string stateCode,
         DateOnly serviceDate,
-        LineOfBusiness lob,
+        ProgramParticipation lob,
         CancellationToken ct = default)
     {
         // Sanitize all user-provided strings up front so every downstream
@@ -163,7 +163,7 @@ public sealed partial class StateEnrollmentGate : IEnrollmentDecisionGate
         string taxonomy,
         string stateCode,
         DateOnly serviceDate,
-        LineOfBusiness lob)
+        ProgramParticipation lob)
     {
         // ── Gate 4: Provider must be known to the state system ────
         if (record is null)
@@ -221,7 +221,7 @@ public sealed partial class StateEnrollmentGate : IEnrollmentDecisionGate
         }
 
         // ── Gate 8: Requested LOB must be supported ───────────────
-        if (lob != LineOfBusiness.None && !record.SupportedLobs.HasFlag(lob))
+        if (lob != ProgramParticipation.None && !record.SupportedLobs.HasFlag(lob))
         {
             return GateResult.Deny("PEMS-005",
                 $"NPI {npi} is not enrolled for {lob} in {stateCode} {record.SourceSystem}. " +
@@ -234,7 +234,7 @@ public sealed partial class StateEnrollmentGate : IEnrollmentDecisionGate
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "Enrollment gate: NPI={Npi} State={State} Taxonomy={Taxonomy} LOB={Lob} Date={Date}")]
     private static partial void LogEnrollmentGateEntry(
-        ILogger logger, string npi, string state, string taxonomy, LineOfBusiness lob, DateOnly date);
+        ILogger logger, string npi, string state, string taxonomy, ProgramParticipation lob, DateOnly date);
 
     /// <summary>
     /// Removes CR and LF from a value that is stored or returned (not only

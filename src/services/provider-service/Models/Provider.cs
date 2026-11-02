@@ -730,19 +730,6 @@ public enum ProviderStatus
 }
 
 /// <summary>
-/// Line of Business enum (matches other services)
-/// </summary>
-public enum LineOfBusiness
-{
-    Commercial = 1,
-    Medicare = 2,
-    Medicaid = 3,
-    Exchange = 4,
-    TRICARE = 5,
-    VA = 6
-}
-
-/// <summary>
 /// Provider bank account / EFT disbursement information.
 /// Mirrors SponsorBankAccount from premium-billing-service but for the credit (payment) side.
 /// Used by capitation-service to disburse NACHA credits or Stripe Connect payouts.

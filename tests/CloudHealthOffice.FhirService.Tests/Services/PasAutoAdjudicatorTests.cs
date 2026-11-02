@@ -172,7 +172,7 @@ public class PasAutoAdjudicatorTests
         enrollmentGateMock
             .Setup(g => g.EvaluateAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<DateOnly>(), It.IsAny<LineOfBusiness>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateOnly>(), It.IsAny<ProgramParticipation>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(GateResult.Pass());
 
         var ruleEngineMock = new Mock<IPriorAuthRuleEngine>();

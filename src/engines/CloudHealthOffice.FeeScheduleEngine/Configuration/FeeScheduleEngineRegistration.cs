@@ -161,7 +161,8 @@ public class FeeScheduleEngineBuilder
             createInner(sp),
             sp.GetRequiredService<Medicaid.IMedicaidDrgRateRepository>(),
             sp.GetRequiredService<ILogger<Medicaid.MedicaidDrgRateResolutionService>>(),
-            sp.GetService<Medicaid.IMedicaidInterimRateRepository>()));
+            sp.GetService<Medicaid.IMedicaidInterimRateRepository>(),
+            sp.GetService<Medicaid.IMedicaidPsychiatricPerDiemRepository>()));
         return this;
     }
 

@@ -25,13 +25,13 @@ public sealed class TmhpPemsSource : IStateEnrollmentSource
 {
     public string StateCode         => "TX";
     public string SourceSystemName  => "PEMS";
-    public LineOfBusiness SupportedLobs =>
-        LineOfBusiness.Medicaid |
-        LineOfBusiness.CHIP     |
-        LineOfBusiness.STAR     |
-        LineOfBusiness.STARPlus |
-        LineOfBusiness.STARKids |
-        LineOfBusiness.LTSS;
+    public ProgramParticipation SupportedLobs =>
+        ProgramParticipation.Medicaid |
+        ProgramParticipation.CHIP     |
+        ProgramParticipation.STAR     |
+        ProgramParticipation.STARPlus |
+        ProgramParticipation.STARKids |
+        ProgramParticipation.LTSS;
 
     private readonly HttpClient _http;
     private readonly IEnrollmentRepository _cache;
@@ -299,23 +299,23 @@ public sealed class TmhpPemsSource : IStateEnrollmentSource
         _             => ProviderTypeClassification.Other
     };
 
-    private static LineOfBusiness MapLobs(IList<string>? programs)
+    private static ProgramParticipation MapLobs(IList<string>? programs)
     {
-        if (programs is null || programs.Count == 0) return LineOfBusiness.None;
-        var lob = LineOfBusiness.None;
+        if (programs is null || programs.Count == 0) return ProgramParticipation.None;
+        var lob = ProgramParticipation.None;
         foreach (var p in programs) lob |= MapLobString(p);
         return lob;
     }
 
-    private static LineOfBusiness MapLobString(string program) => program.ToUpperInvariant() switch
+    private static ProgramParticipation MapLobString(string program) => program.ToUpperInvariant() switch
     {
-        "MEDICAID" or "TXMD"  => LineOfBusiness.Medicaid,
-        "CHIP"                => LineOfBusiness.CHIP,
-        "STAR"                => LineOfBusiness.STAR,
-        "STAR+"   or "STARPLUS" => LineOfBusiness.STARPlus,
-        "STARKIDS"            => LineOfBusiness.STARKids,
-        "LTSS"                => LineOfBusiness.LTSS,
-        _                     => LineOfBusiness.None
+        "MEDICAID" or "TXMD"  => ProgramParticipation.Medicaid,
+        "CHIP"                => ProgramParticipation.CHIP,
+        "STAR"                => ProgramParticipation.STAR,
+        "STAR+"   or "STARPLUS" => ProgramParticipation.STARPlus,
+        "STARKIDS"            => ProgramParticipation.STARKids,
+        "LTSS"                => ProgramParticipation.LTSS,
+        _                     => ProgramParticipation.None
     };
 
     private static IReadOnlyList<EnrollmentRestriction> MapRestrictions(
