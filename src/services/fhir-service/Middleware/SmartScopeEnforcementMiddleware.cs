@@ -362,6 +362,13 @@ public class SmartScopeEnforcementMiddleware
 
             // DTR: a questionnaire package is assembled and returned, not stored.
             ["Questionnaire/$questionnaire-package"] = ReadAccess,
+            // $next-question computes the next question from the response it is
+            // sent and stores nothing (DTR sec-10); $log-questionnaire-errors
+            // reports a fault in a questionnaire the client could read, and
+            // writes nothing a client can read back.
+            ["Questionnaire/$next-question"] = ReadAccess,
+            ["Questionnaire/$log-questionnaire-errors"] = ReadAccess,
+            ["ValueSet/$expand"] = ReadAccess,
 
             // Bulk export for a group — the kick-off shape again.
             ["Group/$export"] = ReadAccess,

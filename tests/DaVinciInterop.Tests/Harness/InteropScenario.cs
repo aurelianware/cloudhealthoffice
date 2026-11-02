@@ -103,6 +103,13 @@ public static class InfernoAuthModes
     /// the seed's <c>payerBackendClient</c>, bound to a payer rather than a provider.
     /// </summary>
     public const string PayerBackendServices = "payerBackendServices";
+
+    /// <summary>
+    /// SMART Backend Services as a provider's DTR client: the kit is registered
+    /// as the seed's <c>dtrBackendClient</c> and obtains its own token in the
+    /// suite's Backend Services group, as a DTR client must (DTR spec-120).
+    /// </summary>
+    public const string DtrClientBackendServices = "dtrClientBackendServices";
     public const string PatientApp = "patientApp";
 }
 

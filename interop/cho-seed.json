@@ -23,6 +23,7 @@
       "providers:read",
       "providers:write",
       "benefits:read",
+      "authorizations:read",
       "settings:manage"
     ]
   },
@@ -39,6 +40,16 @@
     "displayName": "Inferno PDex test kit, as a requesting payer (interop)",
     "payerId": "inferno-new-payer",
     "scopes": ["system/PayerToPayer.read"]
+  },
+  "dtrBackendClient": {
+    "_comment": "The SMART Backend Services client INFERNO-DTR-PAYER-001 registers for the DTR kit before it runs. The kit plays a provider's DTR client (an EHR or DTR app) fetching documentation templates, so the client acts for the seeded provider and holds only the reads DTR needs: Questionnaire (for $questionnaire-package, $next-question and $log-questionnaire-errors) and ValueSet (for $expand). Its keys are the public half of what the kit publishes, as for backendClient.",
+    "clientId": "inferno-dtr",
+    "displayName": "Inferno DTR test kit, as a provider's DTR client (interop)",
+    "providerId": "1234567893",
+    "scopes": [
+      "system/Questionnaire.read",
+      "system/ValueSet.read"
+    ]
   },
   "patientApp": {
     "_comment": "The SMART patient app the CARIN BB scenario (INFERNO-C4BB-SERVER-001) authenticates the kit as. CARIN BB searches ExplanationOfBenefit by type, identifier and date without naming a patient, which CMS-0057-F Patient Access answers only for a token bound to one member. The harness registers this public client through smart-auth-service's admin API, issues a member enrolment for member.memberId, signs in with the Development login as username (honoured only on a Development host), redeems the code, approves the app, and exchanges the code with PKCE. The redirect URI is never fetched: the harness reads the code off the redirect.",

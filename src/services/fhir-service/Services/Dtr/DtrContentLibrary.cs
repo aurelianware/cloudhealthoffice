@@ -40,6 +40,7 @@ public sealed class DtrContentLibrary
     public static DtrContentLibrary Default => Shipped.Value;
 
     private readonly List<Questionnaire> _questionnaires = new();
+    private readonly List<Questionnaire> _adaptive = new();
     private readonly List<Library> _libraries = new();
     private readonly List<ValueSet> _valueSets = new();
 
@@ -66,6 +67,15 @@ public sealed class DtrContentLibrary
 
             switch (resource)
             {
+                case Questionnaire q when IsAdaptive(q):
+                    // The question bank stays here, for $next-question. What is
+                    // published (stored, searchable and packaged) is the DTR
+                    // AdaptiveQuestionnaire-Search form: the same canonical with
+                    // no items (spec-23), so no client ever receives the bank
+                    // as a static form.
+                    _adaptive.Add(q);
+                    _questionnaires.Add(SearchForm(q));
+                    break;
                 case Questionnaire q:
                     _questionnaires.Add(q);
                     break;
@@ -85,6 +95,39 @@ public sealed class DtrContentLibrary
 
     /// <summary>Questionnaires seeded into the read-only default library.</summary>
     public IReadOnlyList<Questionnaire> Questionnaires => _questionnaires.Select(Copy).ToList();
+
+    /// <summary>
+    /// The adaptive question banks, by the canonical of their published search
+    /// form. Never seeded and never packaged: <see cref="AdaptiveQuestionnaireEngine"/>
+    /// releases their items one <c>$next-question</c> at a time.
+    /// </summary>
+    public IReadOnlyList<Questionnaire> AdaptiveQuestionnaires => _adaptive.Select(Copy).ToList();
+
+    /// <summary>The adaptive question bank with this canonical (<c>url</c> or <c>url|version</c>), or null.</summary>
+    public Questionnaire? ResolveAdaptive(string canonical)
+        => Resolve(_adaptive, canonical, q => q.Url, q => q.Version) is { } q ? Copy(q) : null;
+
+    /// <summary>SDC <c>questionnaireAdaptive</c>: the Questionnaire is completed through <c>$next-question</c>.</summary>
+    public const string QuestionnaireAdaptiveExtension =
+        "http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-questionnaireAdaptive";
+
+    /// <summary>DTR AdaptiveQuestionnaire-Search, the profile of a published adaptive form.</summary>
+    public const string AdaptiveSearchProfile =
+        "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-questionnaire-adapt-search";
+
+    /// <summary>True when <paramref name="questionnaire"/> declares itself adaptive.</summary>
+    public static bool IsAdaptive(Questionnaire questionnaire)
+        => questionnaire.Extension.Any(e => e.Url == QuestionnaireAdaptiveExtension
+                                            && e.Value is FhirUrl or FhirUri or FhirBoolean { Value: true });
+
+    private static Questionnaire SearchForm(Questionnaire bank)
+    {
+        var form = Copy(bank);
+        form.Item = new List<Questionnaire.ItemComponent>();
+        form.Meta ??= new Meta();
+        form.Meta.Profile = new[] { AdaptiveSearchProfile };
+        return form;
+    }
 
     public IReadOnlyList<Library> Libraries => _libraries.Select(Copy).ToList();
 

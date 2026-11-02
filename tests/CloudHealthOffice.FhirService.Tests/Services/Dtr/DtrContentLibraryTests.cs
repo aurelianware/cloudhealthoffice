@@ -164,13 +164,32 @@ public class DtrContentLibraryTests
     {
         foreach (var q in Content.Questionnaires)
         {
-            q.Meta.Profile.Should().Contain("http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-std-questionnaire");
+            q.Meta.Profile.Should().Contain(DtrContentLibrary.IsAdaptive(q)
+                ? DtrContentLibrary.AdaptiveSearchProfile
+                : "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-std-questionnaire");
             q.Url.Should().NotBeNullOrEmpty();
             q.Version.Should().NotBeNullOrEmpty();
             q.SubjectType.Should().Equal(ResourceType.Patient);
             q.Text.Should().NotBeNull();
             int.TryParse(q.Meta.VersionId, out _).Should().BeTrue("seed upgrades compare meta.versionId numerically");
             q.UseContext.Should().NotBeEmpty("orders select a form by its focus use context");
+        }
+    }
+
+    [Fact]
+    public void An_adaptive_form_is_published_without_its_question_bank()
+    {
+        var form = Content.Questionnaires.Should().ContainSingle(q => DtrContentLibrary.IsAdaptive(q)).Subject;
+        form.Item.Should().BeEmpty("DTR AdaptiveQuestionnaire-Search allows no items (spec-23)");
+
+        var bank = Content.ResolveAdaptive($"{form.Url}|{form.Version}");
+        bank.Should().NotBeNull();
+        bank!.Item.Should().NotBeEmpty();
+        bank.Item.Select(i => i.LinkId).Should().OnlyHaveUniqueItems();
+        foreach (var condition in bank.Item.SelectMany(i => i.EnableWhen))
+        {
+            bank.Item.Should().Contain(i => i.LinkId == condition.Question,
+                "an enableWhen must name a question in the same bank");
         }
     }
 

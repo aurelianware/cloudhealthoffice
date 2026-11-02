@@ -124,7 +124,11 @@ builder.Services.AddOpenIddict()
             "system/Coverage.read",
             "system/ExplanationOfBenefit.read",
             "system/Encounter.read",
-            "system/Claim.read"
+            "system/Claim.read",
+            "user/Questionnaire.read",
+            "system/Questionnaire.read",
+            "user/ValueSet.read",
+            "system/ValueSet.read"
         );
 
         // ── Token signing ────────────────────────────────────────────────────

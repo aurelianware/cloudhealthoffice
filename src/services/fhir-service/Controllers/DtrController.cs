@@ -272,6 +272,157 @@ public class DtrController : FhirControllerBase
             : StatusCode(result.Status, result.Rejection);
     }
 
+    // ── $next-question ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// POST /fhir/r4/Questionnaire/$next-question — SDC adaptive forms, as DTR
+    /// 2.2.0 profiles them. The body is the client's adaptive
+    /// QuestionnaireResponse (or a Parameters carrying it as
+    /// <c>questionnaire-response</c>); the answer is the same response with the
+    /// next question added to its contained Questionnaire, or marked completed.
+    /// A response the payer finds invalid is a 400 with an OperationOutcome
+    /// (spec-147). Nothing the client sends is stored (sec-10).
+    /// </summary>
+    [HttpPost("Questionnaire/$next-question")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
+    [Consumes("application/fhir+json", "application/json")]
+    [Produces("application/fhir+json")]
+    [ProducesResponseType(typeof(QuestionnaireResponse), 200)]
+    [ProducesResponseType(typeof(OperationOutcome), 400)]
+    [ProducesResponseType(typeof(OperationOutcome), 422)]
+    public IActionResult NextQuestion([FromBody] Resource body)
+    {
+        var response = body switch
+        {
+            QuestionnaireResponse qr => qr,
+            Parameters p => p.Parameter.FirstOrDefault(x => x.Name == "questionnaire-response")?.Resource
+                as QuestionnaireResponse,
+            _ => null,
+        };
+        if (response is null)
+            return FhirBadRequest("$next-question takes a QuestionnaireResponse, or a Parameters with a " +
+                                  "'questionnaire-response' QuestionnaireResponse.");
+
+        var result = new AdaptiveQuestionnaireEngine(DtrContentLibrary.Default).Next(response, DateTimeOffset.UtcNow);
+
+        _logger.LogInformation("$next-question for tenant {TenantId}: HTTP {Status}, status {QrStatus}",
+            LogSanitizer.Sanitize(TenantId), result.Status, result.Response?.Status?.ToString() ?? "-");
+
+        return result.Response is { } next ? Ok(next) : StatusCode(result.Status, result.Rejection);
+    }
+
+    // ── $log-questionnaire-errors ───────────────────────────────────────────
+
+    /// <summary>
+    /// POST /fhir/r4/Questionnaire/$log-questionnaire-errors — DTR 2.2.0
+    /// (oper-1). A DTR client reports a problem it hit with one of the payer's
+    /// questionnaires: the questionnaire canonical and an OperationOutcome. CHO
+    /// logs the canonical and the issue severities and codes so the plan can
+    /// fix its content. Issue text is not logged: a client may quote form data
+    /// in it, and the log is not a place for PHI.
+    /// </summary>
+    [HttpPost("Questionnaire/$log-questionnaire-errors")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
+    [Consumes("application/fhir+json", "application/json")]
+    [Produces("application/fhir+json")]
+    [ProducesResponseType(typeof(OperationOutcome), 200)]
+    [ProducesResponseType(typeof(OperationOutcome), 400)]
+    public IActionResult LogQuestionnaireErrors([FromBody] Parameters parameters)
+    {
+        var canonical = parameters.Parameter.FirstOrDefault(p => p.Name == "questionnaire")?.Value switch
+        {
+            Canonical c => c.Value,
+            FhirUri u => u.Value,
+            FhirString str => str.Value,
+            _ => null,
+        };
+        var outcome = parameters.Parameter.FirstOrDefault(p => p.Name == "operationOutcome")?.Resource as OperationOutcome;
+        if (string.IsNullOrWhiteSpace(canonical) || outcome is null)
+            return FhirBadRequest("$log-questionnaire-errors takes a 'questionnaire' canonical and an " +
+                                  "'operationOutcome' describing the errors.");
+
+        var issues = string.Join(", ", outcome.Issue.Select(i => $"{i.Severity}/{i.Code}"));
+        _logger.LogWarning(
+            "DTR client reported questionnaire errors for tenant {TenantId}, questionnaire {Questionnaire}: {Issues}",
+            LogSanitizer.Sanitize(TenantId), LogSanitizer.Sanitize(canonical, 512), LogSanitizer.Sanitize(issues, 512));
+
+        return Ok(new OperationOutcome
+        {
+            Issue =
+            {
+                new OperationOutcome.IssueComponent
+                {
+                    Severity = OperationOutcome.IssueSeverity.Information,
+                    Code = OperationOutcome.IssueType.Informational,
+                    Diagnostics = $"Recorded {outcome.Issue.Count} issue(s) for {canonical}.",
+                },
+            },
+        });
+    }
+
+    // ── ValueSet/$expand ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// GET or POST /fhir/r4/ValueSet/$expand — the DTR 2.2.0 profile of
+    /// <c>$expand</c> (<c>url</c> required, optional <c>filter</c>): expands a
+    /// ValueSet a DTR questionnaire uses, for a client that received it
+    /// unexpanded in a package. Only explicit concept lists are expandable;
+    /// CHO runs no terminology server.
+    /// </summary>
+    [HttpGet("ValueSet/$expand")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
+    [Produces("application/fhir+json")]
+    [ProducesResponseType(typeof(ValueSet), 200)]
+    [ProducesResponseType(typeof(OperationOutcome), 404)]
+    public IActionResult ExpandValueSet([FromQuery] string? url, [FromQuery] string? filter)
+        => Expand(url, filter);
+
+    [HttpPost("ValueSet/$expand")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
+    [Consumes("application/fhir+json", "application/json")]
+    [Produces("application/fhir+json")]
+    [ProducesResponseType(typeof(ValueSet), 200)]
+    [ProducesResponseType(typeof(OperationOutcome), 404)]
+    public IActionResult ExpandValueSetPost([FromBody] Parameters parameters)
+    {
+        string? Text(string name) => parameters.Parameter.FirstOrDefault(p => p.Name == name)?.Value switch
+        {
+            FhirUri u => u.Value,
+            FhirString str => str.Value,
+            Canonical c => c.Value,
+            _ => null,
+        };
+        return Expand(Text("url"), Text("filter"));
+    }
+
+    private IActionResult Expand(string? url, string? filter)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return FhirBadRequest("ValueSet/$expand requires the 'url' of the ValueSet to expand.");
+
+        var valueSet = DtrContentLibrary.Default.ResolveValueSet(url);
+        if (valueSet is null)
+        {
+            return StatusCode(404, new OperationOutcome
+            {
+                Issue =
+                {
+                    new OperationOutcome.IssueComponent
+                    {
+                        Severity = OperationOutcome.IssueSeverity.Error,
+                        Code = OperationOutcome.IssueType.NotFound,
+                        Diagnostics = $"This server holds no ValueSet {LogSanitizer.Sanitize(url, 512)}.",
+                    },
+                },
+            });
+        }
+
+        var issues = new List<OperationOutcome.IssueComponent>();
+        if (!QuestionnairePackageBuilder.TryExpand(valueSet, DateTimeOffset.UtcNow, filter, issues))
+            return StatusCode(422, new OperationOutcome { Issue = issues });
+        return Ok(valueSet);
+    }
+
     // ── Validation helpers ───────────────────────────────────────────────────
 
     private IActionResult? ValidateItems(List<Questionnaire.ItemComponent> items)

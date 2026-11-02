@@ -12,6 +12,7 @@
 #   ./scripts/interop/run.sh inferno plan-net   # Plan-Net public directory (INFERNO-PLANNET-SERVER-001)
 #   ./scripts/interop/run.sh inferno bulk-data  # Bulk Data Group and Patient export (INFERNO-BULK-SERVER-001)
 #   ./scripts/interop/run.sh inferno pdex       # PDex payer-server $member-match (INFERNO-PDEX-SERVER-001)
+#   ./scripts/interop/run.sh inferno dtr        # DTR 2.2.0 payer server (INFERNO-DTR-PAYER-001)
 #   ./scripts/interop/run.sh inferno all        # every conformance kit
 #   ./scripts/interop/run.sh unit               # harness unit tests only, no Docker
 #
@@ -35,7 +36,7 @@
 # the interop-cho profile — CHO's own services, not the mock — seed it through
 # those services' APIs, and hand the kit CHO's endpoint and a development token
 # (the Bulk Data kit instead authenticates itself with SMART Backend Services).
-# The kits must be fetched first: ./scripts/interop/fetch-inferno.sh us-core c4bb plan-net bulk-data pdex
+# The kits must be fetched first: ./scripts/interop/fetch-inferno.sh us-core c4bb plan-net bulk-data pdex dtr
 #
 # Each scenario starts the pinned HL7 Da Vinci burden-reduction payer reference
 # implementation, waits for it to actually be ready, performs a real exchange
@@ -96,10 +97,12 @@ if [[ "$TARGET" == "inferno" ]]; then
              LABEL='Inferno Bulk Data Group and Patient export (INFERNO-BULK-SERVER-001)' ;;
     pdex)    FILTER='Scenario=INFERNO-PDEX-SERVER-001'
              LABEL='Inferno PDex payer-server $member-match (INFERNO-PDEX-SERVER-001)' ;;
+    dtr)     FILTER='Scenario=INFERNO-DTR-PAYER-001'
+             LABEL='Inferno DTR 2.2.0 payer server (INFERNO-DTR-PAYER-001)' ;;
     all)     FILTER='Target~inferno-framework'
              LABEL='every Inferno conformance kit' ;;
     *)
-      echo "Unknown mode '$MODE' for target 'inferno'. Modes: us-core | c4bb | plan-net | bulk-data | pdex | all." >&2
+      echo "Unknown mode '$MODE' for target 'inferno'. Modes: us-core | c4bb | plan-net | bulk-data | pdex | dtr | all." >&2
       exit 2
       ;;
   esac
@@ -123,7 +126,7 @@ elif [[ "$TARGET" == "deployment" ]]; then
       ;;
     *)
       echo "Unknown mode '$MODE' for target 'deployment'. Modes: us-core | c4bb | plan-net | all." >&2
-      echo "Bulk Data and PDex authenticate with SMART Backend Services and do not run against a deployment yet." >&2
+      echo "Bulk Data, PDex and DTR authenticate with SMART Backend Services and do not run against a deployment yet." >&2
       exit 2
       ;;
   esac
@@ -174,7 +177,8 @@ if [[ "$TARGET" != "br-payer" && "$TARGET" != "inferno" && "$TARGET" != "deploym
   echo "Unknown interop target '$TARGET'." >&2
   echo "Executable targets in this repository:" >&2
   echo "  br-payer  BR-PAS-SUBMIT-001, BR-CRD-001, BR-DTR-001" >&2
-  echo "  inferno   INFERNO-USCORE-SERVER-001, INFERNO-C4BB-SERVER-001, INFERNO-PLANNET-SERVER-001, INFERNO-BULK-SERVER-001" >&2
+  echo "  inferno   INFERNO-USCORE-SERVER-001, INFERNO-C4BB-SERVER-001, INFERNO-PLANNET-SERVER-001, INFERNO-BULK-SERVER-001," >&2
+  echo "            INFERNO-PDEX-SERVER-001, INFERNO-DTR-PAYER-001" >&2
   echo "  deployment  the US Core, CARIN BB and Plan-Net kits against a deployed CHO" >&2
   echo "Other targets are pinned in interop/versions.json but have no scenario yet;" >&2
   echo "see docs/interop/davinci.md for how to add one." >&2
@@ -189,7 +193,9 @@ if [[ "$TARGET" == "inferno" || "$TARGET" == "deployment" ]]; then
     "us-core:$REPO_ROOT/interop/.external/us-core-test-kit:$MODE:us-core" \
     "c4bb:$REPO_ROOT/interop/.external/carin-for-blue-button-test-kit:$MODE:c4bb" \
     "plan-net:$REPO_ROOT/interop/.external/davinci-plan-net-test-kit:$MODE:plan-net" \
-    "bulk-data:$REPO_ROOT/interop/.external/bulk-data-test-kit:$MODE:bulk-data"
+    "bulk-data:$REPO_ROOT/interop/.external/bulk-data-test-kit:$MODE:bulk-data" \
+    "pdex:$REPO_ROOT/interop/.external/davinci-pdex-test-kit:$MODE:pdex" \
+    "dtr:$REPO_ROOT/interop/.external/davinci-dtr-test-kit:$MODE:dtr"
   do
     IFS=: read -r name path mode wanted <<<"$kit"
     [[ "$mode" == "all" || "$mode" == "$wanted" ]] || continue

@@ -292,7 +292,7 @@ public class DtrService : IDtrService
             .ToList();
 
         var bundles = new QuestionnairePackageBuilder(DtrContentLibrary.Default)
-            .Build(selections, request.Coverage, DateTimeOffset.UtcNow, request.ChangedSince, issues);
+            .Build(selections, request.Coverage, DateTimeOffset.UtcNow, request.ChangedSince, issues, fhirBaseUrl);
 
         if (bundles.Count == 0 && request.ChangedSince is not null && selections.Count > 0)
         {

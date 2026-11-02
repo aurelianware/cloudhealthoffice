@@ -48,6 +48,7 @@ public sealed record ChoSeedFixture
     [JsonPropertyName("member")] public ChoSeedMember Member { get; init; } = new();
     [JsonPropertyName("backendClient")] public ChoSeedBackendClient BackendClient { get; init; } = new();
     [JsonPropertyName("payerBackendClient")] public ChoSeedBackendClient PayerBackendClient { get; init; } = new();
+    [JsonPropertyName("dtrBackendClient")] public ChoSeedBackendClient DtrBackendClient { get; init; } = new();
     [JsonPropertyName("patientApp")] public ChoSeedPatientApp PatientApp { get; init; } = new();
 
     public static ChoSeedFixture Load() => LoadFrom(InteropPaths.ChoSeedFixture);

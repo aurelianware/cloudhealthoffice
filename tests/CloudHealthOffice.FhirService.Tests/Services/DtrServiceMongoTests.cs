@@ -52,7 +52,7 @@ public class DtrServiceMongoTests
         var (items, total) = await _service.SearchQuestionnairesAsync(
             new QuestionnaireSearchParams { Count = 100, Page = 1 }, "any-tenant");
 
-        total.Should().Be(5); // 5 seed questionnaires
+        total.Should().Be(6); // 6 seed questionnaires (one adaptive)
     }
 
     [Fact]

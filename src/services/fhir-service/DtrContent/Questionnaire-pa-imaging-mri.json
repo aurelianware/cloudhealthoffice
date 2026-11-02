@@ -2,7 +2,7 @@
   "resourceType": "Questionnaire",
   "id": "q-imaging-mri",
   "meta": {
-    "versionId": "2",
+    "versionId": "3",
     "lastUpdated": "2026-10-31T00:00:00Z",
     "profile": [
       "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-std-questionnaire"
@@ -221,6 +221,31 @@
       "text": "Prior conservative treatment attempted",
       "type": "boolean",
       "required": true
+    },
+    {
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-enableWhenExpression",
+          "valueExpression": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/alternativeExpression",
+                "valueExpression": {
+                  "language": "application/elm+json",
+                  "expression": "{\"type\":\"ExpressionRef\",\"libraryName\":\"ChoImagingMriPrepopulation\",\"name\":\"ConservativeTreatmentAttempted\"}"
+                }
+              }
+            ],
+            "description": "Shown only when the patient's record shows physical therapy within the last year",
+            "language": "text/cql-identifier",
+            "expression": "\"ChoImagingMriPrepopulation\".ConservativeTreatmentAttempted"
+          }
+        }
+      ],
+      "linkId": "3a",
+      "text": "Type and duration of the conservative treatment shown in the patient's record",
+      "type": "string",
+      "required": false
     },
     {
       "linkId": "4",

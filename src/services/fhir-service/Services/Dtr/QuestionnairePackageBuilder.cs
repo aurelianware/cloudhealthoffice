@@ -80,12 +80,16 @@ public sealed class QuestionnairePackageBuilder
         Coverage coverage,
         DateTimeOffset now,
         DateTimeOffset? changedSince,
-        List<OperationOutcome.IssueComponent> issues)
+        List<OperationOutcome.IssueComponent> issues,
+        string? fhirBaseUrl = null)
     {
         var bundles = new List<Bundle>();
         foreach (var selection in selections)
         {
-            var questionnaire = selection.Questionnaire;
+            var adaptive = DtrContentLibrary.IsAdaptive(selection.Questionnaire);
+            var questionnaire = adaptive
+                ? AdaptiveSearchForm(selection.Questionnaire, fhirBaseUrl)
+                : selection.Questionnaire;
             var canonical = Canonical(questionnaire);
             var (libraries, valueSets) = Dependencies(questionnaire, canonical, now, issues);
 
@@ -104,7 +108,16 @@ public sealed class QuestionnairePackageBuilder
                 Timestamp = now,
             };
             Add(bundle, questionnaire);
-            Add(bundle, DraftResponse(canonical, coverage, selection.Orders, now));
+            var draft = DraftResponse(canonical, coverage, selection.Orders, now);
+            if (adaptive)
+            {
+                // spec-25: the response to an adaptive form references a
+                // contained Questionnaire derived from it; $next-question fills it.
+                draft.Meta.Profile = new[] { AdaptiveQuestionnaireEngine.AdaptiveResponseProfile };
+                draft.Contained.Add(AdaptiveQuestionnaireEngine.EmptyContained(questionnaire, AdaptiveUrl(questionnaire)));
+                draft.Questionnaire = $"#{AdaptiveQuestionnaireEngine.ContainedId}";
+            }
+            Add(bundle, draft);
             foreach (var library in libraries) Add(bundle, library);
             foreach (var valueSet in valueSets) Add(bundle, valueSet);
             bundles.Add(bundle);
@@ -130,6 +143,35 @@ public sealed class QuestionnairePackageBuilder
     }
 
     /// <summary>The questionnaire's version-specific canonical (oper-16).</summary>
+    /// <summary>
+    /// The published form of an adaptive questionnaire: no items (DTR
+    /// AdaptiveQuestionnaire-Search), and a <c>questionnaireAdaptive</c> URL
+    /// that is this server's own FHIR base, the base the client already holds a
+    /// Backend Services token for (spec-24).
+    /// </summary>
+    private static Questionnaire AdaptiveSearchForm(Questionnaire stored, string? fhirBaseUrl)
+    {
+        var form = (Questionnaire)stored.DeepCopy();
+        form.Item = new List<Questionnaire.ItemComponent>();
+        form.Meta ??= new Meta();
+        form.Meta.Profile = new[] { DtrContentLibrary.AdaptiveSearchProfile };
+        if (!string.IsNullOrEmpty(fhirBaseUrl))
+        {
+            form.Extension.RemoveAll(e => e.Url == DtrContentLibrary.QuestionnaireAdaptiveExtension);
+            form.Extension.Add(new Extension(DtrContentLibrary.QuestionnaireAdaptiveExtension,
+                new FhirUrl(fhirBaseUrl.TrimEnd('/'))));
+        }
+        return form;
+    }
+
+    private static string AdaptiveUrl(Questionnaire form)
+        => form.Extension.FirstOrDefault(e => e.Url == DtrContentLibrary.QuestionnaireAdaptiveExtension)?.Value switch
+        {
+            FhirUrl url => url.Value,
+            FhirUri uri => uri.Value,
+            _ => "",
+        };
+
     public static string Canonical(Questionnaire questionnaire)
         => questionnaire.Version is { Length: > 0 } v ? $"{questionnaire.Url}|{v}" : questionnaire.Url;
 
@@ -208,6 +250,65 @@ public sealed class QuestionnairePackageBuilder
     /// shipped unexpanded with a warning, because expanding it needs a
     /// terminology server.
     /// </summary>
+    /// <summary>
+    /// Expands <paramref name="valueSet"/> in place for <c>ValueSet/$expand</c>,
+    /// whatever its size, keeping only concepts whose code or display contains
+    /// <paramref name="filter"/> when one is given. False, with an issue, when
+    /// the ValueSet is not an explicit concept list.
+    /// </summary>
+    public static bool TryExpand(
+        ValueSet valueSet, DateTimeOffset now, string? filter, List<OperationOutcome.IssueComponent> issues)
+    {
+        var include = valueSet.Compose?.Include ?? new List<ValueSet.ConceptSetComponent>();
+        if (!Enumerable(valueSet, include))
+        {
+            issues.Add(new OperationOutcome.IssueComponent
+            {
+                Severity = OperationOutcome.IssueSeverity.Error,
+                Code = OperationOutcome.IssueType.TooCostly,
+                Diagnostics = $"ValueSet {valueSet.Url}|{valueSet.Version} is not an explicit concept list; " +
+                              "this server runs no terminology service to expand it.",
+            });
+            return false;
+        }
+
+        var contains = Contains(include)
+            .Where(c => string.IsNullOrEmpty(filter)
+                        || c.Code.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                        || (c.Display?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false))
+            .ToList();
+        valueSet.Expansion = new ValueSet.ExpansionComponent
+        {
+            Identifier = $"urn:uuid:{Guid.NewGuid()}",
+            TimestampElement = new FhirDateTime(now),
+            Total = contains.Count,
+            Contains = contains,
+        };
+        if (!string.IsNullOrEmpty(filter))
+        {
+            valueSet.Expansion.Parameter.Add(new ValueSet.ParameterComponent
+            {
+                Name = "filter",
+                Value = new FhirString(filter),
+            });
+        }
+        return true;
+    }
+
+    private static bool Enumerable(ValueSet valueSet, List<ValueSet.ConceptSetComponent> include)
+        => include.Count > 0
+           && valueSet.Compose!.Exclude.Count == 0
+           && include.All(i => i.Filter.Count == 0 && i.ValueSetElement.Count == 0 && i.Concept.Count > 0);
+
+    private static IEnumerable<ValueSet.ContainsComponent> Contains(IEnumerable<ValueSet.ConceptSetComponent> include)
+        => include.SelectMany(i => i.Concept.Select(c => new ValueSet.ContainsComponent
+        {
+            System = i.System,
+            Version = i.Version,
+            Code = c.Code,
+            Display = c.Display,
+        }));
+
     private static void Expand(ValueSet valueSet, DateTimeOffset now, List<OperationOutcome.IssueComponent> issues)
     {
         var include = valueSet.Compose?.Include ?? new List<ValueSet.ConceptSetComponent>();

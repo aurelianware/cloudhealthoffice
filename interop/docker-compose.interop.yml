@@ -14,7 +14,7 @@
 #   interop-br-provider  HL7 br-provider               (provider-side RI)
 #   interop-cho          CHO native stack + mongo      (CHO as the server under test)
 #   interop-pdex         Inferno PDex test kit         (INFERNO-PDEX-SERVER-001)
-#   interop-dtr-inferno  Inferno DTR test kit          (no scenario yet — see docs/interop/davinci.md)
+#   interop-dtr-inferno  Inferno DTR test kit          (INFERNO-DTR-PAYER-001)
 #   interop-c4bb         Inferno CARIN BB test kit     (INFERNO-C4BB-SERVER-001; judges Provider Access EOBs)
 #   interop-us-core      Inferno US Core test kit      (INFERNO-USCORE-SERVER-001; the US Core floor)
 #   interop-plan-net     Inferno Plan-Net test kit     (INFERNO-PLANNET-SERVER-001; judges the public Provider Directory)
@@ -440,6 +440,11 @@ services:
       # The Inferno Provider Access suites exercise the attribution decision, so
       # the profile has to make the decision the real way.
       Cms0057__ProviderAttribution__ClaimsHistory__Enabled: "true"
+      # CRD answers "documentation needed" for an MRI of the lumbar spine, so
+      # INFERNO-DTR-PAYER-001 can obtain a real coverage-assertion-id from CHO's
+      # own order-sign service and hand the DTR kit its context-only request
+      # (DTR spec-107). The code is one of the MRI form's focus codes.
+      Cms0057__Crd__DocumentationRequiredCodes__0: "72148"
       SmartAuth__Issuer: ${INTEROP_SMART_ISSUER:-http://cho-smart-auth-service:8080}
       SmartAuth__RequireHttpsMetadata: "false"
       # The bundled issuer serves this tenant. appsettings.Development.json
