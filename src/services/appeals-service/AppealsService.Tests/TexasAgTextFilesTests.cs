@@ -256,10 +256,12 @@ public class TexasAgReportsApiTests : IClassFixture<AppealsWebApplicationFactory
     };
 
     private readonly WebApplicationFactory<Program> _host;
+    private readonly AppealsWebApplicationFactory _factory;
     private readonly RecordAccessStoreInMemory _log = new();
 
     public TexasAgReportsApiTests(AppealsWebApplicationFactory factory)
     {
+        _factory = factory;
         _host = factory.WithWebHostBuilder(b => b.ConfigureServices(s =>
         {
             s.RemoveAll<IRecordAccessStore>();
@@ -344,8 +346,34 @@ public class TexasAgReportsApiTests : IClassFixture<AppealsWebApplicationFactory
         text.Should().Contain("123456789").And.NotContain("Pat Texas");
         _log.All.Single(e => e.ActorId == "comp-tx").RecordIds.Should().Contain(a.Id);
 
+        // The file handed out is the file kept in the document catalog.
+        file.Headers.GetValues("X-Document-Id").Should().ContainSingle();
+        var kept = _factory.StateFiles.Stored.Single(u => u.OnBehalfOf == "comp-tx");
+        (kept.TenantId, kept.StateCode, System.Text.Encoding.ASCII.GetString(kept.Content)).Should().Be((Tenant, "TX", text));
+        kept.RunId.Should().StartWith($"tx-member-appeals-01-{month.Replace("-", "")}-");
+
         var json = await With("comp-tx-2", "reports:compliance").GetFromJsonAsync<TexasAgFileView>("/api/appeals/reports/texas/member-appeals" + query, Json);
         json!.Items.Should().Contain(i => i.AppealId == a.Id && i.Pending);
+    }
+
+    [Fact]
+    public async Task A_file_that_cannot_be_kept_is_not_handed_out()
+    {
+        var a = await CreateAsync("M-TX-3");
+        (await As("um-tx", ChoRolePermissions.UMCoordinator).PutAsJsonAsync($"/api/appeals/{a.Id}/texas-codes", Codes, Json)).EnsureSuccessStatusCode();
+        var month = TexasAgTextFiles.TexasDate(DateTime.UtcNow).ToString("yyyy-MM");
+        _factory.StateFiles.Fail = true;
+        try
+        {
+            var file = await With("comp-tx-4", "reports:compliance")
+                .GetAsync($"/api/appeals/reports/texas/member-appeals?month={month}&program=01&mcoCode=SUP&planCode=4F&format=txt");
+            file.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+            (await file.Content.ReadAsStringAsync()).Should().NotContain("123456789");
+        }
+        finally
+        {
+            _factory.StateFiles.Fail = false;
+        }
     }
 
     [Fact]

@@ -112,7 +112,9 @@ public enum DocumentLinkKind
     RfaiRequest,
     PaymentRun,
     /// <summary>A file-drop import run (claims-service <c>CpcdsDropRuns</c>): the source extracts it loaded.</summary>
-    ImportRun
+    ImportRun,
+    /// <summary>One generated state regulatory file (a Texas HHSC monthly text file): the file as it was handed over for submission.</summary>
+    StateReport
 }
 
 public sealed class DocumentRetention
@@ -188,6 +190,13 @@ public static class DocumentTypes
     /// </summary>
     public const string SourceExtract = "SourceExtract";
 
+    /// <summary>
+    /// A file CHO generated for a state regulator (a Texas HHSC monthly
+    /// appeals or complaints text file), kept as handed over for
+    /// submission. Plain text or CSV only, and no other type may be.
+    /// </summary>
+    public const string StateSubmission = "StateSubmission";
+
     public static readonly IReadOnlySet<string> BuiltIn = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         // Clinical
@@ -206,6 +215,8 @@ public static class DocumentTypes
         "CallRecording", "CallTranscript", "CallSummary",
         // Data a plan's other systems sent (a core's CPCDS or X12 extract), as received
         SourceExtract,
+        // A file CHO generated for a state regulator, as handed over
+        StateSubmission,
         // Anything not yet classified
         "Other"
     };

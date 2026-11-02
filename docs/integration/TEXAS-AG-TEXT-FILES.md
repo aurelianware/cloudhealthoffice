@@ -22,6 +22,10 @@ GET /api/appeals/reports/texas/member-appeals?month=2026-09&program=01&mcoCode=S
 
 Needs `reports:um` or `reports:compliance`. Every case and member in a file is written to the record access log.
 
+## Kept in the document catalog
+
+Every txt file handed out is first stored in CHO's document catalog (document-service) as a `StateSubmission` document, state code `TX`, linked to its own `StateReport:<run id>` subject. The response carries `X-Document-Id` and `X-State-Report-Run`. The catalog applies its retention, legal hold and access audit, and reading a `StateReport` document needs `reports:compliance`. If the catalog can't keep the file, the file isn't handed out (503), so every file a plan submits has a kept copy. A blank file (no cases) has nothing to keep.
+
 ## What goes in a file
 
 Every case received by the end of the month and not resolved before it began: cases resolved in the month carry their resolution date, the rest go as pending (no date, `PN` / `PND`) with the same tracking ID every month until resolved. Grievances go in the complaints file; every other case type in the appeals file. No cases gives a blank file, as HHSC asks.
@@ -46,5 +50,4 @@ Required for a complaint: program, complainant, method received, received by, be
 - The tracking ID defaults to the appeal number compacted to 15 characters (`APL-20260915-ABCD1234` → `260915ABCD1234`); set `trackingId` to use another.
 - "Initial contact complaint" counts weekends but not Texas state holidays.
 - The state member number is recorded per case; it is not yet read from the member's enrollment.
-- Generated files are not yet kept in CHO's document catalog; a follow-up stores each one there.
 - Sequence is zero-padded to 6 digits; every other field is left-justified and space-filled, per the layouts' instructions. Confirm against TexConnect's first validation report.

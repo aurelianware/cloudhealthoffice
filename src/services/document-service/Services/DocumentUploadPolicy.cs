@@ -22,6 +22,10 @@ namespace DocumentService.Services;
 /// extract is never a PDF. Their cap is <c>Documents:MaxSourceExtractBytes</c>
 /// (default 1 GiB): a plan's daily claim file outgrows an attachment's 64 MiB.
 /// Above the multipart limit, use the pre-signed upload.</para>
+///
+/// <para>State submissions (<see cref="Models.DocumentTypes.StateSubmission"/>),
+/// files CHO generated for a state regulator, are plain text or CSV only,
+/// under the ordinary cap.</para>
 /// </summary>
 public sealed class DocumentUploadPolicy
 {
@@ -92,7 +96,16 @@ public sealed class DocumentUploadPolicy
     public bool IsAllowedContentType(string? documentType, string? contentType)
         => IsSourceExtract(documentType)
             ? NormalizeContentType(contentType) is { } t && SourceExtractContentTypes.Contains(t)
-            : IsAllowedContentType(contentType);
+            : IsStateSubmission(documentType)
+                ? NormalizeContentType(contentType) is { } s && StateSubmissionContentTypes.Contains(s)
+                : IsAllowedContentType(contentType);
+
+    /// <summary>What a state submission may be: the text files states take.</summary>
+    public static readonly IReadOnlySet<string> StateSubmissionContentTypes =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "text/plain", "text/csv" };
+
+    private static bool IsStateSubmission(string? documentType)
+        => string.Equals(documentType, Models.DocumentTypes.StateSubmission, StringComparison.OrdinalIgnoreCase);
 
     public IReadOnlySet<string> AllowedContentTypes { get; }
 
