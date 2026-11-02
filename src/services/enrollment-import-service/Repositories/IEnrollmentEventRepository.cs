@@ -37,7 +37,27 @@ public interface IEnrollmentEventRepository
         CancellationToken ct = default);
 
     Task<int> GetNextVersionAsync(string tenantId, string memberId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The events that carry rate cell inputs, for up to <paramref name="memberLimit"/>
+    /// members whose id sorts after <paramref name="afterMemberId"/> (ordinal),
+    /// each member's events oldest first. A member is never split across pages.
+    /// </summary>
+    Task<IReadOnlyList<MemberRateCellHistory>> ListRateCellInputsAsync(
+        string tenantId, string? afterMemberId, int memberLimit, CancellationToken ct = default);
 }
+
+/// <summary>One member's rate cell inputs over time, oldest first.</summary>
+public sealed record MemberRateCellHistory(string MemberId, IReadOnlyList<RateCellSnapshot> Snapshots);
+
+/// <summary>The inputs one enrollment event carried, with when it applied.</summary>
+public sealed record RateCellSnapshot(
+    int Version,
+    DateTime OccurredAt,
+    DateTime? EventDate,
+    EnrollmentEventType EventType,
+    string? MaintenanceType,
+    EnrollmentRateCellInputs Inputs);
 
 public readonly record struct EnrollmentEventAppendResult(EnrollmentEvent Event, bool Appended);
 

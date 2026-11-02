@@ -348,6 +348,7 @@ public sealed class Enrollment834EdiParser : IEnrollment834EdiParser
             City = d.City,
             State = d.State,
             Zip = d.Zip,
+            CountyCode = d.CountyCode,
             DateOfBirth = d.DateOfBirth,
             Gender = d.Gender,
             Coverage = r.Coverage.Count > 0 ? r.Coverage : null,
@@ -417,6 +418,9 @@ public sealed class Enrollment834EdiParser : IEnrollment834EdiParser
         target.City = seg.Element(0);
         target.State = seg.Element(1);
         target.Zip = seg.Element(2);
+        // N405 CY = county; N406 is the county code (X12 005010X220A1).
+        if (string.Equals(seg.Element(4), "CY", StringComparison.Ordinal))
+            target.CountyCode = seg.Element(5);
     }
 
     private static CoverageDetail BuildCoverage(X12Segment seg) => new()
