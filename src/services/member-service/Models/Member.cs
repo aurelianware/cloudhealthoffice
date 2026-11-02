@@ -230,6 +230,16 @@ public class Member
     public bool? IsStudent { get; set; }
 
     /// <summary>
+    /// The member's state Medicaid aid codes (Medi-Cal) or eligibility
+    /// categories, each for the dates it applies, as the state's eligibility
+    /// file sends them. Rules keyed to an aid code read the ones active on the
+    /// date of service, such as DHCS APL 26-009 (adults not eligible for
+    /// federally funded full-scope Medi-Cal lose non-emergency dental from
+    /// July 1, 2027). Replaced as a whole by <c>PUT /api/v1/members/{id}/aid-codes</c>.
+    /// </summary>
+    public List<MemberAidCode> AidCodes { get; set; } = new();
+
+    /// <summary>
     /// Audit: Record creation timestamp
     /// </summary>
     public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
@@ -417,4 +427,16 @@ public static class RelationshipCodes
     public const string FosterChild = "10";
     public const string DomesticPartner = "53";
     public const string Other = "G8";
+}
+
+/// <summary>One aid code for a span of dates (<see cref="Member.AidCodes"/>). <see cref="EndDate"/> is the last day; null = open.</summary>
+public class MemberAidCode
+{
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.StringLength(10, MinimumLength = 1)]
+    public string Code { get; set; } = string.Empty;
+
+    public DateTime EffectiveDate { get; set; }
+
+    public DateTime? EndDate { get; set; }
 }

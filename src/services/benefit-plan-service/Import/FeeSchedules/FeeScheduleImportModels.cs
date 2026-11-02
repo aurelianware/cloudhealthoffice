@@ -55,6 +55,22 @@ public sealed record FeeScheduleImportOptions
     /// </summary>
     public string? PlanId { get; init; }
 
+    /// <summary>
+    /// For a <see cref="FeeScheduleType.Supplemental"/> schedule (a state add-on
+    /// such as Medi-Cal Prop 56): the benefit plans, by plan code or version id,
+    /// whose claims it pays. Required for that type, refused for every other.
+    /// </summary>
+    public IReadOnlyList<string> SupplementalForPlanIds { get; init; } = [];
+
+    /// <summary>
+    /// For a supplemental schedule: a claim must be received within this many
+    /// months of the date of service to be paid it (Prop 56: 12).
+    /// </summary>
+    public int? ClaimsRunoutMonths { get; init; }
+
+    /// <summary>For a supplemental schedule: the EOB text for a listed procedure on or after <see cref="TermDate"/>.</summary>
+    public string? DiscontinuedNotice { get; init; }
+
     /// <summary>Keep only rows whose column equals the value (case-insensitive), e.g. "Provider Type" = "Physician".</summary>
     public IReadOnlyList<(string Column, string Value)> Filters { get; init; } = [];
 

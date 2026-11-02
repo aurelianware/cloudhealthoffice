@@ -1272,13 +1272,18 @@ static void ForceCleanProfessionalPaidScenario(SyntheticClaim claim)
         }
     };
     claim.TotalCharges = 180.00m;
+    // Pricing allows the seeded plan default fee schedule rate (99213: $85),
+    // not billed charges; the validation plan's $30 office-visit copay comes
+    // off that. (A 2026-11-02 GKE run paid $55 on every one of these claims.)
+    var allowed = Math.Min(MccPlanDefaultFeeSchedule.RateFor("99213"), claim.TotalCharges);
+    const decimal copay = 30.00m;
     claim.ExpectedOutcome = new ExpectedOutcome
     {
         Disposition = "Paid",
-        ExpectedAllowedAmount = 180.00m,
-        ExpectedPaidAmount = 150.00m,
-        ExpectedMemberLiability = 30.00m,
-        ExpectedCopay = 30.00m,
+        ExpectedAllowedAmount = allowed,
+        ExpectedPaidAmount = allowed - copay,
+        ExpectedMemberLiability = copay,
+        ExpectedCopay = copay,
         ExpectedCoinsurance = 0.00m,
         ExpectedDeductible = 0.00m,
         ExpectedFhirCompliant = true,
@@ -1289,8 +1294,8 @@ static void ForceCleanProfessionalPaidScenario(SyntheticClaim claim)
             {
                 LineNumber = 1,
                 Disposition = "Paid",
-                AllowedAmount = 180.00m,
-                PaidAmount = 150.00m
+                AllowedAmount = allowed,
+                PaidAmount = allowed - copay
             }
         }
     };
@@ -2973,7 +2978,7 @@ static async Task<SubmittedClaim> SubmitClaimAsync(
         subscriberLastName = claim.Member.LastName,
         patientFirstName = claim.Member.FirstName,
         patientLastName = claim.Member.LastName,
-        patientRelationship = claim.Member.Relationship,
+        patientRelationship = MccClaimRelationship.X12Code(claim.Member),
         lineOfBusiness = options.LineOfBusiness,
         billingProviderNPI = claim.BillingProvider.Npi,
         billingProviderName = claim.BillingProvider.FullName,

@@ -97,6 +97,38 @@ public class MembersControllerTests
     }
 
     [Fact]
+    public async Task ReplaceAidCodes_StoresNormalizedSpans_AndEmitsMemberUpdated()
+    {
+        var (ctl, repo, events, _, _, _, _) = Build();
+        await ctl.CreateMember(CreateReq(), CancellationToken.None);
+
+        var resp = await ctl.ReplaceAidCodes("M-001",
+        [
+            new MemberAidCode { Code = " 1h ", EffectiveDate = new DateTime(2027, 8, 1) },
+            new MemberAidCode { Code = "s1", EffectiveDate = new DateTime(2024, 1, 1, 13, 0, 0), EndDate = new DateTime(2027, 7, 31) },
+        ], CancellationToken.None);
+
+        resp.Should().BeOfType<OkObjectResult>();
+        repo.Members[0].AidCodes.Select(a => (a.Code, a.EffectiveDate, a.EndDate)).Should().Equal(
+            ("S1", new DateTime(2024, 1, 1), (DateTime?)new DateTime(2027, 7, 31)),
+            ("1H", new DateTime(2027, 8, 1), (DateTime?)null));
+        events.All.Last().EventType.Should().Be(MemberEventType.MemberUpdated);
+        events.All.Last().Payload!["aidCodes"]!.AsArray().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task ReplaceAidCodes_EndBeforeStart_Is400_UnknownMember404()
+    {
+        var (ctl, _, _, _, _, _, _) = Build();
+        await ctl.CreateMember(CreateReq(), CancellationToken.None);
+
+        (await ctl.ReplaceAidCodes("M-001",
+            [new MemberAidCode { Code = "S1", EffectiveDate = new DateTime(2027, 8, 1), EndDate = new DateTime(2027, 7, 1) }],
+            CancellationToken.None)).Should().BeOfType<BadRequestObjectResult>();
+        (await ctl.ReplaceAidCodes("NOPE", [], CancellationToken.None)).Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
     public async Task CreateMember_DuplicateMemberId_Returns409()
     {
         var (ctl, _, _, _, _, _, _) = Build();

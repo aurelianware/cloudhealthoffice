@@ -210,6 +210,8 @@ To verify:
 - **5% cap on wage index reductions.** The State Plan caps wage index reductions at five percent, so the published index is expected to already include that cap.
 - **Interim claims and administrative days.** Interim claims (stays over 29 days), administrative days and rehabilitation per diems are separate methods and are not covered here.
 
+Freestanding psychiatric hospitals are paid a per diem, not by DRG: see [MEDICAID-PSYCHIATRIC-PER-DIEM.md](MEDICAID-PSYCHIATRIC-PER-DIEM.md).
+
 ## Sources
 
 - 1 TAC §355.8052, Inpatient Hospital Reimbursement.

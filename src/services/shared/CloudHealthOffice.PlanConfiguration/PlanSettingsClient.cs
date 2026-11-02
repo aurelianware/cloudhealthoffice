@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
@@ -30,6 +31,15 @@ public sealed class PlanSettingsOptions
 
     /// <summary>How long a resolved value is cached when no change event arrives.</summary>
     public int CacheSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// Ask tenant-service with this service's own identity instead of the
+    /// caller's token, for a setting the service reads for its own pipeline
+    /// that the caller need not be allowed to read (authorization-service
+    /// reading a Medi-Cal dental rule while a provider submits a prior
+    /// authorization). Off by default: the caller's token is forwarded.
+    /// </summary>
+    public bool UseServiceIdentity { get; set; }
 }
 
 /// <summary>
@@ -39,6 +49,10 @@ public sealed class PlanSettingsOptions
 public abstract class CachingPlanSettings(IMemoryCache cache, PlanSettingsOptions options, TimeProvider clock, ILogger logger) : IPlanSettings
 {
     private readonly object _gate = new();
+
+    /// <summary>The options this client was built with.</summary>
+    protected PlanSettingsOptions Options => options;
+
     private readonly Dictionary<string, CancellationTokenSource> _tokens = new(StringComparer.Ordinal);
 
     public async Task<ResolvedSetting> ResolveAsync(string tenantId, string key, SettingScope scope, DateTime? asOf = null, CancellationToken ct = default)
@@ -123,6 +137,7 @@ public sealed class HttpPlanSettings(
         using var request = new HttpRequestMessage(HttpMethod.Get, query);
         // With no caller, ChoOutboundTokenHandler mints a service token for this tenant.
         request.Headers.Add("X-Tenant-ID", tenantId);
+        if (Options.UseServiceIdentity) request.UseChoServiceIdentity();
         using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<ResolvedSetting>(Json, ct).ConfigureAwait(false)

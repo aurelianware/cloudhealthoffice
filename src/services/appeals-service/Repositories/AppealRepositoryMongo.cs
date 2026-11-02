@@ -349,6 +349,21 @@ public sealed class AppealRepositoryMongo : IAppealRepository, IAppealOutboxStor
             $"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.", ct);
     }
 
+    public async Task<Appeal> RecordNoticeSentAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
+    {
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
+                   & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id);
+
+        var update = Builders<Appeal>.Update
+            .Set(a => a.AcknowledgmentSentAt, appeal.AcknowledgmentSentAt)
+            .Set(a => a.ResolutionNoticeSentAt, appeal.ResolutionNoticeSentAt)
+            .Set(a => a.UpdatedAt, DateTime.UtcNow)
+            .Set(a => a.UpdatedBy, appeal.UpdatedBy);
+
+        return await ApplyOnceAsync(filter, update, auditEvent,
+            $"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.", ct);
+    }
+
     public async Task<AppealNoteLookup?> GetNoteByIdAsync(string tenantId, string noteId, CancellationToken ct = default)
     {
         var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, tenantId)

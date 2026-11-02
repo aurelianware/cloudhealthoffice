@@ -215,6 +215,10 @@ public class Demographics
     
     [JsonPropertyName("zip")]
     public string? Zip { get; set; }
+
+    /// <summary>N406 when N405 is CY: the county the state places the member in.</summary>
+    [JsonPropertyName("countyCode")]
+    public string? CountyCode { get; set; }
     
     [JsonPropertyName("dateOfBirth")]
     public string? DateOfBirth { get; set; }
@@ -358,6 +362,10 @@ public class Dependent
     [JsonPropertyName("zip")]
     public string? Zip { get; set; }
     
+    /// <summary>N406 when N405 is CY.</summary>
+    [JsonPropertyName("countyCode")]
+    public string? CountyCode { get; set; }
+
     [JsonPropertyName("dateOfBirth")]
     public string? DateOfBirth { get; set; }
     

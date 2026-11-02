@@ -13,8 +13,9 @@ All data is synthetic. Nothing here is a CMS attestation.
 | Part | What | State |
 |---|---|---|
 | 1 | Corpus generator and answer key, in-process preflight test | #1778 |
-| 2 | `run`: import history, submit live cases through PAS `$submit`, act as reviewer, score the reports | This PR |
-| 3 | GCP runner script and evidence page | Next |
+| 2 | `run`: import history, submit live cases through PAS `$submit`, act as reviewer, score the reports | #1780 |
+| 3 | Container image and GKE runner script (`scripts/demo/gcp/run-pa-timeliness.sh`) | This PR |
+| 4 | Evidence page with the first real GKE result | After the first run |
 
 ## Generate a corpus
 
@@ -48,14 +49,32 @@ dotnet run --project src/tools/pa-timeliness-challenge -- run --out ./ptc-run \
   --count 10000 --seed 57
 ```
 
-On the GKE demo, run `scripts/demo/gcp/port-forward.sh` first. The token's tenant
+On the GKE demo, run it inside the cluster instead (next section), or run
+`scripts/demo/gcp/port-forward.sh` first and point the URLs at localhost. The token's tenant
 must match `--tenant`. A dedicated tenant (the default, `pa-timeliness`) keeps the
 score clean: the metrics endpoints count every request in the tenant, so the run
 checks the history period before it loads anything and says so if the tenant
 already holds other requests there. A rerun with the same seed is idempotent
 (the import reports them unchanged, the facts are keyed by event id).
 
-What it does, in order:
+## Run it on the GKE demo
+
+The deploy workflow builds the `pa-timeliness-challenge` image beside the
+service images. `run-pa-timeliness.sh` mints a token for the run's tenant into
+a short-lived Secret, runs the tool as a Kubernetes Job against the in-cluster
+services, and copies the job log, `run-summary.json` and `run-summary.md` to
+`./pa-timeliness-results/<timestamp>/`:
+
+```bash
+GAR_REPOSITORY=<vars.GAR_REPOSITORY> IMAGE_TAG=<deployed tag> ./scripts/demo/gcp/run-pa-timeliness.sh
+```
+
+Optional: `TENANT` (default `pa-timeliness`), `COUNT` (10000), `SEED` (57),
+`LIVE_FRACTION` (0.05), `PARALLELISM` (8), `MODE` (`all`, `history-only`,
+`live-only`), `JOB_TIMEOUT` (45m). It exits 0 when every check passed, 1 when
+one failed, and 124 on timeout.
+
+What `run` does, in order:
 
 1. **History.** Imports `authorizations.csv`, records the extension and appeal facts,
    then scores `GET api/authorizations/cms-0057/metrics` (all lines of business and

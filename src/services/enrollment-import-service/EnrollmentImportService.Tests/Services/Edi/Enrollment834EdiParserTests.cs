@@ -128,6 +128,26 @@ public class Enrollment834EdiParserTests
     private static Enrollment834EdiParser MakeParser() => new();
 
     [Fact]
+    public void Parse_N4CountyQualifier_IsKeptAsTheCountyCode_ForMembersAndDependents()
+    {
+        // The first two member N4s (SMITH subscriber, then spouse JANE) gain N405 CY / N406.
+        const string plain = "N4*SAN FRANCISCO*CA*94102~";
+        var edi = SampleEdi;
+        for (var i = 0; i < 2; i++)
+        {
+            var at = edi.IndexOf(plain, i == 0 ? 0 : edi.IndexOf("NM1*IL*1*SMITH*JANE", StringComparison.Ordinal), StringComparison.Ordinal);
+            edi = edi[..at] + "N4*SAN FRANCISCO*CA*94102**CY*38~" + edi[(at + plain.Length)..];
+        }
+
+        var result = MakeParser().Parse(edi, "county.edi");
+
+        result.Enrollments[0].Demographics!.CountyCode.Should().Be("38");
+        result.Enrollments[0].Dependents.Single(d => d.FirstName == "JANE").CountyCode.Should().Be("38");
+        result.Enrollments[0].Dependents.Single(d => d.FirstName == "MICHAEL").CountyCode.Should().BeNull("no N405 CY");
+        result.Enrollments[1].Demographics!.CountyCode.Should().BeNull();
+    }
+
+    [Fact]
     public void Parse_EachInsWithInsY_IsOneSubscriberEnrollment()
     {
         var result = MakeParser().Parse(SampleEdi, "sample.edi");

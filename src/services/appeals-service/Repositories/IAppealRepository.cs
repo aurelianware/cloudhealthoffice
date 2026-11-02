@@ -135,6 +135,13 @@ public interface IAppealRepository
     /// </summary>
     Task<Appeal> AssignReviewerAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default);
 
+    /// <summary>Atomic member-letter date + audit event. Caller sets
+    /// <c>appeal.AcknowledgmentSentAt</c> or
+    /// <c>appeal.ResolutionNoticeSentAt</c> before calling; both are
+    /// written as given.
+    /// </summary>
+    Task<Appeal> RecordNoticeSentAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default);
+
     /// <summary>
     /// Returns the note with <paramref name="noteId"/> within the tenant,
     /// together with its parent appeal, or <c>null</c> if not found /

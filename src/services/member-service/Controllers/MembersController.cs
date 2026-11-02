@@ -234,6 +234,8 @@ public class MembersController : ControllerBase
         CancellationToken ct)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
+        var aidCodeErrors = ValidateAidCodes(request.AidCodes);
+        if (aidCodeErrors.Count > 0) return BadRequest(new { message = "Invalid aid codes.", details = aidCodeErrors });
 
         if (!string.IsNullOrEmpty(request.SubscriberMemberId))
         {
@@ -291,6 +293,7 @@ public class MembersController : ControllerBase
             EmploymentStatus = request.EmploymentStatus,
             TobaccoUser = request.TobaccoUser,
             IsStudent = request.IsStudent,
+            AidCodes = NormalizeAidCodes(request.AidCodes),
             Identifiers = identifiers,
             PreferredLanguage = request.PreferredLanguage,
             BirthSex = request.BirthSex,
@@ -328,6 +331,81 @@ public class MembersController : ControllerBase
 
         return CreatedAtAction(nameof(GetMember), new { memberId = member.MemberId }, member);
     }
+
+    /// <summary>
+    /// Replace the member's state Medicaid aid codes (Medi-Cal) with the spans
+    /// the state's eligibility file gives. Emits MemberUpdated with the new
+    /// list. 400 when a span ends before it starts or names no code.
+    /// </summary>
+    [HttpPut("{memberId}/aid-codes")]
+    [ProducesResponseType(typeof(Member), 200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> ReplaceAidCodes(
+        [FromRoute] string memberId,
+        [FromBody] List<MemberAidCode> aidCodes,
+        CancellationToken ct)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+        var errors = ValidateAidCodes(aidCodes);
+        if (errors.Count > 0) return BadRequest(new { message = "Invalid aid codes.", details = errors });
+
+        var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
+        if (member == null || member.IsDraft) return NotFound();
+
+        member.AidCodes = NormalizeAidCodes(aidCodes);
+        member.LastUpdatedDate = DateTime.UtcNow;
+        member.LastUpdatedBy = User.Identity?.Name ?? "System";
+        await _memberRepository.UpdateAsync(member);
+
+        var payload = new JsonObject
+        {
+            ["aidCodes"] = new JsonArray(member.AidCodes.Select(a => (JsonNode)new JsonObject
+            {
+                ["code"] = a.Code,
+                ["effectiveDate"] = a.EffectiveDate.ToString("yyyy-MM-dd"),
+                ["endDate"] = a.EndDate?.ToString("yyyy-MM-dd"),
+            }).ToArray()),
+        };
+        await _eventPublisher.PublishAsync(new MemberEvent
+        {
+            TenantId = TenantId,
+            MemberId = member.MemberId,
+            EventId = Guid.NewGuid().ToString(),
+            EventType = MemberEventType.MemberUpdated,
+            ActorId = User.Identity?.Name,
+            CorrelationId = HttpContext.TraceIdentifier,
+            Payload = payload,
+        }, ct);
+
+        return Ok(member);
+    }
+
+    internal static List<string> ValidateAidCodes(IReadOnlyList<MemberAidCode>? aidCodes)
+    {
+        var errors = new List<string>();
+        foreach (var (a, i) in (aidCodes ?? []).Select((a, i) => (a, i)))
+        {
+            if (string.IsNullOrWhiteSpace(a.Code)) errors.Add($"aidCodes[{i}]: code is required.");
+            if (a.EffectiveDate == default) errors.Add($"aidCodes[{i}]: effectiveDate is required.");
+            if (a.EndDate is { } end && end.Date < a.EffectiveDate.Date) errors.Add($"aidCodes[{i}]: endDate is before effectiveDate.");
+        }
+        return errors;
+    }
+
+    /// <summary>Trimmed, upper-cased codes and whole dates, in date order.</summary>
+    internal static List<MemberAidCode> NormalizeAidCodes(IEnumerable<MemberAidCode>? aidCodes) =>
+        (aidCodes ?? [])
+            .Where(a => !string.IsNullOrWhiteSpace(a.Code))
+            .Select(a => new MemberAidCode
+            {
+                Code = a.Code.Trim().ToUpperInvariant(),
+                EffectiveDate = DateTime.SpecifyKind(a.EffectiveDate.Date, DateTimeKind.Utc),
+                EndDate = a.EndDate is { } e ? DateTime.SpecifyKind(e.Date, DateTimeKind.Utc) : null,
+            })
+            .OrderBy(a => a.EffectiveDate)
+            .ThenBy(a => a.Code, StringComparer.Ordinal)
+            .ToList();
 
     /// <summary>Update member information. Emits MemberUpdated and, if the address changed, AddressChanged.</summary>
     [HttpPut("{memberId}")]
@@ -976,6 +1054,9 @@ public class CreateMemberRequest
     public EmploymentStatus? EmploymentStatus { get; set; }
     public bool? TobaccoUser { get; set; }
     public bool? IsStudent { get; set; }
+
+    /// <summary>State Medicaid aid codes with their dates (<see cref="Member.AidCodes"/>).</summary>
+    public List<MemberAidCode>? AidCodes { get; set; }
 
     public string? PreferredLanguage { get; set; }
     public string? BirthSex { get; set; }
