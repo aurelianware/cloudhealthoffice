@@ -60,6 +60,31 @@ public class AgReportBuilderTests
     }
 
     [Fact]
+    public void The_medi_cal_grievance_log_carries_the_53858_fields()
+    {
+        var sept = new DateTime(2026, 9, 1, 15, 30, 0, DateTimeKind.Utc);
+        var resolved = Case("g1", sept, 30, code: AppealClosureReasonCode.Approved, type: AppealType.Grievance);
+        resolved.CreatedBy = "csr-7";
+        resolved.GrievanceCategory = "Scheduling";
+        resolved.Decision = new AppealDecision { DecisionType = AppealDecisionType.Approved, DecisionMaker = "gna-lead", DecisionDate = sept.AddDays(10) };
+        var open = Case("g2", sept, 30, status: AppealStatus.InReview, decidedAfterDays: null, type: AppealType.Grievance);
+        open.CreatedBy = null;
+        open.SubmittedBy = "portal-member";
+
+        var row = AgReportBuilder.CaGrievance(resolved,
+            new AgCaGrievanceText("Pat Secret", "Waited three weeks.", "Called the office; booked.", "Appointment booked for 9/20."), Now);
+        var openRow = AgReportBuilder.CaGrievance(open, null, Now);
+
+        Assert.Equal((sept, "Pat Secret", "csr-7", "Scheduling", "Waited three weeks.", "Called the office; booked."),
+            (row.FiledAt, row.MemberName, row.ReceivedBy, row.Category, row.Description, row.ActionTaken));
+        Assert.Equal(("Approved: Appointment booked for 9/20.", "gna-lead", (DateTime?)sept.AddDays(10), (bool?)true),
+            (row.Resolution, row.ResolvedBy, row.ResolvedAt, row.OnTime));
+        Assert.Null(row.MemberNotifiedAt);
+        Assert.Equal(("portal-member", (string?)null, (string?)null, (string?)null, GrievanceCategories.Uncategorized),
+            (openRow.ReceivedBy, openRow.MemberName, openRow.Resolution, openRow.ResolvedBy, openRow.Category));
+    }
+
+    [Fact]
     public void By_month_counts_each_level_and_overturns_appeals_only()
     {
         var from = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -255,6 +280,29 @@ public class AgReportsApiTests : IClassFixture<AppealsWebApplicationFactory>
 
         var appeal = await um.PostAsJsonAsync("/api/appeals", Request(AppealType.Reconsideration), Json);
         appeal.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task The_medi_cal_grievance_log_lists_grievances_with_name_and_complaint_and_logs_them()
+    {
+        var um = As("um-create", ChoRolePermissions.UMCoordinator);
+        var created = await um.PostAsJsonAsync("/api/appeals", new CreateAppealRequest
+        {
+            ClaimId = "CLM-CA", ClaimNumber = "CLM-CA", MemberId = "M-CA-1", PatientName = "Pat Medi-Cal", ProviderNPI = "1234567890",
+            AppealReason = "Office was rude.", LineOfBusiness = LineOfBusiness.Medicaid, AppealType = AppealType.Grievance,
+            AppealLevel = AppealLevel.FirstLevel, GrievanceCategory = "Provider/Staff Attitude",
+        }, Json);
+        created.StatusCode.Should().Be(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        var grievance = (await created.Content.ReadFromJsonAsync<Appeal>(Json))!;
+        (await um.PostAsJsonAsync($"/api/appeals/{grievance.Id}/submit", new IdempotencyEnvelope(), Json)).EnsureSuccessStatusCode();
+        var appeal = await CreateAsync("M-CA-2");
+
+        var response = await With("comp-ca", "reports:compliance").GetAsync("/api/appeals/reports/" + AgReportCatalog.MediCalGrievanceLog);
+
+        var text = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, text);
+        text.Should().Contain("Pat Medi-Cal").And.Contain("Office was rude.").And.Contain("Provider/Staff Attitude").And.NotContain(appeal.Id);
+        _log.All.Single(x => x.ActorId == "comp-ca").RecordIds.Should().Contain(grievance.Id);
     }
 
     [Fact]
