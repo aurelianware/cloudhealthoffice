@@ -16,13 +16,29 @@ internal static class MccFixtureIsolation
             }
 
             ordinal++;
-            var isolatedId = IsSupportedCobPendScenario(claim)
-                ? BuildCobPendMemberId(claim.ClaimId, seed, ordinal)
-                : BuildValidationMemberId(claim.ClaimId, runId, ordinal);
+            if (IsSupportedCobPendScenario(claim))
+            {
+                RewriteMemberIdentity(claim, BuildCobPendMemberId(claim.ClaimId, seed, ordinal));
+                continue;
+            }
 
-            RewriteMemberIdentity(claim, isolatedId);
+            var isolatedId = BuildValidationMemberId(claim.ClaimId, runId, ordinal);
+            RewriteMemberIdentity(claim, isolatedId, SubscriberIdFor(claim.Member, isolatedId));
         }
     }
+
+    /// <summary>
+    /// A dependent (spouse, child) keeps a subscriber id of its own. Giving it
+    /// its own member id as the subscriber id is what an EDI import that lost
+    /// the dependent looks like, and claims adjudication refuses to bind such
+    /// a claim to prior authorizations (it pends PAUNAVAIL, "dependent member
+    /// identity is unresolved"). The first GKE run pended all 47 PA-scored
+    /// claims that way.
+    /// </summary>
+    internal static string SubscriberIdFor(SyntheticMember member, string isolatedId)
+        => string.Equals(MccClaimRelationship.X12Code(member), MccClaimRelationship.SelfCode, StringComparison.Ordinal)
+            ? isolatedId
+            : $"{isolatedId}S";
 
     public static void IsolateCobPendMembers(IEnumerable<SyntheticClaim> claims, int seed)
     {
@@ -35,25 +51,26 @@ internal static class MccFixtureIsolation
         }
     }
 
-    private static void RewriteMemberIdentity(SyntheticClaim claim, string isolatedId)
+    private static void RewriteMemberIdentity(SyntheticClaim claim, string isolatedId, string? subscriberId = null)
     {
+        subscriberId ??= isolatedId;
         claim.Member.MemberId = isolatedId;
-        claim.Member.SubscriberId = isolatedId;
+        claim.Member.SubscriberId = subscriberId;
 
         foreach (var coverage in claim.Member.Coverages)
         {
             coverage.MemberId = isolatedId;
-            coverage.SubscriberId = isolatedId;
+            coverage.SubscriberId = subscriberId;
         }
 
         foreach (var dependent in claim.Member.Dependents)
         {
             dependent.SubscriberMemberId = isolatedId;
-            dependent.SubscriberId = isolatedId;
+            dependent.SubscriberId = subscriberId;
 
             foreach (var coverage in dependent.Coverages)
             {
-                coverage.SubscriberId = isolatedId;
+                coverage.SubscriberId = subscriberId;
             }
         }
     }

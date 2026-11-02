@@ -2810,7 +2810,7 @@ static async Task<SubmittedClaim> SubmitClaimAsync(
         subscriberLastName = claim.Member.LastName,
         patientFirstName = claim.Member.FirstName,
         patientLastName = claim.Member.LastName,
-        patientRelationship = claim.Member.Relationship,
+        patientRelationship = MccClaimRelationship.X12Code(claim.Member),
         lineOfBusiness = options.LineOfBusiness,
         billingProviderNPI = claim.BillingProvider.Npi,
         billingProviderName = claim.BillingProvider.FullName,
