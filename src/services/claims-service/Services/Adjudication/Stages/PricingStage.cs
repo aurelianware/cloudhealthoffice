@@ -203,6 +203,22 @@ public sealed class PricingStage : IClaimAdjudicationStage
         // test BenefitCalculationStage uses for PlaceOfServiceIsFacilityType.
         var isInstitutional = claim.ClaimType == ClaimsService.Models.ClaimType.Institutional;
 
+        // State Medicaid APR-DRG inputs. The method is set only for a stay
+        // InpatientGroupingStage grouped by APR-DRG on a plan that names one;
+        // the state's hospital rates are keyed by the facility, so the billing
+        // NPI goes with it. The discharge date picks the rate tables in force,
+        // the best available date as in the grouping request.
+        var medicaidDrgMethod = context.InpatientGrouping?.MedicaidDrgMethod;
+        var inpatientDetails = lengthOfStay is null ? null : claim.Institutional;
+        var dischargeDate = inpatientDetails is null
+            ? (DateTime?)null
+            : inpatientDetails.DischargeDate
+                ?? inpatientDetails.StatementToDate
+                ?? (claim.ServiceDateTo != default ? claim.ServiceDateTo : claim.ServiceDateFrom);
+        var ageAtAdmission = inpatientDetails is null
+            ? null
+            : InpatientGroupingStage.AgeYearsAt(context.ResolvedMember?.DateOfBirth, inpatientDetails.AdmissionDate);
+
         return claim.ClaimLines
             .OrderBy(l => l.LineNumber)
             .Select(line => new PricingRequest
@@ -231,6 +247,11 @@ public sealed class PricingStage : IClaimAdjudicationStage
                 RevenueCode = string.IsNullOrWhiteSpace(line.RevenueCode) ? null : line.RevenueCode,
                 BillType = billType,
                 IsInstitutional = isInstitutional,
+                MedicaidDrgMethod = medicaidDrgMethod,
+                FacilityNpi = string.IsNullOrWhiteSpace(claim.BillingProviderNPI) ? null : claim.BillingProviderNPI,
+                DischargeStatus = inpatientDetails?.PatientStatusCode,
+                PatientAgeYears = ageAtAdmission,
+                DischargeDate = dischargeDate,
             })
             .ToList();
     }

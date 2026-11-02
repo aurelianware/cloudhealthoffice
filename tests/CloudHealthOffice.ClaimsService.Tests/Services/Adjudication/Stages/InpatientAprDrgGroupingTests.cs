@@ -1,6 +1,7 @@
 using ClaimsService.Models;
 using ClaimsService.Services.Adjudication;
 using ClaimsService.Services.Adjudication.Stages;
+using ClaimsService.Services.Resolution;
 using CloudHealthOffice.GrouperEngine.Licensed;
 using CloudHealthOffice.GrouperEngine.Models;
 using CloudHealthOffice.GrouperEngine.Services;
@@ -257,5 +258,80 @@ public class InpatientAprDrgGroupingTests
 
         Assert.Equal("193", context.InpatientGrouping!.PricedDrg);
         await _aprGrouper.DidNotReceiveWithAnyArgs().GroupAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task A_texas_medicaid_stay_carries_the_state_method_and_its_inputs_to_pricing()
+    {
+        var context = MedicaidStay();
+        context.Claim.RenderingProviderNPI = "1999999992";
+        context.Claim.Institutional!.PatientStatusCode = "02";
+        context.ResolvedMember = new ResolvedMember
+        {
+            MemberId = "MEM-1",
+            DateOfBirth = new DateTime(2010, 6, 1, 0, 0, 0, DateTimeKind.Utc),
+        };
+        GroupByAprDrg();
+        _settings.Set(Tenant, InpatientGroupingStage.MedicaidDrgMethodSettingKey, SettingLevel.LineOfBusiness, "Medicaid", "\"texas\"");
+        _aprGrouper.GroupAsync(Arg.Any<AprDrgGroupingRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Grouped("139", 3));
+
+        await Stage().ExecuteAsync(context, CancellationToken.None);
+
+        Assert.Equal("texas", context.InpatientGrouping!.MedicaidDrgMethod);
+        Assert.All(PricingStage.BuildRequests(context), r =>
+        {
+            Assert.Equal("texas", r.MedicaidDrgMethod);
+            Assert.Equal("139-3", r.DrgCode);
+            // The hospital's rates are keyed by the facility, not the rendering physician.
+            Assert.Equal("1234567893", r.FacilityNpi);
+            Assert.Equal("1999999992", r.ProviderNpi);
+            Assert.Equal("02", r.DischargeStatus);
+            Assert.Equal(15, r.PatientAgeYears);
+            Assert.Equal(new DateTime(2026, 2, 14), r.DischargeDate!.Value.Date);
+        });
+    }
+
+    [Fact]
+    public async Task Without_a_method_the_stay_prices_by_contract_as_before()
+    {
+        var context = MedicaidStay();
+        GroupByAprDrg();
+        _aprGrouper.GroupAsync(Arg.Any<AprDrgGroupingRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Grouped("139", 3));
+
+        await Stage().ExecuteAsync(context, CancellationToken.None);
+
+        Assert.Null(context.InpatientGrouping!.MedicaidDrgMethod);
+        Assert.All(PricingStage.BuildRequests(context), r => Assert.Null(r.MedicaidDrgMethod));
+    }
+
+    [Fact]
+    public async Task An_unreadable_method_pends_rather_than_guessing_contract_or_state()
+    {
+        var context = MedicaidStay();
+        GroupByAprDrg();
+        var settings = Substitute.For<IPlanSettings>();
+        settings.ResolveAsync(default!, default!, default!, default, default)
+            .ReturnsForAnyArgs(call =>
+            {
+                var key = call.ArgAt<string>(1);
+                if (key == InpatientGroupingStage.MedicaidDrgMethodSettingKey)
+                {
+                    return Task.FromResult(SettingResolver.Resolve(
+                        PlanSettingCatalog.Require(key), call.ArgAt<SettingScope>(2), DateTime.UtcNow.Date, [], isFallback: true));
+                }
+                return _settings.ResolveAsync(call.ArgAt<string>(0), key, call.ArgAt<SettingScope>(2), call.ArgAt<DateTime?>(3));
+            });
+        _aprGrouper.GroupAsync(Arg.Any<AprDrgGroupingRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Grouped("139", 3));
+        var stage = new InpatientGroupingStage(
+            _msGrouper, settings, NullLogger<InpatientGroupingStage>.Instance, releases: null, aprGrouper: _aprGrouper);
+
+        var result = await stage.ExecuteAsync(context, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(InpatientGroupingStage.SettingUnavailablePendCode, context.PendDetails!.PendCode);
+        Assert.Null(context.InpatientGrouping!.PricedDrg);
     }
 }
