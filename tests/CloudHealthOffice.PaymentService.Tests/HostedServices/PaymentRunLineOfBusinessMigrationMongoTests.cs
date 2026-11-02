@@ -22,14 +22,14 @@ public sealed class PaymentRunLineOfBusinessMigrationMongoTests : IAsyncLifetime
         _mongo = mongo;
         _db = mongo.CreateDatabase("payment_lob_migration");
         // As Program.cs registers it.
-        MongoDB.Bson.Serialization.BsonSerializer.TryRegisterSerializer(new PaymentRunLineOfBusinessBsonSerializer());
+        MongoDB.Bson.Serialization.BsonSerializer.TryRegisterSerializer(PaymentRunLineOfBusinessMigrationHostedService.Serializer);
     }
 
     public Task InitializeAsync() => Task.CompletedTask;
     public Task DisposeAsync() => _mongo.DropDatabaseAsync(_db);
 
     private IMongoCollection<BsonDocument> Raw =>
-        _db.GetCollection<BsonDocument>(PaymentRunLineOfBusinessMigrationHostedService.CollectionName);
+        _db.GetCollection<BsonDocument>(PaymentRunLineOfBusinessMigrationHostedService.Collection);
 
     private static BsonDocument Run(string id, BsonValue lob) => new()
     {
@@ -60,7 +60,7 @@ public sealed class PaymentRunLineOfBusinessMigrationMongoTests : IAsyncLifetime
         Assert.Equal("Exchange", stored["named"]);
         Assert.Equal(BsonNull.Value, stored["none"]);
 
-        var typed = _db.GetCollection<PaymentRun>(PaymentRunLineOfBusinessMigrationHostedService.CollectionName);
+        var typed = _db.GetCollection<PaymentRun>(PaymentRunLineOfBusinessMigrationHostedService.Collection);
         var medicare = await typed.Find(r => r.Id == "medicare").SingleAsync();
         Assert.Equal(LineOfBusiness.Medicare, medicare.Criteria.LineOfBusiness);
         var none = await typed.Find(r => r.Id == "none").SingleAsync();
@@ -87,7 +87,7 @@ public sealed class PaymentRunLineOfBusinessMigrationMongoTests : IAsyncLifetime
         // Old 1 is Medicare; the shared enum's 1 is Commercial. Reads must not wait for the rewrite.
         await Raw.InsertManyAsync(new[] { Run("medicare", 1), Run("marketplace", new BsonInt64(3)), Run("junk", 9) });
 
-        var typed = _db.GetCollection<PaymentRun>(PaymentRunLineOfBusinessMigrationHostedService.CollectionName);
+        var typed = _db.GetCollection<PaymentRun>(PaymentRunLineOfBusinessMigrationHostedService.Collection);
         var runs = (await typed.Find(FilterDefinition<PaymentRun>.Empty).ToListAsync()).ToDictionary(r => r.Id);
 
         Assert.Equal(LineOfBusiness.Medicare, runs["medicare"].Criteria.LineOfBusiness);
@@ -98,7 +98,7 @@ public sealed class PaymentRunLineOfBusinessMigrationMongoTests : IAsyncLifetime
     [Fact]
     public async Task A_new_run_is_stored_by_name()
     {
-        var typed = _db.GetCollection<PaymentRun>(PaymentRunLineOfBusinessMigrationHostedService.CollectionName);
+        var typed = _db.GetCollection<PaymentRun>(PaymentRunLineOfBusinessMigrationHostedService.Collection);
         await typed.InsertOneAsync(new PaymentRun
         {
             Id = "new", TenantId = "t1", PaymentRunNumber = "PR-new",

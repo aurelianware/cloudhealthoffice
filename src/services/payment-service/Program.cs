@@ -22,7 +22,7 @@ builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 // any class map is built. A run still holding payment-service's old 0-3 number reads
 // as that old value until PaymentRunLineOfBusinessMigrationHostedService rewrites it.
 MongoDB.Bson.Serialization.BsonSerializer.TryRegisterSerializer(
-    new PaymentService.Models.PaymentRunLineOfBusinessBsonSerializer());
+    PaymentService.HostedServices.PaymentRunLineOfBusinessMigrationHostedService.Serializer);
 
 builder.Services.AddControllers()
     .AddCloudHealthOfficeJsonOptions()

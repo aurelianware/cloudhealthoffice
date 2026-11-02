@@ -9,7 +9,7 @@ namespace CloudHealthOffice.PaymentService.Tests;
 /// <summary>A payment run's line of business in BSON, without a database.</summary>
 public class PaymentRunLineOfBusinessBsonSerializerTests
 {
-    private static readonly PaymentRunLineOfBusinessBsonSerializer Serializer = new();
+    private static readonly LegacyLineOfBusinessBsonSerializer Serializer = global::PaymentService.HostedServices.PaymentRunLineOfBusinessMigrationHostedService.Serializer;
 
     private static LineOfBusiness Read(BsonValue stored)
     {

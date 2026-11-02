@@ -66,10 +66,11 @@ today, each with the PR that removes it:
 3. payment-service (done): the shared enum on payment-run criteria, stored by name. The
    hand mapping to claims-service's numbers is gone (the shared numbers are claims').
    `PaymentRunLineOfBusinessMigrationHostedService` rewrites stored 0-3 numbers to names
-   once at startup (every tenant database when `MongoDb:UseTenantScoping`), and
-   `PaymentRunLineOfBusinessBsonSerializer` reads any number not yet rewritten as the old
-   enum, so reads never depend on the rewrite having run. The API reads `Marketplace` as
-   `Exchange` and now writes `Exchange`.
+   once at startup (every tenant database when `MongoDb:UseTenantScoping`), and the
+   shared `LegacyLineOfBusinessBsonSerializer` reads any number not yet rewritten as the
+   old enum, so reads never depend on the rewrite having run. Both are shared
+   (`LegacyLineOfBusinessStorage.cs`) for the next service with stored numbers.
+   The API reads `Marketplace` as `Exchange` and now writes `Exchange`.
 4. eligibility-service: one-time migration of stored records from 0-5 to 1-6.
 5. The services whose enums already match: type swaps, no data change.
 6. Coverage, claims and authorization intake take the line of business from the program.
