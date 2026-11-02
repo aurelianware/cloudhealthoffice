@@ -104,6 +104,7 @@ jobs:
                                  check=True, capture_output=True, text=True).stdout.split("\n")
           include = [{"name": n, "dockerfile": f} for n, f in (l.split() for l in lines if l.strip())]
           include.append({"name": "mcc-platform-validator", "dockerfile": "src/tools/mcc-platform-validator/Dockerfile"})
+          include.append({"name": "pa-timeliness-challenge", "dockerfile": "src/tools/pa-timeliness-challenge/Dockerfile"})
           print("matrix=" + json.dumps({"include": include}))
           EOF
 

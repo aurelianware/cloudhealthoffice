@@ -90,6 +90,10 @@ try
     var summary = await runner.RunAsync(profile, CancellationToken.None);
     Console.WriteLine(summary.ToMarkdown());
     Console.WriteLine($"Summary: {Path.Combine(output, "run-summary.md")} and run-summary.json");
+    // Run as a Kubernetes Job, the pod's files are gone when it ends: the log carries the JSON too.
+    Console.WriteLine(SummaryJsonBegin);
+    Console.WriteLine(await File.ReadAllTextAsync(Path.Combine(output, "run-summary.json")));
+    Console.WriteLine(SummaryJsonEnd);
     return summary.Failed == 0 ? 0 : 1;
 }
 catch (Exception ex) when (ex is ArgumentException or FormatException or OverflowException or UriFormatException)
@@ -104,7 +108,13 @@ catch (HttpRequestException ex)
     return 2;
 }
 
-static DateTimeOffset Instant(string value) =>
-    DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+public partial class Program
+{
+    public const string SummaryJsonBegin = "=== PA_TIMELINESS_SUMMARY_JSON_BEGIN ===";
+    public const string SummaryJsonEnd = "=== PA_TIMELINESS_SUMMARY_JSON_END ===";
 
-static Uri BaseUri(string value) => new(value.EndsWith('/') ? value : value + "/");
+    static DateTimeOffset Instant(string value) =>
+        DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+
+    static Uri BaseUri(string value) => new(value.EndsWith('/') ? value : value + "/");
+}
