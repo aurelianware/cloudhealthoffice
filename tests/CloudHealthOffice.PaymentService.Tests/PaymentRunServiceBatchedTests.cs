@@ -1120,6 +1120,26 @@ public class PaymentRunServiceBatchedTests
         Assert.Contains("lineOfBusiness=2", search.Uri.Query); // claims-service Medicare == 2 (was 1 = Commercial)
     }
 
+    [Theory]
+    [InlineData(LineOfBusiness.Commercial, 1)]
+    [InlineData(LineOfBusiness.Exchange, 4)]
+    [InlineData(LineOfBusiness.TRICARE, 5)]
+    [InlineData(LineOfBusiness.VA, 6)]
+    public async Task ExecutePaymentRunAsync_LineOfBusinessFilter_SendsTheSharedNumber(LineOfBusiness lob, int claimsValue)
+    {
+        // payment-service uses the shared enum, whose numbers are claims-service's: no mapping.
+        var run = PendingRun();
+        run.Criteria.LineOfBusiness = lob;
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        SetupClaimsResponse(Array.Empty<ClaimDto>());
+
+        await CreateService().ExecutePaymentRunAsync(run.Id);
+
+        var search = _claimsHandler.RecordedRequests.First(r => r.Uri.AbsolutePath.StartsWith("/api/claims/search"));
+        Assert.Contains($"lineOfBusiness={claimsValue}", search.Uri.Query);
+    }
+
     [Fact]
     public async Task ExecutePaymentRunAsync_NegativePlanPaid_NotPaid_Reported_ZeroPayStillPaid()
     {

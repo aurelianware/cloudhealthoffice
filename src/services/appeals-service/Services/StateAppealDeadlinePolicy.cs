@@ -74,20 +74,20 @@ public static class StateAppealDeadlinePolicy
     public static AppealDeadlines Resolve(
         RulePack? pack,
         DateTime receivedAt,
-        LineOfBusiness lineOfBusiness,
+        AppealCoverage coverage,
         AppealType appealType,
         AppealLevel appealLevel,
         bool isUrgent,
         IHolidayCalendar? holidays = null)
     {
         var federalDefault = AppealResponseDeadlinePolicy.ComputeTargetResponseDate(
-            receivedAt, lineOfBusiness, appealType, appealLevel, isUrgent);
+            receivedAt, coverage, appealType, appealLevel, isUrgent);
         var federalMaximum = AppealResponseDeadlinePolicy.ComputeEnforceableMaximum(
-            receivedAt, lineOfBusiness, appealType, appealLevel, isUrgent, holidays);
+            receivedAt, coverage, appealType, appealLevel, isUrgent, holidays);
         var federalExtension = AppealResponseDeadlinePolicy.GetExtensionRule(
-            lineOfBusiness, appealType, appealLevel, isUrgent);
+            coverage, appealType, appealLevel, isUrgent);
 
-        if (!Applies(pack, lineOfBusiness, appealType, appealLevel))
+        if (!Applies(pack, coverage, appealType, appealLevel))
             return new AppealDeadlines(federalDefault, federalMaximum, federalExtension, null);
 
         var evaluation = RulePackEvaluator.Evaluate(pack!, new RulePackEvaluationInput
@@ -112,12 +112,14 @@ public static class StateAppealDeadlinePolicy
 
     /// <summary>
     /// True when <paramref name="pack"/> governs a case of this kind: a
-    /// grievance under a State pack of the same line of business.
+    /// grievance under a State pack of the same line of business. A Part D
+    /// case is never governed by a Medicare Advantage pack.
     /// </summary>
-    public static bool Applies(RulePack? pack, LineOfBusiness lineOfBusiness, AppealType appealType, AppealLevel appealLevel) =>
+    public static bool Applies(RulePack? pack, AppealCoverage coverage, AppealType appealType, AppealLevel appealLevel) =>
         pack is not null
         && !pack.IsNational
-        && pack.LineOfBusiness == lineOfBusiness
+        && !coverage.IsPartD
+        && pack.LineOfBusiness == coverage.LineOfBusiness
         && appealType == AppealType.Grievance
         && !AppealResponseDeadlinePolicy.IsExternalReview(appealType, appealLevel);
 

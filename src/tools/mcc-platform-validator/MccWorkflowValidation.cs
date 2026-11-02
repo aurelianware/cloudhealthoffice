@@ -67,6 +67,12 @@ public static class MccWorkflowValidation
         }
 
         if (claim.ClaimType.Equals("Professional", StringComparison.OrdinalIgnoreCase)
+            && MccTplScenarios.ForPlanId(claim.BenefitPlanId) is { } tplScenario)
+        {
+            return MccTplScenarios.ExpectedValidationFor(tplScenario);
+        }
+
+        if (claim.ClaimType.Equals("Professional", StringComparison.OrdinalIgnoreCase)
             && string.Equals(claim.BenefitPlanId, CleanProfessionalPaidPlanId, StringComparison.Ordinal)
             && string.Equals(claim.PlaceOfService, "11", StringComparison.OrdinalIgnoreCase)
             && string.Equals(claim.PriorAuthStatus, "NotRequired", StringComparison.OrdinalIgnoreCase)

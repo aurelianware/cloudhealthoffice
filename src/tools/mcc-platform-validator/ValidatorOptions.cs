@@ -30,6 +30,7 @@ public sealed record ValidatorOptions(
     int PublishClaimResultsLimit,
     bool PriorAuthScenariosEnabled,
     double PriorAuthScenarioRate,
+    bool TplScenariosEnabled,
     bool ShowHelp)
 {
     public const int DefaultMaxClaims = 10_000;
@@ -138,6 +139,9 @@ public sealed record ValidatorOptions(
                 case "--prior-auth-rate" when i + 1 < args.Length:
                     options.PriorAuthScenarioRate = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture);
                     break;
+                case "--tpl-scenarios":
+                    options.TplScenariosEnabled = true;
+                    break;
                 case "--summary-json" when i + 1 < args.Length:
                     options.SummaryJsonPath = args[++i];
                     break;
@@ -200,6 +204,7 @@ public sealed record ValidatorOptions(
             Math.Clamp(options.PublishClaimResultsLimit, 0, effectiveClaims),
             options.PriorAuthScenariosEnabled,
             Math.Clamp(options.PriorAuthScenarioRate, 0.0, 0.25),
+            options.TplScenariosEnabled,
             options.ShowHelp);
     }
 
@@ -235,6 +240,7 @@ public sealed record ValidatorOptions(
         public int PublishClaimResultsLimit { get; set; } = 1000;
         public bool PriorAuthScenariosEnabled { get; set; } = true;
         public double PriorAuthScenarioRate { get; set; } = 0.02;
+        public bool TplScenariosEnabled { get; set; }
         public bool ShowHelp { get; set; }
     }
 }

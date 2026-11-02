@@ -5,13 +5,17 @@ namespace AppealsService.Tests.Services;
 
 public class AppealResponseDeadlinePolicyTests
 {
+    /// <summary>Every line of business the policy answers for, plus Part D.</summary>
+    private static readonly AppealCoverage[] AllCoverages =
+        [.. Enum.GetValues<LineOfBusiness>().Select(l => new AppealCoverage(l)), AppealCoverage.PartD];
+
     private static readonly DateTime Received = new(2026, 10, 8, 14, 30, 0, DateTimeKind.Utc);
 
     [Theory]
     [InlineData(LineOfBusiness.Medicare)]
     [InlineData(LineOfBusiness.Medicaid)]
     [InlineData(LineOfBusiness.Commercial)]
-    [InlineData(LineOfBusiness.Marketplace)]
+    [InlineData(LineOfBusiness.Exchange)]
     public void Expedited_Appeal_Is_72_Hours_For_Every_LineOfBusiness(LineOfBusiness lob)
     {
         foreach (var type in new[] { AppealType.Reconsideration, AppealType.PeerReview, AppealType.ExternalReview })
@@ -25,11 +29,11 @@ public class AppealResponseDeadlinePolicyTests
     [InlineData(LineOfBusiness.Medicare, 30)]    // 42 CFR 422.590(a) pre-service (conservative vs 60-day payment)
     [InlineData(LineOfBusiness.Medicaid, 30)]    // 42 CFR 438.408(b)(2)
     [InlineData(LineOfBusiness.Commercial, 30)]  // 29 CFR 2560.503-1(i)(2)(ii) pre-service
-    [InlineData(LineOfBusiness.Marketplace, 30)] // 45 CFR 147.136
-    [InlineData(LineOfBusiness.MedicarePartD, 7)] // 42 CFR 423.590(a)
-    public void Standard_Appeal_Uses_Shortest_Applicable_Window(LineOfBusiness lob, int days)
+    [InlineData(LineOfBusiness.Exchange, 30)] // 45 CFR 147.136
+    [InlineData(LineOfBusiness.Medicare, 7, AppealBenefitType.PartDDrug)] // 42 CFR 423.590(a)
+    public void Standard_Appeal_Uses_Shortest_Applicable_Window(LineOfBusiness lob, int days, AppealBenefitType benefit = AppealBenefitType.MedicalOrService)
     {
-        AppealResponseDeadlinePolicy.ComputeTargetResponseDate(Received, lob, AppealType.Reconsideration, isUrgent: false)
+        AppealResponseDeadlinePolicy.ComputeTargetResponseDate(Received, new AppealCoverage(lob, benefit), AppealType.Reconsideration, isUrgent: false)
             .Should().Be(Received.AddDays(days));
     }
 
@@ -66,8 +70,8 @@ public class AppealResponseDeadlinePolicyTests
     [Theory]
     [InlineData(LineOfBusiness.Commercial, false)]
     [InlineData(LineOfBusiness.Commercial, true)]
-    [InlineData(LineOfBusiness.Marketplace, false)]
-    [InlineData(LineOfBusiness.Marketplace, true)]
+    [InlineData(LineOfBusiness.Exchange, false)]
+    [InlineData(LineOfBusiness.Exchange, true)]
     public void Commercial_Grievance_Has_No_Federal_Maximum(LineOfBusiness lob, bool urgent)
     {
         AppealResponseDeadlinePolicy.ComputeEnforceableMaximum(Received, lob, AppealType.Grievance, urgent)
@@ -77,7 +81,7 @@ public class AppealResponseDeadlinePolicyTests
     [Fact]
     public void Default_Target_Never_Exceeds_Enforceable_Maximum()
     {
-        foreach (var lob in Enum.GetValues<LineOfBusiness>())
+        foreach (var lob in AllCoverages)
         foreach (var type in Enum.GetValues<AppealType>())
         foreach (var urgent in new[] { true, false })
         {
@@ -91,7 +95,7 @@ public class AppealResponseDeadlinePolicyTests
     [Fact]
     public void Urgent_Never_Exceeds_72_Hours_For_Any_Combination()
     {
-        foreach (var lob in Enum.GetValues<LineOfBusiness>())
+        foreach (var lob in AllCoverages)
         foreach (var type in Enum.GetValues<AppealType>())
         {
             AppealResponseDeadlinePolicy.MaxResponseWindow(lob, type, isUrgent: true)
@@ -106,10 +110,10 @@ public class AppealResponseDeadlinePolicyTests
     {
         // 42 CFR 423.590(a), (d)
         AppealResponseDeadlinePolicy.ComputeTargetResponseDate(
-                Received, LineOfBusiness.MedicarePartD, AppealType.Reconsideration, isUrgent: false)
+                Received, AppealCoverage.PartD, AppealType.Reconsideration, isUrgent: false)
             .Should().Be(Received.AddDays(7));
         AppealResponseDeadlinePolicy.ComputeTargetResponseDate(
-                Received, LineOfBusiness.MedicarePartD, AppealType.Reconsideration, isUrgent: true)
+                Received, AppealCoverage.PartD, AppealType.Reconsideration, isUrgent: true)
             .Should().Be(Received.AddHours(72));
     }
 
@@ -119,7 +123,7 @@ public class AppealResponseDeadlinePolicyTests
     public void PartD_Grievance_Uses_Medicare_Grievance_Clock(bool urgent, int hours)
     {
         AppealResponseDeadlinePolicy.ComputeTargetResponseDate(
-                Received, LineOfBusiness.MedicarePartD, AppealType.Grievance, urgent)
+                Received, AppealCoverage.PartD, AppealType.Grievance, urgent)
             .Should().Be(Received.AddHours(hours));
     }
 
@@ -127,32 +131,32 @@ public class AppealResponseDeadlinePolicyTests
 
     [Theory]
     [InlineData(LineOfBusiness.Medicare, 30)]       // 42 CFR 422.592 — MA IRE
-    [InlineData(LineOfBusiness.MedicarePartD, 7)]   // 42 CFR 423.600 — Part D IRE
+    [InlineData(LineOfBusiness.Medicare, 7, AppealBenefitType.PartDDrug)]   // 42 CFR 423.600 — Part D IRE
     [InlineData(LineOfBusiness.Commercial, 45)]     // 45 CFR 147.136(d); 29 CFR 2590.715-2719
-    [InlineData(LineOfBusiness.Marketplace, 45)]    // 45 CFR 147.136(d)
+    [InlineData(LineOfBusiness.Exchange, 45)]    // 45 CFR 147.136(d)
     [InlineData(LineOfBusiness.Medicaid, 90)]       // 42 CFR 431.244(f) — State Fair Hearing
-    public void External_Review_Uses_Its_Own_Standard_Clock(LineOfBusiness lob, int days)
+    public void External_Review_Uses_Its_Own_Standard_Clock(LineOfBusiness lob, int days, AppealBenefitType benefit = AppealBenefitType.MedicalOrService)
     {
         // Marked by the level...
         AppealResponseDeadlinePolicy.ComputeTargetResponseDate(
-                Received, lob, AppealType.Reconsideration, AppealLevel.ExternalReview, isUrgent: false)
-            .Should().Be(Received.AddDays(days), $"{lob} at ExternalReview level");
+                Received, new AppealCoverage(lob, benefit), AppealType.Reconsideration, AppealLevel.ExternalReview, isUrgent: false)
+            .Should().Be(Received.AddDays(days), $"{new AppealCoverage(lob, benefit)} at ExternalReview level");
         // ...or by the type alone (e.g. a FHIR Task.code with no level extension).
         AppealResponseDeadlinePolicy.ComputeTargetResponseDate(
-                Received, lob, AppealType.ExternalReview, AppealLevel.FirstLevel, isUrgent: false)
-            .Should().Be(Received.AddDays(days), $"{lob} ExternalReview type");
+                Received, new AppealCoverage(lob, benefit), AppealType.ExternalReview, AppealLevel.FirstLevel, isUrgent: false)
+            .Should().Be(Received.AddDays(days), $"{new AppealCoverage(lob, benefit)} ExternalReview type");
     }
 
     [Theory]
     [InlineData(LineOfBusiness.Medicare)]
-    [InlineData(LineOfBusiness.MedicarePartD)]
+    [InlineData(LineOfBusiness.Medicare, AppealBenefitType.PartDDrug)]
     [InlineData(LineOfBusiness.Commercial)]
-    [InlineData(LineOfBusiness.Marketplace)]
+    [InlineData(LineOfBusiness.Exchange)]
     [InlineData(LineOfBusiness.Medicaid)]
-    public void Expedited_External_Review_Is_72_Hours(LineOfBusiness lob)
+    public void Expedited_External_Review_Is_72_Hours(LineOfBusiness lob, AppealBenefitType benefit = AppealBenefitType.MedicalOrService)
     {
         AppealResponseDeadlinePolicy.ComputeTargetResponseDate(
-                Received, lob, AppealType.Reconsideration, AppealLevel.ExternalReview, isUrgent: true)
+                Received, new AppealCoverage(lob, benefit), AppealType.Reconsideration, AppealLevel.ExternalReview, isUrgent: true)
             .Should().Be(Received.AddHours(72));
     }
 
@@ -199,23 +203,23 @@ public class AppealResponseDeadlinePolicyTests
     // MA / Part D grievances: standard only (422.564(e)(2), 423.564(e)(2)).
     [InlineData(LineOfBusiness.Medicare, AppealType.Grievance, AppealLevel.FirstLevel, false, true)]
     [InlineData(LineOfBusiness.Medicare, AppealType.Grievance, AppealLevel.FirstLevel, true, false)]
-    [InlineData(LineOfBusiness.MedicarePartD, AppealType.Grievance, AppealLevel.FirstLevel, false, true)]
-    [InlineData(LineOfBusiness.MedicarePartD, AppealType.Grievance, AppealLevel.FirstLevel, true, false)]
+    [InlineData(LineOfBusiness.Medicare, AppealType.Grievance, AppealLevel.FirstLevel, false, true, AppealBenefitType.PartDDrug)]
+    [InlineData(LineOfBusiness.Medicare, AppealType.Grievance, AppealLevel.FirstLevel, true, false, AppealBenefitType.PartDDrug)]
     // Part D redeterminations: no extension (423.590).
-    [InlineData(LineOfBusiness.MedicarePartD, AppealType.Reconsideration, AppealLevel.FirstLevel, false, false)]
-    [InlineData(LineOfBusiness.MedicarePartD, AppealType.Reconsideration, AppealLevel.FirstLevel, true, false)]
+    [InlineData(LineOfBusiness.Medicare, AppealType.Reconsideration, AppealLevel.FirstLevel, false, false, AppealBenefitType.PartDDrug)]
+    [InlineData(LineOfBusiness.Medicare, AppealType.Reconsideration, AppealLevel.FirstLevel, true, false, AppealBenefitType.PartDDrug)]
     // Commercial / Marketplace: no unilateral extension (29 CFR 2560.503-1(i)).
     [InlineData(LineOfBusiness.Commercial, AppealType.Reconsideration, AppealLevel.FirstLevel, false, false)]
-    [InlineData(LineOfBusiness.Marketplace, AppealType.Reconsideration, AppealLevel.FirstLevel, true, false)]
+    [InlineData(LineOfBusiness.Exchange, AppealType.Reconsideration, AppealLevel.FirstLevel, true, false)]
     [InlineData(LineOfBusiness.Commercial, AppealType.Grievance, AppealLevel.FirstLevel, false, false)]
     // External review / State Fair Hearing: never plan-extendable.
     [InlineData(LineOfBusiness.Medicare, AppealType.Reconsideration, AppealLevel.ExternalReview, false, false)]
     [InlineData(LineOfBusiness.Medicaid, AppealType.ExternalReview, AppealLevel.FirstLevel, false, false)]
     [InlineData(LineOfBusiness.Commercial, AppealType.ExternalReview, AppealLevel.ExternalReview, true, false)]
     public void Extension_Rule_Follows_Regulations(
-        LineOfBusiness lob, AppealType type, AppealLevel level, bool urgent, bool permitted)
+        LineOfBusiness lob, AppealType type, AppealLevel level, bool urgent, bool permitted, AppealBenefitType benefit = AppealBenefitType.MedicalOrService)
     {
-        var rule = AppealResponseDeadlinePolicy.GetExtensionRule(lob, type, level, urgent);
+        var rule = AppealResponseDeadlinePolicy.GetExtensionRule(new AppealCoverage(lob, benefit), type, level, urgent);
 
         rule.IsPermitted.Should().Be(permitted);
         rule.MaxExtension.Should().Be(permitted ? TimeSpan.FromDays(14) : TimeSpan.Zero);
@@ -247,7 +251,7 @@ public class AppealResponseDeadlinePolicyTests
     [Fact]
     public void Three_Argument_Overload_Matches_First_Level()
     {
-        foreach (var lob in Enum.GetValues<LineOfBusiness>())
+        foreach (var lob in AllCoverages)
         foreach (var type in Enum.GetValues<AppealType>())
         foreach (var urgent in new[] { true, false })
         {
@@ -259,25 +263,25 @@ public class AppealResponseDeadlinePolicyTests
     // ── Enforceable maximum for Part D / external review ────────────────
 
     [Theory]
-    [InlineData(LineOfBusiness.MedicarePartD, AppealType.Reconsideration, AppealLevel.FirstLevel, false, 7 * 24)]   // 423.590(a)
-    [InlineData(LineOfBusiness.MedicarePartD, AppealType.Reconsideration, AppealLevel.FirstLevel, true, 72)]        // 423.590(d)
-    [InlineData(LineOfBusiness.MedicarePartD, AppealType.Grievance, AppealLevel.FirstLevel, true, 30 * 24)]         // 24h default only
+    [InlineData(LineOfBusiness.Medicare, AppealType.Reconsideration, AppealLevel.FirstLevel, false, 7 * 24, AppealBenefitType.PartDDrug)]   // 423.590(a)
+    [InlineData(LineOfBusiness.Medicare, AppealType.Reconsideration, AppealLevel.FirstLevel, true, 72, AppealBenefitType.PartDDrug)]        // 423.590(d)
+    [InlineData(LineOfBusiness.Medicare, AppealType.Grievance, AppealLevel.FirstLevel, true, 30 * 24, AppealBenefitType.PartDDrug)]         // 24h default only
     [InlineData(LineOfBusiness.Medicare, AppealType.Reconsideration, AppealLevel.ExternalReview, false, 30 * 24)]   // 422.592
-    [InlineData(LineOfBusiness.MedicarePartD, AppealType.ExternalReview, AppealLevel.FirstLevel, false, 7 * 24)]    // 423.600
+    [InlineData(LineOfBusiness.Medicare, AppealType.ExternalReview, AppealLevel.FirstLevel, false, 7 * 24, AppealBenefitType.PartDDrug)]    // 423.600
     [InlineData(LineOfBusiness.Commercial, AppealType.ExternalReview, AppealLevel.ExternalReview, false, 45 * 24)]  // 147.136(d)
-    [InlineData(LineOfBusiness.Marketplace, AppealType.Reconsideration, AppealLevel.ExternalReview, true, 72)]
+    [InlineData(LineOfBusiness.Exchange, AppealType.Reconsideration, AppealLevel.ExternalReview, true, 72)]
     [InlineData(LineOfBusiness.Medicaid, AppealType.Reconsideration, AppealLevel.ExternalReview, false, 90 * 24)]   // 431.244(f)(1)
     public void EnforceableMaximum_Covers_PartD_And_External_Review(
-        LineOfBusiness lob, AppealType type, AppealLevel level, bool urgent, int hours)
+        LineOfBusiness lob, AppealType type, AppealLevel level, bool urgent, int hours, AppealBenefitType benefit = AppealBenefitType.MedicalOrService)
     {
-        AppealResponseDeadlinePolicy.ComputeEnforceableMaximum(Received, lob, type, level, urgent)
+        AppealResponseDeadlinePolicy.ComputeEnforceableMaximum(Received, new AppealCoverage(lob, benefit), type, level, urgent)
             .Should().Be(Received.AddHours(hours));
     }
 
     [Fact]
     public void Default_Target_Never_Exceeds_Enforceable_Maximum_At_Any_Level()
     {
-        foreach (var lob in Enum.GetValues<LineOfBusiness>())
+        foreach (var lob in AllCoverages)
         foreach (var type in Enum.GetValues<AppealType>())
         foreach (var level in Enum.GetValues<AppealLevel>())
         foreach (var urgent in new[] { true, false })
@@ -292,7 +296,7 @@ public class AppealResponseDeadlinePolicyTests
     [Fact]
     public void Three_Argument_Enforceable_Overload_Matches_First_Level()
     {
-        foreach (var lob in Enum.GetValues<LineOfBusiness>())
+        foreach (var lob in AllCoverages)
         foreach (var type in Enum.GetValues<AppealType>())
         foreach (var urgent in new[] { true, false })
         {
