@@ -13,6 +13,13 @@
     {
       "url": "http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-questionnaireAdaptive",
       "valueUrl": "https://cloudhealthoffice.com/fhir/r4"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-versionAlgorithm",
+      "valueCoding": {
+        "system": "http://hl7.org/fhir/version-algorithm",
+        "code": "semver"
+      }
     }
   ],
   "url": "https://cloudhealthoffice.com/fhir/Questionnaire/pa-sleep-study-adaptive",
@@ -39,13 +46,11 @@
         "coding": [
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "95810",
-            "display": "Polysomnography, attended, 4 or more parameters"
+            "code": "95810"
           },
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "95811",
-            "display": "Polysomnography, attended, with CPAP titration"
+            "code": "95811"
           }
         ]
       }

@@ -142,7 +142,7 @@ public static class DtrPayerServerRequests
                 {
                     ["url"] = "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/intendedUse",
                     ["valueCodeableConcept"] = Concept(
-                        "http://hl7.org/fhir/us/davinci-crd/CodeSystem/temp", "withpa", "Include with prior authorization request"),
+                        "http://hl7.org/fhir/us/davinci-crd/CodeSystem/coverage-information-codes", "withpa", "Include in prior authorization"),
                 }),
             ["questionnaire"] = "#adaptive",
             ["status"] = "in-progress",
@@ -279,7 +279,9 @@ public static class DtrPayerServerRequests
         ["meta"] = Profile("http://hl7.org/fhir/us/davinci-crd/StructureDefinition/profile-servicerequest"),
         ["status"] = "draft",
         ["intent"] = "order",
-        ["code"] = Concept(CptSystem, MriOrderCode, "MRI lumbar spine without contrast"),
+        // No display: the validator checks CPT displays against the AMA's
+        // descriptors, and the code alone is what CHO's rules match on.
+        ["code"] = new JsonObject { ["coding"] = new JsonArray(new JsonObject { ["system"] = CptSystem, ["code"] = MriOrderCode }) },
         ["subject"] = new JsonObject { ["reference"] = $"Patient/{fixture.Member.MemberId}" },
         ["authoredOn"] = "2026-11-01",
         ["requester"] = new JsonObject
@@ -295,11 +297,18 @@ public static class DtrPayerServerRequests
         ["resourceType"] = "Questionnaire",
         ["id"] = "adaptive",
         ["meta"] = Profile("http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-questionnaire-adapt"),
-        ["extension"] = new JsonArray(new JsonObject
-        {
-            ["url"] = "http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-questionnaireAdaptive",
-            ["valueUrl"] = ChoUnderTest.ContainerFhirBaseUrl,
-        }),
+        ["extension"] = new JsonArray(
+            new JsonObject
+            {
+                ["url"] = "http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-questionnaireAdaptive",
+                ["valueUrl"] = ChoUnderTest.ContainerFhirBaseUrl,
+            },
+            // SDC's sdc-2: a versioned Questionnaire says how its versions compare.
+            new JsonObject
+            {
+                ["url"] = "http://hl7.org/fhir/StructureDefinition/artifact-versionAlgorithm",
+                ["valueCoding"] = new JsonObject { ["system"] = "http://hl7.org/fhir/version-algorithm", ["code"] = "semver" },
+            }),
         ["url"] = SleepStudyQuestionnaireUrl,
         ["version"] = SleepStudyQuestionnaireVersion,
         ["name"] = "PaSleepStudyAdaptive",
@@ -314,11 +323,22 @@ public static class DtrPayerServerRequests
         value["extension"] = new JsonArray(new JsonObject
         {
             ["url"] = OriginExtension,
-            ["extension"] = new JsonArray(new JsonObject
-            {
-                ["url"] = "source",
-                ["valueCode"] = "manual",
-            }),
+            // DTR's dtrx-1: a manual answer names its author.
+            ["extension"] = new JsonArray(
+                new JsonObject
+                {
+                    ["url"] = "source",
+                    ["valueCode"] = "manual",
+                },
+                new JsonObject
+                {
+                    ["url"] = "author",
+                    ["extension"] = new JsonArray(new JsonObject
+                    {
+                        ["url"] = "practitioner",
+                        ["valueReference"] = new JsonObject { ["reference"] = $"Practitioner/{PractitionerNpi}" },
+                    }),
+                }),
         });
         return new JsonObject { ["linkId"] = linkId, ["answer"] = new JsonArray(value) };
     }
