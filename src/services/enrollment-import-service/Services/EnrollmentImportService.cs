@@ -258,17 +258,6 @@ public class EnrollmentImportService : IEnrollmentImportService
             payload["subscriberId"] = memberEnrollment.SubscriberId;
         }
 
-        // What a state sends to place the member in a capitation rate cell
-        // (aid code, risk group, program, plan code): the loop 2750
-        // reporting categories and each HD line's plan coverage description,
-        // with their dates. Kept structured so expected member-months can be
-        // built from the enrollment history; which field holds the rate cell
-        // basis is the plan's crosswalk to say, not assumed here.
-        if (RateCellInputs(memberEnrollment) is { } inputs)
-        {
-            payload["rateCellInputs"] = inputs;
-        }
-
         var rawSegment = SerializeRawSegment(memberEnrollment);
 
         // EventId construction differs by source so 834 replays are deterministic
@@ -305,6 +294,10 @@ public class EnrollmentImportService : IEnrollmentImportService
             ActorId = batch.ActorId,
             CorrelationId = batch.FileName,
             Payload = payload,
+            // What a state sends to place the member in a capitation rate
+            // cell, kept structured so expected member-months can be built
+            // from the enrollment history.
+            RateCellInputs = RateCellInputs(memberEnrollment),
             RawSegment = rawSegment
         };
 
@@ -324,37 +317,33 @@ public class EnrollmentImportService : IEnrollmentImportService
 
     /// <summary>
     /// The member's loop 2750 reporting categories and HD lines, or null when
-    /// the transaction carried neither. Values are trimmed; empty ones are
-    /// dropped.
+    /// the transaction carried neither. Values are trimmed; empty categories
+    /// are dropped.
     /// </summary>
-    internal static JsonObject? RateCellInputs(MemberEnrollment e)
+    internal static EnrollmentRateCellInputs? RateCellInputs(MemberEnrollment e)
     {
-        var categories = new JsonArray();
+        var inputs = new EnrollmentRateCellInputs();
         foreach (var c in e.ReportingCategories ?? [])
         {
             if (string.IsNullOrWhiteSpace(c.Name) && string.IsNullOrWhiteSpace(c.ReferenceValue)) continue;
-            categories.Add(new JsonObject
+            inputs.ReportingCategories.Add(new RateCellCategory
             {
-                ["name"] = Trimmed(c.Name),
-                ["qualifier"] = Trimmed(c.ReferenceQualifier),
-                ["value"] = Trimmed(c.ReferenceValue),
-                ["date"] = Trimmed(c.Date)
+                Name = Trimmed(c.Name), Qualifier = Trimmed(c.ReferenceQualifier),
+                Value = Trimmed(c.ReferenceValue), Date = Trimmed(c.Date)
             });
         }
-        var lines = new JsonArray();
         foreach (var line in e.Coverage ?? [])
         {
-            lines.Add(new JsonObject
+            inputs.CoverageLines.Add(new RateCellCoverageLine
             {
-                ["insuranceLineCode"] = Trimmed(line.InsuranceLineCode),
-                ["planCoverageDescription"] = Trimmed(line.PlanCoverageDescription),
-                ["maintenanceType"] = Trimmed(line.MaintenanceType),
-                ["benefitBeginDate"] = Trimmed(line.BenefitBeginDate),
-                ["benefitEndDate"] = Trimmed(line.BenefitEndDate)
+                InsuranceLineCode = Trimmed(line.InsuranceLineCode),
+                PlanCoverageDescription = Trimmed(line.PlanCoverageDescription),
+                MaintenanceType = Trimmed(line.MaintenanceType),
+                BenefitBeginDate = Trimmed(line.BenefitBeginDate),
+                BenefitEndDate = Trimmed(line.BenefitEndDate)
             });
         }
-        if (categories.Count == 0 && lines.Count == 0) return null;
-        return new JsonObject { ["reportingCategories"] = categories, ["coverageLines"] = lines };
+        return inputs.ReportingCategories.Count == 0 && inputs.CoverageLines.Count == 0 ? null : inputs;
     }
 
     private static string? Trimmed(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

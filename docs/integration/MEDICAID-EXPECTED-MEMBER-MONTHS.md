@@ -23,7 +23,7 @@ CHO does not assume either. The plan's crosswalk names the field it reads.
 ## Steps
 
 1. **Keep the inputs (done).** Every enrollment event written from an 834
-   transaction carries `payload.rateCellInputs` when the transaction had any:
+   transaction carries `rateCellInputs` when the transaction had any:
 
    ```json
    {
@@ -38,6 +38,12 @@ CHO does not assume either. The plan's crosswalk names the field it reads.
    dated, so a change of category mid-enrollment is a new event, not an
    overwrite. Files imported before this change have no inputs; reload them
    or send the next full file to fill the history.
+
+   `GET /api/v1/enrollment/rate-cell-inputs?after={memberId}&limit=1000`
+   (`enrollment:read`) lists members in member id order with every event that
+   carried inputs, oldest first (version, occurredAt, eventDate, event type,
+   maintenance type, inputs). Page on with `after={next}` until `next` is
+   null; a member is never split across pages.
 2. **Crosswalk (next).** Finance loads a CSV per state that maps a field and
    value, optionally with an age band, to a rate cell.
 3. **Build (next).** For each month, every member with Medicaid coverage in

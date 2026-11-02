@@ -128,6 +128,14 @@ public class EnrollmentEvent
     }
 
     /// <summary>
+    /// What the state sent to place the member in a capitation rate cell, for
+    /// an 834 transaction that carried any; null otherwise. See
+    /// <see cref="EnrollmentRateCellInputs"/>.
+    /// </summary>
+    [JsonPropertyName("rateCellInputs")]
+    public EnrollmentRateCellInputs? RateCellInputs { get; set; }
+
+    /// <summary>
     /// Raw 834 snippet (or JSON form of the manual request) for audit / display.
     /// Truncated to keep event documents small.
     /// </summary>
@@ -151,6 +159,43 @@ public class EnrollmentEvent
     /// </summary>
     public static string BuildManualEventId(string requestEventId, string memberId) =>
         $"manual-{requestEventId}:{memberId}";
+}
+
+/// <summary>
+/// The 834 values a state uses to place a member in a capitation rate cell
+/// (aid code, risk group, program, plan code): the loop 2750 reporting
+/// categories and each HD line, as sent. Which of them holds the rate cell
+/// basis is the plan's crosswalk to say (docs/integration/MEDICAID-EXPECTED-MEMBER-MONTHS.md).
+/// </summary>
+[BsonIgnoreExtraElements]
+public class EnrollmentRateCellInputs
+{
+    [JsonPropertyName("reportingCategories")]
+    public List<RateCellCategory> ReportingCategories { get; set; } = new();
+
+    [JsonPropertyName("coverageLines")]
+    public List<RateCellCoverageLine> CoverageLines { get; set; } = new();
+}
+
+/// <summary>One loop 2750 reporting category: N1*75 name, REF qualifier and value, DTP date (CCYYMMDD).</summary>
+[BsonIgnoreExtraElements]
+public class RateCellCategory
+{
+    [JsonPropertyName("name")] public string? Name { get; set; }
+    [JsonPropertyName("qualifier")] public string? Qualifier { get; set; }
+    [JsonPropertyName("value")] public string? Value { get; set; }
+    [JsonPropertyName("date")] public string? Date { get; set; }
+}
+
+/// <summary>One loop 2300 HD line: HD03, HD04, HD01 and the DTP*348/349 dates (CCYYMMDD).</summary>
+[BsonIgnoreExtraElements]
+public class RateCellCoverageLine
+{
+    [JsonPropertyName("insuranceLineCode")] public string? InsuranceLineCode { get; set; }
+    [JsonPropertyName("planCoverageDescription")] public string? PlanCoverageDescription { get; set; }
+    [JsonPropertyName("maintenanceType")] public string? MaintenanceType { get; set; }
+    [JsonPropertyName("benefitBeginDate")] public string? BenefitBeginDate { get; set; }
+    [JsonPropertyName("benefitEndDate")] public string? BenefitEndDate { get; set; }
 }
 
 /// <summary>

@@ -1046,16 +1046,22 @@ public partial class EnrollmentImportServiceDependentTests
 
         await h.ImportAsync(new Enrollment834 { BatchId = "RC1", Enrollments = { sub } });
 
-        var subInputs = h.Events.AllEvents.Single(e => e.MemberId == "SUB1").Payload!["rateCellInputs"]!;
-        var category = subInputs["reportingCategories"]!.AsArray().Should().ContainSingle().Subject!;
-        (category["name"]!.GetValue<string>(), category["qualifier"]!.GetValue<string>(), category["value"]!.GetValue<string>(), category["date"]!.GetValue<string>())
-            .Should().Be(("RISK GROUP", "ZZ", "STAR-ADULT", "20260201"));
-        var line = subInputs["coverageLines"]!.AsArray().Should().ContainSingle().Subject!;
-        (line["insuranceLineCode"]!.GetValue<string>(), line["planCoverageDescription"]!.GetValue<string>(), line["benefitBeginDate"]!.GetValue<string>())
-            .Should().Be(("HLT", "STAR BEXAR", "20260201"));
+        var subInputs = h.Events.AllEvents.Single(e => e.MemberId == "SUB1").RateCellInputs!;
+        subInputs.ReportingCategories.Should().ContainSingle().Which.Should().BeEquivalentTo(
+            new RateCellCategory { Name = "RISK GROUP", Qualifier = "ZZ", Value = "STAR-ADULT", Date = "20260201" });
+        subInputs.CoverageLines.Should().ContainSingle().Which.Should().BeEquivalentTo(
+            new RateCellCoverageLine { InsuranceLineCode = "HLT", PlanCoverageDescription = "STAR BEXAR", MaintenanceType = "021", BenefitBeginDate = "20260201" });
 
-        var childInputs = h.Events.AllEvents.Single(e => e.MemberId == DependentId(child)).Payload!["rateCellInputs"]!;
-        childInputs["reportingCategories"]![0]!["value"]!.GetValue<string>().Should().Be("3T", "a dependent's own 2750 loop is kept, trimmed");
+        var childId = DependentId(child)!;
+        h.Events.AllEvents.Single(e => e.MemberId == childId).RateCellInputs!.ReportingCategories
+            .Should().ContainSingle().Which.Value.Should().Be("3T", "a dependent's own 2750 loop is kept, trimmed");
+
+        // The read side pages by member id, each member's events oldest first.
+        var page = await h.Events.ListRateCellInputsAsync("t1", null, 1);
+        page.Should().ContainSingle();
+        var rest = await h.Events.ListRateCellInputsAsync("t1", page[0].MemberId, 10);
+        rest.Select(m => m.MemberId).Should().NotContain(page[0].MemberId);
+        page.Concat(rest).Select(m => m.MemberId).Should().BeEquivalentTo(new[] { "SUB1", childId });
     }
 
     [Fact]
@@ -1066,7 +1072,7 @@ public partial class EnrollmentImportServiceDependentTests
 
         await h.ImportAsync(new Enrollment834 { BatchId = "RC2", Enrollments = { Subscriber("SUB1", "001") } });
 
-        h.Events.AllEvents.Single(e => e.MemberId == "SUB1").Payload!.ContainsKey("rateCellInputs").Should().BeFalse();
+        h.Events.AllEvents.Single(e => e.MemberId == "SUB1").RateCellInputs.Should().BeNull();
     }
 
     [Fact]
