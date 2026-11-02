@@ -434,14 +434,14 @@ public sealed class StateCapitationController : ControllerBase
     };
 
     /// <summary>A CSV field: formula-leading characters are neutralized and commas or quotes are quoted.</summary>
-    private static string Csv(string? value)
+    internal static string Csv(string? value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
         if (value[0] is '=' or '+' or '-' or '@' or '\t' or '\r') value = "'" + value;
         return value.IndexOfAny([',', '"', '\n']) >= 0 ? "\"" + value.Replace("\"", "\"\"") + "\"" : value;
     }
 
-    private static StateCapitationProfile? Profile(string state) => StateCapitationProfile.ForState(state);
+    internal static StateCapitationProfile? Profile(string state) => StateCapitationProfile.ForState(state);
 
     private NotFoundObjectResult UnknownState(string state) =>
         NotFound(new { error = $"No state capitation profile for '{state}'. Supported: TX, CA." });
@@ -449,7 +449,7 @@ public sealed class StateCapitationController : ControllerBase
     private BadRequestObjectResult BadWindow() =>
         BadRequest(new { error = $"from and to must be months (yyyy-MM), from not after to, at most {MaxMonths} months" });
 
-    private static (DateOnly From, DateOnly To)? Window(string? from, string? to)
+    internal static (DateOnly From, DateOnly To)? Window(string? from, string? to)
     {
         if (!DateOnly.TryParseExact(from + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var f)
             || !DateOnly.TryParseExact(to + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var t)

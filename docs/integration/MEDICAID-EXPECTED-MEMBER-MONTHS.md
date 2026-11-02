@@ -47,13 +47,52 @@ CHO does not assume either. The plan's crosswalk names the field it reads.
    carried inputs, oldest first (version, occurredAt, eventDate, event type,
    maintenance type, inputs). Page on with `after={next}` until `next` is
    null; a member is never split across pages.
-2. **Crosswalk (next).** Finance loads a CSV per state that maps a field and
-   value, optionally with an age band, to a rate cell.
-3. **Build (next).** For each month, every member with Medicaid coverage in
-   the state is placed in a rate cell from the inputs in effect that month and
-   the crosswalk. The result replaces the expected member-months for those
-   months, after a dry run. A member whose inputs match no crosswalk row, or
-   more than one, is listed as an exception and left out rather than guessed.
+2. **Crosswalk (done).** Finance loads the state's crosswalk as CSV,
+   replacing the whole crosswalk each time:
+
+   `POST /api/v1/state-capitation/{state}/rate-cell-crosswalk` (`finance:write`, body `text/csv`)
+
+   | Column | Required | Meaning |
+   |---|---|---|
+   | `rate_cell` | yes | The rate cell, as the state's rate sheet names it |
+   | `plan_id` | yes | The CHO plan whose coverage this row places. The build lists coverage for every plan named |
+   | `field` | no | `category:<name>`: the loop 2750 reporting category whose `N1*75` name is `<name>` (case-insensitive). `hd04`: an HD line's plan coverage description. Empty: no 834 condition |
+   | `value` | with `field` | The value to match (case-insensitive) |
+   | `age_min`, `age_max` | no | Age band in whole years, inclusive, on the first day covered in the month |
+   | `county` | no | The county code the 834 sent (N406) |
+   | `effective_from`, `effective_to` | no | Months (yyyy-MM) the row applies to |
+
+   An empty column matches anything. Example (made-up codes):
+
+   ```csv
+   rate_cell,plan_id,field,value,age_min,age_max,county
+   BEXAR-STAR-CHILD-1-5,STAR,category:RISK GROUP,TANF-CHILD,1,5,029
+   BEXAR-STAR-ADULT,STAR,category:RISK GROUP,TANF-ADULT,,,029
+   CHIP-ALL,CHIP,,,,,
+   ```
+
+   `GET .../rate-cell-crosswalk.csv` (`finance:read`) returns it as loaded.
+3. **Build (done).** `POST /api/v1/state-capitation/{state}/expected/build?from=yyyy-MM&to=yyyy-MM`
+   (`finance:write`) is a dry run: member-months by month and rate cell, and
+   the exceptions (first 1,000 inline; `GET .../expected/build/exceptions.csv`
+   has them all). Add `apply=true` to replace the expected member-months of
+   every month in the window, as a CSV load does (`sourceFile` is `834-build`).
+
+   - Coverage is every span in the crosswalk's plans, terminated ones
+     included, from coverage-service. A member covered at any point in a month
+     has one member-month, with the days covered (used when the state
+     prorates).
+   - The inputs used are those of the latest 834 transaction effective on or
+     before the first day covered that month. Effective is the event's date
+     (the 834's maintenance effective date), else the day it was processed.
+   - Exceptions, never guessed: `NoInputs` (no 834 inputs in effect yet),
+     `NoMatch`, `Ambiguous` (rows naming different rate cells match),
+     `MultiplePlans` (covered by two of the plans in the month) and
+     `NoDateOfBirth` (only age-banded rows match and the 834 sent no birth
+     date).
+   - premium-billing-service reads coverage-service and
+     enrollment-import-service with its own service identity, so the finance
+     user does not need `coverage:read` or `enrollment:read`.
 
 ## Not verified
 
@@ -61,3 +100,8 @@ Neither HHSC's nor DHCS's 834 companion guide is public. Which field carries
 the Texas risk group or the Medi-Cal aid code, and whether region comes from
 the 834 or from the member's county, must be checked against a pilot plan's
 companion guide or a sample file.
+
+The per-category `DTP*007` date inside loop 2750 is kept but not used yet: a
+category change takes effect from the transaction's own effective date. Large
+plans read coverage 100 records a page; a build for several hundred thousand
+members takes minutes.

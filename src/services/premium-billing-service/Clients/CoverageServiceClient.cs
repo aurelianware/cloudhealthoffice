@@ -1,5 +1,6 @@
 using System.Net;
 using CloudHealthOffice.Infrastructure.Middleware;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace PremiumBillingService.Clients;
 
@@ -23,6 +24,14 @@ public interface ICoverageServiceClient
     /// </summary>
     Task<List<CoverageDto>> GetAllCoveragesByGroupAsync(string tenantId, string groupNumber, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("This coverage client cannot list terminated coverage");
+
+    /// <summary>
+    /// Every coverage record in the plan, terminated ones included, read with
+    /// premium-billing-service's own identity (the member-month build is the
+    /// service's own pipeline). Throws on any failure.
+    /// </summary>
+    Task<List<CoverageDto>> GetAllCoveragesByPlanAsync(string tenantId, string planId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("This coverage client cannot list a plan's coverage");
 }
 
 public sealed class CoverageServiceClient : ICoverageServiceClient
@@ -30,6 +39,9 @@ public sealed class CoverageServiceClient : ICoverageServiceClient
     public const string HttpClientName = "CoverageService";
     internal const int PageSize = 100;
     internal const int MaxPages = 1000;
+
+    /// <summary>A Medicaid plan's roster can run to hundreds of thousands of members.</summary>
+    internal const int MaxPlanPages = 20000;
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<CoverageServiceClient> _logger;
@@ -42,14 +54,18 @@ public sealed class CoverageServiceClient : ICoverageServiceClient
 
     public Task<List<CoverageDto>> GetActiveCoveragesByGroupAsync(
         string tenantId, string groupNumber, CancellationToken cancellationToken = default)
-        => ListAsync(tenantId, groupNumber, activeOnly: true, cancellationToken);
+        => ListAsync(tenantId, $"groupNumber={Uri.EscapeDataString(groupNumber)}&activeOnly=true", $"group {groupNumber}", MaxPages, serviceIdentity: false, cancellationToken);
 
     public Task<List<CoverageDto>> GetAllCoveragesByGroupAsync(
         string tenantId, string groupNumber, CancellationToken cancellationToken = default)
-        => ListAsync(tenantId, groupNumber, activeOnly: false, cancellationToken);
+        => ListAsync(tenantId, $"groupNumber={Uri.EscapeDataString(groupNumber)}&activeOnly=false", $"group {groupNumber}", MaxPages, serviceIdentity: false, cancellationToken);
+
+    public Task<List<CoverageDto>> GetAllCoveragesByPlanAsync(
+        string tenantId, string planId, CancellationToken cancellationToken = default)
+        => ListAsync(tenantId, $"planId={Uri.EscapeDataString(planId)}&activeOnly=false", $"plan {planId}", MaxPlanPages, serviceIdentity: true, cancellationToken);
 
     private async Task<List<CoverageDto>> ListAsync(
-        string tenantId, string groupNumber, bool activeOnly, CancellationToken cancellationToken)
+        string tenantId, string filter, string what, int maxPages, bool serviceIdentity, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(tenantId))
             throw new InvalidOperationException("A coverage-service call must name its tenant");
@@ -61,17 +77,18 @@ public sealed class CoverageServiceClient : ICoverageServiceClient
 
         for (var page = 0; ; page++)
         {
-            if (page >= MaxPages)
+            if (page >= maxPages)
                 throw new InvalidOperationException(
-                    $"coverage-service returned more than {MaxPages} pages for group {groupNumber}");
+                    $"coverage-service returned more than {maxPages} pages for {what}");
 
             // coverage-service: GET /api/v1/coverage (singular) with activeOnly,
             // answering { coverage, continuationToken, totalCount }.
-            var url = $"/api/v1/coverage?groupNumber={Uri.EscapeDataString(groupNumber)}&activeOnly={(activeOnly ? "true" : "false")}&pageSize={PageSize}";
+            var url = $"/api/v1/coverage?{filter}&pageSize={PageSize}";
             if (continuationToken != null)
                 url += $"&continuationToken={Uri.EscapeDataString(continuationToken)}";
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (serviceIdentity) request.UseChoServiceIdentity();
             request.Headers.Add(TenantMiddleware.TenantHeaderName, tenantId);
             using var response = await client.SendAsync(request, cancellationToken);
 
@@ -79,10 +96,10 @@ public sealed class CoverageServiceClient : ICoverageServiceClient
             {
                 if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
                     _logger.LogError(
-                        "coverage-service refused the coverage list ({StatusCode}) for group {GroupNumber}, tenant {TenantId}",
-                        (int)response.StatusCode, groupNumber, tenantId);
+                        "coverage-service refused the coverage list ({StatusCode}) for {What}, tenant {TenantId}",
+                        (int)response.StatusCode, what, tenantId);
                 throw new HttpRequestException(
-                    $"coverage-service answered {(int)response.StatusCode} {response.StatusCode} for group {groupNumber}",
+                    $"coverage-service answered {(int)response.StatusCode} {response.StatusCode} for {what}",
                     null, response.StatusCode);
             }
 
@@ -109,7 +126,7 @@ public sealed class CoverageServiceClient : ICoverageServiceClient
                 break;
             if (!seenTokens.Add(continuationToken))
                 throw new InvalidOperationException(
-                    $"coverage-service repeated a continuation token for group {groupNumber}");
+                    $"coverage-service repeated a continuation token for {what}");
         }
 
         return coverages;
