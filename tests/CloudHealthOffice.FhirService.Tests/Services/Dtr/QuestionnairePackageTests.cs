@@ -85,6 +85,10 @@ public class QuestionnairePackageTests
         var questionnaire = bundle.Entry[0].Resource.Should().BeOfType<Questionnaire>().Subject;
         questionnaire.Url.Should().Be(MriCanonical);
         questionnaire.Version.Should().Be("1.0.0");
+        // SDC sdc-2: a versioned form says how its versions compare.
+        questionnaire.GetExtension(AdaptiveQuestionnaireEngine.VersionAlgorithmExtension)
+            .Should().NotBeNull().And.Subject.As<Extension>().Value.Should().BeOfType<Coding>()
+            .Which.Code.Should().Be("semver");
         bundle.Entry.Select(e => e.Resource).OfType<QuestionnaireResponse>().Should().ContainSingle();
 
         // oper-12/13: the Library it names, carrying both CQL and ELM.

@@ -93,7 +93,9 @@ public sealed class QuestionnairePackageBuilder
             var adaptive = DtrContentLibrary.IsAdaptive(selection.Questionnaire);
             var questionnaire = adaptive
                 ? AdaptiveSearchForm(selection.Questionnaire, fhirBaseUrl)
-                : selection.Questionnaire;
+                // A copy, so the stored form is never changed; sdc-2 needs a
+                // versionAlgorithm on any versioned form, whoever authored it.
+                : ((Questionnaire)selection.Questionnaire.DeepCopy()).WithVersionAlgorithm();
             var canonical = Canonical(questionnaire);
             var (libraries, valueSets) = Dependencies(questionnaire, canonical, now, issues);
 

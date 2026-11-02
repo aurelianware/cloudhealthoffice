@@ -128,6 +128,8 @@ public static class PaCorpusWriter
         public required IReadOnlyDictionary<string, int> ScenarioCounts { get; init; }
         /// <summary>History cohort: all lines of business, then each one.</summary>
         public required IReadOnlyList<PaExpectedMetrics> ExpectedHistoryMetrics { get; init; }
+        /// <summary>History cohort: the annual public-reporting draft per line of business and receipt year (UTC).</summary>
+        public required IReadOnlyList<PaExpectedAnnual> ExpectedAnnualDrafts { get; init; }
         public required IReadOnlyList<PaCaseExpectation> Cases { get; init; }
 
         public static AnswerKey From(PaCorpusProfile profile, IReadOnlyList<PaCase> cases)
@@ -148,6 +150,9 @@ public static class PaCorpusWriter
                 ScenarioCounts = cases.GroupBy(c => $"{c.Cohort}/{c.Scenario}").OrderBy(g => g.Key, StringComparer.Ordinal)
                     .ToDictionary(g => g.Key, g => g.Count()),
                 ExpectedHistoryMetrics = metrics,
+                ExpectedAnnualDrafts = history.Select(c => c.ReceivedAt.UtcDateTime.Year).Distinct().Order()
+                    .SelectMany(year => Enum.GetValues<PaLineOfBusiness>().Select(l => PaExpectedAnnual.Compute(history, l, year)))
+                    .ToList(),
                 Cases = cases.Select(c => new PaCaseExpectation(c.CaseId, c.AuthorizationNumber, c.Cohort, c.Scenario,
                     c.LineOfBusiness, c.Expected)).ToList(),
             };
