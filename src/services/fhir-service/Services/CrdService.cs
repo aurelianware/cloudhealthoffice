@@ -21,6 +21,7 @@ public class CrdService : ICrdService
     private readonly IDtrService? _dtrService;
     private readonly ICrdAssertionStore? _assertionStore;
     private readonly string? _dtrLaunchUrl;
+    private readonly string? _portalQuestionnaireUrl;
     private readonly TimeSpan _assertionRetention;
 
     public CrdService(
@@ -47,6 +48,10 @@ public class CrdService : ICrdService
         _dtrLaunchUrl = string.IsNullOrWhiteSpace(dtrConfig?.Value.DtrLaunchUrl)
             ? null
             : dtrConfig.Value.DtrLaunchUrl.Trim();
+        _portalQuestionnaireUrl = Uri.TryCreate(dtrConfig?.Value.PortalQuestionnaireUrl?.Trim(), UriKind.Absolute, out var portal)
+                                  && portal.Scheme == Uri.UriSchemeHttps
+            ? portal.GetLeftPart(UriPartial.Path)
+            : null;
         _assertionRetention = TimeSpan.FromDays(Math.Max(1, config.Value.AssertionRetentionDays));
     }
 
@@ -139,7 +144,7 @@ public class CrdService : ICrdService
             var forms = questionnaires.TryGetValue(assertion, out var q) ? q : [];
             var record = issued.FirstOrDefault(i => ReferenceEquals(i.Draft, assertion)).Record;
             cards[assertion.CardIndex] = BuildDocumentationRequiredCard(
-                assertion.Display, forms, record, _dtrLaunchUrl);
+                assertion.Display, forms, record, _dtrLaunchUrl, _portalQuestionnaireUrl);
         }
 
         sw.Stop();
@@ -719,19 +724,31 @@ public class CrdService : ICrdService
     /// through the EHR's SMART <c>fhirContext</c> (DTR spec-113); appContext is
     /// for what only CRD knows.
     /// </para>
+    ///
+    /// <para>
+    /// With no DTR app but a provider portal questionnaire page
+    /// (<c>Cms0057:Dtr:PortalQuestionnaireUrl</c>), the card carries an
+    /// <c>absolute</c> link to that page, for a practice whose EHR has no DTR
+    /// client. Its query names the forms, the coverage-assertion-id and the
+    /// billing code: nothing that identifies the patient, since the URL leaves
+    /// the EHR. The provider signs in to the portal and finds the member there.
+    /// </para>
     /// </summary>
     internal static CrdCard BuildDocumentationRequiredCard(
         string serviceDisplay,
         IReadOnlyList<string> questionnaires,
         CrdCoverageAssertion? assertion,
-        string? dtrLaunchUrl)
+        string? dtrLaunchUrl,
+        string? portalQuestionnaireUrl = null)
     {
+        var portal = dtrLaunchUrl is null && portalQuestionnaireUrl is not null && questionnaires.Count > 0;
         var card = new CrdCard
         {
             Uuid = Guid.NewGuid().ToString(),
             Summary = $"Documentation required for {serviceDisplay}",
             Detail = "Additional clinical documentation is needed for this service. "
-                     + "Complete the payer's documentation in your DTR application."
+                     + "Complete the payer's documentation in your DTR application"
+                     + (portal ? ", or in the payer's provider portal if your EHR has none." : ".")
                      + (assertion is not null && questionnaires.Count > 0
                          ? " The order's coverage information names the form to use."
                          : string.Empty),
@@ -763,8 +780,36 @@ public class CrdService : ICrdService
                 AppContext = DtrAppContext(questionnaires, assertion),
             });
         }
+        else if (portal)
+        {
+            card.Links.Add(new CrdCardLink
+            {
+                Label = "Complete documentation in the provider portal",
+                Url = PortalQuestionnaireLink(portalQuestionnaireUrl!, questionnaires, assertion),
+                Type = "absolute",
+            });
+        }
 
         return card;
+    }
+
+    /// <summary>
+    /// The provider portal link: <c>questionnaire</c> (repeated), the
+    /// assertion id as <c>context</c>, and the billing code as
+    /// <c>code=system|code</c>. Never the patient, Coverage or order ids.
+    /// </summary>
+    internal static string PortalQuestionnaireLink(
+        string pageUrl, IReadOnlyList<string> questionnaires, CrdCoverageAssertion? assertion)
+    {
+        var query = questionnaires.Select(q => "questionnaire=" + Uri.EscapeDataString(q)).ToList();
+        if (assertion is not null)
+        {
+            query.Add("context=" + Uri.EscapeDataString(assertion.AssertionId));
+            if (assertion.BillingCode is { Length: > 0 } code)
+                query.Add("code=" + Uri.EscapeDataString(
+                    assertion.BillingCodeSystem is { Length: > 0 } system ? $"{system}|{code}" : code));
+        }
+        return pageUrl + "?" + string.Join("&", query);
     }
 
     /// <summary>

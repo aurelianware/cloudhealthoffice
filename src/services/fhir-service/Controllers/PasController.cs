@@ -32,6 +32,7 @@ public class PasController : FhirControllerBase
     private readonly IPasAuthorizationRecorder _recorder;
     private readonly HttpClient _providerVerificationClient;
     private readonly ILogger<PasController> _logger;
+    private readonly IDtrService? _dtr;
 
     public PasController(
         IPasAutoAdjudicator adjudicator,
@@ -41,8 +42,10 @@ public class PasController : FhirControllerBase
         IOptions<PasAutoAdjudicationConfig> config,
         IHttpClientFactory httpClientFactory,
         IPasAuthorizationRecorder recorder,
-        ILogger<PasController> logger)
+        ILogger<PasController> logger,
+        IDtrService? dtr = null)
     {
+        _dtr = dtr;
         _adjudicator = adjudicator;
         _responseBuilder = responseBuilder;
         _complianceChecker = complianceChecker;
@@ -248,6 +251,8 @@ public class PasController : FhirControllerBase
             LineOfBusiness = decision.LineOfBusiness,
             StateCode = decision.StateCode,
         };
+
+        await StoreDocumentationAsync(record, HttpContext.RequestAborted);
 
         var stored = await _recorder.RecordAsync(record, TenantId, HttpContext.RequestAborted);
         if (!stored.Recorded)
@@ -593,6 +598,54 @@ public class PasController : FhirControllerBase
         return FhirBadRequest(
             "The prior authorization names a different requesting provider than the "
             + "authenticated caller is identified as.");
+    }
+
+    /// <summary>
+    /// Keeps each DTR form the request carries in the QuestionnaireResponse
+    /// store, so the record can point at it and a reviewer can open it (G-16).
+    /// A response already stored here (the provider portal saves the form
+    /// before it submits) is referenced as it is when it is the same
+    /// patient's answer to the same form; anything else is stored as a copy,
+    /// under its own id. Before the record is written: a record never names a
+    /// response that is not there.
+    /// </summary>
+    private async System.Threading.Tasks.Task StoreDocumentationAsync(PasAuthorizationRecordRequest record, CancellationToken ct)
+    {
+        if (record.Documentation is not { Count: > 0 } documentation || _dtr is null)
+            return;
+
+        foreach (var doc in documentation)
+        {
+            if (doc.Response is not { } response) continue;
+
+            // Stored under the member the record is for (CHO Patient ids are
+            // member ids), whatever the Bundle called the patient: an EHR's
+            // Patient id or a Bundle-local urn:uuid means nothing here, and
+            // QuestionnaireResponse reads are scoped by member.
+            var subject = $"Patient/{record.MemberId}";
+
+            QuestionnaireResponse? kept = null;
+            if (!string.IsNullOrEmpty(response.Id))
+            {
+                var existing = await _dtr.GetResponseAsync(response.Id, TenantId, ct);
+                if (existing is not null
+                    && string.Equals(existing.Subject?.Reference, subject, StringComparison.Ordinal)
+                    && string.Equals(existing.Questionnaire, response.Questionnaire, StringComparison.Ordinal))
+                    kept = existing;
+            }
+
+            if (kept is null)
+            {
+                var copy = (QuestionnaireResponse)response.DeepCopy();
+                copy.Subject = new ResourceReference(subject);
+                kept = await _dtr.SubmitResponseAsync(copy, TenantId, ct);
+            }
+
+            doc.QuestionnaireResponseId = kept.Id;
+            doc.Title = (await _dtr.ResolveQuestionnaireAsync(doc.Questionnaire, TenantId, FhirBaseUrl, ct))?.Title is { } title
+                ? (title.Length > 200 ? title[..200] : title)
+                : null;
+        }
     }
 
     /// <summary>Tracking handle issued at submit and used to inquire later.</summary>

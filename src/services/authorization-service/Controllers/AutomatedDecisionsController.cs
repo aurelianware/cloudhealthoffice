@@ -66,6 +66,9 @@ public sealed class AutomatedDecisionsController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>PWK01 for a completed DTR form: 03, report justifying treatment.</summary>
+    public const string DtrFormAttachmentType = "03";
+
     [HttpPost]
     [ProducesResponseType(typeof(Authorization), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -139,6 +142,17 @@ public sealed class AutomatedDecisionsController : ControllerBase
                 UnitSystem = s.UnitSystem,
                 PlaceOfServiceCode = s.PlaceOfServiceCode,
                 RevenueCode = s.RevenueCode,
+            }).ToList(),
+            // DTR forms the request carried (PWK01 03: report justifying
+            // treatment; sent electronically as part of the request).
+            ClinicalAttachments = (request.Documentation ?? []).Select(d => new ClinicalAttachment
+            {
+                AttachmentType = DtrFormAttachmentType,
+                TransmissionCode = "EL",
+                Description = d.Title ?? "Documentation questionnaire",
+                QuestionnaireResponseId = d.QuestionnaireResponseId,
+                Questionnaire = d.Questionnaire,
+                UploadedDate = d.Authored ?? request.ReceivedAt!.Value,
             }).ToList(),
             Status = AuthorizationStatus.Submitted,
             SubmittedDate = request.ReceivedAt!.Value,

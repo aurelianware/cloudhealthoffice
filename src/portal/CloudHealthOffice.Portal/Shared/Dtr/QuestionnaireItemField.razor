@@ -1,0 +1,157 @@
+@using CloudHealthOffice.Portal.Services.Dtr
+@using QType = Hl7.Fhir.Model.Questionnaire.QuestionnaireItemType
+@*
+    One Questionnaire item and its children. Hand entry only: no CQL, no EHR
+    prefill (decision Q-6). Items whose enableWhen does not hold are not shown
+    and are not answered.
+*@
+
+@if (Form.IsEnabled(Item))
+{
+    var id = $"dtr-item-{Item.LinkId}";
+    <div class="@(Depth > 0 ? "ml-4" : "")" data-testid="@id">
+        @switch (Item.Type)
+        {
+            case QType.Group:
+                <MudText Typo="Typo.subtitle1" Class="mt-4 mb-1"><strong>@Item.Label</strong></MudText>
+                break;
+
+            case QType.Display:
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="my-2">@Item.Label</MudText>
+                break;
+
+            case QType.Boolean:
+                <MudSelect T="string" Label="@Label" Value="@BooleanValue" ValueChanged="SetBoolean"
+                           Disabled="Item.ReadOnly || ReadOnly" Variant="Variant.Outlined" Class="my-2" Clearable="!Item.Required">
+                    <MudSelectItem Value="@("true")">Yes</MudSelectItem>
+                    <MudSelectItem Value="@("false")">No</MudSelectItem>
+                </MudSelect>
+                break;
+
+            case QType.Integer:
+            case QType.Decimal:
+                <MudTextField T="string" Label="@Label" Value="@Item.Number" ValueChanged="SetNumber"
+                              InputMode="@(Item.Type == QType.Integer ? InputMode.numeric : InputMode.@decimal)"
+                              Error="@(Item.InputError is not null)" ErrorText="@Item.InputError"
+                              Disabled="Item.ReadOnly || ReadOnly" Variant="Variant.Outlined" Class="my-2" Immediate="true" />
+                break;
+
+            case QType.Date:
+            case QType.DateTime:
+                <MudDatePicker Label="@Label" Date="@Item.Date" DateChanged="SetDate"
+                               Disabled="Item.ReadOnly || ReadOnly" Variant="Variant.Outlined" Class="my-2" Editable="true" />
+                break;
+
+            case QType.String:
+            case QType.Url:
+                <MudTextField T="string" Label="@Label" Value="@Item.Text" ValueChanged="SetText"
+                              MaxLength="@(Item.MaxLength ?? 524288)"
+                              Error="@(Item.InputError is not null)" ErrorText="@Item.InputError"
+                              Disabled="Item.ReadOnly || ReadOnly" Variant="Variant.Outlined" Class="my-2" Immediate="true" />
+                break;
+
+            case QType.Text:
+                <MudTextField T="string" Label="@Label" Value="@Item.Text" ValueChanged="SetText" Lines="3"
+                              MaxLength="@(Item.MaxLength ?? 524288)"
+                              Disabled="Item.ReadOnly || ReadOnly" Variant="Variant.Outlined" Class="my-2" Immediate="true" />
+                break;
+
+            case QType.Choice:
+            case QType.OpenChoice:
+                if (Item.Repeats)
+                {
+                    <MudText Typo="Typo.body2" Class="mt-3">@Label</MudText>
+                    @foreach (var option in Item.Options)
+                    {
+                        <MudCheckBox T="bool" Value="@Item.Choices.Contains(option.Key)" ValueChanged="@(v => SetChoice(option.Key, v))"
+                                     Label="@option.Display" Disabled="Item.ReadOnly || ReadOnly" Dense="true" />
+                    }
+                }
+                else
+                {
+                    <MudSelect T="string" Label="@Label" Value="@Item.Choice" ValueChanged="SetSingleChoice"
+                               Disabled="Item.ReadOnly || ReadOnly" Variant="Variant.Outlined" Class="my-2" Clearable="true">
+                        @foreach (var option in Item.Options)
+                        {
+                            <MudSelectItem Value="@option.Key">@option.Display</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+                @if (Item.Type == QType.OpenChoice)
+                {
+                    <MudTextField T="string" Label="Other (type an answer)" Value="@Item.Text" ValueChanged="SetText"
+                                  Disabled="Item.ReadOnly || ReadOnly" Variant="Variant.Outlined" Class="my-1" Immediate="true" />
+                }
+                @if (Item.Options.Count == 0 && Item.Type == QType.Choice)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Warning">This question's answer list was not included in the form package.</MudText>
+                }
+                break;
+
+            default:
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="my-2">
+                    @Item.Label: this kind of question (@Item.Type) cannot be answered on this page. Send it with the request's other documentation.
+                </MudAlert>
+                break;
+        }
+
+        @foreach (var child in Item.Children)
+        {
+            <QuestionnaireItemField Form="Form" Item="child" Depth="Depth + 1" ReadOnly="ReadOnly" Changed="Changed" />
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public QuestionnaireForm Form { get; set; } = default!;
+
+    [Parameter, EditorRequired] public FormItem Item { get; set; } = default!;
+
+    [Parameter] public int Depth { get; set; }
+
+    [Parameter] public bool ReadOnly { get; set; }
+
+    /// <summary>Raised on every answer change, so the page re-evaluates enableWhen for the whole form.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private string Label => Item.Required ? $"{Item.Label} *" : Item.Label;
+
+    private string? BooleanValue => Item.Boolean switch { true => "true", false => "false", null => null };
+
+    private Task SetBoolean(string? value)
+    {
+        Item.Boolean = value switch { "true" => true, "false" => false, _ => null };
+        return Changed.InvokeAsync();
+    }
+
+    private Task SetNumber(string? value)
+    {
+        Item.Number = value;
+        return Changed.InvokeAsync();
+    }
+
+    private Task SetDate(DateTime? value)
+    {
+        Item.Date = value;
+        return Changed.InvokeAsync();
+    }
+
+    private Task SetText(string? value)
+    {
+        Item.Text = value;
+        return Changed.InvokeAsync();
+    }
+
+    private Task SetSingleChoice(string? key)
+    {
+        Item.Choice = string.IsNullOrEmpty(key) ? null : key;
+        return Changed.InvokeAsync();
+    }
+
+    private Task SetChoice(string key, bool selected)
+    {
+        if (selected) Item.Choices.Add(key);
+        else Item.Choices.Remove(key);
+        return Changed.InvokeAsync();
+    }
+}

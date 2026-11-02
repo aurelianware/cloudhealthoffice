@@ -100,6 +100,7 @@ public static class PasAuthorizationMapper
         MapPatientAndCoverage(bundle, claim, request, errors);
         MapProviders(bundle, claim, request, errors);
         MapServices(bundle, claim, request, errors);
+        MapDocumentation(bundle, claim, request, errors);
 
         request.LevelOfService = LevelOfService(claim, warnings);
         request.ServiceTypeCode = claim.Item?
@@ -467,6 +468,89 @@ public static class PasAuthorizationMapper
     private static Coding? Icd10Coding(CodeableConcept? concept, string system)
         => concept?.Coding?.FirstOrDefault(c => c.System == system && !string.IsNullOrWhiteSpace(c.Code));
 
+    // ── Documentation (DTR) ───────────────────────────────────────────
+
+    /// <summary>At most this many completed forms ride on one request.</summary>
+    public const int MaxDocumentation = 10;
+
+    /// <summary>
+    /// The DTR QuestionnaireResponses the request carries: each
+    /// <c>Claim.supportingInfo</c> whose <c>valueReference</c> names a
+    /// QuestionnaireResponse in the Bundle (PAS AdditionalInformation, DTR's
+    /// "withpa" intended use). They become the record's documentation so the
+    /// reviewer sees the answers with the request (G-16). A response about
+    /// someone other than the Claim's patient is refused, not filed on the
+    /// wrong member's request.
+    /// </summary>
+    private static void MapDocumentation(
+        Bundle bundle, Claim claim, PasAuthorizationRecordRequest request, List<PasMappingError> errors)
+    {
+        var found = new List<(QuestionnaireResponse Response, int Sequence)>();
+        foreach (var info in claim.SupportingInfo ?? [])
+        {
+            if (info.Value is not ResourceReference reference
+                || Resolve(bundle, reference) is not QuestionnaireResponse response)
+                continue;
+            if (found.Any(f => ReferenceEquals(f.Response, response)))
+                continue;
+            found.Add((response, info.Sequence ?? 0));
+        }
+
+        if (found.Count == 0)
+            return;
+        if (found.Count > MaxDocumentation)
+        {
+            errors.Add(new("Claim.supportingInfo",
+                $"At most {MaxDocumentation} QuestionnaireResponses can accompany one request."));
+            return;
+        }
+
+        var patient = Resolve(bundle, claim.Patient);
+        var documentation = new List<PasDocumentation>();
+        foreach (var (response, sequence) in found)
+        {
+            var path = $"Claim.supportingInfo[{sequence}]";
+            var subject = Resolve(bundle, response.Subject);
+            var samePatient = (subject is not null && ReferenceEquals(subject, patient))
+                              || string.Equals(response.Subject?.Reference, claim.Patient?.Reference, StringComparison.Ordinal);
+            if (!samePatient)
+            {
+                errors.Add(new(path, "The QuestionnaireResponse's subject must be the Claim's patient."));
+                continue;
+            }
+
+            var questionnaire = response.Questionnaire?.Trim();
+            if (string.IsNullOrEmpty(questionnaire) || questionnaire.Length > 500)
+            {
+                errors.Add(new(path, "The QuestionnaireResponse must name its Questionnaire (at most 500 characters)."));
+                continue;
+            }
+
+            if (response.Status is not (QuestionnaireResponse.QuestionnaireResponseStatus.Completed
+                or QuestionnaireResponse.QuestionnaireResponseStatus.Amended))
+            {
+                errors.Add(new(path, "Only a completed or amended QuestionnaireResponse can accompany a request."));
+                continue;
+            }
+
+            documentation.Add(new PasDocumentation
+            {
+                Response = response,
+                Questionnaire = questionnaire,
+                Authored = ParseInstant(response.Authored),
+            });
+        }
+
+        if (documentation.Count > 0)
+            request.Documentation = documentation;
+    }
+
+    private static DateTime? ParseInstant(string? value)
+        => DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed)
+            ? parsed.UtcDateTime
+            : null;
+
     // ── Priority, dates ───────────────────────────────────────────────
 
     /// <summary>The words that state urgency, whatever system (or none) they arrive in.</summary>
@@ -788,6 +872,37 @@ public sealed class PasAuthorizationRecordRequest
     public List<PasDiagnosisCode> DiagnosisCodes { get; set; } = [];
     public List<PasRequestedService> RequestedServices { get; set; } = [];
     public PasAutomatedDecision? Decision { get; set; }
+
+    /// <summary>
+    /// The DTR forms the request carries, once stored. Null (and not sent)
+    /// when it carries none, so a request without documentation hashes as it
+    /// always has.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<PasDocumentation>? Documentation { get; set; }
+}
+
+/// <summary>
+/// A completed DTR form that accompanies a prior authorization request: kept
+/// on the record (authorization-service <c>ClinicalAttachment</c>) by the id
+/// of the QuestionnaireResponse fhir-service stored.
+/// </summary>
+public sealed class PasDocumentation
+{
+    /// <summary>The response as the request carried it; stored before the record is written.</summary>
+    [JsonIgnore]
+    public QuestionnaireResponse? Response { get; set; }
+
+    /// <summary>Id of the stored QuestionnaireResponse (GET /fhir/r4/QuestionnaireResponse/{id}).</summary>
+    public string? QuestionnaireResponseId { get; set; }
+
+    /// <summary>The Questionnaire canonical the response answers.</summary>
+    public string Questionnaire { get; set; } = string.Empty;
+
+    /// <summary>The Questionnaire's title, for the reviewer's list.</summary>
+    public string? Title { get; set; }
+
+    public DateTime? Authored { get; set; }
 }
 
 public sealed class PasDiagnosisCode
