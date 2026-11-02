@@ -75,6 +75,32 @@ Expected-pend scenarios score as:
 - `Unsupported` only when a future expected-pend subtype requires a signal the
   validator still cannot distinguish from persisted claim state.
 
+## Texas and California TPL Scenarios (`--tpl-scenarios`)
+
+Off by default. When on, about 1% of the corpus (at least one of each) becomes
+Medicaid third-party liability scenarios. Each one is a clean professional
+office visit (99213) for its own member, with one plan-found TPL row recorded
+through coverage-service (`POST /api/v1/coverage/member/{id}/tpl`, after a plain
+coverage row with no other insurance so the COB stage sees nothing):
+
+| Scenario | TPL row | Expected |
+| --- | --- | --- |
+| `Tpl:TxCostAvoid` | TX, comprehensive | Denied CARC 22 (cost avoided) |
+| `Tpl:TxPediatricPreventivePayAndChase` | TX, comprehensive; member 8 years old, Z00.129 | Paid (pay and chase) |
+| `Tpl:TxCasualtyOnlyPays` | TX, casualty only; no accident indicator | Paid |
+| `Tpl:CaOhcCostAvoid` | CA, OHC code K | Denied CARC 22 |
+| `Tpl:CaOhcCodeAPayAndChase` | CA, OHC code A | Paid (pay and chase) |
+| `Tpl:CaOhcDentalOnlyPays` | CA, OHC code L (dental only) | Paid |
+
+They need claims-service running with
+`Adjudication:ThirdPartyLiability:Mode=CostAvoid` and `--line-of-business 3`.
+`TPL_SCENARIOS=true scripts/run-mcc-local-k8s.sh` (or `scripts/demo/gcp/run-mcc.sh`)
+sets the mode for the run and restores the previous value afterwards. The mode
+is service-wide, so every Medicaid claim in that run does a TPL lookup against
+coverage-service; a failed lookup pends `TPL`. Run it separately from a
+baseline so a lookup failure doesn't hide other regressions. Rules:
+docs/integration/MEDICAID-TPL.md.
+
 ## Service Bus Post-Window Reconciliation
 
 The validator polls each submitted claim for a persisted terminal outcome

@@ -41,6 +41,7 @@
     <Using Include="Xunit" />
     <Using Include="Moq" />
     <Using Include="FluentAssertions" />
+    <Using Include="CloudHealthOffice.Infrastructure.Programs" />
   </ItemGroup>
 
 </Project>

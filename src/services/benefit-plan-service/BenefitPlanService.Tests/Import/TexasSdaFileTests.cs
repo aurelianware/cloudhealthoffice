@@ -27,6 +27,14 @@ public class TexasSdaFileTests
         "Universal Mean Effective September 1, 2026 - $10,161.08",
     ];
 
+    internal static readonly string[] ChildrensTitle =
+    [
+        "State Fiscal Year 2027",
+        "All Patient Refined Diagnosis Related Group (APR DRG)",
+        "Standard Dollar Amounts for Children's Hospitals",
+        "Universal Mean Effective September 1, 2026 - $10,161.08",
+    ];
+
     // Real SFY 2027 rows (public HHSC data).
     internal static readonly string[] Waco =
     [
@@ -137,12 +145,41 @@ public class TexasSdaFileTests
         noMean.Should().Throw<TexasSdaFormatException>().WithMessage("*Universal Mean*");
     }
 
-    [Fact]
-    public void Refuses_a_childrens_file_until_its_layout_is_known()
-    {
-        var act = () => TexasSdaFileReader.Read(Pdf(["Standard Dollar Amounts for Children's Hospitals"], Waco));
+    internal static readonly string[] TexasChildrens =
+    [
+        "139135109", "1477643690", "453304", "TEXAS CHILDRENS HOSPITAL", "6621 FANNIN ST", "HOUSTON", "77030", "HARRIS",
+        "$12,591.52", "$272.26", "$12,863.78", "$3,425.82",
+    ];
 
-        act.Should().Throw<TexasSdaFormatException>().WithMessage("*Children's*not supported*");
+    [Fact]
+    public void Reads_a_childrens_file_with_its_adult_delivery_sda()
+    {
+        var file = TexasSdaFileReader.Read(Pdf(ChildrensTitle, TexasChildrens));
+
+        file.HospitalClass.Should().Be(TexasHospitalClass.Childrens);
+        var row = file.Rows.Single();
+        row.BaseSda.Should().Be(12591.52m);
+        row.AddOns["Safety-Net Add-on"].Should().Be(272.26m);
+        row.FinalSda.Should().Be(12863.78m);
+        // Lower than the final SDA, which is right for children's hospitals
+        // (urban base) and would be held back on a rural file.
+        row.DeliverySda.Should().Be(3425.82m);
+        file.Discrepancies.Should().BeEmpty();
+
+        var hospital = file.ToPricerHospital(row, interimRate: null);
+        hospital.TexasClass.Should().Be(TexasHospitalClass.Childrens);
+        hospital.DeliveryBaseRate.Should().Be(3425.82m);
+    }
+
+    [Fact]
+    public void A_childrens_row_that_does_not_add_up_is_held_back()
+    {
+        string[] bad = [.. TexasChildrens[..10], "$12,900.00", "$3,425.82"];
+
+        var file = TexasSdaFileReader.Read(Pdf(ChildrensTitle, TexasChildrens, bad.Select((v, i) => i == 0 ? "139135110" : v).ToArray()));
+
+        file.Rows.Should().ContainSingle();
+        file.Discrepancies.Should().ContainSingle().Which.Problem.Should().Contain("add to 12863.78");
     }
 
     [Fact]

@@ -17,6 +17,10 @@ namespace BenefitPlanService.Import.MedicaidDrg;
 //                                 safety-net add-ons = SDA with add-ons
 //   {sfy}-fy-hosp-rural-sda.pdf   SDA + add-on = SDA with add-on, and a
 //                                 separate OB-GYN delivery SDA (§355.8052(e)(2))
+//   {sfy}-fy-hosp-childrens-sda.pdf  SDA + safety-net add-on = final SDA,
+//                                 and an adult delivery SDA for labor and
+//                                 delivery of patients 18 or older
+//                                 (§355.8052(c)(4)(B))
 //
 // Each page repeats a title block naming the class, the fiscal year and the
 // universal mean with its effective date, then one row per hospital: TPI,
@@ -25,8 +29,7 @@ namespace BenefitPlanService.Import.MedicaidDrg;
 // every row's arithmetic (the parts must add up to the published total), so
 // a misread column refuses the file instead of loading a wrong rate.
 //
-// Children's hospitals are not read yet: their file has not been seen, and
-// a layout this reader does not recognise is refused, never guessed at.
+// A layout this reader does not recognise is refused, never guessed at.
 // ═══════════════════════════════════════════════════════════════════
 
 /// <summary>One hospital's row in a Texas SDA file.</summary>
@@ -53,7 +56,11 @@ public sealed record TexasSdaRow
     /// <summary>The final SDA the stay is paid with: base plus every add-on.</summary>
     public required decimal FinalSda { get; init; }
 
-    /// <summary>Rural only: the final SDA for labor and delivery stays (§355.8052(e)(2)).</summary>
+    /// <summary>
+    /// The SDA for labor and delivery stays: rural, the OB-GYN delivery SDA
+    /// (§355.8052(e)(2)); children's, the adult delivery SDA for patients 18
+    /// or older (§355.8052(c)(4)(B)). Null for urban hospitals.
+    /// </summary>
     public decimal? DeliverySda { get; init; }
 
     /// <summary>The page the row was read from, for error messages.</summary>
@@ -162,8 +169,6 @@ public static partial class TexasSdaFileReader
                     "RURAL" => TexasHospitalClass.Rural,
                     _ => TexasHospitalClass.Childrens,
                 };
-                if (found == TexasHospitalClass.Childrens)
-                    throw new TexasSdaFormatException("Children's hospital SDA files are not supported yet; send the file so its layout can be added.");
                 if (cls is { } c && c != found)
                     throw new TexasSdaFormatException($"Page {page} is for {found} hospitals but earlier pages are for {c} hospitals.");
                 cls = found;
@@ -191,14 +196,14 @@ public static partial class TexasSdaFileReader
             if (!LeadingIds().IsMatch(text)) continue;
 
             if (cls is null)
-                throw new TexasSdaFormatException("Hospital rows come before the title naming the hospital class (urban or rural).");
+                throw new TexasSdaFormatException("Hospital rows come before the title naming the hospital class (urban, rural or children's).");
 
             var row = ParseRow(page, segments, cls.Value, errors, discrepancies);
             if (row is not null) rows.Add(row);
         }
 
         if (cls is null)
-            throw new TexasSdaFormatException("This is not a Texas SDA file: no 'Standard Dollar Amounts for Urban/Rural Hospitals' title was found.");
+            throw new TexasSdaFormatException("This is not a Texas SDA file: no 'Standard Dollar Amounts for Urban/Rural/Children's Hospitals' title was found.");
         if (universalMean is null || effective is null)
             throw new TexasSdaFormatException("No 'Universal Mean Effective <date> - $<amount>' line was found.");
         if (errors.Count > 0)
@@ -242,7 +247,7 @@ public static partial class TexasSdaFileReader
             .ToList();
         var tpi = m.Groups["tpi"].Value;
 
-        var expected = cls == TexasHospitalClass.Urban ? 7 : 4;
+        var expected = cls == TexasHospitalClass.Urban ? 7 : 4; // rural and children's both have 4
         if (amounts.Count != expected)
         {
             errors.Add($"Page {page}, TPI {tpi}: {amounts.Count} dollar columns where the {cls} layout has {expected}.");
@@ -260,11 +265,19 @@ public static partial class TexasSdaFileReader
             for (var i = 0; i < UrbanAddOns.Length; i++) addOns[UrbanAddOns[i]] = amounts[i + 1];
             final = amounts[6];
         }
-        else
+        else if (cls == TexasHospitalClass.Rural)
         {
             // SDA, add-on, SDA with add-on, OB-GYN delivery SDA.
             baseSda = amounts[0];
             addOns["Rural Add-on"] = amounts[1];
+            final = amounts[2];
+            delivery = amounts[3];
+        }
+        else
+        {
+            // 2015 SDA, safety-net add-on, final SDA, adult delivery SDA.
+            baseSda = amounts[0];
+            addOns["Safety-Net Add-on"] = amounts[1];
             final = amounts[2];
             delivery = amounts[3];
         }
@@ -281,8 +294,12 @@ public static partial class TexasSdaFileReader
             problem = $"the columns add to {sum:0.00} but the final SDA is {final:0.00}";
         else if (final <= 0)
             problem = "the final SDA is not positive";
-        else if (delivery is { } d && d < final)
-            problem = $"the OB-GYN delivery SDA {d:0.00} is below the final SDA {final:0.00}";
+        else if (delivery is { } d && d <= 0)
+            problem = "the delivery SDA is not positive";
+        // A rural delivery SDA is the final SDA plus a delivery add-on; a
+        // children's adult delivery SDA is the urban base and is lower.
+        else if (cls == TexasHospitalClass.Rural && delivery is { } rd && rd < final)
+            problem = $"the OB-GYN delivery SDA {rd:0.00} is below the final SDA {final:0.00}";
         if (problem is not null)
         {
             discrepancies.Add(new TexasSdaDiscrepancy(page, tpi, npi, name, problem));
