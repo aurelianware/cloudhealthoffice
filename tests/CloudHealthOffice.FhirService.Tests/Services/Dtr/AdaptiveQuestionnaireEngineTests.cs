@@ -63,6 +63,31 @@ public class AdaptiveQuestionnaireEngineTests
         => response.Contained.OfType<Questionnaire>().Single().Item.Select(i => i.LinkId);
 
     [Fact]
+    public async Task Versioned_adaptive_questionnaires_carry_a_version_algorithm_sdc_2()
+    {
+        var bundle = await AdaptivePackage();
+        var form = bundle.Entry.Select(e => e.Resource).OfType<Questionnaire>().Single();
+        var draft = bundle.Entry.Select(e => e.Resource).OfType<QuestionnaireResponse>().Single();
+
+        static void HasSemver(Questionnaire q) =>
+            q.GetExtension(AdaptiveQuestionnaireEngine.VersionAlgorithmExtension)!.Value
+                .Should().BeOfType<Coding>().Which.Code.Should().Be("semver");
+
+        HasSemver(form);
+        HasSemver(draft.Contained.OfType<Questionnaire>().Single());
+
+        // A client's contained form without it gets one back from $next-question.
+        draft.Contained.OfType<Questionnaire>().Single().Extension
+            .RemoveAll(e => e.Url == AdaptiveQuestionnaireEngine.VersionAlgorithmExtension);
+        var result = _engine.Next(draft, Now);
+        HasSemver(result.Response!.Contained.OfType<Questionnaire>().Single());
+
+        draft.Extension.Should().ContainSingle(e => e.Url == QuestionnairePackageBuilder.IntendedUseExtension)
+            .Which.Value.Should().BeOfType<CodeableConcept>().Which.Coding.Should().ContainSingle(c =>
+                c.System == QuestionnairePackageBuilder.CrdCoverageInformationCodeSystem && c.Code == "withpa");
+    }
+
+    [Fact]
     public async Task The_package_carries_the_search_form_and_a_response_with_an_empty_contained_questionnaire()
     {
         var bundle = await AdaptivePackage();
