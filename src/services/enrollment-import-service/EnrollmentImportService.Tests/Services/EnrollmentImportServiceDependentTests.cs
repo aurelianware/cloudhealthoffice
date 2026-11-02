@@ -1031,6 +1031,45 @@ public partial class EnrollmentImportServiceDependentTests
     }
 
     [Fact]
+    public async Task Events_keep_the_rate_cell_inputs_each_member_sent()
+    {
+        var h = new Harness();
+        var child = Child("MICHAEL", "20150610", "021");
+        child.ReportingCategories = [new ReportingCategory { Name = "AID CODE", ReferenceQualifier = "ZZ", ReferenceValue = " 3T ", Date = "20260201" }];
+        var sub = Subscriber("SUB1", "021", child);
+        sub.ReportingCategories =
+        [
+            new ReportingCategory { Name = "RISK GROUP", ReferenceQualifier = "ZZ", ReferenceValue = "STAR-ADULT", Date = "20260201" },
+            new ReportingCategory { Name = " ", ReferenceValue = " " },
+        ];
+        sub.Coverage = [new CoverageDetail { InsuranceLineCode = "HLT", PlanCoverageDescription = "STAR BEXAR", MaintenanceType = "021", BenefitBeginDate = "20260201" }];
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "RC1", Enrollments = { sub } });
+
+        var subInputs = h.Events.AllEvents.Single(e => e.MemberId == "SUB1").Payload!["rateCellInputs"]!;
+        var category = subInputs["reportingCategories"]!.AsArray().Should().ContainSingle().Subject!;
+        (category["name"]!.GetValue<string>(), category["qualifier"]!.GetValue<string>(), category["value"]!.GetValue<string>(), category["date"]!.GetValue<string>())
+            .Should().Be(("RISK GROUP", "ZZ", "STAR-ADULT", "20260201"));
+        var line = subInputs["coverageLines"]!.AsArray().Should().ContainSingle().Subject!;
+        (line["insuranceLineCode"]!.GetValue<string>(), line["planCoverageDescription"]!.GetValue<string>(), line["benefitBeginDate"]!.GetValue<string>())
+            .Should().Be(("HLT", "STAR BEXAR", "20260201"));
+
+        var childInputs = h.Events.AllEvents.Single(e => e.MemberId == DependentId(child)).Payload!["rateCellInputs"]!;
+        childInputs["reportingCategories"]![0]!["value"]!.GetValue<string>().Should().Be("3T", "a dependent's own 2750 loop is kept, trimmed");
+    }
+
+    [Fact]
+    public async Task Events_without_categories_or_hd_lines_have_no_rate_cell_inputs()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "RC2", Enrollments = { Subscriber("SUB1", "001") } });
+
+        h.Events.AllEvents.Single(e => e.MemberId == "SUB1").Payload!.ContainsKey("rateCellInputs").Should().BeFalse();
+    }
+
+    [Fact]
     public async Task EachDependent_GetsItsOwnTransactionRowAndEvent()
     {
         var h = new Harness();
