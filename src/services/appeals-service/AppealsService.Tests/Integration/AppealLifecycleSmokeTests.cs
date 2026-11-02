@@ -251,7 +251,7 @@ public class AppealLifecycleSmokeTests : IClassFixture<AppealsWebApplicationFact
     [InlineData(LineOfBusiness.Medicare, 30)]
     [InlineData(LineOfBusiness.Medicaid, 30)]
     [InlineData(LineOfBusiness.Commercial, 30)]
-    [InlineData(LineOfBusiness.Marketplace, 30)]
+    [InlineData(LineOfBusiness.Exchange, 30)]
     public async Task Create_Standard_Defaults_TargetResponseDate_Per_LineOfBusiness(LineOfBusiness lob, int days)
     {
         _factory.Reset();

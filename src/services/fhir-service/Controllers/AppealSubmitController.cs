@@ -245,6 +245,9 @@ public sealed class AppealSubmitController : FhirControllerBase
         // lands in a future PR.
 
         var (appealType, appealLevel) = ResolveTypeAndLevel(task);
+        var coverage = AppealLineOfBusinessCodes.ToCoverage(ParseCodedExtension(task,
+            FhirAppealMapper.AppealLineOfBusinessExtensionUrl,
+            AppealLineOfBusinessCode.Commercial, LineOfBusinessAliases));
 
         return new AppealDto
         {
@@ -254,9 +257,8 @@ public sealed class AppealSubmitController : FhirControllerBase
             ProviderNPI = providerNpi!,
             AppealType = appealType,
             AppealLevel = appealLevel,
-            LineOfBusiness = ParseCodedExtension(task,
-                FhirAppealMapper.AppealLineOfBusinessExtensionUrl,
-                LineOfBusiness.Commercial, LineOfBusinessAliases),
+            LineOfBusiness = coverage.LineOfBusiness,
+            BenefitType = coverage.BenefitType,
             Status = AppealStatus.Draft,
             Source = AppealSource.ProviderPortal,
             AppealReason = task.Description ?? string.Empty,
@@ -305,17 +307,17 @@ public sealed class AppealSubmitController : FhirControllerBase
             ["fairhearing"] = AppealLevel.ExternalReview
         };
 
-    private static readonly IReadOnlyDictionary<string, LineOfBusiness> LineOfBusinessAliases =
-        new Dictionary<string, LineOfBusiness>(StringComparer.OrdinalIgnoreCase)
+    private static readonly IReadOnlyDictionary<string, AppealLineOfBusinessCode> LineOfBusinessAliases =
+        new Dictionary<string, AppealLineOfBusinessCode>(StringComparer.OrdinalIgnoreCase)
         {
-            ["medicareadvantage"] = LineOfBusiness.Medicare,
-            ["ma"] = LineOfBusiness.Medicare,
-            ["partc"] = LineOfBusiness.Medicare,
-            ["medicarepartc"] = LineOfBusiness.Medicare,
-            ["partd"] = LineOfBusiness.MedicarePartD,
-            ["pdp"] = LineOfBusiness.MedicarePartD,
-            ["exchange"] = LineOfBusiness.Marketplace,
-            ["qhp"] = LineOfBusiness.Marketplace
+            ["medicareadvantage"] = AppealLineOfBusinessCode.Medicare,
+            ["ma"] = AppealLineOfBusinessCode.Medicare,
+            ["partc"] = AppealLineOfBusinessCode.Medicare,
+            ["medicarepartc"] = AppealLineOfBusinessCode.Medicare,
+            ["partd"] = AppealLineOfBusinessCode.MedicarePartD,
+            ["pdp"] = AppealLineOfBusinessCode.MedicarePartD,
+            ["exchange"] = AppealLineOfBusinessCode.Marketplace,
+            ["qhp"] = AppealLineOfBusinessCode.Marketplace
         };
 
     /// <summary>
