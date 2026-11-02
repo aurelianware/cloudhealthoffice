@@ -70,6 +70,12 @@ public static class AppealOutbox
             AppealEventPublisher.BuildDeadlineExtendedPayload(a, audit.ActorId, correlationId)
                 with { EventId = Wire(audit), OccurredAt = audit.OccurredAt });
 
+    public static AppealEvent NoticeSent(
+        AppealEvent audit, Appeal a, AppealNoticeKind notice, DateTime sentAt, string? correlationId) =>
+        Attach(audit, AppealEventPublisher.AppealNoticeSentType,
+            AppealEventPublisher.BuildNoticeSentPayload(a, notice, sentAt, audit.ActorId, correlationId)
+                with { EventId = Wire(audit), OccurredAt = audit.OccurredAt });
+
     public static AppealEvent StatusMigrated(
         AppealEvent audit, Appeal a, string legacyStatus, AppealClosureReasonCode mapped, string? correlationId) =>
         Attach(audit, AppealEventPublisher.AppealStatusMigratedType,

@@ -31,11 +31,11 @@ public static class AgReportCatalog
     public static readonly IReadOnlyList<ReportDefinition> All =
     [
         new(CaseLog, "Appeal and grievance log",
-            "Every appeal and grievance received in [from, to): who, what level, received, due, resolved, resolution and whether it was on time.",
+            "Every appeal and grievance received in [from, to): who, what level, received, acknowledged, due, resolved, resolution, when the resolution letter went out and whether it was on time.",
             Permission,
             [From, To, Lob, Kind],
-            ["AppealId", "AppealNumber", "Kind", "Level", "GrievanceCategory", "Expedited", "MemberId", "LineOfBusiness", "ReceivedAt", "DueAt", "Extended",
-             "Status", "ResolvedAt", "Resolution", "OnTime", "ClaimNumber", "DenialReasonCode", "ProviderNpi"],
+            ["AppealId", "AppealNumber", "Kind", "Level", "GrievanceCategory", "Expedited", "MemberId", "LineOfBusiness", "ReceivedAt", "AcknowledgedAt", "DueAt", "Extended",
+             "Status", "ResolvedAt", "Resolution", "ResolutionNoticeSentAt", "OnTime", "ClaimNumber", "DenialReasonCode", "ProviderNpi"],
             "42 CFR 438.416 (Medicaid managed care grievance and appeal records)"),
         new(TimelinessByMonth, "Appeal and grievance timeliness by month",
             "For each receipt month and level: received, resolved on time, resolved late, closed without a decision, open past due or not yet due, and overturns.",
@@ -58,10 +58,10 @@ public static class AgReportCatalog
             ["Category", "Received", "ResolvedOnTime", "ResolvedLate", "ClosedWithoutDecision", "Open", "PercentOnTime"],
             "DHCS Dental APL 25-008 grievance categories (Medi-Cal Dental); other programs' and states' categories are recorded as given"),
         new(MediCalGrievanceLog, "Medi-Cal grievance log",
-            "Every grievance received in [from, to) with the grievance log fields California requires: filed, member, who received it, the complaint, the action taken, the resolution, who resolved it and when the member was told.",
+            "Every grievance received in [from, to) with the grievance log fields California requires: filed, member, who received it, when it was acknowledged, the complaint, the action taken, the resolution, who resolved it and when the member was told.",
             Permission,
             [From, To, Lob],
-            ["AppealId", "AppealNumber", "FiledAt", "MemberId", "MemberName", "ReceivedBy", "Category", "Expedited", "Description",
+            ["AppealId", "AppealNumber", "FiledAt", "MemberId", "MemberName", "ReceivedBy", "AcknowledgedAt", "Category", "Expedited", "Description",
              "ActionTaken", "Resolution", "ResolvedBy", "ResolvedAt", "MemberNotifiedAt", "Status", "OnTime"],
             "22 CCR 53858(e)(1) grievance log; 28 CCR 1300.68(b)(5); 42 CFR 438.416"),
     ];
@@ -84,11 +84,13 @@ public sealed record AgCaseRow(
     string MemberId,
     LineOfBusiness LineOfBusiness,
     DateTime ReceivedAt,
+    DateTime? AcknowledgedAt,
     DateTime? DueAt,
     bool Extended,
     AppealStatus Status,
     DateTime? ResolvedAt,
     string? Resolution,
+    DateTime? ResolutionNoticeSentAt,
     bool? OnTime,
     string? ClaimNumber,
     string? DenialReasonCode,
@@ -107,6 +109,7 @@ public sealed record AgCaGrievanceRow(
     string MemberId,
     string? MemberName,
     string? ReceivedBy,
+    DateTime? AcknowledgedAt,
     string Category,
     bool Expedited,
     string? Description,
@@ -193,9 +196,10 @@ public static class AgReportBuilder
 
     public static AgCaseRow Case(Appeal a, DateTime asOf) => new(
         a.Id, a.AppealNumber, Kind(a), LevelKey(a), IsGrievance(a) ? Category(a) : null, a.IsUrgent, a.MemberId, a.LineOfBusiness,
-        ReceivedAt(a), a.TargetResponseDate, a.DeadlineExtension is not null, a.Status,
+        ReceivedAt(a), a.AcknowledgmentSentAt, a.TargetResponseDate, a.DeadlineExtension is not null, a.Status,
         a.Status == AppealStatus.Closed ? DecidedAt(a) : null,
         a.Status == AppealStatus.Closed ? a.ClosureReasonCode?.ToString() : null,
+        a.ResolutionNoticeSentAt,
         OnTime(a, asOf),
         IsGrievance(a) || string.IsNullOrWhiteSpace(a.ClaimNumber) ? null : a.ClaimNumber,
         IsGrievance(a) ? null : a.DenialReasonCode,
@@ -205,8 +209,9 @@ public static class AgReportBuilder
     /// A grievance as a California log row. Who received it is the user who
     /// recorded it (or who submitted it, for a portal filing); who resolved
     /// it is the decision maker, else whoever closed it. The resolution is
-    /// the decision and its stated reason. The date the member was told is
-    /// not recorded yet, so it is blank.
+    /// the decision and its stated reason. The member was told when the
+    /// resolution letter went out (<see cref="Appeal.ResolutionNoticeSentAt"/>),
+    /// blank until someone records it.
     /// </summary>
     public static AgCaGrievanceRow CaGrievance(Appeal a, AgCaGrievanceText? text, DateTime asOf)
     {
@@ -219,11 +224,11 @@ public static class AgReportBuilder
         }
         return new AgCaGrievanceRow(
             a.Id, a.AppealNumber, ReceivedAt(a), a.MemberId, Blank(text?.MemberName),
-            Blank(a.CreatedBy) ?? Blank(a.SubmittedBy), Category(a), a.IsUrgent,
+            Blank(a.CreatedBy) ?? Blank(a.SubmittedBy), a.AcknowledgmentSentAt, Category(a), a.IsUrgent,
             Blank(text?.Description), Blank(text?.ActionTaken), resolution,
             closed ? Blank(a.Decision?.DecisionMaker) ?? Blank(a.ClosedBy) : null,
             closed ? DecidedAt(a) : null,
-            null, a.Status, OnTime(a, asOf));
+            a.ResolutionNoticeSentAt, a.Status, OnTime(a, asOf));
     }
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
