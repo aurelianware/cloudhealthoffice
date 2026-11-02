@@ -144,4 +144,16 @@ public class MccPlanDefaultFeeScheduleTests
             SyntheticFeeScheduleGenerator.PlanDefaultFeeScheduleId,
             SyntheticFeeScheduleGenerator.GeneratePlanDefaultSchedule().FeeScheduleId);
     }
+
+    [Fact]
+    public void RateFor_ReturnsTheSeededRate_TheCleanPaidAnswerKeyPricesFrom()
+    {
+        // The clean-paid scenario bills 99213 at $180; pricing allows the
+        // seeded rate, so the answer key must expect that rate, not billed.
+        var rate = MccPlanDefaultFeeSchedule.RateFor("99213");
+
+        Assert.Equal(85m, rate);
+        Assert.Contains(MccPlanDefaultFeeSchedule.BuildPayload().Lines,
+            l => l.ProcedureCode == "99213" && l.Rate == rate);
+    }
 }
