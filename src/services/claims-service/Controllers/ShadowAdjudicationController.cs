@@ -18,6 +18,9 @@ public class ShadowAdjudicationController : ControllerBase
 {
     private const int MaxListLimit = 1000;
 
+    /// <summary>Most results one report or CSV reads (a run holds at most MaxClaimsPerRun).</summary>
+    internal const int MaxReportResults = 50_000;
+
     private readonly IShadowAdjudicationService _service;
     private readonly IShadowAdjudicationRepository _store;
     private readonly ICurrentActor _actor;
@@ -95,5 +98,44 @@ public class ShadowAdjudicationController : ControllerBase
         if (await _store.GetRunAsync(TenantId, runId, ct) is null)
             return NotFound();
         return Ok(await _store.ListResultsAsync(TenantId, runId, kind, Math.Clamp(limit, 1, MaxListLimit), ct));
+    }
+
+    /// <summary>
+    /// The run's report: how much CHO decided, how often it agreed with the
+    /// core, money the core paid more or less than CHO would have, and the top
+    /// reasons (gap, CHO stage, denial codes, procedure, billing provider).
+    /// </summary>
+    [HttpGet("runs/{runId}/report")]
+    [RequirePermission(ClaimsPermissions.Import)]
+    [ProducesResponseType(typeof(ShadowRunReport), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ShadowRunReport>> Report(
+        string runId, [FromQuery] int top = ShadowRunReportBuilder.DefaultTopN, CancellationToken ct = default)
+    {
+        var run = await _store.GetRunAsync(TenantId, runId, ct);
+        if (run is null) return NotFound();
+        var results = await _store.ListResultsAsync(TenantId, runId, kind: null, MaxReportResults, ct);
+        return Ok(ShadowRunReportBuilder.Build(run, results, top));
+    }
+
+    /// <summary>
+    /// The run's discrepancies as CSV: one row per differing line (or per
+    /// claim when no single line differs). Set <c>includeUndecided</c> to add
+    /// the claims CHO could not decide, with the missing input.
+    /// </summary>
+    [HttpGet("runs/{runId}/discrepancies.csv")]
+    [RequirePermission(ClaimsPermissions.Import)]
+    [Produces("text/csv")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DiscrepanciesCsv(
+        string runId, [FromQuery] bool includeUndecided = false, CancellationToken ct = default)
+    {
+        var run = await _store.GetRunAsync(TenantId, runId, ct);
+        if (run is null) return NotFound();
+        var results = await _store.ListResultsAsync(TenantId, runId, kind: null, MaxReportResults, ct);
+        var csv = ShadowDiscrepancyCsv.Write(results, includeUndecided);
+        return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv; charset=utf-8",
+            $"shadow-adjudication-{run.Id}.csv");
     }
 }
