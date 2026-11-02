@@ -61,8 +61,13 @@ public class EligibilityInquiry
     public DateTime? CompletedDate { get; set; }
     public string? ResponseId { get; set; }
     
-    // Line of Business
-    [JsonConverter(typeof(JsonStringEnumConverter))]
+    /// <summary>
+    /// The shared line of business, stored by name. Inquiries stored before the
+    /// consolidation hold eligibility-service's old 0-5 numbers; they read correctly
+    /// (Program.cs registers the legacy serializer) and are rewritten at startup by
+    /// <c>EligibilityLineOfBusinessMigrationHostedService</c>.
+    /// </summary>
+    [JsonConverter(typeof(LineOfBusinessJsonConverter))]
     public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
 }
 
@@ -194,12 +199,3 @@ public enum EligibilityInquiryStatus
     Rejected
 }
 
-public enum LineOfBusiness
-{
-    Commercial,
-    Medicare,
-    Medicaid,
-    Exchange,
-    TRICARE,
-    VA
-}
