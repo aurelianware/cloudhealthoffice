@@ -168,7 +168,7 @@ The **Exists** column says what can be built on today: a source endpoint, an exi
 | Denials and overturns | Medical director | Denials by reason, peer-to-peer outcome, overturned on appeal |
 | A&G timeliness | A&G manager, compliance | Cases by level with received, acknowledged, resolved, within standard |
 | Grievance categories | Quality, compliance | Grievances by category and resolution |
-| Medi-Cal grievance log (`ag-grievance-log-medi-cal`) | Compliance | Each grievance with the 22 CCR 53858(e) log fields: filed, member name, received by, complaint, action taken, resolution, resolved by, member notified. Carries PHI; every row is in the record access log. Member-notified date is blank until CHO records when resolution letters are sent. |
+| Medi-Cal grievance log (`ag-grievance-log-medi-cal`) | Compliance | Each grievance with the 22 CCR 53858(e) log fields: filed, member name, received by, complaint, action taken, resolution, resolved by, member notified (when the resolution letter went out), plus when the acknowledgment letter went out. Carries PHI; every row is in the record access log. Letter dates are recorded with `POST /api/appeals/{id}/notices` and are blank until someone records them. |
 
 ### 4.8 Members and enrollment — `reports:enrollment` (new)
 

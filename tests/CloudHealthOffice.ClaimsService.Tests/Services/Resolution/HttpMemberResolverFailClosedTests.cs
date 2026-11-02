@@ -48,6 +48,19 @@ public class HttpMemberResolverFailClosedTests
     }
 
     [Fact]
+    public async Task AidCodes_AreReadWithTheirDates()
+    {
+        const string body =
+            """{"memberId":"M1","aidCodes":[{"code":"S1","effectiveDate":"2024-01-01T00:00:00Z","endDate":"2027-07-31T00:00:00Z"},{"code":"","effectiveDate":"2024-01-01"}]}""";
+        var member = await Resolver(new Stub(() => Json(HttpStatusCode.OK, body))).GetMemberAsync("t1", "M1");
+
+        member!.AidCodes.Should().ContainSingle();
+        member.AidCodes[0].Code.Should().Be("S1");
+        member.AidCodes[0].ActiveOn(new DateTime(2027, 7, 31)).Should().BeTrue();
+        member.AidCodes[0].ActiveOn(new DateTime(2027, 8, 1)).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task NotFound_IsADefinitiveNull()
     {
         (await Resolver(new Stub(() => new HttpResponseMessage(HttpStatusCode.NotFound))).GetMemberAsync("t1", "M1"))

@@ -1,3 +1,4 @@
+using CloudHealthOffice.FeeScheduleEngine.Domain;
 using CloudHealthOffice.FeeScheduleEngine.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -83,6 +84,23 @@ public class FeeScheduleRepositoryMongo : IFeeScheduleRepository, IProviderContr
         var sort = Builders<FeeSchedule>.Sort.Descending(x => x.EffectiveDate);
 
         return await _scheduleCollection.Find(filter).Sort(sort).FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<FeeSchedule>> GetSupplementalSchedulesAsync(
+        string tenantId, IReadOnlyCollection<string> planKeys, DateTime serviceDate, CancellationToken ct = default)
+    {
+        var keys = planKeys.Where(k => !string.IsNullOrWhiteSpace(k)).Distinct(StringComparer.Ordinal).ToList();
+        if (keys.Count == 0) return Array.Empty<FeeSchedule>();
+
+        var filter = Builders<FeeSchedule>.Filter.And(
+            Builders<FeeSchedule>.Filter.Eq(x => x.TenantId, tenantId),
+            Builders<FeeSchedule>.Filter.Eq(x => x.Type, FeeScheduleType.Supplemental),
+            Builders<FeeSchedule>.Filter.AnyIn(x => x.SupplementalForPlanIds, keys),
+            Builders<FeeSchedule>.Filter.Lte(x => x.EffectiveDate, serviceDate));
+
+        return await _scheduleCollection.Find(filter)
+            .Sort(Builders<FeeSchedule>.Sort.Ascending(x => x.EffectiveDate))
+            .ToListAsync(ct);
     }
 
     public async Task<FeeScheduleLine?> GetLineAsync(

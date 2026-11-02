@@ -89,6 +89,25 @@ internal sealed class InMemoryEnrollmentEventRepository : IEnrollmentEventReposi
         }
     }
 
+    public Task<IReadOnlyList<MemberRateCellHistory>> ListRateCellInputsAsync(
+        string tenantId, string? afterMemberId, int memberLimit, CancellationToken ct = default)
+    {
+        lock (_lock)
+        {
+            IReadOnlyList<MemberRateCellHistory> page = _events
+                .Where(e => e.TenantId == tenantId && e.RateCellInputs != null
+                            && (afterMemberId == null || string.CompareOrdinal(e.MemberId, afterMemberId) > 0))
+                .GroupBy(e => e.MemberId)
+                .OrderBy(g => g.Key, StringComparer.Ordinal)
+                .Take(memberLimit)
+                .Select(g => new MemberRateCellHistory(g.Key, g.OrderBy(e => e.Version)
+                    .Select(e => new RateCellSnapshot(e.Version, e.OccurredAt, e.EventDate, e.EventType, e.MaintenanceType, e.RateCellInputs!))
+                    .ToList()))
+                .ToList();
+            return Task.FromResult(page);
+        }
+    }
+
     private static EnrollmentEvent Clone(EnrollmentEvent src) => new()
     {
         Id = src.Id,
@@ -110,6 +129,7 @@ internal sealed class InMemoryEnrollmentEventRepository : IEnrollmentEventReposi
         ActorId = src.ActorId,
         CorrelationId = src.CorrelationId,
         Payload = src.Payload?.DeepClone() as System.Text.Json.Nodes.JsonObject,
+        RateCellInputs = src.RateCellInputs,
         RawSegment = src.RawSegment
     };
 }

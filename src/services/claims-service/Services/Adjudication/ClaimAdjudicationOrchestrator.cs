@@ -35,6 +35,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         Stages.TimelyFilingStage.StageName,
         Stages.DuplicateClaimStage.StageName,
         Stages.ProviderIntegrityStage.StageName,
+        Stages.StateOnlyAdultDentalStage.StageName,
         Stages.NetworkCredentialingStage.StageName,
         Stages.InpatientGroupingStage.StageName,
         Stages.PricingStage.StageName,
@@ -284,6 +285,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     {
         Stages.DuplicateClaimStage.StageName,
         Stages.ProviderIntegrityStage.StageName,
+        Stages.StateOnlyAdultDentalStage.StageName,
         Stages.NetworkCredentialingStage.StageName,
         Stages.NcciEditsStage.StageName,
         Stages.ScrubbingStage.StageName,

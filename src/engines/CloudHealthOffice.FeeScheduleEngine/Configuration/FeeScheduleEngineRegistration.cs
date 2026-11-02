@@ -50,6 +50,7 @@ public class FeeScheduleEngineBuilder
         _services.AddScoped<IProviderContractRepository>(CreateFeeScheduleCache<FeeScheduleRepositoryMongo>);
         _services.AddScoped<Medicaid.IMedicaidDrgRateRepository, Medicaid.MedicaidDrgRateRepositoryMongo>();
         _services.AddScoped<Medicaid.IMedicaidInterimRateRepository, Medicaid.MedicaidInterimRateRepositoryMongo>();
+        _services.AddScoped<Medicaid.IMedicaidPsychiatricPerDiemRepository, Medicaid.MedicaidPsychiatricPerDiemRepositoryMongo>();
         return this;
     }
 

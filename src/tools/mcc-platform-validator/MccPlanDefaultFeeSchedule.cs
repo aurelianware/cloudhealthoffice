@@ -52,6 +52,16 @@ public static class MccPlanDefaultFeeSchedule
     }
 
     /// <summary>
+    /// The seeded flat rate for <paramref name="procedureCode"/> (no modifier):
+    /// what pricing allows for one unit of it on the validation plan.
+    /// </summary>
+    public static decimal RateFor(string procedureCode)
+        => SyntheticFeeScheduleGenerator.GeneratePlanDefaultSchedule(EffectiveDate).Lines
+            .First(l => string.Equals(l.ProcedureCode, procedureCode, StringComparison.OrdinalIgnoreCase)
+                        && string.IsNullOrEmpty(l.Modifier))
+            .AllowedAmount;
+
+    /// <summary>
     /// The line charge to submit: the line total, charge × units (X12 837 SV102 /
     /// SV203). The generator's <see cref="ClaimLine.ChargeAmount"/> is per unit (its
     /// claim total is Σ charge × units), and pricing treats the submitted charge as

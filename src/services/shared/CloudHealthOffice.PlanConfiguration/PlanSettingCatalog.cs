@@ -257,6 +257,33 @@ public static class PlanSettings
         ChangeControl = ChangeControl.TwoPersonApproval,
     };
 
+    /// <summary>
+    /// DHCS APL 26-009: from July 1, 2027, Medi-Cal members 19 and older who are
+    /// not eligible for federally funded full-scope Medi-Cal lose non-emergency
+    /// dental (<c>StateOnlyAdultDentalRule</c> in CloudHealthOffice.Infrastructure).
+    /// JSON: <c>"off"</c> (the default), or
+    /// <c>{"mode":"CarveOut"|"EmergencyOnly","stateOnlyAidCodes":[...],"exceptionAidCodes":[...],"emergencyProcedureCodes":[...]}</c>.
+    /// A Dental Managed Care Plan uses CarveOut: the members move to Medi-Cal
+    /// Dental FFS and the plan pays nothing for them. The aid codes are the
+    /// plan's, from DHCS's aid code master chart. Set at the line of business
+    /// or the benefit plan of a Medi-Cal Dental program.
+    /// </summary>
+    public static readonly SettingDefinition MediCalStateOnlyAdultDental = new()
+    {
+        Key = "eligibility.mediCal.stateOnlyAdultDental",
+        Type = SettingType.Json,
+        Owner = "claims-service",
+        Description = "DHCS APL 26-009: how claims treat dental for members 19+ not eligible for federally funded full-scope Medi-Cal from July 1, 2027 (off, CarveOut or EmergencyOnly, with the aid codes).",
+        Default = "\"off\"",
+        AllowedLevels = new HashSet<SettingLevel>
+        {
+            SettingLevel.Tenant,
+            SettingLevel.LineOfBusiness,
+            SettingLevel.BenefitPlan,
+        },
+        ChangeControl = ChangeControl.ReasonRequired,
+    };
+
     public static IReadOnlyList<SettingDefinition> All { get; } =
     [
         OrphanGraceDays,
@@ -266,5 +293,6 @@ public static class PlanSettings
         MedicaidDrgMethod,
         PaymentEnforceSeparationOfDuties,
         PersonalRepresentativeRequireSecondUserActivation,
+        MediCalStateOnlyAdultDental,
     ];
 }

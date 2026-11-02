@@ -107,6 +107,7 @@ public class MccFixtureIsolationTests
         retroAdd.ClaimId = "MCC-E-0000013";
         retroAdd.Member.MemberId = "MBR-SHARED";
         retroAdd.Member.SubscriberId = "SUB-SHARED";
+        retroAdd.Member.Relationship = "Self";
 
         var runId = Guid.Parse("906f49d1-18cc-4d19-9c77-69822ad6d88b");
 
@@ -153,6 +154,7 @@ public class MccFixtureIsolationTests
         // scenario allowlist that would otherwise need updating by hand.
         var generator = new EdgeCaseClaimGenerator(new InMemoryReferenceDataProvider());
         var subrogation = generator.Generate(2, nameof(EdgeCaseScenario.SubrogationWorkersComp), new Random(43));
+        subrogation.Member.Relationship = "Self";
         var runId = Guid.Parse("906f49d1-18cc-4d19-9c77-69822ad6d88b");
 
         MccFixtureIsolation.IsolateValidationMembers([subrogation], seed: 42, runId);
@@ -160,4 +162,34 @@ public class MccFixtureIsolationTests
         Assert.Equal("MCCV906F49D1E0000002", subrogation.Member.MemberId);
         Assert.Equal(subrogation.Member.MemberId, subrogation.Member.SubscriberId);
     }
+
+    [Theory]
+    [InlineData("Spouse")]
+    [InlineData("Child")]
+    public void IsolateValidationMembers_KeepsADependentsSubscriberIdDistinct(string relationship)
+    {
+        // A dependent whose subscriber id equals its own member id looks like
+        // a lost dependent, and claims-service pends its PA lookup PAUNAVAIL
+        // (the first GKE run pended all 47 PA-scored claims that way).
+        var generator = new EdgeCaseClaimGenerator(new InMemoryReferenceDataProvider());
+        var claim = generator.Generate(53, nameof(EdgeCaseScenario.PriorAuthRequired_NoAuth), new Random(42));
+        claim.ClaimId = "MCC-E-0000053";
+        claim.Member.Relationship = relationship;
+        var runId = Guid.Parse("906f49d1-18cc-4d19-9c77-69822ad6d88b");
+
+        MccFixtureIsolation.IsolateValidationMembers([claim], seed: 42, runId);
+
+        Assert.Equal("MCCV906F49D1E0000053", claim.Member.MemberId);
+        Assert.Equal("MCCV906F49D1E0000053S", claim.Member.SubscriberId);
+        Assert.NotEqual(MccClaimRelationship.SelfCode, MccClaimRelationship.X12Code(claim.Member));
+    }
+
+    [Theory]
+    [InlineData("Self", "18", "18")]
+    [InlineData("Spouse", "18", "01")]
+    [InlineData("Child", "18", "19")]
+    [InlineData("", "19", "19")]
+    [InlineData("Other", "18", "G8")]
+    public void X12Code_SendsTheCodeClaimsServiceReads_WordFirst(string word, string code, string expected)
+        => Assert.Equal(expected, MccClaimRelationship.X12Code(new SyntheticMember { Relationship = word, RelationshipCode = code }));
 }

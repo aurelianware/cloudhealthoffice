@@ -136,6 +136,44 @@ Lines price at the Basic Rate.
 
 A synthetic sample is in [samples/fee-schedules](samples/fee-schedules/state-medicaid-physician-sample.csv).
 
+### State supplemental payments (Medi-Cal Dental Prop 56)
+
+A `type=Supplemental` schedule is an add-on paid **on top of** a line's allowed amount for the
+procedures it lists, such as the Proposition 56 supplemental payments Medi-Cal Dental Managed
+Care Plans pay providers over the Schedule of Maximum Allowances. It is never a line's base rate.
+The engine reports it per line as `SupplementalAmount` (with `SupplementalPayments` naming the
+schedule), apart from `AllowedAmount`: it is not part of the contractual adjustment, cost sharing
+or lesser-of-billed, and claims record it on the adjudication result (`SupplementalPayments`).
+
+| Parameter | Meaning |
+|---|---|
+| `supplementalForPlan` | Required, repeatable: the plan code(s) or version id(s) whose claims it pays. `planId` is refused. |
+| `effectiveDate` / `termDate` | The dates of service it pays for: on or after `effectiveDate`, before `termDate`. |
+| `claimsRunoutMonths` | A claim must be **received** within this many months of the date of service to be paid it. |
+| `discontinuedNotice` | Text for the provider and member EOB on a listed procedure on or after `termDate`. |
+
+The CSV is one row per CDT code with the add-on amount; name the amount column with `rateColumn`.
+
+**APL 26-008.** Prop 56 dental supplemental payments end for dates of service on or after
+July 1, 2027, with a one-year claims runout (claims for June 30, 2027 and earlier must be
+received within a year of the date of service, so by June 30, 2028). Load the DHCS list with
+the end date and runout, or re-import the list you loaded with `termDate` and `replace=true`:
+
+```bash
+curl -X POST "$CHO/api/v1/fee-schedules/import/csv?name=Medi-Cal%20Dental%20Prop%2056&effectiveDate=2017-07-01&termDate=2027-07-01&type=Supplemental&jurisdiction=CA&sourceId=ca-dhcs-prop56-dental&supplementalForPlan=$PLAN_CODE&claimsRunoutMonths=12&discontinuedNotice=Prop%2056%20supplemental%20payments%20are%20discontinued%20for%20dates%20of%20service%20on%20or%20after%20July%201%2C%202027.&rateColumn=Supplemental%20Amount&replace=true" \
+  -H "Authorization: Bearer $TOKEN" -H "X-Tenant-ID: $TENANT" -F "file=@prop56-dental.csv"
+```
+
+From July 1, 2027 a listed procedure pays no supplemental and the line carries the APL's notice
+in `PaymentNotices`, which claims keep on the adjudication result for the EOB. A claim received
+after the runout pays no supplemental and says why. A line priced with no received date (an
+estimate) is paid the supplemental with a warning that the runout was not checked.
+
+Not done yet: paying the supplemental out (the payment run and the 835 do not add it to the
+check), printing `PaymentNotices` on the member EOB and the 835, and the quarterly Prop 56
+deliverable (APL 26-004) built from the recorded payments. The DHCS code list and amounts are
+not in this repository; the plan loads the list DHCS sent it.
+
 ## Which public source fits which plan
 
 | Plan | Default fee schedule (uncontracted providers) | Public source | Load path |

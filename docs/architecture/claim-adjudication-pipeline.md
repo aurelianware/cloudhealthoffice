@@ -117,6 +117,7 @@ POST /api/v1/claims                                     (capability 5.3)
    │       110  TimelyFilingStage            ★ real (added 10/26) │
    │       120  DuplicateClaimStage          ★ real               │
    │       150  ProviderIntegrityStage       ★ real (added 7/26)  │
+   │       160  StateOnlyAdultDentalStage    ★ real (APL 26-009)  │
    │       200  NetworkCredentialingStage    ★ real (5.6)         │
    │       240  InpatientGroupingStage       ★ real (ADR 024 §8)  │
    │       250  PricingStage                 ★ real (added 10/26) │
@@ -647,6 +648,7 @@ to `AdjudicationResult.RemarkCodes` (835 MOA/MIA). Constants live in
 | NetworkCredentialing credentialing deny | B7 | — |
 | ProviderIntegrity exclusion | gate's code, else B7 | — |
 | TimelyFiling (every line past the filing limit) | 29 | — |
+| StateOnlyAdultDental carve-out (APL 26-009; bill Medi-Cal Dental FFS) | 109 | — |
 | Duplicate | 18 | — |
 | BenefitCalculation missing / non-GUID plan id, engine threw (Reject) | 16 | MA130 |
 | BenefitCalculation eligibility / prior auth | 27 / 197 | — |

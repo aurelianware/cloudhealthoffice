@@ -330,6 +330,29 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         }
     }
 
+    public Task<Appeal> RecordNoticeSentAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
+    {
+        lock (_sync)
+        {
+            var key = Key(appeal.TenantId, appeal.Id);
+            if (!_appeals.TryGetValue(key, out var current))
+                throw new InvalidOperationException($"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.");
+            if (IsReplay(current, auditEvent))
+            {
+                AppendEventInternal(auditEvent);
+                return Task.FromResult(Clone(current));
+            }
+            current.AcknowledgmentSentAt = appeal.AcknowledgmentSentAt;
+            current.ResolutionNoticeSentAt = appeal.ResolutionNoticeSentAt;
+            current.UpdatedAt = DateTime.UtcNow;
+            current.UpdatedBy = appeal.UpdatedBy;
+            AddOutbox(current, auditEvent);
+            _appeals[key] = current;
+            AppendEventInternal(auditEvent);
+            return Task.FromResult(Clone(current));
+        }
+    }
+
     public Task<AppealNoteLookup?> GetNoteByIdAsync(string tenantId, string noteId, CancellationToken ct = default)
     {
         lock (_sync)
@@ -465,6 +488,8 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         ProgramId = a.ProgramId,
         DeadlineExtension = a.DeadlineExtension == null ? null : CloneExtension(a.DeadlineExtension),
         DecisionDate = a.DecisionDate,
+        AcknowledgmentSentAt = a.AcknowledgmentSentAt,
+        ResolutionNoticeSentAt = a.ResolutionNoticeSentAt,
         SubmittedBy = a.SubmittedBy,
         Notes = a.Notes.Select(CloneNote).ToList(),
         AttachmentControlNumbers = new List<string>(a.AttachmentControlNumbers),

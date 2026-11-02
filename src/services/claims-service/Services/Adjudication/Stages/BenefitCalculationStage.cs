@@ -1147,6 +1147,9 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             PaymentDate = existing.PaymentDate,
             // Decided at 276, before benefits; keep it on the rebuilt result.
             ThirdPartyLiability = existing.ThirdPartyLiability,
+            // Worked out by the pricing stage, before benefits.
+            SupplementalPayments = existing.SupplementalPayments,
+            PaymentNotices = existing.PaymentNotices,
         };
 
         // Line CAS is load-bearing downstream: ClaimEventPublisher derives
