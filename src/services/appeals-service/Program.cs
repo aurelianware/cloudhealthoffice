@@ -90,6 +90,14 @@ builder.Services.AddSingleton<IAppealRepository>(sp => sp.GetRequiredService<App
 builder.Services.AddSingleton<IAppealOutboxStore>(sp => sp.GetRequiredService<AppealRepositoryMongo>());
 // Texas HHSC reporting codes per case (UMCM 5.24.5 / 5.24.6 text files).
 builder.Services.AddSingleton<ITexasAgCodesStore, TexasAgCodesStoreMongo>();
+// Generated state files are kept in the document catalog (document-service).
+builder.Services.AddHttpClient(HttpStateFileCatalog.ClientName, client =>
+{
+    client.BaseAddress = new Uri((builder.Configuration["Services:DocumentService"]
+        ?? HttpStateFileCatalog.DefaultBaseUrl).TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
+builder.Services.AddSingleton<IStateFileCatalog, HttpStateFileCatalog>();
 
 // Registration order matters for IHostedService.StartAsync sequencing:
 // migration runs first so the index initializer sees a consistent

@@ -4,6 +4,7 @@ using AppealsService.Middleware;
 using AppealsService.Reports;
 using AppealsService.Reports.Texas;
 using AppealsService.Repositories;
+using AppealsService.Services;
 using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Reporting;
 using CloudHealthOffice.Infrastructure.Security;
@@ -29,14 +30,19 @@ public class TexasAgReportsController : ControllerBase
 
     private readonly IAppealRepository _appeals;
     private readonly ITexasAgCodesStore _codes;
+    private readonly IStateFileCatalog _catalog;
     private readonly ICurrentActor _actor;
+    private readonly ILogger<TexasAgReportsController> _logger;
     private readonly TimeProvider _clock;
 
-    public TexasAgReportsController(IAppealRepository appeals, ITexasAgCodesStore codes, ICurrentActor actor, TimeProvider? clock = null)
+    public TexasAgReportsController(IAppealRepository appeals, ITexasAgCodesStore codes, IStateFileCatalog catalog, ICurrentActor actor,
+        ILogger<TexasAgReportsController> logger, TimeProvider? clock = null)
     {
         _appeals = appeals;
         _codes = codes;
+        _catalog = catalog;
         _actor = actor;
+        _logger = logger;
         _clock = clock ?? TimeProvider.System;
     }
 
@@ -78,7 +84,10 @@ public class TexasAgReportsController : ControllerBase
     /// Builds one month's file for one program. <c>format=txt</c> answers the
     /// fixed-width file to upload to TexConnect (with the count of cases
     /// left out in <c>X-Report-Problems</c>); otherwise JSON lists the cases
-    /// in it and the problems that kept others out.
+    /// in it and the problems that kept others out. Every txt file handed out
+    /// is first kept in the document catalog (its id in <c>X-Document-Id</c>):
+    /// if it can't be kept, it isn't handed out (503). A blank file (no cases)
+    /// has nothing to keep.
     /// </summary>
     [HttpGet("reports/texas/{file}")]
     [RequirePermission(AgReportCatalog.Permission)]
@@ -120,9 +129,36 @@ public class TexasAgReportsController : ControllerBase
 
         // The access log reads the cases from here (a file is not an object it can inspect).
         HttpContext.Items[StandardReports.AuditedRowsItemsKey] = result.Items;
-        Response.Headers["X-Report-Problems"] = result.Problems.Count.ToString(CultureInfo.InvariantCulture);
         var name = $"tx-{file}-{request.Program}-{request.Year:0000}{request.Month:00}.txt";
-        return File(Encoding.ASCII.GetBytes(result.Text), "text/plain", name);
+        var bytes = Encoding.ASCII.GetBytes(result.Text);
+        if (bytes.Length > 0)
+        {
+            var now = _clock.GetUtcNow().UtcDateTime;
+            var runId = $"tx-{file}-{request.Program}-{request.Year:0000}{request.Month:00}-{now:yyyyMMdd'T'HHmmss'Z'}-{Guid.NewGuid():N}"[..^24];
+            try
+            {
+                var stored = await _catalog.StoreAsync(new StateFileUpload(
+                    TenantId, _actor.UserId, runId,
+                    $"Texas HHSC {(kind == TexasAgFile.MemberAppeals ? "member appeals (UMCM 5.24.6)" : "complaints (UMCM 5.24.5)")} {request.Year:0000}-{request.Month:00}, program {request.Program}",
+                    bytes, name, "TX",
+                    new Dictionary<string, string>
+                    {
+                        ["Report"] = file, ["Month"] = $"{request.Year:0000}-{request.Month:00}", ["Program"] = request.Program,
+                        ["Rows"] = result.Items.Count.ToString(CultureInfo.InvariantCulture),
+                    }), ct);
+                Response.Headers["X-Document-Id"] = stored.DocumentId;
+                Response.Headers["X-State-Report-Run"] = runId;
+            }
+            catch (StateFileCatalogException ex)
+            {
+                _logger.LogError(ex, "Texas {File} file not kept in the document catalog; not handed out", file);
+                return Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
+                    title: "The file could not be kept in the document catalog, so it was not handed out. Try again shortly.");
+            }
+        }
+
+        Response.Headers["X-Report-Problems"] = result.Problems.Count.ToString(CultureInfo.InvariantCulture);
+        return File(bytes, "text/plain", name);
     }
 }
 
