@@ -22,6 +22,12 @@ builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // Add services
+// Inquiries store their line of business by its shared name; registered before any
+// class map is built. An inquiry still holding eligibility-service's old 0-5 number reads
+// as that old value until EligibilityLineOfBusinessMigrationHostedService rewrites it.
+MongoDB.Bson.Serialization.BsonSerializer.TryRegisterSerializer(
+    EligibilityService.HostedServices.EligibilityLineOfBusinessMigrationHostedService.Serializer);
+
 builder.Services.AddControllers().AddCloudHealthOfficeJsonOptions();
 
 builder.Services.AddEndpointsApiExplorer();
@@ -58,6 +64,9 @@ if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvide
 }
 
 builder.Services.AddScoped<IEligibilityRepository, EligibilityRepositoryMongo>();
+// Ahead of the other hosted services: rewrites inquiries stored with the old 0-5
+// line-of-business numbers to the shared names, once.
+builder.Services.AddHostedService<EligibilityService.HostedServices.EligibilityLineOfBusinessMigrationHostedService>();
 
 // HTTP Client for service calls (shared by adapters, factory, and eligibility service)
 builder.Services.AddHttpClient("EligibilityDefault")
