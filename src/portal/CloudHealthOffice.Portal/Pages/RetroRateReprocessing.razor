@@ -497,6 +497,9 @@
         "SkipRecoupmentNotOptedIn" => "Skip (plan does not recoup)",
         "SkipUndecided" => "Skip (needs review)",
         "SkipNotYetPaid" => "Skip (not paid yet)",
+        "SkipReportOnly" => "Skip (report only plan)",
+        "SkipOutsideLookback" => "Skip (outside lookback)",
+        "SkipBelowMinimum" => "Skip (below minimum)",
         _ => action,
     };
 
@@ -505,6 +508,9 @@
         "SkipRecoupmentNotOptedIn" => "overpaid claim(s) left as paid: the plan has not opted in to recoupment.",
         "SkipUndecided" => "claim(s) left alone: the re-price pended or denied and needs a person.",
         "SkipNotYetPaid" => "claim(s) left alone: approved but not paid yet. Measure again once they are paid.",
+        "SkipReportOnly" => "claim(s) reported only: the plan settles these rate changes outside claims.",
+        "SkipOutsideLookback" => "claim(s) left as paid: the date of service is older than the plan's lookback.",
+        "SkipBelowMinimum" => "claim(s) left as paid: the difference is below the plan's minimum adjustment.",
         _ => $"claim(s) skipped ({action}).",
     };
 
