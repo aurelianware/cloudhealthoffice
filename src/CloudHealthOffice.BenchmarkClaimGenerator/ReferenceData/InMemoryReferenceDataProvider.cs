@@ -18,6 +18,29 @@ public class InMemoryReferenceDataProvider : IReferenceDataProvider
         "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"
     };
 
+    // A real city for each state, so a generated address never reads
+    // "Dallas, NM". Looked up from the state already drawn, with no extra
+    // random draw, so a seed still produces the same claims and answer key.
+    private static readonly Dictionary<string, string> CityByState = new(StringComparer.Ordinal)
+    {
+        ["AL"] = "Birmingham", ["AK"] = "Anchorage", ["AZ"] = "Phoenix", ["AR"] = "Little Rock",
+        ["CA"] = "Los Angeles", ["CO"] = "Denver", ["CT"] = "Hartford", ["DE"] = "Wilmington",
+        ["FL"] = "Jacksonville", ["GA"] = "Atlanta", ["HI"] = "Honolulu", ["ID"] = "Boise",
+        ["IL"] = "Chicago", ["IN"] = "Indianapolis", ["IA"] = "Des Moines", ["KS"] = "Wichita",
+        ["KY"] = "Louisville", ["LA"] = "New Orleans", ["ME"] = "Portland", ["MD"] = "Baltimore",
+        ["MA"] = "Boston", ["MI"] = "Detroit", ["MN"] = "Minneapolis", ["MS"] = "Jackson",
+        ["MO"] = "Kansas City", ["MT"] = "Billings", ["NE"] = "Omaha", ["NV"] = "Las Vegas",
+        ["NH"] = "Manchester", ["NJ"] = "Newark", ["NM"] = "Albuquerque", ["NY"] = "New York",
+        ["NC"] = "Charlotte", ["ND"] = "Fargo", ["OH"] = "Columbus", ["OK"] = "Oklahoma City",
+        ["OR"] = "Portland", ["PA"] = "Philadelphia", ["RI"] = "Providence", ["SC"] = "Charleston",
+        ["SD"] = "Sioux Falls", ["TN"] = "Nashville", ["TX"] = "Dallas", ["UT"] = "Salt Lake City",
+        ["VT"] = "Burlington", ["VA"] = "Virginia Beach", ["WA"] = "Seattle", ["WV"] = "Charleston",
+        ["WI"] = "Milwaukee", ["WY"] = "Cheyenne",
+    };
+
+    private static string CityFor(string state)
+        => CityByState.TryGetValue(state, out var city) ? city : "Dallas";
+
     private static readonly string[] FirstNames =
     {
         "James", "Mary", "Robert", "Patricia", "John", "Jennifer", "Michael", "Linda",
@@ -234,7 +257,7 @@ public class InMemoryReferenceDataProvider : IReferenceDataProvider
             LineOfBusiness = "STAR",
             GroupNumber = $"MCC-GRP-{random.Next(1, 100):D3}",
             Address = $"{random.Next(100, 9999)} Main St",
-            City = "Dallas",
+            City = CityFor(state),
             State = state,
             ZipCode = $"{random.Next(10000, 99999)}"
         };
@@ -260,7 +283,7 @@ public class InMemoryReferenceDataProvider : IReferenceDataProvider
             NetworkStatus = isParticipating ? "InNetwork" : "OutOfNetwork",
             CredentialingStatus = isParticipating ? "Active" : "Expired",
             Address = $"{random.Next(100, 9999)} Medical Dr",
-            City = "Dallas",
+            City = CityFor(state),
             State = state,
             ZipCode = $"{random.Next(10000, 99999)}",
             EffectiveDate = DateTime.Today.AddYears(-2),
