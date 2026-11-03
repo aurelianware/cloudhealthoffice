@@ -45,6 +45,8 @@ elif args[:2] == ["get", "deployments"]:
     print("")
 elif args[:2] == ["get", "pods"]:
     print("")
+elif args[:1] == ["exec"] and "db.hello().isWritablePrimary" in args:
+    print("true")
 elif args[:1] == ["create"] and "--dry-run=client" in args:
     # kubectl create ... --dry-run=client -o yaml, as JSON (valid YAML).
     kind, rest = args[1], args[2:]
@@ -247,6 +249,18 @@ def test_hosted_deploy_installs_the_hosted_stack(stubs):
     mongo = next(d for d in docs if d.get("kind") == "StatefulSet" and d["metadata"]["name"] == "mongodb")
     args = mongo["spec"]["template"]["spec"]["containers"][0]["args"]
     assert args[args.index("--tlsMode") + 1] == "requireTLS"
+    # Single-node replica set rs0 (coverage writes use transactions), with a
+    # keyfile copied to uid 999 / mode 0400 by an init container.
+    assert args[args.index("--replSet") + 1] == "rs0"
+    assert args[args.index("--keyFile") + 1] == "/etc/mongo-keyfile/keyfile"
+    mongo_pod = mongo["spec"]["template"]["spec"]
+    assert [c["name"] for c in mongo_pod["initContainers"]] == ["mongo-keyfile"]
+    assert "chmod 0400" in mongo_pod["initContainers"][0]["command"][-1]
+    volumes = {v["name"]: v for v in mongo_pod["volumes"]}
+    assert volumes["keyfile-src"]["secret"]["secretName"] == "mongodb-keyfile"
+    assert any(d.get("kind") == "Secret" and d["metadata"]["name"] == "mongodb-keyfile" for d in docs)
+    execs = " ".join(c["args"][-1] for c in calls(stubs) if c["tool"] == "kubectl" and c["args"][:1] == ["exec"])
+    assert "rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongodb.cloudhealthoffice.svc.cluster.local:27017' }] })" in execs
     assert mongo["spec"]["volumeClaimTemplates"][0]["spec"]["storageClassName"] == "cho-pd-cmek"
 
     deployments = {d["metadata"]["name"]: d for d in docs if d.get("kind") == "Deployment"}
