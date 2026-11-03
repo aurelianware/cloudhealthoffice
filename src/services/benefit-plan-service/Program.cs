@@ -224,8 +224,13 @@ builder.Services.AddScoped<CachingServiceCategoryMappingRepository>(sp =>
     var inner = sp.GetRequiredService<ChoServiceCategoryMappingRepositoryMongo>();
     return new CachingServiceCategoryMappingRepository(inner, inner, inner, cache, options);
 });
+// The resolver's read seam: the cache, falling back to the system-default
+// bundle for a tenant with no tenant-default mappings of its own.
 builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IServiceCategoryMappingRepository>(
-    sp => sp.GetRequiredService<CachingServiceCategoryMappingRepository>());
+    sp => new SystemDefaultFallbackMappingRepository(
+        sp.GetRequiredService<CachingServiceCategoryMappingRepository>(),
+        sp.GetRequiredService<SystemDefaultMappingSeeder>(),
+        sp.GetRequiredService<IOptionsMonitor<ServiceCategoryMappingOptions>>()));
 builder.Services.AddScoped<IServiceCategoryMappingWriteRepository>(
     sp => sp.GetRequiredService<CachingServiceCategoryMappingRepository>());
 builder.Services.AddScoped<ISystemDefaultsAppliedRecordRepository>(

@@ -66,6 +66,15 @@ public sealed class ServiceCategoryMappingOptions
     public bool SeedSystemDefaultsOnStartup { get; set; } = true;
 
     /// <summary>
+    /// When a tenant has no tenant-default mappings of its own (the admin seed
+    /// never ran for it, for instance on a deployment with
+    /// <see cref="AdminWriteEnabled"/> off), read the loaded system-default
+    /// bundle in their place. Nothing is written; a tenant that saves even one
+    /// tenant-default mapping uses only its own. Default <c>true</c>.
+    /// </summary>
+    public bool FallBackToSystemDefaults { get; set; } = true;
+
+    /// <summary>
     /// Filesystem path to the JSON seed file relative to the service
     /// content root. Default <c>schemas/service-category-mappings/system-defaults.json</c>.
     /// Override in tests to point at a fixture.
