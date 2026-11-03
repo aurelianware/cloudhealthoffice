@@ -27,6 +27,10 @@ public interface IMemberServiceClient
 public class CreateMemberRequestDto
 {
     public string MemberId { get; set; } = string.Empty;
+
+    /// <summary>member-service's EnrollmentStatus name. Omitted, member-service creates the
+    /// member Pending, and a Pending member's claims deny in benefit calculation.</summary>
+    public string? Status { get; set; }
     public string? SSN { get; set; }
     public string GroupNumber { get; set; } = string.Empty;
     public bool IsSubscriber { get; set; }
