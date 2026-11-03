@@ -13,6 +13,8 @@
 #   *coverage*.csv       CPCDS coverages (one file, optional)
 #   *claim*.csv          CPCDS claims (any number)
 #   *auth*.csv, *278*    UM authorizations, CSV or X12 278 (any number, optional)
+#   *balance*.csv        the core's accumulator balances as of a date, for shadow
+#                        adjudication only (any number, optional)
 #
 # Settings (environment):
 #   CHO_TOKEN                 a tenant administrator's CHO token (required unless --local)
@@ -88,7 +90,8 @@ token() {
 # loads here loads the same way when the core starts writing to the drop.
 kind() {
   local name; name="$(basename "$1")"; name="${name%.*}"; name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
-  if [[ $name == *auth* || $name == *278* ]]; then echo authorizations
+  if [[ $name == *balance* ]]; then echo balances
+  elif [[ $name == *auth* || $name == *278* ]]; then echo authorizations
   elif [[ $name == *coverage* ]]; then echo coverages
   elif [[ $name == *member* ]]; then echo members
   elif [[ $name == *claim* ]]; then echo claims
@@ -168,18 +171,32 @@ authorizations() {
   note_refusals "$(jq '(.rejected // 0) + ((.fileErrors // []) | length)' "$report")"
 }
 
+balances() {
+  local dry="$1" file="$2"
+  local report="$OUT/balances-$(basename "$file").json"
+  local args=(-F "file=@$file" -F "dryRun=$dry")
+  [[ -n "$SOURCE_SYSTEM" ]] && args+=(-F "sourceSystem=$SOURCE_SYSTEM")
+  post "balances $(basename "$file")" "$CLAIMS_URL/api/v1/claims/shadow-adjudication/accumulator-balances/import" "$report" "${args[@]}"
+  local code="$HTTP_CODE"
+  jq -r --arg name "$(basename "$file")" --arg code "$code" \
+    '"  accumulator balances \($name) (\($code)): \(.rowsInFile // 0) rows, \(.loaded // 0) " + (if .dryRun then "to load" else "loaded" end) + ", \(.rejected // 0) refused" +
+    ([(.fileErrors // [])[], (.errors // [])[:10][]] | map("\n    ! " + .) | join(""))' "$report"
+  note_refusals "$(jq '(.rejected // 0) + ((.fileErrors // []) | length)' "$report")"
+}
+
 import_folder() {
   local dry="$1"
   [[ -n "$FOLDER" && -d "$FOLDER" ]] || { echo "Give the folder that holds the extracts." >&2; usage; }
   mkdir -p "$OUT"
 
-  local members=() coverages=() claim_files=() auth_files=() unknown=()
+  local members=() coverages=() claim_files=() auth_files=() balance_files=() unknown=()
   while IFS= read -r -d '' file; do
     case $(kind "$file") in
       members) members+=("$file") ;;
       coverages) coverages+=("$file") ;;
       claims) claim_files+=("$file") ;;
       authorizations) auth_files+=("$file") ;;
+      balances) balance_files+=("$file") ;;
       *) unknown+=("$file") ;;
     esac
   done < <(find "$FOLDER" -maxdepth 1 -type f ! -name '.*' -print0 | sort -z)
@@ -188,7 +205,7 @@ import_folder() {
     echo "One member file and at most one coverage file per load; found ${#members[@]} and ${#coverages[@]}." >&2; exit 2; }
   [[ ${#members[@]} -eq 1 || ${#coverages[@]} -eq 0 ]] || {
     echo "A coverage file loads with its member file; add the member file." >&2; exit 2; }
-  for file in "${unknown[@]}"; do echo "  skipped $(basename "$file"): its name says neither member, coverage, claim, auth nor 278"; done
+  for file in "${unknown[@]}"; do echo "  skipped $(basename "$file"): its name says neither member, coverage, claim, auth, 278 nor balance"; done
 
   TOKEN="$(token)"
   [[ $dry == true ]] || : > "$OUT/claim-batches.txt"
@@ -197,6 +214,7 @@ import_folder() {
   [[ ${#members[@]} -eq 1 ]] && members_and_coverage "$dry" "${members[0]}" "${coverages[0]:-}"
   for file in "${claim_files[@]}"; do claims "$dry" "$file"; done
   for file in "${auth_files[@]}"; do authorizations "$dry" "$file"; done
+  for file in "${balance_files[@]}"; do balances "$dry" "$file"; done
 
   if [[ $STATUS -ne 0 ]]; then
     echo "Some files or rows were refused; the reports in $OUT say which and why."

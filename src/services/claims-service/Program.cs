@@ -577,6 +577,9 @@ builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.ShadowAdju
 // earlier claims for the member, never from CHO's accumulator store.
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAccumulatorHistory,
     ClaimsService.Services.Adjudication.Shadow.ShadowAccumulatorHistory>();
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAccumulatorBalanceRepository,
+    ClaimsService.Services.Adjudication.Shadow.ShadowAccumulatorBalanceRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.ShadowAccumulatorBalanceImporter>();
 // Medicaid TPL recovery cases (pay-and-chase and retroactive), with the
 // state retention clock and monthly report.
 builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryRepository, ClaimsService.Services.Tpl.TplRecoveryRepositoryMongo>();

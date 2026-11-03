@@ -197,13 +197,45 @@ claim from the core's own account instead:
   service date.
 - Claims of other family members count toward the family deductible and
   out-of-pocket maximum when they carry the same `subscriberId`. CPCDS claim
-  files name only the patient, so imported claims do not yet; the family
-  amounts start from the member's own claims.
+  files name only the patient, so imported claims do not yet; load family
+  totals in a [starting balance](#starting-balances).
 
-Limits: only what was loaded counts, so a member whose January claims were not
-in the files starts low (load the whole plan year, or wait for the starting
-balance file, planned next). Accumulators reset on January 1; a plan year that
-starts on another date is not handled. A benefit-plan-service older than
+### Starting balances
+
+When the files do not reach back to the start of the plan year, load the
+core's own accumulators as of a date. A balance stands in for every core claim
+of its network tier the core had adjudicated by that date; claims after it add
+to it. For each claim, CHO uses the member's latest balance dated before the
+core adjudicated the claim.
+
+`POST /api/v1/claims/shadow-adjudication/accumulator-balances/import`
+(`claims:import`, multipart: `file`, optional `sourceSystem` for the member
+crosswalk, `dryRun`). `trial.sh` loads any file whose name contains `balance`.
+CSV with a header row (comma, pipe or tab; case, spaces and underscores in the
+header are ignored):
+
+| Column | |
+|---|---|
+| `member_id` | The core's member id (the crosswalk maps it) |
+| `as_of_date` | `yyyy-MM-dd`: the balance includes everything the core adjudicated through that day |
+| `network` | `in-network` (default) or `out-of-network` |
+| `individual_deductible_met`, `individual_oop_met` | The member's own |
+| `family_deductible_met`, `family_oop_met` | The whole family's, this member included (optional) |
+
+```csv
+member_id,as_of_date,network,individual_deductible_met,individual_oop_met,family_deductible_met,family_oop_met
+M100,2026-06-30,in-network,400.00,650.00,900.00,1200.00
+```
+
+Reloading replaces a balance for the same member, date and network. Balances
+are kept in claims-service's `ShadowAccumulatorBalances` collection and never
+reach CHO's accumulator store.
+
+### Limits
+
+Only what was loaded counts: a member with neither a balance nor the year's
+earlier claims starts at zero. Accumulators reset on January 1; a plan year
+that starts on another date is not handled. A benefit-plan-service older than
 claims-service ignores the history; the claim then pends `SVCUNAVAIL` rather
 than being compared against CHO's store.
 
@@ -223,7 +255,7 @@ links to the page or guide that loads it ("What to load next").
 | Medicare physician fee schedule | [Medicare PFS importer](MEDICARE-PFS-IMPORTER.md), one schedule per locality (the PricingApi uploads do not reach adjudication) |
 | Provider contracts and custom fee schedules | [Contract roster importer](CONTRACT-ROSTER-IMPORTER.md) and [fee schedule CSV importer](FEE-SCHEDULE-IMPORTER.md) |
 | Benefit plan design | benefit-plan-service API / portal |
-| Accumulators to date | The core's earlier claims in the same files ([Accumulators](#accumulators)). Load the whole plan year so a mid-year claim meets the deductible where the core did. A starting balance file is planned |
+| Accumulators to date | The core's earlier claims in the same files ([Accumulators](#accumulators)). Load the whole plan year, or the core's [starting balances](#starting-balances), so a mid-year claim meets the deductible where the core did |
 | Prior authorizations | authorization-service |
 
 ## Configuration
@@ -251,8 +283,8 @@ pricing, provider, coverage, member, authorization), once per claim.
    procedure, provider) and the discrepancy CSV.
 3. Provider contract and custom fee schedule loader: the contract roster and
    fee schedule CSV importers.
-4. Accumulators: derived from the imported claims (done); a starting balance
-   file from the core next, held apart from live balances.
+4. Accumulators: derived from the imported claims, plus the core's starting
+   balances, held apart from live balances (done).
 5. Automatic run after each CPCDS file-drop batch; re-run after a configuration
    change to show the gap closing.
 6. Benefit plan template import and a portal report page.
