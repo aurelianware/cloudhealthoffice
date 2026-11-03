@@ -574,6 +574,17 @@ builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryRepository, Cl
 builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryService, ClaimsService.Services.Tpl.TplRecoveryService>();
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationService,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationService>();
+// Retro rate reprocessing, step 2: dry-run impact of a fee schedule change on
+// paid claims (docs/integration/RETRO-RATE-REPROCESSING.md). Reads the change
+// from benefit-plan-service and re-prices through the shadow pipeline.
+builder.Services.Configure<ClaimsService.Services.RetroRate.RetroRateOptions>(
+    builder.Configuration.GetSection(ClaimsService.Services.RetroRate.RetroRateOptions.SectionName));
+builder.Services.AddScoped<ClaimsService.Services.RetroRate.IFeeScheduleChangeClient,
+    ClaimsService.Services.RetroRate.HttpFeeScheduleChangeClient>();
+builder.Services.AddScoped<ClaimsService.Services.RetroRate.IRetroRateImpactRepository,
+    ClaimsService.Services.RetroRate.RetroRateImpactRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Services.RetroRate.IRetroRateImpactService,
+    ClaimsService.Services.RetroRate.RetroRateImpactService>();
 
 // CPCDS file drop: a folder per tenant the core's daily extracts land in,
 // loaded on a timer (members and coverage, claim providers, claims). Off
