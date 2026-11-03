@@ -167,6 +167,7 @@
         <p class="ev-lede">Coverage transition, consent, member match, export, validation, provenance, durable ingestion, and a read path for the clinical data at the end of it. Nine stages, each with a decision that determines whether the implementation is safe or merely present.</p>
         <div class="ev-badges"><span class="ev-badge ev-badge--cyan">P2P-01 &middot; P2P-02 &middot; P2P-03 &middot; P2P-04</span>
           <span class="ev-badge ev-badge--cyan">PAT-02 USCDI clinical</span>
+          <span class="ev-badge ev-badge--green">Inferno PDex kit: pass</span>
           <span class="ev-badge">Synthetic data</span>
           <span class="ev-badge ev-badge--amber">No production exchange claimed</span></div>
         <p class="ev-rule-definition">
@@ -424,6 +425,7 @@
             <dt>Test data</dt><dd>Synthetic. No exchange described here has moved production member data.</dd>
             <dt>Architecture docs</dt><dd><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/payer-to-payer.md">payer-to-payer.md</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/consent.md">consent.md</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/clinical-fhir.md">clinical-fhir.md</a></dd>
             <dt>Pull requests</dt><dd><a href="https://github.com/aurelianware/cloudhealthoffice/pull/1148">#1148</a> member data export &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1149">#1149</a> <code>$member-match</code> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1150">#1150</a> outbound initiation &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1151">#1151</a> durable ingestion &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1152">#1152</a> purpose-scoped consent &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1157">#1157</a> USCDI clinical read path</dd>
+            <dt>Also judged externally</dt><dd>The Inferno Da Vinci PDex payer-server kit (v0.13.2) runs <code>$member-match</code> against Cloud Health Office every night as the new payer, signing in with SMART Backend Services, and passes, including the no-match refusal. Its PDex 2.0 query groups are not run, because Cloud Health Office exchanges data the PDex 2.1 way, by bulk <code>$davinci-data-export</code>. <a href="/evidence/inferno-conformance">See the results</a>.</dd>
             <dt>Result</dt><dd>The latest published acceptance snapshot below &mdash; generated from the suite, not typed into this page</dd>
           </dl>
         </div>
