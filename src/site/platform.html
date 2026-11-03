@@ -380,7 +380,7 @@
         <div class="section-label" style="color:#0E7490; font-size:0.85rem; letter-spacing:2px; text-transform:uppercase; margin-bottom:16px;">What's ready today</div>
         <h2>What Runs Today &mdash; and What Doesn't Yet.</h2>
         <p>This page documents the platform's building blocks. Availability differs by capability: some run today, while production integrations, SLAs, and customer validation remain pilot- or roadmap-scoped. We'd rather draw that line clearly than blur it.</p>
-        <p style="margin-top:16px;"><strong>Usable now:</strong> the claims adjudication, pricing, and fee-schedule engines are implemented and inspectable in the repository &mdash; including the free fee-schedule lookup and claims-repricing tools that run on the same code.</p>
+        <p style="margin-top:16px;"><strong>Usable now:</strong> the claims adjudication, pricing, and fee-schedule engines are implemented and inspectable in the repository &mdash; including the free fee-schedule lookup and claims-repricing tools that run on the same code. So are shadow adjudication of a core's claims, retro rate reprocessing, and the Texas and California Medicaid pricing, encounter, third-party liability and reporting modules described below. All of them are tested on synthetic data, not yet at a live plan.</p>
         <p style="margin-top:12px;"><strong>Pilot-scoped:</strong> payer deployments start with a CMS-0057-F compliance layer alongside your existing core, then modernize domain by domain on your timeline. Your system of record stays authoritative until you choose to cut over a domain. See <a href="/cms-0057f-compliance">CMS-0057-F deadlines and APIs</a> and <a href="/docs/benefit-plan-guide">benefit plan configuration</a>.</p>
         <p style="margin-top:12px;"><strong>Roadmap:</strong> subscription packaging, update cadences, and public production SLAs for the data and API services are still being completed.</p>
         <p style="margin-top:20px;">
@@ -403,7 +403,7 @@
           <article class="layers-card">
             <h3>Layer 2 &mdash; Domain cutover</h3>
             <p>Which one operational domain do we peel off the core without a rip-and-replace program?</p>
-            <p>Move one domain (prior auth, provider, eligibility, or claims intake) onto Cloud Health Office. The core remains system of record for everything not cut over. Reversible.</p>
+            <p>Move one domain (prior auth, provider, eligibility, or claims intake) onto Cloud Health Office. The core remains system of record for everything not cut over. Reversible. Rehearse claims first with <a href="/services/cms-0057-f-cpcds-trial">shadow adjudication</a>: Cloud Health Office re-runs the claims your core paid and reports every difference.</p>
           </article>
           <article class="layers-card">
             <h3>Layer 3 &mdash; Core</h3>
@@ -412,6 +412,28 @@
           </article>
         </div>
         <p class="layers-constraint">Layer 3 is a path, not a completed QNXT replacement reference. Named cores remain adapter-based and configured per payer during onboarding.</p>
+      </section>
+
+
+      <section id="medicaid" class="assessment-section" aria-labelledby="medicaid-heading">
+        <div class="section-label" style="color:#0E7490; font-size:0.85rem; letter-spacing:2px; text-transform:uppercase; margin-bottom:16px;">Medicaid managed care</div>
+        <h2 id="medicaid-heading">Built for Texas and California Medicaid plans.</h2>
+        <p>The work a Medicaid MCO's core has to do beyond paying a professional claim: state pricing methods, encounters the state accepts, third-party liability, and the monthly close and state reports.</p>
+        <div class="layers-grid">
+          <article class="layers-card">
+            <h3>State pricing</h3>
+            <p>APR-DRG inpatient pricing from the HHSC weight tables and SDAs, and Medi-Cal's APR-DRG formula. Texas outpatient hospital pricing (interim percent of charges and EAPG). FQHC and RHC encounter rates, nursing facility per diems net of patient liability, and psychiatric hospital per diems with IMD day limits. A licensed APR-DRG and EAPG grouper plugs in through a documented seam.</p>
+          </article>
+          <article class="layers-card">
+            <h3>Encounters and TPL</h3>
+            <p>Texas and California 837P and 837I encounter routes, with 999 and 277CA responses reconciled record by record, replacements and voids, and a rework queue for rejections. Third-party liability: state TPL file loads, cost avoidance and pay-and-chase by state rules, recovery cases, the California 12-month clock, and other-coverage reporting.</p>
+          </article>
+          <article class="layers-card">
+            <h3>Finance close and state reports</h3>
+            <p>Capitation reconciliation by member, month and rate cell, with withholds. IBNR from a lag triangle, the Medicaid MLR, 1099 totals, retro rate reprocessing, and standard claims, UM and appeals reports. Texas UMCM reports (claims summary, claims lag, MLR, TPR, appeals and complaints) and the Medi-Cal grievance log.</p>
+          </article>
+        </div>
+        <p class="layers-constraint">Built and tested on synthetic data; no plan runs these modules in production yet. State rate values marked &ldquo;verify&rdquo; are checked against the plan's contract before use. See the <a href="/insights/cms-0057-f/medicaid-cms-0057-f-blueprint">Medicaid blueprint</a> and <a href="/docs/texas-compliance">Texas compliance</a>.</p>
       </section>
 
       <section class="mcc-proof-strip" aria-labelledby="mcc-proof-heading">
