@@ -290,6 +290,7 @@ builder.Services.AddScoped<IReportsService, ReportsService>();
 builder.Services.AddScoped<GlobalSearch>();
 builder.Services.AddScoped<IEdiTransactionsService, EdiTransactionsService>();
 builder.Services.AddScoped<IDataDropService, DataDropService>();
+builder.Services.AddScoped<IShadowAdjudicationClient, ShadowAdjudicationClient>();
 builder.Services.AddScoped<IEligibilityService, EligibilityService>();
 builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
 builder.Services.AddScoped<ICms0057Service, Cms0057Service>();
@@ -536,6 +537,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 // only; the document is fetched with the user's CHO token (GET, no side effects).
 app.MapMemberDocumentDownload();
 app.MapDocumentDownload();
+app.MapShadowDiscrepancyDownload();
 
 app.MapControllers();
 app.MapRazorPages();

@@ -216,6 +216,12 @@
                         <MudNavLink Href="/edi-transactions" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SwapHoriz">
                             Imports &amp; EDI
                         </MudNavLink>
+                        @if (_canImportClaims)
+                        {
+                            <MudNavLink Href="/shadow-adjudication" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.CompareArrows">
+                                Shadow Adjudication
+                            </MudNavLink>
+                        }
                         <MudNavLink Href="/admin/unmatched-attachments" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HelpOutline">
                             Held Attachments
                         </MudNavLink>
@@ -454,6 +460,7 @@
     private bool _canRunReports;
     // Retro rate reprocessing (claims-service, claims:adjust).
     private bool _canAdjustClaims;
+    private bool _canImportClaims;
     private bool _canAdminWork;
     private bool _canPostNotices;
     private bool _canReadCorrespondence;
@@ -488,6 +495,7 @@
             _canReadContracts = userContext != null && UserContextService.HasPermission("contracts:read");
             _canWork = userContext != null && UserContextService.HasPermission("workqueue:work");
             _canAdjustClaims = userContext != null && UserContextService.HasPermission("claims:adjust");
+            _canImportClaims = userContext != null && UserContextService.HasPermission("claims:import");
             _canRunReports = userContext != null && ReportModules.All.Any(m => m.Permissions.Any(UserContextService.HasPermission));
             _canAdminWork = userContext != null && UserContextService.HasPermission("workqueue:admin");
             _canPostNotices = userContext != null && UserContextService.HasPermission("notices:write");
