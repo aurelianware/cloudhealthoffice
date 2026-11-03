@@ -50,16 +50,29 @@ mkdir -p trial && cp docs/integration/samples/cpcds/*.csv docs/integration/sampl
 ```
 
 The dry run lists the sample plan codes as **unmapped**. That is the first
-real task with a plan's own files too. Create or import the benefit plans,
-map the codes (`POST /api/v1/plan-code-mappings`), and run `check` again
-until it is clean. Then:
+real task with a plan's own files too: create or import the benefit plans, map
+the codes (`POST /api/v1/plan-code-mappings`), and run `check` again until it
+is clean. For the samples, one script does it for the Gold PPO:
 
 ```bash
+./scripts/cpcds/sample-setup.sh --local     # plan, plan code, network, clinic, fee schedule
 ./scripts/cpcds/trial.sh load trial --local
+./scripts/cpcds/trial.sh shadow --local
 ```
 
-Then `./scripts/cpcds/trial.sh shadow --local` re-adjudicates the loaded
-claims in CHO and compares them with the core's answers in the files.
+`shadow` re-adjudicates the loaded claims in CHO and compares them with the
+core's answers in the files. With the samples it shows each kind of result:
+
+| Claim | What you see | Why |
+|---|---|---|
+| PRO-1001 | **Match**: allowed $180, paid $150, the $30 office copay, line by line | The plan, network and fee schedule `sample-setup.sh` loaded agree with the core |
+| PRO-1002 | **Outcome mismatch**: the core denied it (CARC 50), CHO would have applied it to the deductible | A real finding to take to the plan's claims team |
+| INP-2001, DEN-3001 | **Undecided**, `PLANUNAVAIL` | Their plan codes (HMO-SILVER, DEN-BASIC) are still unmapped: what a plan's own first run looks like |
+
+The sample clinic's NPI is not a real provider, so CHO cannot screen it
+against NPPES and the run notes that it would hold those claims for provider
+screening. A plan's real providers screen against the OIG list the laptop stack
+downloads ([SHADOW-ADJUDICATION.md](SHADOW-ADJUDICATION.md#provider-screening)).
 
 `--local` signs a development token (`scripts/dev-token.sh`) that only a
 Development stack accepts. Never put real member data on this stack. It keeps

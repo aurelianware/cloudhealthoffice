@@ -27,6 +27,13 @@ public class ShadowRunReport
     /// <summary>Why CHO could not decide: one row per pend / gap code, most claims first.</summary>
     public List<ShadowReasonRow> UndecidedByGap { get; init; } = [];
 
+    /// <summary>
+    /// Decided claims CHO would still hold because it could not screen a provider
+    /// (PROVIDERSCREEN): counted among the decided, and listed here so the run says
+    /// that screening is still to be set up.
+    /// </summary>
+    public ShadowReasonRow HeldForProviderScreening { get; init; } = new();
+
     /// <summary>The CHO stage whose finding drove a non-matching decision, largest dollars first.</summary>
     public List<ShadowReasonRow> ByChoStage { get; init; } = [];
 
@@ -101,6 +108,8 @@ public static class ShadowRunReportBuilder
             ByKind = ShadowDiscrepancyKind.All
                 .Select(kind => Row(kind, results.Where(r => r.Kind == kind)))
                 .ToList(),
+            HeldForProviderScreening = Row(
+                ShadowDiscrepancyComparer.ProviderScreeningCode, decided.Where(r => r.HeldForProviderScreening)),
             UndecidedByGap = Top(
                 undecided.GroupBy(r => r.ChoPendCode ?? "UNKNOWN", StringComparer.OrdinalIgnoreCase)
                     .Select(g => Row(g.Key, g)),

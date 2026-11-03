@@ -34,15 +34,22 @@ services:
 
   mongo:
     image: mongo:7
+    # A one-member replica set, not a standalone server: coverage-service saves
+    # coverage in a transaction (the PCP panel count), and Mongo has no
+    # transactions without a replica set. The health check initiates the set on
+    # first start and reports healthy once this member is primary. Its member
+    # name is mongo:27017, so a client on the host connects with
+    # mongodb://localhost:27017/?directConnection=true.
+    command: ["--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "try { rs.status() } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }) } if (!db.hello().isWritablePrimary) quit(1)"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
   redis:
     image: redis:7-alpine

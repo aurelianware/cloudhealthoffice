@@ -77,11 +77,28 @@ public class ShadowAdjudicationPageTests : TestContext
             .And.Contain("Load data").And.Contain("Contract roster importer");
         guide.QuerySelectorAll("a").Select(a => a.GetAttribute("href")).Should().Contain("/fee-schedules");
         cut.Find("[data-testid=shadow-accumulator-note]").TextContent.Should().Contain("accumulator baseline");
+        cut.FindAll("[data-testid=shadow-screening-note]").Should().BeEmpty();
         cut.Find("[data-testid=shadow-by-kind]").TextContent.Should().Contain("CHO could not decide").And.Contain("Paid differs");
         var results = cut.Find("[data-testid=shadow-results]").TextContent;
         results.Should().Contain("C-9").And.Contain("No contract for the billing provider").And.NotContain("C-5");
         cut.Find("[data-testid=shadow-csv]").GetAttribute("href").Should().Be("/shadow-adjudication/runs/run1/discrepancies.csv");
         cut.Find("[data-testid=shadow-csv-undecided]").GetAttribute("href").Should().EndWith("?includeUndecided=true");
+    }
+
+    [Fact]
+    public void Claims_held_for_provider_screening_say_so_and_how_to_turn_screening_on()
+    {
+        _shadow.Setup(s => s.GetReportAsync("run1", It.IsAny<int>())).ReturnsAsync(new ShadowRunReport
+        {
+            Run = Run1, ComparableClaims = 3, DecidedClaims = 3,
+            HeldForProviderScreening = new() { Key = "PROVIDERSCREEN", Claims = 2, CorePaid = 180m },
+        });
+
+        var cut = RenderComponent<ShadowAdjudication>();
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=shadow-screening-note]").TextContent
+            .Should().Contain("hold 2 of the decided claims").And.Contain("$180.00").And.Contain("exclusion screening"));
+        cut.FindAll("[data-testid=shadow-gap-guide]").Should().BeEmpty();
     }
 
     [Fact]

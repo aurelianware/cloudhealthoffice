@@ -37,3 +37,34 @@ services:
       - Services__SponsorService=http://sponsor-service:8080
       - Services__BenefitPlanService=http://benefit-plan-service:8080
       - Services__CoverageService=http://coverage-service:8080
+
+  # Benefit calculation and the provider check reach these by their own setting
+  # names. Without them every shadow claim is held for provider review.
+  # AdminWriteEnabled lets scripts/cpcds/sample-setup.sh (and a plan's own setup)
+  # apply the standard service categories (lab, imaging, office visit, ...) to the
+  # tenant; without them a lab test billed from an office takes the office copay.
+  benefit-plan-service:
+    environment:
+      - Services__ProviderServiceUrl=http://provider-service:8080
+      - Services__ProviderVerificationServiceUrl=http://provider-verification-service:8080
+      - ServiceCategoryMapping__AdminWriteEnabled=true
+
+  # Screens providers against the OIG exclusion list (LEIE), downloaded from
+  # oig.hhs.gov on start and refreshed daily. CHO holds a claim from a provider
+  # it cannot screen; shadow adjudication reports those claims as "held for
+  # provider screening" and still compares the rest of CHO's answer.
+  provider-verification-service:
+    build:
+      context: .
+      dockerfile: src/services/provider-verification-service/Dockerfile
+    ports:
+      - "5040:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=ProviderVerificationDB
+      - ProviderVerification__ExclusionScreening__Leie__Enabled=true
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core]

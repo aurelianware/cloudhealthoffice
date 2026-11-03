@@ -180,6 +180,7 @@ class TrialScriptTests(unittest.TestCase):
                 "comparableClaims": 3, "decidedClaims": 1,
                 "corePaidMore": {"claims": 0, "amount": 0}, "corePaidLess": {"claims": 0, "amount": 0},
                 "undecidedByGap": [{"key": "NOCONTRACT", "claims": 2, "corePaid": 410.5}],
+                "heldForProviderScreening": {"key": "PROVIDERSCREEN", "claims": 1, "corePaid": 60},
             }),
             f"GET {self.SHADOW}/runs/run-1/discrepancies.csv?includeUndecided=true": (200, "ClaimNumber,Kind\nC1,ChoUndecided\n"),
         })
@@ -196,7 +197,9 @@ class TrialScriptTests(unittest.TestCase):
         self.assertIn(("PUT", f"{self.SHADOW}/settings"), shadow_calls)
         run_post = next(c for c in self.server.calls if c["method"] == "POST" and c["path"] == f"{self.SHADOW}/runs")
         self.assertEqual(json.loads(run_post["body"]), {"importBatchId": "batch-1", "background": True})
-        self.assertIn("Running: 1 of 3 claims", result.stdout)
+        self.assertIn("Running: 1 compared so far", result.stdout)
+        self.assertIn("Completed: 3 compared", result.stdout)
+        self.assertIn("CHO would hold 1 of the decided claims until it can screen their providers", result.stdout)
         self.assertIn("CHO decided 33.3%, matched the core on 100%", result.stdout)
         self.assertIn("NOCONTRACT: 2 claims, core paid $410.5 -> load provider contracts", result.stdout)
         out = Path(self.temp.name) / "out"

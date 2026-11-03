@@ -273,7 +273,7 @@ shadow() {
       sleep "$poll"; waited=$((waited + poll))
       api GET "$base/runs/$run" "$OUT/shadow-run.json"
       status=$(jq -r '.status // "Completed"' "$OUT/shadow-run.json")
-      jq -r '"  \(.status): \(.claimsProcessed // 0) of \(.claimsRequested // 0) claims"' "$OUT/shadow-run.json"
+      jq -r 'if .status == "Queued" then "  Queued" elif .status == "Running" then "  Running: \(.claimsProcessed // 0) compared so far" else "  \(.status): \(.claimsProcessed // 0) compared" end' "$OUT/shadow-run.json"
     done
     if [[ $status == Failed ]]; then
       echo "  failed: $(jq -r '.error // "no reason given"' "$OUT/shadow-run.json")"; STATUS=1; continue
@@ -287,6 +287,9 @@ shadow() {
       def money: (. * 100 | round) / 100 | tostring | "$" + .;
       "  \(.run.claimsCompared) claims compared; CHO decided \(if .comparableClaims > 0 then (.decidedClaims / .comparableClaims | pct) else "-" end), matched the core on \(.run.matchRate | pct) of those.",
       "  Core paid more on \(.corePaidMore.claims) claims (\(.corePaidMore.amount | money)), less on \(.corePaidLess.claims) (\(.corePaidLess.amount | money)).",
+      (if (.heldForProviderScreening.claims // 0) > 0 then
+        "  CHO would hold \(.heldForProviderScreening.claims) of the decided claims until it can screen their providers"
+        + " (OIG LEIE, SAM, NPPES): turn on exclusion screening (docs/integration/SHADOW-ADJUDICATION.md)." else empty end),
       (if (.undecidedByGap | length) > 0 then "  What to load next:" else empty end),
       (.undecidedByGap[:5][] | "    \(.key): \(.claims) claims, core paid \(.corePaid | money)" + (if $hints[.key] then " -> " + $hints[.key] else "" end))
     ' "$report"

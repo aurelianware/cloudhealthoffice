@@ -31,6 +31,9 @@ public static class ShadowGapGuide
 
     private static GapLink Guide(string text, string file) => new(text, Docs + file);
 
+    /// <summary>claims-service's code for a claim CHO would hold only because it could not screen a provider.</summary>
+    public const string ProviderScreeningCode = "PROVIDERSCREEN";
+
     private static readonly Dictionary<string, Gap> Gaps = new(StringComparer.OrdinalIgnoreCase)
     {
         ["NOCONTRACT"] = new("NOCONTRACT",
@@ -112,6 +115,11 @@ public static class ShadowGapGuide
             "Check benefit-plan-service (fee schedules), then run again.", GapAction.RunAgain, []),
         ["PAUNAVAIL"] = new("PAUNAVAIL", "The prior authorization lookup did not answer.",
             "Check authorization-service, then run again.", GapAction.RunAgain, []),
+        [ProviderScreeningCode] = new(ProviderScreeningCode,
+            "CHO could not screen the billing or rendering provider against the OIG and SAM exclusion lists and NPPES, so it would hold the claim for review.",
+            "Turn on exclusion screening in provider-verification-service (OIG LEIE, and SAM with an API key) and load the plan's providers. A confirmed exclusion is compared as the denial it is.",
+            GapAction.LoadData,
+            [Page("Providers", "/providers"), Guide("Shadow adjudication: provider screening", "SHADOW-ADJUDICATION.md#provider-screening")]),
         ["SVCUNAVAIL"] = new("SVCUNAVAIL", "A service CHO calls during adjudication did not answer.",
             "Run again; if it repeats, the reason names the service.", GapAction.RunAgain, []),
     };

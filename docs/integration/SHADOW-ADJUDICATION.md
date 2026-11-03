@@ -116,6 +116,7 @@ returns per-claim comparisons, largest paid difference first.
 | `corePaidLess` | Decided claims where the core paid less (possible underpayments). |
 | `byKind` | Every kind: claims, net and absolute paid variance, core paid. |
 | `undecidedByGap` | Why CHO could not decide, by gap code, most claims first, with the core-paid dollars CHO cannot check yet. This is the to-do list for loading inputs. |
+| `heldForProviderScreening` | Decided claims CHO would still hold because it could not screen a provider (`PROVIDERSCREEN`, see [Provider screening](#provider-screening)). They count as decided. |
 | `byChoStage` | The CHO stage behind each non-matching decision (its first finding; Pricing for an allowed difference and BenefitCalculation for a payment difference when no stage reported one), largest dollars first. |
 | `byDenialCodes` | Denial disagreements as `core CARC → CHO CARC` (`paid` when that side paid). |
 | `byProcedure` | Procedure codes (or `REV` revenue codes) on lines that differ, with line counts and line dollars. |
@@ -141,7 +142,7 @@ One kind per claim, in this order of precedence:
 | Kind | Meaning |
 |---|---|
 | `NotComparable` | The core's claim is not final (pended, voided). CHO is not run. |
-| `ChoUndecided` | CHO pended or rejected the claim, or denied it only because the member is not loaded. `choPendCode` names the gap: `NOCONTRACT` (no contract or fee schedule rate), `PRICING`, `REJECT:<stage>`, `MEMBERNOTLOADED`, ... |
+| `ChoUndecided` | CHO pended or rejected the claim, or denied it only because the member is not loaded. `choPendCode` names the gap: `NOCONTRACT` (no contract or fee schedule rate), `PRICING`, `PLANUNAVAIL` (the member's coverage names no CHO plan, usually an unmapped core plan code), `REJECT:<stage>`, `MEMBERNOTLOADED`, ... |
 | `OutcomeMismatch` | One side paid, the other denied. |
 | `DenialCodeMismatch` | Both denied, with different CARCs (or a line both denied, with different codes). |
 | `AllowedVariance` | Allowed differs on the claim or a line: pricing. |
@@ -156,6 +157,29 @@ Line denial codes: the core's come from the CPCDS "Line payment denial code"
 the importer stores; CHO's are the line's adjustments other than the member's
 share (group PR) and the contractual write-down (CARC 45).
 
+## Provider screening
+
+CHO checks every billing and rendering provider against the federal exclusion
+lists (OIG LEIE, SAM) and NPPES before it pays, and holds a claim for review
+(`MEDREVIEW`) when it cannot clear the provider. A new deployment has screened
+no one, so without screening every claim would be held.
+
+In a shadow run, a claim whose only hold is that screening is compared on what
+CHO decides once the provider clears. The result says so:
+`heldForProviderScreening` is true and `choPendCode` is `PROVIDERSCREEN`; the
+report counts these claims in `heldForProviderScreening`, and the portal and
+`trial.sh shadow` say how many there are. A confirmed exclusion is a denial and
+is compared as one. A screening hold together with any other pend stays
+`ChoUndecided`.
+
+To screen providers, run provider-verification-service with
+`ProviderVerification__ExclusionScreening__Leie__Enabled=true` (it downloads the
+OIG list from oig.hhs.gov and refreshes it daily; SAM needs an API key), and set
+`Services__ProviderVerificationServiceUrl` and `Services__ProviderServiceUrl` on
+benefit-plan-service. The CPCDS laptop trial does both. On GKE,
+`render_manifests.py --leie-screening` turns LEIE on. Providers that are not in
+NPPES (the synthetic sample NPIs, for one) are still held after screening.
+
 ## What CHO needs to decide a plan's claims
 
 Expect most claims to be `ChoUndecided` until these are loaded. The run tells
@@ -166,7 +190,9 @@ links to the page or guide that loads it ("What to load next").
 | Input | Loaded through |
 |---|---|
 | Members, coverage, plan id, group | 834 (`enrollment-import-service`), or the CPCDS member and coverage files |
-| Provider network and credentialing | provider-service |
+| Provider network and credentialing | provider-service: each plan's in-network tier names a network (`networkTiers[].networkId`), and the provider's network participation puts it in that network. Without it every provider is out of network |
+| Service categories | `POST /api/v1/service-category-mappings/seed-system-defaults` once per tenant (benefit-plan-service, needs `ServiceCategoryMapping__AdminWriteEnabled=true`). Without them a lab test or X-ray billed from an office is costed as an office visit |
+| Provider screening | See [Provider screening](#provider-screening) |
 | Medicare physician fee schedule | [Medicare PFS importer](MEDICARE-PFS-IMPORTER.md), one schedule per locality (the PricingApi uploads do not reach adjudication) |
 | Provider contracts and custom fee schedules | [Contract roster importer](CONTRACT-ROSTER-IMPORTER.md) and [fee schedule CSV importer](FEE-SCHEDULE-IMPORTER.md) |
 | Benefit plan design | benefit-plan-service API / portal |

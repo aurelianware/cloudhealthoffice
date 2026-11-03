@@ -228,6 +228,19 @@
                             </MudSimpleTable>
                         </MudPaper>
                     }
+                    @if (report.HeldForProviderScreening.Claims > 0)
+                    {
+                        var screening = ShadowGapGuide.For(ShadowGapGuide.ProviderScreeningCode);
+                        <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined" Class="mb-3" data-testid="shadow-screening-note">
+                            CHO would hold @report.HeldForProviderScreening.Claims.ToString("N0", CultureInfo.InvariantCulture) of the decided claims
+                            (@Money(report.HeldForProviderScreening.CorePaid) paid by the core) for review until it can screen their providers.
+                            They are compared on what CHO decides once a provider clears. @screening.Fix
+                            @foreach (var link in screening.Links)
+                            {
+                                <MudLink Href="@link.Href" Target="_blank" Typo="Typo.body2" Class="ml-1">@link.Text</MudLink>
+                            }
+                        </MudAlert>
+                    }
                     @if (report.ByKind.Any(r => r.Claims > 0 && r.Key is ShadowKinds.PaidVariance or ShadowKinds.MemberLiabilityVariance))
                     {
                         <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined" Class="mb-3" data-testid="shadow-accumulator-note">

@@ -1,0 +1,46 @@
+{
+  "planId": "SAMPLE-PPO-GOLD",
+  "planName": "Sample Gold PPO (synthetic)",
+  "payer": "Sample Health Plan",
+  "effectiveDate": "2026-01-01T00:00:00Z",
+  "planType": "PPO",
+  "lineOfBusiness": "Commercial",
+  "isActive": true,
+  "costSharing": {
+    "individualDeductible": 500,
+    "familyDeductible": 1000,
+    "individualOutOfPocketMax": 4000,
+    "familyOutOfPocketMax": 8000,
+    "inNetworkDeductible": 500,
+    "outOfNetworkDeductible": 1500,
+    "inNetworkOutOfPocketMax": 4000,
+    "outOfNetworkOutOfPocketMax": 10000
+  },
+  "benefits": [
+    {
+      "serviceCategory": "Office Visit",
+      "description": "Office visit: $30 copay, no deductible",
+      "inNetworkCopay": 30,
+      "outNetworkCopay": 60,
+      "deductibleApplies": false,
+      "priorAuthRequired": false
+    },
+    {
+      "serviceCategory": "Laboratory",
+      "description": "Lab tests: covered in full in network",
+      "inNetworkCopay": 0,
+      "inNetworkCoinsurance": 0,
+      "deductibleApplies": false,
+      "priorAuthRequired": false
+    },
+    {
+      "serviceCategory": "Physical Therapy",
+      "description": "Physical therapy: $40 copay in network, deductible then 40% out of network",
+      "inNetworkCopay": 40,
+      "outNetworkCoinsurance": 40,
+      "deductibleApplies": true,
+      "priorAuthRequired": false
+    }
+  ],
+  "networkTiers": []
+}

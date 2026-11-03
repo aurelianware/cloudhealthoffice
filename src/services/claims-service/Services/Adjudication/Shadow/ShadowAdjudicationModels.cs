@@ -106,6 +106,13 @@ public class ShadowAdjudicationResult
     public string? ChoPendCode { get; set; }
     public string? ChoPendReason { get; set; }
 
+    /// <summary>
+    /// CHO would hold this claim only because it could not screen a provider
+    /// (OIG LEIE, SAM, NPPES): not a confirmed exclusion. The outcome and amounts
+    /// are what CHO decides once the provider clears, so they are still compared.
+    /// </summary>
+    public bool HeldForProviderScreening { get; set; }
+
     /// <summary>Every CHO stage that did not pass, as "Stage: reason".</summary>
     public List<string> ChoStageFindings { get; set; } = [];
 
