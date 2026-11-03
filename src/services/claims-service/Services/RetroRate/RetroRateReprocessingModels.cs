@@ -28,6 +28,15 @@ public static class RetroRateItemAction
 
     /// <summary>Approved but not yet paid (no 835): it cannot be adjusted; re-run the impact once it is paid.</summary>
     public const string SkipNotYetPaid = "SkipNotYetPaid";
+
+    /// <summary>The plan reports rate changes but does not adjust claims for them (settled another way, such as cost settlement).</summary>
+    public const string SkipReportOnly = "SkipReportOnly";
+
+    /// <summary>The date of service is older than the plan's lookback limit.</summary>
+    public const string SkipOutsideLookback = "SkipOutsideLookback";
+
+    /// <summary>The paid difference is below the plan's minimum adjustment amount.</summary>
+    public const string SkipBelowMinimum = "SkipBelowMinimum";
 }
 
 /// <summary>The outcome of executing one item.</summary>
@@ -137,7 +146,29 @@ public class RetroRateTenantOptions
     /// <summary>Plans (plan id or plan code, as the claim carries it) whose overpayments are recouped.</summary>
     public List<string> RecoupPlans { get; set; } = [];
 
-    public bool Recoups(string? planId) =>
-        RecoupAllPlans
-        || (!string.IsNullOrWhiteSpace(planId) && RecoupPlans.Contains(planId.Trim(), StringComparer.OrdinalIgnoreCase));
+    /// <summary>
+    /// Smallest paid difference (either direction) worth an adjustment; smaller
+    /// ones are left as paid. 0 (the default) adjusts every difference above the
+    /// impact run's tolerance.
+    /// </summary>
+    public decimal MinimumNetAmount { get; set; }
+
+    /// <summary>
+    /// Only claims with a date of service within this many months of the day
+    /// the run is proposed are adjusted; null (the default) has no limit.
+    /// </summary>
+    public int? LookbackMonths { get; set; }
+
+    /// <summary>Report rate changes for every plan of the tenant but never adjust claims for them.</summary>
+    public bool ReportOnlyAllPlans { get; set; }
+
+    /// <summary>Plans whose rate changes are reported but not adjusted claim by claim.</summary>
+    public List<string> ReportOnlyPlans { get; set; } = [];
+
+    public bool Recoups(string? planId) => RecoupAllPlans || Lists(RecoupPlans, planId);
+
+    public bool ReportOnly(string? planId) => ReportOnlyAllPlans || Lists(ReportOnlyPlans, planId);
+
+    private static bool Lists(List<string> plans, string? planId) =>
+        !string.IsNullOrWhiteSpace(planId) && plans.Contains(planId.Trim(), StringComparer.OrdinalIgnoreCase);
 }

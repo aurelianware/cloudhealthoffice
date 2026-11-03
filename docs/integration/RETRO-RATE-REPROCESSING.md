@@ -200,6 +200,66 @@ all plans:
 
 Plan values match the claim's `benefitPlanId` (plan id or plan code).
 
+### Plan rules
+
+Three more settings per tenant decide which differences are worth an
+adjustment. Claims they leave out stay as paid and are listed with the reason.
+
+| Setting | Default | Effect |
+|---|---|---|
+| `MinimumNetAmount` | `0` | A paid difference smaller than this (either direction) is skipped (`SkipBelowMinimum`). |
+| `LookbackMonths` | none | A date of service more than this many months before the day the run is proposed is skipped (`SkipOutsideLookback`). |
+| `ReportOnlyPlans`, `ReportOnlyAllPlans` | none | The impact report still shows these plans' claims, but the run never adjusts them (`SkipReportOnly`), for rates settled another way (cost settlement, a lump-sum payment). |
+
+### Texas and California starting points
+
+These are shapes to start from, not the states' rules. CHO does not ship
+values for them: the timelines, lookback and minimums come from each plan's
+state contract and claims manual (Texas HHSC UMCM and the MCO contract; DHCS
+APLs and the Medi-Cal managed care contract), and are for the plan and its
+counsel to confirm.
+
+```json
+"Adjudication": {
+  "RetroRate": {
+    "Tenants": {
+      "tx-mco": {
+        "RecoupPlans": [],
+        "MinimumNetAmount": 0,
+        "LookbackMonths": null,
+        "ReportOnlyPlans": []
+      },
+      "ca-mcp": {
+        "RecoupPlans": [],
+        "MinimumNetAmount": 0,
+        "LookbackMonths": null,
+        "ReportOnlyPlans": []
+      }
+    }
+  }
+}
+```
+
+What to check before filling them in:
+
+- Whether the state expects the plan to recoup provider overpayments from a
+  retroactive rate decrease, or only to pay increases (keep `RecoupPlans`
+  empty until it does).
+- How far back a retroactive rate change reaches and how long the plan has to
+  reprocess (`LookbackMonths`, and how soon to run).
+- Which rates are settled outside claims, such as Texas hospital interim
+  rates settled at cost report (`ReportOnlyPlans`). Interim, per diem and DRG
+  base rates loaded outside the fee schedule store do not record changes yet,
+  so they do not appear here at all.
+
+### Medicaid encounters
+
+Nothing extra is needed. Each adjustment's corrected claim publishes
+`claims.finalized` with `originalClaimId` set to the version it amends, and
+encounter-submission-service turns that into a replacement encounter (837
+CLM05-3 = 7) linked to the original, or a fresh original when the first was
+never sent or never accepted. See `EncounterLifecycleService`.
+
 ## Portal
 
 Operations → **Rate Change Reprocessing** (`/retro-rate`, needs
@@ -220,4 +280,5 @@ Operations → **Rate Change Reprocessing** (`/retro-rate`, needs
 
 1. **835 remark code** for a rate-change correction (a plan setting), and a
    per-contract recoupment opt-in.
-2. **State presets** (Texas, California) and Medicaid encounter replacements.
+2. **Async runner** for runs larger than one request should hold.
+3. Change records for Texas interim, per diem and DRG base rate stores.
