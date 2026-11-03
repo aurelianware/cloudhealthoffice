@@ -13,6 +13,15 @@ public static class ShadowDiscrepancyComparer
     /// <summary>Pend code recorded when CHO denied only because the member is not loaded.</summary>
     public const string MemberNotLoadedCode = "MEMBERNOTLOADED";
 
+    /// <summary>
+    /// Recorded when CHO's only hold is the provider screening it could not complete
+    /// (see <see cref="ShadowAdjudicationResult.HeldForProviderScreening"/>).
+    /// </summary>
+    public const string ProviderScreeningCode = "PROVIDERSCREEN";
+
+    /// <summary>Recorded when benefit calculation could not run because the claim reached it with no benefit plan.</summary>
+    public const string NoPlanCode = "PLANUNAVAIL";
+
     /// <summary>Prefix of the pend code recorded when a CHO stage rejected the claim (it lacks information CHO needs).</summary>
     public const string RejectCodePrefix = "REJECT:";
 
@@ -56,6 +65,24 @@ public static class ShadowDiscrepancyComparer
         var choResult = cho.AdjudicationResult ?? new AdjudicationResult();
         var resolved = ClaimAdjudicationStageResult.ResolveOutcome(cho.StageResults);
 
+        // A provider CHO could not screen holds the claim for review; nothing is
+        // wrong with the claim itself, and a fresh deployment has screened no one.
+        // Compare what CHO decides once the provider clears, and say it is held.
+        // A confirmed exclusion is a Deny and is compared as one.
+        var heldForScreening = false;
+        if (resolved == ClaimAdjudicationOutcome.Pend)
+        {
+            var withoutScreening = ClaimAdjudicationStageResult.ResolveOutcome(cho.StageResults
+                .Where(r => !(r.Outcome == ClaimAdjudicationOutcome.Pend
+                              && r.StageName == ProviderIntegrityStage.StageName))
+                .ToList());
+            if (withoutScreening is ClaimAdjudicationOutcome.Pass or ClaimAdjudicationOutcome.Deny)
+            {
+                resolved = withoutScreening;
+                heldForScreening = true;
+            }
+        }
+
         var result = new ShadowAdjudicationResult
         {
             TenantId = cho.TenantId,
@@ -79,7 +106,15 @@ public static class ShadowDiscrepancyComparer
                 .Where(r => r.Outcome != ClaimAdjudicationOutcome.Pass)
                 .Select(r => string.IsNullOrWhiteSpace(r.Reason) ? r.StageName : $"{r.StageName}: {r.Reason}")
                 .ToList(),
+            HeldForProviderScreening = heldForScreening,
         };
+        if (heldForScreening)
+        {
+            result.ChoPendCode = ProviderScreeningCode;
+            result.ChoPendReason = cho.StageResults
+                .First(r => r.Outcome == ClaimAdjudicationOutcome.Pend && r.StageName == ProviderIntegrityStage.StageName)
+                .Reason;
+        }
 
         var choDecided = resolved is ClaimAdjudicationOutcome.Pass or ClaimAdjudicationOutcome.Deny;
         var memberNotLoaded = resolved == ClaimAdjudicationOutcome.Deny
@@ -96,6 +131,15 @@ public static class ShadowDiscrepancyComparer
             var rejecting = cho.StageResults.First(r => r.Outcome == ClaimAdjudicationOutcome.Reject);
             result.ChoPendCode = RejectCodePrefix + rejecting.StageName;
             result.ChoPendReason = rejecting.Reason;
+
+            // No plan to calculate with: the member's coverage named no CHO plan,
+            // almost always a core plan code with no mapping. Say so, not "rejected".
+            if (rejecting.StageName == BenefitCalculationStage.StageName
+                && string.IsNullOrWhiteSpace(cho.Claim.BenefitPlanId))
+            {
+                result.ChoPendCode = NoPlanCode;
+                result.ChoPendReason = "The member's coverage names no CHO benefit plan: create the plan and map the core's plan code to it.";
+            }
         }
         else if (memberNotLoaded)
         {

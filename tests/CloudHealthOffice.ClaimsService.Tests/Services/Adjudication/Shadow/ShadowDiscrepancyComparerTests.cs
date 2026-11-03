@@ -121,12 +121,72 @@ public class ShadowDiscrepancyComparerTests
     [Fact]
     public void AChoReject_IsUndecided_NotADenial()
     {
-        var cho = Cho(ClaimAdjudicationStageResult.Reject(BenefitCalculationStage.StageName, "Missing BenefitPlanId"));
+        var cho = Cho(ClaimAdjudicationStageResult.Reject(BenefitCalculationStage.StageName, "Plan has no benefits"));
+        cho.Claim.BenefitPlanId = "plan-1";
 
         var result = ShadowDiscrepancyComparer.Compare(CorePaid(80m, 60m, 20m), cho, Tolerance);
 
         Assert.Equal(ShadowDiscrepancyKind.ChoUndecided, result.Kind);
         Assert.Equal("REJECT:BenefitCalculation", result.ChoPendCode);
+    }
+
+    [Fact]
+    public void ABenefitRejectForNoPlan_SaysThePlanIsMissing()
+    {
+        var cho = Cho(ClaimAdjudicationStageResult.Reject(BenefitCalculationStage.StageName,
+            "Claim is missing BenefitPlanId; benefit calculation cannot run."));
+
+        var result = ShadowDiscrepancyComparer.Compare(CorePaid(80m, 60m, 20m), cho, Tolerance);
+
+        Assert.Equal(ShadowDiscrepancyKind.ChoUndecided, result.Kind);
+        Assert.Equal(ShadowDiscrepancyComparer.NoPlanCode, result.ChoPendCode);
+        Assert.Contains("plan code", result.ChoPendReason);
+    }
+
+    [Fact]
+    public void AHoldOnlyForProviderScreening_IsComparedOnWhatChoDecides_AndSaysItIsHeld()
+    {
+        var cho = ChoPassed(80m, 60m, 20m);
+        cho.StageResults.Insert(0, ClaimAdjudicationStageResult.Pend(ProviderIntegrityStage.StageName,
+            "Billing provider: Provider was not screened against OIG LEIE / SAM.gov exclusion lists; manual review required"));
+        cho.PendDetails = new PendDetails { PendCode = ProviderIntegrityStage.MedicalReviewPendCode };
+
+        var result = ShadowDiscrepancyComparer.Compare(CorePaid(80m, 60m, 20m), cho, Tolerance);
+
+        Assert.Equal(ShadowDiscrepancyKind.Match, result.Kind);
+        Assert.True(result.HeldForProviderScreening);
+        Assert.Equal(ShadowOutcome.Paid, result.ChoOutcome);
+        Assert.Equal(ShadowDiscrepancyComparer.ProviderScreeningCode, result.ChoPendCode);
+        Assert.Contains("not screened", result.ChoPendReason);
+        Assert.Equal(60m, result.ChoPaid);
+    }
+
+    [Fact]
+    public void AScreeningHoldWithAnotherPend_StaysUndecided()
+    {
+        var cho = Cho(
+            ClaimAdjudicationStageResult.Pend(ProviderIntegrityStage.StageName, "not screened"),
+            ClaimAdjudicationStageResult.Pend(PricingStage.StageName, "No contracted rate"));
+        cho.PendDetails = new PendDetails { PendCode = "NOCONTRACT" };
+
+        var result = ShadowDiscrepancyComparer.Compare(CorePaid(80m, 60m, 20m), cho, Tolerance);
+
+        Assert.Equal(ShadowDiscrepancyKind.ChoUndecided, result.Kind);
+        Assert.False(result.HeldForProviderScreening);
+        Assert.Equal("NOCONTRACT", result.ChoPendCode);
+    }
+
+    [Fact]
+    public void AConfirmedExclusion_IsComparedAsTheDenialItIs()
+    {
+        var cho = Cho(ClaimAdjudicationStageResult.Deny(ProviderIntegrityStage.StageName, "Billing provider is excluded"));
+        cho.AdjudicationResult.DenialReasonCode = "B7";
+
+        var result = ShadowDiscrepancyComparer.Compare(CorePaid(80m, 60m, 20m), cho, Tolerance);
+
+        Assert.Equal(ShadowDiscrepancyKind.OutcomeMismatch, result.Kind);
+        Assert.False(result.HeldForProviderScreening);
+        Assert.Equal("B7", result.ChoDenialCode);
     }
 
     [Fact]

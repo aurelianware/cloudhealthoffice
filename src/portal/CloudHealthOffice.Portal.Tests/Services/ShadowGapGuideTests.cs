@@ -35,7 +35,7 @@ public class ShadowGapGuideTests
     public void Guide_links_point_at_docs_that_exist()
     {
         var root = FindRepoRoot();
-        var guides = new[] { "NOCONTRACT", "MEMBERNOTLOADED", "PLANUNAVAIL", "NETWORK", "NOAUTH", "TPL", "CONFIGUNAVAIL", "SCRUB", "REJECT:X", "UNKNOWN" }
+        var guides = new[] { "NOCONTRACT", "MEMBERNOTLOADED", "PLANUNAVAIL", "NETWORK", "NOAUTH", "TPL", "CONFIGUNAVAIL", "SCRUB", "PROVIDERSCREEN", "REJECT:X", "UNKNOWN" }
             .SelectMany(c => ShadowGapGuide.For(c).Links)
             .Where(l => l.Href.Contains("/docs/integration/"))
             .Select(l => l.Href[(l.Href.IndexOf("/docs/integration/") + 1)..].Split('#')[0])

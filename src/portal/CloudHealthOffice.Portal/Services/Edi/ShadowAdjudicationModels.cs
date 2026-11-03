@@ -88,6 +88,9 @@ public class ShadowRunReport
     public ShadowMoneyBucket CorePaidLess { get; set; } = new();
     public List<ShadowReasonRow> ByKind { get; set; } = new();
     public List<ShadowReasonRow> UndecidedByGap { get; set; } = new();
+
+    /// <summary>Decided claims CHO would still hold until it can screen their providers (PROVIDERSCREEN).</summary>
+    public ShadowReasonRow HeldForProviderScreening { get; set; } = new();
     public List<ShadowReasonRow> ByChoStage { get; set; } = new();
     public List<ShadowReasonRow> ByDenialCodes { get; set; } = new();
     public List<ShadowReasonRow> ByProcedure { get; set; } = new();
