@@ -504,16 +504,18 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
                 ackCode = elements[1];
             }
 
-            // IK3 — Implementation Segment Note (error detail)
-            if (elements.Length > 3 && elements[0] == "IK3")
+            // IK3 — Implementation Segment Note: IK301 segment id, IK302 position,
+            // IK303 loop id (optional), IK304 syntax error code.
+            if (elements.Length > 4 && elements[0] == "IK3")
             {
-                errors.Add($"Segment {elements[1]} position {elements[2]}: error code {elements[3]}");
+                errors.Add($"Segment {elements[1]} position {elements[2]}: error code {elements[4]}");
             }
 
-            // IK4 — Implementation Data Element Note (element-level error)
-            if (elements.Length > 2 && elements[0] == "IK4")
+            // IK4 — Implementation Data Element Note: IK401 position, IK402 data
+            // element reference (optional), IK403 syntax error code.
+            if (elements.Length > 3 && elements[0] == "IK4")
             {
-                errors.Add($"Element error at position {elements[1]}: code {elements[2]}");
+                errors.Add($"Element error at position {elements[1]}: code {elements[3]}");
             }
         }
 
