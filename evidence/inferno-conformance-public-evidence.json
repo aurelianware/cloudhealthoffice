@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "inferno-conformance",
-  "generatedAtUtc": "2026-11-02T20:33:03Z",
-  "sourceCommit": "e067f293fd95f46dc1bb888e18299b2d88d0c88b",
-  "sourceCommitShort": "e067f293fd95",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/e067f293fd95f46dc1bb888e18299b2d88d0c88b",
+  "generatedAtUtc": "2026-11-03T01:08:52Z",
+  "sourceCommit": "6cb04612161671ff9c7e21c866432bec2874904f",
+  "sourceCommitShort": "6cb046121616",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/6cb04612161671ff9c7e21c866432bec2874904f",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence and of the Da Vinci interoperability snapshot. A kit result never changes a CMS-0057-F scenario status, and no result here is CMS, ONC or HL7 certification.",
   "kits": [
@@ -32,49 +32,18 @@
         "dtr_payer_server_v220_questionnaire_operations",
         "dtr_payer_v220_log_questionnaire_error_support"
       ],
-      "status": "Failed",
+      "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-02T20:20:48.1079925+00:00",
+      "testedAtUtc": "2026-11-03T00:21:30.4921598+00:00",
       "tests": {
-        "passed": 37,
-        "failed": 2,
+        "passed": 39,
+        "failed": 0,
         "skipped": 1,
         "omitted": 3,
         "knownKitIssue": 3,
         "total": 46
       },
-      "failingTests": [
-        {
-          "test": "dtr_v220_payer_questionnaire_response_validation",
-          "result": "fail",
-          "message": "Not all responses were valid. See messages for details."
-        },
-        {
-          "test": "dtr_payer_v220_questionnaire_package_support",
-          "result": "fail",
-          "message": "(no message)"
-        },
-        {
-          "test": "dtr_payer_v220_questionnaire_design",
-          "result": "fail",
-          "message": "(no message)"
-        },
-        {
-          "test": "dtr_server_v220_payer_questionnaire_not_found",
-          "result": "fail",
-          "message": "Resource does not conform to the base Parameters profile."
-        },
-        {
-          "test": "dtr_payer_v220_error_handling",
-          "result": "fail",
-          "message": "(no message)"
-        },
-        {
-          "test": "dtr_payer_server_v220_must_support",
-          "result": "fail",
-          "message": "(no message)"
-        }
-      ],
+      "failingTests": [],
       "notRunTests": [
         {
           "test": "smart_backend_services_token_tls_version",
@@ -145,7 +114,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-02T20:24:33.0748099+00:00",
+      "testedAtUtc": "2026-11-03T00:25:31.3374897+00:00",
       "tests": {
         "passed": 13,
         "failed": 0,
@@ -182,7 +151,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-02T20:29:36.7058624+00:00",
+      "testedAtUtc": "2026-11-03T00:30:27.3943162+00:00",
       "tests": {
         "passed": 21,
         "failed": 0,
@@ -263,7 +232,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-02T20:13:29.5079804+00:00",
+      "testedAtUtc": "2026-11-03T00:14:20.1786774+00:00",
       "tests": {
         "passed": 41,
         "failed": 0,
@@ -418,7 +387,7 @@
       "groups": [],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-02T20:26:54.9291658+00:00",
+      "testedAtUtc": "2026-11-03T00:27:43.6683034+00:00",
       "tests": {
         "passed": 180,
         "failed": 0,
@@ -822,7 +791,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-02T20:10:18.8376682+00:00",
+      "testedAtUtc": "2026-11-03T00:11:25.7068082+00:00",
       "tests": {
         "passed": 31,
         "failed": 0,
@@ -848,15 +817,15 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-11-02T20:29:36.7076657+00:00",
+    "generatedAtUtc": "2026-11-03T00:30:27.3961440+00:00",
     "environment": "CI",
-    "choCommit": "e067f293fd95f46dc1bb888e18299b2d88d0c88b",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/e067f293fd95f46dc1bb888e18299b2d88d0c88b",
-    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41509851175",
+    "choCommit": "6cb04612161671ff9c7e21c866432bec2874904f",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/6cb04612161671ff9c7e21c866432bec2874904f",
+    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/41536963224",
     "dataClassification": "synthetic",
     "summary": {
-      "passed": 5,
-      "failed": 1,
+      "passed": 6,
+      "failed": 0,
       "skipped": 0,
       "notRun": 0,
       "total": 6
