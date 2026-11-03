@@ -207,6 +207,12 @@
                         <MudNavLink Href="/batch-adjudication" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment">
                             Batch Adjudication
                         </MudNavLink>
+                        @if (_canAdjustClaims)
+                        {
+                            <MudNavLink Href="/retro-rate" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.PublishedWithChanges">
+                                Rate Change Reprocessing
+                            </MudNavLink>
+                        }
                         <MudNavLink Href="/edi-transactions" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SwapHoriz">
                             Imports &amp; EDI
                         </MudNavLink>
@@ -446,6 +452,8 @@
     // Work management: My Work (pull) and its configuration (work-management-service).
     private bool _canWork;
     private bool _canRunReports;
+    // Retro rate reprocessing (claims-service, claims:adjust).
+    private bool _canAdjustClaims;
     private bool _canAdminWork;
     private bool _canPostNotices;
     private bool _canReadCorrespondence;
@@ -479,6 +487,7 @@
                 && (UserContextService.HasPermission("enrollment:read") || UserContextService.HasPermission("billing:read"));
             _canReadContracts = userContext != null && UserContextService.HasPermission("contracts:read");
             _canWork = userContext != null && UserContextService.HasPermission("workqueue:work");
+            _canAdjustClaims = userContext != null && UserContextService.HasPermission("claims:adjust");
             _canRunReports = userContext != null && ReportModules.All.Any(m => m.Permissions.Any(UserContextService.HasPermission));
             _canAdminWork = userContext != null && UserContextService.HasPermission("workqueue:admin");
             _canPostNotices = userContext != null && UserContextService.HasPermission("notices:write");
