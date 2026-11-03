@@ -25,6 +25,9 @@ services:
       - CpcdsDrop__Interval=00:00:30
       - CpcdsDrop__QuietPeriod=00:00:10
       - CpcdsDrop__Archive__Enabled=true
+      # Shadow adjudication: on, so each claim file can be re-adjudicated in
+      # CHO and compared with the core's answer (portal: Shadow adjudication).
+      - Adjudication__Shadow__Enabled=true
     volumes:
       - ${CHO_DROP_DIR:-./drops}:/drops
 

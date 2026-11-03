@@ -18,6 +18,12 @@ public interface IDataDropService
     Task<DataDropSettingsView?> GetSettingsAsync();
     Task<DataDropChange<DataDropSettingsView>> SaveSettingsAsync(DataDropSettings settings);
 
+    /// <summary>The tenant's shadow adjudication switch; null when the user may not see it.</summary>
+    Task<ShadowAdjudicationSettingsView?> GetShadowSettingsAsync();
+
+    /// <summary>Turns shadow adjudication on or off for the tenant.</summary>
+    Task<DataDropChange<ShadowAdjudicationSettingsView>> SaveShadowSettingsAsync(bool enabled);
+
     /// <summary>Loads what is waiting now. Null value with no errors: nothing was ready.</summary>
     Task<DataDropChange<DataDropRunRecord>> RunNowAsync();
 
@@ -59,6 +65,14 @@ public class DataDropService : IDataDropService
 
     public Task<DataDropChange<DataDropSettingsView>> SaveSettingsAsync(DataDropSettings settings)
         => SendAsync<DataDropSettingsView>(HttpMethod.Put, $"{DropsUrl}/settings", settings, ClaimsServiceName);
+
+    private string ShadowSettingsUrl => $"{_configuration["Services:ClaimsService"]}/v1/claims/shadow-adjudication/settings";
+
+    public Task<ShadowAdjudicationSettingsView?> GetShadowSettingsAsync()
+        => GetAsync<ShadowAdjudicationSettingsView>(ShadowSettingsUrl, ClaimsServiceName);
+
+    public Task<DataDropChange<ShadowAdjudicationSettingsView>> SaveShadowSettingsAsync(bool enabled)
+        => SendAsync<ShadowAdjudicationSettingsView>(HttpMethod.Put, ShadowSettingsUrl, new { enabled }, ClaimsServiceName);
 
     public Task<DataDropChange<DataDropRunRecord>> RunNowAsync()
         => SendAsync<DataDropRunRecord>(HttpMethod.Post, $"{DropsUrl}/run", null, ClaimsServiceName);

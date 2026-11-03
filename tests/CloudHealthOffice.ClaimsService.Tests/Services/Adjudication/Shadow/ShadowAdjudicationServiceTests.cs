@@ -17,6 +17,7 @@ public class ShadowAdjudicationServiceTests
     private readonly IShadowAdjudicationPipeline _pipeline = Substitute.For<IShadowAdjudicationPipeline>();
     private readonly IShadowAdjudicationRepository _store = Substitute.For<IShadowAdjudicationRepository>();
     private readonly ShadowAdjudicationOptions _options = new() { Enabled = true };
+    private readonly InMemoryShadowAdjudicationTenantSettingsRepository _tenantSettings = new();
 
     public ShadowAdjudicationServiceTests()
     {
@@ -33,6 +34,48 @@ public class ShadowAdjudicationServiceTests
         _options.Enabled = true;
         _options.Tenants.Add("another-tenant");
         await Assert.ThrowsAsync<ShadowAdjudicationDisabledException>(() => Run(new() { ClaimIds = ["cpcds-1"] }));
+    }
+
+    [Fact]
+    public async Task ATenantsSavedChoice_ReplacesConfiguration_ButNotTheDeploymentSwitch()
+    {
+        Store(Imported("cpcds-1"));
+        var tenants = Tenants();
+
+        // Not on the configured list, but the tenant turned it on from the portal.
+        _options.Tenants.Add("another-tenant");
+        await tenants.SaveAsync("tenant-1", true, "admin", DateTime.UtcNow);
+        var view = await tenants.DescribeAsync("tenant-1");
+        Assert.True(view.Running);
+        Assert.Equal(ShadowAdjudicationSettingsSource.Stored, view.Source);
+        Assert.Single((await Run(new() { ClaimIds = ["cpcds-1"] })).Results);
+
+        // Turned off by the tenant, though configuration (every tenant) would allow it.
+        _options.Tenants.Clear();
+        await tenants.SaveAsync("tenant-1", false, "admin", DateTime.UtcNow);
+        var off = await Assert.ThrowsAsync<ShadowAdjudicationDisabledException>(() => Run(new() { ClaimIds = ["cpcds-1"] }));
+        Assert.Contains("off for this tenant", off.Message);
+
+        // On for the tenant, but the deployment's switch is off: nothing runs.
+        await tenants.SaveAsync("tenant-1", true, "admin", DateTime.UtcNow);
+        _options.Enabled = false;
+        view = await tenants.DescribeAsync("tenant-1");
+        Assert.True(view.Enabled);
+        Assert.False(view.Running);
+        var deployment = await Assert.ThrowsAsync<ShadowAdjudicationDisabledException>(() => Run(new() { ClaimIds = ["cpcds-1"] }));
+        Assert.Contains("off in this deployment", deployment.Message);
+    }
+
+    [Fact]
+    public async Task WithNoSavedChoice_ConfigurationDecides()
+    {
+        var tenants = Tenants();
+        Assert.True((await tenants.DescribeAsync("tenant-1")).Running);
+        Assert.Equal(ShadowAdjudicationSettingsSource.Configuration, (await tenants.DescribeAsync("tenant-1")).Source);
+
+        _options.Tenants.Add("another-tenant");
+        Assert.False((await tenants.DescribeAsync("tenant-1")).Enabled);
+        Assert.True((await tenants.DescribeAsync("another-tenant")).Running);
     }
 
     [Fact]
@@ -163,9 +206,11 @@ public class ShadowAdjudicationServiceTests
 
     private Task<ShadowAdjudicationRunResponse> Run(ShadowAdjudicationRunRequest request) =>
         new ShadowAdjudicationService(
-                _claims, _transactions, _pipeline, _store, Options.Create(_options),
+                _claims, _transactions, _pipeline, _store, Tenants(),
                 NullLogger<ShadowAdjudicationService>.Instance)
             .RunAsync("tenant-1", request, "actor-1", CancellationToken.None);
+
+    private ShadowAdjudicationTenants Tenants() => new(Options.Create(_options), _tenantSettings);
 
     private void Store(Claim claim) =>
         _claims.GetLatestVersionAsync(claim.ClaimVersionId, Arg.Any<DateTime>()).Returns(claim);

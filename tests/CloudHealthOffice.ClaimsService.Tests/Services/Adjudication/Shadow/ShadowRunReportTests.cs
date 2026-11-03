@@ -130,7 +130,10 @@ public class ShadowRunReportTests
     private static ShadowAdjudicationController Controller(IShadowAdjudicationRepository store)
     {
         var controller = new ShadowAdjudicationController(
-            Substitute.For<IShadowAdjudicationService>(), store, Substitute.For<ICurrentActor>());
+            Substitute.For<IShadowAdjudicationService>(), store,
+            new ShadowAdjudicationTenants(Microsoft.Extensions.Options.Options.Create(new ShadowAdjudicationOptions()),
+                new InMemoryShadowAdjudicationTenantSettingsRepository()),
+            Substitute.For<ICurrentActor>());
         var http = new DefaultHttpContext();
         http.Items["TenantId"] = "tenant-1";
         controller.ControllerContext = new ControllerContext { HttpContext = http };

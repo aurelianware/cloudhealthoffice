@@ -44,6 +44,30 @@ of shadow runs until it is classified, and a unit test fails until it is.
 All require `claims:import`, the same permission as the CPCDS importer: the
 results show the plan's payment differences.
 
+### Turning it on for a plan
+
+`GET /api/v1/claims/shadow-adjudication/settings` says whether runs are accepted
+for the tenant now (`running`), whether the deployment allows them
+(`enabledForDeployment`), the tenant's own choice (`enabled`, from `Stored` or
+`Configuration`), `maxClaimsPerRun` and `tolerance`.
+
+`PUT /api/v1/claims/shadow-adjudication/settings` with `{ "enabled": true }`
+turns it on for the tenant without a redeploy, and `false` turns it off. A
+saved choice replaces what `Adjudication:Shadow:Tenants` says for that tenant,
+in either direction. `Adjudication:Shadow:Enabled` stays the deployment's
+switch: while it is off, nothing runs, whatever a tenant saved.
+
+In the portal: Imports & EDI, Setup, "Shadow adjudication for this plan".
+Switching on "Shadow-adjudicate each claim file after it loads" there turns
+shadow adjudication on for the plan too.
+
+The laptop trial (`deploy/local/cpcds-trial`) and the hosted drop
+(`deploy/gcp/render_manifests.py --cpcds-drop-bucket`) set
+`Adjudication__Shadow__Enabled=true`, so there it is on for every plan unless
+the plan turns it off.
+
+### Runs
+
 `POST /api/v1/claims/shadow-adjudication/runs`
 
 ```json
@@ -141,8 +165,8 @@ you which one is missing.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `Enabled` | `false` | Runs are refused (409) unless true. |
-| `Tenants` | `[]` | When set, only these tenants may run. |
+| `Enabled` | `false` | The deployment's switch. Runs are refused (409) unless true. `true` in the CPCDS trial and hosted drop profiles. |
+| `Tenants` | `[]` | When set, only these tenants run, unless a tenant saved its own choice (`PUT .../settings`), which wins. Empty: every tenant. |
 | `MaxClaimsPerRun` | `200` | Most claims one synchronous run adjudicates. |
 | `Tolerance` | `0.01` | Dollar difference treated as equal. |
 

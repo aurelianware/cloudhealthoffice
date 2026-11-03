@@ -605,6 +605,9 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             # (SourceExtract, ten-year retention); the bucket is transit only.
             set_env(container, "CpcdsDrop__Archive__Enabled", "true")
             set_env(container, "Services__DocumentService", "http://document-service")
+            # Shadow adjudication of the loaded claims is part of the offer: on
+            # for the deployment, and each plan turns it off or on in the portal.
+            set_env(container, "Adjudication__Shadow__Enabled", "true")
         if name == "appeals-service" and args.appeals_secrets_project:
             spec["serviceAccountName"] = "appeals-service"
             set_env(container, "SecretProvider__Provider", "GoogleSecretManager")

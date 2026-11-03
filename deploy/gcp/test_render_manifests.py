@@ -294,6 +294,7 @@ def test_production_keeps_the_managed_store_identity(tmp_path):
 def test_claims_service_keeps_the_folder_drop_without_a_bucket():
     claims = deployments(render())["claims-service"]
     assert "CpcdsDrop__Store" not in env(claims)
+    assert "Adjudication__Shadow__Enabled" not in env(claims)
 
 
 def test_claims_service_reads_the_cpcds_drop_bucket_through_workload_identity():
@@ -307,6 +308,7 @@ def test_claims_service_reads_the_cpcds_drop_bucket_through_workload_identity():
     assert env(claims)["CpcdsDrop__Gcs__Bucket"] == "demo-project-cho-cpcds-drops"
     assert env(claims)["CpcdsDrop__Archive__Enabled"] == "true"
     assert env(claims)["Services__DocumentService"] == "http://document-service"
+    assert env(claims)["Adjudication__Shadow__Enabled"] == "true"
     accounts = [d for d in docs if d["kind"] == "ServiceAccount" and d["metadata"]["name"] == "claims-service"]
     assert len(accounts) == 1
     assert accounts[0]["metadata"]["annotations"]["iam.gke.io/gcp-service-account"] == gsa
