@@ -58,6 +58,9 @@ until it is clean. Then:
 ./scripts/cpcds/trial.sh load trial --local
 ```
 
+Then `./scripts/cpcds/trial.sh shadow --local` re-adjudicates the loaded
+claims in CHO and compares them with the core's answers in the files.
+
 `--local` signs a development token (`scripts/dev-token.sh`) that only a
 Development stack accepts. Never put real member data on this stack. It keeps
 documents in memory and trusts a public signing key.
@@ -129,7 +132,30 @@ is the order the daily drop uses, so every claim and authorization finds its
 member. Reloading the same files is safe: unchanged records are reported
 `Unchanged` and nothing is written.
 
-### 5. Validate with Inferno
+### 5. Shadow-adjudicate the loaded claims
+
+```bash
+./scripts/cpcds/trial.sh shadow
+```
+
+CHO re-adjudicates every claim file the last `load` loaded, in the background,
+and compares its answer with the core's: nothing members, providers or the
+FHIR APIs see changes. The step turns shadow adjudication on for the tenant if
+it is off (the deployment must allow it: `Adjudication__Shadow__Enabled=true`,
+which the laptop trial and the hosted drop set), waits for each run and prints:
+
+- how many claims CHO decided and how often it matched the core
+- money the core paid more or less than CHO would have
+- what to load next for the claims CHO could not decide (contracts and fee
+  schedules, benefit plans, providers, authorizations)
+
+The report and the discrepancy CSV are saved in `cpcds-trial-out/`. The
+portal shows the same runs, with links to each importer, under
+**Operations**, **Shadow Adjudication**. Load what it names and run `shadow`
+again to watch the gap close. `--batch <importBatchId>` shadows one earlier
+load. See [SHADOW-ADJUDICATION.md](SHADOW-ADJUDICATION.md).
+
+### 6. Validate with Inferno
 
 ```bash
 ./scripts/interop/fetch-inferno.sh us-core c4bb plan-net   # once
@@ -148,7 +174,7 @@ member. [VALIDATE-A-DEPLOYMENT.md](VALIDATE-A-DEPLOYMENT.md) explains:
 - why nothing is seeded
 - how to read a failure that comes from the data rather than the API
 
-### 6. Keep it current
+### 7. Keep it current
 
 Once a load works by hand, the core can write the same files to the daily
 drop instead. To set that up, turn the drop on, either in the portal under
@@ -170,5 +196,6 @@ in `cpcds-trial-out/` contain member data. Keep them inside the plan.
 - [ ] `check` exits 0 on a full extract.
 - [ ] `load` exits 0, and the claim counts and paid amounts match the core's own control totals.
 - [ ] Authorizations loaded, if the plan uses its own UM platform.
+- [ ] `shadow` run on the loaded claims, and its "what to load next" list worked down.
 - [ ] Inferno US Core, CARIN BB and Plan-Net run against the deployment with a loaded member.
 - [ ] Daily drop on, and freshness showing Fresh.
