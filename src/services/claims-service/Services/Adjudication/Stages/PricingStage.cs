@@ -144,6 +144,7 @@ public sealed class PricingStage : IClaimAdjudicationStage
         var outcome = Evaluate(claim, requests, priced);
         context.PricingResult = outcome;
         RecordSupplementalPayments(context, priced);
+        RecordLinePricing(context, requests, priced);
 
         if (!outcome.IsFullyPriced)
         {
@@ -290,6 +291,40 @@ public sealed class PricingStage : IClaimAdjudicationStage
             .SelectMany(r => r.PaymentNotices)
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Copies what priced each line (schedule, revision, rate source, amounts)
+    /// onto the claim's adjudication result, replacing any from an earlier
+    /// run. Lines pricing returned more than once are left out, as
+    /// <see cref="Evaluate"/> leaves them unpriced.
+    /// </summary>
+    internal static void RecordLinePricing(
+        ClaimAdjudicationContext context, IReadOnlyList<PricingRequest> requests, PricingResultSet priced)
+    {
+        var serviceDates = requests
+            .GroupBy(r => r.LineNumber)
+            .ToDictionary(g => g.Key, g => g.First().ServiceDate);
+        context.AdjudicationResult.LinePricing = priced.LineResults
+            .GroupBy(r => r.LineNumber)
+            .Where(g => g.Count() == 1)
+            .Select(g => g.Single())
+            .OrderBy(r => r.LineNumber)
+            .Select(r => new ClaimLinePricing
+            {
+                LineNumber = r.LineNumber,
+                ProcedureCode = r.ProcedureCode,
+                ServiceDate = serviceDates.TryGetValue(r.LineNumber, out var date) ? date : default,
+                FeeScheduleId = r.FeeScheduleId,
+                FeeScheduleName = r.FeeScheduleName,
+                FeeScheduleRevision = r.FeeScheduleRevision,
+                FeeScheduleType = r.FeeScheduleType.ToString(),
+                RateSource = r.RateSource.ToString(),
+                BaseAmount = r.BaseAmount,
+                AllowedAmount = r.AllowedAmount,
+                LesserOfBilledApplied = r.LesserOfBilledApplied,
+            })
             .ToList();
     }
 

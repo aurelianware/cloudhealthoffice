@@ -3,6 +3,7 @@ using CloudHealthOffice.FeeScheduleEngine.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
+using CloudHealthOffice.Infrastructure.Logging;
 using System.Linq.Expressions;
 
 namespace CloudHealthOffice.FeeScheduleEngine.Persistence;
@@ -29,16 +30,19 @@ public class FeeScheduleRepositoryMongo : IFeeScheduleRepository, IProviderContr
     private readonly IMongoCollection<FeeSchedule> _scheduleCollection;
     private readonly IMongoCollection<ProviderContract> _contractCollection;
     private readonly ILogger<FeeScheduleRepositoryMongo> _logger;
+    private readonly IFeeScheduleHistoryRepository? _history;
 
     public FeeScheduleRepositoryMongo(
         IMongoDatabase database,
         IConfiguration configuration,
-        ILogger<FeeScheduleRepositoryMongo> logger)
+        ILogger<FeeScheduleRepositoryMongo> logger,
+        IFeeScheduleHistoryRepository? history = null)
         : this(
             database,
             configuration["FeeScheduleEngine:FeeScheduleCollection"] ?? "FeeSchedules",
             configuration["FeeScheduleEngine:ProviderContractCollection"] ?? "ProviderContracts",
-            logger)
+            logger,
+            history)
     {
     }
 
@@ -51,11 +55,13 @@ public class FeeScheduleRepositoryMongo : IFeeScheduleRepository, IProviderContr
         IMongoDatabase database,
         string scheduleCollection,
         string contractCollection,
-        ILogger<FeeScheduleRepositoryMongo> logger)
+        ILogger<FeeScheduleRepositoryMongo> logger,
+        IFeeScheduleHistoryRepository? history = null)
     {
         _scheduleCollection = database.GetCollection<FeeSchedule>(scheduleCollection);
         _contractCollection = database.GetCollection<ProviderContract>(contractCollection);
         _logger = logger;
+        _history = history;
     }
 
     // ── IFeeScheduleRepository ──────────────────────────────────────────
@@ -113,6 +119,14 @@ public class FeeScheduleRepositoryMongo : IFeeScheduleRepository, IProviderContr
         return ResolveLinePriority(schedule.Lines, procedureCode, modifier);
     }
 
+    /// <summary>
+    /// Create or replace, then record the write in the change history (when
+    /// one is wired): the schedule as it stood is kept as a revision snapshot
+    /// and a <see cref="FeeScheduleChange"/> lists what moved. A history
+    /// failure is logged, never thrown: the schedule is already written, and
+    /// failing the call would send the caller back with a revision that is no
+    /// longer current.
+    /// </summary>
     public async Task<FeeSchedule> UpsertAsync(FeeSchedule schedule, CancellationToken ct = default)
     {
         schedule.LastUpdatedDate = DateTime.UtcNow;
@@ -121,11 +135,34 @@ public class FeeScheduleRepositoryMongo : IFeeScheduleRepository, IProviderContr
             Builders<FeeSchedule>.Filter.Eq(x => x.Id, schedule.Id),
             Builders<FeeSchedule>.Filter.Eq(x => x.TenantId, schedule.TenantId));
 
+        // The stored schedule before the write, for the history. Read even for
+        // a revision-0 write: documents written before Revision existed are
+        // replaced at 0 too. A stale read only matters when the conditional
+        // write below then fails, and then nothing is recorded.
+        var before = _history is null
+            ? null
+            : await _scheduleCollection.Find(filter).FirstOrDefaultAsync(ct);
+
         await ConditionalUpsertAsync(
             _scheduleCollection, filter, schedule, x => x.Revision, "Fee schedule", schedule.Id,
             () => schedule.Revision, r => schedule.Revision = r, ct);
 
         _logger.LogDebug("Upserted fee schedule {Id}", schedule.Id);
+
+        if (_history is not null)
+        {
+            try
+            {
+                await _history.RecordAsync(before, schedule, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex,
+                    "Fee schedule {Id} revision {Revision} was written but its change history was not recorded",
+                    LogSanitizer.Sanitize(schedule.Id, 256), schedule.Revision);
+            }
+        }
+
         return schedule;
     }
 

@@ -242,6 +242,7 @@ public class RateResolutionService : IRateResolutionService
                 NetworkStatus    = networkStatus,
                 FeeScheduleId    = schedule?.Id,
                 FeeScheduleName  = schedule?.Name,
+                FeeScheduleRevision = schedule?.Revision,
                 UnresolvedReason = unresolvedReason,
             }, rateLine, IsPerStay: false, LesserOfBilled: false);
         }
@@ -323,6 +324,7 @@ public class RateResolutionService : IRateResolutionService
             NetworkStatus   = networkStatus,
             FeeScheduleId   = schedule?.Id,
             FeeScheduleName = schedule?.Name,
+            FeeScheduleRevision = schedule?.Revision,
             Adjustments     = adjustments,
             IsPerStayRate   = isPerStay,
             Warnings        = warnings,

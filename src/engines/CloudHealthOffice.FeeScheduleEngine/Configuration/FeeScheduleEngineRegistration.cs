@@ -45,6 +45,7 @@ public class FeeScheduleEngineBuilder
     /// </summary>
     public FeeScheduleEngineBuilder UseMongoRepositories()
     {
+        _services.AddScoped<IFeeScheduleHistoryRepository, FeeScheduleHistoryRepositoryMongo>();
         _services.AddScoped<FeeScheduleRepositoryMongo>();
         _services.AddScoped<IFeeScheduleRepository>(CreateFeeScheduleCache<FeeScheduleRepositoryMongo>);
         _services.AddScoped<IProviderContractRepository>(CreateFeeScheduleCache<FeeScheduleRepositoryMongo>);
