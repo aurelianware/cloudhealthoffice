@@ -54,6 +54,7 @@ public sealed class RecordingAppealEventPublisher : IAppealEventTransport
     public readonly ConcurrentQueue<AssignedCall> Assigned = new();
     public readonly ConcurrentQueue<MigratedCall> Migrated = new();
     public readonly ConcurrentQueue<DeadlineExtendedCall> DeadlineExtended = new();
+    public readonly ConcurrentQueue<AppealNoticeSentEventPayload> NoticesSent = new();
 
     // Full wire payloads for tests that assert replay determinism.
     public readonly ConcurrentQueue<AppealNoteAddedEventPayload> NoteAddedPayloads = new();
@@ -97,6 +98,7 @@ public sealed class RecordingAppealEventPublisher : IAppealEventTransport
         while (Assigned.TryDequeue(out _)) { }
         while (Migrated.TryDequeue(out _)) { }
         while (DeadlineExtended.TryDequeue(out _)) { }
+        while (NoticesSent.TryDequeue(out _)) { }
         while (NoteAddedPayloads.TryDequeue(out _)) { }
         while (DeadlineExtendedPayloads.TryDequeue(out _)) { }
     }
@@ -213,6 +215,9 @@ public sealed class RecordingAppealEventPublisher : IAppealEventTransport
                 DeadlineExtendedPayloads.Enqueue(p);
                 break;
             }
+            case AppealEventPublisher.AppealNoticeSentType:
+                NoticesSent.Enqueue(Read<AppealNoticeSentEventPayload>(m));
+                break;
             default:
                 throw new InvalidOperationException($"Unknown event type {m.EventType}");
         }

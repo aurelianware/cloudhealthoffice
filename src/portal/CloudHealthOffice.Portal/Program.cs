@@ -290,6 +290,7 @@ builder.Services.AddScoped<IReportsService, ReportsService>();
 builder.Services.AddScoped<GlobalSearch>();
 builder.Services.AddScoped<IEdiTransactionsService, EdiTransactionsService>();
 builder.Services.AddScoped<IDataDropService, DataDropService>();
+builder.Services.AddScoped<IShadowAdjudicationClient, ShadowAdjudicationClient>();
 builder.Services.AddScoped<IEligibilityService, EligibilityService>();
 builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
 builder.Services.AddScoped<ICms0057Service, Cms0057Service>();
@@ -303,6 +304,11 @@ builder.Services.AddScoped<IIdCardService, CloudHealthOffice.Portal.Services.IdC
 builder.Services.AddScoped<IProviderService, ProviderService>();
 builder.Services.AddScoped<IBenefitPlanService, BenefitPlanService>();
 builder.Services.AddScoped<IBenefitPlanValidationService, BenefitPlanValidationService>();
+// Guided plan onboarding: state program templates -> Draft -> publish (benefit-plan-service).
+builder.Services.AddScoped<IPlanTemplateService, PlanTemplateService>();
+// Fee schedule library: browse, preview and deploy reference schedules at a percentage (benefit-plan-service).
+builder.Services.AddScoped<IFeeScheduleLibraryService, FeeScheduleLibraryService>();
+builder.Services.AddScoped<IRetroRateService, RetroRateService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ISponsorService, SponsorService>();
@@ -531,6 +537,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 // only; the document is fetched with the user's CHO token (GET, no side effects).
 app.MapMemberDocumentDownload();
 app.MapDocumentDownload();
+app.MapShadowDiscrepancyDownload();
 
 app.MapControllers();
 app.MapRazorPages();

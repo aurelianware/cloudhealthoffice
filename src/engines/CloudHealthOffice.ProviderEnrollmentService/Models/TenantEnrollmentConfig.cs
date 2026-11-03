@@ -40,7 +40,7 @@ public enum EnrollmentGateMode
 public record LobEnrollmentOverride
 {
     /// <summary>The line of business this override applies to.</summary>
-    public required LineOfBusiness Lob { get; init; }
+    public required ProgramParticipation Lob { get; init; }
 
     /// <summary>null = inherit tenant default GateMode.</summary>
     public EnrollmentGateMode? GateMode { get; init; }
@@ -133,10 +133,10 @@ public record TenantEnrollmentConfig
     ///
     /// Callers never touch LobOverrides directly — always call ResolveFor().
     /// </summary>
-    public ResolvedEnrollmentConfig ResolveFor(LineOfBusiness lob)
+    public ResolvedEnrollmentConfig ResolveFor(ProgramParticipation lob)
     {
         // Exact LOB match — no flag decomposition. A request carrying
-        // LineOfBusiness.STAR resolves the STAR override, not Medicaid.
+        // ProgramParticipation.STAR resolves the STAR override, not Medicaid.
         var ovr = LobOverrides.FirstOrDefault(o => o.Lob == lob);
 
         return new ResolvedEnrollmentConfig
@@ -160,7 +160,7 @@ public record TenantEnrollmentConfig
 public record ResolvedEnrollmentConfig
 {
     public required string TenantId                         { get; init; }
-    public required LineOfBusiness Lob                      { get; init; }
+    public required ProgramParticipation Lob                      { get; init; }
     public required EnrollmentGateMode GateMode             { get; init; }
     public required IReadOnlyList<string> EnabledStateCodes { get; init; }
     public required int RevalidationWarningDays             { get; init; }

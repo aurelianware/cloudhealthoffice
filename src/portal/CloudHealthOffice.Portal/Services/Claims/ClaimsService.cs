@@ -214,23 +214,6 @@ public class ClaimsService : IClaimsService
         return request;
     }
 
-    public async Task<string> SubmitClaimAsync(SubmitClaimRequest request)
-    {
-        var baseUrl = _configuration["Services:ClaimsService"];
-        try
-        {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/claims", request);
-            response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<SubmitClaimResponse>();
-            return result?.ClaimId ?? string.Empty;
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
-            throw new ServiceUnavailableException("Claims Service", ex);
-        }
-    }
-
     public async Task<ClaimInsightsView> GetClaimInsightsAsync(DateTime from, DateTime to, string? lineOfBusiness = null)
     {
         var baseUrl = _configuration["Services:ClaimsService"];
@@ -435,6 +418,152 @@ public class ClaimsService : IClaimsService
                ?? throw new InvalidOperationException("The note wasn't saved: empty response.");
     }
 
+    public async Task<System.Text.Json.Nodes.JsonObject?> GetCorrectionDraftAsync(string claimId)
+    {
+        var url = $"{GetClaimsServiceRootUrl()}/api/v1/claims/{Uri.EscapeDataString(claimId)}/correction-draft";
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.GetAsync(url);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            throw new InvalidOperationException("You don't have permission to correct claims.");
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"The claim couldn't be loaded for correction ({(int)response.StatusCode}).");
+
+        return await response.Content.ReadFromJsonAsync<System.Text.Json.Nodes.JsonObject>(JsonOptions);
+    }
+
+    public async Task<ClaimCorrectionResult> SubmitCorrectionAsync(
+        string claimId,
+        string reason,
+        string? notes,
+        System.Text.Json.Nodes.JsonObject correctedClaim,
+        string idempotencyKey)
+    {
+        var url = $"{GetClaimsServiceRootUrl()}/api/v1/claims/{Uri.EscapeDataString(claimId)}/adjustments";
+        var body = new System.Text.Json.Nodes.JsonObject
+        {
+            ["adjustmentReason"] = reason,
+            ["notes"] = string.IsNullOrWhiteSpace(notes) ? null : notes,
+            ["correctedClaim"] = correctedClaim.DeepClone(),
+        };
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = JsonContent.Create(body, options: JsonOptions),
+        };
+        request.Headers.Add("Idempotency-Key", idempotencyKey);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.SendAsync(request);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+
+        var text = await response.Content.ReadAsStringAsync();
+        if (response.IsSuccessStatusCode)
+        {
+            var created = string.IsNullOrWhiteSpace(text)
+                ? null
+                : System.Text.Json.JsonSerializer.Deserialize<ClaimCorrectionCreated>(text, JsonOptions);
+            return ClaimCorrectionResult.Ok(created?.Id ?? string.Empty, created?.NewClaimId ?? string.Empty);
+        }
+
+        return ClaimCorrectionResult.Fail(response.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Forbidden => new[] { "You don't have permission to correct claims." },
+            System.Net.HttpStatusCode.NotFound => new[] { "The claim wasn't found." },
+            _ => ClaimCorrectionResult.ReadErrors(text, (int)response.StatusCode),
+        });
+    }
+
+    public async Task<ClaimCorrectionResult> SubmitNewClaimAsync(System.Text.Json.Nodes.JsonObject claim)
+    {
+        var url = $"{GetClaimsServiceRootUrl()}/api/v1/claims";
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.PostAsJsonAsync(url, claim, JsonOptions);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+
+        var text = await response.Content.ReadAsStringAsync();
+        if (response.IsSuccessStatusCode)
+        {
+            var created = string.IsNullOrWhiteSpace(text)
+                ? null
+                : System.Text.Json.JsonSerializer.Deserialize<ClaimCorrectionCreated>(text, JsonOptions);
+            return ClaimCorrectionResult.Ok(string.Empty, created?.Id ?? string.Empty);
+        }
+
+        return ClaimCorrectionResult.Fail(response.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Forbidden => new[] { "You don't have permission to submit claims." },
+            System.Net.HttpStatusCode.NotImplemented => new[] { "This tenant's claims system doesn't accept claims from CHO." },
+            _ => ClaimCorrectionResult.ReadErrors(text, (int)response.StatusCode),
+        });
+    }
+
+    public async Task<string?> VoidClaimAsync(string claimId, string reason)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.PostAsJsonAsync(
+                $"{baseUrl}/claims/{Uri.EscapeDataString(claimId)}/void", new { reason }, JsonOptions);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+
+        if (response.IsSuccessStatusCode) return null;
+        if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            return "You don't have permission to reverse claims.";
+
+        var text = await response.Content.ReadAsStringAsync();
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("message", out var message)
+                && message.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(message.GetString()))
+            {
+                return message.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+            // Not JSON: fall through.
+        }
+        return $"The claim wasn't reversed ({(int)response.StatusCode}).";
+    }
+
+    private sealed class ClaimCorrectionCreated
+    {
+        public string Id { get; set; } = string.Empty;
+        public string NewClaimId { get; set; } = string.Empty;
+    }
+
     private string GetClaimsServiceRootUrl()
     {
         var baseUrl = (_configuration["Services:ClaimsService"] ?? string.Empty).TrimEnd('/');
@@ -480,11 +609,6 @@ public class ClaimsService : IClaimsService
             _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
             throw new ServiceUnavailableException("Claims Service", ex);
         }
-    }
-
-    private class SubmitClaimResponse
-    {
-        public string ClaimId { get; set; } = string.Empty;
     }
 
     private static async Task<T?> ReadOptionalJsonAsync<T>(HttpResponseMessage response)

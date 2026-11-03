@@ -251,7 +251,7 @@ public class AppealLifecycleSmokeTests : IClassFixture<AppealsWebApplicationFact
     [InlineData(LineOfBusiness.Medicare, 30)]
     [InlineData(LineOfBusiness.Medicaid, 30)]
     [InlineData(LineOfBusiness.Commercial, 30)]
-    [InlineData(LineOfBusiness.Marketplace, 30)]
+    [InlineData(LineOfBusiness.Exchange, 30)]
     public async Task Create_Standard_Defaults_TargetResponseDate_Per_LineOfBusiness(LineOfBusiness lob, int days)
     {
         _factory.Reset();
@@ -506,11 +506,13 @@ public sealed class AppealsWebApplicationFactory : WebApplicationFactory<Program
     public RecordingAppealEventPublisher Publisher { get; } = new();
     public InMemoryTexasAgCodesStore TexasCodes { get; } = new();
     public RecordingStateFileCatalog StateFiles { get; } = new();
+    public FakeMemberProgramResolver MemberPrograms { get; } = new();
 
     public void Reset()
     {
         Repo.Clear();
         Publisher.Clear();
+        MemberPrograms.Clear();
     }
 
     protected override IHost CreateHost(IHostBuilder builder)
@@ -566,6 +568,8 @@ public sealed class AppealsWebApplicationFactory : WebApplicationFactory<Program
             services.AddSingleton<ITexasAgCodesStore>(TexasCodes);
             services.RemoveAll<IStateFileCatalog>();
             services.AddSingleton<IStateFileCatalog>(StateFiles);
+            services.RemoveAll<IMemberProgramResolver>();
+            services.AddSingleton<IMemberProgramResolver>(MemberPrograms);
 
             services.AddSingleton(Repo);
             services.AddSingleton<IAppealRepository>(sp => sp.GetRequiredService<InMemoryAppealRepository>());

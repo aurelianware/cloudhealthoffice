@@ -17,7 +17,6 @@ public interface IClaimsService
         int limit = 250,
         string? validationStatus = null,
         string? paymentStatus = null);
-    Task<string> SubmitClaimAsync(SubmitClaimRequest request);
     Task<bool> TryRecordAiExaminerAgreementAsync(
         string claimId,
         string agreement,
@@ -69,4 +68,40 @@ public interface IClaimsService
     /// caller's own access events).
     /// </summary>
     Task<List<RecentClaimView>> GetRecentlyViewedClaimsAsync(int limit = 10);
+
+    /// <summary>
+    /// The claim's content ready to correct (claims-service
+    /// <c>GET /api/v1/claims/{id}/correction-draft</c>, needs
+    /// <c>claims:adjust</c>). Null when the claim doesn't exist.
+    /// </summary>
+    Task<System.Text.Json.Nodes.JsonObject?> GetCorrectionDraftAsync(string claimId);
+
+    /// <summary>
+    /// Submits a corrected claim as an adjustment of a finalized claim
+    /// (claims-service <c>POST /api/v1/claims/{id}/adjustments</c>). The new
+    /// version supersedes the claim and runs the full adjudication pipeline.
+    /// The same <paramref name="idempotencyKey"/> with the same body returns
+    /// the first result, so a retried click never creates two adjustments.
+    /// </summary>
+    Task<ClaimCorrectionResult> SubmitCorrectionAsync(
+        string claimId,
+        string reason,
+        string? notes,
+        System.Text.Json.Nodes.JsonObject correctedClaim,
+        string idempotencyKey);
+
+    /// <summary>
+    /// Submits a manually keyed claim (claims-service <c>POST /api/v1/claims</c>,
+    /// the same intake every 837 claim goes through). The created claim is
+    /// adjudicated by the pipeline. <see cref="ClaimCorrectionResult.NewClaimId"/>
+    /// carries the new claim's id.
+    /// </summary>
+    Task<ClaimCorrectionResult> SubmitNewClaimAsync(System.Text.Json.Nodes.JsonObject claim);
+
+    /// <summary>
+    /// Reverses (voids) a paid claim (claims-service <c>POST /claims/{id}/void</c>,
+    /// needs <c>claims:void</c>). Returns null when the claim is voided (or
+    /// already was), otherwise the service's reason for refusing.
+    /// </summary>
+    Task<string?> VoidClaimAsync(string claimId, string reason);
 }

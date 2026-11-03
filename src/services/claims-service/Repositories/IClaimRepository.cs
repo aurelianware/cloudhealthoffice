@@ -109,6 +109,20 @@ public interface IClaimRepository
     Task<IReadOnlyList<Finance.TplReportClaim>> GetTplReportClaimsAsync(DateTime adjudicatedFrom, DateTime adjudicatedBefore, CancellationToken ct = default)
         => throw new NotSupportedException("The TPL/TPR report needs the MongoDB claim store.");
 
+    /// <summary>
+    /// Medicaid claim versions adjudicated in [<paramref name="adjudicatedFrom"/>,
+    /// <paramref name="adjudicatedBefore"/>), for the Texas Claims Summary Report.
+    /// </summary>
+    Task<IReadOnlyList<Finance.ClaimsSummaryClaim>> GetClaimsSummaryAdjudicatedAsync(DateTime adjudicatedFrom, DateTime adjudicatedBefore, CancellationToken ct = default)
+        => throw new NotSupportedException("The Claims Summary Report needs the MongoDB claim store.");
+
+    /// <summary>
+    /// Medicaid claim versions received before <paramref name="before"/> and not
+    /// adjudicated by then (open at that instant), for the Texas Claims Summary Report.
+    /// </summary>
+    Task<IReadOnlyList<Finance.ClaimsSummaryClaim>> GetClaimsSummaryOpenAsync(DateTime before, CancellationToken ct = default)
+        => throw new NotSupportedException("The Claims Summary Report needs the MongoDB claim store.");
+
     Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByIdsAsync(
         IReadOnlyCollection<string> claimIds,
         string? memberId,
@@ -346,6 +360,33 @@ public interface IClaimRepository
     /// </summary>
     Task<IReadOnlyList<Claim>> FindFinalizedMedicaidAsync(
         DateTime from, DateTime to, string? memberId, bool payAndChaseOnly, int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Retro rate reprocessing: current-version, unadjusted Approved /
+    /// PartiallyPaid / Paid claims of the request tenant whose dates of service
+    /// overlap the query's window and that either name the fee schedule in
+    /// their pricing provenance or supplemental payments, or are on one of its
+    /// plans. Oldest service first, at most <paramref name="limit"/>.
+    /// <see cref="Services.RetroRate.RetroRateMatcher"/> narrows them further.
+    /// </summary>
+    Task<IReadOnlyList<Claim>> FindRetroRateCandidatesAsync(
+        Services.RetroRate.RetroRateCandidateQuery query, int limit, CancellationToken ct = default)
+        => throw new NotSupportedException("This claim store cannot search for retro rate candidates.");
+
+    /// <summary>
+    /// Shadow adjudication's accumulator history: current-version claims of the
+    /// request tenant that another core adjudicated and paid
+    /// (<see cref="Claim.ExternalSource"/> set; Approved, PartiallyPaid or
+    /// Paid), for <paramref name="memberId"/> or filed under
+    /// <paramref name="subscriberId"/>, with a first service date in
+    /// [<paramref name="serviceFrom"/>, <paramref name="serviceBefore"/>).
+    /// Oldest adjudication first, at most <paramref name="limit"/>. Stores
+    /// that cannot search return none.
+    /// </summary>
+    Task<IReadOnlyList<Claim>> FindCoreClaimsForAccumulationAsync(
+        string memberId, string? subscriberId, DateTime serviceFrom, DateTime serviceBefore, int limit,
+        CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<Claim>>([]);
 
     Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(
         DateTime from, DateTime to, int limit, CancellationToken ct = default);

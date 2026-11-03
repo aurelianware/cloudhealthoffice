@@ -18,7 +18,7 @@ using ChoInstitutionalDetails = ClaimsService.Models.InstitutionalClaimDetails;
 using ChoEncounter = EncounterService.Models.Encounter;
 using ChoEncounterDiagnosis = EncounterService.Models.EncounterDiagnosis;
 using ChoEncounterLine = EncounterService.Models.EncounterServiceLine;
-using ChoLineOfBusiness = ClaimsService.Models.LineOfBusiness;
+using ChoLineOfBusiness = CloudHealthOffice.Infrastructure.Programs.LineOfBusiness;
 using ChoRequestedService = AuthorizationService.Models.RequestedService;
 
 namespace CloudHealthOffice.FhirConformance.Tests;
@@ -169,7 +169,7 @@ public class GoldenInstanceTests
         AuthorizationNumber = "AUTH-GOLD-1",
         MemberId = "MEM-GOLD-1",
         CoverageId = "cov-gold-1",
-        LineOfBusiness = AuthorizationService.Models.LineOfBusiness.Medicaid,
+        LineOfBusiness = CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Medicaid,
         RequestingProviderNPI = "1234567893",
         RequestingProviderName = "Example Orthopaedics",
         ServicingProviderNPI = "1245319599",

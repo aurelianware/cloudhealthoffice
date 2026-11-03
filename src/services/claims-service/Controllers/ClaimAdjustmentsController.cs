@@ -27,16 +27,46 @@ public class ClaimAdjustmentsController : ControllerBase
 {
     private readonly IClaimAdjustmentService _adjustmentService;
     private readonly IClaimAdjustmentRepository _adjustmentRepository;
+    private readonly IClaimRepository _claimRepository;
     private readonly ICurrentActor _actor;
 
     public ClaimAdjustmentsController(
         IClaimAdjustmentService adjustmentService,
         IClaimAdjustmentRepository adjustmentRepository,
+        IClaimRepository claimRepository,
         ICurrentActor actor)
     {
         _adjustmentService = adjustmentService;
         _adjustmentRepository = adjustmentRepository;
+        _claimRepository = claimRepository;
         _actor = actor;
+    }
+
+    /// <summary>
+    /// The claim's current content in the shape the adjustment endpoint
+    /// takes as <see cref="ClaimAdjustmentRequest.CorrectedClaim"/>, so an
+    /// examiner's correction screen can edit it and post it back without a
+    /// lossy client-side mapping. Adjudication output (claim and line
+    /// results, pend details, AI examination, payment fields) is cleared:
+    /// the corrected version is re-adjudicated from scratch. Read-only.
+    /// </summary>
+    [HttpGet("api/v1/claims/{claimId}/correction-draft")]
+    [RequirePermission(ClaimsPermissions.Adjust)]
+    [AuditClaimAccess(ClaimAccessActions.View, ClaimIdRouteValue = "claimId")]
+    [ProducesResponseType(typeof(AdapterClaim), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetCorrectionDraft(
+        [FromRoute] string claimId,
+        CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        var claim = await _claimRepository.GetByIdAsync(claimId);
+        if (claim == null || claim.TenantId != tenantId)
+        {
+            return NotFound(new { error = $"Claim {claimId} not found" });
+        }
+
+        return Ok(ClaimCorrectionDraft.From(claim));
     }
 
     /// <summary>

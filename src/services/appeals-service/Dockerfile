@@ -12,11 +12,13 @@ COPY src/Directory.Build.props src/
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/appeals-service/appeals-service.csproj src/services/appeals-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/CloudHealthOffice.PlanConfiguration.csproj src/services/shared/CloudHealthOffice.PlanConfiguration/
 RUN dotnet restore src/services/appeals-service/appeals-service.csproj
 
 # Copy source code and build
 COPY src/services/appeals-service/ src/services/appeals-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.PlanConfiguration/ src/services/shared/CloudHealthOffice.PlanConfiguration/
 RUN dotnet build src/services/appeals-service/appeals-service.csproj -c Release --no-restore
 
 # Publish stage

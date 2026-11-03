@@ -19,4 +19,8 @@
     <ProjectReference Include="..\..\src\services\capitation-service\capitation-service.csproj" />
     <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Infrastructure.Tests\CloudHealthOffice.Infrastructure.Tests.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The shared line of business (docs/architecture/line-of-business.md). -->
+    <Using Include="CloudHealthOffice.Infrastructure.Programs" />
+  </ItemGroup>
 </Project>

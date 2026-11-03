@@ -1,0 +1,390 @@
+@page "/benefit-plans/templates"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject IPlanTemplateService Templates
+@inject IUserContextService UserContextService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+@*
+    Guided plan onboarding, step 1 and 2: pick a state program template, read
+    its benefit configuration (each value sourced or marked verify, with the
+    carve-outs and what CHO does not model), and create a Draft plan in this
+    tenant from it. The Draft is then edited and published on the draft page.
+    Reads need benefits:read; creating a Draft needs settings:manage.
+*@
+
+<PageTitle>Plan templates - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="benefits:read">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudBreadcrumbs Items="_crumbs" Class="px-0" />
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.LibraryBooks" Class="mr-2" />
+        Plan templates
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        Start a benefit plan from a state program template. Pick one, review its benefits, create a draft,
+        then check every value marked <strong>verify</strong> against your contract before you publish.
+    </MudText>
+
+    @if (_error != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" data-testid="templates-error">@_error</MudAlert>
+    }
+
+    <MudTabs Elevation="1" Rounded="true" PanelClass="pt-4" @bind-ActivePanelIndex="_tab">
+        <MudTabPanel Text="Templates" data-testid="tab-templates">
+            <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Style="flex-wrap: wrap;">
+                    <MudSelect T="string" @bind-Value="_stateFilter" Label="State" Variant="Variant.Outlined" Margin="Margin.Dense"
+                               Clearable="true" Style="max-width: 160px;" data-testid="state-filter">
+                        @foreach (var s in _states)
+                        {
+                            <MudSelectItem Value="@s">@s</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudTextField @bind-Value="_search" Placeholder="Search program or population" Variant="Variant.Outlined"
+                                  Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search" Style="max-width: 320px;" />
+                </MudStack>
+            </MudPaper>
+
+            <MudGrid>
+                <MudItem xs="12" md="5">
+                    <MudTable Items="Filtered" Dense="true" Hover="true" Loading="_loading" T="PlanTemplateSummary"
+                              OnRowClick="@(e => SelectAsync(e.Item!.TemplateId))" RowClassFunc="RowClass" data-testid="template-list">
+                        <HeaderContent>
+                            <MudTh>Template</MudTh>
+                            <MudTh>Verify</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd data-testid="template-row">
+                                <MudText Typo="Typo.body2"><strong>@context.PlanName</strong></MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@context.State · @context.Program · @context.Population</MudText>
+                            </MudTd>
+                            <MudTd>
+                                @if (context.VerifyCount > 0)
+                                {
+                                    <MudChip Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">@context.VerifyCount</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">0</MudChip>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <MudText Class="pa-4">No templates match.</MudText>
+                        </NoRecordsContent>
+                    </MudTable>
+                </MudItem>
+
+                <MudItem xs="12" md="7">
+                    @if (_selected is null)
+                    {
+                        <MudPaper Class="pa-6" Outlined="true">
+                            <MudText Color="Color.Secondary">Choose a template to see its benefit configuration.</MudText>
+                        </MudPaper>
+                    }
+                    else
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" data-testid="template-detail">
+                            <MudText Typo="Typo.h5">@_selected.PlanName</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                                @_selected.State · @_selected.Program · @_selected.LineOfBusiness
+                                @if (!string.IsNullOrEmpty(_selected.EffectiveFrom)) { <span> · rules effective @_selected.EffectiveFrom</span> }
+                            </MudText>
+                            <MudText Typo="Typo.body2" Class="mb-2">@_selected.Population</MudText>
+                            @if (!string.IsNullOrWhiteSpace(_selected.Notes))
+                            {
+                                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">@_selected.Notes</MudAlert>
+                            }
+
+                            <MudText Typo="Typo.subtitle1" Class="mt-3">Plan cost sharing</MudText>
+                            <MudSimpleTable Dense="true" Class="mb-3">
+                                <tbody>
+                                    <tr><td>Deductible (individual / family)</td><td>@Money(_selected.CostSharing.IndividualDeductible) / @Money(_selected.CostSharing.FamilyDeductible)</td></tr>
+                                    <tr><td>Out-of-pocket max (individual / family)</td><td>@Money(_selected.CostSharing.IndividualOutOfPocketMax) / @Money(_selected.CostSharing.FamilyOutOfPocketMax)</td></tr>
+                                    <tr><td>Monthly premium</td><td>@Money(_selected.CostSharing.MonthlyPremium)</td></tr>
+                                </tbody>
+                            </MudSimpleTable>
+
+                            <MudText Typo="Typo.subtitle1">Benefits</MudText>
+                            <MudSimpleTable Dense="true" Hover="true" Class="mb-3" data-testid="template-benefits">
+                                <thead>
+                                    <tr><th>Service</th><th>Covered</th><th>Copay</th><th>Coins.</th><th>PA</th><th>Limit</th><th>Status</th></tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var b in _selected.Benefits.Concat(_selected.DisplayBenefits))
+                                    {
+                                        var src = _selected.SourceFor(b.Source);
+                                        <tr data-testid="template-benefit">
+                                            <td>@b.ServiceCategory</td>
+                                            <td>@(b.Covered ? "Yes" : "No")</td>
+                                            <td>@(b.Copay is { } c ? Money(c) : "-")</td>
+                                            <td>@(b.Coinsurance is { } ci && ci > 0 ? $"{ci * 100:0.#}%" : "-")</td>
+                                            <td>@(b.PriorAuthRequired ? "Yes" : "")</td>
+                                            <td>@Limit(b)</td>
+                                            <td>
+                                                <MudTooltip Text="@(src?.Title ?? "No source cited")">
+                                                    <MudChip Size="Size.Small" Variant="Variant.Outlined"
+                                                             Color="@(b.IsVerify ? Color.Warning : Color.Success)">@(b.IsVerify ? "verify" : "sourced")</MudChip>
+                                                </MudTooltip>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+
+                            @if (_selected.CarveOuts.Count > 0)
+                            {
+                                <MudText Typo="Typo.subtitle1">Carved out</MudText>
+                                <ul class="mb-3" data-testid="template-carveouts">
+                                    @foreach (var c in _selected.CarveOuts)
+                                    {
+                                        <li><MudText Typo="Typo.body2"><strong>@c.Service</strong> → @c.To</MudText></li>
+                                    }
+                                </ul>
+                            }
+
+                            @if (_selected.NotModeled.Count > 0)
+                            {
+                                <MudText Typo="Typo.subtitle1">Not modeled by CHO (handle outside the plan)</MudText>
+                                <ul class="mb-3" data-testid="template-notmodeled">
+                                    @foreach (var n in _selected.NotModeled)
+                                    {
+                                        <li><MudText Typo="Typo.body2"><strong>@n.Item</strong>: @n.Why</MudText></li>
+                                    }
+                                </ul>
+                            }
+
+                            @if (_selected.Sources.Count > 0)
+                            {
+                                <MudExpansionPanels Elevation="0" Class="mb-3">
+                                    <MudExpansionPanel Text="@($"Sources ({_selected.Sources.Count})")">
+                                        @foreach (var s in _selected.Sources.Values)
+                                        {
+                                            <MudText Typo="Typo.body2" Class="mb-1">
+                                                @if (s.Url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                                                {
+                                                    <MudLink Href="@s.Url" Target="_blank">@s.Title</MudLink>
+                                                }
+                                                else
+                                                {
+                                                    @s.Title <span class="mud-text-secondary">(@s.Url)</span>
+                                                }
+                                                @if (!string.IsNullOrEmpty(s.Accessed)) { <span class="mud-text-secondary"> · accessed @s.Accessed</span> }
+                                            </MudText>
+                                        }
+                                    </MudExpansionPanel>
+                                </MudExpansionPanels>
+                            }
+
+                            <MudDivider Class="my-3" />
+                            <MudText Typo="Typo.subtitle1" Class="mb-2">Create a draft plan from this template</MudText>
+                            @if (!_canManage)
+                            {
+                                <MudAlert Severity="Severity.Info" Dense="true" data-testid="create-needs-permission">
+                                    Creating a plan needs the settings:manage permission (tenant administrator).
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudForm @ref="_form" data-testid="create-draft-form">
+                                    <MudGrid Spacing="2">
+                                        <MudItem xs="12" sm="6">
+                                            <MudTextField @bind-Value="_request.PlanId" Label="Plan ID" Required="true" Variant="Variant.Outlined"
+                                                          Margin="Margin.Dense" HelperText="Your stable plan code, e.g. TX-CHIP-186-2027" data-testid="draft-plan-id" />
+                                        </MudItem>
+                                        <MudItem xs="12" sm="6">
+                                            <MudTextField @bind-Value="_request.PlanName" Label="Plan name" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                          Placeholder="@_selected.PlanName" />
+                                        </MudItem>
+                                        <MudItem xs="12" sm="6">
+                                            <MudTextField @bind-Value="_request.Payer" Label="Payer" Required="true" Variant="Variant.Outlined"
+                                                          Margin="Margin.Dense" data-testid="draft-payer" />
+                                        </MudItem>
+                                        <MudItem xs="12" sm="6">
+                                            <MudTextField @bind-Value="_request.ProgramId" Label="Program ID (optional)" Variant="Variant.Outlined"
+                                                          Margin="Margin.Dense" HelperText="Your tenant's program, if you have set one up" />
+                                        </MudItem>
+                                        <MudItem xs="12" sm="6">
+                                            <MudDatePicker @bind-Date="_effective" Label="Effective date" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                        </MudItem>
+                                        <MudItem xs="12" sm="6">
+                                            <MudDatePicker @bind-Date="_request.TerminationDate" Label="Termination date (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                        </MudItem>
+                                    </MudGrid>
+                                    @if (_createError != null)
+                                    {
+                                        <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2" data-testid="create-error">@_createError</MudAlert>
+                                    }
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" Disabled="_creating"
+                                               OnClick="CreateDraftAsync" data-testid="create-draft">
+                                        Create draft
+                                    </MudButton>
+                                </MudForm>
+                            }
+                        </MudPaper>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <MudTabPanel Text="@($"Draft plans ({_drafts.Count})")" data-testid="tab-drafts">
+            <MudTable Items="_drafts" Dense="true" Hover="true" T="PlanDraftSummary" data-testid="draft-list">
+                <HeaderContent>
+                    <MudTh>Plan ID</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Payer</MudTh>
+                    <MudTh>Version</MudTh>
+                    <MudTh>Effective</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd Style="font-family: monospace;">@context.PlanId</MudTd>
+                    <MudTd>@context.PlanName</MudTd>
+                    <MudTd>@context.Payer</MudTd>
+                    <MudTd>v@(context.VersionNumber)</MudTd>
+                    <MudTd>@context.EffectiveDate.ToString("MM/dd/yyyy")</MudTd>
+                    <MudTd>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Href="@DraftHref(context.PlanId, context.VersionId, null)">
+                            Review and publish
+                        </MudButton>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Class="pa-4">No draft plans. Create one from a template.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private readonly List<BreadcrumbItem> _crumbs = new()
+    {
+        new("Benefit Plans", "/benefit-plans"),
+        new("Plan templates", null, disabled: true),
+    };
+
+    private List<PlanTemplateSummary> _templates = new();
+    private List<PlanDraftSummary> _drafts = new();
+    private List<string> _states = new();
+    private PlanTemplateDetail? _selected;
+    private CreateDraftFromTemplateRequest _request = new();
+    private DateTime? _effective;
+    private MudForm? _form;
+    private string? _stateFilter;
+    private string _search = string.Empty;
+    private string? _error;
+    private string? _createError;
+    private bool _loading = true;
+    private bool _creating;
+    private bool _canManage;
+    private int _tab;
+
+    private IEnumerable<PlanTemplateSummary> Filtered => _templates
+        .Where(t => _stateFilter is null || t.State == _stateFilter)
+        .Where(t => string.IsNullOrWhiteSpace(_search)
+                    || t.Program.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                    || t.PlanName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                    || t.Population.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canManage = UserContextService.HasPermission("settings:manage");
+        if (!UserContextService.HasPermission("benefits:read"))
+        {
+            _loading = false;
+            return;
+        }
+        try
+        {
+            _templates = await Templates.ListTemplatesAsync();
+            _states = _templates.Select(t => t.State).Distinct().OrderBy(s => s).ToList();
+            _drafts = await Templates.ListDraftsAsync();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SelectAsync(string templateId)
+    {
+        _createError = null;
+        try
+        {
+            _selected = await Templates.GetTemplateAsync(templateId);
+            _request = new CreateDraftFromTemplateRequest();
+            _effective = _request.EffectiveDate;
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task CreateDraftAsync()
+    {
+        if (_selected is null) return;
+        _createError = null;
+        if (string.IsNullOrWhiteSpace(_request.PlanId) || string.IsNullOrWhiteSpace(_request.Payer) || _effective is null)
+        {
+            _createError = "Plan ID, payer and effective date are required.";
+            return;
+        }
+
+        _creating = true;
+        try
+        {
+            _request.PlanId = _request.PlanId.Trim();
+            _request.Payer = _request.Payer.Trim();
+            _request.PlanName = string.IsNullOrWhiteSpace(_request.PlanName) ? null : _request.PlanName.Trim();
+            _request.ProgramId = string.IsNullOrWhiteSpace(_request.ProgramId) ? null : _request.ProgramId.Trim();
+            _request.EffectiveDate = _effective.Value.Date;
+            var result = await Templates.CreateDraftFromTemplateAsync(_selected.TemplateId, _request);
+            if (!result.Success)
+            {
+                _createError = result.Error;
+                return;
+            }
+            Snackbar.Add($"Draft {result.PlanId} created. Review it and publish when it matches your contract.", Severity.Success);
+            Navigation.NavigateTo(DraftHref(result.PlanId, result.VersionId, _selected.TemplateId));
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _createError = ex.Message;
+        }
+        finally
+        {
+            _creating = false;
+        }
+    }
+
+    internal static string DraftHref(string planId, string versionId, string? templateId) =>
+        $"/benefit-plans/drafts/{Uri.EscapeDataString(planId)}/{Uri.EscapeDataString(versionId)}"
+        + (templateId is null ? string.Empty : $"?template={Uri.EscapeDataString(templateId)}");
+
+    private string RowClass(PlanTemplateSummary t, int _) =>
+        _selected?.TemplateId == t.TemplateId ? "mud-selected-item" : string.Empty;
+
+    private static string Money(decimal v) => v.ToString("$#,##0.##");
+
+    private static string Limit(PlanTemplateBenefit b)
+    {
+        var parts = new List<string>();
+        if (b.VisitLimit is { } v) parts.Add($"{v} visits{(b.VisitLimitPeriod is null ? "" : "/" + b.VisitLimitPeriod)}");
+        if (b.AnnualMaximum is { } m) parts.Add($"{Money(m)}/yr");
+        if (!string.IsNullOrWhiteSpace(b.Limitations)) parts.Add(b.Limitations!);
+        return string.Join("; ", parts);
+    }
+}

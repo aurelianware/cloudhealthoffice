@@ -298,6 +298,99 @@ public sealed class ClaimsFinanceController : ControllerBase
             TexasTprReport.FileName(report, body.McoCode));
     }
 
+    /// <summary>
+    /// HHSC's monthly Claims Summary Report (UMCM 5.24.1) figures for a
+    /// claims month: per program, claim type and claim form, the Medicaid
+    /// claims adjudicated in the month by days from receipt, with adjusted,
+    /// duplicate, deficient, unprocessed and capitated counts, plus the
+    /// pharmacy figures, recoupments and advanced payments entered in the
+    /// request. A claim's program is its member's rate cell in the month of
+    /// service, mapped by <c>rateCellPrograms</c>; claims that can't be
+    /// placed are left out and counted under <c>excluded</c>.
+    /// </summary>
+    [HttpPost("texas/claims-summary")]
+    [RequirePermission("finance:read")]
+    public async Task<ActionResult> TexasClaimsSummaryFigures(
+        [FromBody] TexasClaimsSummaryRequest request,
+        [FromServices] IExpectedRateCellSource rateCells,
+        [FromServices] ICurrentActor actor,
+        CancellationToken ct)
+    {
+        var (report, error) = await BuildTexasClaimsSummaryAsync(request, rateCells, actor, ct);
+        return error ?? Ok(report);
+    }
+
+    /// <summary>
+    /// One program's Claims Summary Report as HHSC's fixed-width text file
+    /// (5.24.1 v2.5), for upload to TexConnect. Left-out claims are listed in
+    /// the <c>X-Report-Excluded</c> header. A figure too large for its field
+    /// is refused (422) rather than cut.
+    /// </summary>
+    [HttpPost("texas/claims-summary/text")]
+    [RequirePermission("finance:read")]
+    [Produces("text/plain")]
+    public async Task<ActionResult> TexasClaimsSummaryText(
+        [FromQuery] string? program,
+        [FromBody] TexasClaimsSummaryRequest request,
+        [FromServices] IExpectedRateCellSource rateCells,
+        [FromServices] ICurrentActor actor,
+        CancellationToken ct)
+    {
+        if (program is null || !TexasClaimsSummaryCodes.Programs.ContainsKey(program))
+            return BadRequest(new { error = "program must be an HHSC program code, 01 to 09" });
+        var (report, error) = await BuildTexasClaimsSummaryAsync(request, rateCells, actor, ct);
+        if (error != null) return error;
+
+        string text;
+        try
+        {
+            text = TexasClaimsSummaryReport.Text(report!, program);
+        }
+        catch (ArgumentException ex)
+        {
+            return UnprocessableEntity(new { error = "A figure does not fit HHSC's field; nothing was written", detail = ex.Message });
+        }
+        if (text.Length == 0)
+            return UnprocessableEntity(new { error = $"Nothing to report for program {program} in {request.ClaimsMonth}" });
+        if (report!.Excluded.Count > 0)
+            Response.Headers["X-Report-Excluded"] = string.Join("; ", report.Excluded.Select(e => $"{e.Claims} claim(s): {e.Reason}"));
+        return File(System.Text.Encoding.ASCII.GetBytes(text), "text/plain", TexasClaimsSummaryReport.FileName(report, program));
+    }
+
+    private async Task<(TexasClaimsSummary? Report, ActionResult? Error)> BuildTexasClaimsSummaryAsync(
+        TexasClaimsSummaryRequest request, IExpectedRateCellSource rateCells, ICurrentActor actor, CancellationToken ct)
+    {
+        var errors = request.Validate(out var month);
+        if (errors.Count > 0) return (null, BadRequest(new { error = "The claims summary request is not valid", errors }));
+
+        var (fromUtc, beforeUtc) = TexasClaimsSummaryReport.Window(month);
+        var adjudicated = await _claims.GetClaimsSummaryAdjudicatedAsync(fromUtc, beforeUtc, ct);
+        var open = await _claims.GetClaimsSummaryOpenAsync(beforeUtc, ct);
+
+        // Rate cells are needed for each claim's month of service, which can
+        // be well before the claims month: read from the earliest one, at
+        // most MaxIncurredMonths back.
+        var floor = month.AddMonths(-(MaxIncurredMonths - 1));
+        var earliest = month;
+        foreach (var c in adjudicated.Concat(open))
+        {
+            var m = new DateOnly(c.ServiceDateFrom.Year, c.ServiceDateFrom.Month, 1);
+            if (m < earliest) earliest = m;
+        }
+        if (earliest < floor) earliest = floor;
+
+        IReadOnlyList<ExpectedRateCell> cells;
+        try
+        {
+            cells = await rateCells.GetAsync(actor.TenantId, "TX", earliest, month, ct);
+        }
+        catch (ExpectedRateCellsUnavailableException ex)
+        {
+            return (null, StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message }));
+        }
+        return (TexasClaimsSummaryReport.Build(month, request, adjudicated, open, cells), null);
+    }
+
     private const int MaxTprRecoveryCases = 100_000;
 
     private async Task<(TexasTpr? Report, ActionResult? Error)> BuildTexasTprAsync(

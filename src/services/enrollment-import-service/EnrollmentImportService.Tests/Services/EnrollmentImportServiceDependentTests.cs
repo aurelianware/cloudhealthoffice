@@ -306,6 +306,8 @@ public partial class EnrollmentImportServiceDependentTests
 
         var deps = h.Created.Where(c => !c.IsSubscriber).ToList();
         deps.Should().OnlyContain(d => d.SubscriberMemberId == "SUB1" && d.MemberId.StartsWith("SUB1-D"));
+        // Created covered, not Pending: a Pending member's claims deny in benefit calculation.
+        h.Created.Should().OnlyContain(c => c.Status == "Active");
         deps.Select(d => d.MemberId).Should().OnlyHaveUniqueItems();
         deps.Single(d => d.FirstName == "JANE").RelationshipCode.Should().Be("01");
         deps.Single(d => d.FirstName == "MICHAEL").RelationshipCode.Should().Be("19");
@@ -1028,6 +1030,54 @@ public partial class EnrollmentImportServiceDependentTests
         result.FailedCount.Should().Be(0);
         h.Updated.Single(u => u.Id == "SUB1").Request.Status.Should().Be(expected);
         h.Terminated.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Events_keep_the_rate_cell_inputs_each_member_sent()
+    {
+        var h = new Harness();
+        var child = Child("MICHAEL", "20150610", "021");
+        child.ReportingCategories = [new ReportingCategory { Name = "AID CODE", ReferenceQualifier = "ZZ", ReferenceValue = " 3T ", Date = "20260201" }];
+        var sub = Subscriber("SUB1", "021", child);
+        sub.ReportingCategories =
+        [
+            new ReportingCategory { Name = "RISK GROUP", ReferenceQualifier = "ZZ", ReferenceValue = "STAR-ADULT", Date = "20260201" },
+            new ReportingCategory { Name = " ", ReferenceValue = " " },
+        ];
+        sub.Coverage = [new CoverageDetail { InsuranceLineCode = "HLT", PlanCoverageDescription = "STAR BEXAR", MaintenanceType = "021", BenefitBeginDate = "20260201" }];
+        sub.Demographics!.CountyCode = "029";
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "RC1", Enrollments = { sub } });
+
+        var subInputs = h.Events.AllEvents.Single(e => e.MemberId == "SUB1").RateCellInputs!;
+        subInputs.ReportingCategories.Should().ContainSingle().Which.Should().BeEquivalentTo(
+            new RateCellCategory { Name = "RISK GROUP", Qualifier = "ZZ", Value = "STAR-ADULT", Date = "20260201" });
+        subInputs.CoverageLines.Should().ContainSingle().Which.Should().BeEquivalentTo(
+            new RateCellCoverageLine { InsuranceLineCode = "HLT", PlanCoverageDescription = "STAR BEXAR", MaintenanceType = "021", BenefitBeginDate = "20260201" });
+
+        (subInputs.DateOfBirth, subInputs.CountyCode, subInputs.Zip).Should().Be(("19850315", "029", "94102"));
+
+        var childId = DependentId(child)!;
+        h.Events.AllEvents.Single(e => e.MemberId == childId).RateCellInputs!.ReportingCategories
+            .Should().ContainSingle().Which.Value.Should().Be("3T", "a dependent's own 2750 loop is kept, trimmed");
+
+        // The read side pages by member id, each member's events oldest first.
+        var page = await h.Events.ListRateCellInputsAsync("t1", null, 1);
+        page.Should().ContainSingle();
+        var rest = await h.Events.ListRateCellInputsAsync("t1", page[0].MemberId, 10);
+        rest.Select(m => m.MemberId).Should().NotContain(page[0].MemberId);
+        page.Concat(rest).Select(m => m.MemberId).Should().BeEquivalentTo(new[] { "SUB1", childId });
+    }
+
+    [Fact]
+    public async Task Events_without_categories_or_hd_lines_have_no_rate_cell_inputs()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "RC2", Enrollments = { Subscriber("SUB1", "001") } });
+
+        h.Events.AllEvents.Single(e => e.MemberId == "SUB1").RateCellInputs.Should().BeNull();
     }
 
     [Fact]

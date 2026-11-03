@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shadow Adjudication and CMS-0057-F Trial on Your Own Claims (CPCDS) | Cloud Health Office</title>
+  <meta name="description" content="Load CPCDS files from QNXT, Facets or your own core. Cloud Health Office re-adjudicates the claims next to your core and tests your CMS-0057-F APIs with Inferno." />
+  <meta name="author" content="Aurelianware, Inc." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/services/cms-0057-f-cpcds-trial" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/services/cms-0057-f-cpcds-trial" />
+  <meta property="og:title" content="Run your own claims through Cloud Health Office, next to your core" />
+  <meta property="og:description" content="Shadow adjudication of your core&#39;s claims, line by line, plus your CMS-0057-F APIs tested with pinned Inferno kits on your own members. Your core keeps paying claims." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://cloudhealthoffice.com/services/cms-0057-f-cpcds-trial" />
+  <meta name="twitter:title" content="Run your own claims through Cloud Health Office, next to your core" />
+  <meta name="twitter:description" content="Shadow adjudication of your core&#39;s claims, line by line, plus your CMS-0057-F APIs tested with pinned Inferno kits on your own members. Your core keeps paying claims." />
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Service",
+      "name": "Shadow adjudication and CMS-0057-F trial on a plan's own claims",
+      "url": "https://cloudhealthoffice.com/services/cms-0057-f-cpcds-trial",
+      "serviceType": "Shadow claims adjudication and CMS-0057-F API validation from CPCDS extracts",
+      "description": "A health plan loads CPCDS extracts from its current core into Cloud Health Office, which re-adjudicates the claims read-only and reports line-level differences, and serves the CMS-0057-F APIs tested with pinned Inferno kits.",
+      "provider": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc.",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "areaServed": {
+        "@type": "Country",
+        "name": "United States"
+      },
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "Health plans running QNXT, Facets, HealthRules or a plan-built core"
+      }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Services",
+          "item": "https://cloudhealthoffice.com/services"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Shadow adjudication and CMS-0057-F trial",
+          "item": "https://cloudhealthoffice.com/services/cms-0057-f-cpcds-trial"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Do we have to replace our core to use this?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Your core keeps adjudicating and stays the system of record. Cloud Health Office reads what the core exports and serves the CMS-0057-F APIs from it."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which Inferno kits run against our own data?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "US Core, CARIN Blue Button and Plan-Net. Bulk Data and PDex need the kit's SMART Backend Services key registered with your deployment first. Our own nightly results for all six kits, on synthetic data, are on the Inferno results page."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What about prior authorizations?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "CPCDS has no prior authorizations, but the CMS-0057-F APIs and metrics need them. If your plan runs its own UM platform, load its decisions as CSV or X12 278 files, through the same folder. They are kept read-only and tagged with their source."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can the daily drop replace the one-time load?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Once a load works by hand, the core writes the same files to the drop folder each day. Freshness and reconciliation against the core's control totals show in the portal."
+          }
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/evidence-hub.css" />
+  <link rel="stylesheet" href="/css/services.css" />
+  <link rel="stylesheet" href="/css/conversion.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body class="ev">
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/blueprints/google-cloud">Reference architecture</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="/api-explorer">API explorer</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof updateNavigation === 'function') { updateNavigation('#mainNav'); }
+    });
+  </script>
+
+  <main id="main-content">
+
+    <header class="ev-hero">
+      <div class="ev-hero-inner">
+        <nav class="ev-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/services">Services</a><span>/</span><a href="/services/cms-0057-f-cpcds-trial" aria-current="page">CMS-0057-F trial on your data</a></nav>
+        <span class="ev-eyebrow">Health plans on QNXT, Facets, HealthRules or a plan-built core</span>
+        <h1>Run your own claims through Cloud Health Office, <em>next to your core</em>.</h1>
+        <p class="ev-lede">
+          Export CPCDS files from the core you run today and load them. Cloud Health Office re-adjudicates every
+          claim your core already decided and shows, line by line, where the answers differ. The same load lets you
+          test your CMS-0057-F APIs on your own members with the pinned Inferno kits. Your core keeps paying claims.
+        </p>
+        <div class="ev-badges">
+          <span class="ev-badge ev-badge--cyan">Your core keeps adjudicating</span>
+          <span class="ev-badge">Plan-hosted or Aurelianware-hosted</span>
+          <span class="ev-badge">Read-only shadow runs</span>
+          <span class="ev-badge">Pinned Inferno kits</span>
+          <span class="ev-badge ev-badge--amber">Not certification</span>
+        </div>
+        <div class="ev-actions">
+          <a class="ev-btn" href="/contact?interest=cms0057-assessment" data-ga-event="cpcds_trial_cta_click">Talk about a trial &rarr;</a>
+          <a class="ev-btn ev-btn--ghost" href="#shadow">See what shadow adjudication shows</a>
+        </div>
+        <p class="ev-rule-definition">
+          <strong>CPCDS</strong> (the Common Payer Consumer Data Set) is the claims and coverage data set behind the
+          CARIN Blue Button guide that CMS recommends for the Patient Access API. Most cores can already export
+          something close to it, which makes it a practical way to get a plan's data out without a custom adapter.
+        </p>
+      </div>
+    </header>
+
+    <section class="ev-section" id="shadow">
+      <div class="ev-container">
+        <span class="ev-eyebrow">The part worth trying first</span>
+        <h2>Shadow adjudication: run your real claims through a second core, without switching.</h2>
+        <p class="ev-sub">
+          Cloud Health Office can re-adjudicate the claims your core already decided and record, claim by claim and
+          line by line, where its answer differs: allowed, paid, member liability and denial codes. Nothing a member,
+          provider or API sees changes. No accumulator moves and no event is sent.
+        </p>
+        <div class="ev-grid ev-grid--two">
+          <div class="ev-card">
+            <span class="ev-card__tag">Payment integrity</span>
+            <h3>Where the core may have paid too much or too little</h3>
+            <p>The run report splits decided claims into &ldquo;core paid more&rdquo; and &ldquo;core paid less&rdquo;, in claims and dollars, and breaks the differences down by stage, denial code, procedure code and billing NPI. A discrepancy CSV goes to your payment-integrity team.</p>
+          </div>
+          <div class="ev-card">
+            <span class="ev-card__tag">Migration rehearsal</span>
+            <h3>How much of your volume a second core already handles</h3>
+            <p>The undecided rate is the readiness number. For each claim it can't decide, the report names the missing input, such as no contract rate for the provider or a member not loaded. That list is the work plan.</p>
+          </div>
+        </div>
+        <p>
+          Setting it up takes a few clicks in the portal. Turn shadow adjudication on for the plan under Imports &amp;
+          EDI, then open <strong>Operations &rarr; Shadow Adjudication</strong>. Pick a claim file from the daily
+          drop and run it. Whole files, up to 50,000 claims, run in the background. Each run's report and its
+          discrepancy CSV are on the same page, and with the switch on, every new file can be shadowed as it loads.
+        </p>
+        <p>
+          Expect most claims to be undecided at first. Shadow adjudication needs the inputs your core uses: provider
+          contracts and fee schedules (importers ship for contract rosters, fee schedule CSVs and the Medicare
+          physician fee schedule by locality), benefit plan designs, and the provider network, from your core's
+          roster file. Each member's deductible and out-of-pocket start where your core had them: from the member's
+          earlier claims in the files, or from a starting-balance file when the files begin mid-year. The run lists
+          what to load next for every claim it could not decide, so you can load it and run again to watch the gap close.
+        </p>
+        <p>
+          Turning it on takes one switch per plan in the portal, or one command in the trial kit. Runs over a whole
+          claim file go in the background, and the portal's Shadow Adjudication page shows each run, its match rate
+          and the discrepancy CSV.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="inputs">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Everything you can load</span>
+        <h2>The files that feed shadow adjudication and the CMS-0057-F APIs.</h2>
+        <p class="ev-sub">
+          Each load has a dry run that writes nothing, keeps your core's identifiers, and is safe to repeat. The
+          more of these you load, the more claims a shadow run can decide.
+        </p>
+        <div class="ev-scroll">
+          <table class="ev-table">
+            <thead>
+              <tr><th>Data</th><th>Formats it reads</th><th>Shadow adjudication</th><th>CMS-0057-F APIs</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="ev-what">Members and coverage</span></td><td>CPCDS member and coverage files, or X12 834</td><td>The member, plan and eligibility on each claim</td><td>Patient, Coverage; Payer-to-Payer member match</td></tr>
+              <tr><td><span class="ev-what">Claims your core adjudicated</span></td><td>CPCDS claim files, one-time or daily drop</td><td>The claims re-run and the core answers compared</td><td>ExplanationOfBenefit for Patient Access, Provider Access and Payer-to-Payer</td></tr>
+              <tr><td><span class="ev-what">Prior authorizations</span></td><td>Your UM platform's CSV, or X12 278 files</td><td>Authorization checks on claims</td><td>Prior authorization status, metrics and payer-to-payer exchange</td></tr>
+              <tr><td><span class="ev-what">Benefit plans</span></td><td>State program templates (Texas, California, Florida, Arizona, New York), CMS QHP Public Use Files, or the plans API, then a core plan-code mapping</td><td>Cost sharing and covered services</td><td>Coverage and coverage requirements (CRD)</td></tr>
+              <tr><td><span class="ev-what">Fee schedules</span></td><td>CSV rate sheets, Medi-Cal Rates and TMHP fee schedules as published, the Medicare physician fee schedule by locality, or a shared library schedule deployed at a percentage</td><td>Allowed amounts</td><td></td></tr>
+              <tr><td><span class="ev-what">Provider contracts</span></td><td>Contract roster CSV</td><td>Which rate each provider is paid at</td><td></td></tr>
+              <tr><td><span class="ev-what">Texas Medicaid hospital rates</span></td><td>HHSC APR-DRG weight tables and SDA files, hospital interim rates, psychiatric per diem PDFs</td><td>Inpatient, outpatient and psychiatric pricing</td><td></td></tr>
+              <tr><td><span class="ev-what">Prior auth required rules</span></td><td>Your plan's PA-required list, the Texas TMPPM, Medi-Cal TAR and Non-Benefit lists</td><td>Claims that needed an authorization</td><td>CRD answers and PAS decisions</td></tr>
+              <tr><td><span class="ev-what">Other coverage (TPL)</span></td><td>Texas and Medi-Cal TPL files</td><td>Cost avoidance and coordination of benefits</td><td></td></tr>
+              <tr><td><span class="ev-what">Providers and network</span></td><td>Your core's network roster CSV (NPI, network, plan, dates, credentialed), or the providers and networks APIs; providers named on CPCDS claims are added for reference</td><td>Network status and credentialing</td><td>The public Provider Directory (Plan-Net)</td></tr>
+              <tr><td><span class="ev-what">Accumulators to date</span></td><td>Your core's earlier claims in the same files, or a starting-balance CSV (deductible and out-of-pocket met as of a date)</td><td>Deductible and out-of-pocket met before each claim, kept apart from live balances</td><td></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Not loadable yet: claim history from X12 837 and 835 files. The <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/integration/LOADING-A-PLANS-DATA.md">implementation guide</a> lists every load in order.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section" id="how">
+      <div class="ev-container">
+        <span class="ev-eyebrow">How it works</span>
+        <h2>From your first file to a shadow report: six steps, all with features that already ship.</h2>
+        <p class="ev-sub">
+          The CMS-0057-F APIs are due January 1, 2027. Most of the data behind them already lives in your core. The
+          trial shows whether that data, served through Cloud Health Office, passes the kits.
+        </p>
+        <ol class="ev-flow">
+          <li>
+            <strong>Export from your core</strong>
+            <p>Members, coverages and claims as CPCDS files. Prior authorizations from your UM platform are optional, as CSV or X12 278.</p>
+          </li>
+          <li>
+            <strong>Dry run and map plan codes</strong>
+            <p>A dry run writes nothing. It lists what would be created, the core plan codes not yet mapped to a benefit plan, and the first errors in each file.</p>
+          </li>
+          <li>
+            <strong>Load</strong>
+            <p>Members and coverage first, then your network roster, claims, authorizations and any starting balances. Reloading the same files is safe: unchanged records are left alone.</p>
+          </li>
+          <li>
+            <strong>Shadow-adjudicate</strong>
+            <p>One command turns shadow adjudication on for your plan, re-runs every loaded claim in the background and prints how often Cloud Health Office decided and matched your core, the money your core paid more or less, and what to load next.</p>
+          </li>
+          <li>
+            <strong>Validate with Inferno</strong>
+            <p>US Core, CARIN Blue Button and Plan-Net, run against the deployment with one of your loaded members and a member app's token.</p>
+          </li>
+          <li>
+            <strong>Keep it current</strong>
+            <p>Point the core's daily export at the drop folder. The Imports &amp; EDI console shows each run, freshness and reconciliation, and every file is archived as received for ten years.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="modes">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Where it runs</span>
+        <h2>Two ways to run the trial.</h2>
+        <div class="ev-scroll">
+          <table class="ev-table">
+            <thead>
+              <tr><th></th><th>Plan-hosted</th><th>Aurelianware-hosted</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="ev-what">Where Cloud Health Office runs</span></td><td>Your cloud or data center</td><td>Google Cloud, one tenant per plan</td></tr>
+              <tr><td><span class="ev-what">How files arrive</span></td><td>Your own folder or bucket, or the import API</td><td>Key-only SFTP into your plan's folder, with logins created from the SSH keys you add in the portal</td></tr>
+              <tr><td><span class="ev-what">Who sees the data</span></td><td>Only your plan</td><td>Your plan and Aurelianware, under a business associate agreement</td></tr>
+              <tr><td><span class="ev-what">When</span></td><td>Now. A laptop run on the sample files takes about 15 minutes once the images are built, and its shadow run shows a matched claim, a mismatch and an unmapped plan</td><td>Set up for a plan after a pilot agreement is signed</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          In the plan-hosted trial, share only the Inferno summary with us: pass, fail and skip counts per kit and the
+          failing test ids. The import reports and the kit's evidence folder contain member data and stay inside
+          your plan.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section" id="faq">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Questions plans ask</span>
+        <h2>Frequently asked questions</h2>
+        <h3>Do we have to replace our core to use this?</h3>
+        <p>No. Your core keeps adjudicating and stays the system of record. Cloud Health Office reads what the core exports and serves the CMS-0057-F APIs from it.</p>
+        <h3>Which Inferno kits run against our own data?</h3>
+        <p>US Core, CARIN Blue Button and Plan-Net. Bulk Data and PDex need the kit's SMART Backend Services key registered with your deployment first. Our own nightly results for all six kits, on synthetic data, are on the <a href="/evidence/inferno-conformance">Inferno results page</a>.</p>
+        <h3>What about prior authorizations?</h3>
+        <p>CPCDS has no prior authorizations, but the CMS-0057-F APIs and metrics need them. If your plan runs its own UM platform, load its decisions as CSV or X12 278 files, through the same folder. They are kept read-only and tagged with their source.</p>
+        <h3>Can the daily drop replace the one-time load?</h3>
+        <p>Yes. Once a load works by hand, the core writes the same files to the drop folder each day. Freshness and reconciliation against the core's control totals show in the portal.</p>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="limits">
+      <div class="ev-container">
+        <div class="ev-limits">
+          <h3>What we do not claim</h3>
+          <ul>
+            <li>A passing kit is not certification and not a guarantee of regulatory compliance. There is no certification program for payer APIs under CMS-0057-F.</li>
+            <li>No named customers or production plan deployments are claimed on this site.</li>
+            <li>A kit tests one implementation guide at one version, in the groups that are run. Requirements no kit checks, such as decision timeframes, attribution and consent, need their own evidence.</li>
+            <li>Shadow adjudication results depend on the inputs loaded. They are findings to review, not a recovery estimate.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section" id="related">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Read next</span>
+        <h2>Related pages and guides</h2>
+        <div class="ev-grid">
+          <a class="ev-card" href="/evidence/inferno-conformance"><h3>Inferno results</h3><p>Nightly verdicts from all six kits, every failing test and every known kit issue.</p></a>
+          <a class="ev-card" href="/services/qnxt-cms-0057-f-adapter"><h3>QNXT adapter scoping</h3><p>When CPCDS files aren't enough: how we scope a direct QNXT adapter, one plan at a time.</p></a>
+          <a class="ev-card" href="/cms-0057f-compliance"><h3>CMS-0057-F compliance</h3><p>The four APIs, the deadlines and how Cloud Health Office serves each one.</p></a>
+          <a class="ev-card" href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/integration/CPCDS-TRIAL-KIT.md"><h3>CPCDS trial kit guide</h3><p>The step-by-step guide, file names, commands and the checklist, in the public repository.</p></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt">
+      <div class="ev-container">
+        <div class="ev-cta">
+          <h2>See your own data through the APIs.</h2>
+          <p>Tell us which core you run and which lines of business are in scope. We'll walk your team through the export, the dry run and the first Inferno run.</p>
+          <div class="ev-actions">
+            <a class="ev-btn" href="/contact?interest=cms0057-assessment" data-ga-event="cpcds_trial_cta_click">Talk about a trial &rarr;</a>
+            <a class="ev-btn ev-btn--ghost" href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/integration/CPCDS-TRIAL-KIT.md">Read the trial kit guide &rarr;</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+</body>
+</html>

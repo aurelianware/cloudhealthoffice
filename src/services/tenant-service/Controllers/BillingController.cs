@@ -52,26 +52,23 @@ public class BillingController : ControllerBase
             return NotFound(new { error = $"Tenant {tenantId} not found" });
         }
 
-        // Create Stripe customer if not exists
-        if (string.IsNullOrEmpty(tenant.Billing?.StripeCustomerId))
+        // Create the Stripe customer once, and save its id before anything
+        // else can fail, so a retry reuses it rather than creating another.
+        var customerId = tenant.Billing?.StripeCustomerId;
+        if (string.IsNullOrEmpty(customerId))
         {
-            var customerId = await _stripeService.CreateCustomerAsync(tenant);
-            
-            if (tenant.Billing == null)
-                tenant.Billing = new Models.BillingInfo();
-            
-            tenant.Billing.StripeCustomerId = customerId;
-            tenant.Billing.BillingEmail = tenant.ContactInfo.Email;
-            
-            await _tenantService.UpdateTenantAsync(tenantId, new Models.UpdateTenantRequest());
+            customerId = await _stripeService.CreateCustomerAsync(tenant);
+            await _tenantService.RecordStripeBillingAsync(tenantId, customerId);
         }
 
-        // Create subscription
-        var subscriptionId = await _stripeService.CreateSubscriptionAsync(tenant.Billing!.StripeCustomerId!, tier);
+        // The subscription carries the tenant id so its webhooks find the tenant;
+        // its id is saved so cancel and tier changes can find the subscription.
+        var subscriptionId = await _stripeService.CreateSubscriptionAsync(customerId, tier, tenantId);
+        await _tenantService.RecordStripeBillingAsync(tenantId, customerId, subscriptionId);
 
         return Ok(new
         {
-            customerId = tenant.Billing.StripeCustomerId,
+            customerId,
             subscriptionId,
             tier
         });

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CloudHealthOffice.Finance.Contracts;
+using CloudHealthOffice.Infrastructure.Programs;
 using PaymentService.Models;
 
 namespace PaymentService.Services;
@@ -50,7 +51,9 @@ public static class GlEventOutbox
             PaymentRunId = run.Id,
             PaymentRunNumber = run.PaymentRunNumber,
             RunStatus = run.Status.ToString(),
-            LineOfBusiness = run.Criteria.LineOfBusiness?.ToString(),
+            // The shared canonical name: payment-service's own enum says Marketplace where
+            // every other service (and the GL) says Exchange.
+            LineOfBusiness = LineOfBusinessNames.Normalize(run.Criteria.LineOfBusiness?.ToString()),
             PaymentDate = run.PaymentDate.Date,
             ExecutedAt = run.ExecutionStartedAt ?? at,
             ExecutedBy = run.ExecutedBy ?? string.Empty,

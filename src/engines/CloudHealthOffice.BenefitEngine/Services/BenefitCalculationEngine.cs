@@ -199,22 +199,29 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
 
         // ── Step 2: Load current accumulator state ──
         var planYear = DeterminePlanYear(request.ServiceDate, plan);
-        var accumulators = await MeasureStageAsync(
-            "accumulatorRead",
-            () => _accumulatorService.GetAccumulatorsAsync(
-                request.MemberId, request.SubscriberId,
-                request.BenefitPlanId, planYear, ct));
+        // Shadow adjudication supplies the other payer's accumulation instead.
+        IReadOnlyList<AccumulatorSnapshot> accumulators = request.PriorAccumulation is null
+            ? await MeasureStageAsync(
+                "accumulatorRead",
+                () => _accumulatorService.GetAccumulatorsAsync(
+                    request.MemberId, request.SubscriberId,
+                    request.BenefitPlanId, planYear, ct))
+            : [];
 
         var workingAccumulators = MeasureStage(
             "workingSet",
             () => new AccumulatorWorkingSet(accumulators, plan, _logger));
+        if (request.PriorAccumulation is { } prior)
+            ApplyPriorAccumulation(workingAccumulators, prior, request.ServiceDate);
 
         // Re-adjudication of the same claim, or a replacement of an earlier
         // one: price it against the balances without the claim's own earlier
         // updates and without the replaced claim's (otherwise it would meet
         // a deductible the claim it replaces already met), and reverse those
         // updates when writing.
-        var priorUpdates = await ReadPriorUpdatesAsync(request, planYear, ct);
+        var priorUpdates = request.PriorAccumulation is null
+            ? await ReadPriorUpdatesAsync(request, planYear, ct)
+            : new PriorUpdates([], []);
         workingAccumulators.ExcludePriorUpdates(priorUpdates.Own);
         workingAccumulators.ExcludePriorUpdates(priorUpdates.Replaced);
 
@@ -285,7 +292,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         // is still computed from the in-memory working set so callers can see
         // the projected post-claim balances.
         var accumulatorSnapshot = MeasureStage("snapshot", workingAccumulators.GetSnapshot);
-        if (request.ExecutionMode == AdjudicationExecutionMode.Production)
+        if (request.ExecutionMode == AdjudicationExecutionMode.Production && request.PriorAccumulation is null)
         {
             await MeasureTaskStageAsync(
                 "accumulatorWrite",
@@ -322,7 +329,8 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         BenefitResolutionRequest request, string planYear, AccumulatorWorkingSet working)
     {
         if (request.ExecutionMode != AdjudicationExecutionMode.Prospective
-            || string.IsNullOrWhiteSpace(request.ClaimId))
+            || string.IsNullOrWhiteSpace(request.ClaimId)
+            || request.PriorAccumulation is not null)
             return null;
         return new AccumulatorCommit
         {
@@ -769,7 +777,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
 
         // Persist accumulators — skipped for prospective (read-only) estimates.
         var accumulatorSnapshot = workingAccumulators.GetSnapshot();
-        if (request.ExecutionMode == AdjudicationExecutionMode.Production)
+        if (request.ExecutionMode == AdjudicationExecutionMode.Production && request.PriorAccumulation is null)
         {
             await WriteAccumulatorsAsync(request, planYear, workingAccumulators, priorUpdates, ct);
         }
@@ -1625,6 +1633,31 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             TotalDeductibleCredited = lines.Sum(l => l.DeductibleCreditedAmount),
             TotalPlanPaid = lines.Sum(l => l.PlanPaidAmount)
         };
+    }
+
+    /// <summary>
+    /// Starts the working set from the accumulation the caller supplied
+    /// (shadow adjudication): each entry in this claim's plan year counts toward
+    /// the member's own accumulators when it is the member's, and toward the
+    /// family's either way. Accumulators reset each calendar year here
+    /// (<see cref="DeterminePlanYear"/>), so an entry counts only when it is
+    /// in the claim's calendar year. Which entries came before the claim is
+    /// the caller's choice.
+    /// </summary>
+    private static void ApplyPriorAccumulation(
+        AccumulatorWorkingSet working, PriorAccumulation prior, DateOnly serviceDate)
+    {
+        foreach (var entry in prior.Entries)
+        {
+            if (entry.ServiceDate.Year != serviceDate.Year) continue;
+            if (entry.ThisMember)
+            {
+                working.AddPriorAccumulation(AccumulatorType.IndividualDeductible, AccumulatorScope.Individual, entry.NetworkTier, entry.Deductible);
+                working.AddPriorAccumulation(AccumulatorType.IndividualOutOfPocketMax, AccumulatorScope.Individual, entry.NetworkTier, entry.OutOfPocket);
+            }
+            working.AddPriorAccumulation(AccumulatorType.FamilyDeductible, AccumulatorScope.Family, entry.NetworkTier, entry.Deductible);
+            working.AddPriorAccumulation(AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family, entry.NetworkTier, entry.OutOfPocket);
+        }
     }
 
     private static string DeterminePlanYear(DateOnly serviceDate, BenefitPlanConfig plan)

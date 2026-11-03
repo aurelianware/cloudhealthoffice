@@ -108,6 +108,46 @@ builder.Services.AddScoped<AuthorizationService.Services.BenefitExclusion.IDrugE
 builder.Services.AddScoped<AuthorizationService.Services.BenefitExclusion.IAuthorizationExclusionService,
     AuthorizationService.Services.BenefitExclusion.AuthorizationExclusionService>();
 
+// DHCS APL 26-009 (Medi-Cal adult dental, from July 1, 2027): the CHO backend
+// checks dental requests against the plan setting
+// eligibility.mediCal.stateOnlyAdultDental, the member's coverage and aid codes.
+// These are reads for this service's own decision, so they use its identity:
+// the submitting provider need not read plan configuration, coverage or members.
+var planSettingsOptions = builder.Configuration.GetSection(CloudHealthOffice.PlanConfiguration.PlanSettingsOptions.SectionName)
+    .Get<CloudHealthOffice.PlanConfiguration.PlanSettingsOptions>() ?? new CloudHealthOffice.PlanConfiguration.PlanSettingsOptions();
+planSettingsOptions.UseServiceIdentity = true;
+builder.Services.AddSingleton(planSettingsOptions);
+CloudHealthOffice.PlanConfiguration.PlanSettingsServiceCollectionExtensions.AddPlanSettingsClient(builder.Services, builder.Configuration);
+builder.Services.AddHttpClient(AuthorizationService.Services.StatePrograms.HttpStateDentalMemberLookup.CoverageClientName, client =>
+{
+    client.BaseAddress = new Uri((builder.Configuration["Services:CoverageService"]
+        ?? AuthorizationService.Services.StatePrograms.HttpStateDentalMemberLookup.DefaultCoverageServiceUrl).TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+builder.Services.AddHttpClient(AuthorizationService.Services.StatePrograms.HttpStateDentalMemberLookup.MemberClientName, client =>
+{
+    client.BaseAddress = new Uri((builder.Configuration["Services:MemberService"]
+        ?? AuthorizationService.Services.StatePrograms.HttpStateDentalMemberLookup.DefaultMemberServiceUrl).TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+builder.Services.AddScoped<AuthorizationService.Services.StatePrograms.IStateDentalMemberLookup,
+    AuthorizationService.Services.StatePrograms.HttpStateDentalMemberLookup>();
+// A prior authorization's line of business comes from the member's program
+// (coverage -> benefit plan -> program in tenant-service,
+// docs/architecture/line-of-business.md). Read as this service: the provider
+// submitting a request need not read plan configuration.
+var programDirectoryOptions = builder.Configuration.GetSection(CloudHealthOffice.PlanConfiguration.ProgramDirectoryOptions.SectionName)
+    .Get<CloudHealthOffice.PlanConfiguration.ProgramDirectoryOptions>() ?? new CloudHealthOffice.PlanConfiguration.ProgramDirectoryOptions();
+programDirectoryOptions.UseServiceIdentity = true;
+builder.Services.AddSingleton(programDirectoryOptions);
+CloudHealthOffice.PlanConfiguration.ProgramDirectoryServiceCollectionExtensions.AddProgramDirectoryClient(builder.Services, builder.Configuration);
+builder.Services.AddScoped<AuthorizationService.Services.IAuthorizationLineOfBusinessResolver,
+    AuthorizationService.Services.ProgramAuthorizationLineOfBusinessResolver>();
+builder.Services.AddScoped<AuthorizationService.Services.StatePrograms.IStateOnlyAdultDentalPaCheck,
+    AuthorizationService.Services.StatePrograms.StateOnlyAdultDentalPaCheck>();
+
 // CMS-0057-F PA data as FHIR (G-31, and the PA half of G-33 / G-35):
 // authorization-service owns the prior-authorization ExplanationOfBenefit
 // projection because it owns the record, as claims-service owns the claim one.

@@ -61,6 +61,15 @@ builder.Services.Configure<CoverageService.Services.Tpl.TplReportingOptions>(
     builder.Configuration.GetSection(CoverageService.Services.Tpl.TplReportingOptions.SectionName));
 builder.Services.AddScoped<CoverageService.Services.Tpl.ITplDiscoveryService, CoverageService.Services.Tpl.TplDiscoveryService>();
 
+// A coverage's line of business comes from its plan's program in tenant-service
+// (docs/architecture/line-of-business.md). The lookup is this service's own: an
+// 834 load or an administrator writing coverage need not read plan configuration.
+var programDirectoryOptions = builder.Configuration.GetSection(CloudHealthOffice.PlanConfiguration.ProgramDirectoryOptions.SectionName)
+    .Get<CloudHealthOffice.PlanConfiguration.ProgramDirectoryOptions>() ?? new CloudHealthOffice.PlanConfiguration.ProgramDirectoryOptions();
+programDirectoryOptions.UseServiceIdentity = true;
+builder.Services.AddSingleton(programDirectoryOptions);
+CloudHealthOffice.PlanConfiguration.ProgramDirectoryServiceCollectionExtensions.AddProgramDirectoryClient(builder.Services, builder.Configuration);
+
 // PCP assignment + provider client + care team projector
 builder.Services.Configure<ProviderServiceOptions>(opts =>
 {

@@ -18,11 +18,17 @@ using Coverage = Hl7.Fhir.Model.Coverage;
 /// <c>required</c>, <c>repeats</c> on choices, <c>answerOption</c> and
 /// expanded <c>answerValueSet</c>s, static <c>initial</c> values, and
 /// <c>enableWhen</c> (a disabled item is neither required nor answered).
+/// An item shown by an <c>sdc-questionnaire-enableWhenExpression</c> (CQL this
+/// page cannot run) is shown but never required: the person answers it if
+/// it applies.
 /// </para>
 /// </summary>
 public sealed class QuestionnaireForm
 {
     public const string HiddenExtension = "http://hl7.org/fhir/StructureDefinition/questionnaire-hidden";
+
+    public const string EnableWhenExpressionExtension =
+        "http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-enableWhenExpression";
 
     private readonly Dictionary<string, FormItem> _byLinkId = new(StringComparer.Ordinal);
 
@@ -121,6 +127,23 @@ public sealed class QuestionnaireForm
         foreach (var extension in extensions ?? [])
             response.Extension.Add((Extension)extension.DeepCopy());
         return response;
+    }
+
+    /// <summary>
+    /// Fills the form from a response's answers (an adaptive form comes back
+    /// from <c>$next-question</c> with the earlier answers in it). Answers to
+    /// items the form does not have are ignored.
+    /// </summary>
+    public void ApplyAnswers(IEnumerable<QuestionnaireResponse.ItemComponent>? items)
+    {
+        foreach (var item in items ?? [])
+        {
+            if (!string.IsNullOrEmpty(item.LinkId) && Find(item.LinkId) is { } formItem)
+                formItem.SetAnswers((item.Answer ?? []).Select(a => a.Value).Where(v => v is not null)!);
+            ApplyAnswers(item.Item);
+            foreach (var answer in item.Answer ?? [])
+                ApplyAnswers(answer.Item);
+        }
     }
 
     private List<QuestionnaireResponse.ItemComponent> ResponseItems(IEnumerable<FormItem> items)
@@ -295,7 +318,14 @@ public sealed class FormItem
 
     public string Label => string.IsNullOrWhiteSpace(Definition.Text) ? LinkId : Definition.Text;
 
-    public bool Required => Definition.Required == true;
+    /// <summary>Required, unless a CQL condition this page cannot run decides whether it is asked at all.</summary>
+    public bool Required => Definition.Required == true && !ConditionNotEvaluated;
+
+    /// <summary>
+    /// Shown by an <c>enableWhenExpression</c>: the plan asks it only in some
+    /// cases, which only a DTR client running the form's CQL can tell.
+    /// </summary>
+    public bool ConditionNotEvaluated => Definition.Extension?.Any(e => e.Url == QuestionnaireForm.EnableWhenExpressionExtension) == true;
 
     public bool Repeats => Definition.Repeats == true;
 
@@ -392,6 +422,32 @@ public sealed class FormItem
                 if (Type == Questionnaire.QuestionnaireItemType.OpenChoice && !string.IsNullOrWhiteSpace(Text))
                     yield return new FhirString(Text.Trim());
                 break;
+        }
+    }
+
+    /// <summary>Sets the answer from FHIR values, as <see cref="AnswerValues"/> would give them back.</summary>
+    internal void SetAnswers(IEnumerable<DataType> values)
+    {
+        foreach (var value in values)
+        {
+            switch (value)
+            {
+                case FhirBoolean b: Boolean = b.Value; break;
+                case FhirDecimal dec when dec.Value.HasValue: Number = dec.Value.Value.ToString(CultureInfo.InvariantCulture); break;
+                case Integer integer when integer.Value.HasValue: Number = integer.Value.Value.ToString(CultureInfo.InvariantCulture); break;
+                case Date date when DateTime.TryParse(date.Value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d): Date = d; break;
+                case FhirDateTime dt when DateTime.TryParse(dt.Value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d): Date = d; break;
+                case Coding coding when Options.FirstOrDefault(o => QuestionnaireForm.AnswerEquals(o.Value, coding)) is { } choice:
+                    if (Repeats) Choices.Add(choice.Key);
+                    else Choice = choice.Key;
+                    break;
+                case FhirUri u: Text = u.Value; break;
+                case FhirString str when Options.FirstOrDefault(o => QuestionnaireForm.AnswerEquals(o.Value, str)) is { } choice:
+                    if (Repeats) Choices.Add(choice.Key);
+                    else Choice = choice.Key;
+                    break;
+                case FhirString str: Text = str.Value; break;
+            }
         }
     }
 

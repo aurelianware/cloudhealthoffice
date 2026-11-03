@@ -10,7 +10,12 @@ namespace TenantService.Services;
 public interface IStripeService
 {
     Task<string> CreateCustomerAsync(Tenant tenant);
-    Task<string> CreateSubscriptionAsync(string customerId, string subscriptionTier);
+    /// <summary>
+    /// Creates the subscription. <paramref name="tenantId"/> is stored as the
+    /// subscription's <c>tenant_id</c> metadata, which the subscription webhooks
+    /// use to find the tenant.
+    /// </summary>
+    Task<string> CreateSubscriptionAsync(string customerId, string subscriptionTier, string? tenantId = null);
     Task CancelSubscriptionAsync(string subscriptionId);
     Task UpdateSubscriptionAsync(string subscriptionId, string newTier);
     Task<Stripe.Invoice?> GetUpcomingInvoiceAsync(string customerId);
@@ -65,7 +70,7 @@ public class StripeService : IStripeService
         return customer.Id;
     }
 
-    public async Task<string> CreateSubscriptionAsync(string customerId, string subscriptionTier)
+    public async Task<string> CreateSubscriptionAsync(string customerId, string subscriptionTier, string? tenantId = null)
     {
         var priceId = GetPriceId(subscriptionTier);
 
@@ -86,6 +91,8 @@ public class StripeService : IStripeService
             },
             Expand = new List<string> { "latest_invoice.payment_intent" }
         };
+        if (!string.IsNullOrWhiteSpace(tenantId))
+            options.Metadata = new Dictionary<string, string> { ["tenant_id"] = tenantId };
 
         var service = new SubscriptionService();
         var subscription = await service.CreateAsync(options);

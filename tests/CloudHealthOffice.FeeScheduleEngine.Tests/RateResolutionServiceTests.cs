@@ -41,6 +41,25 @@ public class RateResolutionServiceTests
     }
 
     /// <summary>
+    /// The line reports which revision of the schedule priced it, so a later
+    /// replace of the schedule can find the claims paid on the old rates.
+    /// </summary>
+    [Fact]
+    public async Task PricedLine_ReportsScheduleRevision()
+    {
+        var schedule = CreateMpfsSchedule("99213",
+            workRvu: 1.30m, peRvu: 1.59m, peRvuFacility: 0.83m, mpRvu: 0.09m,
+            cf: 33.8872m);
+        schedule.Revision = 7;
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", pos: "11"));
+
+        Assert.Equal("mpfs-test", result.FeeScheduleId);
+        Assert.Equal(7, result.FeeScheduleRevision);
+    }
+
+    /// <summary>
     /// Facility POS (21 = inpatient hospital) uses facility PE RVU.
     /// 99213 facility: (1.30×1.0 + 0.83×1.0 + 0.09×1.0) × 33.8872 = 75.23
     /// </summary>

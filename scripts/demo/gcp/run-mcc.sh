@@ -7,7 +7,9 @@
 # the portal's Mass Adjudication console and in the job log.
 #
 # Required: GAR_REPOSITORY, IMAGE_TAG (same values the deploy used)
-# Optional: CLAIMS (default 2000), PARALLELISM (default 10)
+# Optional: CLAIMS (default 2000), PARALLELISM (default 10),
+#           TPL_SCENARIOS=true (Texas/California Medicaid TPL scenarios; turns
+#           claims-service TPL cost avoidance on for the run, then restores it)
 
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -43,6 +45,20 @@ if command -v gcloud >/dev/null 2>&1; then
     exit 1
   fi
 fi
+# The demo's MongoDB has real credentials (unlike a local cluster's
+# admin/local-dev-only), so the evidence export at the end of the run reads
+# them from the cluster.
+if [[ -z "${MONGO_USER:-}" || -z "${MONGO_PASS:-}" ]]; then
+  if MONGO_USER="$(kubectl get secret mongodb-auth -n "${NAMESPACE:-cloudhealthoffice}" -o jsonpath='{.data.username}' 2>/dev/null | base64 -d)" \
+    && MONGO_PASS="$(kubectl get secret mongodb-auth -n "${NAMESPACE:-cloudhealthoffice}" -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)" \
+    && [[ -n "$MONGO_USER" && -n "$MONGO_PASS" ]]; then
+    export MONGO_USER MONGO_PASS
+  else
+    echo "WARNING: could not read secret mongodb-auth; the evidence export may fail" >&2
+    unset MONGO_USER MONGO_PASS
+  fi
+fi
+
 export SKIP_BUILD=true
 export KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-none}"
 export CLAIMS="${CLAIMS:-2000}"

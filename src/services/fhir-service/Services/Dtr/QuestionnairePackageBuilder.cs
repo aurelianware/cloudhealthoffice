@@ -50,8 +50,12 @@ public sealed class QuestionnairePackageBuilder
 
     public const string CqfLibraryExtension = "http://hl7.org/fhir/StructureDefinition/cqf-library";
 
-    /// <summary>CRD's DocReason code system (the CRD "temp" code system).</summary>
-    public const string CrdTempCodeSystem = "http://hl7.org/fhir/us/davinci-crd/CodeSystem/temp";
+    /// <summary>
+    /// The code system of CRD 2.2.1's DocReason value set (withpa, withclaim, ...),
+    /// which DTR 2.2.0's intendedUse extension binds. Earlier CRD versions kept
+    /// these codes in the "temp" code system.
+    /// </summary>
+    public const string CrdCoverageInformationCodeSystem = "http://hl7.org/fhir/us/davinci-crd/CodeSystem/coverage-information-codes";
 
     /// <summary>
     /// Value sets with fewer entries than this are expanded in the package
@@ -89,7 +93,9 @@ public sealed class QuestionnairePackageBuilder
             var adaptive = DtrContentLibrary.IsAdaptive(selection.Questionnaire);
             var questionnaire = adaptive
                 ? AdaptiveSearchForm(selection.Questionnaire, fhirBaseUrl)
-                : selection.Questionnaire;
+                // A copy, so the stored form is never changed; sdc-2 needs a
+                // versionAlgorithm on any versioned form, whoever authored it.
+                : ((Questionnaire)selection.Questionnaire.DeepCopy()).WithVersionAlgorithm();
             var canonical = Canonical(questionnaire);
             var (libraries, valueSets) = Dependencies(questionnaire, canonical, now, issues);
 
@@ -380,7 +386,7 @@ public sealed class QuestionnairePackageBuilder
         // The documentation supports a prior authorization request: CHO's DTR
         // forms are chosen by CRD's pa-needed / doc-needed determinations.
         response.Extension.Add(new Extension(IntendedUseExtension,
-            new CodeableConcept(CrdTempCodeSystem, "withpa", "Include with prior authorization request")));
+            new CodeableConcept(CrdCoverageInformationCodeSystem, "withpa", "Include in prior authorization")));
 
         return response;
     }

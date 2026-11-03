@@ -21,6 +21,20 @@ public interface IFeeScheduleRepository
         string tenantId, string planId, DateTime serviceDate, CancellationToken ct = default);
 
     /// <summary>
+    /// The <see cref="Domain.FeeScheduleType.Supplemental"/> schedules that name
+    /// any of <paramref name="planKeys"/> (a plan version id and its plan code)
+    /// in <see cref="FeeSchedule.SupplementalForPlanIds"/> and took effect on or
+    /// before <paramref name="serviceDate"/> — including those whose
+    /// <see cref="FeeSchedule.TermDate"/> has passed, so the engine can tell a
+    /// provider that a supplemental was discontinued rather than say nothing.
+    /// Lines included. Empty by default: a store that holds no supplemental
+    /// schedules need not implement it.
+    /// </summary>
+    Task<IReadOnlyList<FeeSchedule>> GetSupplementalSchedulesAsync(
+        string tenantId, IReadOnlyCollection<string> planKeys, DateTime serviceDate, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<FeeSchedule>>(Array.Empty<FeeSchedule>());
+
+    /// <summary>
     /// Look up a single rate line for a procedure code within a schedule.
     ///
     /// Lookup priority:
@@ -40,7 +54,7 @@ public interface IFeeScheduleRepository
     /// </summary>
     Task<FeeSchedule> UpsertAsync(FeeSchedule schedule, CancellationToken ct = default);
 
-    /// <summary>List all schedules for a tenant (for admin UI).</summary>
+    /// <summary>List all schedules for a tenant (for admin UI), without their lines; read one with <see cref="GetByIdAsync"/> for its lines.</summary>
     Task<IReadOnlyList<FeeSchedule>> ListAsync(
         string tenantId, int page = 1, int pageSize = 50, CancellationToken ct = default);
 }

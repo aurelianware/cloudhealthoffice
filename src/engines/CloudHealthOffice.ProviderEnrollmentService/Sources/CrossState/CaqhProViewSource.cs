@@ -33,7 +33,7 @@ public sealed class CaqhProViewSource : IStateEnrollmentSource
 {
     public string StateCode         => "US";   // national scope
     public string SourceSystemName  => "CAQH-ProView";
-    public LineOfBusiness SupportedLobs => LineOfBusiness.All;
+    public ProgramParticipation SupportedLobs => ProgramParticipation.All;
 
     private readonly HttpClient _http;
     private readonly IEnrollmentRepository _cache;
@@ -163,7 +163,7 @@ public sealed class CaqhProViewSource : IStateEnrollmentSource
                               : DateOnly.Parse(d.ReattestationDueDate),
         LastVerifiedDate = DateOnly.FromDateTime(DateTime.UtcNow),
         ProviderType     = ProviderTypeClassification.Unknown,   // enriched downstream
-        SupportedLobs    = LineOfBusiness.All,
+        SupportedLobs    = ProgramParticipation.All,
         EnrolledTaxonomies  = d.Specialties?.Select(s => s.TaxonomyCode).ToList() ?? [],
         EnrolledCounties    = [],
         McoParticipation    = [],

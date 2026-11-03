@@ -45,7 +45,7 @@ public sealed class EnrollmentRepositoryMongoTests(MongoRunnerFixture mongo) : I
         Status = status,
         EffectiveDate = new DateOnly(2023, 1, 15),
         ProviderType = ProviderTypeClassification.PhysicianMD,
-        SupportedLobs = LineOfBusiness.Medicaid | LineOfBusiness.STAR,
+        SupportedLobs = ProgramParticipation.Medicaid | ProgramParticipation.STAR,
         McoParticipation = [mco],
         RevalidationDueDate = revalidationInDays is { } days ? Today.AddDays(days) : null,
     };
@@ -62,7 +62,7 @@ public sealed class EnrollmentRepositoryMongoTests(MongoRunnerFixture mongo) : I
         read.StateCode.Should().Be("TX");
         read.Status.Should().Be(EnrollmentStatus.Active);
         read.ProviderType.Should().Be(ProviderTypeClassification.PhysicianMD);
-        read.SupportedLobs.Should().Be(LineOfBusiness.Medicaid | LineOfBusiness.STAR);
+        read.SupportedLobs.Should().Be(ProgramParticipation.Medicaid | ProgramParticipation.STAR);
         read.McoParticipation.Should().Equal("MCO-001");
         read.IsFromCache.Should().BeTrue();
     }

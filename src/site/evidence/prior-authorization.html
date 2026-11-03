@@ -170,6 +170,8 @@
         <div class="ev-badges"><span class="ev-badge ev-badge--cyan">PAS-01 &hellip; PAS-08</span>
           <span class="ev-badge">Da Vinci CRD / DTR / PAS STU 2.2.x</span>
           <span class="ev-badge">CDex solicited attachment</span>
+          <span class="ev-badge ev-badge--green">Inferno DTR kit: pass</span>
+          <span class="ev-badge ev-badge--green">PA Timeliness: 2,601 of 2,601 checks</span>
           <span class="ev-badge ev-badge--amber">Synthetic data</span></div>
         <p class="ev-rule-definition">
           <strong>CMS-0057-F</strong> is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and some
@@ -184,6 +186,7 @@
       <nav class="ev-toc" aria-label="On this page">
         <h2>On this page</h2>
         <ol>
+            <li><a href="#latest">Latest proof points</a></li>
             <li><a href="#chain">The chain: CRD, DTR, PAS</a></li>
             <li><a href="#inquire">$inquire as a read projection</a></li>
             <li><a href="#a4">What A4 actually requires</a></li>
@@ -193,6 +196,19 @@
       </nav>
     </div>
 
+
+    <section class="ev-section ev-section--alt" id="latest">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Latest proof points</span>
+        <h2>What is new since October</h2>
+        <div class="ev-grid ev-grid--two" style="grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr))">
+          <a class="ev-card" href="/evidence/inferno-conformance"><span class="ev-card__tag">Conformance kit</span><h3>The Inferno DTR test kit passes</h3><p>The DTR 2.2.0 payer-server suite runs every night against Cloud Health Office: <code>$questionnaire-package</code> by form, by CRD context and by order, adaptive forms through <code>$next-question</code>, <code>ValueSet/$expand</code> and <code>$log-questionnaire-errors</code>. Three kit tests that no conformant server can pass are recorded and not counted.</p></a>
+          <a class="ev-card" href="/evidence/pa-timeliness-challenge"><span class="ev-card__tag">Decision timeframes</span><h3>PA Timeliness Challenge: 2,601 of 2,601 checks</h3><p>10,000 synthetic requests across lines of business on the GKE demo, scored against an answer key computed from the CMS-0057-F decision timeframes and metrics. PAS <code>$submit</code> answered at p50 531 ms and p95 1.18 s. One known gap: PAS carries no Exchange filing code.</p></a>
+          <a class="ev-card" href="/docs/prior-auth-guide"><span class="ev-card__tag">Providers without a DTR app</span><h3>A portal DTR page for small practices and dental offices</h3><p>A practice whose EHR has no DTR client fills the plan's forms in the provider portal, including adaptive forms asked one question at a time. The answers ride along with the PAS request, so the reviewer sees the documentation with the authorization.</p></a>
+          <a class="ev-card" href="/docs/texas-tmppm-pa-rules"><span class="ev-card__tag">Where the rules come from</span><h3>The plan's own prior-auth rules, loaded once</h3><p>CRD and PAS answer from one PA rule store, loaded from the plan's own PA-required list, the Texas TMPPM, or Medi-Cal's TAR and Non-Benefit lists. Claims adjudication reads the same rule set, so a claim and its authorization agree.</p></a>
+        </div>
+      </div>
+    </section>
 
     <section class="ev-section" id="chain">
       <div class="ev-container">
@@ -240,6 +256,14 @@
           never asked for would fail a conformant server. Canonical versions are never normalised away either: a
           dependency present at a different version is reported as a <strong>version mismatch</strong>, not as
           missing, because calling it missing sends a reader looking for something that is sitting in the package.
+        </p>
+        <p>
+          Two kinds of form are served. A <strong>standard</strong> form, such as the MRI form, ships with CQL
+          libraries (CQL and compiled ELM) that let the provider's DTR client prefill answers from the EHR. An
+          <strong>adaptive</strong> form, such as the sleep-study form, is answered one question at a time through
+          <code>Questionnaire/$next-question</code>, with the payer choosing each next question. Either way the
+          completed QuestionnaireResponse travels in the PAS request, and Cloud Health Office files it with the
+          authorization as a clinical attachment.
         </p>
 
         <h3>PAS <code>$submit</code> &mdash; one authorization record</h3>
@@ -418,8 +442,8 @@
             <dt>IG family</dt><dd>Da Vinci CRD / DTR / PAS STU 2.2.x &middot; CDex solicited attachment</dd>
             <dt>Test data</dt><dd>Synthetic. Decisions come from the Cloud Health Office rule store, not from a payer's production rules.</dd>
             <dt>Architecture docs</dt><dd><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/prior-authorization.md">prior-authorization.md</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/cdex-additional-information.md">cdex-additional-information.md</a></dd>
-            <dt>Pull requests</dt><dd><a href="https://github.com/aurelianware/cloudhealthoffice/pull/1147">#1147</a> drug exclusion &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1154">#1154</a> PAS <code>$inquire</code> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1155">#1155</a> prior-authorization retention &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1156">#1156</a> CDex additional-information round trip</dd>
-            <dt>Also exercised externally</dt><dd>CRD, DTR and PAS <code>$submit</code> are exercised against an independently developed HL7 Da Vinci implementation &mdash; <a href="/evidence/davinci-interoperability">see that evidence</a>, which is kept separate from the acceptance status above</dd>
+            <dt>Pull requests</dt><dd><a href="https://github.com/aurelianware/cloudhealthoffice/pull/1147">#1147</a> drug exclusion &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1154">#1154</a> PAS <code>$inquire</code> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1155">#1155</a> prior-authorization retention &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1156">#1156</a> CDex additional-information round trip &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1690">#1690</a> DTR package with CQL prepopulation &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1693">#1693</a> CRD names the DTR form &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1709">#1709</a> claims read the PA rule set &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1755">#1755</a> portal DTR page and PAS attachments &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1756">#1756</a> Inferno DTR kit &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1813">#1813</a> adaptive forms in the portal &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1815">#1815</a> PA Timeliness Challenge run</dd>
+            <dt>Also exercised externally</dt><dd>CRD, DTR and PAS <code>$submit</code> are exercised against an independently developed HL7 Da Vinci implementation &mdash; <a href="/evidence/davinci-interoperability">see that evidence</a>, which is kept separate from the acceptance status above. DTR is also judged nightly by the Inferno DTR payer-server kit: <a href="/evidence/inferno-conformance">see the results</a></dd>
           </dl>
         </div>
 
@@ -439,10 +463,10 @@
           <ul>
             <li><strong>Acceptance evidence is not CMS certification</strong>, and a Passable status does not establish production readiness for a particular payer deployment.</li>
             <li><strong>Synthetic data throughout.</strong> The coverage decisions exercised are Cloud Health Office's own rule content, not a plan's production medical policy.</li>
-            <li><strong>CQL is not executed.</strong> Where a DTR package carries a Library its structure is validated; its CQL is not run. This is package exchange, not rule evaluation.</li>
+            <li><strong>Cloud Health Office does not run DTR prepopulation CQL.</strong> It serves the CQL and compiled ELM in the package; the provider's DTR client runs them against the EHR, as DTR intends. The server's role in adaptive forms is choosing the next question.</li>
             <li><strong>The CDex request is made available for retrieval, not pushed.</strong> There is no provider FHIR endpoint registry in this repository to POST a Task into.</li>
             <li><strong>The CDex Task Data Request profile is deliberately not implemented</strong> &mdash; a payer querying a provider's clinical record is a different transaction from a pended prior authorization.</li>
-            <li><strong>Prior-authorization decisions in Augment mode depend on an external core adapter</strong>, and those adapters are documented stubs in this repository. See <a href="/evidence/replace-vs-augment">Replace vs Augment</a>.</li>
+            <li><strong>Prior-authorization decisions in Augment mode depend on an external core adapter</strong>, and those adapters are documented stubs in this repository. See <a href="/evidence/replace-vs-augment">Replace vs Augment</a>. A plan that keeps its own UM platform can load its decided authorizations as CSV or X12 278 files, so status, Patient Access and the CMS-0057-F metrics read real decisions; that load is read-only and is not a live PAS-to-278 bridge.</li>
           </ul>
         </div>
 
@@ -459,6 +483,7 @@
         <span class="ev-eyebrow">Related evidence</span>
         <h2>Where to read next</h2>
         <div class="ev-grid">
+          <a class="ev-card" href="/evidence/pa-timeliness-challenge"><h3>PA Timeliness Challenge</h3><p>10,000 synthetic requests scored against an answer key computed from the decision timeframes.</p></a>
           <a class="ev-card" href="/evidence/davinci-interoperability"><h3>Independently tested interoperability</h3><p>The same three protocols, exchanged with software Cloud Health Office did not write.</p></a>
           <a class="ev-card" href="/insights/cms-0057-f/acceptance-scenarios"><h3>CMS-0057-F implementation evidence</h3><p>The full scenario inventory and the live acceptance snapshot.</p></a>
           <a class="ev-card" href="/docs/prior-auth-guide"><h3>Prior Authorization Guide</h3><p>Operating the prior-authorization workflow in the platform.</p></a>

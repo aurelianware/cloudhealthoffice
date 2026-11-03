@@ -23,27 +23,63 @@ public class ShadowAdjudicationController : ControllerBase
 
     private readonly IShadowAdjudicationService _service;
     private readonly IShadowAdjudicationRepository _store;
+    private readonly ShadowAdjudicationTenants _tenants;
     private readonly ICurrentActor _actor;
+    private readonly TimeProvider _clock;
 
     public ShadowAdjudicationController(
-        IShadowAdjudicationService service, IShadowAdjudicationRepository store, ICurrentActor actor)
+        IShadowAdjudicationService service, IShadowAdjudicationRepository store, ShadowAdjudicationTenants tenants,
+        ICurrentActor actor, TimeProvider? clock = null)
     {
         _service = service;
         _store = store;
+        _tenants = tenants;
         _actor = actor;
+        _clock = clock ?? TimeProvider.System;
     }
 
     private string TenantId =>
         HttpContext?.Items["TenantId"]?.ToString() is { Length: > 0 } tenant ? tenant : _actor.TenantId;
 
     /// <summary>
+    /// Whether shadow adjudication runs for this tenant: the deployment's switch,
+    /// the tenant's own choice, the run size cap and the tolerance.
+    /// </summary>
+    [HttpGet("settings")]
+    [RequirePermission(ClaimsPermissions.Import)]
+    [ProducesResponseType(typeof(ShadowAdjudicationSettingsView), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ShadowAdjudicationSettingsView>> GetSettings(CancellationToken ct = default)
+        => Ok(await _tenants.DescribeAsync(TenantId, ct));
+
+    /// <summary>
+    /// Turns shadow adjudication on or off for this tenant, without a
+    /// redeploy. Replaces what deployment configuration says for the tenant.
+    /// Nothing runs while the deployment's switch is off.
+    /// </summary>
+    [HttpPut("settings")]
+    [RequirePermission(ClaimsPermissions.Import)]
+    [ProducesResponseType(typeof(ShadowAdjudicationSettingsView), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ShadowAdjudicationSettingsView>> PutSettings(
+        [FromBody] ShadowAdjudicationSettingsRequest? request, CancellationToken ct = default)
+    {
+        if (request is null)
+            return BadRequest(new { error = "Send { \"enabled\": true } or { \"enabled\": false }." });
+        await _tenants.SaveAsync(TenantId, request.Enabled, _actor.UserId, _clock.GetUtcNow().UtcDateTime, ct);
+        return Ok(await _tenants.DescribeAsync(TenantId, ct));
+    }
+
+    /// <summary>
     /// Runs a shadow adjudication over the named claims, or the claims of one
     /// CPCDS import batch, and returns the run's totals. Per-claim results:
-    /// <c>GET runs/{runId}/results</c>.
+    /// <c>GET runs/{runId}/results</c>. With <c>background: true</c> and an
+    /// import batch, queues a run over the whole batch and answers 202 at once;
+    /// <c>GET runs/{runId}</c> shows its status and progress.
     /// </summary>
     [HttpPost("runs")]
     [RequirePermission(ClaimsPermissions.Import)]
     [ProducesResponseType(typeof(ShadowAdjudicationRun), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ShadowAdjudicationRun), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ShadowAdjudicationRun>> Run(
@@ -59,6 +95,13 @@ public class ShadowAdjudicationController : ControllerBase
 
         try
         {
+            if (request.Background)
+            {
+                if (string.IsNullOrWhiteSpace(request.ImportBatchId))
+                    return BadRequest(new { error = "A background run takes a CPCDS import batch (importBatchId)." });
+                var queued = await _service.QueueAsync(TenantId, request, _actor.UserId, ct);
+                return AcceptedAtAction(nameof(GetRun), new { runId = queued.Id }, queued);
+            }
             var response = await _service.RunAsync(TenantId, request, _actor.UserId, ct);
             return Ok(response.Run);
         }

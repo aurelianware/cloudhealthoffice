@@ -43,8 +43,19 @@
                 <MudNumericField T="int" @bind-Value="_form.ExpectedEveryHours" Label="Expected every (hours)" Min="1" Max="744" Disabled="!CanEdit" />
                 <MudNumericField T="int" @bind-Value="_form.StaleGraceHours" Label="Late after (hours)" Min="0" Max="168" Disabled="!CanEdit" />
             </div>
+            @if (_shadow is not null)
+            {
+                <MudSwitch T="bool" @bind-Value="_shadowOn" Color="Color.Primary" Class="mt-2"
+                           Label="Shadow adjudication for this plan" Disabled="!CanEdit" data-testid="drop-shadow-switch" />
+            }
             <MudSwitch T="bool" @bind-Value="_form.ShadowAfterImport" Color="Color.Primary" Class="mt-2"
                        Label="Shadow-adjudicate each claim file after it loads" Disabled="!CanEdit" />
+            @if (_shadow is { } shadow)
+            {
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); display: block;" data-testid="drop-shadow-state">
+                    @ShadowState(shadow)
+                </MudText>
+            }
             <MudTextField T="string" @bind-Value="_columnMapText" Label="Column map" Lines="4" Class="mt-2" Disabled="!CanEdit"
                           Placeholder="Claim unique identifier = CLAIM_ID"
                           HelperText="One per line: the documented CPCDS column = the extract's own header. Only for columns named differently." />
@@ -146,6 +157,8 @@
     private static readonly string[] LinesOfBusiness = ["Commercial", "Medicare", "Medicaid", "Exchange", "TRICARE", "VA"];
 
     private DataDropSettingsView? _view;
+    private ShadowAdjudicationSettingsView? _shadow;
+    private bool _shadowOn;
     private DataDropSettings _form = new();
     private string? _columnMapText;
     private DataDropSftpAccount? _sftp;
@@ -167,6 +180,16 @@
         catch (Exception ex)
         {
             _error = ex.Message;
+        }
+
+        try
+        {
+            ShowShadow(await DataDrops.GetShadowSettingsAsync());
+        }
+        catch (ServiceUnavailableException)
+        {
+            // An older claims-service without the shadow switch: the drop settings still work.
+            _shadow = null;
         }
 
         if (CanManageSftp)
@@ -206,6 +229,12 @@
             : null;
     }
 
+    private void ShowShadow(ShadowAdjudicationSettingsView? shadow)
+    {
+        _shadow = shadow;
+        _shadowOn = shadow?.Enabled ?? false;
+    }
+
     private async Task SaveSettingsAsync()
     {
         _settingsErrors = new();
@@ -225,6 +254,8 @@
             if (result.Succeeded)
             {
                 Show(result.Value);
+                if (!await SaveShadowAsync())
+                    return;
                 Snackbar.Add("Drop settings saved. They take effect at the next poll.", Severity.Success);
             }
             else
@@ -240,6 +271,39 @@
         {
             _saving = false;
         }
+    }
+
+    /// <summary>
+    /// Saves the plan's shadow switch when it changed. Asking for shadow runs
+    /// after each claim file turns shadow adjudication on, since one is no use
+    /// without the other.
+    /// </summary>
+    private async Task<bool> SaveShadowAsync()
+    {
+        if (_shadow is null)
+            return true;
+        if (_form.ShadowAfterImport)
+            _shadowOn = true;
+        if (_shadowOn == _shadow.Enabled)
+            return true;
+
+        var result = await DataDrops.SaveShadowSettingsAsync(_shadowOn);
+        if (result.Succeeded)
+        {
+            ShowShadow(result.Value);
+            return true;
+        }
+        _settingsErrors = result.Errors.ToList();
+        return false;
+    }
+
+    private static string ShadowState(ShadowAdjudicationSettingsView shadow)
+    {
+        if (!shadow.EnabledForDeployment)
+            return "Shadow adjudication is off in this deployment (Adjudication:Shadow:Enabled); your choice here takes effect once it is on.";
+        return shadow.Running
+            ? $"Shadow adjudication is on: CHO re-adjudicates imported claims and compares its answer with the core's, up to {shadow.MaxClaimsPerRun} claims a run. Nothing members or providers see changes."
+            : "Shadow adjudication is off for this plan.";
     }
 
     private async Task SaveKeysAsync()

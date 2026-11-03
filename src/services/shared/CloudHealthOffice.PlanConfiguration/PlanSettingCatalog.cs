@@ -211,6 +211,31 @@ public static class PlanSettings
     };
 
     /// <summary>
+    /// What happens to an adult (21-64) psychiatric hospital stay over the
+    /// 15-day monthly IMD limit (42 CFR 438.6(e)) on a plan that pays by
+    /// <see cref="MedicaidDrgMethod"/> <c>texas</c>: <c>pend</c> for review
+    /// (default) or <c>pay</c> it at the hospital's per diem. Over the limit
+    /// the state loses federal match on that month's capitation, so whether
+    /// the plan still pays the hospital is the plan's decision.
+    /// </summary>
+    public static readonly SettingDefinition ImdOverLimitAction = new()
+    {
+        Key = "pricing.inpatient.imdOverLimitAction",
+        Type = SettingType.Enum,
+        Owner = "claims-service",
+        Description = "Adult psychiatric hospital stays over the 15-day monthly IMD limit: pend for review (pend) or pay at the per diem (pay).",
+        Default = "\"pend\"",
+        AllowedLevels = new HashSet<SettingLevel>
+        {
+            SettingLevel.Tenant,
+            SettingLevel.LineOfBusiness,
+            SettingLevel.BenefitPlan,
+        },
+        Constraints = new SettingConstraints { AllowedValues = ["pend", "pay"] },
+        ChangeControl = ChangeControl.ReasonRequired,
+    };
+
+    /// <summary>
     /// Whether releasing money needs a second user (maker-checker):
     /// capitation disbursements and premium drafts cannot be released by the
     /// person who prepared them (plan-configuration.md §12 step 2b).
@@ -257,6 +282,33 @@ public static class PlanSettings
         ChangeControl = ChangeControl.TwoPersonApproval,
     };
 
+    /// <summary>
+    /// DHCS APL 26-009: from July 1, 2027, Medi-Cal members 19 and older who are
+    /// not eligible for federally funded full-scope Medi-Cal lose non-emergency
+    /// dental (<c>StateOnlyAdultDentalRule</c> in CloudHealthOffice.Infrastructure).
+    /// JSON: <c>"off"</c> (the default), or
+    /// <c>{"mode":"CarveOut"|"EmergencyOnly","stateOnlyAidCodes":[...],"exceptionAidCodes":[...],"emergencyProcedureCodes":[...]}</c>.
+    /// A Dental Managed Care Plan uses CarveOut: the members move to Medi-Cal
+    /// Dental FFS and the plan pays nothing for them. The aid codes are the
+    /// plan's, from DHCS's aid code master chart. Set at the line of business
+    /// or the benefit plan of a Medi-Cal Dental program.
+    /// </summary>
+    public static readonly SettingDefinition MediCalStateOnlyAdultDental = new()
+    {
+        Key = "eligibility.mediCal.stateOnlyAdultDental",
+        Type = SettingType.Json,
+        Owner = "claims-service",
+        Description = "DHCS APL 26-009: how claims treat dental for members 19+ not eligible for federally funded full-scope Medi-Cal from July 1, 2027 (off, CarveOut or EmergencyOnly, with the aid codes).",
+        Default = "\"off\"",
+        AllowedLevels = new HashSet<SettingLevel>
+        {
+            SettingLevel.Tenant,
+            SettingLevel.LineOfBusiness,
+            SettingLevel.BenefitPlan,
+        },
+        ChangeControl = ChangeControl.ReasonRequired,
+    };
+
     public static IReadOnlyList<SettingDefinition> All { get; } =
     [
         OrphanGraceDays,
@@ -264,7 +316,9 @@ public static class PlanSettings
         InpatientDrgClassification,
         AprDrgVersion,
         MedicaidDrgMethod,
+        ImdOverLimitAction,
         PaymentEnforceSeparationOfDuties,
         PersonalRepresentativeRequireSecondUserActivation,
+        MediCalStateOnlyAdultDental,
     ];
 }

@@ -42,6 +42,7 @@ public sealed class AppealEventPublisher : IAppealEventTransport, IHostedService
     public const string AppealAssignedType = "AppealAssigned";
     public const string AppealStatusMigratedType = "AppealStatusMigrated";
     public const string AppealDeadlineExtendedType = "AppealDeadlineExtended";
+    public const string AppealNoticeSentType = "AppealNoticeSent";
 
     private readonly ILogger<AppealEventPublisher> _logger;
     private readonly IConfiguration _configuration;
@@ -256,6 +257,7 @@ public sealed class AppealEventPublisher : IAppealEventTransport, IHostedService
         AppealType = a.AppealType.ToString(),
         AppealLevel = a.AppealLevel.ToString(),
         LineOfBusiness = a.LineOfBusiness.ToString(),
+        BenefitType = a.BenefitType.ToString(),
         Source = a.Source.ToString(),
         TargetResponseDate = a.TargetResponseDate,
         IsUrgent = a.IsUrgent,
@@ -408,12 +410,29 @@ public sealed class AppealEventPublisher : IAppealEventTransport, IHostedService
         AppealId = a.Id,
         CurrentStatus = (a.DeadlineExtension?.StatusAtExtension ?? a.Status).ToString(),
         LineOfBusiness = a.LineOfBusiness.ToString(),
+        BenefitType = a.BenefitType.ToString(),
         Reason = a.DeadlineExtension?.Reason.ToString(),
         ExtensionDays = a.DeadlineExtension?.ExtensionDays,
         PreviousTargetResponseDate = a.DeadlineExtension?.PreviousTargetResponseDate,
         TargetResponseDate = a.DeadlineExtension?.NewTargetResponseDate ?? a.TargetResponseDate,
         WrittenNoticeSentAt = a.DeadlineExtension?.WrittenNoticeSentAt,
         RegulatoryBasis = a.DeadlineExtension?.RegulatoryBasis,
+        Actor = actor,
+        CorrelationId = correlationId
+    };
+
+    internal static AppealNoticeSentEventPayload BuildNoticeSentPayload(
+        Appeal a, AppealNoticeKind notice, DateTime sentAt, string actor, string? correlationId) => new()
+    {
+        EventId = Guid.NewGuid().ToString(),
+        EventType = AppealNoticeSentType,
+        EventVersion = EventVersion,
+        OccurredAt = DateTime.UtcNow,
+        TenantId = a.TenantId,
+        AppealId = a.Id,
+        Notice = notice.ToString(),
+        SentAt = sentAt,
+        CurrentStatus = a.Status.ToString(),
         Actor = actor,
         CorrelationId = correlationId
     };
@@ -445,7 +464,10 @@ public sealed record AppealCreatedEventPayload
     public string ProviderNPI { get; init; } = string.Empty;
     public string AppealType { get; init; } = string.Empty;
     public string AppealLevel { get; init; } = string.Empty;
+    /// <summary>The shared line-of-business name (Exchange, not Marketplace; Part D is Medicare).</summary>
     public string LineOfBusiness { get; init; } = string.Empty;
+    /// <summary>MedicalOrService or PartDDrug (a Medicare Part D drug case).</summary>
+    public string BenefitType { get; init; } = string.Empty;
     public string Source { get; init; } = string.Empty;
     public DateTime? TargetResponseDate { get; init; }
     public bool IsUrgent { get; init; }
@@ -583,13 +605,31 @@ public sealed record AppealDeadlineExtendedEventPayload
     public string TenantId { get; init; } = string.Empty;
     public string AppealId { get; init; } = string.Empty;
     public string CurrentStatus { get; init; } = string.Empty;
+    /// <summary>The shared line-of-business name (Exchange, not Marketplace; Part D is Medicare).</summary>
     public string LineOfBusiness { get; init; } = string.Empty;
+    /// <summary>MedicalOrService or PartDDrug (a Medicare Part D drug case).</summary>
+    public string BenefitType { get; init; } = string.Empty;
     public string? Reason { get; init; }
     public int? ExtensionDays { get; init; }
     public DateTime? PreviousTargetResponseDate { get; init; }
     public DateTime? TargetResponseDate { get; init; }
     public DateTime? WrittenNoticeSentAt { get; init; }
     public string? RegulatoryBasis { get; init; }
+    public string Actor { get; init; } = string.Empty;
+    public string? CorrelationId { get; init; }
+}
+
+public sealed record AppealNoticeSentEventPayload
+{
+    public string EventId { get; init; } = string.Empty;
+    public string EventType { get; init; } = string.Empty;
+    public string EventVersion { get; init; } = string.Empty;
+    public DateTime OccurredAt { get; init; }
+    public string TenantId { get; init; } = string.Empty;
+    public string AppealId { get; init; } = string.Empty;
+    public string Notice { get; init; } = string.Empty;
+    public DateTime SentAt { get; init; }
+    public string CurrentStatus { get; init; } = string.Empty;
     public string Actor { get; init; } = string.Empty;
     public string? CorrelationId { get; init; }
 }

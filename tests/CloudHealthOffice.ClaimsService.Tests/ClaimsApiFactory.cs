@@ -237,8 +237,15 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(ImportTransactionRepository);
             // The shadow adjudication store is Mongo, removed by the filter above.
             services.AddSingleton(ShadowAdjudicationRepository);
+            services.AddSingleton<global::ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationTenantSettingsRepository>(
+                new global::ClaimsService.Services.Adjudication.Shadow.InMemoryShadowAdjudicationTenantSettingsRepository());
+            services.AddSingleton<global::ClaimsService.Services.Adjudication.Shadow.IShadowAccumulatorBalanceRepository>(
+                new global::ClaimsService.Services.Adjudication.Shadow.InMemoryShadowAccumulatorBalanceRepository());
             // And the Medicaid TPL recovery case store.
             services.AddSingleton(Substitute.For<global::ClaimsService.Services.Tpl.ITplRecoveryRepository>());
+            // The retro rate impact store is Mongo too.
+            services.AddSingleton(Substitute.For<global::ClaimsService.Services.RetroRate.IRetroRateImpactRepository>());
+            services.AddSingleton(Substitute.For<global::ClaimsService.Services.RetroRate.IRetroRateReprocessingRepository>());
             // So is the CPCDS drop run store.
             services.AddSingleton<global::ClaimsService.Import.Cpcds.Drop.ICpcdsDropRunRepository>(
                 new global::ClaimsService.Import.Cpcds.Drop.InMemoryCpcdsDropRunRepository());

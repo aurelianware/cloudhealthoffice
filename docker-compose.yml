@@ -34,15 +34,22 @@ services:
 
   mongo:
     image: mongo:7
+    # A one-member replica set, not a standalone server: coverage-service saves
+    # coverage in a transaction (the PCP panel count), and Mongo has no
+    # transactions without a replica set. The health check initiates the set on
+    # first start and reports healthy once this member is primary. Its member
+    # name is mongo:27017, so a client on the host connects with
+    # mongodb://localhost:27017/?directConnection=true.
+    command: ["--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "try { rs.status() } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }) } if (!db.hello().isWritablePrimary) quit(1)"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
   redis:
     image: redis:7-alpine
@@ -81,6 +88,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=CoverageDB
+      - Services__TenantService=http://tenant-service:8080
     depends_on:
       mongo:
         condition: service_healthy
@@ -113,6 +121,7 @@ services:
       - MongoDb__DatabaseName=ClaimsDB
       - Kafka__BootstrapServers=kafka:9092
       - Kafka__ClientId=claims-service
+      - Services__TenantService=http://tenant-service:8080
     depends_on:
       mongo:
         condition: service_healthy
@@ -153,6 +162,7 @@ services:
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=AuthorizationDB
       - Services__ContactServiceUrl=http://contact-service:8080
+      - Services__TenantService=http://tenant-service:8080
     depends_on:
       mongo:
         condition: service_healthy
@@ -388,6 +398,8 @@ services:
       - MongoDb__DatabaseName=AppealsDB
       - Services__ContactServiceUrl=http://contact-service:8080
       - Services__AuthorizationServiceUrl=http://authorization-service:8080
+      - Services__CoverageService=http://coverage-service:8080
+      - Services__TenantService=http://tenant-service:8080
     depends_on:
       mongo:
         condition: service_healthy

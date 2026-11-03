@@ -2,7 +2,7 @@
   "resourceType": "Questionnaire",
   "id": "q-imaging-mri",
   "meta": {
-    "versionId": "3",
+    "versionId": "4",
     "lastUpdated": "2026-10-31T00:00:00Z",
     "profile": [
       "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/dtr-std-questionnaire"
@@ -60,58 +60,47 @@
         "coding": [
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "70551",
-            "display": "MRI brain without contrast"
+            "code": "70551"
           },
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "70552",
-            "display": "MRI brain with contrast"
+            "code": "70552"
           },
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "70553",
-            "display": "MRI brain without and with contrast"
+            "code": "70553"
           },
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "72141",
-            "display": "MRI cervical spine without contrast"
+            "code": "72141"
           },
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "72146",
-            "display": "MRI thoracic spine without contrast"
+            "code": "72146"
           },
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "72148",
-            "display": "MRI lumbar spine without contrast"
+            "code": "72148"
           },
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "72156",
-            "display": "MRI cervical spine without and with contrast"
+            "code": "72156"
           },
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "72157",
-            "display": "MRI thoracic spine without and with contrast"
+            "code": "72157"
           },
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "72158",
-            "display": "MRI lumbar spine without and with contrast"
+            "code": "72158"
           },
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "73221",
-            "display": "MRI upper extremity joint without contrast"
+            "code": "73221"
           },
           {
             "system": "http://www.ama-assn.org/go/cpt",
-            "code": "73721",
-            "display": "MRI lower extremity joint without contrast"
+            "code": "73721"
           }
         ],
         "text": "MRI services this documentation template applies to"
@@ -134,7 +123,7 @@
         {
           "valueCoding": {
             "system": "http://snomed.info/sct",
-            "code": "122495006",
+            "code": "69536005",
             "display": "Head"
           }
         },

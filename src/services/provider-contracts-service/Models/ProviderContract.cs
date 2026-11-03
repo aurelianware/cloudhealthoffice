@@ -402,19 +402,6 @@ public enum ProviderType
 }
 
 /// <summary>
-/// Line of Business (matches other CHO services)
-/// </summary>
-public enum LineOfBusiness
-{
-    Commercial = 1,
-    Medicare = 2,
-    Medicaid = 3,
-    Exchange = 4,
-    TRICARE = 5,
-    VA = 6
-}
-
-/// <summary>
 /// Marks a property as containing sensitive data (e.g. TIN, SSN).
 /// Portal must mask display; list endpoints must not return full value.
 /// </summary>

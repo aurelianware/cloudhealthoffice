@@ -223,7 +223,7 @@ public sealed class EnrollmentRepositoryMongo : IEnrollmentRepository
             RevalidationDueDate = RevalidationDueDate is null ? null : DateOnly.Parse(RevalidationDueDate),
             LastVerifiedDate    = LastVerifiedDate is null ? null : DateOnly.Parse(LastVerifiedDate),
             ProviderType        = Enum.Parse<ProviderTypeClassification>(ProviderType),
-            SupportedLobs       = (LineOfBusiness)SupportedLobs,
+            SupportedLobs       = (ProgramParticipation)SupportedLobs,
             EnrolledTaxonomies  = EnrolledTaxonomies,
             EnrolledCounties    = EnrolledCounties,
             EnrolledZipCodes    = EnrolledZipCodes,

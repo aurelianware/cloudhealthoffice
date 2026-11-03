@@ -641,7 +641,7 @@ public sealed class ProviderContractBackfillTests(MongoRunnerFixture mongo) : IA
             ProviderName = "Dr. Chen",
             ProviderTin = "123456789",
             ProviderType = LegalModels.ProviderType.Individual,
-            LineOfBusiness = LegalModels.LineOfBusiness.Commercial,
+            LineOfBusiness = CloudHealthOffice.Infrastructure.Programs.LineOfBusiness.Commercial,
             PaymentMethodology = methodology,
             NetworkStatus = network,
             Status = status,

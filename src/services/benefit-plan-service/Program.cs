@@ -114,8 +114,11 @@ builder.Services.AddScoped<BenefitPlanService.Import.QhpPuf.IQhpPufImportService
 // Fee schedule CSV importer (docs/integration/FEE-SCHEDULE-IMPORTER.md).
 builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IFeeScheduleImportService, BenefitPlanService.Import.FeeSchedules.FeeScheduleImportService>();
 builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IMedicarePfsImportService, BenefitPlanService.Import.FeeSchedules.MedicarePfsImportService>();
+// Shared fee schedule library: browse, deploy at a percentage, platform publish (docs/integration/FEE-SCHEDULE-LIBRARY.md).
+builder.Services.AddScoped<BenefitPlanService.Import.FeeSchedules.IFeeScheduleLibraryService, BenefitPlanService.Import.FeeSchedules.FeeScheduleLibraryService>();
 builder.Services.AddScoped<BenefitPlanService.Import.MedicaidDrg.ITexasDrgRateImportService, BenefitPlanService.Import.MedicaidDrg.TexasDrgRateImportService>();
 builder.Services.AddScoped<BenefitPlanService.Import.MedicaidDrg.ITexasInterimRateImportService, BenefitPlanService.Import.MedicaidDrg.TexasInterimRateImportService>();
+builder.Services.AddScoped<BenefitPlanService.Import.MedicaidDrg.ITexasPsychPerDiemImportService, BenefitPlanService.Import.MedicaidDrg.TexasPsychPerDiemImportService>();
 // Provider contract roster importer (docs/integration/CONTRACT-ROSTER-IMPORTER.md).
 builder.Services.AddScoped<BenefitPlanService.Import.Contracts.IContractRosterImportService, BenefitPlanService.Import.Contracts.ContractRosterImportService>();
 // Plan prior-auth-required lists into the PA rule store CRD, PAS and the published list read.
@@ -221,8 +224,13 @@ builder.Services.AddScoped<CachingServiceCategoryMappingRepository>(sp =>
     var inner = sp.GetRequiredService<ChoServiceCategoryMappingRepositoryMongo>();
     return new CachingServiceCategoryMappingRepository(inner, inner, inner, cache, options);
 });
+// The resolver's read seam: the cache, falling back to the system-default
+// bundle for a tenant with no tenant-default mappings of its own.
 builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IServiceCategoryMappingRepository>(
-    sp => sp.GetRequiredService<CachingServiceCategoryMappingRepository>());
+    sp => new SystemDefaultFallbackMappingRepository(
+        sp.GetRequiredService<CachingServiceCategoryMappingRepository>(),
+        sp.GetRequiredService<SystemDefaultMappingSeeder>(),
+        sp.GetRequiredService<IOptionsMonitor<ServiceCategoryMappingOptions>>()));
 builder.Services.AddScoped<IServiceCategoryMappingWriteRepository>(
     sp => sp.GetRequiredService<CachingServiceCategoryMappingRepository>());
 builder.Services.AddScoped<ISystemDefaultsAppliedRecordRepository>(

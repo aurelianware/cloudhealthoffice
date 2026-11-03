@@ -274,7 +274,14 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
 
                 // Same filter, same reason: the shadow adjudication store is Mongo.
                 services.AddSingleton(Substitute.For<global::ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationRepository>());
+                services.AddSingleton<global::ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationTenantSettingsRepository>(
+                    new global::ClaimsService.Services.Adjudication.Shadow.InMemoryShadowAdjudicationTenantSettingsRepository());
+                services.AddSingleton<global::ClaimsService.Services.Adjudication.Shadow.IShadowAccumulatorBalanceRepository>(
+                    new global::ClaimsService.Services.Adjudication.Shadow.InMemoryShadowAccumulatorBalanceRepository());
                 services.AddSingleton(Substitute.For<global::ClaimsService.Services.Tpl.ITplRecoveryRepository>());
+                // The retro rate impact store is Mongo too.
+                services.AddSingleton(Substitute.For<global::ClaimsService.Services.RetroRate.IRetroRateImpactRepository>());
+                services.AddSingleton(Substitute.For<global::ClaimsService.Services.RetroRate.IRetroRateReprocessingRepository>());
                 services.AddSingleton<global::ClaimsService.Import.Cpcds.Drop.ICpcdsDropRunRepository>(
                     new global::ClaimsService.Import.Cpcds.Drop.InMemoryCpcdsDropRunRepository());
                 services.AddSingleton<global::ClaimsService.Import.Cpcds.Drop.ICpcdsDropTenantSettingsRepository>(

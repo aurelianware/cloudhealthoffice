@@ -117,6 +117,7 @@ POST /api/v1/claims                                     (capability 5.3)
    │       110  TimelyFilingStage            ★ real (added 10/26) │
    │       120  DuplicateClaimStage          ★ real               │
    │       150  ProviderIntegrityStage       ★ real (added 7/26)  │
+   │       160  StateOnlyAdultDentalStage    ★ real (APL 26-009)  │
    │       200  NetworkCredentialingStage    ★ real (5.6)         │
    │       240  InpatientGroupingStage       ★ real (ADR 024 §8)  │
    │       250  PricingStage                 ★ real (added 10/26) │
@@ -484,6 +485,12 @@ chooses between them per line of business, benefit plan or sponsor, once
   `texas`, `PricingStage` asks for the stay to be priced from the imported HHSC
   tables instead of the contract
   (`docs/integration/MEDICAID-DRG-PRICING.md`, "Claim pricing").
+  With a method set it also reads `pricing.inpatient.imdOverLimitAction`
+  (`pend` or `pay`; an unreadable value means `pend`), and `PricingStage`
+  sends the member's room and board days on other live inpatient claims in
+  the same months, for the psychiatric hospital IMD day limit
+  (`docs/integration/MEDICAID-PSYCHIATRIC-PER-DIEM.md`). If that history
+  cannot be read, the claim pends `PRICING`.
 - It fails closed in the same way as MS-DRG:
   - a refused or invalid answer pends `DRGREVIEW`;
   - a missing or unreachable grouper pends `GROUPERUNAVAIL`;
@@ -647,6 +654,7 @@ to `AdjudicationResult.RemarkCodes` (835 MOA/MIA). Constants live in
 | NetworkCredentialing credentialing deny | B7 | — |
 | ProviderIntegrity exclusion | gate's code, else B7 | — |
 | TimelyFiling (every line past the filing limit) | 29 | — |
+| StateOnlyAdultDental carve-out (APL 26-009; bill Medi-Cal Dental FFS) | 109 | — |
 | Duplicate | 18 | — |
 | BenefitCalculation missing / non-GUID plan id, engine threw (Reject) | 16 | MA130 |
 | BenefitCalculation eligibility / prior auth | 27 / 197 | — |

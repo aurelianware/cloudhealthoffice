@@ -47,8 +47,15 @@ public enum ProviderTypeClassification
     Other
 }
 
+/// <summary>
+/// The programs a provider is enrolled in with the State (flags: Medicaid, CHIP, STAR ...).
+/// Not a line of business: the platform's line of business is the shared
+/// <c>CloudHealthOffice.Infrastructure.Programs.LineOfBusiness</c>
+/// (docs/architecture/line-of-business.md). Stored and sent as the same numbers as before
+/// the rename; JSON property names are unchanged.
+/// </summary>
 [Flags]
-public enum LineOfBusiness
+public enum ProgramParticipation
 {
     None             = 0,
     Medicaid         = 1 << 0,
@@ -101,7 +108,7 @@ public record StateEnrollmentRecord
     public DateOnly? RevalidationDueDate                    { get; init; }
     public DateOnly? LastVerifiedDate                       { get; init; }
     public required ProviderTypeClassification ProviderType { get; init; }
-    public LineOfBusiness SupportedLobs                     { get; init; }
+    public ProgramParticipation SupportedLobs                     { get; init; }
     public IReadOnlyList<string> EnrolledTaxonomies         { get; init; } = [];
     public IReadOnlyList<string> EnrolledCounties           { get; init; } = [];
     public IReadOnlyList<string> EnrolledZipCodes           { get; init; } = [];

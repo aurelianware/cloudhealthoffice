@@ -1,0 +1,5 @@
+work/
+dotnet/bin/
+dotnet/obj/
+java/lib/
+java/out/

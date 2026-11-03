@@ -207,9 +207,21 @@
                         <MudNavLink Href="/batch-adjudication" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment">
                             Batch Adjudication
                         </MudNavLink>
+                        @if (_canAdjustClaims)
+                        {
+                            <MudNavLink Href="/retro-rate" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.PublishedWithChanges">
+                                Rate Change Reprocessing
+                            </MudNavLink>
+                        }
                         <MudNavLink Href="/edi-transactions" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SwapHoriz">
                             Imports &amp; EDI
                         </MudNavLink>
+                        @if (_canImportClaims)
+                        {
+                            <MudNavLink Href="/shadow-adjudication" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.CompareArrows">
+                                Shadow Adjudication
+                            </MudNavLink>
+                        }
                         <MudNavLink Href="/admin/unmatched-attachments" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HelpOutline">
                             Held Attachments
                         </MudNavLink>
@@ -284,6 +296,12 @@
                     <MudNavGroup Title="Configuration" Icon="@Icons.Material.Filled.Tune" Expanded="false">
                         <MudNavLink Href="/benefit-plans" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HealthAndSafety">
                             Benefit Plans
+                        </MudNavLink>
+                        <MudNavLink Href="/benefit-plans/templates" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.LibraryBooks">
+                            Plan Templates
+                        </MudNavLink>
+                        <MudNavLink Href="/fee-schedules" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.PriceChange">
+                            Fee Schedules
                         </MudNavLink>
                         @if (_canReadSponsors)
                         {
@@ -440,6 +458,9 @@
     // Work management: My Work (pull) and its configuration (work-management-service).
     private bool _canWork;
     private bool _canRunReports;
+    // Retro rate reprocessing (claims-service, claims:adjust).
+    private bool _canAdjustClaims;
+    private bool _canImportClaims;
     private bool _canAdminWork;
     private bool _canPostNotices;
     private bool _canReadCorrespondence;
@@ -473,6 +494,8 @@
                 && (UserContextService.HasPermission("enrollment:read") || UserContextService.HasPermission("billing:read"));
             _canReadContracts = userContext != null && UserContextService.HasPermission("contracts:read");
             _canWork = userContext != null && UserContextService.HasPermission("workqueue:work");
+            _canAdjustClaims = userContext != null && UserContextService.HasPermission("claims:adjust");
+            _canImportClaims = userContext != null && UserContextService.HasPermission("claims:import");
             _canRunReports = userContext != null && ReportModules.All.Any(m => m.Permissions.Any(UserContextService.HasPermission));
             _canAdminWork = userContext != null && UserContextService.HasPermission("workqueue:admin");
             _canPostNotices = userContext != null && UserContextService.HasPermission("notices:write");

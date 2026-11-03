@@ -20,7 +20,7 @@ public class EligibilityRepositoryMongo : IEligibilityRepository
 
     public EligibilityRepositoryMongo(IMongoDatabase database, ILogger<EligibilityRepositoryMongo> logger)
     {
-        _inquiryCollection = database.GetCollection<EligibilityInquiry>("EligibilityInquiries");
+        _inquiryCollection = database.GetCollection<EligibilityInquiry>(HostedServices.EligibilityLineOfBusinessMigrationHostedService.Collection);
         _responseCollection = database.GetCollection<EligibilityResponse>("EligibilityResponses");
         _logger = logger;
         

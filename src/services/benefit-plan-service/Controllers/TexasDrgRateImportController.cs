@@ -22,13 +22,16 @@ public sealed class TexasDrgRateImportController : ControllerBase
 
     private readonly ITexasDrgRateImportService _importer;
     private readonly ITexasInterimRateImportService _interimImporter;
+    private readonly ITexasPsychPerDiemImportService _psychImporter;
     private readonly ICurrentActor _actor;
 
     public TexasDrgRateImportController(
-        ITexasDrgRateImportService importer, ITexasInterimRateImportService interimImporter, ICurrentActor actor)
+        ITexasDrgRateImportService importer, ITexasInterimRateImportService interimImporter,
+        ITexasPsychPerDiemImportService psychImporter, ICurrentActor actor)
     {
         _importer = importer;
         _interimImporter = interimImporter;
+        _psychImporter = psychImporter;
         _actor = actor;
     }
 
@@ -73,7 +76,8 @@ public sealed class TexasDrgRateImportController : ControllerBase
 
     /// <summary>
     /// Loads hospital interim rates (inpatient and outpatient cost-to-charge
-    /// ratios) from a CSV or Excel sheet: NPI, inpatient and/or outpatient
+    /// ratios) from HHSC's monthly inpatient RCC PDF ({yyyy}-{m}-inp-rcc.pdf),
+    /// or from a CSV or Excel sheet: NPI, inpatient and/or outpatient
     /// rate (0.452 or 45.2%), effective date (or <paramref name="effectiveDate"/>
     /// for the whole file), and optionally TPI and hospital name. Texas DRG
     /// pricing uses the inpatient rate for outliers (clients under 21).
@@ -95,7 +99,7 @@ public sealed class TexasDrgRateImportController : ControllerBase
         if (string.IsNullOrWhiteSpace(tenantId))
             return BadRequest(new { message = "Tenant context missing." });
         if (file is null || file.Length == 0)
-            return BadRequest(new { message = "Upload the interim rate sheet (CSV or Excel) as 'file'." });
+            return BadRequest(new { message = "Upload HHSC's inpatient RCC PDF, or an interim rate sheet (CSV or Excel), as 'file'." });
 
         try
         {
@@ -104,6 +108,43 @@ public sealed class TexasDrgRateImportController : ControllerBase
                 content, file.FileName,
                 new InterimRateImportOptions { EffectiveDate = effectiveDate, Replace = replace, DryRun = dryRun },
                 tenantId, _actor.UserId, ct);
+            return Ok(report);
+        }
+        catch (InterimRateFormatException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Loads psychiatric hospital per diems from HHSC's
+    /// "SFY yyyy Psychiatric Hospital Rates" PDF
+    /// ({yyyy}-ffy-psychiatric-hosp-per-diem-rates.pdf): private freestanding
+    /// and state-owned facilities, one per diem per hospital.
+    /// </summary>
+    [HttpPost("psychiatric-per-diems")]
+    [RequirePermission("settings:manage")]
+    [RequestSizeLimit(MaxUploadBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxUploadBytes)]
+    [ProducesResponseType(typeof(PsychPerDiemImportReport), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<PsychPerDiemImportReport>> ImportPsychiatricPerDiems(
+        IFormFile? file,
+        [FromQuery] bool replace = false,
+        [FromQuery] bool dryRun = true,
+        CancellationToken ct = default)
+    {
+        var tenantId = HttpContext.GetTenantId();
+        if (string.IsNullOrWhiteSpace(tenantId))
+            return BadRequest(new { message = "Tenant context missing." });
+        if (file is null || file.Length == 0)
+            return BadRequest(new { message = "Upload HHSC's psychiatric hospital per diem PDF as 'file'." });
+
+        try
+        {
+            await using var content = file.OpenReadStream();
+            var report = await _psychImporter.ImportAsync(
+                content, file.FileName, new PsychPerDiemImportOptions { Replace = replace, DryRun = dryRun }, tenantId, _actor.UserId, ct);
             return Ok(report);
         }
         catch (InterimRateFormatException ex)

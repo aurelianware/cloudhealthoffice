@@ -64,7 +64,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
             GroupNumber = coverage.GroupNumber,
             CoverageBeginDate = coverage.EffectiveDate,
             CoverageEndDate = coverage.TerminationDate,
-            LineOfBusiness = (LineOfBusiness)Math.Max(0, coverage.LineOfBusiness - 1),
+            LineOfBusiness = LineOfBusinessNames.FromNumber(coverage.LineOfBusiness),
             Benefits = benefits,
             Deductible = accumulation.Deductible,
             OutOfPocket = accumulation.OutOfPocket,

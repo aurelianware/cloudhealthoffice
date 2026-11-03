@@ -49,6 +49,12 @@ public sealed record InpatientGroupingOutcome(
     /// </summary>
     public string? MedicaidDrgMethod { get; init; }
 
+    /// <summary>
+    /// <c>pricing.inpatient.imdOverLimitAction</c> (<c>pend</c> or <c>pay</c>),
+    /// resolved only when <see cref="MedicaidDrgMethod"/> is set.
+    /// </summary>
+    public string? ImdOverLimitAction { get; init; }
+
     /// <summary>Grouping did not run: the billed DRG stands.</summary>
     public static InpatientGroupingOutcome NotGrouped(string? billedDrg) =>
         new(billedDrg, billedDrg, null, Grouped: false);
@@ -146,6 +152,7 @@ public sealed class InpatientGroupingStage : IClaimAdjudicationStage
 
     /// <summary>The state Medicaid APR-DRG method an APR-DRG-grouped stay is paid by.</summary>
     public static readonly string MedicaidDrgMethodSettingKey = PlanSettings.MedicaidDrgMethod.Key;
+    public static readonly string ImdOverLimitActionSettingKey = PlanSettings.ImdOverLimitAction.Key;
 
     private readonly IMsDrgGrouper _grouper;
     private readonly IAprDrgGrouper? _aprGrouper;
@@ -413,11 +420,25 @@ public sealed class InpatientGroupingStage : IClaimAdjudicationStage
                 "Could not determine whether this plan pays inpatient stays by a state Medicaid APR-DRG method.");
         }
 
+        var medicaidMethod = MedicaidDrgMethods.Normalize(method.Value);
+
+        // Only read when a state method is on; an unreadable setting falls
+        // back to pend, the safe default.
+        string? imdOverLimit = null;
+        if (medicaidMethod is not null)
+        {
+            var overLimit = await _settings
+                .ResolveAsync(context.TenantId, ImdOverLimitActionSettingKey, context.SettingScopeForClaim(), asOf, ct)
+                .ConfigureAwait(false);
+            imdOverLimit = overLimit.IsFallback ? "pend" : overLimit.Value.Trim().Trim('"').ToLowerInvariant();
+        }
+
         var outcome = new InpatientGroupingOutcome(
             PricedDrg: result.DrgSoiKey, billedDrg, Result: null, Grouped: true)
         {
             AprDrgResult = result,
-            MedicaidDrgMethod = MedicaidDrgMethods.Normalize(method.Value),
+            MedicaidDrgMethod = medicaidMethod,
+            ImdOverLimitAction = imdOverLimit,
         };
         context.InpatientGrouping = outcome;
 

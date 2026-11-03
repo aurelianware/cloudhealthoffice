@@ -45,6 +45,12 @@ public sealed class AdaptiveQuestionnaireEngine
     /// <summary>The closing display item added when no question remains (spec-39).</summary>
     public const string CompletionLinkId = "cho-complete";
 
+    /// <summary>
+    /// The R4 form of R5's versionAlgorithm. SDC's sdc-2 (which the DTR
+    /// adaptive profiles inherit) requires it on any Questionnaire with a version.
+    /// </summary>
+    public const string VersionAlgorithmExtension = "http://hl7.org/fhir/StructureDefinition/artifact-versionAlgorithm";
+
     private readonly DtrContentLibrary _content;
 
     public AdaptiveQuestionnaireEngine(DtrContentLibrary content) => _content = content;
@@ -73,7 +79,24 @@ public sealed class AdaptiveQuestionnaireEngine
             Status = PublicationStatus.Active,
             SubjectTypeElement = searchForm.SubjectTypeElement.Select(e => (Code<ResourceType>)e.DeepCopy()).ToList(),
             DerivedFrom = new[] { canonical },
-        };
+        }.WithVersionAlgorithm();
+    }
+
+    /// <summary>
+    /// The form a response answers, as a canonical: its <c>questionnaire</c>,
+    /// or, for an adaptive response that names its contained Questionnaire
+    /// (<c>#adaptive</c>), the form that Questionnaire is derived from
+    /// (spec-25). Null when a contained reference names nothing it contains.
+    /// </summary>
+    public static string? AnsweredForm(QuestionnaireResponse response)
+    {
+        var reference = response.Questionnaire?.Trim();
+        if (string.IsNullOrEmpty(reference) || !reference.StartsWith('#'))
+            return reference;
+
+        var contained = response.Contained.OfType<Questionnaire>()
+            .FirstOrDefault(q => string.Equals(q.Id, reference[1..], StringComparison.Ordinal));
+        return contained?.DerivedFrom.FirstOrDefault(d => !string.IsNullOrWhiteSpace(d))?.Trim();
     }
 
     /// <summary>Validates <paramref name="response"/> and answers with the next question, or completes it.</summary>
@@ -165,6 +188,7 @@ public sealed class AdaptiveQuestionnaireEngine
         next.Meta.Profile = new[] { AdaptiveResponseProfile };
         next.AuthoredElement = new FhirDateTime(now);
         var nextContained = next.Contained.OfType<Questionnaire>().Single(q => q.Id == contained.Id);
+        nextContained.WithVersionAlgorithm();
 
         // A required question that is enabled and still unanswered is the
         // client's to answer first: the response goes back as it came.
@@ -304,4 +328,23 @@ public sealed class AdaptiveQuestionnaireEngine
         Code = code,
         Diagnostics = text,
     };
+}
+
+internal static class QuestionnaireVersionAlgorithm
+{
+    /// <summary>
+    /// Adds the semver versionAlgorithm extension (sdc-2) when the
+    /// Questionnaire has a version and doesn't say how to compare it yet.
+    /// </summary>
+    public static Questionnaire WithVersionAlgorithm(this Questionnaire questionnaire)
+    {
+        if (!string.IsNullOrEmpty(questionnaire.Version)
+            && questionnaire.GetExtension(AdaptiveQuestionnaireEngine.VersionAlgorithmExtension) is null)
+        {
+            questionnaire.Extension.Add(new Extension(AdaptiveQuestionnaireEngine.VersionAlgorithmExtension,
+                new Coding("http://hl7.org/fhir/version-algorithm", "semver")));
+        }
+
+        return questionnaire;
+    }
 }

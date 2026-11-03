@@ -1,0 +1,132 @@
+@*
+    Professional claim editor (CMS-1500 fields an examiner keys or fixes):
+    member, providers, place of service, prior auth, diagnoses, service lines.
+    Bound to a ClaimEditModel; fields it doesn't show are carried through
+    untouched by ClaimEditModel.ApplyTo. Used by the correction page and,
+    later, by manual claim entry.
+*@
+
+<MudPaper Class="pa-4 mb-4" Outlined="true">
+    <MudText Typo="Typo.h6" GutterBottom="true">Claim</MudText>
+    <MudGrid Spacing="2">
+        <MudItem xs="12" sm="6" md="4">
+            <MudTextField @bind-Value="Model.MemberId" Label="Member ID" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Required="true" data-testid="edit-member" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudTextField @bind-Value="Model.BillingProviderNpi" Label="Billing provider NPI" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Required="true" MaxLength="10" data-testid="edit-billing-npi" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudTextField @bind-Value="Model.RenderingProviderNpi" Label="Rendering provider NPI" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" MaxLength="10" data-testid="edit-rendering-npi" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudTextField @bind-Value="Model.PlaceOfServiceCode" Label="Place of service" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" MaxLength="2" HelperText="e.g. 11 office, 02 telehealth" data-testid="edit-pos" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudTextField @bind-Value="Model.PriorAuthorizationNumber" Label="Prior authorization number" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" data-testid="edit-prior-auth" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4" Class="d-flex align-center">
+            <MudText Typo="Typo.body1">Total charge <strong>@Model.TotalCharge.ToString("C")</strong></MudText>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudPaper Class="pa-4 mb-4" Outlined="true">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+        <MudText Typo="Typo.h6">Diagnoses</MudText>
+        <MudSpacer />
+        <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="Model.AddDiagnosis" Disabled="@(Model.Diagnoses.Count >= 12)" data-testid="add-diagnosis">
+            Add diagnosis
+        </MudButton>
+    </MudStack>
+    <MudGrid Spacing="2">
+        @for (var i = 0; i < Model.Diagnoses.Count; i++)
+        {
+            var dx = Model.Diagnoses[i];
+            var pointer = i + 1;
+            <MudItem xs="12" sm="6" md="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudTextField @bind-Value="dx.Code" Label="@($"{pointer}{(pointer == 1 ? " (principal)" : string.Empty)}")"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="ICD-10, e.g. E11.9"
+                                  data-testid="@($"edit-dx-{pointer}")" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                   aria-label="@($"Remove diagnosis {pointer}")"
+                                   OnClick="@(() => Model.RemoveDiagnosis(dx))" />
+                </MudStack>
+            </MudItem>
+        }
+    </MudGrid>
+</MudPaper>
+
+<MudPaper Class="pa-4 mb-4" Outlined="true">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+        <MudText Typo="Typo.h6">Service lines</MudText>
+        <MudSpacer />
+        <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="@(() => Model.AddLine())" Disabled="@(Model.Lines.Count >= 50)" data-testid="add-line">
+            Add line
+        </MudButton>
+    </MudStack>
+    <MudSimpleTable Dense="true" Hover="false" Striped="false" Style="overflow-x:auto">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th style="min-width:110px">Procedure</th>
+                <th style="min-width:110px">Modifiers</th>
+                <th style="min-width:90px">Dx pointers</th>
+                <th style="min-width:80px">Units</th>
+                <th style="min-width:120px">Charge</th>
+                <th style="min-width:150px">From</th>
+                <th style="min-width:150px">To</th>
+                <th style="min-width:70px">POS</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @for (var i = 0; i < Model.Lines.Count; i++)
+            {
+                var line = Model.Lines[i];
+                var n = i + 1;
+                <tr data-testid="@($"edit-line-{n}")">
+                    <td>@n</td>
+                    <td><MudTextField @bind-Value="line.ProcedureCode" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Placeholder="CPT/HCPCS" aria-label="@($"Line {n} procedure code")"
+                                      data-testid="@($"edit-line-{n}-procedure")" /></td>
+                    <td><MudTextField @bind-Value="line.ModifiersText" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Placeholder="25, 59" aria-label="@($"Line {n} modifiers")"
+                                      data-testid="@($"edit-line-{n}-modifiers")" /></td>
+                    <td><MudTextField @bind-Value="line.DiagnosisPointersText" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Placeholder="1, 2" aria-label="@($"Line {n} diagnosis pointers")"
+                                      data-testid="@($"edit-line-{n}-pointers")" /></td>
+                    <td><MudNumericField @bind-Value="line.Units" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                         Min="0" HideSpinButtons="true" aria-label="@($"Line {n} units")"
+                                         data-testid="@($"edit-line-{n}-units")" /></td>
+                    <td><MudNumericField @bind-Value="line.ChargeAmount" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                         Min="0" Format="N2" HideSpinButtons="true" Adornment="Adornment.Start"
+                                         AdornmentText="$" aria-label="@($"Line {n} charge")"
+                                         data-testid="@($"edit-line-{n}-charge")" /></td>
+                    <td><MudDatePicker @bind-Date="line.ServiceDateFrom" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       DateFormat="MM/dd/yyyy" aria-label="@($"Line {n} service from")" /></td>
+                    <td><MudDatePicker @bind-Date="line.ServiceDateTo" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       DateFormat="MM/dd/yyyy" aria-label="@($"Line {n} service to")" /></td>
+                    <td><MudTextField @bind-Value="line.PlaceOfServiceCode" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      MaxLength="2" Placeholder="@Model.PlaceOfServiceCode"
+                                      aria-label="@($"Line {n} place of service")" /></td>
+                    <td><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                       aria-label="@($"Remove line {n}")"
+                                       OnClick="@(() => Model.RemoveLine(line))" /></td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired]
+    public ClaimEditModel Model { get; set; } = null!;
+}

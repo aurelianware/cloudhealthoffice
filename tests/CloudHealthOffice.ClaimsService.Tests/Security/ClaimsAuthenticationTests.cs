@@ -288,6 +288,49 @@ public class ClaimsAuthenticationTests : IClassFixture<ClaimsApiFactory>
             Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task CorrectionDraft_RequiresClaimsAdjust_AndClearsTheOutcome()
+    {
+        var claim = StubClaim(ClaimStatus.Paid);
+        claim.PaidDate = DateTime.UtcNow;
+        claim.AdjudicationResult = new AdjudicationResult { AllowedAmount = 80m };
+        claim.ClaimLines.Add(new ClaimLine
+        {
+            LineNumber = 1,
+            ProcedureCode = "99213",
+            Units = 3,
+            ChargeAmount = 300m,
+            AdjudicationResult = new LineAdjudicationResult { AllowedAmount = 80m },
+        });
+        var url = $"/api/v1/claims/{claim.Id}/correction-draft";
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await Examiner().GetAsync(url)).StatusCode);
+
+        var response = await Supervisor().GetAsync(url);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var draft = await response.Content.ReadFromJsonAsync<AdapterClaim>();
+        Assert.NotNull(draft);
+        Assert.Equal("MEM-1", draft!.MemberId);
+        Assert.Equal(ClaimStatus.Submitted, draft.Status);
+        Assert.Null(draft.AdjudicationResult);
+        Assert.Null(draft.PaidDate);
+        var line = Assert.Single(draft.ClaimLines);
+        Assert.Equal("99213", line.ProcedureCode);
+        Assert.Equal(3, line.Units);
+        Assert.Null(line.AdjudicationResult);
+    }
+
+    [Fact]
+    public async Task CorrectionDraft_OtherTenantsClaim_IsNotFound()
+    {
+        var claim = StubClaim(ClaimStatus.Paid);
+        claim.TenantId = "someone-else";
+
+        var response = await Supervisor().GetAsync($"/api/v1/claims/{claim.Id}/correction-draft");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     // ── Service callers ────────────────────────────────────────────────
 
     [Fact]

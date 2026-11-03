@@ -480,6 +480,7 @@ builder.Services.AddScoped<IClaimAdjudicationStage, ScrubbingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, TimelyFilingStage>(); // Order=110
 builder.Services.AddScoped<IClaimAdjudicationStage, DuplicateClaimStage>(); // Order=120
 builder.Services.AddScoped<IClaimAdjudicationStage, ProviderIntegrityStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, StateOnlyAdultDentalStage>(); // Order=160, DHCS APL 26-009
 builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>();
 // Order=240: groups an inpatient stay so PricingStage prices by the grouped
 // DRG, when the plan setting says to (ADR 024 step 8). Both the grouper and
@@ -498,6 +499,14 @@ builder.Services.AddMsDrgGrouper(builder.Configuration);
 // such claims pend GROUPERUNAVAIL; nothing else reads it.
 builder.Services.AddLicensedGroupers(builder.Configuration);
 builder.Services.AddPlanSettingsClient(builder.Configuration);
+// A claim's line of business comes from its plan's program in tenant-service
+// (docs/architecture/line-of-business.md). Adjudication reads it as this service:
+// an examiner re-running a claim need not read plan configuration.
+var programDirectoryOptions = builder.Configuration.GetSection(ProgramDirectoryOptions.SectionName)
+    .Get<ProgramDirectoryOptions>() ?? new ProgramDirectoryOptions();
+programDirectoryOptions.UseServiceIdentity = true;
+builder.Services.AddSingleton(programDirectoryOptions);
+builder.Services.AddProgramDirectoryClient(builder.Configuration);
 builder.Services.AddScoped<IClaimAdjudicationStage, InpatientGroupingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PricingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();
@@ -553,18 +562,47 @@ builder.Services.AddScoped<IClaimAdjudicationOrchestrator>(sp => sp.GetRequiredS
 builder.Services.AddScoped<IClaimApprovalReadjudicator>(sp => sp.GetRequiredService<ClaimAdjudicationOrchestrator>());
 // Shadow adjudication: the same pipeline, read-only stages only, run on claims
 // another core adjudicated (CPCDS file drop) to compare answers. Off unless
-// Adjudication:Shadow:Enabled. See docs/integration/SHADOW-ADJUDICATION.md.
+// Adjudication:Shadow:Enabled (the deployment's switch); within it, each tenant
+// turns it on or off from the portal. See docs/integration/SHADOW-ADJUDICATION.md.
 builder.Services.AddScoped<IShadowAdjudicationPipeline>(sp => sp.GetRequiredService<ClaimAdjudicationOrchestrator>());
 builder.Services.Configure<ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationOptions>(
     builder.Configuration.GetSection(ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationOptions.SectionName));
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationRepository,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationRepositoryMongo>();
+// Each tenant's own shadow on/off switch (portal), within the deployment's switch.
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationTenantSettingsRepository,
+    ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationTenantSettingsRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationTenants>();
+// A shadow claim's deductible and out-of-pocket start from the core's own
+// earlier claims for the member, never from CHO's accumulator store.
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAccumulatorHistory,
+    ClaimsService.Services.Adjudication.Shadow.ShadowAccumulatorHistory>();
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAccumulatorBalanceRepository,
+    ClaimsService.Services.Adjudication.Shadow.ShadowAccumulatorBalanceRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.ShadowAccumulatorBalanceImporter>();
 // Medicaid TPL recovery cases (pay-and-chase and retroactive), with the
 // state retention clock and monthly report.
 builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryRepository, ClaimsService.Services.Tpl.TplRecoveryRepositoryMongo>();
 builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryService, ClaimsService.Services.Tpl.TplRecoveryService>();
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationService,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationService>();
+// Background shadow runs: whole import batches, in pages, resumable across replicas.
+builder.Services.AddHostedService<ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationWorker>();
+// Retro rate reprocessing, step 2: dry-run impact of a fee schedule change on
+// paid claims (docs/integration/RETRO-RATE-REPROCESSING.md). Reads the change
+// from benefit-plan-service and re-prices through the shadow pipeline.
+builder.Services.Configure<ClaimsService.Services.RetroRate.RetroRateOptions>(
+    builder.Configuration.GetSection(ClaimsService.Services.RetroRate.RetroRateOptions.SectionName));
+builder.Services.AddScoped<ClaimsService.Services.RetroRate.IFeeScheduleChangeClient,
+    ClaimsService.Services.RetroRate.HttpFeeScheduleChangeClient>();
+builder.Services.AddScoped<ClaimsService.Services.RetroRate.IRetroRateImpactRepository,
+    ClaimsService.Services.RetroRate.RetroRateImpactRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Services.RetroRate.IRetroRateImpactService,
+    ClaimsService.Services.RetroRate.RetroRateImpactService>();
+builder.Services.AddScoped<ClaimsService.Services.RetroRate.IRetroRateReprocessingRepository,
+    ClaimsService.Services.RetroRate.RetroRateReprocessingRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Services.RetroRate.IRetroRateReprocessingService,
+    ClaimsService.Services.RetroRate.RetroRateReprocessingService>();
 
 // CPCDS file drop: a folder per tenant the core's daily extracts land in,
 // loaded on a timer (members and coverage, claim providers, claims). Off

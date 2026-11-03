@@ -34,6 +34,9 @@ public sealed class AppealDto
     public string? ProviderName { get; set; }
 
     public string? DenialReasonCode { get; set; }
+
+    /// <summary>What a grievance is about, as the plan's state reports categorize it. Grievances only.</summary>
+    public string? GrievanceCategory { get; set; }
     public string? DenialReason { get; set; }
 
     public decimal DeniedAmount { get; set; }
@@ -41,7 +44,8 @@ public sealed class AppealDto
 
     public AppealType AppealType { get; set; } = AppealType.Reconsideration;
     public AppealLevel AppealLevel { get; set; } = AppealLevel.FirstLevel;
-    public LineOfBusiness LineOfBusiness { get; set; }
+    public CloudHealthOffice.Infrastructure.Programs.LineOfBusiness LineOfBusiness { get; set; }
+    public AppealBenefitType BenefitType { get; set; }
     public AppealStatus Status { get; set; } = AppealStatus.Draft;
 
     public string AppealReason { get; set; } = string.Empty;
@@ -55,8 +59,14 @@ public sealed class AppealDto
     public DateTime SubmittedDate { get; set; } = DateTime.UtcNow;
     public DateTime? ReceivedDate { get; set; }
     public DateTime? TargetResponseDate { get; set; }
+    public string? State { get; set; }
+    public string? RulePackVersion { get; set; }
+    public string? StateSource { get; set; }
+    public string? ProgramId { get; set; }
     public AppealDeadlineExtensionDto? DeadlineExtension { get; set; }
     public DateTime? DecisionDate { get; set; }
+    public DateTime? AcknowledgmentSentAt { get; set; }
+    public DateTime? ResolutionNoticeSentAt { get; set; }
 
     public string? SubmittedBy { get; set; }
 

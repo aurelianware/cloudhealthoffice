@@ -147,6 +147,18 @@ The bundle carries a positive integer `version`. The seeder records the
 last applied version per tenant in a `SystemDefaultsApplied` document
 and skips reruns at the same version.
 
+### Fallback when a tenant has none
+
+A tenant with no tenant-default mappings of its own (the seed endpoint was
+never called for it, which is common where `AdminWriteEnabled` is off)
+reads the loaded bundle in their place: the resolver's read seam is
+`SystemDefaultFallbackMappingRepository`, which returns
+`SystemDefaultMappingSeeder.DefaultMappingsFor(tenant)` when the tenant-level
+list is empty. Nothing is written and no `SystemDefaultsApplied` record is
+made, so a later seed still writes the full bundle. Plan-scoped reads and
+tenants with even one tenant-default row are unchanged. Turn it off with
+`ServiceCategoryMapping:FallBackToSystemDefaults=false`.
+
 ### Seed re-application
 
 To ship bundle changes, bump `version`, mark what is new with `since`
@@ -262,6 +274,7 @@ wide audit-pattern initiative.
 | Admin gate | `ServiceCategoryMapping:AdminWriteEnabled` (default false) |
 | Seed bundle | `schemas/service-category-mappings/system-defaults.json` (copied to ContentRoot at build time) |
 | Seed startup behaviour | `ServiceCategoryMapping:SeedSystemDefaultsOnStartup` (default true; tests disable) |
+| Fallback for unseeded tenants | `ServiceCategoryMapping:FallBackToSystemDefaults` (default true; read only) |
 | Per-tenant seed application | `POST /api/v1/service-category-mappings/seed-system-defaults` with `X-Tenant-ID` header |
 | Per-tenant idempotency record | `SystemDefaultsApplied` document in the same collection |
 

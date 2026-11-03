@@ -220,6 +220,50 @@ public sealed class SystemDefaultMappingSeeder : IHostedService
         return written;
     }
 
+    /// <summary>
+    /// The loaded bundle as tenant-default mappings for <paramref name="tenantId"/>,
+    /// without writing anything. Read by
+    /// <see cref="Repositories.SystemDefaultFallbackMappingRepository"/> for a
+    /// tenant that has no tenant-default mappings of its own, so a plan that
+    /// never ran the admin seed still resolves a lab test billed from an office
+    /// as lab, not as an office visit. Empty when the bundle did not load.
+    /// </summary>
+    public IReadOnlyList<ServiceCategoryMapping> DefaultMappingsFor(string tenantId)
+    {
+        var bundle = _bundle;
+        if (bundle is null || string.IsNullOrEmpty(tenantId)) return [];
+        return bundle.Mappings.Select((seed, i) => new ServiceCategoryMapping
+        {
+            Id = DeterministicId(bundle.Version, i, -1),
+            TenantId = tenantId,
+            BenefitPlanId = null,
+            ServiceTypeCode = seed.ServiceTypeCode,
+            ServiceTypeDescription = seed.ServiceTypeDescription,
+            Rules = seed.Rules.Select((r, j) => new ProcedureCodeRule
+            {
+                Id = DeterministicId(bundle.Version, i, j),
+                Priority = r.Priority,
+                CodeType = r.CodeType,
+                CodePattern = r.CodePattern,
+                CodeRangeEnd = r.CodeRangeEnd,
+                PlaceOfServiceCode = r.PlaceOfServiceCode,
+                RequiredModifier = r.RequiredModifier,
+                RevenueCode = r.RevenueCode,
+            }).ToList(),
+            IsActive = true,
+        }).ToList();
+    }
+
+    private static Guid DeterministicId(int version, int mapping, int rule)
+    {
+        Span<byte> bytes = stackalloc byte[16];
+        BitConverter.TryWriteBytes(bytes[..4], 0x5DEFA017);
+        BitConverter.TryWriteBytes(bytes[4..8], version);
+        BitConverter.TryWriteBytes(bytes[8..12], mapping);
+        BitConverter.TryWriteBytes(bytes[12..], rule);
+        return new Guid(bytes);
+    }
+
     /// <summary>The bundle version a rule was introduced in: the rule's <c>since</c>, else its mapping's, else 1.</summary>
     internal static int EffectiveSince(SeedMapping mapping, SeedRule rule) => rule.Since ?? mapping.Since ?? 1;
 

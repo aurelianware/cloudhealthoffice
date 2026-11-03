@@ -28,6 +28,22 @@ public class ShadowRunReportTests
     }
 
     [Fact]
+    public void DecidedClaimsHeldForProviderScreening_AreCountedSeparately()
+    {
+        var results = Results();
+        results[0].HeldForProviderScreening = true;
+        results[0].ChoPendCode = ShadowDiscrepancyComparer.ProviderScreeningCode;
+
+        var report = ShadowRunReportBuilder.Build(new ShadowAdjudicationRun(), results);
+
+        Assert.Equal(4, report.DecidedClaims);
+        Assert.Equal(ShadowDiscrepancyComparer.ProviderScreeningCode, report.HeldForProviderScreening.Key);
+        Assert.Equal(1, report.HeldForProviderScreening.Claims);
+        Assert.Equal(60m, report.HeldForProviderScreening.CorePaid);
+        Assert.DoesNotContain(report.UndecidedByGap, r => r.Key == ShadowDiscrepancyComparer.ProviderScreeningCode);
+    }
+
+    [Fact]
     public void UndecidedGaps_AreRankedByClaims_WithTheMoneyCHOCannotCheckYet()
     {
         var report = ShadowRunReportBuilder.Build(new ShadowAdjudicationRun(), Results());
@@ -130,7 +146,10 @@ public class ShadowRunReportTests
     private static ShadowAdjudicationController Controller(IShadowAdjudicationRepository store)
     {
         var controller = new ShadowAdjudicationController(
-            Substitute.For<IShadowAdjudicationService>(), store, Substitute.For<ICurrentActor>());
+            Substitute.For<IShadowAdjudicationService>(), store,
+            new ShadowAdjudicationTenants(Microsoft.Extensions.Options.Options.Create(new ShadowAdjudicationOptions()),
+                new InMemoryShadowAdjudicationTenantSettingsRepository()),
+            Substitute.For<ICurrentActor>());
         var http = new DefaultHttpContext();
         http.Items["TenantId"] = "tenant-1";
         controller.ControllerContext = new ControllerContext { HttpContext = http };

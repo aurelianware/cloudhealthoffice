@@ -3,7 +3,8 @@
 @*
     One Questionnaire item and its children. Hand entry only: no CQL, no EHR
     prefill (decision Q-6). Items whose enableWhen does not hold are not shown
-    and are not answered.
+    and are not answered. An item shown by a CQL enableWhenExpression is shown,
+    optional, with a note.
 *@
 
 @if (Form.IsEnabled(Item))
@@ -93,6 +94,13 @@
                     @Item.Label: this kind of question (@Item.Type) cannot be answered on this page. Send it with the request's other documentation.
                 </MudAlert>
                 break;
+        }
+
+        @if (Item.ConditionNotEvaluated && Item.IsQuestion)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-2" data-testid="@($"{id}-conditional")">
+                The plan asks this only in some cases, which this page can't check. Answer it if it applies.
+            </MudText>
         }
 
         @foreach (var child in Item.Children)

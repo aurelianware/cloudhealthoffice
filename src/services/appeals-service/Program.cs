@@ -1,3 +1,4 @@
+using CloudHealthOffice.PlanConfiguration;
 using CloudHealthOffice.Infrastructure.Contacts;
 using AppealsService.HostedServices;
 using CloudHealthOffice.Infrastructure.Extensions;
@@ -21,6 +22,10 @@ using MongoDB.Bson.Serialization.Conventions;
 // human-readable strings rather than integers. Also future-proofs against
 // enum-value reordering: adding a new status value doesn't silently
 // re-map existing data.
+// The shared LineOfBusiness reads the names appeals stored before the
+// consolidation (Marketplace, MedicarePartD) as well as the canonical ones;
+// AppealLineOfBusinessMigrationHostedService rewrites them at startup.
+MongoDB.Bson.Serialization.BsonSerializer.TryRegisterSerializer(new LineOfBusinessBsonSerializer(BsonType.String));
 MongoDB.Bson.Serialization.Conventions.ConventionRegistry.Register(
     "appeals-enums-as-strings",
     new ConventionPack { new EnumRepresentationConvention(BsonType.String) },
@@ -34,7 +39,10 @@ builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.Services.AddControllers()
-    .AddCloudHealthOfficeJsonOptions();
+    .AddCloudHealthOfficeJsonOptions()
+    // Ahead of the generic enum converter: reads Marketplace as Exchange and
+    // refuses MedicarePartD (a Part D case is Medicare + benefitType PartDDrug).
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Insert(0, new AppealLineOfBusinessJsonConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -104,6 +112,7 @@ builder.Services.AddSingleton<IStateFileCatalog, HttpStateFileCatalog>();
 // schema and duplicate-AppealNumber warnings fire before the unique
 // index build.
 builder.Services.AddHostedService<AppealStatusMigrationHostedService>();
+builder.Services.AddHostedService<AppealLineOfBusinessMigrationHostedService>();
 builder.Services.AddHostedService<AppealIndexInitializer>();
 
 // ── Appeal body encryption ───────────────────────────────────────────
@@ -149,9 +158,38 @@ builder.Services.AddSingleton<IAppealHolidayCalendarProvider>(sp =>
 // ── State rule packs ─────────────────────────────────────────────────
 // Embedded, versioned State appeal and grievance rules, validated against
 // the federal floor. Resolved right after Build() so a bad pack fails
-// startup. Read-only today: GET api/appeals/rule-packs.
+// startup. Served at GET api/appeals/rule-packs, and applied to appeal and
+// grievance deadlines when the case names a State (StateAppealDeadlinePolicy).
 builder.Services.AddSingleton<AppealsService.Services.RulePacks.IRulePackCatalog>(_ =>
     AppealsService.Services.RulePacks.RulePackCatalog.FromEmbeddedResources());
+
+// ── Appeal jurisdiction (State) ──────────────────────────────────────
+// A tenant's default State, used when a create request names none, so its
+// cases run on that State's rule pack (Medi-Cal grievances: 30 days, not
+// the federal 90). Resolved right after Build() so a bad code fails startup.
+builder.Services.AddSingleton<IAppealJurisdictionProvider>(sp =>
+    new ConfiguredAppealJurisdictionProvider(
+        sp.GetRequiredService<IConfiguration>().GetSection(AppealJurisdictionOptions.SectionName).Get<AppealJurisdictionOptions>()
+        ?? new AppealJurisdictionOptions()));
+
+// The member's program (coverage → benefit plan → program) is the first
+// source of a case's State: coverage-service for the active plan, then
+// tenant-service's program directory.
+// The lookup is this service's own: the caller filing a case need not be
+// allowed to read plan configuration.
+var programDirectoryOptions = builder.Configuration.GetSection(ProgramDirectoryOptions.SectionName)
+    .Get<ProgramDirectoryOptions>() ?? new ProgramDirectoryOptions();
+programDirectoryOptions.UseServiceIdentity = true;
+builder.Services.AddSingleton(programDirectoryOptions);
+builder.Services.AddProgramDirectoryClient(builder.Configuration);
+builder.Services.AddHttpClient(HttpMemberProgramResolver.CoverageClientName, client =>
+{
+    client.BaseAddress = new Uri((builder.Configuration["Services:CoverageService"]
+        ?? HttpMemberProgramResolver.DefaultCoverageServiceUrl).TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+builder.Services.AddScoped<IMemberProgramResolver, HttpMemberProgramResolver>();
 
 // ── Kafka consumer (X12 275 attachment ingress) ──────────────────────
 // Subscribes to the attachments-in topic, routes appeal-context 275s to
@@ -202,6 +240,7 @@ var app = builder.Build();
 
 _ = app.Services.GetRequiredService<IAppealHolidayCalendarProvider>();
 _ = app.Services.GetRequiredService<AppealsService.Services.RulePacks.IRulePackCatalog>();
+_ = app.Services.GetRequiredService<IAppealJurisdictionProvider>();
 
 app.UseChoObservability();
 

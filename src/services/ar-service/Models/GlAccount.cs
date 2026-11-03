@@ -159,9 +159,3 @@ public enum FinancialStatementSection
 }
 
 public enum GlAccountStatus { Active = 1, Inactive = 2, Suspended = 3 }
-
-public enum LineOfBusiness
-{
-    Commercial = 1, Medicare = 2, Medicaid = 3,
-    Exchange = 4, TRICARE = 5, VA = 6
-}

@@ -107,17 +107,15 @@ public static class LinesOfBusiness
     public const string Tricare = "TRICARE";
     public const string Va = "VA";
 
-    private static readonly string[] ByNumber = ["", Commercial, Medicare, Medicaid, Exchange, Tricare, Va];
+    public static IReadOnlyList<string> All { get; } = [Commercial, Medicare, Medicaid, Exchange, Tricare, Va];
 
-    public static IReadOnlyList<string> All { get; } = ByNumber.Skip(1).ToArray();
-
-    /// <summary>The canonical name for a value, numeric (sponsor-service's default JSON) or by name; null when unknown.</summary>
+    /// <summary>
+    /// The canonical name for a value, numeric (sponsor-service's default JSON), by name, or
+    /// a legacy spelling (Marketplace, MedicarePartD); null when unknown. Delegates to the
+    /// shared <see cref="CloudHealthOffice.Infrastructure.Programs.LineOfBusinessNames"/>.
+    /// </summary>
     public static string? Normalize(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return null;
-        if (int.TryParse(value, out var n)) return n > 0 && n < ByNumber.Length ? ByNumber[n] : null;
-        return All.FirstOrDefault(name => string.Equals(name, value.Trim(), StringComparison.OrdinalIgnoreCase));
-    }
+        => CloudHealthOffice.Infrastructure.Programs.LineOfBusinessNames.Normalize(value);
 }
 
 /// <summary>Reading typed values out of setting JSON.</summary>

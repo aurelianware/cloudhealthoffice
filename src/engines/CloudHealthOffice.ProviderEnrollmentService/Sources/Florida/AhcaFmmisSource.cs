@@ -22,10 +22,10 @@ public sealed class AhcaFmmisSource : IStateEnrollmentSource
 {
     public string StateCode         => "FL";
     public string SourceSystemName  => "FMMIS";
-    public LineOfBusiness SupportedLobs =>
-        LineOfBusiness.Medicaid |
-        LineOfBusiness.CHIP     |
-        LineOfBusiness.LTSS;
+    public ProgramParticipation SupportedLobs =>
+        ProgramParticipation.Medicaid |
+        ProgramParticipation.CHIP     |
+        ProgramParticipation.LTSS;
 
     private readonly HttpClient _http;
     private readonly IEnrollmentRepository _cache;

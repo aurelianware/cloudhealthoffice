@@ -51,7 +51,26 @@ public class RateResolutionService : IRateResolutionService
 
         // A single line is its own claim: a per-stay amount is compared with the
         // line's billed charge, which is then the stay's total billed charge.
-        return line.LesserOfBilled ? ApplyLesserOfBilled(line.Result) : line.Result;
+        var result = line.LesserOfBilled ? ApplyLesserOfBilled(line.Result) : line.Result;
+        return await ApplySupplementalAsync(request, result, ct);
+    }
+
+    /// <summary>
+    /// Adds the plan's state supplemental payments (<see cref="FeeScheduleType.Supplemental"/>)
+    /// to a finished line, after every contract adjustment and lesser-of, so a
+    /// supplemental is never reduced, ranked or capped at billed with the base rate.
+    /// </summary>
+    private async Task<PricingResult> ApplySupplementalAsync(
+        PricingRequest request, PricingResult result, CancellationToken ct)
+    {
+        var planKeys = SupplementalPaymentCalculator.PlanKeys(request);
+        if (planKeys.Count == 0) return result;
+
+        // A store that predates supplemental schedules (or a loose test double)
+        // can answer null: no supplemental schedules.
+        var schedules = await _feeScheduleRepo.GetSupplementalSchedulesAsync(
+            request.TenantId, planKeys, request.ServiceDate, ct) ?? [];
+        return SupplementalPaymentCalculator.Apply(result, request, schedules);
     }
 
     /// <summary>
@@ -223,6 +242,7 @@ public class RateResolutionService : IRateResolutionService
                 NetworkStatus    = networkStatus,
                 FeeScheduleId    = schedule?.Id,
                 FeeScheduleName  = schedule?.Name,
+                FeeScheduleRevision = schedule?.Revision,
                 UnresolvedReason = unresolvedReason,
             }, rateLine, IsPerStay: false, LesserOfBilled: false);
         }
@@ -304,6 +324,7 @@ public class RateResolutionService : IRateResolutionService
             NetworkStatus   = networkStatus,
             FeeScheduleId   = schedule?.Id,
             FeeScheduleName = schedule?.Name,
+            FeeScheduleRevision = schedule?.Revision,
             Adjustments     = adjustments,
             IsPerStayRate   = isPerStay,
             Warnings        = warnings,
@@ -421,6 +442,11 @@ public class RateResolutionService : IRateResolutionService
 
         // Phase 5: Per-stay rates are paid once per claim, allocated across the lines
         AllocatePerStayAmounts(initialResults, finalResults);
+
+        // Phase 6: State supplemental payments, on top of the finished allowed amount
+        var orderedRequests = requests.OrderBy(r => r.LineNumber).ToList();
+        for (var i = 0; i < finalResults.Count; i++)
+            finalResults[i] = await ApplySupplementalAsync(orderedRequests[i], finalResults[i], ct);
 
         return new PricingResultSet
         {

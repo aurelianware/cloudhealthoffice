@@ -2,6 +2,7 @@ using AppealsService.Middleware;
 using AppealsService.Models;
 using AppealsService.Reports;
 using AppealsService.Repositories;
+using AppealsService.Services;
 using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Reporting;
 using CloudHealthOffice.Infrastructure.Security;
@@ -28,12 +29,14 @@ public class AgReportsController : ControllerBase
 
     private readonly IAppealRepository _appeals;
     private readonly ICurrentActor _actor;
+    private readonly IAppealFieldEncryptor _encryptor;
     private readonly TimeProvider _clock;
 
-    public AgReportsController(IAppealRepository appeals, ICurrentActor actor, TimeProvider? clock = null)
+    public AgReportsController(IAppealRepository appeals, ICurrentActor actor, IAppealFieldEncryptor encryptor, TimeProvider? clock = null)
     {
         _appeals = appeals;
         _actor = actor;
+        _encryptor = encryptor;
         _clock = clock ?? TimeProvider.System;
     }
 
@@ -70,7 +73,8 @@ public class AgReportsController : ControllerBase
             [
                 "The enrollee is identified by member id. The reason for the appeal or grievance is not included (it is held encrypted); open the case for it.",
                 "OnTime is blank for a case still open and not yet due, or closed without a decision (withdrawn, expired, administrative).",
-                "Acknowledgment dates are not recorded yet. GrievanceCategory is UNCATEGORIZED for a grievance recorded without one.",
+                "AcknowledgedAt and ResolutionNoticeSentAt are the dates recorded for the letters (POST /api/appeals/{id}/notices); blank means none was recorded.",
+                "GrievanceCategory is UNCATEGORIZED for a grievance recorded without one.",
             ]);
         return ReportResults.Respond(this, run, format);
     }
@@ -125,6 +129,53 @@ public class AgReportsController : ControllerBase
                 ["from"] = fromDate.ToString("O"), ["to"] = toDate.ToString("O"), ["lineOfBusiness"] = lineOfBusiness?.ToString(),
             },
             ["Grievances recorded without a category are counted under UNCATEGORIZED."]);
+        return ReportResults.Respond(this, run, format);
+    }
+
+    /// <summary>
+    /// The California grievance log (22 CCR 53858(e)): every grievance
+    /// received in [from, to) with the member's name, the complaint, the
+    /// action taken and the resolution. Those fields are decrypted only for
+    /// the rows returned, and every row is written to the record access log.
+    /// </summary>
+    [HttpGet(AgReportCatalog.MediCalGrievanceLog)]
+    [AuditRecordAccess(RecordType, ReportAction, ResultIdProperty = "AppealId")]
+    public async Task<IActionResult> MediCalGrievanceLog(
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] LineOfBusiness? lineOfBusiness = null,
+        [FromQuery] string? format = null,
+        CancellationToken ct = default)
+    {
+        var asOf = _clock.GetUtcNow().UtcDateTime;
+        var (fromDate, toDate, error) = StandardReports.Period(from, to, asOf, TimeSpan.FromDays(30), TimeSpan.FromDays(366));
+        if (error is not null) return BadRequest(new { error });
+
+        var activity = await _appeals.ListInsightActivityAsync(TenantId, fromDate, toDate, ct);
+        var grievances = AgReportBuilder.Received(activity, fromDate, toDate, lineOfBusiness, AgReportBuilder.GrievanceKind).ToList();
+        var rows = new List<AgCaGrievanceRow>(grievances.Count);
+        foreach (var (a, i) in grievances.Select((a, i) => (a, i)))
+        {
+            // Rows past the cap are counted, not returned, so they are not decrypted.
+            var text = i < StandardReports.MaxRows
+                ? new AgCaGrievanceText(
+                    await _encryptor.DecryptAsync(a.PatientName, ct),
+                    await _encryptor.DecryptAsync(a.AppealReason, ct),
+                    await _encryptor.DecryptAsync(a.Decision?.ReviewerNotes, ct),
+                    await _encryptor.DecryptAsync(a.Decision?.DecisionReason, ct))
+                : null;
+            rows.Add(AgReportBuilder.CaGrievance(a, text, asOf));
+        }
+        var run = ReportRun<AgCaGrievanceRow>.Of(AgReportCatalog.Find(AgReportCatalog.MediCalGrievanceLog), _actor.UserId, asOf, rows, StandardReports.MaxRows,
+            new Dictionary<string, string?>
+            {
+                ["from"] = fromDate.ToString("O"), ["to"] = toDate.ToString("O"), ["lineOfBusiness"] = lineOfBusiness?.ToString(),
+            },
+            [
+                "This log includes the member's name and the complaint text, as 22 CCR 53858(e) requires. Handle the file as PHI.",
+                "ReceivedBy is the user who recorded the grievance (or who submitted it through a portal). ActionTaken is the reviewer's notes on the decision.",
+                "MemberNotifiedAt is when the resolution letter was sent and AcknowledgedAt when the acknowledgment letter was sent, as recorded on the case (POST /api/appeals/{id}/notices); blank means none was recorded.",
+            ]);
         return ReportResults.Respond(this, run, format);
     }
 

@@ -173,4 +173,76 @@ public class DtrQuestionnairePageTests : TestContext
         claim.Item.Single().ProductOrService.Coding.Single().Code.Should().Be("D2740");
         ((ResourceReference)claim.SupportingInfo.Single().Value).Reference.Should().Be("QuestionnaireResponse/qr-saved-1");
     }
+
+    [Fact]
+    public void An_adaptive_form_asks_one_question_at_a_time_and_saves_what_the_plan_completed()
+    {
+        const string sleep = "https://cloudhealthoffice.com/fhir/Questionnaire/pa-sleep-study-adaptive";
+        var searchForm = new Questionnaire
+        {
+            Url = sleep,
+            Version = "1.0.0",
+            Title = "Prior Authorization: Attended Sleep Study (adaptive)",
+            Status = PublicationStatus.Active,
+            UseContext =
+            [
+                new UsageContext
+                {
+                    Code = new Coding("http://terminology.hl7.org/CodeSystem/usage-context-type", "focus"),
+                    Value = new CodeableConcept("http://www.ama-assn.org/go/cpt", "95810", "Polysomnography"),
+                },
+            ],
+        };
+        var draft = AdaptiveFormTests.Round([]);
+        _dtr.Setup(d => d.GetPackageAsync(It.IsAny<Coverage>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<Coding?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DtrPackage([new DtrPackagedForm(searchForm, [], draft.Extension.ToList(), draft)], []));
+
+        // The plan: first the HSAT question; once answered "no", it is done.
+        var sent = new List<QuestionnaireResponse>();
+        _dtr.Setup(d => d.NextQuestionAsync(It.IsAny<QuestionnaireResponse>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((QuestionnaireResponse r, CancellationToken _) =>
+            {
+                sent.Add((QuestionnaireResponse)r.DeepCopy());
+                return r.Item.Count == 0
+                    ? AdaptiveFormTests.Round([AdaptiveFormTests.HsatDone()])
+                    : AdaptiveFormTests.Round(
+                        [AdaptiveFormTests.HsatDone(), new Questionnaire.ItemComponent { LinkId = "cho-complete", Text = "No more questions.", Type = Questionnaire.QuestionnaireItemType.Display }],
+                        r.Item, completed: true);
+            });
+
+        var cut = RenderAt($"/dtr/questionnaire?questionnaire={Uri.EscapeDataString(sleep + "|1.0.0")}");
+        Type(cut, "[data-testid=dtr-member-id]", "MBR-1001");
+        cut.Find("[data-testid=dtr-find-member]").Click();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=dtr-form]").TextContent.Should().Contain("home sleep apnea test"));
+        cut.FindAll("[data-testid=dtr-adaptive-note]").Should().ContainSingle();
+
+        // Saving before the plan is done says so.
+        cut.Find("[data-testid=dtr-save]").Click();
+        cut.FindAll("[data-testid=dtr-form-problem]").Select(p => p.TextContent).Should().Contain(p => p.Contains("Next question"));
+
+        // Answer through the form model (MudSelect is JS-driven), then ask for the next question.
+        var openForm = ((System.Collections.IEnumerable)typeof(DtrQuestionnaire)
+            .GetField("_forms", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(cut.Instance)!).Cast<object>().Single();
+        var form = (QuestionnaireForm)openForm.GetType().GetProperty("Form")!.GetValue(openForm)!;
+        form.Find("hsat-done")!.Boolean = false;
+        cut.Find("[data-testid=dtr-next-question]").Click();
+
+        cut.WaitForAssertion(() => cut.FindAll("[data-testid=dtr-next-question]").Should().BeEmpty());
+        cut.Find("[data-testid=dtr-form]").TextContent.Should().Contain("No more questions.");
+        sent.Should().HaveCount(2);
+        ((FhirBoolean)sent[1].Item.Single().Answer.Single().Value).Value.Should().BeFalse();
+
+        cut.Find("[data-testid=dtr-save]").Click();
+        cut.WaitForAssertion(() => cut.FindAll("[data-testid=dtr-pa-section]").Should().ContainSingle());
+        _saved!.Questionnaire.Should().Be("#adaptive");
+        _saved.Status.Should().Be(QuestionnaireResponse.QuestionnaireResponseStatus.Completed);
+        _saved.Contained.OfType<Questionnaire>().Single().DerivedFrom.Should().Equal(AdaptiveFormTests.SleepCanonical);
+
+        // The service is the packaged form's focus code, not the contained one's (which has none).
+        var entry = (PriorAuthEntry)typeof(DtrQuestionnaire)
+            .GetField("_entry", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(cut.Instance)!;
+        entry.ServiceCode.Should().Be("95810");
+    }
 }

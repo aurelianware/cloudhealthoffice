@@ -18,6 +18,9 @@ metadata:
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   ClaimsService__BaseUrl: "http://claims-service.cloudhealthoffice"
+  # A case's State comes from the member's coverage → benefit plan → program.
+  Services__CoverageService: "http://coverage-service.cloudhealthoffice"
+  Services__TenantService: "http://tenant-service.cloudhealthoffice"
   AppealEncryption__KeySecretPrefix: "appeal-body-encryption-key"
   AppealEncryption__CurrentKeyVersion: "v1"
   AppealEncryption__AcceptedKeyVersions__0: "v1"
@@ -77,6 +80,16 @@ spec:
             configMapKeyRef:
               name: appeals-service-config
               key: ClaimsService__BaseUrl
+        - name: Services__CoverageService
+          valueFrom:
+            configMapKeyRef:
+              name: appeals-service-config
+              key: Services__CoverageService
+        - name: Services__TenantService
+          valueFrom:
+            configMapKeyRef:
+              name: appeals-service-config
+              key: Services__TenantService
         - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:

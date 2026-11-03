@@ -294,6 +294,10 @@ public class EnrollmentImportService : IEnrollmentImportService
             ActorId = batch.ActorId,
             CorrelationId = batch.FileName,
             Payload = payload,
+            // What a state sends to place the member in a capitation rate
+            // cell, kept structured so expected member-months can be built
+            // from the enrollment history.
+            RateCellInputs = RateCellInputs(memberEnrollment),
             RawSegment = rawSegment
         };
 
@@ -310,6 +314,45 @@ public class EnrollmentImportService : IEnrollmentImportService
                 LogSanitizer.Sanitize(tenantId), LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(batchId));
         }
     }
+
+    /// <summary>
+    /// The member's loop 2750 reporting categories and HD lines, or null when
+    /// the transaction carried neither. Values are trimmed; empty categories
+    /// are dropped.
+    /// </summary>
+    internal static EnrollmentRateCellInputs? RateCellInputs(MemberEnrollment e)
+    {
+        var inputs = new EnrollmentRateCellInputs();
+        foreach (var c in e.ReportingCategories ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(c.Name) && string.IsNullOrWhiteSpace(c.ReferenceValue)) continue;
+            inputs.ReportingCategories.Add(new RateCellCategory
+            {
+                Name = Trimmed(c.Name), Qualifier = Trimmed(c.ReferenceQualifier),
+                Value = Trimmed(c.ReferenceValue), Date = Trimmed(c.Date)
+            });
+        }
+        foreach (var line in e.Coverage ?? [])
+        {
+            inputs.CoverageLines.Add(new RateCellCoverageLine
+            {
+                InsuranceLineCode = Trimmed(line.InsuranceLineCode),
+                PlanCoverageDescription = Trimmed(line.PlanCoverageDescription),
+                MaintenanceType = Trimmed(line.MaintenanceType),
+                BenefitBeginDate = Trimmed(line.BenefitBeginDate),
+                BenefitEndDate = Trimmed(line.BenefitEndDate)
+            });
+        }
+        if (inputs.ReportingCategories.Count == 0 && inputs.CoverageLines.Count == 0) return null;
+        // Age bands and regions: rate cells usually cross the category with
+        // the member's age and county, as the same file states them.
+        inputs.DateOfBirth = Trimmed(e.Demographics?.DateOfBirth);
+        inputs.CountyCode = Trimmed(e.Demographics?.CountyCode);
+        inputs.Zip = Trimmed(e.Demographics?.Zip);
+        return inputs;
+    }
+
+    private static string? Trimmed(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static bool IsRetro(MemberEnrollment e, DateTime? eventDate) =>
         eventDate.HasValue && eventDate.Value.Date < DateTime.UtcNow.Date.AddDays(-30);
@@ -766,10 +809,12 @@ public class EnrollmentImportService : IEnrollmentImportService
             City = dependent.City,
             State = dependent.State,
             Zip = dependent.Zip,
+            CountyCode = dependent.CountyCode,
             DateOfBirth = dependent.DateOfBirth,
             Gender = dependent.Gender
         },
-        Coverage = dependent.Coverage ?? new()
+        Coverage = dependent.Coverage ?? new(),
+        ReportingCategories = dependent.ReportingCategories
     };
 
     /// <summary>
@@ -901,7 +946,9 @@ public class EnrollmentImportService : IEnrollmentImportService
             Address = enrollment.Demographics?.Address1,
             City = enrollment.Demographics?.City,
             State = enrollment.Demographics?.State,
-            ZipCode = enrollment.Demographics?.Zip
+            ZipCode = enrollment.Demographics?.Zip,
+            // The same status a later change for this member sets.
+            Status = MapStatus(enrollment.BenefitStatus)
         });
     }
 
@@ -1771,7 +1818,8 @@ public class EnrollmentImportService : IEnrollmentImportService
             Address = dependent.Address1,
             City = dependent.City,
             State = dependent.State,
-            ZipCode = dependent.Zip
+            ZipCode = dependent.Zip,
+            Status = MapStatus(dependent.BenefitStatus)
         });
     }
 

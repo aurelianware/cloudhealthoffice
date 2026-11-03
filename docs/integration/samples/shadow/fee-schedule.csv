@@ -1,0 +1,5 @@
+Sample Health Plan Gold PPO fee schedule (SYNTHETIC, not real rates)
+Procedure Code,Modifier,Description,Non-Facility Fee,Facility Fee
+99213,,Office/outpatient visit est,150.00,105.00
+85025,,Complete CBC w/auto diff,30.00,30.00
+97110,,Therapeutic exercises,45.00,45.00

@@ -45,11 +45,13 @@ public class FeeScheduleEngineBuilder
     /// </summary>
     public FeeScheduleEngineBuilder UseMongoRepositories()
     {
+        _services.AddScoped<IFeeScheduleHistoryRepository, FeeScheduleHistoryRepositoryMongo>();
         _services.AddScoped<FeeScheduleRepositoryMongo>();
         _services.AddScoped<IFeeScheduleRepository>(CreateFeeScheduleCache<FeeScheduleRepositoryMongo>);
         _services.AddScoped<IProviderContractRepository>(CreateFeeScheduleCache<FeeScheduleRepositoryMongo>);
         _services.AddScoped<Medicaid.IMedicaidDrgRateRepository, Medicaid.MedicaidDrgRateRepositoryMongo>();
         _services.AddScoped<Medicaid.IMedicaidInterimRateRepository, Medicaid.MedicaidInterimRateRepositoryMongo>();
+        _services.AddScoped<Medicaid.IMedicaidPsychiatricPerDiemRepository, Medicaid.MedicaidPsychiatricPerDiemRepositoryMongo>();
         return this;
     }
 
@@ -160,7 +162,8 @@ public class FeeScheduleEngineBuilder
             createInner(sp),
             sp.GetRequiredService<Medicaid.IMedicaidDrgRateRepository>(),
             sp.GetRequiredService<ILogger<Medicaid.MedicaidDrgRateResolutionService>>(),
-            sp.GetService<Medicaid.IMedicaidInterimRateRepository>()));
+            sp.GetService<Medicaid.IMedicaidInterimRateRepository>(),
+            sp.GetService<Medicaid.IMedicaidPsychiatricPerDiemRepository>()));
         return this;
     }
 

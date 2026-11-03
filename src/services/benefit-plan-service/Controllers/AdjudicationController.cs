@@ -434,14 +434,14 @@ public class AdjudicationController : ControllerBase
         // Map string LOB from the Argo workflow payload to the enrollment service enum
         var lob = request.LineOfBusiness?.ToUpperInvariant() switch
         {
-            "MEDICAID"    => LineOfBusiness.Medicaid,
-            "STAR"        => LineOfBusiness.STAR,
-            "STARPLUS"    => LineOfBusiness.STARPlus,
-            "STARKIDS"    => LineOfBusiness.STARKids,
-            "CHIP"        => LineOfBusiness.CHIP,
-            "MARKETPLACE" or "EXCHANGE" => LineOfBusiness.Marketplace,
-            "MEDICARE"    => LineOfBusiness.Medicare,
-            _             => LineOfBusiness.None
+            "MEDICAID"    => ProgramParticipation.Medicaid,
+            "STAR"        => ProgramParticipation.STAR,
+            "STARPLUS"    => ProgramParticipation.STARPlus,
+            "STARKIDS"    => ProgramParticipation.STARKids,
+            "CHIP"        => ProgramParticipation.CHIP,
+            "MARKETPLACE" or "EXCHANGE" => ProgramParticipation.Marketplace,
+            "MEDICARE"    => ProgramParticipation.Medicare,
+            _             => ProgramParticipation.None
         };
 
         var gateResult = await _enrollmentGate.EvaluateAsync(

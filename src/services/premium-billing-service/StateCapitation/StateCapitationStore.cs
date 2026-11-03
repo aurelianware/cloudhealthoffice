@@ -15,12 +15,15 @@ public sealed class StoredStateRate
     public DateTime EffectiveFrom { get; set; }
     public DateTime? EffectiveTo { get; set; }
     public decimal Pmpm { get; set; }
+
+    /// <summary>Percent of the PMPM the state withholds (0 to 100).</summary>
+    public decimal WithholdPercent { get; set; }
     public string? SourceFile { get; set; }
     public string? LoadedBy { get; set; }
     public DateTime LoadedAt { get; set; }
 
     public StateCapitationRate ToRate() => new(RateCell, DateOnly.FromDateTime(EffectiveFrom),
-        EffectiveTo == null ? null : DateOnly.FromDateTime(EffectiveTo.Value), Pmpm);
+        EffectiveTo == null ? null : DateOnly.FromDateTime(EffectiveTo.Value), Pmpm, WithholdPercent);
 }
 
 /// <summary>One expected member-month as stored; a reload of the month replaces it.</summary>
@@ -38,6 +41,38 @@ public sealed class StoredExpectedMonth
     public DateTime LoadedAt { get; set; }
 
     public ExpectedMemberMonth ToExpected() => new(MemberId, DateOnly.FromDateTime(Month), RateCell, DaysEnrolled);
+}
+
+/// <summary>A state's rate cell crosswalk as stored: one document per row, replaced whole on each load.</summary>
+public sealed class StoredCrosswalkRow
+{
+    [BsonId] public string Id { get; set; } = string.Empty;
+    public string TenantId { get; set; } = string.Empty;
+    public string State { get; set; } = string.Empty;
+    public int Line { get; set; }
+    public string RateCell { get; set; } = string.Empty;
+    public string? PlanId { get; set; }
+    public string? Field { get; set; }
+    public string? Value { get; set; }
+    public int? AgeMin { get; set; }
+    public int? AgeMax { get; set; }
+    public string? County { get; set; }
+    public DateTime? EffectiveFrom { get; set; }
+    public DateTime? EffectiveTo { get; set; }
+    public string? SourceFile { get; set; }
+    public string? LoadedBy { get; set; }
+    public DateTime LoadedAt { get; set; }
+
+    public RateCellCrosswalkRow ToRow() => new(RateCell, PlanId, Field, Value, AgeMin, AgeMax, County,
+        EffectiveFrom is { } f ? DateOnly.FromDateTime(f) : null, EffectiveTo is { } t ? DateOnly.FromDateTime(t) : null);
+
+    public static StoredCrosswalkRow From(RateCellCrosswalkRow r, int line) => new()
+    {
+        Line = line, RateCell = r.RateCell, PlanId = r.PlanId, Field = r.Field, Value = r.Value,
+        AgeMin = r.AgeMin, AgeMax = r.AgeMax, County = r.County,
+        EffectiveFrom = r.EffectiveFrom?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+        EffectiveTo = r.EffectiveTo?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+    };
 }
 
 /// <summary>One state 820 payment (one ST/SE) as received; the trace number is unique per tenant and state.</summary>
@@ -80,6 +115,14 @@ public interface IStateCapitationStore
     Task<bool> TryAddPaymentAsync(StoredStatePayment payment);
 
     Task<IReadOnlyList<RemittanceAdvice>> GetPaymentsAsync(string state);
+
+    /// <summary>Replaces the state's whole rate cell crosswalk.</summary>
+    Task<int> ReplaceCrosswalkAsync(string state, IReadOnlyList<StoredCrosswalkRow> rows)
+        => throw new NotSupportedException("This store has no rate cell crosswalk");
+
+    /// <summary>The state's rate cell crosswalk, in file order.</summary>
+    Task<IReadOnlyList<RateCellCrosswalkRow>> GetCrosswalkAsync(string state)
+        => throw new NotSupportedException("This store has no rate cell crosswalk");
 }
 
 public sealed class StateCapitationStoreMongo : IStateCapitationStore
@@ -87,6 +130,7 @@ public sealed class StateCapitationStoreMongo : IStateCapitationStore
     private readonly IMongoCollection<StoredStateRate> _rates;
     private readonly IMongoCollection<StoredExpectedMonth> _expected;
     private readonly IMongoCollection<StoredStatePayment> _payments;
+    private readonly IMongoCollection<StoredCrosswalkRow> _crosswalk;
     private readonly IHttpContextAccessor _http;
 
     public StateCapitationStoreMongo(IMongoDatabase database, IHttpContextAccessor http)
@@ -94,6 +138,7 @@ public sealed class StateCapitationStoreMongo : IStateCapitationStore
         _rates = database.GetCollection<StoredStateRate>("StateCapitationRates");
         _expected = database.GetCollection<StoredExpectedMonth>("StateCapitationExpected");
         _payments = database.GetCollection<StoredStatePayment>("StateCapitationPayments");
+        _crosswalk = database.GetCollection<StoredCrosswalkRow>("StateCapitationCrosswalk");
         _http = http;
 
         _expected.Indexes.CreateOne(new CreateIndexModel<StoredExpectedMonth>(
@@ -183,5 +228,27 @@ public sealed class StateCapitationStoreMongo : IStateCapitationStore
         var rows = await _payments.Find(x => x.TenantId == tenant && x.State == state)
             .SortBy(x => x.PaymentDate).ToListAsync();
         return rows.Select(r => r.Advice).ToList();
+    }
+
+    public async Task<int> ReplaceCrosswalkAsync(string state, IReadOnlyList<StoredCrosswalkRow> rows)
+    {
+        var tenant = Tenant;
+        await _crosswalk.DeleteManyAsync(x => x.TenantId == tenant && x.State == state);
+        if (rows.Count == 0) return 0;
+        foreach (var r in rows)
+        {
+            r.TenantId = tenant;
+            r.State = state;
+            r.Id = $"{tenant}|{state}|{r.Line}";
+        }
+        await _crosswalk.InsertManyAsync(rows);
+        return rows.Count;
+    }
+
+    public async Task<IReadOnlyList<RateCellCrosswalkRow>> GetCrosswalkAsync(string state)
+    {
+        var tenant = Tenant;
+        var rows = await _crosswalk.Find(x => x.TenantId == tenant && x.State == state).SortBy(x => x.Line).ToListAsync();
+        return rows.Select(r => r.ToRow()).ToList();
     }
 }

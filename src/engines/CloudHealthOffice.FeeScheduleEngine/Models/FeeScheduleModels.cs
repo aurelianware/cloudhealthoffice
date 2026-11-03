@@ -113,6 +113,40 @@ public class FeeSchedule
     /// </summary>
     public decimal? DrgBaseRate { get; set; }
 
+    // ── Supplemental payment fields (FeeScheduleType.Supplemental) ──
+
+    /// <summary>
+    /// For <see cref="FeeScheduleType.Supplemental"/>: the benefit plans whose
+    /// claims are paid this supplemental, by version id or plan code, matched
+    /// like <see cref="DefaultForPlanId"/>. Null or empty = no plan, so a
+    /// supplemental schedule pays nothing until a plan is named. Ignored on
+    /// every other schedule type.
+    /// </summary>
+    [BsonIgnoreIfNull]
+    public List<string>? SupplementalForPlanIds { get; set; }
+
+    /// <summary>
+    /// For <see cref="FeeScheduleType.Supplemental"/>: a claim must be received
+    /// within this many months of the date of service to be paid the
+    /// supplemental (Medi-Cal Prop 56: 12, APL 26-008). Null = no limit beyond
+    /// the plan's own timely filing. A supplemental schedule with a
+    /// <see cref="TermDate"/> therefore stops paying for good
+    /// <c>ClaimsRunoutMonths</c> after its last date of service.
+    /// </summary>
+    [BsonIgnoreIfNull]
+    public int? ClaimsRunoutMonths { get; set; }
+
+    /// <summary>
+    /// For <see cref="FeeScheduleType.Supplemental"/>: the explanation a
+    /// provider and member EOB must carry on a listed procedure whose date of
+    /// service is on or after <see cref="TermDate"/>. APL 26-008 prescribes
+    /// "Prop 56 supplemental payments are discontinued for dates of service on
+    /// or after July 1, 2027." Null = a generic notice naming the schedule and
+    /// date.
+    /// </summary>
+    [BsonIgnoreIfNull]
+    public string? DiscontinuedNotice { get; set; }
+
     /// <summary>The procedure/service lines for this schedule.</summary>
     public List<FeeScheduleLine> Lines { get; set; } = new();
 
@@ -456,6 +490,15 @@ public record PricingRequest
     /// <summary>Total number of lines on the claim (enables multiple procedure detection).</summary>
     public int TotalLineCount { get; init; } = 1;
 
+    /// <summary>
+    /// The date the payer received the claim. A supplemental payment with a
+    /// claims runout (<see cref="FeeSchedule.ClaimsRunoutMonths"/>) is paid
+    /// only when the claim arrived within the runout. Null (a payment
+    /// estimate, a repricing call) = the runout is not checked, and the
+    /// result says so in <see cref="PricingResult.Warnings"/>.
+    /// </summary>
+    public DateTime? ClaimReceivedDate { get; init; }
+
     // ── Inpatient fields ─────────────────────────────────────────
 
     /// <summary>
@@ -532,6 +575,35 @@ public record PricingRequest
     /// falls back to <see cref="ServiceDate"/>.
     /// </summary>
     public DateTime? DischargeDate { get; init; }
+
+    /// <summary>
+    /// Hospital days on the member's other live inpatient claims in the
+    /// months this stay touches, so a monthly day limit (the adult IMD limit
+    /// for psychiatric hospitals) counts the month, not just this claim. The
+    /// pricer decides which of them count (e.g. only psychiatric hospitals).
+    /// Send it on the first line; null = not looked up.
+    /// </summary>
+    public IReadOnlyList<OtherInpatientDays>? OtherInpatientDays { get; init; }
+
+    /// <summary>
+    /// What to do with an adult psychiatric hospital stay over the monthly
+    /// IMD day limit, from the plan setting
+    /// <c>pricing.inpatient.imdOverLimitAction</c>: <c>pend</c> (default) or <c>pay</c>.
+    /// </summary>
+    public string? ImdOverLimitAction { get; init; }
+}
+
+/// <summary>Room and board days on another of the member's inpatient claims.</summary>
+public sealed record OtherInpatientDays
+{
+    /// <summary>The hospital (billing provider) NPI.</summary>
+    public string FacilityNpi { get; init; } = string.Empty;
+
+    /// <summary>First day.</summary>
+    public DateTime From { get; init; }
+
+    /// <summary>Consecutive days from <see cref="From"/>.</summary>
+    public int Days { get; init; }
 }
 
 /// <summary>Values of <see cref="PricingRequest.MedicaidDrgMethod"/>.</summary>
@@ -592,6 +664,15 @@ public record PricingResult
 
     /// <summary>Name of the matched fee schedule (for portal display).</summary>
     public string? FeeScheduleName { get; init; }
+    /// <summary>
+    /// <see cref="FeeSchedule.Revision"/> of the matched schedule as it was
+    /// read for this line. With <see cref="FeeScheduleId"/> it says which
+    /// version of the rates priced the line, so a later rate change can find
+    /// the claims it touches (see <see cref="FeeScheduleChange"/>). Null when
+    /// no <see cref="FeeSchedule"/> priced the line (UCR, capitation, a
+    /// Medicaid DRG / per diem rate table).
+    /// </summary>
+    public long? FeeScheduleRevision { get; init; }
 
     /// <summary>Ordered list of adjustments applied to arrive at AllowedAmount.</summary>
     public IReadOnlyList<RateAdjustment> Adjustments { get; init; } = Array.Empty<RateAdjustment>();
@@ -623,6 +704,42 @@ public record PricingResult
     /// on every line of the claim. Empty otherwise.
     /// </summary>
     public IReadOnlyList<string> CalculationSteps { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// State supplemental payment for this line (<see cref="FeeScheduleType.Supplemental"/>
+    /// schedules, e.g. Medi-Cal Prop 56), paid on top of <see cref="AllowedAmount"/>
+    /// and kept apart from it: it is not part of the contractual adjustment,
+    /// cost sharing or lesser-of-billed. Zero when no supplemental applies.
+    /// </summary>
+    public decimal SupplementalAmount { get; init; }
+
+    /// <summary>Each supplemental paid on this line, for audit and the state's supplemental reporting.</summary>
+    public IReadOnlyList<SupplementalPayment> SupplementalPayments { get; init; } = Array.Empty<SupplementalPayment>();
+
+    /// <summary>
+    /// Text the provider and member EOB must carry for this line, such as the
+    /// APL 26-008 notice that Prop 56 supplemental payments are discontinued.
+    /// Empty when there is none.
+    /// </summary>
+    public IReadOnlyList<string> PaymentNotices { get; init; } = Array.Empty<string>();
+}
+
+/// <summary>One supplemental payment on a priced line.</summary>
+public record SupplementalPayment
+{
+    /// <summary>The <see cref="FeeScheduleType.Supplemental"/> schedule that paid it.</summary>
+    public string FeeScheduleId { get; init; } = string.Empty;
+
+    /// <summary>The schedule's name, e.g. "Medi-Cal Dental Prop 56".</summary>
+    public string FeeScheduleName { get; init; } = string.Empty;
+
+    /// <summary>Per-unit add-on from the schedule line.</summary>
+    public decimal Rate { get; init; }
+
+    public decimal Units { get; init; }
+
+    /// <summary>Rate × units, rounded to cents.</summary>
+    public decimal Amount { get; init; }
 }
 
 /// <summary>

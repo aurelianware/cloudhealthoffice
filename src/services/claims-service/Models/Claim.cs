@@ -1235,6 +1235,86 @@ public class AdjudicationResult
     /// not run (off, or not a Medicaid claim).
     /// </summary>
     public ClaimTplRecord? ThirdPartyLiability { get; set; }
+
+    /// <summary>
+    /// State supplemental payments worked out for the claim's lines (Medi-Cal
+    /// Prop 56 dental, for example), on top of the allowed amount and kept out
+    /// of it. Recorded for the state's supplemental reporting and the payment
+    /// that follows; set by the pricing stage. Empty when none applied.
+    /// </summary>
+    public List<ClaimSupplementalPayment> SupplementalPayments { get; set; } = new();
+
+    /// <summary>
+    /// What priced each line: the fee schedule and its revision, the rate
+    /// source and the amounts, as the pricing stage got them. Lets a later
+    /// rate change find the paid claims it touches (retro rate reprocessing)
+    /// and shows which rates a paid claim used. Set by the pricing stage;
+    /// empty on claims priced before it recorded this, and on claims the
+    /// pricing stage did not price.
+    /// </summary>
+    public List<ClaimLinePricing> LinePricing { get; set; } = new();
+
+    /// <summary>
+    /// Text the provider and member EOB must carry, such as APL 26-008's
+    /// "Prop 56 supplemental payments are discontinued for dates of service
+    /// on or after July 1, 2027." Empty when there is none.
+    /// </summary>
+    public List<string> PaymentNotices { get; set; } = new();
+}
+
+/// <summary>How one claim line was priced (<see cref="AdjudicationResult.LinePricing"/>).</summary>
+public class ClaimLinePricing
+{
+    public int LineNumber { get; set; }
+    public string ProcedureCode { get; set; } = string.Empty;
+
+    /// <summary>The line's date of service used to pick the rates in force.</summary>
+    public DateTime ServiceDate { get; set; }
+
+    /// <summary>
+    /// The fee schedule whose rates priced the line, or the Medicaid rate
+    /// table row (DRG, interim rate, psych per diem) for a stay priced by a
+    /// state method. Null when no schedule did (UCR, capitation, percent of
+    /// billed).
+    /// </summary>
+    public string? FeeScheduleId { get; set; }
+    public string? FeeScheduleName { get; set; }
+
+    /// <summary>
+    /// The schedule's revision when the line was priced. A replace of the
+    /// schedule stores a higher revision, so a line whose revision is lower
+    /// than the schedule's latest change was priced on the old rates. Null
+    /// when <see cref="FeeScheduleId"/> is not a fee schedule.
+    /// </summary>
+    public long? FeeScheduleRevision { get; set; }
+
+    /// <summary><c>FeeScheduleType</c> of the match, e.g. <c>Mpfs</c>, <c>Medicaid</c>, <c>Drg</c>.</summary>
+    public string FeeScheduleType { get; set; } = string.Empty;
+
+    /// <summary><c>RateSource</c> of the match, e.g. <c>ProviderContract</c>, <c>PlanDefault</c>, <c>Medicaid</c>.</summary>
+    public string RateSource { get; set; } = string.Empty;
+
+    /// <summary>The rate the schedule produced before modifiers, units and reductions.</summary>
+    public decimal BaseAmount { get; set; }
+
+    /// <summary>The allowed amount pricing returned for the line.</summary>
+    public decimal AllowedAmount { get; set; }
+
+    public bool LesserOfBilledApplied { get; set; }
+}
+
+/// <summary>One state supplemental payment on a claim line (<see cref="AdjudicationResult.SupplementalPayments"/>).</summary>
+public class ClaimSupplementalPayment
+{
+    public int LineNumber { get; set; }
+    public string ProcedureCode { get; set; } = string.Empty;
+
+    /// <summary>The supplemental fee schedule that pays it.</summary>
+    public string FeeScheduleId { get; set; } = string.Empty;
+    public string FeeScheduleName { get; set; } = string.Empty;
+    public decimal Rate { get; set; }
+    public decimal Units { get; set; }
+    public decimal Amount { get; set; }
 }
 
 /// <summary>
@@ -1536,19 +1616,6 @@ public enum ClaimStatus
     /// <see cref="Denied"/>.
     /// </summary>
     Deny = 10
-}
-
-/// <summary>
-/// Line of Business enum (matches other services)
-/// </summary>
-public enum LineOfBusiness
-{
-    Commercial = 1,
-    Medicare = 2,
-    Medicaid = 3,
-    Exchange = 4,
-    TRICARE = 5,
-    VA = 6
 }
 
 /// <summary>

@@ -311,30 +311,6 @@ public class ModelDtoPropertyTests
         sut.PayerAmount.Should().Be(140.00m);
     }
 
-    // ── ServiceLineRequest ───────────────────────────────────────────────────
-
-    [Fact]
-    public void ServiceLineRequest_AllProperties_RoundTrip()
-    {
-        var sut = new ServiceLineRequest
-        {
-            ProcedureCode = "99213",
-            ChargeAmount = 180.00m,
-            Units = 2
-        };
-
-        sut.ProcedureCode.Should().Be("99213");
-        sut.ChargeAmount.Should().Be(180.00m);
-        sut.Units.Should().Be(2);
-    }
-
-    [Fact]
-    public void ServiceLineRequest_DefaultUnits_IsOne()
-    {
-        var sut = new ServiceLineRequest { ProcedureCode = "99211", ChargeAmount = 50m };
-        sut.Units.Should().Be(1);
-    }
-
     // ── WorkflowRunExtended ──────────────────────────────────────────────────
 
     [Fact]

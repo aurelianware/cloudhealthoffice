@@ -119,18 +119,32 @@
                     {
                         <MudStack Spacing="2">
                             <MudAlert Severity="Severity.Info">
-                                @(ClaimStatusDisplay.IsReversible(_claim.Status)
-                                    ? "Finalized by the payment cycle: correct it with an adjustment, or reverse it."
-                                    : "Finalized: correct it with an adjustment.")
+                                @(string.Equals(_claim.Status, "Voided", StringComparison.OrdinalIgnoreCase)
+                                    ? "Reversed: this claim was voided and can't be corrected."
+                                    : ClaimStatusDisplay.IsReversible(_claim.Status)
+                                        ? "Finalized by the payment cycle: correct it with an adjustment, or reverse it."
+                                        : "Finalized: correct it with an adjustment.")
                             </MudAlert>
-                            @if (ClaimStatusDisplay.IsReversible(_claim.Status))
+                            @if (_canAdjust && ClaimCorrect.CanCorrect(_claim))
+                            {
+                                <MudButton Variant="Variant.Filled"
+                                          Color="Color.Primary"
+                                          FullWidth="true"
+                                          StartIcon="@Icons.Material.Filled.EditNote"
+                                          Href="@($"/claims/{Uri.EscapeDataString(_claim.ClaimId)}/correct")"
+                                          data-testid="correct-claim">
+                                    Correct claim
+                                </MudButton>
+                            }
+                            @if (_canVoid && ClaimStatusDisplay.IsReversible(_claim.Status))
                             {
                                 <MudButton Variant="Variant.Outlined"
                                           Color="Color.Warning"
                                           FullWidth="true"
                                           StartIcon="@Icons.Material.Filled.Undo"
-                                          OnClick="@(() => ReversalFlowAsync())">
-                                    Initiate Reversal
+                                          OnClick="@(() => ReversalFlowAsync())"
+                                          data-testid="reverse-claim">
+                                    Reverse claim
                                 </MudButton>
                             }
                         </MudStack>
@@ -1231,6 +1245,8 @@
     private string? TabQuery => string.IsNullOrWhiteSpace(FromRun) ? null : $"?fromRun={Uri.EscapeDataString(FromRun)}";
 
     private bool _canReadAccessLog;
+    private bool _canAdjust;
+    private bool _canVoid;
     private bool _canReadPayments;
     private List<ClaimAccessEntry>? _accessLog;
     private string? _accessLogError;
@@ -1305,11 +1321,15 @@
             await UserContextService.GetCurrentUserAsync();
             _canReadAccessLog = UserContextService.HasPermission("audit:read");
             _canReadPayments = UserContextService.HasPermission("payments:read");
+            _canAdjust = UserContextService.HasPermission("claims:adjust");
+            _canVoid = UserContextService.HasPermission("claims:void");
         }
         catch
         {
             _canReadAccessLog = false;
             _canReadPayments = false;
+            _canAdjust = false;
+            _canVoid = false;
         }
     }
 
@@ -1795,12 +1815,12 @@
 
         var parameters = new DialogParameters<ReversalDialog>();
         parameters.Add("ClaimId", _claim.ClaimId);
-        var dialog = await DialogService.ShowAsync<ReversalDialog>("Initiate Claim Reversal", parameters);
+        var dialog = await DialogService.ShowAsync<ReversalDialog>("Reverse claim", parameters);
         var result = await dialog.Result;
 
-        if (!result.Canceled)
+        if (result is { Canceled: false })
         {
-            Snackbar.Add("Reversal initiated successfully", Severity.Success);
+            Snackbar.Add("Claim reversed.", Severity.Success);
             await LoadClaimDetails();
         }
     }

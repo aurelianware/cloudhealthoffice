@@ -1,0 +1,544 @@
+@page "/shadow-adjudication"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Infrastructure
+@using CloudHealthOffice.Portal.Services
+@using System.Globalization
+@inject IDataDropService DataDrops
+@inject IShadowAdjudicationClient Shadow
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+@*
+    Shadow adjudication: CHO re-adjudicates claims the plan's core already
+    adjudicated (loaded from CPCDS files) and shows where the answers differ.
+    Nothing a member, provider or FHIR API sees changes. Needs claims:import.
+    See docs/integration/SHADOW-ADJUDICATION.md.
+*@
+
+<PageTitle>Shadow adjudication - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="claims:import" RoleName="Claims Import">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.CompareArrows" Class="mr-2" />
+        Shadow adjudication
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        CHO re-adjudicates the claims your core system already adjudicated and shows where the two answers differ:
+        what CHO could not decide yet and why, where it would have paid more or less, and which providers and codes drive it.
+        Nothing members, providers or the FHIR APIs see changes.
+    </MudText>
+
+    @if (_error != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _error = null" data-testid="shadow-error">@_error</MudAlert>
+    }
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    <MudGrid Spacing="3">
+        <MudItem xs="12" md="5">
+            <MudPaper Elevation="0" Class="pa-4" Style="@PaperStyle" data-testid="shadow-status">
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Status</MudText>
+                @if (_settings is { } settings)
+                {
+                    <MudText Typo="Typo.body2" Class="my-2" data-testid="shadow-status-text">@StatusText(settings)</MudText>
+                    <MudSwitch T="bool" Value="settings.Enabled" ValueChanged="SetEnabledAsync" Color="Color.Primary"
+                               Disabled="_saving" Label="Shadow adjudication for this plan" data-testid="shadow-switch" />
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); display: block;">
+                        To shadow every claim file as it loads, switch on "Shadow-adjudicate each claim file after it loads" in
+                        <MudLink Href="/edi-transactions">Imports &amp; EDI</MudLink>, Setup.
+                    </MudText>
+                }
+                else if (!_loading)
+                {
+                    <MudText Typo="Typo.body2" Class="my-2">Shadow adjudication is not available from this claims service.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="7">
+            <MudPaper Elevation="0" Class="pa-4" Style="@PaperStyle" data-testid="shadow-batches">
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Run on a claim file</MudText>
+                @if (_batches.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="my-2" data-testid="shadow-no-batches">
+                        No claim files have loaded through the daily drop yet. Drop a CPCDS claims file (see the CPCDS trial kit),
+                        or paste the import batch id from a CPCDS import report below.
+                    </MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="my-2">
+                        <thead><tr><th>Claim file</th><th>Loaded</th><th>Claims</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var batch in _batches)
+                            {
+                                <tr>
+                                    <td style="font-family: monospace;">@batch.FileName</td>
+                                    <td>@batch.LoadedAt.ToLocalTime().ToString("MM/dd HH:mm", CultureInfo.InvariantCulture)</td>
+                                    <td>@batch.Claims.ToString("N0", CultureInfo.InvariantCulture)</td>
+                                    <td>
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" Disabled="!CanRun"
+                                                   OnClick="() => RunAsync(batch.ImportBatchId)" data-testid="shadow-run-batch">Run shadow</MudButton>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+                <div class="d-flex gap-2 align-center">
+                    <MudTextField T="string" @bind-Value="_batchId" Label="Import batch id" Placeholder="from a CPCDS import report" Class="flex-grow-1" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!CanRun || string.IsNullOrWhiteSpace(_batchId))"
+                               OnClick="() => RunAsync(_batchId!)" data-testid="shadow-run-id">Run</MudButton>
+                </div>
+                @if (_settings is { } s && s.MaxClaimsPerRun > 0)
+                {
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); display: block;" Class="mt-1">
+                        A run compares every claim in the file in the background, @s.MaxClaimsPerRun.ToString("N0", CultureInfo.InvariantCulture) at a time; this page shows its progress.
+                    </MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12">
+            <MudPaper Elevation="0" Class="pa-4" Style="@PaperStyle" data-testid="shadow-runs">
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Runs</MudText>
+                @if (_runs.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="my-2">No shadow runs yet.</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="my-2">
+                        <thead>
+                            <tr><th>Started</th><th>By</th><th>Status</th><th>Compared</th><th>CHO decided</th><th>Match rate</th><th>Net paid difference</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var run in _runs)
+                            {
+                                <tr style="@(run.Id == _report?.Run.Id ? "background: var(--cb-accent-border-15);" : "")">
+                                    <td>@run.StartedAtUtc.ToLocalTime().ToString("MM/dd/yyyy HH:mm", CultureInfo.InvariantCulture)</td>
+                                    <td>@(run.RequestedBy == "cpcds-drop" ? "After file load" : run.RequestedBy)</td>
+                                    <td data-testid="shadow-run-status">
+                                        @if (run.InProgress)
+                                        {
+                                            <span>@run.Status @run.ClaimsProcessed.ToString("N0", CultureInfo.InvariantCulture) of @run.ClaimsRequested.ToString("N0", CultureInfo.InvariantCulture)</span>
+                                            <MudProgressLinear Color="Color.Primary" Value="@Progress(run)" Size="Size.Small" />
+                                        }
+                                        else if (run.Status == "Failed")
+                                        {
+                                            <MudTooltip Text="@(run.Error ?? "")"><span style="color: var(--mud-palette-error);">Failed</span></MudTooltip>
+                                        }
+                                        else
+                                        {
+                                            <span>Done</span>
+                                        }
+                                    </td>
+                                    <td>@(run.InProgress ? "" : run.ClaimsCompared.ToString("N0", CultureInfo.InvariantCulture))</td>
+                                    <td>@(run.InProgress ? "" : Percent(1 - run.UndecidedRate))</td>
+                                    <td>@(run.InProgress ? "" : Percent(run.MatchRate))</td>
+                                    <td>@(run.InProgress ? "" : Money(run.NetPaidVariance))</td>
+                                    <td>
+                                        @if (!run.InProgress)
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => OpenAsync(run.Id)" data-testid="shadow-open-run">Report</MudButton>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </MudPaper>
+        </MudItem>
+
+        @if (_report is { } report)
+        {
+            <MudItem xs="12">
+                <MudPaper Elevation="0" Class="pa-4" Style="@PaperStyle" data-testid="shadow-report">
+                    <div class="d-flex align-center flex-wrap gap-2">
+                        <MudText Typo="Typo.h6" Class="flex-grow-1">
+                            Run of @report.Run.StartedAtUtc.ToLocalTime().ToString("MM/dd/yyyy HH:mm", CultureInfo.InvariantCulture)
+                        </MudText>
+                        <MudButton Href="@ShadowDiscrepancyDownloadEndpoint.PathFor(report.Run.Id, false)" Target="_blank" Variant="Variant.Outlined"
+                                   StartIcon="@Icons.Material.Filled.Download" data-testid="shadow-csv">Discrepancies CSV</MudButton>
+                        <MudButton Href="@ShadowDiscrepancyDownloadEndpoint.PathFor(report.Run.Id, true)" Target="_blank" Variant="Variant.Text"
+                                   data-testid="shadow-csv-undecided">With undecided claims</MudButton>
+                    </div>
+
+                    <MudGrid Spacing="2" Class="my-2">
+                        @Tile("Claims compared", report.Run.ClaimsCompared.ToString("N0", CultureInfo.InvariantCulture), $"{report.ComparableClaims:N0} with a final core answer")
+                        @Tile("CHO decided", Percent(Share(report.DecidedClaims, report.ComparableClaims)), $"{report.DecidedClaims:N0} claims; the rest name the input CHO is missing")
+                        @Tile("Matched the core", Percent(report.Run.MatchRate), "of the claims CHO decided")
+                        @Tile("Core paid more", Money(report.CorePaidMore.Amount), $"{report.CorePaidMore.Claims:N0} claims: possible overpayments")
+                        @Tile("Core paid less", Money(report.CorePaidLess.Amount), $"{report.CorePaidLess.Claims:N0} claims: possible underpayments")
+                    </MudGrid>
+
+                    @if (report.Run.Skipped.Count > 0 || report.Run.Failed.Count > 0)
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined" Class="mb-2" data-testid="shadow-skipped">
+                            @report.Run.Skipped.Count skipped (not found or not loaded from a core), @report.Run.Failed.Count failed.
+                        </MudAlert>
+                    }
+
+                    @if (report.UndecidedByGap.Count > 0)
+                    {
+                        <MudPaper Elevation="0" Class="pa-3 mb-3" Style="border: 1px solid var(--cb-accent-border-15); border-radius: 8px;" data-testid="shadow-gap-guide">
+                            <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">What to load next</MudText>
+                            <MudText Typo="Typo.body2" Class="mb-2" Style="color: var(--cb-fg-text-55);">
+                                CHO could not decide @(report.ComparableClaims - report.DecidedClaims) claims. Each reason below names what CHO is missing and where to load it; run shadow again afterwards to see the gap close.
+                            </MudText>
+                            <MudSimpleTable Dense="true" Elevation="0">
+                                <thead><tr><th>Reason</th><th>Claims</th><th>Core paid</th><th>What is missing</th><th>What to do</th></tr></thead>
+                                <tbody>
+                                    @foreach (var row in report.UndecidedByGap)
+                                    {
+                                        var gap = ShadowGapGuide.For(row.Key);
+                                        <tr data-testid="shadow-gap-row">
+                                            <td style="font-family: monospace;">
+                                                @row.Key
+                                                <div><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                                              Color="@(gap.Action == ShadowGapGuide.GapAction.LoadData ? Color.Primary : gap.Action == ShadowGapGuide.GapAction.RunAgain ? Color.Warning : Color.Default)">@ShadowGapGuide.ActionLabel(gap.Action)</MudChip></div>
+                                            </td>
+                                            <td>@row.Claims.ToString("N0", CultureInfo.InvariantCulture)</td>
+                                            <td>@Money(row.CorePaid)</td>
+                                            <td style="max-width: 320px;">@gap.Missing</td>
+                                            <td style="max-width: 420px;">
+                                                @gap.Fix
+                                                @if (gap.Links.Count > 0)
+                                                {
+                                                    <div class="d-flex flex-wrap gap-2 mt-1">
+                                                        @foreach (var link in gap.Links)
+                                                        {
+                                                            <MudLink Href="@link.Href" Target="@(link.Href.StartsWith("/") ? null : "_blank")" Typo="Typo.body2">@link.Text</MudLink>
+                                                        }
+                                                    </div>
+                                                }
+                                                @if (row.ExampleClaims.Count > 0)
+                                                {
+                                                    <div style="font-family: monospace; font-size: 0.8em; color: var(--cb-fg-text-55);">e.g. @string.Join(", ", row.ExampleClaims.Take(3))</div>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudPaper>
+                    }
+                    @if (report.HeldForProviderScreening.Claims > 0)
+                    {
+                        var screening = ShadowGapGuide.For(ShadowGapGuide.ProviderScreeningCode);
+                        <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined" Class="mb-3" data-testid="shadow-screening-note">
+                            CHO would hold @report.HeldForProviderScreening.Claims.ToString("N0", CultureInfo.InvariantCulture) of the decided claims
+                            (@Money(report.HeldForProviderScreening.CorePaid) paid by the core) for review until it can screen their providers.
+                            They are compared on what CHO decides once a provider clears. @screening.Fix
+                            @foreach (var link in screening.Links)
+                            {
+                                <MudLink Href="@link.Href" Target="_blank" Typo="Typo.body2" Class="ml-1">@link.Text</MudLink>
+                            }
+                        </MudAlert>
+                    }
+                    @if (report.ByKind.Any(r => r.Claims > 0 && r.Key is ShadowKinds.PaidVariance or ShadowKinds.MemberLiabilityVariance))
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined" Class="mb-3" data-testid="shadow-accumulator-note">
+                            Paid and member-share differences can come from deductibles and out-of-pocket already met: CHO starts imported members' accumulators at zero
+                            unless an accumulator baseline is loaded.
+                        </MudAlert>
+                    }
+
+                    <MudGrid Spacing="3">
+                        <MudItem xs="12" md="6">
+                            @ReasonTable("How the answers compare", "Kind", report.ByKind.Where(r => r.Claims > 0).Select(r => (r, ShadowKinds.Label(r.Key))), "shadow-by-kind", money: true)
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            @ReasonTable("Differences by CHO stage", "Stage", report.ByChoStage.Select(r => (r, r.Key)), "shadow-by-stage", money: true)
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            @ReasonTable("Denial codes (core to CHO)", "Codes", report.ByDenialCodes.Select(r => (r, r.Key)), "shadow-by-denial", money: true)
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            @ReasonTable("Procedures on differing lines", "Code", report.ByProcedure.Select(r => (r, r.Key)), "shadow-by-procedure", money: true)
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            @ReasonTable("Billing providers", "NPI", report.ByBillingProvider.Select(r => (r, r.Key)), "shadow-by-provider", money: true)
+                        </MudItem>
+                    </MudGrid>
+
+                    <div class="d-flex align-center gap-2 mt-4">
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;" Class="flex-grow-1">Claims</MudText>
+                        <MudSelect T="string" Value="_kind" ValueChanged="FilterAsync" Label="Show" Dense="true" Style="max-width: 280px;" data-testid="shadow-kind">
+                            <MudSelectItem T="string" Value="@string.Empty">Every difference, largest first</MudSelectItem>
+                            @foreach (var kind in ShadowKinds.All)
+                            {
+                                <MudSelectItem T="string" Value="@kind">@ShadowKinds.Label(kind)</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </div>
+                    <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mt-2" data-testid="shadow-results">
+                        <thead>
+                            <tr><th>Claim</th><th>Result</th><th>Core</th><th>CHO</th><th>Core paid</th><th>CHO paid</th><th>Why</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in _results)
+                            {
+                                <tr>
+                                    <td style="font-family: monospace;">@r.ClaimNumber</td>
+                                    <td>@ShadowKinds.Label(r.Kind)</td>
+                                    <td>@Outcome(r.CoreOutcome, r.CoreDenialCode)</td>
+                                    <td>@Outcome(r.ChoOutcome, r.ChoDenialCode ?? r.ChoPendCode)</td>
+                                    <td>@Money(r.CorePaid)</td>
+                                    <td>@(r.Kind == ShadowKinds.ChoUndecided ? "" : Money(r.ChoPaid))</td>
+                                    <td style="max-width: 420px;">@(r.ChoPendReason ?? r.ChoStageFindings.FirstOrDefault())</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private const string PaperStyle = "background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;";
+    private const int ResultsShown = 50;
+
+    private ShadowAdjudicationSettingsView? _settings;
+    private List<ClaimBatch> _batches = new();
+    private List<ShadowRun> _runs = new();
+    private ShadowRunReport? _report;
+    private List<ShadowResult> _results = new();
+    private string _kind = string.Empty;
+    private string? _batchId;
+    private bool _loading;
+    private bool _saving;
+    private string? _error;
+
+    private bool CanRun => _settings is { Running: true } && !_saving;
+
+    /// <summary>How often the page re-reads runs while one is queued or running.</summary>
+    public static TimeSpan RefreshEvery { get; set; } = TimeSpan.FromSeconds(5);
+
+    private System.Threading.Timer? _refresh;
+    private bool _disposed;
+
+    /// <summary>A claim file the daily drop loaded, which a run can be pointed at.</summary>
+    public sealed record ClaimBatch(string ImportBatchId, string FileName, DateTime LoadedAt, decimal Claims);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        try
+        {
+            _settings = await DataDrops.GetShadowSettingsAsync();
+            _runs = await Shadow.ListRunsAsync();
+            _batches = ClaimBatches(await DataDrops.GetRunsAsync(30));
+            if (_runs.FirstOrDefault(r => !r.InProgress) is { } latest)
+                await OpenAsync(latest.Id);
+            WatchProgress();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    /// <summary>The claim steps of recent drop runs, newest first, one per import batch.</summary>
+    public static List<ClaimBatch> ClaimBatches(IEnumerable<DataDropRunRecord> runs)
+        => runs
+            .SelectMany(run => run.Steps
+                .Where(step => step.Name == "claims" && !string.IsNullOrWhiteSpace(step.ImportBatchId))
+                .Select(step => new ClaimBatch(
+                    step.ImportBatchId!,
+                    step.Files.FirstOrDefault() ?? "claims",
+                    run.CompletedAt ?? run.StartedAt,
+                    step.Counts.GetValueOrDefault("created") + step.Counts.GetValueOrDefault("updated") + step.Counts.GetValueOrDefault("unchanged"))))
+            .GroupBy(b => b.ImportBatchId)
+            .Select(g => g.First())
+            .OrderByDescending(b => b.LoadedAt)
+            .Take(10)
+            .ToList();
+
+    private async Task SetEnabledAsync(bool enabled)
+    {
+        _saving = true;
+        try
+        {
+            var result = await DataDrops.SaveShadowSettingsAsync(enabled);
+            if (result.Succeeded)
+            {
+                _settings = result.Value;
+                Snackbar.Add(enabled ? "Shadow adjudication is on for this plan." : "Shadow adjudication is off for this plan.", Severity.Success);
+            }
+            else
+            {
+                _error = string.Join(" ", result.Errors);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task RunAsync(string importBatchId)
+    {
+        _saving = true;
+        try
+        {
+            var result = await Shadow.RunBatchAsync(importBatchId.Trim());
+            if (result.Succeeded)
+            {
+                Snackbar.Add("Shadow run started. Its report opens here when it finishes.", Severity.Success);
+                _runs = await Shadow.ListRunsAsync();
+                WatchProgress();
+            }
+            else
+            {
+                _error = string.Join(" ", result.Errors);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static double Progress(ShadowRun run)
+        => run.ClaimsRequested <= 0 ? 0 : Math.Min(100, 100.0 * run.ClaimsProcessed / run.ClaimsRequested);
+
+    /// <summary>While a run is queued or running, re-read the runs; open the report of one that just finished.</summary>
+    private void WatchProgress()
+    {
+        if (_refresh is not null || _disposed || !_runs.Any(r => r.InProgress))
+            return;
+        _refresh = new System.Threading.Timer(_ => _ = InvokeAsync(RefreshRunsAsync), null, RefreshEvery, RefreshEvery);
+    }
+
+    private async Task RefreshRunsAsync()
+    {
+        if (_disposed)
+            return;
+        try
+        {
+            var before = _runs.Where(r => r.InProgress).Select(r => r.Id).ToHashSet();
+            _runs = await Shadow.ListRunsAsync();
+            var finished = _runs.FirstOrDefault(r => before.Contains(r.Id) && !r.InProgress && r.Status != "Failed");
+            if (finished is not null)
+                await OpenAsync(finished.Id);
+            if (!_runs.Any(r => r.InProgress))
+            {
+                _refresh?.Dispose();
+                _refresh = null;
+            }
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _refresh?.Dispose();
+            _refresh = null;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _refresh?.Dispose();
+    }
+
+    private async Task OpenAsync(string runId)
+    {
+        _report = await Shadow.GetReportAsync(runId);
+        _kind = string.Empty;
+        _results = _report is null ? new() : await DifferencesAsync(runId, _kind);
+    }
+
+    private async Task FilterAsync(string kind)
+    {
+        _kind = kind;
+        if (_report is { } report)
+            _results = await DifferencesAsync(report.Run.Id, kind);
+    }
+
+    /// <summary>One kind, or every claim that is not a match, largest paid difference first.</summary>
+    private async Task<List<ShadowResult>> DifferencesAsync(string runId, string kind)
+    {
+        if (!string.IsNullOrEmpty(kind))
+            return await Shadow.ListResultsAsync(runId, kind, ResultsShown);
+        var all = await Shadow.ListResultsAsync(runId, null, 1000);
+        return all.Where(r => r.Kind is not ShadowKinds.Match and not ShadowKinds.NotComparable).Take(ResultsShown).ToList();
+    }
+
+    public static string StatusText(ShadowAdjudicationSettingsView settings)
+    {
+        if (!settings.EnabledForDeployment)
+            return "Shadow adjudication is off in this deployment (Adjudication:Shadow:Enabled). Ask your CHO operator to turn it on; your choice here takes effect then.";
+        return settings.Running
+            ? "On. Run it on a claim file below, or have every claim file shadowed as it loads."
+            : "Off for this plan. Switch it on to compare CHO's answers with your core's.";
+    }
+
+    private static decimal? Share(int part, int whole) => whole == 0 ? null : (decimal)part / whole;
+
+    private static string Percent(decimal? value) => value is { } v ? v.ToString("P0", CultureInfo.GetCultureInfo("en-US")) : "-";
+
+    private static string Money(decimal value) => value.ToString("C2", CultureInfo.GetCultureInfo("en-US"));
+
+    private static string Outcome(string outcome, string? code) => string.IsNullOrEmpty(code) ? outcome : $"{outcome} ({code})";
+
+    private static RenderFragment Tile(string label, string value, string note) => __builder =>
+    {
+        <MudItem xs="12" sm="6" md="2" Style="min-width: 180px;">
+            <MudPaper Elevation="0" Class="pa-3" Style="border: 1px solid var(--cb-accent-border-15); border-radius: 8px;">
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55);">@label</MudText>
+                <MudText Typo="Typo.h5" Style="font-weight: 700;">@value</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55);">@note</MudText>
+            </MudPaper>
+        </MudItem>
+    };
+
+    private static RenderFragment ReasonTable(string title, string keyHeader, IEnumerable<(ShadowReasonRow Row, string Label)> rows, string testId, bool money) => __builder =>
+    {
+        var list = rows.ToList();
+        <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">@title</MudText>
+        @if (list.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-55);" data-testid="@testId">None in this run.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Elevation="0" data-testid="@testId">
+                <thead><tr><th>@keyHeader</th><th>Claims</th><th>@(money ? "Paid difference" : "Core paid")</th><th>Examples</th></tr></thead>
+                <tbody>
+                    @foreach (var (row, label) in list)
+                    {
+                        <tr>
+                            <td>@label</td>
+                            <td>@row.Claims.ToString("N0", CultureInfo.InvariantCulture)</td>
+                            <td>@Money(money ? row.AbsolutePaidVariance : row.CorePaid)</td>
+                            <td style="font-family: monospace; font-size: 0.8em;">@string.Join(", ", row.ExampleClaims.Take(3))</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    };
+}

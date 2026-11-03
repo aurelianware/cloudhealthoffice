@@ -92,17 +92,6 @@ public class ClaimsServiceTests
         ex.ServiceName.Should().Be("Claims Service");
     }
 
-    // ── SubmitClaimAsync ──
-
-    [Fact]
-    public async Task SubmitClaimAsync_WhenApiFails_ThrowsServiceUnavailableException()
-    {
-        var sut = CreateService();
-        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
-            () => sut.SubmitClaimAsync(new SubmitClaimRequest()));
-        ex.ServiceName.Should().Be("Claims Service");
-    }
-
     // ── SearchClaimsAsync ──
 
     [Fact]
@@ -841,55 +830,6 @@ public class ClaimsServiceTests
         JsonSerializer.Deserialize<IdCardOrderView>(
             """{"status":7}""",
             JsonOpts)!.Status.Should().Be("Paid");
-    }
-
-    // ── SubmitClaimAsync ──
-
-    [Fact]
-    public async Task SubmitClaimAsync_WhenApiReturns200_ExtractsClaimId()
-    {
-        var json = JsonSerializer.Serialize(new { claimId = "CLM-NEW-999" }, JsonOpts);
-        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
-
-        var result = await sut.SubmitClaimAsync(new SubmitClaimRequest
-        {
-            MemberId = "MBR-1", ProviderId = "PRV-1",
-            ServiceDate = new DateTime(2026, 3, 15)
-        });
-
-        result.Should().Be("CLM-NEW-999");
-    }
-
-    [Fact]
-    public async Task SubmitClaimAsync_WhenResponseMissingClaimId_ReturnsEmptyString()
-    {
-        var json = JsonSerializer.Serialize(new { otherField = "value" }, JsonOpts);
-        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
-
-        var result = await sut.SubmitClaimAsync(new SubmitClaimRequest());
-
-        result.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task SubmitClaimAsync_VerifyPostBodyContainsRequest()
-    {
-        var handler = new FakeHandler(HttpStatusCode.OK,
-            JsonSerializer.Serialize(new { claimId = "CLM-X" }, JsonOpts));
-        var sut = CreateService(new HttpClient(handler));
-
-        await sut.SubmitClaimAsync(new SubmitClaimRequest
-        {
-            MemberId = "MBR-42", ProviderId = "PRV-7",
-            ServiceDate = new DateTime(2026, 6, 1)
-        });
-
-        handler.CapturedRequests.Should().ContainSingle();
-        var req = handler.CapturedRequests[0];
-        req.Method.Should().Be(HttpMethod.Post);
-        var body = await req.Content!.ReadAsStringAsync();
-        body.Should().Contain("MBR-42");
-        body.Should().Contain("PRV-7");
     }
 
     // ── SearchClaimsAsync ──
