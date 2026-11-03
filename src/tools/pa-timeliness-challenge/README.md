@@ -14,8 +14,8 @@ All data is synthetic. Nothing here is a CMS attestation.
 |---|---|---|
 | 1 | Corpus generator and answer key, in-process preflight test | #1778 |
 | 2 | `run`: import history, submit live cases through PAS `$submit`, act as reviewer, score the reports | #1780 |
-| 3 | Container image and GKE runner script (`scripts/demo/gcp/run-pa-timeliness.sh`) | This PR |
-| 4 | Evidence page with the first real GKE result | After the first run |
+| 3 | Container image and GKE runner script (`scripts/demo/gcp/run-pa-timeliness.sh`) | #1781 |
+| 4 | Evidence page with the first GKE result (2,601 of 2,601 checks, November 3, 2026): [cloudhealthoffice.com/evidence/pa-timeliness-challenge](https://cloudhealthoffice.com/evidence/pa-timeliness-challenge) | This PR |
 
 ## Generate a corpus
 
