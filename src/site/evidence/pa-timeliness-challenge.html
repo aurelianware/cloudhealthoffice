@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PA Timeliness Challenge Results for CMS-0057-F — Cloud Health Office</title>
+  <meta name="description" content="Results of the PA Timeliness Challenge: 10,000 synthetic prior authorizations scored against an answer key computed from the CMS-0057-F timeframes. 2,601 of 2,601 checks matched on the first GKE run." />
+  <meta name="author" content="Aurelianware, Inc." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/evidence/pa-timeliness-challenge" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/evidence/pa-timeliness-challenge" />
+  <meta property="og:title" content="Prior authorization decided on time, and reported right" />
+  <meta property="og:description" content="Results of the PA Timeliness Challenge: 10,000 synthetic prior authorizations scored against an answer key computed from the CMS-0057-F timeframes. 2,601 of 2,601 checks matched on the first GKE run." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/evidence/evidence-model.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Prior authorization decided on time, and reported right" />
+  <meta name="twitter:description" content="Results of the PA Timeliness Challenge: 10,000 synthetic prior authorizations scored against an answer key computed from the CMS-0057-F timeframes. 2,601 of 2,601 checks matched on the first GKE run." />
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/evidence/evidence-model.svg" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "PA Timeliness Challenge results",
+      "description": "Results of the PA Timeliness Challenge: 10,000 synthetic prior authorizations scored against an answer key computed from the CMS-0057-F timeframes. 2,601 of 2,601 checks matched on the first GKE run.",
+      "url": "https://cloudhealthoffice.com/evidence/pa-timeliness-challenge",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc."
+      },
+      "about": [
+        "CMS-0057-F",
+        "Prior authorization decision timeframes",
+        "Prior authorization metrics reporting",
+        "Da Vinci PAS"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Evidence",
+          "item": "https://cloudhealthoffice.com/evidence"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "PA Timeliness Challenge",
+          "item": "https://cloudhealthoffice.com/evidence/pa-timeliness-challenge"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/evidence-hub.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body class="ev">
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/blueprints/google-cloud">Reference architecture</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="/api-explorer">API explorer</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof updateNavigation === 'function') { updateNavigation('#mainNav'); }
+    });
+  </script>
+
+  <main id="main-content">
+
+    <header class="ev-hero">
+      <div class="ev-hero-inner">
+        <nav class="ev-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/evidence">Evidence</a><span>/</span><a href="/evidence/pa-timeliness-challenge">PA Timeliness Challenge</a></nav>
+        <span class="ev-eyebrow">Prior-authorization reporting evidence</span>
+        <h1>10,000 prior authorizations, <em>an answer key written first</em>.</h1>
+        <p class="ev-lede">CMS-0057-F asks every impacted payer to decide prior authorizations within 72 hours or 7 days and to publish how it did. The PA Timeliness Challenge loads a synthetic year of requests whose right answers are computed from the rule before Cloud Health Office sees them, drives live requests through PAS, and checks every number the platform reports. On its first run on our Google Cloud demo, all 2,601 checks matched.</p>
+        <div class="ev-badges"><span class="ev-badge ev-badge--cyan">2,601 of 2,601 checks matched</span>
+          <span class="ev-badge">10,000 requests &middot; 4 lines of business</span>
+          <span class="ev-badge">GKE demo, November 3, 2026</span>
+          <span class="ev-badge ev-badge--amber">Synthetic data &middot; not an attestation</span></div>
+        <p class="ev-rule-definition">
+          The <strong>PA Timeliness Challenge</strong> is the prior-authorization counterpart to our
+          <a href="/docs/million-claim-challenge">Million Claim Challenge</a>. Both start from a corpus whose
+          correct outcomes are known in advance and score what the deployed platform actually recorded.
+        </p>
+      </div>
+    </header>
+
+    <div class="ev-section ev-section--tight">
+      <nav class="ev-toc" aria-label="On this page">
+        <h2>On this page</h2>
+        <ol>
+            <li><a href="#result">The first run</a></li>
+            <li><a href="#checked">What was checked</a></li>
+            <li><a href="#corpus">The corpus and its answer key</a></li>
+            <li><a href="#found">What the challenge found</a></li>
+            <li><a href="#reproduce">How to repeat it</a></li>
+            <li><a href="#limits">What this does not establish</a></li>
+            <li><a href="#related">Related evidence</a></li>
+        </ol>
+      </nav>
+    </div>
+
+    <section class="ev-section ev-section--alt" id="result">
+      <div class="ev-container">
+        <span class="ev-eyebrow">November 3, 2026</span>
+        <h2>The first run</h2>
+        <p class="ev-sub">
+          Run against the Cloud Health Office demo on Google Kubernetes Engine, in a tenant of its own, as a
+          Kubernetes Job beside the services it tests. Image built from commit
+          <code>7a0fbed</code>. Seed 57, 10,000 requests, history period calendar year 2025.
+        </p>
+        <div class="ev-scroll">
+          <table class="ev-table">
+            <thead>
+              <tr><th>Area</th><th>What it compares</th><th>Checks</th><th>Matched</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="ev-what">Import</span></td><td>9,500 history requests loaded through the authorization CSV import, plus 1,188 sourced extension and appeal facts.</td><td>2</td><td>2</td></tr>
+              <tr><td><span class="ev-what">Operational metrics</span></td><td>The CMS-0057-F metrics endpoint for all lines of business and for each of Commercial, Medicare Advantage, Medicaid and Exchange: counts, approval and denial rates, average and median decision hours, decided within timeframe, extensions, approvals after appeal. Thirty values per view.</td><td>150</td><td>150</td></tr>
+              <tr><td><span class="ev-what">Per-request timeliness</span></td><td>The on-time and extension flag on every one of the 8,709 in-scope requests in the UM decision-timeliness report.</td><td>1 (8,709 rows)</td><td>1</td></tr>
+              <tr><td><span class="ev-what">Annual report draft</span></td><td>The 2025 annual draft for each line of business, to four decimal places, scored on final outcomes after appeal.</td><td>108</td><td>108</td></tr>
+              <tr><td><span class="ev-what">Live PAS requests</span></td><td>500 requests submitted through PAS <code>Claim/$submit</code>, then read back: line of business, level of service, the extension the reviewer asked for (granted on Medicare Advantage and Medicaid, refused on Commercial), the decision and each denied line's reason.</td><td>2,310</td><td>2,310</td></tr>
+              <tr><td><span class="ev-what">Live metrics</span></td><td>The metrics endpoint over the live window, after the reviewer decided the live cohort.</td><td>30</td><td>30</td></tr>
+              <tr><td><strong>Total</strong></td><td></td><td><strong>2,601</strong></td><td><strong>2,601</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The history phase took 77 seconds and the live phase 77 seconds. PAS <code>$submit</code> answered in
+          531 ms at the median and 1.18 s at the 95th percentile. The full result,
+          with each check's expected and actual value, is published as
+          <a href="/evidence/data/pa-timeliness-challenge-2026-11-03.json">run-summary.json</a>.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section" id="checked">
+      <div class="ev-container">
+        <span class="ev-eyebrow">The score</span>
+        <h2>What was checked</h2>
+        <p class="ev-sub">
+          The score is agreement, not a timeliness rate. The synthetic plan in the corpus decides about 87% of
+          standard requests inside 7 days, on purpose, so that late decisions, extensions and appeals all appear
+          in the reports. A pass means Cloud Health Office reported that plan's performance exactly as the rule
+          says it should be counted.
+        </p>
+        <div class="ev-grid ev-grid--two">
+          <div class="ev-card">
+            <h3>History: the timing path</h3>
+            <p>A real year of decisions can't be replayed in real time, so the history cohort is imported with its original receipt and decision times, the way a plan migrating from another system would load it. Extensions and appeals recorded in the source system come in as sourced facts. This phase exercises the reporting rules: deadlines, the 14-day extension, expedited versus standard, and what counts as decided.</p>
+          </div>
+          <div class="ev-card">
+            <h3>Live: the workflow path</h3>
+            <p>The live cohort goes in the way a provider would send it, as a Da Vinci PAS bundle. The challenge then acts as the reviewer: it takes the scripted extensions, records line-level decisions with denial reasons through the 278 response endpoint, and reads every request back. Live decisions happen within minutes, so this phase proves the workflow and the record, not the clock.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="corpus">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Written first</span>
+        <h2>The corpus and its answer key</h2>
+        <p>
+          The generator writes a deterministic corpus from a seed: the same options give the same files, byte for
+          byte. Each request is drawn from one of twelve scenarios, including decided at the deadline, decided one
+          minute late, extended and decided inside the extension, extended and decided late, an extension asked
+          for on a line of business that doesn't allow one, excluded drugs, undecided requests, and denials
+          approved on appeal. Requests are spread across Commercial, Medicare Advantage, Medicaid and Exchange, and
+          about a quarter are expedited.
+        </p>
+        <p>
+          The answer key is computed from the rule's 72-hour and 7-day timeframes and its one 14-day extension for
+          Medicare Advantage and Medicaid. It doesn't call or copy any Cloud Health Office code. A preflight test
+          runs the corpus through the real import and reporting code on every pull request, so a change that would
+          make the reports disagree with the rule fails before it merges.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section" id="found">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Stated up front</span>
+        <h2>What the challenge found</h2>
+        <div class="ev-grid ev-grid--two">
+          <div class="ev-card">
+            <h3>Imported extensions were measured against the wrong deadline (fixed)</h3>
+            <p>While the challenge was being built, its preflight test found that a Medicare Advantage or Medicaid request extended in its source system was counted as extended but still judged against the original 72-hour or 7-day deadline. A decision inside the extension counted as late. The fix moves the deadline only as the rule allows: on those lines of business, when the extension was granted by the original deadline, and by at most 14 days. It shipped before this run.</p>
+          </div>
+          <div class="ev-card">
+            <h3>PAS has no Exchange code (open)</h3>
+            <p>A PAS request carries its line of business as an X12 claim filing indicator, and that code set has no value for a marketplace plan. Live Exchange requests are therefore sent, and recorded, as Commercial. The live cohort is scored that way and the run says so. History requests, which carry their line of business directly, are reported as Exchange.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="reproduce">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Reproducible</span>
+        <h2>How to repeat it</h2>
+        <p>
+          The generator, the validator and the runner are in the public repository under
+          <code>src/tools/pa-timeliness-challenge</code>. On the Google Cloud demo, the deploy workflow builds the
+          challenge image beside the service images, and <code>scripts/demo/gcp/run-pa-timeliness.sh</code> runs it
+          as a Kubernetes Job against the in-cluster services, then saves the job log and the run summary. Against
+          any other stack, <code>dotnet run --project src/tools/pa-timeliness-challenge -- run</code> takes the
+          authorization and FHIR service URLs and a bearer token for the run's tenant.
+        </p>
+        <p>
+          A rerun with the same seed is idempotent: the import reports the requests unchanged and the facts are
+          keyed by event. The run checks the history period before it loads anything and warns if the tenant
+          already holds other requests there, since the metrics count every request in the tenant.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section" id="limits">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Stated plainly</span>
+        <h2>What this does not establish</h2>
+        <div class="ev-limits">
+          <h3>Limitations</h3>
+          <ul>
+            <li><strong>Synthetic data on a demo stack.</strong> No member data is involved, and no production deployment or production volume is claimed.</li>
+            <li><strong>Not a CMS attestation.</strong> The numbers describe a synthetic plan. A plan's own report depends on its own decisions, its line-of-business mapping and its counsel's reading of the rule.</li>
+            <li><strong>Agreement with our reading of the rule.</strong> The answer key encodes one interpretation of how CMS-0057-F counts decisions, extensions and appeals. Where the rule leaves room, a plan may count differently.</li>
+            <li><strong>Prior authorization only.</strong> Patient Access, Provider Access and Payer-to-Payer are evidenced separately, by the <a href="/evidence/inferno-conformance">Inferno kits</a> and the <a href="/insights/cms-0057-f/acceptance-scenarios">acceptance scenarios</a>. The challenge doesn't score the prior-authorization data a member sees through Patient Access.</li>
+            <li><strong>One run.</strong> This is the first run on the demo. It isn't on a nightly schedule yet.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="related">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Related evidence</span>
+        <h2>Where to read next</h2>
+        <div class="ev-grid">
+          <a class="ev-card" href="/evidence/prior-authorization"><h3>CRD, DTR and PAS workflow</h3><p>How the three chain into one workflow, and what has to happen after a payer answers A4.</p></a>
+          <a class="ev-card" href="/evidence/davinci-interoperability"><h3>Da Vinci interoperability</h3><p>PAS, CRD and DTR exchanges against a pinned HL7 reference implementation.</p></a>
+          <a class="ev-card" href="/docs/million-claim-challenge"><h3>Million Claim Challenge</h3><p>The same method for claims adjudication: a known-answer corpus scored against the deployed platform.</p></a>
+          <a class="ev-card" href="/evidence"><h3>Evidence Hub</h3><p>How the separate evidence systems fit together, and what none of them claims.</p></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section">
+      <div class="ev-container">
+        <div class="ev-cta">
+          <h2>Run it against your numbers.</h2>
+          <p>The challenge can run against a Cloud Health Office sandbox loaded with your own prior-authorization history, so your team can compare what we report with what you report today.</p>
+          <div class="ev-actions">
+            <a class="ev-btn" href="/contact?interest=cms0057-assessment" data-ga-event="pa_timeliness_interest">Talk to an architect &rarr;</a>
+            <a class="ev-btn ev-btn--ghost" href="https://github.com/aurelianware/cloudhealthoffice/tree/main/src/tools/pa-timeliness-challenge">Read the challenge source &rarr;</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+
+</body>
+</html>
