@@ -33,7 +33,7 @@
       "description": "How Cloud Health Office runs ONC's Inferno FHIR conformance test kits against its own APIs, why the kit versions are pinned, which suite cannot grade the platform at all, and what a pass would and would not mean.",
       "url": "https://cloudhealthoffice.com/insights/cms-0057-f/what-a-conformance-test-kit-proves",
       "datePublished": "2026-10-23",
-      "dateModified": "2026-10-30",
+      "dateModified": "2026-11-03",
       "isPartOf": {
         "@type": "WebSite",
         "name": "Cloud Health Office",
@@ -277,6 +277,7 @@
           <li><strong>CARIN Blue Button</strong>, the <code>c4bb_v200</code> financial groups &mdash; capability statement, Patient, Coverage, ExplanationOfBenefit, Organization, Practitioner.</li>
         </ul>
         <p>Three more are defined and not yet executed: a DTR payer-server suite, a PDex server suite, and a PDex client suite. The whole inventory lives in <code>interop/scenarios.json</code> in the public repository, so the list of what we claim to exercise is itself reviewable.</p>
+        <p><strong>Update, November 2026:</strong> the DTR payer-server suite and the PDex server suite now run every night alongside the others, and both pass. The PDex client suite is still not run. Current verdicts are on the <a href="/evidence/inferno-conformance">Inferno results page</a>.</p>
         <div class="callout">
           <span class="k">A word we are careful with</span>
           <p>In that inventory file, <code>implemented: true</code> means <strong>the harness executes the scenario</strong> &mdash; not that a result exists, and certainly not that it passed. Two scenarios are implemented and awaiting a first real run. Three are defined and not executed. No kit has judged this platform in any suite. The distance between &ldquo;wired up&rdquo; and &ldquo;passing&rdquo; is exactly the distance this page is trying not to let anyone cross by accident.</p>
@@ -288,7 +289,7 @@
         <div class="stats">
           <div class="stat"><b>v1.1.6</b><span>US Core test kit</span></div>
           <div class="stat"><b>v0.16.3</b><span>CARIN for Blue Button test kit</span></div>
-          <div class="stat"><b>v0.17.1</b><span>Da Vinci DTR test kit</span></div>
+          <div class="stat"><b>v0.18.0</b><span>Da Vinci DTR test kit</span></div>
           <div class="stat"><b>v0.13.2</b><span>Da Vinci PDex test kit</span></div>
         </div>
         <p>The same file pins the HL7 FHIR validator at 7.0.3 and the Da Vinci reference implementations the interoperability harness exchanges messages with. Moving any pin is a reviewed change, which means the question &ldquo;why did this result change?&rdquo; always has an answer in version control.</p>
