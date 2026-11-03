@@ -119,6 +119,7 @@ The folder's files are sorted by name, the same way the daily drop sorts them:
 | `coverage` | CPCDS coverages (one file, with the member file) |
 | `claim` | CPCDS claims (any number) |
 | `auth` or `278` | Authorizations. An X12 file (starting `ISA`) goes to the 278 import, anything else to the CSV import |
+| `balance` | The core's accumulator balances as of a date, for `shadow` only ([starting balances](SHADOW-ADJUDICATION.md#starting-balances)) |
 
 The kit sends each file with `dryRun=true` and prints:
 
@@ -165,7 +166,9 @@ which the laptop trial and the hosted drop set), waits for each run and prints:
 The report and the discrepancy CSV are saved in `cpcds-trial-out/`. The
 portal shows the same runs, with links to each importer, under
 **Operations**, **Shadow Adjudication**. Load what it names and run `shadow`
-again to watch the gap close. `--batch <importBatchId>` shadows one earlier
+again to watch the gap close. Deductibles and out-of-pocket amounts start from
+the core's own account: the member's earlier claims in the files, and a
+`balance` file when the files start mid-year. `--batch <importBatchId>` shadows one earlier
 load. See [SHADOW-ADJUDICATION.md](SHADOW-ADJUDICATION.md).
 
 ### 6. Validate with Inferno

@@ -41,6 +41,9 @@ class StubCho(BaseHTTPRequestHandler):
         pass
 
 
+BALANCES = "/api/v1/claims/shadow-adjudication/accumulator-balances/import"
+
+
 class TrialScriptTests(unittest.TestCase):
     def setUp(self):
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), StubCho)
@@ -50,6 +53,7 @@ class TrialScriptTests(unittest.TestCase):
             "/api/v1/claims/import/cpcds": (200, {"batchId": "batch-1", "claimsInFile": 3, "created": 3, "rejected": 0}),
             "/api/v1/authorizations/import/csv": (200, {"authorizationsInFile": 1, "created": 1}),
             "/api/v1/authorizations/import/x12-278": (200, {"authorizationsInFile": 2, "created": 2}),
+            BALANCES: (200, {"dryRun": True, "rowsInFile": 2, "loaded": 2, "rejected": 0}),
         }
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.addCleanup(self.server.shutdown)
@@ -63,6 +67,7 @@ class TrialScriptTests(unittest.TestCase):
             "CPCDS_Coverages.csv": "Member id\nM1\n",
             "jiva_authorizations.csv": "authorization_number\nPA-1\n",
             "um_278_20261101.x12": "ISA*00*          *00*~",
+            "qnxt_member_balances_20260630.csv": "member_id,as_of_date,individual_deductible_met\nM1,2026-06-30,400\n",
             "readme.txt": "not an extract",
         }.items():
             (self.folder / name).write_text(content)
@@ -91,6 +96,7 @@ class TrialScriptTests(unittest.TestCase):
             "/api/v1/claims/import/cpcds",
             "/api/v1/authorizations/import/csv",
             "/api/v1/authorizations/import/x12-278",
+            BALANCES,
         ])
         for call in self.server.calls:
             self.assertRegex(call["body"], r'name="dryRun"\r\n\r\ntrue')
@@ -100,8 +106,19 @@ class TrialScriptTests(unittest.TestCase):
         self.assertIn('filename="CPCDS_Coverages.csv"', enrollment)
         self.assertRegex(self.server.calls[1]["body"], r'name="sourceSystem"\r\n\r\nqnxt')
         self.assertRegex(self.server.calls[1]["body"], r'name="lineOfBusiness"\r\n\r\nMedicaid')
+        self.assertRegex(self.server.calls[4]["body"], r'name="sourceSystem"\r\n\r\nqnxt')
+        self.assertIn("accumulator balances qnxt_member_balances_20260630.csv (200): 2 rows, 2 to load, 0 refused", result.stdout)
         self.assertIn("skipped readme.txt", result.stdout)
         self.assertIn("Clean.", result.stdout)
+
+    def test_refused_balance_rows_fail_the_check(self):
+        self.server.replies[BALANCES] = (200, {"dryRun": True, "rowsInFile": 2, "loaded": 1, "rejected": 1,
+                                               "errors": ["line 3: as_of_date '30 June' is not a date (yyyy-MM-dd)"]})
+
+        result = self.run_script("check", str(self.folder))
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("! line 3: as_of_date '30 June' is not a date", result.stdout)
 
     def test_load_writes(self):
         result = self.run_script("load", str(self.folder))
