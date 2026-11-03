@@ -219,4 +219,18 @@ public class AdaptiveQuestionnaireEngineTests
 
         result.Status.Should().Be(422);
     }
+
+    [Fact]
+    public void The_form_an_adaptive_response_answers_is_the_one_its_contained_questionnaire_derives_from()
+    {
+        var adaptive = new QuestionnaireResponse
+        {
+            Contained = [new Questionnaire { Id = "adaptive", DerivedFrom = [Canonical] }],
+            Questionnaire = "#adaptive",
+        };
+
+        AdaptiveQuestionnaireEngine.AnsweredForm(adaptive).Should().Be(Canonical);
+        AdaptiveQuestionnaireEngine.AnsweredForm(new QuestionnaireResponse { Questionnaire = Canonical }).Should().Be(Canonical);
+        AdaptiveQuestionnaireEngine.AnsweredForm(new QuestionnaireResponse { Questionnaire = "#missing" }).Should().BeNull();
+    }
 }

@@ -180,6 +180,27 @@ public class DtrControllerTests
         submitted.Meta.Should().NotBeNull();
     }
 
+    [Theory]
+    [InlineData("https://cloudhealthoffice.com/fhir/Questionnaire/pa-sleep-study-adaptive|1.0.0", 201)]
+    [InlineData("https://elsewhere.example/Questionnaire/unknown|1.0.0", 400)]
+    public async Task SubmitQuestionnaireResponse_AdaptiveResponse_IsCheckedAgainstTheFormItDerivesFrom(
+        string derivedFrom, int expected)
+    {
+        // A completed adaptive response names its contained Questionnaire,
+        // which names the published form it was derived from (spec-25).
+        var response = new QuestionnaireResponse
+        {
+            Contained = [new Questionnaire { Id = "adaptive", Status = PublicationStatus.Active, DerivedFrom = [derivedFrom] }],
+            Questionnaire = "#adaptive",
+            Status = QuestionnaireResponse.QuestionnaireResponseStatus.Completed,
+            Subject = new ResourceReference("Patient/pat-1"),
+        };
+
+        var result = await _controller.SubmitQuestionnaireResponse(response, CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(expected);
+    }
+
     [Fact]
     public async Task SubmitQuestionnaireResponse_StatusInProgress_Returns400()
     {

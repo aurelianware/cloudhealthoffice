@@ -82,6 +82,23 @@ public sealed class AdaptiveQuestionnaireEngine
         }.WithVersionAlgorithm();
     }
 
+    /// <summary>
+    /// The form a response answers, as a canonical: its <c>questionnaire</c>,
+    /// or, for an adaptive response that names its contained Questionnaire
+    /// (<c>#adaptive</c>), the form that Questionnaire is derived from
+    /// (spec-25). Null when a contained reference names nothing it contains.
+    /// </summary>
+    public static string? AnsweredForm(QuestionnaireResponse response)
+    {
+        var reference = response.Questionnaire?.Trim();
+        if (string.IsNullOrEmpty(reference) || !reference.StartsWith('#'))
+            return reference;
+
+        var contained = response.Contained.OfType<Questionnaire>()
+            .FirstOrDefault(q => string.Equals(q.Id, reference[1..], StringComparison.Ordinal));
+        return contained?.DerivedFrom.FirstOrDefault(d => !string.IsNullOrWhiteSpace(d))?.Trim();
+    }
+
     /// <summary>Validates <paramref name="response"/> and answers with the next question, or completes it.</summary>
     public NextQuestionResult Next(QuestionnaireResponse response, DateTimeOffset now)
     {

@@ -205,8 +205,10 @@ public class DtrController : FhirControllerBase
             return FhirBadRequest("QuestionnaireResponse.questionnaire reference is required");
 
         // Resolved as a canonical too: a DTR client answers the url|version the
-        // package named, not a local id.
-        if (!await _dtrService.QuestionnaireExistsAsync(response.Questionnaire, TenantId, FhirBaseUrl, ct))
+        // package named, not a local id. An adaptive response names its
+        // contained Questionnaire, which must derive from a form we publish.
+        if (AdaptiveQuestionnaireEngine.AnsweredForm(response) is not { Length: > 0 } answered
+            || !await _dtrService.QuestionnaireExistsAsync(answered, TenantId, FhirBaseUrl, ct))
             return FhirBadRequest(
                 $"Referenced Questionnaire '{response.Questionnaire}' does not exist");
 

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using FhirService.Services.Dtr;
 using Hl7.Fhir.Model;
 
 namespace FhirService.Services.Pas;
@@ -519,7 +520,9 @@ public static class PasAuthorizationMapper
                 continue;
             }
 
-            var questionnaire = response.Questionnaire?.Trim();
+            // An adaptive response names its contained Questionnaire; the record
+            // names the form it was derived from.
+            var questionnaire = AdaptiveQuestionnaireEngine.AnsweredForm(response);
             if (string.IsNullOrEmpty(questionnaire) || questionnaire.Length > 500)
             {
                 errors.Add(new(path, "The QuestionnaireResponse must name its Questionnaire (at most 500 characters)."));
