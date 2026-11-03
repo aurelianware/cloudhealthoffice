@@ -42,6 +42,8 @@ public class ClaimOutcomeWriterRouteGuardTests
             ["POST api/claims/admin/accumulators/accumulator-commit-pends/rerun"] = (Kind.StatusOrOutcomeWriter, "accumulator pend re-run through the pipeline"),
             ["POST api/claims/admin/accumulators/prior-auth-unavailable-pends/rerun"] = (Kind.StatusOrOutcomeWriter, "prior-auth pend re-run through the pipeline"),
             ["POST api/v1/claims/{predecessorClaimId}/adjustments"] = (Kind.StatusOrOutcomeWriter, "adjustment: new version supersedes the predecessor"),
+            ["POST api/v1/claims/retro-rate/reprocessing-runs/{runId}/execute"] = (Kind.StatusOrOutcomeWriter,
+                "retro rate reprocessing: creates adjustments through IClaimAdjustmentService (same path as POST adjustments), approved by a second person"),
             ["POST api/claims/admin/lifecycle/deny-backfill"] = (Kind.StatusOrOutcomeWriter, "one-time opt-in backfill: unremitted legacy Denied -> Deny (same adjudicated outcome, non-final phase)"),
             ["POST api/v1/claims/import/cpcds"] = (Kind.StatusOrOutcomeWriter,
                 "CPCDS import (claims:import): stores outcomes the plan's core adjudicated, never a CHO-adjudicated claim; " +
@@ -72,6 +74,10 @@ public class ClaimOutcomeWriterRouteGuardTests
             ["POST api/v1/claims/shadow-adjudication/runs"] = (Kind.NoStatusChange,
                 "shadow adjudication: re-adjudicates imported core claims through read-only stages only (no Persistence), " +
                 "stores comparisons in their own collection; the claim is never written"),
+            ["POST api/v1/claims/retro-rate/reprocessing-runs"] = (Kind.NoStatusChange,
+                "plans a retro rate reprocessing run in its own collection; changes no claim until approved and executed"),
+            ["POST api/v1/claims/retro-rate/reprocessing-runs/{runId}/approve"] = (Kind.NoStatusChange, "approves a reprocessing run (second person); writes no claim"),
+            ["POST api/v1/claims/retro-rate/reprocessing-runs/{runId}/cancel"] = (Kind.NoStatusChange, "cancels a reprocessing run; writes no claim"),
             ["POST api/v1/claims/retro-rate/impact-runs"] = (Kind.NoStatusChange,
                 "retro rate impact dry run: re-prices paid claims through the shadow pipeline's read-only stages, " +
                 "stores the results in their own collection; the claim is never written"),
@@ -116,7 +122,8 @@ public class ClaimOutcomeWriterRouteGuardTests
                 "POST api/v1/claims/{predecessorClaimId}/adjustments",
                 "POST api/claims/admin/lifecycle/deny-backfill",
                 "POST api/v1/claims/import/cpcds",
-                "POST api/v1/claims/import/cpcds/drops/run");
+                "POST api/v1/claims/import/cpcds/drops/run",
+                "POST api/v1/claims/retro-rate/reprocessing-runs/{runId}/execute");
     }
 
     [Theory]
