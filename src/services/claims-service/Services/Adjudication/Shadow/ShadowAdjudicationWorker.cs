@@ -56,6 +56,10 @@ public sealed class ShadowAdjudicationWorker : BackgroundService
         if (run is null)
             return false;
 
+        // No request here: the claim repository and the pipeline's HTTP shims read the
+        // tenant from the scope's adjudication context, the way the CPCDS drop sets it.
+        scope.ServiceProvider.GetRequiredService<IAdjudicationTenantContext>().TenantId = run.TenantId;
+
         try
         {
             await scope.ServiceProvider.GetRequiredService<IShadowAdjudicationService>().ProcessBackgroundRunAsync(run, ct);
