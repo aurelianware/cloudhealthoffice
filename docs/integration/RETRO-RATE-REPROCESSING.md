@@ -130,6 +130,22 @@ Limits:
   async runner that comes with the reprocessing run.
 - Nothing is adjusted. That is the next step.
 
+## Portal
+
+Operations → **Rate Change Reprocessing** (`/retro-rate`, needs
+`claims:adjust`) puts the steps on one page:
+
+- **Rate changes** lists the recorded fee schedule changes (schedule, revision,
+  effective date, codes whose rates moved, plan). **Measure impact** runs the
+  dry-run impact report for that revision.
+- **Impact runs** shows a run's totals (underpaid, overpaid, unchanged,
+  undecided, net), its notes, the largest providers and its claims, filterable
+  by direction. **Propose reprocessing** plans the adjustments.
+- **Reprocessing runs** shows what a run will adjust and what it skips and why.
+  **Approve** is disabled for the person who proposed it (claims-service also
+  refuses it); **Execute** creates the adjustments and shows each claim's
+  outcome. Proposed and approved runs can be cancelled.
+
 ## Coming next
 
 1. **Reprocessing run.** Approved by an operator; creates adjustments in bulk
