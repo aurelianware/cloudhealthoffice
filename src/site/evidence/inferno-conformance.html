@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Inferno Conformance Results for Payer FHIR APIs — Cloud Health Office</title>
-  <meta name="description" content="Nightly results from four ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, and Bulk Data with SMART Backend Services. Failures and known kit issues included." />
+  <meta name="description" content="Nightly results from six ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data with SMART Backend Services, Da Vinci PDex and Da Vinci DTR. Failures and known kit issues included." />
   <meta name="author" content="Aurelianware, Inc." />
   <link rel="canonical" href="https://cloudhealthoffice.com/evidence/inferno-conformance" />
 
@@ -12,11 +12,11 @@
   <meta property="og:site_name" content="Cloud Health Office" />
   <meta property="og:url" content="https://cloudhealthoffice.com/evidence/inferno-conformance" />
   <meta property="og:title" content="Judged every night by tests we did not write" />
-  <meta property="og:description" content="Nightly results from four ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, and Bulk Data with SMART Backend Services. Failures and known kit issues included." />
+  <meta property="og:description" content="Nightly results from six ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data with SMART Backend Services, Da Vinci PDex and Da Vinci DTR. Failures and known kit issues included." />
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/evidence/evidence-model.svg" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Judged every night by tests we did not write" />
-  <meta name="twitter:description" content="Nightly results from four ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, and Bulk Data with SMART Backend Services. Failures and known kit issues included." />
+  <meta name="twitter:description" content="Nightly results from six ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data with SMART Backend Services, Da Vinci PDex and Da Vinci DTR. Failures and known kit issues included." />
   <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/evidence/evidence-model.svg" />
 
   <script type="application/ld+json">
@@ -26,7 +26,7 @@
     {
       "@type": "TechArticle",
       "headline": "Inferno conformance results",
-      "description": "Nightly results from four ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, and Bulk Data with SMART Backend Services. Failures and known kit issues included.",
+      "description": "Nightly results from six ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data with SMART Backend Services, Da Vinci PDex and Da Vinci DTR. Failures and known kit issues included.",
       "url": "https://cloudhealthoffice.com/evidence/inferno-conformance",
       "isPartOf": {
         "@type": "WebSite",
@@ -168,8 +168,8 @@
         <nav class="ev-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/evidence">Evidence</a><span>/</span><a href="/evidence/inferno-conformance">Inferno conformance</a></nav>
         <span class="ev-eyebrow">Conformance kit evidence</span>
         <h1>Judged every night by <em>tests we did not write</em>.</h1>
-        <p class="ev-lede">Four open-source Inferno test kits run against Cloud Health Office on a nightly schedule: US Core, CARIN Blue Button, Da Vinci Plan-Net, and Bulk Data with SMART Backend Services. The latest results are published below as the kits reported them, including the failures.</p>
-        <div class="ev-badges"><span class="ev-badge ev-badge--cyan">US Core &middot; CARIN BB &middot; Plan-Net &middot; Bulk Data</span>
+        <p class="ev-lede">Six open-source Inferno test kits run against Cloud Health Office on a nightly schedule: US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data with SMART Backend Services, Da Vinci PDex (payer-to-payer member match) and Da Vinci DTR (prior authorization documentation). The latest results are published below as the kits reported them, including the failures.</p>
+        <div class="ev-badges"><span class="ev-badge ev-badge--cyan">US Core &middot; CARIN BB &middot; Plan-Net &middot; Bulk Data &middot; PDex &middot; DTR</span>
           <span class="ev-badge">Kits pinned by release and commit</span>
           <span class="ev-badge">Synthetic data</span>
           <span class="ev-badge ev-badge--amber">Not certification</span></div>
@@ -251,6 +251,18 @@
                 <td>Suite <code>bulk_data_v200</code>: the SMART Backend Services, Group export and Patient export groups. The client is a registered backend bound to a seeded provider.</td>
                 <td>The Provider Access and Payer-to-Payer APIs, due January 1, 2027, which must support FHIR Bulk Data with system-to-system authorization.</td>
               </tr>
+              <tr>
+                <td><span class="ev-what">Da Vinci PDex</span><p><a href="https://github.com/inferno-framework/davinci-pdex-test-kit">davinci-pdex-test-kit</a> v0.13.2</p></td>
+                <td>The CapabilityStatement declares <code>$member-match</code>; the HRex request (the member's demographics, the coverage to match and the member's consent) is valid; a match returns the member's identifier; and a request that matches no one is refused with an OperationOutcome.</td>
+                <td>Suite <code>pdex_payer_server</code>: the member-match workflow and no-match groups. The kit acts as the new payer and signs in with SMART Backend Services as a registered payer, so the token, the payer binding and the consent check are the real path.</td>
+                <td>The Payer-to-Payer API, due January 1, 2027: the new payer finds the member at the previous payer before asking for their data. PDex and HRex are the guides CMS recommends for it.</td>
+              </tr>
+              <tr>
+                <td><span class="ev-what">Da Vinci DTR</span><p><a href="https://github.com/inferno-framework/davinci-dtr-test-kit">davinci-dtr-test-kit</a> v0.18.0</p></td>
+                <td>DTR operations in the CapabilityStatement; <code>$questionnaire-package</code> by form, by CRD context and by order; adaptive forms through <code>$next-question</code>; <code>ValueSet/$expand</code>; every package validated against the DTR profiles; the error cases; and <code>$log-questionnaire-errors</code>.</td>
+                <td>Suite <code>dtr_payer_server_v220</code>: discovery, SMART Backend Services, the questionnaire operations and error logging. The kit plays a provider's DTR client against CHO's standard MRI form and its adaptive sleep-study form.</td>
+                <td>The Prior Authorization API, due January 1, 2027: the provider learns what documentation the plan needs and fills it in. DTR 2.2.0 is the guide CMS recommends for that step.</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -291,6 +303,14 @@
             <h3>Bulk Data: TLS and system export</h3>
             <p>The nightly runs on a private plain-HTTP network, so the token-endpoint TLS test is switched off with the kit's own setting. That group passed over real TLS on hosted Inferno against our demo environment on October 29, 2026. The system-level export group isn't run, because Cloud Health Office doesn't serve system-level <code>$export</code>.</p>
           </div>
+          <div class="ev-card">
+            <h3>PDex: payer-to-payer query groups not run</h3>
+            <p>Kit v0.13.2 is generated from PDex 2.0.0. Cloud Health Office exchanges payer-to-payer data the PDex 2.1.0 way, by bulk <code>$davinci-data-export</code> after the member match, so the kit's 2.0 query workflow groups are not run. The member-match groups, which both versions share, are.</p>
+          </div>
+          <div class="ev-card">
+            <h3>DTR: three tests no conformant server can pass</h3>
+            <p>In kit v0.18.0, the latest release, two must-support tests require elements that the DTR 2.2.0 profiles prohibit (the base Questionnaire's assemble-expectation and item display extensions, and items on an adaptive search form, which carries none by design). A third reads a Library's terminology dependencies as missing Libraries. The three are recorded and not counted. Every returned Questionnaire and Library is still validated against its DTR profile by the kit's other tests.</p>
+          </div>
         </div>
       </div>
     </section>
@@ -300,7 +320,7 @@
         <span class="ev-eyebrow">Reproducible</span>
         <h2>How the run works, and how to repeat it</h2>
         <p>
-          The nightly job starts a Cloud Health Office stack and the four kits together on an isolated network. It
+          The nightly job starts a Cloud Health Office stack and the six kits together on an isolated network. It
           seeds synthetic members, claims, coverage and a provider directory, checks that Cloud Health Office
           answers its own <code>metadata</code> endpoint, and then hands each kit its inputs. Each kit is pinned to
           a release tag and commit in <code>interop/versions.json</code>. The groups each kit runs, and the known kit
