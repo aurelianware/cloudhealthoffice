@@ -63,6 +63,8 @@ public class ClaimOutcomeWriterRouteGuardTests
             ["POST api/claims/finance/texas/claims-lag/workbook"] = (Kind.NoStatusChange, "read: fills HHSC's uploaded claims lag workbook; writes no claim"),
             ["POST api/claims/finance/texas/tpr"] = (Kind.NoStatusChange, "read: Texas TPL/TPR Report (UMCM 5.3.4.1) figures"),
             ["POST api/claims/finance/texas/tpr/workbook"] = (Kind.NoStatusChange, "read: fills HHSC's uploaded TPL/TPR workbook; writes no claim"),
+            ["POST api/claims/finance/texas/claims-summary"] = (Kind.NoStatusChange, "read: builds the HHSC Claims Summary Report (UMCM 5.24.1) from claims; writes no claim"),
+            ["POST api/claims/finance/texas/claims-summary/text"] = (Kind.NoStatusChange, "read: the same Claims Summary Report as the HHSC text file; writes no claim"),
             ["PUT api/claims/{id}/ai-examination"] = (Kind.NoStatusChange, "advisory AI recommendation"),
             ["POST api/claims/{id}/ai-examination/agreement"] = (Kind.NoStatusChange, "examiner feedback on the AI recommendation"),
             ["POST api/claims/{claimId}/notes"] = (Kind.NoStatusChange, "appends a reviewer note; never touches the claim"),
