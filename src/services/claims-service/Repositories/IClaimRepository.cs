@@ -109,6 +109,20 @@ public interface IClaimRepository
     Task<IReadOnlyList<Finance.TplReportClaim>> GetTplReportClaimsAsync(DateTime adjudicatedFrom, DateTime adjudicatedBefore, CancellationToken ct = default)
         => throw new NotSupportedException("The TPL/TPR report needs the MongoDB claim store.");
 
+    /// <summary>
+    /// Medicaid claim versions adjudicated in [<paramref name="adjudicatedFrom"/>,
+    /// <paramref name="adjudicatedBefore"/>), for the Texas Claims Summary Report.
+    /// </summary>
+    Task<IReadOnlyList<Finance.ClaimsSummaryClaim>> GetClaimsSummaryAdjudicatedAsync(DateTime adjudicatedFrom, DateTime adjudicatedBefore, CancellationToken ct = default)
+        => throw new NotSupportedException("The Claims Summary Report needs the MongoDB claim store.");
+
+    /// <summary>
+    /// Medicaid claim versions received before <paramref name="before"/> and not
+    /// adjudicated by then (open at that instant), for the Texas Claims Summary Report.
+    /// </summary>
+    Task<IReadOnlyList<Finance.ClaimsSummaryClaim>> GetClaimsSummaryOpenAsync(DateTime before, CancellationToken ct = default)
+        => throw new NotSupportedException("The Claims Summary Report needs the MongoDB claim store.");
+
     Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByIdsAsync(
         IReadOnlyCollection<string> claimIds,
         string? memberId,

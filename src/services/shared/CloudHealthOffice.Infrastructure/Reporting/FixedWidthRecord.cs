@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace AppealsService.Reports.Texas;
+namespace CloudHealthOffice.Infrastructure.Reporting;
 
 /// <summary>One field of an HHSC fixed-width text file: its 1-based start and width, from the layout tab.</summary>
 public sealed record FixedWidthField(string Name, int Start, int Width)
