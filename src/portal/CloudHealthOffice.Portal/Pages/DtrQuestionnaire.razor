@@ -121,9 +121,25 @@
                     {
                         <MudChip Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.Check" data-testid="dtr-form-saved">Saved</MudChip>
                     }
+                    @if (form.Adaptive is not null)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block" data-testid="dtr-adaptive-note">
+                            The plan asks these questions one at a time; each answer decides the next question.
+                        </MudText>
+                    }
                     @foreach (var item in form.Form.Items)
                     {
-                        <QuestionnaireItemField Form="form.Form" Item="item" ReadOnly="form.Saved is not null" Changed="StateHasChanged" />
+                        <QuestionnaireItemField Form="form.Form" Item="item" ReadOnly="form.Saved is not null || form.Adaptive?.Completed == true" Changed="StateHasChanged" />
+                    }
+                    @if (form.Adaptive is { Completed: false } && form.Saved is null)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-2" OnClick="() => NextQuestion(form)"
+                                   Disabled="_busy" data-testid="dtr-next-question">Next question</MudButton>
+                    }
+                    else if (form.Adaptive is { Completed: true } && form.Saved is null)
+                    {
+                        <MudButton Variant="Variant.Text" Class="mt-2" OnClick="() => StartOver(form)" Disabled="_busy"
+                                   data-testid="dtr-start-over">Start this form over</MudButton>
                     }
                 </div>
                 @if (index < _forms.Count - 1)
@@ -247,9 +263,19 @@
 
     private sealed class OpenForm(QuestionnaireForm form, IReadOnlyList<Fhir.Extension> extensions)
     {
-        public QuestionnaireForm Form { get; } = form;
+        private readonly QuestionnaireForm _form = form;
+
+        /// <summary>The questions on the page: an adaptive form's are those asked so far.</summary>
+        public QuestionnaireForm Form => Adaptive?.Form ?? _form;
+
+        /// <summary>The form as packaged (its focus codes name the service, even for an adaptive form).</summary>
+        public QuestionnaireForm Packaged => _form;
         public IReadOnlyList<Fhir.Extension> Extensions { get; } = extensions;
         public Fhir.QuestionnaireResponse? Saved { get; set; }
+
+        /// <summary>Set for an adaptive form, with the package's draft to start over from.</summary>
+        public AdaptiveForm? Adaptive { get; set; }
+        public Fhir.QuestionnaireResponse? Draft { get; init; }
     }
 
     private sealed record ServiceChoice(string Key, string Label, Fhir.Coding Coding);
@@ -346,16 +372,39 @@
         var package = await Dtr.GetPackageAsync(coverage, canonicals, canonicals.Count == 0 ? _requestedCode : null);
         _forms.Clear();
         foreach (var packaged in package.Forms)
-            _forms.Add(new OpenForm(new QuestionnaireForm(packaged.Questionnaire, packaged.ValueSets), packaged.ResponseExtensions));
+        {
+            var form = new OpenForm(new QuestionnaireForm(packaged.Questionnaire, packaged.ValueSets), packaged.ResponseExtensions)
+            {
+                Draft = packaged.IsAdaptive ? packaged.Draft : null,
+            };
+            // An adaptive form has no questions until the plan asks the first.
+            if (form.Draft is not null)
+                form.Adaptive = new AdaptiveForm(await Dtr.NextQuestionAsync(form.Draft));
+            _forms.Add(form);
+        }
         _packageMessages = package.Messages;
         if (_forms.Count == 0 && _packageMessages.Count == 0)
             _packageMessages = ["The plan has no documentation form for this request."];
         PrepareServiceChoices();
     }
 
+    private Task NextQuestion(OpenForm form)
+    {
+        _formProblems = form.Form.Validate();
+        if (_formProblems.Count > 0) return Task.CompletedTask;
+        return Run(async () => form.Adaptive!.Load(await Dtr.NextQuestionAsync(form.Adaptive.NextRequest(DateTimeOffset.UtcNow))));
+    }
+
+    private Task StartOver(OpenForm form)
+        => Run(async () => form.Adaptive = new AdaptiveForm(await Dtr.NextQuestionAsync(form.Draft!)));
+
     private async Task SaveAnswers()
     {
         _formProblems = _forms.SelectMany(f => f.Form.Validate()).ToList();
+        _formProblems = _formProblems
+            .Concat(_forms.Where(f => f.Adaptive is { Completed: false })
+                .Select(f => $"{f.Form.Title}: answer the plan's questions until it has no more (use Next question)."))
+            .ToList();
         if (_formProblems.Count > 0) return;
 
         await Run(async () =>
@@ -363,7 +412,12 @@
             var subject = new Fhir.ResourceReference($"Patient/{_member!.Patient.Id}");
             foreach (var form in _forms.Where(f => f.Saved is null))
             {
-                var response = form.Form.ToResponse(subject, form.Extensions, DateTimeOffset.UtcNow);
+                // An adaptive form is saved as the plan completed it: the
+                // response contains the questions it was asked.
+                var response = form.Adaptive is { } adaptive
+                    ? (Fhir.QuestionnaireResponse)adaptive.Response.DeepCopy()
+                    : form.Form.ToResponse(subject, form.Extensions, DateTimeOffset.UtcNow);
+                response.Subject ??= subject;
                 form.Saved = await Dtr.SaveResponseAsync(response);
                 _saved.Add(form.Saved);
             }
@@ -382,7 +436,7 @@
     {
         var codes = new List<Fhir.Coding>();
         if (_requestedCode is not null) codes.Add(_requestedCode);
-        codes.AddRange(_forms.SelectMany(f => f.Form.FocusCodes));
+        codes.AddRange(_forms.SelectMany(f => f.Packaged.FocusCodes));
 
         _serviceChoices = codes
             .GroupBy(c => $"{c.System}|{c.Code}", StringComparer.Ordinal)

@@ -29,6 +29,9 @@ public interface IDtrPortalService
     Task<DtrPackage> GetPackageAsync(
         Coverage coverage, IReadOnlyList<string> questionnaires, Coding? serviceCode, CancellationToken ct = default);
 
+    /// <summary>An adaptive form's next question: the response with the answers so far, as the plan returns it.</summary>
+    Task<QuestionnaireResponse> NextQuestionAsync(QuestionnaireResponse response, CancellationToken ct = default);
+
     Task<QuestionnaireResponse> SaveResponseAsync(QuestionnaireResponse response, CancellationToken ct = default);
 
     Task<PasSubmitOutcome> SubmitPriorAuthAsync(Bundle request, CancellationToken ct = default);
@@ -51,8 +54,17 @@ public sealed record DtrMember(Patient Patient, IReadOnlyList<Coverage> Coverage
     }
 }
 
-/// <summary>One packaged form: the Questionnaire, its expanded ValueSets and the draft response's extensions to carry over.</summary>
-public sealed record DtrPackagedForm(Questionnaire Questionnaire, IReadOnlyList<ValueSet> ValueSets, IReadOnlyList<Extension> ResponseExtensions);
+/// <summary>
+/// One packaged form: the Questionnaire, its expanded ValueSets, the draft
+/// response's extensions to carry over, and the draft itself (which an
+/// adaptive form is answered from).
+/// </summary>
+public sealed record DtrPackagedForm(
+    Questionnaire Questionnaire, IReadOnlyList<ValueSet> ValueSets, IReadOnlyList<Extension> ResponseExtensions,
+    QuestionnaireResponse? Draft = null)
+{
+    public bool IsAdaptive => AdaptiveForm.IsAdaptiveDraft(Draft);
+}
 
 public sealed record DtrPackage(IReadOnlyList<DtrPackagedForm> Forms, IReadOnlyList<string> Messages);
 
@@ -166,7 +178,8 @@ public sealed class DtrPortalService : IDtrPortalService
                 forms.Add(new DtrPackagedForm(
                     questionnaire,
                     resources.OfType<ValueSet>().ToList(),
-                    draft?.Extension.ToList() ?? []));
+                    draft?.Extension.ToList() ?? [],
+                    draft));
             }
             else if (parameter.Name == "outcome" && parameter.Resource is OperationOutcome outcome)
             {
@@ -176,6 +189,10 @@ public sealed class DtrPortalService : IDtrPortalService
 
         return new DtrPackage(forms, messages);
     }
+
+    public async Task<QuestionnaireResponse> NextQuestionAsync(QuestionnaireResponse response, CancellationToken ct = default)
+        => await PostAsync<QuestionnaireResponse>("Questionnaire/$next-question", response, ct)
+           ?? throw new DtrRequestException(HttpStatusCode.BadGateway, ["The FHIR service did not return the next question."]);
 
     public async Task<QuestionnaireResponse> SaveResponseAsync(QuestionnaireResponse response, CancellationToken ct = default)
         => await PostAsync<QuestionnaireResponse>("QuestionnaireResponse", response, ct)
@@ -218,11 +235,16 @@ public sealed class DtrPortalService : IDtrPortalService
         var response = await GetAsync<QuestionnaireResponse>($"QuestionnaireResponse/{id}", ct, notFoundIsNull: true);
         if (response is null) return null;
 
-        var (url, version) = SplitCanonical(response.Questionnaire);
+        // An adaptive form's response contains the questions it was asked and
+        // names the form they derive from.
+        var contained = AdaptiveForm.IsAdaptiveDraft(response)
+            ? response.Contained.OfType<Questionnaire>().FirstOrDefault(q => q.Id == response.Questionnaire![1..])
+            : null;
+        var (url, version) = SplitCanonical(contained is null ? response.Questionnaire : contained.DerivedFrom.FirstOrDefault());
         var questionnaire = (await ListAllQuestionnairesAsync(ct))
             .Where(q => q.Url == url && (version is null || q.Version == version))
             .FirstOrDefault();
-        return (response, questionnaire);
+        return (response, contained ?? questionnaire);
     }
 
     private async Task<IReadOnlyList<Questionnaire>> ListAllQuestionnairesAsync(CancellationToken ct)
