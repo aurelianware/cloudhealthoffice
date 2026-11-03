@@ -111,6 +111,25 @@ public class DataDropSettingsView
     public string? UpdatedBy { get; set; }
 }
 
+/// <summary>
+/// Whether claims-service shadow-adjudicates this tenant's imported claims:
+/// the deployment's switch and the tenant's own choice.
+/// </summary>
+public class ShadowAdjudicationSettingsView
+{
+    public string TenantId { get; set; } = string.Empty;
+    public bool EnabledForDeployment { get; set; }
+    public bool Enabled { get; set; }
+    public bool Running { get; set; }
+
+    /// <summary>Configuration or Stored.</summary>
+    public string Source { get; set; } = string.Empty;
+    public int MaxClaimsPerRun { get; set; }
+    public decimal Tolerance { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 /// <summary>The tenant's hosted SFTP login, as tenant-service describes it.</summary>
 public class DataDropSftpAccount
 {

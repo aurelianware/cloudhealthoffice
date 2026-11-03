@@ -1,5 +1,4 @@
 using ClaimsService.Services.Adjudication.Shadow;
-using Microsoft.Extensions.Options;
 
 namespace ClaimsService.Import.Cpcds.Drop;
 
@@ -35,24 +34,28 @@ public sealed class ShadowAdjudicateAfterImport : ICpcdsImportBatchCompletedHand
 {
     private readonly IShadowAdjudicationService _shadow;
     private readonly CpcdsDropTenants _tenants;
+    private readonly ShadowAdjudicationTenants _shadowTenants;
     private readonly ShadowAdjudicationOptions _shadowOptions;
 
     public ShadowAdjudicateAfterImport(
         IShadowAdjudicationService shadow,
         CpcdsDropTenants tenants,
-        IOptions<ShadowAdjudicationOptions> shadowOptions)
+        ShadowAdjudicationTenants shadowTenants)
     {
         _shadow = shadow;
         _tenants = tenants;
-        _shadowOptions = shadowOptions.Value;
+        _shadowTenants = shadowTenants;
+        _shadowOptions = shadowTenants.Options;
     }
 
     public async Task<string?> OnBatchImportedAsync(CpcdsImportBatchCompleted batch, CancellationToken ct)
     {
         if (await _tenants.ResolveAsync(batch.TenantId, ct) is not { ShadowAfterImport: true })
             return null;
-        if (!_shadowOptions.IsEnabledFor(batch.TenantId))
-            return $"Shadow adjudication after import is on for this tenant but {ShadowAdjudicationOptions.SectionName} is not enabled for it; skipped.";
+        if (!await _shadowTenants.IsEnabledForAsync(batch.TenantId, ct))
+            return _shadowOptions.Enabled
+                ? "Shadow adjudication after import is on for this tenant's drop, but shadow adjudication is off for the tenant; skipped. Turn it on in the portal (Shadow adjudication)."
+                : $"Shadow adjudication after import is on for this tenant's drop, but {ShadowAdjudicationOptions.SectionName}:Enabled is off in this deployment; skipped.";
         if (batch.Created + batch.Updated + batch.Unchanged == 0)
             return null;
 

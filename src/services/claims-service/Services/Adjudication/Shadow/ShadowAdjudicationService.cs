@@ -1,7 +1,6 @@
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using CloudHealthOffice.Infrastructure.Logging;
-using Microsoft.Extensions.Options;
 
 namespace ClaimsService.Services.Adjudication.Shadow;
 
@@ -26,6 +25,7 @@ public sealed class ShadowAdjudicationService : IShadowAdjudicationService
     private readonly IClaimImportTransactionRepository _transactions;
     private readonly IShadowAdjudicationPipeline _pipeline;
     private readonly IShadowAdjudicationRepository _store;
+    private readonly ShadowAdjudicationTenants _tenants;
     private readonly ShadowAdjudicationOptions _options;
     private readonly ILogger<ShadowAdjudicationService> _logger;
 
@@ -34,14 +34,15 @@ public sealed class ShadowAdjudicationService : IShadowAdjudicationService
         IClaimImportTransactionRepository transactions,
         IShadowAdjudicationPipeline pipeline,
         IShadowAdjudicationRepository store,
-        IOptions<ShadowAdjudicationOptions> options,
+        ShadowAdjudicationTenants tenants,
         ILogger<ShadowAdjudicationService> logger)
     {
         _claims = claims;
         _transactions = transactions;
         _pipeline = pipeline;
         _store = store;
-        _options = options.Value;
+        _tenants = tenants;
+        _options = tenants.Options;
         _logger = logger;
     }
 
@@ -50,9 +51,10 @@ public sealed class ShadowAdjudicationService : IShadowAdjudicationService
     {
         ArgumentException.ThrowIfNullOrEmpty(tenantId);
         ArgumentNullException.ThrowIfNull(request);
-        if (!_options.IsEnabledFor(tenantId))
-            throw new ShadowAdjudicationDisabledException(
-                $"Shadow adjudication is not enabled for this tenant ({ShadowAdjudicationOptions.SectionName}).");
+        if (!await _tenants.IsEnabledForAsync(tenantId, ct).ConfigureAwait(false))
+            throw new ShadowAdjudicationDisabledException(_options.Enabled
+                ? "Shadow adjudication is off for this tenant. Turn it on in the portal (Shadow adjudication) or with PUT /api/v1/claims/shadow-adjudication/settings."
+                : $"Shadow adjudication is off in this deployment ({ShadowAdjudicationOptions.SectionName}:Enabled).");
 
         var max = Math.Max(1, _options.MaxClaimsPerRun);
         var limit = Math.Clamp(request.Limit ?? max, 1, max);

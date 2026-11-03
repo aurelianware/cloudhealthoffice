@@ -562,12 +562,17 @@ builder.Services.AddScoped<IClaimAdjudicationOrchestrator>(sp => sp.GetRequiredS
 builder.Services.AddScoped<IClaimApprovalReadjudicator>(sp => sp.GetRequiredService<ClaimAdjudicationOrchestrator>());
 // Shadow adjudication: the same pipeline, read-only stages only, run on claims
 // another core adjudicated (CPCDS file drop) to compare answers. Off unless
-// Adjudication:Shadow:Enabled. See docs/integration/SHADOW-ADJUDICATION.md.
+// Adjudication:Shadow:Enabled (the deployment's switch); within it, each tenant
+// turns it on or off from the portal. See docs/integration/SHADOW-ADJUDICATION.md.
 builder.Services.AddScoped<IShadowAdjudicationPipeline>(sp => sp.GetRequiredService<ClaimAdjudicationOrchestrator>());
 builder.Services.Configure<ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationOptions>(
     builder.Configuration.GetSection(ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationOptions.SectionName));
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationRepository,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationRepositoryMongo>();
+// Each tenant's own shadow on/off switch (portal), within the deployment's switch.
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationTenantSettingsRepository,
+    ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationTenantSettingsRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationTenants>();
 // Medicaid TPL recovery cases (pay-and-chase and retroactive), with the
 // state retention clock and monthly report.
 builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryRepository, ClaimsService.Services.Tpl.TplRecoveryRepositoryMongo>();

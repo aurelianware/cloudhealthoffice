@@ -289,6 +289,28 @@ public sealed class CpcdsDropRunnerTests : IDisposable
 
     // ── shadow adjudication after import ────────────────────────────────
 
+    private static ShadowAdjudicationTenants ShadowTenants(ShadowAdjudicationOptions options) =>
+        new(Options.Create(options), new InMemoryShadowAdjudicationTenantSettingsRepository());
+
+    [Fact]
+    public async Task Shadow_adjudication_after_import_follows_the_tenants_own_shadow_switch()
+    {
+        _options.Tenants[Tenant].ShadowAfterImport = true;
+        var shadow = Substitute.For<IShadowAdjudicationService>();
+        var stored = new InMemoryShadowAdjudicationTenantSettingsRepository();
+        var shadowTenants = new ShadowAdjudicationTenants(
+            Options.Create(new ShadowAdjudicationOptions { Enabled = true, Tenants = ["someone-else"] }), stored);
+
+        (await new ShadowAdjudicateAfterImport(shadow, Tenants(), shadowTenants).OnBatchImportedAsync(Batch(), default))
+            .Should().Contain("off for the tenant");
+
+        await shadowTenants.SaveAsync(Tenant, true, "admin", DateTime.UtcNow);
+        shadow.RunAsync(Tenant, Arg.Any<ShadowAdjudicationRunRequest>(), "cpcds-drop", Arg.Any<CancellationToken>())
+            .Returns(new ShadowAdjudicationRunResponse { Run = new ShadowAdjudicationRun { Id = "s-3", ClaimsRequested = 3, ClaimsCompared = 3 }, Results = [] });
+        (await new ShadowAdjudicateAfterImport(shadow, Tenants(), shadowTenants).OnBatchImportedAsync(Batch(), default))
+            .Should().Contain("s-3");
+    }
+
     private static CpcdsImportBatchCompleted Batch() => new(Tenant, "run-1", "batch-1", "qnxt", "claims.csv", 2, 0, 1, 0);
 
     [Fact]
@@ -298,8 +320,7 @@ public sealed class CpcdsDropRunnerTests : IDisposable
         var shadow = Substitute.For<IShadowAdjudicationService>();
         shadow.RunAsync(Tenant, Arg.Any<ShadowAdjudicationRunRequest>(), "cpcds-drop", Arg.Any<CancellationToken>())
             .Returns(new ShadowAdjudicationRunResponse { Run = new ShadowAdjudicationRun { Id = "s-1", ClaimsRequested = 3, ClaimsCompared = 3 }, Results = [] });
-        var handler = new ShadowAdjudicateAfterImport(shadow, Tenants(),
-            Options.Create(new ShadowAdjudicationOptions { Enabled = true }));
+        var handler = new ShadowAdjudicateAfterImport(shadow, Tenants(), ShadowTenants(new ShadowAdjudicationOptions { Enabled = true }));
 
         var note = await handler.OnBatchImportedAsync(Batch(), default);
 
@@ -315,8 +336,7 @@ public sealed class CpcdsDropRunnerTests : IDisposable
         var shadow = Substitute.For<IShadowAdjudicationService>();
         shadow.RunAsync(Tenant, Arg.Any<ShadowAdjudicationRunRequest>(), "cpcds-drop", Arg.Any<CancellationToken>())
             .Returns(new ShadowAdjudicationRunResponse { Run = new ShadowAdjudicationRun { Id = "s-2", ClaimsRequested = 200, ClaimsCompared = 198 }, Results = [] });
-        var handler = new ShadowAdjudicateAfterImport(shadow, Tenants(),
-            Options.Create(new ShadowAdjudicationOptions { Enabled = true, MaxClaimsPerRun = 200 }));
+        var handler = new ShadowAdjudicateAfterImport(shadow, Tenants(), ShadowTenants(new ShadowAdjudicationOptions { Enabled = true, MaxClaimsPerRun = 200 }));
 
         var note = await handler.OnBatchImportedAsync(Batch() with { Created = 450, Unchanged = 50 }, default);
 
@@ -329,12 +349,12 @@ public sealed class CpcdsDropRunnerTests : IDisposable
         var shadow = Substitute.For<IShadowAdjudicationService>();
         var off = new ShadowAdjudicationOptions { Enabled = false };
 
-        (await new ShadowAdjudicateAfterImport(shadow, Tenants(), Options.Create(off))
+        (await new ShadowAdjudicateAfterImport(shadow, Tenants(), ShadowTenants(off))
             .OnBatchImportedAsync(Batch(), default)).Should().BeNull();
 
         _options.Tenants[Tenant].ShadowAfterImport = true;
-        (await new ShadowAdjudicateAfterImport(shadow, Tenants(), Options.Create(off))
-            .OnBatchImportedAsync(Batch(), default)).Should().Contain("not enabled");
+        (await new ShadowAdjudicateAfterImport(shadow, Tenants(), ShadowTenants(off))
+            .OnBatchImportedAsync(Batch(), default)).Should().Contain("off in this deployment");
         await shadow.DidNotReceiveWithAnyArgs().RunAsync(default!, default!, default, default);
     }
 
