@@ -1,0 +1,538 @@
+@page "/retro-rate"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject IRetroRateService RetroRate
+@inject IUserContextService UserContextService
+@inject ISnackbar Snackbar
+
+@*
+    Retro rate reprocessing: when a fee schedule changes, measure what it does
+    to claims already paid (a dry run), then propose a reprocessing run that a
+    second person approves and executes. Underpayments are paid; overpayments
+    are recouped only on plans that opt in. Needs claims:adjust.
+    See docs/integration/RETRO-RATE-REPROCESSING.md.
+*@
+
+<PageTitle>Rate change reprocessing - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="claims:adjust" RoleName="Claims Adjuster">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.PublishedWithChanges" Class="mr-2" />
+        Rate change reprocessing
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        When a fee schedule changes, see which paid claims it touches and what they would be paid now, then adjust them with a second person's approval.
+        Underpayments are paid; overpayments are recouped only on plans that opt in.
+    </MudText>
+
+    @if (_error != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _error = null" data-testid="retro-error">@_error</MudAlert>
+    }
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    <MudTabs @bind-ActivePanelIndex="_tab" Elevation="1" Rounded="true" PanelClass="pt-4">
+        <MudTabPanel Text="Rate changes" data-testid="tab-changes">
+            <MudSimpleTable Dense="true" Hover="true" data-testid="changes-table">
+                <thead>
+                    <tr><th>Schedule</th><th>Change</th><th>Effective</th><th>Codes</th><th>Plan</th><th>When</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in _changes)
+                    {
+                        <tr data-testid="change-row">
+                            <td><strong>@c.FeeScheduleName</strong></td>
+                            <td>@c.KindLabel @(c.PreviousRevision is { } p ? $"(rev {p} to {c.NewRevision})" : $"(rev {c.NewRevision})")</td>
+                            <td>@c.EffectiveDate.ToString("MM/dd/yyyy")@(c.TermDate is { } t ? " - " + t.ToString("MM/dd/yyyy") : "")</td>
+                            <td>
+                                @c.CodesSummary
+                                @if (c.LinesRateIncreased + c.LinesRateDecreased > 0)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@c.LinesRateIncreased up, @c.LinesRateDecreased down</MudText>
+                                }
+                            </td>
+                            <td>@(c.DefaultForPlanId ?? "-")</td>
+                            <td>@c.ChangedAt.ToLocalTime().ToString("MM/dd/yyyy HH:mm")</td>
+                            <td>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" Disabled="_busy"
+                                           OnClick="@(() => MeasureAsync(c))" data-testid="measure-button">Measure impact</MudButton>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+            @if (!_loading && _changes.Count == 0)
+            {
+                <MudText Class="pa-4" Color="Color.Secondary" data-testid="changes-empty">
+                    No fee schedule changes recorded yet. Every create or replace of a fee schedule shows up here.
+                </MudText>
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Impact runs" data-testid="tab-impact">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudSimpleTable Dense="true" Hover="true" data-testid="impact-runs">
+                        <thead><tr><th>Run</th><th>Net</th></tr></thead>
+                        <tbody>
+                            @foreach (var r in _impactRuns)
+                            {
+                                <tr data-testid="impact-run-row" style="cursor: pointer;@(r.Id == _impact?.Id ? " background: var(--cb-accent-bg-5);" : "")"
+                                    @onclick="@(() => OpenImpactAsync(r))">
+                                    <td>
+                                        <MudText Typo="Typo.body2"><strong>@r.FeeScheduleName</strong> rev @r.NewRevision</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@r.ClaimsAffected claims · @r.CompletedAtUtc.ToLocalTime().ToString("MM/dd/yyyy HH:mm")</MudText>
+                                    </td>
+                                    <td>@Money(r.NetPaidDelta)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                    @if (_impactRuns.Count == 0)
+                    {
+                        <MudText Class="pa-4" Color="Color.Secondary">No impact runs yet. Measure a rate change to start one.</MudText>
+                    }
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    @if (_impact is { } run)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" data-testid="impact-detail">
+                            <MudText Typo="Typo.h5">@run.FeeScheduleName, revision @run.NewRevision</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                                @run.ChangeKind · effective @run.EffectiveDate.ToString("MM/dd/yyyy") · @run.CandidatesRead.ToString("N0") paid claims read@(run.Truncated ? " (more in scope)" : "")
+                            </MudText>
+                            <MudGrid Spacing="2" Class="mb-3">
+                                @Tile("Underpaid", run.Count("Underpaid"), run.TotalUnderpaid, "impact-underpaid")
+                                @Tile("Overpaid", run.Count("Overpaid"), run.TotalOverpaid, "impact-overpaid")
+                                @Tile("Unchanged", run.Count("Unchanged"), null, "impact-unchanged")
+                                @Tile("Undecided", run.Count("Undecided"), null, "impact-undecided")
+                            </MudGrid>
+                            <MudText Typo="Typo.body1" Class="mb-2" data-testid="impact-net">
+                                Net to providers: <strong>@Money(run.NetPaidDelta)</strong> · member cost share change @Money(run.NetMemberLiabilityDelta) (estimate)
+                            </MudText>
+                            @foreach (var note in run.Notes)
+                            {
+                                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-1" data-testid="impact-note">@note</MudAlert>
+                            }
+                            @if (run.Failed.Count > 0)
+                            {
+                                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-1">@run.Failed.Count claim(s) could not be re-priced: @string.Join(", ", run.Failed.Take(5))</MudAlert>
+                            }
+
+                            @if (run.TopProviders.Count > 0)
+                            {
+                                <MudText Typo="Typo.h6" Class="mt-3">Largest providers</MudText>
+                                <MudSimpleTable Dense="true" data-testid="impact-providers">
+                                    <thead><tr><th>Billing NPI</th><th>Claims</th><th>Underpaid</th><th>Overpaid</th><th>Net</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var p in run.TopProviders.Take(10))
+                                        {
+                                            <tr><td>@(string.IsNullOrEmpty(p.BillingProviderNpi) ? "-" : p.BillingProviderNpi)</td><td>@p.Claims</td><td>@Money(p.Underpaid)</td><td>@Money(p.Overpaid)</td><td>@Money(p.Net)</td></tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            }
+
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-3">
+                                <MudText Typo="Typo.h6">Claims</MudText>
+                                <MudSelect T="string" Value="_direction" ValueChanged="FilterAsync" Label="Direction" Dense="true" Margin="Margin.Dense"
+                                           Variant="Variant.Outlined" Clearable="true" Style="max-width: 200px;" data-testid="impact-direction">
+                                    @foreach (var d in Directions)
+                                    {
+                                        <MudSelectItem Value="@d">@d</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudStack>
+                            <MudSimpleTable Dense="true" Hover="true" data-testid="impact-results">
+                                <thead><tr><th>Claim</th><th>Service date</th><th>Provider</th><th>Plan</th><th>Matched by</th><th>Paid</th><th>Now</th><th>Difference</th><th></th></tr></thead>
+                                <tbody>
+                                    @foreach (var c in _results)
+                                    {
+                                        <tr data-testid="impact-result-row">
+                                            <td><MudLink Href="@($"/claims/{Uri.EscapeDataString(c.ClaimId)}")">@(string.IsNullOrEmpty(c.ClaimNumber) ? c.ClaimId : c.ClaimNumber)</MudLink></td>
+                                            <td>@c.ServiceDateFrom.ToString("MM/dd/yyyy")</td>
+                                            <td>@c.BillingProviderNpi</td>
+                                            <td>@c.BenefitPlanId</td>
+                                            <td>@c.Match</td>
+                                            <td>@Money(c.Paid)</td>
+                                            <td>@(c.Direction == "Undecided" ? "-" : Money(c.Repriced))</td>
+                                            <td>@(c.Direction == "Undecided" ? "-" : Money(c.NetPaidDelta))</td>
+                                            <td>
+                                                <MudChip T="string" Size="Size.Small" Color="DirectionColor(c.Direction)" Variant="Variant.Outlined">@c.Direction</MudChip>
+                                                @if (c.PendCode is { } pc)
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary" title="@c.PendReason">@pc</MudText>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                            @if (_results.Count == 0)
+                            {
+                                <MudText Class="pa-2" Color="Color.Secondary">No claims@(_direction is null ? "" : " " + _direction.ToLowerInvariant()).</MudText>
+                            }
+
+                            <MudPaper Class="pa-3 mt-3" Outlined="true">
+                                @if (run.Count("Underpaid") + run.Count("Overpaid") == 0)
+                                {
+                                    <MudText Color="Color.Secondary">Nothing to adjust: no claim's payment changes.</MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Class="mb-2">
+                                        Propose a reprocessing run to adjust these claims. Nothing changes until someone else approves it and it is executed.
+                                    </MudText>
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="@(() => ProposeAsync(run))" data-testid="propose-button">
+                                        Propose reprocessing
+                                    </MudButton>
+                                }
+                            </MudPaper>
+                        </MudPaper>
+                    }
+                    else
+                    {
+                        <MudPaper Class="pa-6" Outlined="true"><MudText Color="Color.Secondary">Choose an impact run to see its claims.</MudText></MudPaper>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Reprocessing runs" data-testid="tab-reprocessing">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudSimpleTable Dense="true" Hover="true" data-testid="reprocessing-runs">
+                        <thead><tr><th>Run</th><th>Status</th></tr></thead>
+                        <tbody>
+                            @foreach (var r in _reprocessingRuns)
+                            {
+                                <tr data-testid="reprocessing-run-row" style="cursor: pointer;@(r.Id == _reprocessing?.Id ? " background: var(--cb-accent-bg-5);" : "")"
+                                    @onclick="@(() => _reprocessing = r)">
+                                    <td>
+                                        <MudText Typo="Typo.body2"><strong>@r.FeeScheduleName</strong> rev @r.Revision</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@r.ClaimsToAdjust claims · @r.CreatedAtUtc.ToLocalTime().ToString("MM/dd/yyyy HH:mm")</MudText>
+                                    </td>
+                                    <td><MudChip T="string" Size="Size.Small" Color="StatusColor(r.Status)">@r.Status</MudChip></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                    @if (_reprocessingRuns.Count == 0)
+                    {
+                        <MudText Class="pa-4" Color="Color.Secondary">No reprocessing runs yet. Propose one from an impact run.</MudText>
+                    }
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    @if (_reprocessing is { } rp)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" data-testid="reprocessing-detail">
+                            <MudStack Row="true" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.h5">@rp.FeeScheduleName, revision @rp.Revision</MudText>
+                                <MudChip T="string" Color="StatusColor(rp.Status)" data-testid="reprocessing-status">@rp.Status</MudChip>
+                            </MudStack>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                                Proposed by @(rp.CreatedBy ?? "unknown") @rp.CreatedAtUtc.ToLocalTime().ToString("MM/dd/yyyy HH:mm")
+                                @if (rp.ApprovedBy is not null) { <span> · approved by @rp.ApprovedBy</span> }
+                                @if (rp.ExecutedBy is not null) { <span> · executed by @rp.ExecutedBy</span> }
+                                @if (rp.CancelledBy is not null) { <span> · cancelled by @rp.CancelledBy</span> }
+                            </MudText>
+                            <MudText Typo="Typo.body1" Class="mb-2" data-testid="reprocessing-plan">
+                                @rp.ClaimsToAdjust claim(s) to adjust: @Money(rp.PlannedAdditionalPayment) additional payment, @Money(rp.PlannedRecoupment) recoupment.
+                            </MudText>
+                            @foreach (var s in rp.SkippedByAction.Where(s => s.Value > 0))
+                            {
+                                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-1" data-testid="reprocessing-skipped">@s.Value @SkipText(s.Key)</MudAlert>
+                            }
+                            @if (rp.CountsByOutcome.Count > 0)
+                            {
+                                <MudText Typo="Typo.body2" Class="mt-2" data-testid="reprocessing-outcomes">
+                                    @string.Join(" · ", rp.CountsByOutcome.Where(o => o.Value > 0).Select(o => $"{o.Value} {OutcomeText(o.Key)}"))
+                                </MudText>
+                            }
+
+                            <MudStack Row="true" Spacing="2" Class="mt-3">
+                                @if (rp.Status == "Proposed")
+                                {
+                                    <MudTooltip Text="@(IsMine(rp) ? "Someone other than the person who proposed it must approve." : "")">
+                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_busy || IsMine(rp))"
+                                                   OnClick="@(() => TransitionAsync(rp, "approve"))" data-testid="approve-button">Approve</MudButton>
+                                    </MudTooltip>
+                                }
+                                @if (rp.Status == "Approved")
+                                {
+                                    <MudButton Variant="Variant.Filled" Color="Color.Warning" Disabled="_busy"
+                                               OnClick="@(() => TransitionAsync(rp, "execute"))" data-testid="execute-button">Execute @rp.ClaimsToAdjust adjustments</MudButton>
+                                }
+                                @if (rp.Status is "Proposed" or "Approved")
+                                {
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="_busy"
+                                               OnClick="@(() => TransitionAsync(rp, "cancel"))" data-testid="cancel-button">Cancel run</MudButton>
+                                }
+                            </MudStack>
+
+                            <MudSimpleTable Dense="true" Hover="true" Class="mt-3" data-testid="reprocessing-items">
+                                <thead><tr><th>Claim</th><th>Provider</th><th>Plan</th><th>Difference</th><th>Action</th><th>Outcome</th></tr></thead>
+                                <tbody>
+                                    @foreach (var i in rp.Items)
+                                    {
+                                        <tr data-testid="reprocessing-item-row">
+                                            <td><MudLink Href="@($"/claims/{Uri.EscapeDataString(i.ClaimId)}")">@(string.IsNullOrEmpty(i.ClaimNumber) ? i.ClaimId : i.ClaimNumber)</MudLink></td>
+                                            <td>@i.BillingProviderNpi</td>
+                                            <td>@i.BenefitPlanId</td>
+                                            <td>@(i.Direction == "Undecided" ? "-" : Money(i.NetPaidDelta))</td>
+                                            <td>@ActionText(i.Action)</td>
+                                            <td>
+                                                @i.Outcome
+                                                @if (!string.IsNullOrEmpty(i.Message))
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@i.Message</MudText>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudPaper>
+                    }
+                    else
+                    {
+                        <MudPaper Class="pa-6" Outlined="true"><MudText Color="Color.Secondary">Choose a reprocessing run.</MudText></MudPaper>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private static readonly string[] Directions = ["Underpaid", "Overpaid", "Unchanged", "Undecided"];
+
+    private List<FeeScheduleChangeView> _changes = new();
+    private List<RetroRateImpactRunView> _impactRuns = new();
+    private List<RetroRateReprocessingRunView> _reprocessingRuns = new();
+    private RetroRateImpactRunView? _impact;
+    private List<RetroRateImpactResultView> _results = new();
+    private RetroRateReprocessingRunView? _reprocessing;
+    private string? _direction;
+    private string? _userId;
+    private string? _error;
+    private bool _loading = true;
+    private bool _busy;
+    private int _tab;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!UserContextService.HasPermission("claims:adjust"))
+        {
+            _loading = false;
+            return;
+        }
+        try
+        {
+            _userId = (await UserContextService.GetCurrentUserAsync())?.UserId;
+        }
+        catch (Exception)
+        {
+            // Approve stays enabled; claims-service still enforces the two-person rule.
+        }
+
+        try
+        {
+            var changes = RetroRate.ListChangesAsync();
+            var impact = RetroRate.ListImpactRunsAsync();
+            var reprocessing = RetroRate.ListReprocessingRunsAsync();
+            _changes = await changes;
+            _impactRuns = await impact;
+            _reprocessingRuns = await reprocessing;
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task MeasureAsync(FeeScheduleChangeView change)
+    {
+        _busy = true;
+        try
+        {
+            var result = await RetroRate.RunImpactAsync(change.FeeScheduleId, change.NewRevision);
+            if (result.Value is not { } run)
+            {
+                _error = result.Error;
+                return;
+            }
+            _impactRuns.Insert(0, run);
+            await OpenImpactAsync(run);
+            _tab = 1;
+            Snackbar.Add($"Measured {run.ClaimsAffected} paid claim(s). Nothing was changed.", Severity.Info);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task OpenImpactAsync(RetroRateImpactRunView run)
+    {
+        _impact = run;
+        _direction = null;
+        await LoadResultsAsync();
+    }
+
+    private async Task FilterAsync(string? direction)
+    {
+        _direction = direction;
+        await LoadResultsAsync();
+    }
+
+    private async Task LoadResultsAsync()
+    {
+        if (_impact is null) return;
+        try { _results = await RetroRate.ListImpactResultsAsync(_impact.Id, _direction); }
+        catch (ServiceUnavailableException ex) { _error = ex.Message; }
+    }
+
+    private async Task ProposeAsync(RetroRateImpactRunView run)
+    {
+        _busy = true;
+        try
+        {
+            var result = await RetroRate.ProposeAsync(run.Id);
+            if (result.Value is not { } proposed)
+            {
+                _error = result.Error;
+                return;
+            }
+            _reprocessingRuns.Insert(0, proposed);
+            _reprocessing = proposed;
+            _tab = 2;
+            Snackbar.Add("Reprocessing run proposed. Someone else must approve it before it can be executed.", Severity.Success);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task TransitionAsync(RetroRateReprocessingRunView run, string action)
+    {
+        _busy = true;
+        try
+        {
+            var result = action switch
+            {
+                "approve" => await RetroRate.ApproveAsync(run.Id),
+                "execute" => await RetroRate.ExecuteAsync(run.Id),
+                _ => await RetroRate.CancelAsync(run.Id),
+            };
+            if (result.Value is not { } updated)
+            {
+                _error = result.Error;
+                return;
+            }
+            var index = _reprocessingRuns.FindIndex(r => r.Id == updated.Id);
+            if (index >= 0) _reprocessingRuns[index] = updated;
+            _reprocessing = updated;
+            Snackbar.Add(action switch
+            {
+                "approve" => "Approved. It can now be executed.",
+                "execute" => $"Executed: {updated.CountsByOutcome.GetValueOrDefault("AdjustmentCreated")} adjustment(s) created. They pay or recoup on the next reversal and payment runs.",
+                _ => "Cancelled.",
+            }, action == "cancel" ? Severity.Info : Severity.Success);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private bool IsMine(RetroRateReprocessingRunView run) =>
+        !string.IsNullOrEmpty(_userId) && string.Equals(run.CreatedBy, _userId, StringComparison.OrdinalIgnoreCase);
+
+    private static string Money(decimal v) => v.ToString("$#,##0.00;-$#,##0.00");
+
+    private static Color DirectionColor(string direction) => direction switch
+    {
+        "Underpaid" => Color.Success,
+        "Overpaid" => Color.Warning,
+        "Undecided" => Color.Error,
+        _ => Color.Default,
+    };
+
+    private static Color StatusColor(string status) => status switch
+    {
+        "Proposed" => Color.Info,
+        "Approved" => Color.Primary,
+        "Executing" => Color.Warning,
+        "Completed" => Color.Success,
+        _ => Color.Default,
+    };
+
+    internal static string ActionText(string action) => action switch
+    {
+        "PayDifference" => "Pay difference",
+        "Recoup" => "Recoup",
+        "SkipRecoupmentNotOptedIn" => "Skip (plan does not recoup)",
+        "SkipUndecided" => "Skip (needs review)",
+        "SkipNotYetPaid" => "Skip (not paid yet)",
+        "SkipReportOnly" => "Skip (report only plan)",
+        "SkipOutsideLookback" => "Skip (outside lookback)",
+        "SkipBelowMinimum" => "Skip (below minimum)",
+        _ => action,
+    };
+
+    internal static string SkipText(string action) => action switch
+    {
+        "SkipRecoupmentNotOptedIn" => "overpaid claim(s) left as paid: the plan has not opted in to recoupment.",
+        "SkipUndecided" => "claim(s) left alone: the re-price pended or denied and needs a person.",
+        "SkipNotYetPaid" => "claim(s) left alone: approved but not paid yet. Measure again once they are paid.",
+        "SkipReportOnly" => "claim(s) reported only: the plan settles these rate changes outside claims.",
+        "SkipOutsideLookback" => "claim(s) left as paid: the date of service is older than the plan's lookback.",
+        "SkipBelowMinimum" => "claim(s) left as paid: the difference is below the plan's minimum adjustment.",
+        _ => $"claim(s) skipped ({action}).",
+    };
+
+    private static string OutcomeText(string outcome) => outcome switch
+    {
+        "AdjustmentCreated" => "adjustments created",
+        "AlreadyAdjusted" => "already adjusted",
+        "ClaimChanged" => "changed since measured",
+        "Refused" => "refused",
+        "Failed" => "failed",
+        "Skipped" => "skipped",
+        "Pending" => "pending",
+        _ => outcome,
+    };
+
+    private RenderFragment Tile(string label, int count, decimal? amount, string testId) => __builder =>
+    {
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3" Outlined="true" data-testid="@testId">
+                <MudText Typo="Typo.h5">@count.ToString("N0")</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@label@(amount is { } a ? " · " + Money(a) : "")</MudText>
+            </MudPaper>
+        </MudItem>
+    };
+}
