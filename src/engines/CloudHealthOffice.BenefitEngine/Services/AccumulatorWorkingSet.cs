@@ -500,13 +500,6 @@ public class AccumulatorWorkingSet
     }
 
     /// <summary>
-    /// Takes a claim's own earlier, still-active accumulator updates out of
-    /// the starting balances, so re-adjudicating the same claim prices it
-    /// against the accumulators as they were without it — the same result
-    /// as the first pass, instead of a claim that has already met its own
-    /// deductible.
-    /// </summary>
-    /// <summary>
     /// Counts an amount already met (shadow adjudication's prior accumulation)
     /// toward an accumulator the plan has. An accumulator the plan does not
     /// configure is left alone.
@@ -519,6 +512,13 @@ public class AccumulatorWorkingSet
         entry.CurrentAccumulated += amount;
     }
 
+    /// <summary>
+    /// Takes a claim's own earlier, still-active accumulator updates out of
+    /// the starting balances, so re-adjudicating the same claim prices it
+    /// against the accumulators as they were without it — the same result
+    /// as the first pass, instead of a claim that has already met its own
+    /// deductible.
+    /// </summary>
     public void ExcludePriorUpdates(IEnumerable<AccumulatorUpdate> updates)
     {
         foreach (var update in updates)
