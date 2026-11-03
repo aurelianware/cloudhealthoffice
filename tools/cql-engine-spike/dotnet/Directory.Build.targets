@@ -1,0 +1,3 @@
+<Project>
+  <!-- Standalone spike: do not inherit the repository's build settings or central package versions. -->
+</Project>

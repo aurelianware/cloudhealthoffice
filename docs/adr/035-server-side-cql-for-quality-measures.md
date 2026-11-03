@@ -10,8 +10,10 @@ for Documentation Templates and Rules (DTR). This ADR adds a separate decision
 for quality measurement (HEDIS and Star Ratings).
 
 The owner approved a digital-first quality module (CQL on FHIR rather than a
-traditional SQL measure engine) on 2026-11-01. The engine choice below is
-open until the spike reports.
+traditional SQL measure engine) on 2026-11-01, and chose Medicaid in Texas
+and California as the first line of business on 2026-11-03. The spike
+reported on 2026-11-03 (below) and recommends the Firely CQL SDK. The engine
+choice is proposed until the owner approves it.
 
 ## Context
 
@@ -78,9 +80,59 @@ memory for 100k and 1M synthetic members, packaging and licensing of the
 engine, and how cleanly each records the provenance needed for decision 4.
 The spike writes its result as an update to this ADR.
 
+## Spike result (2026-11-03)
+
+Harness and full numbers: [tools/cql-engine-spike](../../tools/cql-engine-spike/README.md).
+The measure was the public CMS125 Breast Cancer Screening eCQM (QI-Core 2025
+content, 66 test cases), because NCQA's Digital HEDIS content needs a license.
+
+| | Java clinical-reasoning 4.14.0 | Firely CQL SDK 2.18.0 |
+| --- | --- | --- |
+| Correct on the 66 test cases | 66 / 66 | 66 / 66 |
+| 10k members, 4 threads | 2.56 ms/member | 0.24 ms/member |
+| 1M members, 4 threads | about 43 min (extrapolated) | 105 s measured, 1.8 GB peak |
+| License | Apache-2.0 | BSD-3-Clause |
+| Output | `MeasureReport` from `$evaluate-measure` | Definition results; CHO builds the `MeasureReport` |
+
+What the spike also found:
+
+- **Value sets.** The published content carries a partial VSAC expansion.
+  Java evaluates with it silently; Firely refuses it. CHO must refuse partial
+  expansions in its loader whichever engine runs.
+- **Measurement Period precision.** Java gives a `ZonedDateTime` period second
+  precision, which fails two boundary test cases. The period has to be passed
+  at millisecond precision.
+- **Content compatibility.** Firely rejects the published ELM as is
+  (namespaced includes, and QICoreCommon needs explicit `DateTime` casts) and
+  ran on the patched copy the Firely repository maintains. NCQA content would
+  need the same check.
+- **Profiles.** Neither engine needs `meta.profile` on the data. CHO's
+  projections can feed the engine without claiming QI-Core profiles.
+- **Claims versus EHR content.** CMS eCQMs read EHR codes (the CMS125
+  numerator is a LOINC Mammography `Observation`). A claims-only member with
+  a CPT mammogram never meets it. CHO needs NCQA's HEDIS digital content,
+  which models claims, so the NCQA license (Step 0) is on the critical path.
+- **FHIR SDK version.** Firely CQL SDK 2.18.0 needs Hl7.Fhir.R4 6.x; CHO's
+  services are on 5.10.2.
+
+### Recommendation
+
+Use the **Firely CQL SDK**, in a **new quality worker service** that owns its
+own Hl7.Fhir 6.x dependency, so no existing service has to move off 5.10.2 to
+adopt it. Reasons: it was about 10 to 20 times faster here, it is .NET like the
+rest of CHO, NCQA co-maintains it and tests it against HEDIS content, and it
+fails closed on partial value sets. CHO pays for that with code it must write:
+`MeasureReport` assembly, supplemental data and stratification, and a cache of
+compiled assemblies so the ~9 s ELM compile happens once per measure version.
+
+Keep the Java engine as a CI cross-check: run both on each measure's test
+deck and fail the build when they disagree. That gives an independent second
+answer for auditors at no runtime cost.
+
 ## Consequences
 
-- A new runtime component (a JVM sidecar or a new .NET dependency). Per the
+- A new runtime component: with the recommendation above, a new .NET
+  quality worker service using the Firely CQL SDK. Per the
   owner's ground rules this is a major dependency, which is why it needs this
   ADR and the owner's approval.
 - A new batch workload. Population runs need a worker, a schedule and
