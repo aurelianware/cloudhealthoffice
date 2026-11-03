@@ -1278,6 +1278,28 @@ public class ClaimRepositoryMongo : IClaimRepository
             .Select(Hydrate).ToList();
     }
 
+    public async Task<IReadOnlyList<Claim>> FindCoreClaimsForAccumulationAsync(
+        string memberId, string? subscriberId, DateTime serviceFrom, DateTime serviceBefore, int limit,
+        CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var whose = string.IsNullOrWhiteSpace(subscriberId)
+            ? b.Eq(c => c.MemberId, memberId)
+            : b.Or(b.Eq(c => c.MemberId, memberId), b.Eq(c => c.SubscriberId, subscriberId));
+        var filter = b.And(
+            b.Eq(c => c.TenantId, GetTenantId()),
+            b.Ne(c => c.ExternalSource, null),
+            b.In(c => c.Status, new[] { ClaimStatus.Approved, ClaimStatus.PartiallyPaid, ClaimStatus.Paid }),
+            b.Eq(c => c.SupersededAt, null),
+            b.Ne(c => c.VersionState, ClaimVersionState.Adjusted),
+            b.Gte(c => c.ServiceDateFrom, serviceFrom),
+            b.Lt(c => c.ServiceDateFrom, serviceBefore),
+            whose);
+        return (await _collection.Find(filter).SortBy(c => c.AdjudicatedDate).ThenBy(c => c.ServiceDateFrom)
+                .Limit(limit).ToListAsync(ct))
+            .Select(Hydrate).ToList();
+    }
+
     public async Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(
         DateTime from, DateTime to, int limit, CancellationToken ct = default)
     {

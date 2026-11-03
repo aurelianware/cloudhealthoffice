@@ -506,6 +506,19 @@ public class AccumulatorWorkingSet
     /// as the first pass, instead of a claim that has already met its own
     /// deductible.
     /// </summary>
+    /// <summary>
+    /// Counts an amount already met (shadow adjudication's prior accumulation)
+    /// toward an accumulator the plan has. An accumulator the plan does not
+    /// configure is left alone.
+    /// </summary>
+    public void AddPriorAccumulation(AccumulatorType type, AccumulatorScope scope, NetworkTier networkTier, decimal amount)
+    {
+        if (amount <= 0) return;
+        if (!_entries.TryGetValue(MakeKey(type, scope, networkTier), out var entry)) return;
+        entry.OriginalAccumulated += amount;
+        entry.CurrentAccumulated += amount;
+    }
+
     public void ExcludePriorUpdates(IEnumerable<AccumulatorUpdate> updates)
     {
         foreach (var update in updates)

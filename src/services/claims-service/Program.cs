@@ -573,6 +573,10 @@ builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdj
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationTenantSettingsRepository,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationTenantSettingsRepositoryMongo>();
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationTenants>();
+// A shadow claim's deductible and out-of-pocket start from the core's own
+// earlier claims for the member, never from CHO's accumulator store.
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAccumulatorHistory,
+    ClaimsService.Services.Adjudication.Shadow.ShadowAccumulatorHistory>();
 // Medicaid TPL recovery cases (pay-and-chase and retroactive), with the
 // state retention clock and monthly report.
 builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryRepository, ClaimsService.Services.Tpl.TplRecoveryRepositoryMongo>();

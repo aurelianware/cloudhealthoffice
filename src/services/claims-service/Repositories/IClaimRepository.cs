@@ -373,6 +373,21 @@ public interface IClaimRepository
         Services.RetroRate.RetroRateCandidateQuery query, int limit, CancellationToken ct = default)
         => throw new NotSupportedException("This claim store cannot search for retro rate candidates.");
 
+    /// <summary>
+    /// Shadow adjudication's accumulator history: current-version claims of the
+    /// request tenant that another core adjudicated and paid
+    /// (<see cref="Claim.ExternalSource"/> set; Approved, PartiallyPaid or
+    /// Paid), for <paramref name="memberId"/> or filed under
+    /// <paramref name="subscriberId"/>, with a first service date in
+    /// [<paramref name="serviceFrom"/>, <paramref name="serviceBefore"/>).
+    /// Oldest adjudication first, at most <paramref name="limit"/>. Stores
+    /// that cannot search return none.
+    /// </summary>
+    Task<IReadOnlyList<Claim>> FindCoreClaimsForAccumulationAsync(
+        string memberId, string? subscriberId, DateTime serviceFrom, DateTime serviceBefore, int limit,
+        CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<Claim>>([]);
+
     Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(
         DateTime from, DateTime to, int limit, CancellationToken ct = default);
 
