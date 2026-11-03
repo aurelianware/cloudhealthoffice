@@ -575,6 +575,35 @@ public record PricingRequest
     /// falls back to <see cref="ServiceDate"/>.
     /// </summary>
     public DateTime? DischargeDate { get; init; }
+
+    /// <summary>
+    /// Hospital days on the member's other live inpatient claims in the
+    /// months this stay touches, so a monthly day limit (the adult IMD limit
+    /// for psychiatric hospitals) counts the month, not just this claim. The
+    /// pricer decides which of them count (e.g. only psychiatric hospitals).
+    /// Send it on the first line; null = not looked up.
+    /// </summary>
+    public IReadOnlyList<OtherInpatientDays>? OtherInpatientDays { get; init; }
+
+    /// <summary>
+    /// What to do with an adult psychiatric hospital stay over the monthly
+    /// IMD day limit, from the plan setting
+    /// <c>pricing.inpatient.imdOverLimitAction</c>: <c>pend</c> (default) or <c>pay</c>.
+    /// </summary>
+    public string? ImdOverLimitAction { get; init; }
+}
+
+/// <summary>Room and board days on another of the member's inpatient claims.</summary>
+public sealed record OtherInpatientDays
+{
+    /// <summary>The hospital (billing provider) NPI.</summary>
+    public string FacilityNpi { get; init; } = string.Empty;
+
+    /// <summary>First day.</summary>
+    public DateTime From { get; init; }
+
+    /// <summary>Consecutive days from <see cref="From"/>.</summary>
+    public int Days { get; init; }
 }
 
 /// <summary>Values of <see cref="PricingRequest.MedicaidDrgMethod"/>.</summary>

@@ -434,6 +434,43 @@ public class MedicaidDrgRateResolutionServiceTests
     }
 
     [Fact]
+    public async Task Days_at_psychiatric_hospitals_on_other_claims_count_toward_the_month()
+    {
+        var sut = new MedicaidDrgRateResolutionService(_engine, _rates, NullLogger<MedicaidDrgRateResolutionService>.Instance,
+            psychRates: PsychRates((new DateTime(2026, 9, 1), 563.36m)));
+        var stay = PsychStay(35, new DateTime(2026, 10, 20), 6);
+        stay[0] = stay[0] with
+        {
+            OtherInpatientDays =
+            [
+                new OtherInpatientDays { FacilityNpi = Hospital, From = new DateTime(2026, 10, 2), Days = 10 },
+                // A general hospital is not an IMD: its days do not count.
+                new OtherInpatientDays { FacilityNpi = "1999999992", From = new DateTime(2026, 10, 12), Days = 5 },
+            ],
+        };
+
+        var result = await sut.ResolveBatchAsync(stay);
+
+        // 10 + 6 = 16 IMD days in October.
+        Assert.All(result.LineResults, r => Assert.Contains("16 IMD day(s) (10 on other claims)", r.UnresolvedReason));
+    }
+
+    [Fact]
+    public async Task The_plan_setting_can_pay_over_the_limit()
+    {
+        var sut = new MedicaidDrgRateResolutionService(_engine, _rates, NullLogger<MedicaidDrgRateResolutionService>.Instance,
+            psychRates: PsychRates((new DateTime(2026, 9, 1), 563.36m)));
+        var stay = PsychStay(35, new DateTime(2026, 10, 1), 16).Select(r => r with { ImdOverLimitAction = "pay" }).ToList();
+
+        var result = await sut.ResolveBatchAsync(stay);
+
+        var room = result.LineResults.Single(r => r.LineNumber == 1);
+        Assert.Equal(RateSource.Medicaid, room.RateSource);
+        Assert.Equal(16 * 563.36m, room.AllowedAmount);
+        Assert.Contains(room.CalculationSteps, s => s.Contains("Paid under the plan's setting"));
+    }
+
+    [Fact]
     public async Task A_hospital_without_a_per_diem_is_priced_by_drg()
     {
         var sut = new MedicaidDrgRateResolutionService(_engine, _rates, NullLogger<MedicaidDrgRateResolutionService>.Instance,

@@ -485,6 +485,12 @@ chooses between them per line of business, benefit plan or sponsor, once
   `texas`, `PricingStage` asks for the stay to be priced from the imported HHSC
   tables instead of the contract
   (`docs/integration/MEDICAID-DRG-PRICING.md`, "Claim pricing").
+  With a method set it also reads `pricing.inpatient.imdOverLimitAction`
+  (`pend` or `pay`; an unreadable value means `pend`), and `PricingStage`
+  sends the member's room and board days on other live inpatient claims in
+  the same months, for the psychiatric hospital IMD day limit
+  (`docs/integration/MEDICAID-PSYCHIATRIC-PER-DIEM.md`). If that history
+  cannot be read, the claim pends `PRICING`.
 - It fails closed in the same way as MS-DRG:
   - a refused or invalid answer pends `DRGREVIEW`;
   - a missing or unreachable grouper pends `GROUPERUNAVAIL`;

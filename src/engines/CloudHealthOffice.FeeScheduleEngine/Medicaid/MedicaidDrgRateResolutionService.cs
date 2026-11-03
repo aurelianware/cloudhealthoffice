@@ -235,10 +235,17 @@ public sealed partial class MedicaidDrgRateResolutionService : IRateResolutionSe
         for (var i = 0; i < rates.Count - 1; i++)
             rates[i] = rates[i] with { EffectiveTo = rates[i + 1].EffectiveFrom.AddDays(-1) };
 
+        var otherDays = await OtherImdDaysAsync(lines, tenantId, ct).ConfigureAwait(false);
+        var policy = _psychPolicy;
+        var overLimit = lines.Select(r => r.ImdOverLimitAction).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim().Trim('"');
+        if (string.Equals(overLimit, "pay", StringComparison.OrdinalIgnoreCase))
+            policy = policy with { OverLimitAction = ImdOverLimitAction.Pay };
+
         var claim = new PsychiatricStayClaim
         {
             FacilityNpi = facilityNpi,
             AgeAtAdmission = lines[0].PatientAgeYears,
+            ImdDaysAlreadyPaid = otherDays.ByMonth,
             Lines = lines.Select(r => new PsychiatricStayLine
             {
                 LineNumber = r.LineNumber,
@@ -249,11 +256,11 @@ public sealed partial class MedicaidDrgRateResolutionService : IRateResolutionSe
             }).ToList(),
         };
 
-        var price = new PsychiatricPerDiemPricer(_psychPolicy).Price(claim, rates);
+        var price = new PsychiatricPerDiemPricer(policy).Price(claim, rates);
         var steps = new List<string>
         {
-            $"Psychiatric hospital {facilityNpi} ({atAdmission.HospitalName}, {atAdmission.FacilityClass}) is paid its per diem, not a DRG. "
-            + "IMD days on the member's other claims are not yet counted toward the monthly limit.",
+            $"Psychiatric hospital {facilityNpi} ({atAdmission.HospitalName}, {atAdmission.FacilityClass}) is paid its per diem, not a DRG.",
+            otherDays.Note,
         };
         steps.AddRange(price.Steps);
         if (!price.Priced)
@@ -290,6 +297,45 @@ public sealed partial class MedicaidDrgRateResolutionService : IRateResolutionSe
                 };
             }).ToList(),
         };
+    }
+
+    /// <summary>
+    /// IMD days by month on the member's other live inpatient claims: days at
+    /// a hospital that has a psychiatric per diem on that day. Other hospitals
+    /// are not IMDs and do not count.
+    /// </summary>
+    private async Task<(IReadOnlyDictionary<DateOnly, int> ByMonth, string Note)> OtherImdDaysAsync(
+        IReadOnlyList<PricingRequest> lines, string tenantId, CancellationToken ct)
+    {
+        var others = lines.Select(r => r.OtherInpatientDays).FirstOrDefault(o => o is not null);
+        if (others is null)
+            return (new Dictionary<DateOnly, int>(), "The member's other inpatient claims were not looked up; only this claim's days count toward the monthly IMD limit.");
+
+        var byMonth = new Dictionary<DateOnly, int>();
+        var isPsych = new Dictionary<(string, DateTime), bool>();
+        var counted = 0;
+        foreach (var segment in others.Where(o => o.Days > 0 && !string.IsNullOrWhiteSpace(o.FacilityNpi)))
+        {
+            var npi = segment.FacilityNpi.Trim();
+            for (var i = 0; i < segment.Days; i++)
+            {
+                var day = segment.From.Date.AddDays(i);
+                // Rates change at most yearly; key the lookup by NPI and month.
+                var key = (npi, new DateTime(day.Year, day.Month, 1));
+                if (!isPsych.TryGetValue(key, out var psych))
+                {
+                    psych = await _psychRates!.FindAsync(tenantId, TexasState, npi, day, ct).ConfigureAwait(false) is not null;
+                    isPsych[key] = psych;
+                }
+                if (!psych) continue;
+                var month = new DateOnly(day.Year, day.Month, 1);
+                byMonth[month] = (byMonth.TryGetValue(month, out var n) ? n : 0) + 1;
+                counted++;
+            }
+        }
+
+        return (byMonth, string.Create(CultureInfo.InvariantCulture,
+            $"The member's other inpatient claims: {others.Count} stay segment(s), {counted} psychiatric hospital day(s) counted toward the monthly IMD limit."));
     }
 
     /// <summary>
