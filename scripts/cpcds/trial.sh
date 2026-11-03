@@ -13,6 +13,8 @@
 #   *coverage*.csv       CPCDS coverages (one file, optional)
 #   *claim*.csv          CPCDS claims (any number)
 #   *auth*.csv, *278*    UM authorizations, CSV or X12 278 (any number, optional)
+#   *roster*.csv         the core's network roster: NPI, network, plan, dates
+#                        (any number, optional)
 #   *balance*.csv        the core's accumulator balances as of a date, for shadow
 #                        adjudication only (any number, optional)
 #
@@ -21,6 +23,7 @@
 #   CHO_CLAIMS_URL            claims-service           (default http://localhost:5001)
 #   CHO_ENROLLMENT_URL        enrollment-import-service (default http://localhost:5011)
 #   CHO_AUTHORIZATION_URL     authorization-service    (default http://localhost:5005)
+#   CHO_PROVIDER_URL          provider-service         (default http://localhost:5004)
 #   CHO_SOURCE_SYSTEM         the core's name, recorded on each claim (e.g. qnxt)
 #   CHO_LINE_OF_BUSINESS      Commercial (default), Medicare, Medicaid, Exchange, TRICARE or VA
 #   CHO_TRIAL_OUT             where the import reports go (default ./cpcds-trial-out)
@@ -68,6 +71,7 @@ done
 CLAIMS_URL="${CHO_CLAIMS_URL:-http://localhost:5001}"
 ENROLLMENT_URL="${CHO_ENROLLMENT_URL:-http://localhost:5011}"
 AUTHORIZATION_URL="${CHO_AUTHORIZATION_URL:-http://localhost:5005}"
+PROVIDER_URL="${CHO_PROVIDER_URL:-http://localhost:5004}"
 SOURCE_SYSTEM="${CHO_SOURCE_SYSTEM:-}"
 LINE_OF_BUSINESS="${CHO_LINE_OF_BUSINESS:-Commercial}"
 OUT="${CHO_TRIAL_OUT:-./cpcds-trial-out}"
@@ -91,6 +95,7 @@ token() {
 kind() {
   local name; name="$(basename "$1")"; name="${name%.*}"; name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
   if [[ $name == *balance* ]]; then echo balances
+  elif [[ $name == *roster* ]]; then echo rosters
   elif [[ $name == *auth* || $name == *278* ]]; then echo authorizations
   elif [[ $name == *coverage* ]]; then echo coverages
   elif [[ $name == *member* ]]; then echo members
@@ -171,6 +176,20 @@ authorizations() {
   note_refusals "$(jq '(.rejected // 0) + ((.fileErrors // []) | length)' "$report")"
 }
 
+rosters() {
+  local dry="$1" file="$2"
+  local report="$OUT/roster-$(basename "$file").json"
+  post "roster $(basename "$file")" "$PROVIDER_URL/api/v1/providers/import/network-roster" "$report" \
+    -F "file=@$file" -F "dryRun=$dry" -F "lineOfBusiness=$LINE_OF_BUSINESS"
+  local code="$HTTP_CODE"
+  jq -r --arg name "$(basename "$file")" --arg code "$code" \
+    '"  network roster \($name) (\($code)): \(.rowsRead // 0) rows, \(.participationsAdded // 0) participations " + (if .dryRun then "to add" else "added" end) +
+    ", \(.unchanged // 0) unchanged, \(.providersCreated // 0) new providers, \(.credentialed // 0) credentialed, \(.rejected // 0) refused" +
+    (if ((.networksCreated // []) | length) > 0 then "\n    new networks: " + (.networksCreated | join(", ")) else "" end) +
+    ([(.fileErrors // [])[], (.errors // [])[:10][], (.warnings // [])[:5][]] | map("\n    ! " + .) | join(""))' "$report"
+  note_refusals "$(jq '(.rejected // 0) + ((.fileErrors // []) | length)' "$report")"
+}
+
 balances() {
   local dry="$1" file="$2"
   local report="$OUT/balances-$(basename "$file").json"
@@ -189,7 +208,7 @@ import_folder() {
   [[ -n "$FOLDER" && -d "$FOLDER" ]] || { echo "Give the folder that holds the extracts." >&2; usage; }
   mkdir -p "$OUT"
 
-  local members=() coverages=() claim_files=() auth_files=() balance_files=() unknown=()
+  local members=() coverages=() claim_files=() auth_files=() roster_files=() balance_files=() unknown=()
   while IFS= read -r -d '' file; do
     case $(kind "$file") in
       members) members+=("$file") ;;
@@ -197,6 +216,7 @@ import_folder() {
       claims) claim_files+=("$file") ;;
       authorizations) auth_files+=("$file") ;;
       balances) balance_files+=("$file") ;;
+      rosters) roster_files+=("$file") ;;
       *) unknown+=("$file") ;;
     esac
   done < <(find "$FOLDER" -maxdepth 1 -type f ! -name '.*' -print0 | sort -z)
@@ -205,13 +225,14 @@ import_folder() {
     echo "One member file and at most one coverage file per load; found ${#members[@]} and ${#coverages[@]}." >&2; exit 2; }
   [[ ${#members[@]} -eq 1 || ${#coverages[@]} -eq 0 ]] || {
     echo "A coverage file loads with its member file; add the member file." >&2; exit 2; }
-  for file in "${unknown[@]}"; do echo "  skipped $(basename "$file"): its name says neither member, coverage, claim, auth, 278 nor balance"; done
+  for file in "${unknown[@]}"; do echo "  skipped $(basename "$file"): its name says neither member, coverage, claim, auth, 278, roster nor balance"; done
 
   TOKEN="$(token)"
   [[ $dry == true ]] || : > "$OUT/claim-batches.txt"
   echo "$([[ $dry == true ]] && echo 'Dry run (nothing is written)' || echo 'Loading') from $FOLDER; reports in $OUT"
   # The order the drop uses: claims and authorizations name members, so members first.
   [[ ${#members[@]} -eq 1 ]] && members_and_coverage "$dry" "${members[0]}" "${coverages[0]:-}"
+  for file in "${roster_files[@]}"; do rosters "$dry" "$file"; done
   for file in "${claim_files[@]}"; do claims "$dry" "$file"; done
   for file in "${auth_files[@]}"; do authorizations "$dry" "$file"; done
   for file in "${balance_files[@]}"; do balances "$dry" "$file"; done
@@ -243,7 +264,7 @@ GAP_HINTS='{
   "NOCONTRACT": "load provider contracts (contract roster) and fee schedules",
   "MEMBERNOTLOADED": "load the member and coverage files before claims",
   "PLANUNAVAIL": "create the benefit plans (plan templates) and map the core plan codes",
-  "NETWORK": "load providers and network participation",
+  "NETWORK": "load the network roster from the core (a *roster* file)",
   "NOAUTH": "load the authorizations (278 or CSV)",
   "TIMELY": "check the received dates and the plan timely filing limit",
   "SCRUB": "check the claim columns (codes, NPIs, dates) and the column map",

@@ -113,6 +113,7 @@ builder.Services.AddHttpClient<ProviderService.Services.INppesLookupClient, Prov
         builder.Configuration.GetValue("ProviderVerification:TimeoutSeconds", 30));
 });
 builder.Services.AddScoped<ProviderService.Services.Cpcds.CpcdsReferencedProviderImporter>();
+builder.Services.AddScoped<ProviderService.Services.Roster.NetworkRosterImporter>();
 // Bank-account dual control: a change is pending until a second user with
 // payments:approve approves it; payments read only the approved account.
 builder.Services.AddScoped<IProviderBankAccountChangeService, ProviderBankAccountChangeService>();
