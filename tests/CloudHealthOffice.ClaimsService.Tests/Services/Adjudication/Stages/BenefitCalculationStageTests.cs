@@ -1410,6 +1410,21 @@ public partial class BenefitCalculationStageTests
     }
 
     [Fact]
+    public void ApplyToContext_KeepsTheLinePricing()
+    {
+        var ctx = ContextFor(BuildClaim(Guid.NewGuid().ToString()));
+        ctx.AdjudicationResult.LinePricing.Add(new ClaimLinePricing { LineNumber = 1, FeeScheduleId = "FS-1", FeeScheduleRevision = 4 });
+
+        BenefitCalculationStage.ApplyToContext(ctx, SingleLineResult(new LineBenefitResult
+        {
+            LineNumber = 1, IsCovered = true, BilledAmount = 100m, AllowedAmount = 100m, PlanPaidAmount = 100m,
+        }));
+
+        var line = Assert.Single(ctx.AdjudicationResult.LinePricing);
+        Assert.Equal(4, line.FeeScheduleRevision);
+    }
+
+    [Fact]
     public void ApplyToContext_DrgLineWithoutAdjustments_SynthesizesBalancingCas()
     {
         var ctx = ContextFor(BuildClaim(Guid.NewGuid().ToString()));

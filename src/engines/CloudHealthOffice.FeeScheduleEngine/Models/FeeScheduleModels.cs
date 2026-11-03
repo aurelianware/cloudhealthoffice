@@ -635,6 +635,15 @@ public record PricingResult
 
     /// <summary>Name of the matched fee schedule (for portal display).</summary>
     public string? FeeScheduleName { get; init; }
+    /// <summary>
+    /// <see cref="FeeSchedule.Revision"/> of the matched schedule as it was
+    /// read for this line. With <see cref="FeeScheduleId"/> it says which
+    /// version of the rates priced the line, so a later rate change can find
+    /// the claims it touches (see <see cref="FeeScheduleChange"/>). Null when
+    /// no <see cref="FeeSchedule"/> priced the line (UCR, capitation, a
+    /// Medicaid DRG / per diem rate table).
+    /// </summary>
+    public long? FeeScheduleRevision { get; init; }
 
     /// <summary>Ordered list of adjustments applied to arrive at AllowedAmount.</summary>
     public IReadOnlyList<RateAdjustment> Adjustments { get; init; } = Array.Empty<RateAdjustment>();

@@ -1149,6 +1149,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             ThirdPartyLiability = existing.ThirdPartyLiability,
             // Worked out by the pricing stage, before benefits.
             SupplementalPayments = existing.SupplementalPayments,
+            LinePricing = existing.LinePricing,
             PaymentNotices = existing.PaymentNotices,
         };
 
