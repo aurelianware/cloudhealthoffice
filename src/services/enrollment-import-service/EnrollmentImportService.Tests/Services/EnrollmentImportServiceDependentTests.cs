@@ -306,6 +306,8 @@ public partial class EnrollmentImportServiceDependentTests
 
         var deps = h.Created.Where(c => !c.IsSubscriber).ToList();
         deps.Should().OnlyContain(d => d.SubscriberMemberId == "SUB1" && d.MemberId.StartsWith("SUB1-D"));
+        // Created covered, not Pending: a Pending member's claims deny in benefit calculation.
+        h.Created.Should().OnlyContain(c => c.Status == "Active");
         deps.Select(d => d.MemberId).Should().OnlyHaveUniqueItems();
         deps.Single(d => d.FirstName == "JANE").RelationshipCode.Should().Be("01");
         deps.Single(d => d.FirstName == "MICHAEL").RelationshipCode.Should().Be("19");

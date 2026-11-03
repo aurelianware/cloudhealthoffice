@@ -284,7 +284,9 @@ public class MembersController : ControllerBase
             Email = request.Email,
             EffectiveDate = request.EffectiveDate,
             TerminationDate = request.TerminationDate,
-            Status = EnrollmentStatus.Pending,
+            // An enrollment feed that already knows the member is covered (an 834 add,
+            // a CPCDS member with active coverage) says so; anything else starts Pending.
+            Status = request.Status ?? EnrollmentStatus.Pending,
             MaintenanceTypeCode = request.MaintenanceTypeCode,
             MaintenanceReasonCode = request.MaintenanceReasonCode,
             PlanChangeEffectiveDate = request.PlanChangeEffectiveDate,
@@ -1051,6 +1053,8 @@ public class CreateMemberRequest
     public DateTime? PlanChangeEffectiveDate { get; set; }
     public decimal? MedicaidSpendDownLiabilityAmount { get; set; }
     public decimal MedicaidSpendDownAmountMet { get; set; }
+    /// <summary>Enrollment status at creation. Omitted: Pending.</summary>
+    public EnrollmentStatus? Status { get; set; }
     public EmploymentStatus? EmploymentStatus { get; set; }
     public bool? TobaccoUser { get; set; }
     public bool? IsStudent { get; set; }
