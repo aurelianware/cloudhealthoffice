@@ -239,6 +239,8 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(ShadowAdjudicationRepository);
             // And the Medicaid TPL recovery case store.
             services.AddSingleton(Substitute.For<global::ClaimsService.Services.Tpl.ITplRecoveryRepository>());
+            // The retro rate impact store is Mongo too.
+            services.AddSingleton(Substitute.For<global::ClaimsService.Services.RetroRate.IRetroRateImpactRepository>());
             // So is the CPCDS drop run store.
             services.AddSingleton<global::ClaimsService.Import.Cpcds.Drop.ICpcdsDropRunRepository>(
                 new global::ClaimsService.Import.Cpcds.Drop.InMemoryCpcdsDropRunRepository());

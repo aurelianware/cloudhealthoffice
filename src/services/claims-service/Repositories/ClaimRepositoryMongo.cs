@@ -1252,6 +1252,32 @@ public class ClaimRepositoryMongo : IClaimRepository
         return (await _collection.Find(filter).SortBy(c => c.AdjudicatedDate).Limit(limit).ToListAsync(ct)).Select(Hydrate).ToList();
     }
 
+    public async Task<IReadOnlyList<Claim>> FindRetroRateCandidatesAsync(
+        Services.RetroRate.RetroRateCandidateQuery query, int limit, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var ties = new List<FilterDefinition<Claim>>
+        {
+            b.ElemMatch(c => c.AdjudicationResult!.LinePricing, p => p.FeeScheduleId == query.FeeScheduleId),
+            b.ElemMatch(c => c.AdjudicationResult!.SupplementalPayments, p => p.FeeScheduleId == query.FeeScheduleId),
+        };
+        if (query.PlanKeys.Count > 0)
+            ties.Add(b.In(c => c.BenefitPlanId, query.PlanKeys));
+
+        var filter = b.And(
+            b.Eq(c => c.TenantId, GetTenantId()),
+            b.In(c => c.Status, new[] { ClaimStatus.Approved, ClaimStatus.PartiallyPaid, ClaimStatus.Paid }),
+            b.Eq(c => c.SupersededAt, null),
+            b.Ne(c => c.VersionState, ClaimVersionState.Adjusted),
+            b.Or(b.Gte(c => c.ServiceDateTo, query.ServiceFrom), b.Gte(c => c.ServiceDateFrom, query.ServiceFrom)),
+            b.Or(ties));
+        if (query.ServiceBefore is { } before)
+            filter &= b.Lt(c => c.ServiceDateFrom, before);
+
+        return (await _collection.Find(filter).SortBy(c => c.ServiceDateFrom).Limit(limit).ToListAsync(ct))
+            .Select(Hydrate).ToList();
+    }
+
     public async Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(
         DateTime from, DateTime to, int limit, CancellationToken ct = default)
     {
