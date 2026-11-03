@@ -585,6 +585,10 @@ builder.Services.AddScoped<ClaimsService.Services.RetroRate.IRetroRateImpactRepo
     ClaimsService.Services.RetroRate.RetroRateImpactRepositoryMongo>();
 builder.Services.AddScoped<ClaimsService.Services.RetroRate.IRetroRateImpactService,
     ClaimsService.Services.RetroRate.RetroRateImpactService>();
+builder.Services.AddScoped<ClaimsService.Services.RetroRate.IRetroRateReprocessingRepository,
+    ClaimsService.Services.RetroRate.RetroRateReprocessingRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Services.RetroRate.IRetroRateReprocessingService,
+    ClaimsService.Services.RetroRate.RetroRateReprocessingService>();
 
 // CPCDS file drop: a folder per tenant the core's daily extracts land in,
 // loaded on a timer (members and coverage, claim providers, claims). Off

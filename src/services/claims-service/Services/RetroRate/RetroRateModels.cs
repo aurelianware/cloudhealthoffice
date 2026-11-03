@@ -74,6 +74,9 @@ public class RetroRateImpactResult
     public string RunId { get; set; } = string.Empty;
 
     public string ClaimId { get; set; } = string.Empty;
+
+    /// <summary>The claim version document that was read (what a reprocessing run adjusts).</summary>
+    public string ClaimDocumentId { get; set; } = string.Empty;
     public string ClaimNumber { get; set; } = string.Empty;
     public string ClaimStatus { get; set; } = string.Empty;
     public DateTime ServiceDateFrom { get; set; }
@@ -186,6 +189,21 @@ public class RetroRateOptions
 
     /// <summary>A paid difference at or below this is Unchanged.</summary>
     public decimal Tolerance { get; set; } = 0.01m;
+
+    /// <summary>
+    /// A reprocessing run must be approved by someone other than the person
+    /// who proposed it (two-person rule). On by default.
+    /// </summary>
+    public bool RequireSecondApprover { get; set; } = true;
+
+    /// <summary>
+    /// Per-tenant recoupment opt-in. Without an entry, overpayments are never
+    /// recouped: underpayments are paid, overpaid claims are left as paid.
+    /// </summary>
+    public Dictionary<string, RetroRateTenantOptions> Tenants { get; set; } = new(StringComparer.Ordinal);
+
+    public RetroRateTenantOptions For(string tenantId) =>
+        Tenants.TryGetValue(tenantId, out var t) ? t : new RetroRateTenantOptions();
 }
 
 /// <summary>The candidate query for <see cref="ClaimsService.Repositories.IClaimRepository.FindRetroRateCandidatesAsync"/>.</summary>

@@ -130,6 +130,76 @@ Limits:
   async runner that comes with the reprocessing run.
 - Nothing is adjusted. That is the next step.
 
+## Reprocessing run
+
+A reprocessing run turns an impact run into adjustments. It has three steps,
+each `claims:adjust`, and nothing changes until the last:
+
+```
+POST /api/v1/claims/retro-rate/reprocessing-runs              { "impactRunId": "...", "claimIds": [] }
+POST /api/v1/claims/retro-rate/reprocessing-runs/{id}/approve
+POST /api/v1/claims/retro-rate/reprocessing-runs/{id}/execute
+POST /api/v1/claims/retro-rate/reprocessing-runs/{id}/cancel   (Proposed or Approved only)
+GET  /api/v1/claims/retro-rate/reprocessing-runs[/{id}]
+```
+
+**Propose** plans each claim of the impact run (or only `claimIds`):
+
+| Impact direction | Action |
+|---|---|
+| Underpaid, Paid / PartiallyPaid | `PayDifference`: adjust |
+| Overpaid, plan opted in | `Recoup`: adjust |
+| Overpaid, plan not opted in | `SkipRecoupmentNotOptedIn`: left as paid |
+| Undecided | `SkipUndecided`: a person looks first |
+| Approved, not yet paid | `SkipNotYetPaid`: an adjustment needs a paid claim; re-run the impact after the payment cycle |
+| Unchanged | not listed |
+
+The plan shows the claims to adjust, the expected additional payment and
+recoupment, and what was skipped. A plan with nothing to adjust is recorded as
+Completed.
+
+**Approve** must be done by someone other than the proposer
+(`Adjudication:RetroRate:RequireSecondApprover`, default true).
+
+**Execute** re-reads each claim. If it changed since the impact run (adjusted,
+voided, superseded, no longer Paid), it is left alone (`ClaimChanged`).
+Otherwise it creates an adjustment through the same service as
+`POST /api/v1/claims/{id}/adjustments`, with:
+- the claim's own content as the corrected claim, so it re-adjudicates at the
+  current rates;
+- reason "Retro rate change: fee schedule {name} revision {n} (additional
+  payment | recoupment)";
+- idempotency key `retro-rate:{runId}:{claimDocumentId}`.
+
+From there the normal adjustment lifecycle runs: the new version adjudicates,
+the adjustment moves to PendingReversal, the reversal run sends the CLP02=22
+reversal of the original (and books the recoupment to GL), and the corrected
+claim pays in the next payment run. The net to the provider is the
+difference.
+
+Each item ends as `AdjustmentCreated`, `AlreadyAdjusted` (the run was
+executed again), `ClaimChanged`, `Refused` (the adjustment service said no,
+for example another adjustment is open or the claim was already adjusted
+once), `Failed` or `Skipped`. A run left Executing by a crash can be executed
+again; adjustments it already made are found by their idempotency key.
+
+### Recoupment opt-in
+
+Overpayments are never recouped unless the tenant opts in, per plan or for
+all plans:
+
+```json
+"Adjudication": {
+  "RetroRate": {
+    "Tenants": {
+      "tenant-1": { "RecoupPlans": ["STAR-TX", "3f1c..."], "RecoupAllPlans": false }
+    }
+  }
+}
+```
+
+Plan values match the claim's `benefitPlanId` (plan id or plan code).
+
 ## Portal
 
 Operations → **Rate Change Reprocessing** (`/retro-rate`, needs
@@ -148,9 +218,6 @@ Operations → **Rate Change Reprocessing** (`/retro-rate`, needs
 
 ## Coming next
 
-1. **Reprocessing run.** Approved by an operator; creates adjustments in bulk
-   through the existing adjustments API and reversal runs (CLP02=22 reversal
-   plus corrected claim on the 835). Underpayments are paid by default.
-   Recoupments of overpayments are opt-in per plan or contract.
-2. **Portal page** for change history, impact and approval.
-3. **State presets** (Texas, California) and Medicaid encounter replacements.
+1. **835 remark code** for a rate-change correction (a plan setting), and a
+   per-contract recoupment opt-in.
+2. **State presets** (Texas, California) and Medicaid encounter replacements.

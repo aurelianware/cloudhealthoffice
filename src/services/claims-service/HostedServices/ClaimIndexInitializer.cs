@@ -114,6 +114,7 @@ public sealed class ClaimIndexInitializer : IHostedService
             cancellationToken: cancellationToken);
         Services.Adjudication.Shadow.ShadowAdjudicationRepositoryMongo.EnsureIndexes(_db, cancellationToken);
         Services.RetroRate.RetroRateImpactRepositoryMongo.EnsureIndexes(_db, cancellationToken);
+        Services.RetroRate.RetroRateReprocessingRepositoryMongo.EnsureIndexes(_db, cancellationToken);
         Import.Cpcds.Drop.CpcdsDropRunRepositoryMongo.EnsureIndexes(_db, cancellationToken);
         // SNIP warning lookups: "who sends rule X" (e.g. L2-2300-DTP472).
         // Optional: some Mongo-compatible stores (e.g. Cosmos DB for MongoDB)
