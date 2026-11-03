@@ -260,7 +260,7 @@ public class EnrollmentImportServiceTests
 
         memberClient.Verify(m => m.CreateAsync(
             "t1",
-            It.Is<CreateMemberRequestDto>(r => r.MemberId == "M-delegate" && r.IsSubscriber),
+            It.Is<CreateMemberRequestDto>(r => r.MemberId == "M-delegate" && r.IsSubscriber && r.Status == "Active"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

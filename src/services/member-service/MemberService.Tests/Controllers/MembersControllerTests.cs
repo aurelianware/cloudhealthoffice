@@ -83,6 +83,18 @@ public class MembersControllerTests
     }
 
     [Fact]
+    public async Task CreateMember_TakesTheStatusTheEnrollmentFeedSends()
+    {
+        var (ctl, repo, _, _, _, _, _) = Build();
+        var req = CreateReq();
+        req.Status = EnrollmentStatus.Active;
+
+        await ctl.CreateMember(req, CancellationToken.None);
+
+        repo.Members[0].Status.Should().Be(EnrollmentStatus.Active);
+    }
+
+    [Fact]
     public async Task CreateMember_Records_race_and_ethnicity()
     {
         var (ctl, repo, _, _, _, _, _) = Build();
