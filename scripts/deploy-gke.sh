@@ -518,6 +518,18 @@ fi
 
 # ── MongoDB and Redis ────────────────────────────────────────────────────────
 log "Deploying MongoDB and Redis"
+# MongoDB runs as a single-node replica set (rs0): coverage-service writes PCP
+# rosters in multi-document transactions, which a standalone mongod rejects
+# (every coverage write then fails with 503 PCP_PANEL_UNAVAILABLE). With
+# authentication on, a replica set needs a keyfile; it is kept in a secret so
+# every deploy reuses the same one. Same set name and init as the compose stack.
+MONGO_KEYFILE="$(existing_secret_value mongodb-keyfile keyfile)"
+if [[ -z "$MONGO_KEYFILE" ]]; then
+  MONGO_KEYFILE="$(openssl rand -base64 756 | tr -d '\n')"
+  kubectl create secret generic mongodb-keyfile --namespace "$NAMESPACE" \
+    --from-literal=keyfile="$MONGO_KEYFILE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  ok "mongodb-keyfile (new)"
+fi
 # The manifest sets a 3.5 GB WiredTiger cache but requests 2Gi. Request enough
 # memory for the cache, put the data on standard disk, and with the small
 # profile lower the CPU request so everything fits on one node.
@@ -534,6 +546,13 @@ for d in docs:
             requests["memory"] = "5Gi"
             if os.environ["RESOURCE_PROFILE"] == "small":
                 requests["cpu"] = "250m"
+            # Single-node replica set for multi-document transactions.
+            c["args"] = c.get("args", []) + [
+                "--replSet", "rs0", "--bind_ip_all",
+                "--keyFile", "/etc/mongo-keyfile/keyfile",
+            ]
+            c.setdefault("volumeMounts", []).append(
+                {"name": "keyfile", "mountPath": "/etc/mongo-keyfile", "readOnly": True})
             if hosted:
                 c["args"] = c.get("args", []) + [
                     "--tlsMode", "requireTLS",
@@ -544,6 +563,25 @@ for d in docs:
                 ]
                 c.setdefault("volumeMounts", []).append(
                     {"name": "tls", "mountPath": "/etc/cho-tls", "readOnly": True})
+        # mongod refuses a keyfile readable by group or others, and a secret
+        # volume can't be owned by uid 999 with mode 0400, so an init
+        # container copies it into an emptyDir with the right owner and mode.
+        pod.setdefault("initContainers", []).append({
+            "name": "mongo-keyfile",
+            "image": pod["containers"][0]["image"],
+            "command": ["sh", "-c",
+                        "cp /keyfile-src/keyfile /etc/mongo-keyfile/keyfile && "
+                        "chown 999:999 /etc/mongo-keyfile/keyfile && "
+                        "chmod 0400 /etc/mongo-keyfile/keyfile"],
+            "volumeMounts": [
+                {"name": "keyfile-src", "mountPath": "/keyfile-src", "readOnly": True},
+                {"name": "keyfile", "mountPath": "/etc/mongo-keyfile"},
+            ],
+        })
+        pod.setdefault("volumes", []).extend([
+            {"name": "keyfile-src", "secret": {"secretName": "mongodb-keyfile"}},
+            {"name": "keyfile", "emptyDir": {"medium": "Memory"}},
+        ])
         if hosted:
             # mongod runs as uid 999; the group lets it read the key.
             pod.setdefault("securityContext", {})["fsGroup"] = 999
@@ -577,6 +615,23 @@ for _ in $(seq 1 60); do
 done
 [[ "$mongo_ready" == true ]] || err "MongoDB never accepted an authenticated connection"
 ok "mongodb accepting connections"
+
+# Initiate the single-node replica set once (idempotent), named by the host
+# clients resolve, then wait for it to become writable primary.
+kubectl exec -n "$NAMESPACE" mongodb-0 -- "${MONGOSH[@]}" --eval "
+  try { rs.status() } catch (e) {
+    rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '${MONGO_HOST}:27017' }] })
+  }" >/dev/null || err "MongoDB replica set rs0 could not be initiated"
+mongo_primary=false
+for _ in $(seq 1 60); do
+  if [[ "$(kubectl exec -n "$NAMESPACE" mongodb-0 -- "${MONGOSH[@]}" \
+      --eval 'db.hello().isWritablePrimary' 2>/dev/null | tr -d '[:space:]')" == true ]]; then
+    mongo_primary=true; break
+  fi
+  sleep 2
+done
+[[ "$mongo_primary" == true ]] || err "MongoDB replica set rs0 never elected a primary"
+ok "mongodb replica set rs0 primary"
 
 if [[ "$HOSTED" == true ]]; then
   # No synthetic tenant or member: the plan's own data arrives through the
