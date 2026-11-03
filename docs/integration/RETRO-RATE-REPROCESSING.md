@@ -72,17 +72,69 @@ A line whose `feeScheduleId` matches a `Replaced` change and whose
 rates. Claims priced before this was recorded have an empty `linePricing`; for
 them, the plan (`defaultForPlanId`) and date of service are the fallback match.
 
+## Dry-run impact report
+
+`POST /api/v1/claims/retro-rate/impact-runs` (claims-service, permission
+`claims:adjust`) measures one change against the claims already paid:
+
+```json
+{ "feeScheduleId": "tenant-1:TMHP adult:20260901", "revision": 3, "limit": 2000 }
+```
+
+`revision` is the change's `newRevision`; leave it out for the schedule's
+latest change. The run:
+
+1. Reads the change from benefit-plan-service (`GET /api/v1/fee-schedules/changes`).
+2. Reads candidate claims: current-version, unadjusted Approved / PartiallyPaid /
+   Paid claims whose dates of service overlap the change's window (the earlier
+   of the old and new effective dates to the later term date) and that either
+   name the schedule in `linePricing` or `supplementalPayments`, or are on the
+   plan the schedule is the default (or supplemental) for. At most `limit`
+   (capped by `Adjudication:RetroRate:MaxClaimsPerRun`, default 2,000);
+   `truncated` says when there were more.
+3. Keeps the claims the change actually touches (`match`):
+   - `Provenance`: a line was priced on this schedule at an older revision and
+     bills a changed code (any code when the change has `allCodes`);
+   - `Supplemental`: a supplemental payment on a changed code came from it;
+   - `PlanFallback`: the claim has no pricing provenance (priced before it was
+     recorded), is on the schedule's plan and bills a changed code. Broader:
+     a provider contract may have priced it instead;
+   - `NewSchedule`: the change created a schedule effective back over claims
+     on its plan that were priced on something else.
+4. Re-prices each one through the shadow pipeline (the same read-only stages
+   shadow adjudication uses: no persistence, no event, no accumulator write)
+   and compares it with what was paid, line by line.
+5. Classifies each claim by `direction`: `Underpaid` (an additional payment is
+   owed), `Overpaid` (a recoupment, only where the plan opts in), `Unchanged`
+   (within `Adjudication:RetroRate:Tolerance`, default $0.01), or `Undecided`
+   (the re-price pended, denied or rejected; its pend code says why).
+
+The run returns totals: claims affected, counts by direction and match, total
+underpaid, total overpaid, net, member liability change, the 25 providers with
+the largest net, failures, and notes for the reader. Per-claim results:
+
+```
+GET /api/v1/claims/retro-rate/impact-runs
+GET /api/v1/claims/retro-rate/impact-runs/{runId}
+GET /api/v1/claims/retro-rate/impact-runs/{runId}/results?direction=Underpaid&limit=200
+GET /api/v1/claims/retro-rate/impact-runs/{runId}/claims.csv
+```
+
+Limits:
+
+- Member cost share is recalculated against today's accumulators, which
+  already include the paid claim, so member liability changes on deductible or
+  out-of-pocket claims are estimates. Medicaid claims with no cost share are
+  exact.
+- A run is synchronous and capped; very large changes need several runs or the
+  async runner that comes with the reprocessing run.
+- Nothing is adjusted. That is the next step.
+
 ## Coming next
 
-1. **Affected-claim finder and dry-run impact report.** For a change, list the
-   approved and paid claims it touches (date of service in the effective range,
-   a line on the schedule at an older revision, or on the plan for older claims,
-   and a changed code), re-price them with the shadow pipeline, and report old
-   and new allowed, paid and member liability per claim and per provider, with
-   a CSV.
-2. **Reprocessing run.** Approved by an operator; creates adjustments in bulk
+1. **Reprocessing run.** Approved by an operator; creates adjustments in bulk
    through the existing adjustments API and reversal runs (CLP02=22 reversal
    plus corrected claim on the 835). Underpayments are paid by default.
    Recoupments of overpayments are opt-in per plan or contract.
-3. **Portal page** for change history, impact and approval.
-4. **State presets** (Texas, California) and Medicaid encounter replacements.
+2. **Portal page** for change history, impact and approval.
+3. **State presets** (Texas, California) and Medicaid encounter replacements.

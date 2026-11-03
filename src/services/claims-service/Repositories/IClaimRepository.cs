@@ -347,6 +347,18 @@ public interface IClaimRepository
     Task<IReadOnlyList<Claim>> FindFinalizedMedicaidAsync(
         DateTime from, DateTime to, string? memberId, bool payAndChaseOnly, int limit, CancellationToken ct = default);
 
+    /// <summary>
+    /// Retro rate reprocessing: current-version, unadjusted Approved /
+    /// PartiallyPaid / Paid claims of the request tenant whose dates of service
+    /// overlap the query's window and that either name the fee schedule in
+    /// their pricing provenance or supplemental payments, or are on one of its
+    /// plans. Oldest service first, at most <paramref name="limit"/>.
+    /// <see cref="Services.RetroRate.RetroRateMatcher"/> narrows them further.
+    /// </summary>
+    Task<IReadOnlyList<Claim>> FindRetroRateCandidatesAsync(
+        Services.RetroRate.RetroRateCandidateQuery query, int limit, CancellationToken ct = default)
+        => throw new NotSupportedException("This claim store cannot search for retro rate candidates.");
+
     Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(
         DateTime from, DateTime to, int limit, CancellationToken ct = default);
 

@@ -10,7 +10,9 @@ namespace BenefitPlanService.Controllers;
 /// The change history of this tenant's fee schedules: one entry for every
 /// create and replace, whichever importer, library deploy or API made it, with
 /// the codes whose rates moved. Retro rate reprocessing starts from here. See
-/// docs/integration/RETRO-RATE-REPROCESSING.md.
+/// docs/integration/RETRO-RATE-REPROCESSING.md. Readable with benefits:read,
+/// or with the claims permissions claims-service's retro rate impact run calls
+/// it under.
 /// </summary>
 [ApiController]
 public sealed class FeeScheduleChangesController : ControllerBase
@@ -21,7 +23,7 @@ public sealed class FeeScheduleChangesController : ControllerBase
 
     /// <summary>Changes newest first, optionally for one schedule (<c>scheduleId</c>) and since a time.</summary>
     [HttpGet("api/v1/fee-schedules/changes")]
-    [RequirePermission("benefits:read")]
+    [RequirePermission("benefits:read,claims:work,claims:adjust")]
     [ProducesResponseType(typeof(IReadOnlyList<FeeScheduleChange>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<FeeScheduleChange>>> List(
         [FromQuery] string? scheduleId, [FromQuery] DateTime? since, [FromQuery] int limit = 50, CancellationToken ct = default)
@@ -38,7 +40,7 @@ public sealed class FeeScheduleChangesController : ControllerBase
     /// replaced: the live schedule still holds it.
     /// </summary>
     [HttpGet("api/v1/fee-schedules/revision")]
-    [RequirePermission("benefits:read")]
+    [RequirePermission("benefits:read,claims:work,claims:adjust")]
     [ProducesResponseType(typeof(FeeScheduleRevisionSnapshot), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<FeeScheduleRevisionSnapshot>> GetRevision(

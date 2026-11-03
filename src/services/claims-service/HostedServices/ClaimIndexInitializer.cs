@@ -69,6 +69,11 @@ public sealed class ClaimIndexInitializer : IHostedService
                 .Ascending(c => c.TenantId)
                 .Ascending(c => c.MemberId)
                 .Ascending(c => c.ServiceDateFrom)),
+            // Retro rate reprocessing: paid claims priced on a fee schedule
+            // (FindRetroRateCandidatesAsync). Multikey over the line pricing.
+            new CreateIndexModel<Claim>(new IndexKeysDefinitionBuilder<Claim>()
+                .Ascending(c => c.TenantId).Ascending("AdjudicationResult.LinePricing.FeeScheduleId"),
+                new CreateIndexOptions { Name = "retro_rate_line_pricing_schedule" }),
             // Accumulator outbox: the dispatcher's due scan (sparse — only
             // claims with an entry carry the field).
             new CreateIndexModel<Claim>(keys.Ascending(c => c.PendingAccumulatorCommit!.DueAtMs),
@@ -108,6 +113,7 @@ public sealed class ClaimIndexInitializer : IHostedService
             new CreateIndexOptions { Name = "tenant_import_batch", Sparse = true }),
             cancellationToken: cancellationToken);
         Services.Adjudication.Shadow.ShadowAdjudicationRepositoryMongo.EnsureIndexes(_db, cancellationToken);
+        Services.RetroRate.RetroRateImpactRepositoryMongo.EnsureIndexes(_db, cancellationToken);
         Import.Cpcds.Drop.CpcdsDropRunRepositoryMongo.EnsureIndexes(_db, cancellationToken);
         // SNIP warning lookups: "who sends rule X" (e.g. L2-2300-DTP472).
         // Optional: some Mongo-compatible stores (e.g. Cosmos DB for MongoDB)
