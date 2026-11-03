@@ -78,8 +78,9 @@ public sealed class ShadowAccumulatorBalanceRepositoryMongo : IShadowAccumulator
     public async Task UpsertAsync(IReadOnlyList<ShadowAccumulatorBalance> balances, CancellationToken ct = default)
     {
         if (balances.Count == 0) return;
+        var f = Builders<ShadowAccumulatorBalance>.Filter;
         var writes = balances.Select(b => new ReplaceOneModel<ShadowAccumulatorBalance>(
-            Builders<ShadowAccumulatorBalance>.Filter.Eq(x => x.Id, b.Id), b) { IsUpsert = true });
+            f.Eq(x => x.Id, b.Id) & f.Eq(x => x.TenantId, b.TenantId), b) { IsUpsert = true });
         await _balances.BulkWriteAsync(writes, new BulkWriteOptions { IsOrdered = false }, ct);
     }
 
