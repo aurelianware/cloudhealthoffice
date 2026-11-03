@@ -81,18 +81,23 @@ public class ShadowAdjudicationPageTests : TestContext
     }
 
     [Fact]
-    public void A_loaded_claim_file_can_be_shadowed_from_the_page()
+    public void A_loaded_claim_file_runs_in_the_background_and_its_report_opens_when_done()
     {
-        var run2 = new ShadowRun { Id = "run2", ClaimsCompared = 10, StartedAtUtc = DateTime.UtcNow };
-        _shadow.Setup(s => s.RunBatchAsync("batch-1")).ReturnsAsync(DataDropChange<ShadowRun>.Ok(run2));
-        _shadow.Setup(s => s.GetReportAsync("run2", It.IsAny<int>())).ReturnsAsync(new ShadowRunReport { Run = run2, ComparableClaims = 10 });
+        ShadowAdjudication.RefreshEvery = TimeSpan.FromMilliseconds(50);
+        var queued = new ShadowRun { Id = "run2", Status = "Running", Background = true, ClaimsRequested = 1000, ClaimsProcessed = 400, StartedAtUtc = DateTime.UtcNow };
+        var done = new ShadowRun { Id = "run2", Status = "Completed", Background = true, ClaimsRequested = 1000, ClaimsProcessed = 1000, ClaimsCompared = 990, StartedAtUtc = DateTime.UtcNow };
+        _shadow.Setup(s => s.RunBatchAsync("batch-1")).ReturnsAsync(DataDropChange<ShadowRun>.Ok(queued));
+        _shadow.Setup(s => s.GetReportAsync("run2", It.IsAny<int>())).ReturnsAsync(new ShadowRunReport { Run = done, ComparableClaims = 990 });
 
         var cut = RenderComponent<ShadowAdjudication>();
         cut.WaitForAssertion(() => cut.Find("[data-testid=shadow-batches]").TextContent.Should().Contain("CPCDS_Claims_20261103.csv").And.Contain("10"));
 
+        _shadow.Setup(s => s.ListRunsAsync(It.IsAny<int>())).ReturnsAsync(new List<ShadowRun> { queued, Run1 });
         cut.Find("[data-testid=shadow-run-batch]").Click();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=shadow-run-status]").TextContent.Should().Contain("Running 400 of 1,000"));
 
-        cut.WaitForAssertion(() => _shadow.Verify(s => s.GetReportAsync("run2", It.IsAny<int>()), Times.Once));
+        _shadow.Setup(s => s.ListRunsAsync(It.IsAny<int>())).ReturnsAsync(new List<ShadowRun> { done, Run1 });
+        cut.WaitForAssertion(() => _shadow.Verify(s => s.GetReportAsync("run2", It.IsAny<int>()), Times.Once), TimeSpan.FromSeconds(5));
         _shadow.Verify(s => s.RunBatchAsync("batch-1"), Times.Once);
     }
 

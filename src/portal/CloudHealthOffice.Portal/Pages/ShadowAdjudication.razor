@@ -6,6 +6,7 @@
 @inject IDataDropService DataDrops
 @inject IShadowAdjudicationClient Shadow
 @inject ISnackbar Snackbar
+@implements IDisposable
 
 @*
     Shadow adjudication: CHO re-adjudicates claims the plan's core already
@@ -96,7 +97,7 @@
                 @if (_settings is { } s && s.MaxClaimsPerRun > 0)
                 {
                     <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); display: block;" Class="mt-1">
-                        A run takes up to @s.MaxClaimsPerRun.ToString("N0", CultureInfo.InvariantCulture) claims of the file.
+                        A run compares every claim in the file in the background, @s.MaxClaimsPerRun.ToString("N0", CultureInfo.InvariantCulture) at a time; this page shows its progress.
                     </MudText>
                 }
             </MudPaper>
@@ -113,7 +114,7 @@
                 {
                     <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="my-2">
                         <thead>
-                            <tr><th>Started</th><th>By</th><th>Compared</th><th>CHO decided</th><th>Match rate</th><th>Net paid difference</th><th></th></tr>
+                            <tr><th>Started</th><th>By</th><th>Status</th><th>Compared</th><th>CHO decided</th><th>Match rate</th><th>Net paid difference</th><th></th></tr>
                         </thead>
                         <tbody>
                             @foreach (var run in _runs)
@@ -121,11 +122,31 @@
                                 <tr style="@(run.Id == _report?.Run.Id ? "background: var(--cb-accent-border-15);" : "")">
                                     <td>@run.StartedAtUtc.ToLocalTime().ToString("MM/dd/yyyy HH:mm", CultureInfo.InvariantCulture)</td>
                                     <td>@(run.RequestedBy == "cpcds-drop" ? "After file load" : run.RequestedBy)</td>
-                                    <td>@run.ClaimsCompared.ToString("N0", CultureInfo.InvariantCulture)</td>
-                                    <td>@Percent(1 - run.UndecidedRate)</td>
-                                    <td>@Percent(run.MatchRate)</td>
-                                    <td>@Money(run.NetPaidVariance)</td>
-                                    <td><MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => OpenAsync(run.Id)" data-testid="shadow-open-run">Report</MudButton></td>
+                                    <td data-testid="shadow-run-status">
+                                        @if (run.InProgress)
+                                        {
+                                            <span>@run.Status @run.ClaimsProcessed.ToString("N0", CultureInfo.InvariantCulture) of @run.ClaimsRequested.ToString("N0", CultureInfo.InvariantCulture)</span>
+                                            <MudProgressLinear Color="Color.Primary" Value="@Progress(run)" Size="Size.Small" />
+                                        }
+                                        else if (run.Status == "Failed")
+                                        {
+                                            <MudTooltip Text="@(run.Error ?? "")"><span style="color: var(--mud-palette-error);">Failed</span></MudTooltip>
+                                        }
+                                        else
+                                        {
+                                            <span>Done</span>
+                                        }
+                                    </td>
+                                    <td>@(run.InProgress ? "" : run.ClaimsCompared.ToString("N0", CultureInfo.InvariantCulture))</td>
+                                    <td>@(run.InProgress ? "" : Percent(1 - run.UndecidedRate))</td>
+                                    <td>@(run.InProgress ? "" : Percent(run.MatchRate))</td>
+                                    <td>@(run.InProgress ? "" : Money(run.NetPaidVariance))</td>
+                                    <td>
+                                        @if (!run.InProgress)
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => OpenAsync(run.Id)" data-testid="shadow-open-run">Report</MudButton>
+                                        }
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -237,6 +258,12 @@
 
     private bool CanRun => _settings is { Running: true } && !_saving;
 
+    /// <summary>How often the page re-reads runs while one is queued or running.</summary>
+    public static TimeSpan RefreshEvery { get; set; } = TimeSpan.FromSeconds(5);
+
+    private System.Threading.Timer? _refresh;
+    private bool _disposed;
+
     /// <summary>A claim file the daily drop loaded, which a run can be pointed at.</summary>
     public sealed record ClaimBatch(string ImportBatchId, string FileName, DateTime LoadedAt, decimal Claims);
 
@@ -248,8 +275,9 @@
             _settings = await DataDrops.GetShadowSettingsAsync();
             _runs = await Shadow.ListRunsAsync();
             _batches = ClaimBatches(await DataDrops.GetRunsAsync(30));
-            if (_runs.FirstOrDefault() is { } latest)
+            if (_runs.FirstOrDefault(r => !r.InProgress) is { } latest)
                 await OpenAsync(latest.Id);
+            WatchProgress();
         }
         catch (Exception ex)
         {
@@ -311,9 +339,9 @@
             var result = await Shadow.RunBatchAsync(importBatchId.Trim());
             if (result.Succeeded)
             {
-                Snackbar.Add($"Shadow run finished: {result.Value!.ClaimsCompared:N0} claims compared.", Severity.Success);
+                Snackbar.Add("Shadow run started. Its report opens here when it finishes.", Severity.Success);
                 _runs = await Shadow.ListRunsAsync();
-                await OpenAsync(result.Value.Id);
+                WatchProgress();
             }
             else
             {
@@ -328,6 +356,50 @@
         {
             _saving = false;
         }
+    }
+
+    private static double Progress(ShadowRun run)
+        => run.ClaimsRequested <= 0 ? 0 : Math.Min(100, 100.0 * run.ClaimsProcessed / run.ClaimsRequested);
+
+    /// <summary>While a run is queued or running, re-read the runs; open the report of one that just finished.</summary>
+    private void WatchProgress()
+    {
+        if (_refresh is not null || _disposed || !_runs.Any(r => r.InProgress))
+            return;
+        _refresh = new System.Threading.Timer(_ => _ = InvokeAsync(RefreshRunsAsync), null, RefreshEvery, RefreshEvery);
+    }
+
+    private async Task RefreshRunsAsync()
+    {
+        if (_disposed)
+            return;
+        try
+        {
+            var before = _runs.Where(r => r.InProgress).Select(r => r.Id).ToHashSet();
+            _runs = await Shadow.ListRunsAsync();
+            var finished = _runs.FirstOrDefault(r => before.Contains(r.Id) && !r.InProgress && r.Status != "Failed");
+            if (finished is not null)
+                await OpenAsync(finished.Id);
+            if (!_runs.Any(r => r.InProgress))
+            {
+                _refresh?.Dispose();
+                _refresh = null;
+            }
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _refresh?.Dispose();
+            _refresh = null;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _refresh?.Dispose();
     }
 
     private async Task OpenAsync(string runId)

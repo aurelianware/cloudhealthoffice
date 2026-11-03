@@ -91,6 +91,16 @@ the CPCDS import report). Runs synchronously over at most
 | `skipped` | Claims not found, or not loaded from a core. |
 | `failed` | Claims whose run threw (logged). |
 
+**Whole files, in the background.** Add `"background": true` (with an
+`importBatchId`) and the call answers `202 Accepted` with the queued run at
+once. A worker in claims-service then adjudicates every claim of the batch (up
+to `MaxClaimsPerBackgroundRun`, 50,000), `MaxClaimsPerRun` at a time, saving
+the results and `claimsProcessed` after each page. `status` goes `Queued`,
+`Running`, then `Completed` or `Failed` (with `error`). A replica that stops
+mid-run leaves its lease (`LeaseDuration`, 5 minutes) to lapse, and the next
+one resumes after the claims already compared. The automatic run after each
+CPCDS file drop and the portal's "Run shadow" both use this.
+
 `GET /api/v1/claims/shadow-adjudication/runs` lists recent runs,
 `GET .../runs/{runId}` returns one, and `GET .../runs/{runId}/results?kind=PaidVariance&limit=200`
 returns per-claim comparisons, largest paid difference first.
@@ -169,7 +179,10 @@ you which one is missing.
 |---|---|---|
 | `Enabled` | `false` | The deployment's switch. Runs are refused (409) unless true. `true` in the CPCDS trial and hosted drop profiles. |
 | `Tenants` | `[]` | When set, only these tenants run, unless a tenant saved its own choice (`PUT .../settings`), which wins. Empty: every tenant. |
-| `MaxClaimsPerRun` | `200` | Most claims one synchronous run adjudicates. |
+| `MaxClaimsPerRun` | `200` | Most claims one synchronous run adjudicates; the page size of a background run. |
+| `MaxClaimsPerBackgroundRun` | `50000` | Most claims one background run adjudicates. |
+| `WorkerInterval` | `00:00:10` | How often the worker looks for queued runs. |
+| `LeaseDuration` | `00:05:00` | How long a replica holds a running run between pages. |
 | `Tolerance` | `0.01` | Dollar difference treated as equal. |
 
 A shadow run calls the same services a real adjudication does (benefit-plan,
