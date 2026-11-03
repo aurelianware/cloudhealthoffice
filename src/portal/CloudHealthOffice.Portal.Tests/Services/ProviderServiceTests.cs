@@ -142,9 +142,112 @@ public class ProviderServiceTests
         await sut.SearchProvidersAsync(specialty: "Cardiology", networkStatus: "In-Network", searchTerm: "Smith");
 
         var url = handler.CapturedUrls.Single();
+        url.Should().Contain("/providers/search?");
         url.Should().Contain("specialty=Cardiology");
-        url.Should().Contain("networkStatus=In-Network");
-        url.Should().Contain("search=Smith");
+        url.Should().Contain("name=Smith");
+        // provider-service has no network-status filter; the portal filters on the derived status.
+        url.Should().NotContain("networkStatus=");
+    }
+
+    [Fact]
+    public async Task SearchProvidersAsync_Filtered_WithNpi_UsesExactNpiLookup()
+    {
+        var handler = new FakeHandler(HttpStatusCode.NotFound, "");
+        var sut = CreateService(new HttpClient(handler));
+
+        var result = await sut.SearchProvidersAsync(specialty: null, searchTerm: "1234567893");
+
+        result.Should().BeEmpty();
+        handler.CapturedUrls.Single().Should().EndWith("/providers/npi/1234567893");
+    }
+
+    // provider-service returns its stored Provider record, not the portal's
+    // flat list shape. Before ProviderRecordProjection the grid read it
+    // straight into ProviderListItem and showed blank names (demo, Nov 2026).
+    private static readonly string StoredProviderRecords = """
+        [
+          {
+            "id": "row-1", "providerId": "PRV-1", "npi": "9280640944",
+            "providerType": "Individual", "firstName": "Linda", "lastName": "Garcia",
+            "credentials": "MD", "fullName": "Linda Garcia MD",
+            "primarySpecialty": "207Q00000X", "taxonomyCode": "207Q00000X",
+            "address": "120 Medical Dr", "city": "Dallas", "state": "TX", "zipCode": "75201",
+            "credentialingStatus": "Approved", "integrityScore": 96, "integrityRating": "Clear",
+            "networkParticipations": [
+              { "planId": "plan-1", "networkId": "mcc-in", "lineOfBusiness": "Medicaid",
+                "networkTier": "InNetwork", "effectiveDate": "2024-01-01T00:00:00Z" }
+            ]
+          },
+          {
+            "id": "row-2", "providerId": "PRV-2", "npi": "9242532080",
+            "providerType": "Organization", "organizationName": "Parkview Community Hospital",
+            "fullName": "Parkview Community Hospital",
+            "primarySpecialty": "General Acute Care Hospital", "taxonomyCode": "282N00000X",
+            "city": "Fort Worth", "state": "TX", "credentialingStatus": "Approved",
+            "networkParticipations": [
+              { "planId": "plan-1", "networkId": "mcc-oon", "networkTier": "OutOfNetwork",
+                "effectiveDate": "2024-01-01T00:00:00Z" }
+            ]
+          }
+        ]
+        """;
+
+    [Fact]
+    public async Task SearchProvidersAsync_Filtered_MapsStoredProviderRecords()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, StoredProviderRecords)));
+
+        var result = await sut.SearchProvidersAsync(specialty: null, searchTerm: "a");
+
+        result.Should().HaveCount(2);
+        result[0].ProviderId.Should().Be("PRV-1");
+        result[0].Name.Should().Be("Linda Garcia MD");
+        result[0].PracticeType.Should().Be("Individual");
+        result[0].Specialty.Should().Be("Family Medicine");
+        result[0].NetworkStatus.Should().Be("In-Network");
+        result[0].NetworkCount.Should().Be(1);
+        result[0].IntegrityRating.Should().Be("Clear");
+        result[1].Name.Should().Be("Parkview Community Hospital");
+        result[1].PracticeType.Should().Be("Organization");
+        result[1].PracticeName.Should().Be("Parkview Community Hospital");
+        result[1].NetworkStatus.Should().Be("Out-of-Network");
+        result[1].NetworkCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SearchProvidersAsync_Filtered_FiltersOnDerivedNetworkStatus()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, StoredProviderRecords)));
+
+        var result = await sut.SearchProvidersAsync(networkStatus: "In-Network", searchTerm: "a");
+
+        result.Should().ContainSingle().Which.NPI.Should().Be("9280640944");
+    }
+
+    [Fact]
+    public async Task SearchProvidersAsync_ByTerm_MapsStoredProviderRecords()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, StoredProviderRecords)));
+
+        var result = await sut.SearchProvidersAsync("Garcia");
+
+        result[0].Name.Should().Be("Linda Garcia MD");
+        result[0].Specialty.Should().Be("Family Medicine");
+    }
+
+    [Fact]
+    public async Task GetProviderByIdAsync_MapsStoredProviderRecordWithCredentialsString()
+    {
+        var single = System.Text.Json.JsonDocument.Parse(StoredProviderRecords).RootElement[0].GetRawText();
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, single)));
+
+        var result = await sut.GetProviderByIdAsync("PRV-1");
+
+        result.Should().NotBeNull();
+        result!.Name.Should().Be("Linda Garcia MD");
+        result.TaxonomyCode.Should().Be("207Q00000X");
+        result.Locations.Should().ContainSingle().Which.ZipCode.Should().Be("75201");
+        result.NetworkAssignments.Should().ContainSingle().Which.Status.Should().Be("Active");
     }
 
     [Fact]

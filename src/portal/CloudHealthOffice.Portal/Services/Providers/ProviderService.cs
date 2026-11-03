@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Net;
+using System.Text.Json;
 
 namespace CloudHealthOffice.Portal.Services;
 
@@ -21,8 +22,26 @@ public class ProviderService : IProviderService
         var baseUrl = _configuration["Services:ProviderService"];
         try
         {
-            var providers = await _httpClient.GetFromJsonAsync<List<ProviderSummary>>($"{baseUrl}/providers/search?q={searchTerm}");
-            return providers ?? new List<ProviderSummary>();
+            var term = searchTerm?.Trim() ?? string.Empty;
+            if (IsNpi(term))
+            {
+                // Name search does not match NPIs; an NPI goes to the exact lookup.
+                using var response = await _httpClient.GetAsync($"{baseUrl}/providers/npi/{term}");
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    return new List<ProviderSummary>();
+                }
+
+                response.EnsureSuccessStatusCode();
+                var single = await response.Content.ReadFromJsonAsync<JsonElement>();
+                return ProviderRecordProjection.ToSummaries(
+                    single.ValueKind == JsonValueKind.Object ? WrapInArray(single) : single,
+                    DateTime.UtcNow);
+            }
+
+            var payload = await _httpClient.GetFromJsonAsync<JsonElement>(
+                $"{baseUrl}/providers/search?q={Uri.EscapeDataString(term)}");
+            return ProviderRecordProjection.ToSummaries(payload, DateTime.UtcNow);
         }
         catch (HttpRequestException ex)
         {
@@ -36,16 +55,57 @@ public class ProviderService : IProviderService
         var baseUrl = _configuration["Services:ProviderService"];
         try
         {
-            var query = $"{baseUrl}/providers/list?";
-            if (!string.IsNullOrEmpty(specialty))
-                query += $"specialty={specialty}&";
-            if (!string.IsNullOrEmpty(networkStatus))
-                query += $"networkStatus={networkStatus}&";
-            if (!string.IsNullOrEmpty(searchTerm))
-                query += $"search={searchTerm}";
+            var asOf = DateTime.UtcNow;
+            var term = searchTerm?.Trim();
+            List<ProviderListItem> providers;
 
-            var providers = await _httpClient.GetFromJsonAsync<List<ProviderListItem>>(query);
-            return providers ?? new List<ProviderListItem>();
+            if (!string.IsNullOrEmpty(term) && IsNpi(term))
+            {
+                // The NPI box is an exact match: GET /providers/npi/{npi}.
+                using var response = await _httpClient.GetAsync($"{baseUrl}/providers/npi/{term}");
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    return new List<ProviderListItem>();
+                }
+
+                response.EnsureSuccessStatusCode();
+                var single = await response.Content.ReadFromJsonAsync<JsonElement>();
+                providers = single.ValueKind == JsonValueKind.Object
+                    ? new List<ProviderListItem> { ProviderRecordProjection.ToListItem(single, asOf) }
+                    : ProviderRecordProjection.ToListItems(single, asOf);
+            }
+            else
+            {
+                // /providers/list takes no name filter, so a name search goes
+                // to /providers/search (first, last or organization name).
+                var query = string.IsNullOrEmpty(term)
+                    ? $"{baseUrl}/providers/list?"
+                    : $"{baseUrl}/providers/search?name={Uri.EscapeDataString(term)}&";
+                if (!string.IsNullOrEmpty(specialty))
+                    query += $"specialty={Uri.EscapeDataString(specialty)}&";
+                query += "pageSize=200";
+
+                var payload = await _httpClient.GetFromJsonAsync<JsonElement>(query);
+                providers = ProviderRecordProjection.ToListItems(payload, asOf);
+            }
+
+            if (!string.IsNullOrEmpty(specialty))
+            {
+                providers = providers
+                    .Where(p => p.Specialty.Contains(specialty, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            // provider-service has no network-status filter; the status is
+            // derived from the provider's network participations.
+            if (!string.IsNullOrEmpty(networkStatus))
+            {
+                providers = providers
+                    .Where(p => string.Equals(p.NetworkStatus, networkStatus, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            return providers;
         }
         catch (HttpRequestException ex)
         {
@@ -54,12 +114,18 @@ public class ProviderService : IProviderService
         }
     }
 
+    private static JsonElement WrapInArray(JsonElement item)
+        => JsonDocument.Parse($"[{item.GetRawText()}]").RootElement.Clone();
+
+    private static bool IsNpi(string term) => term.Length == 10 && term.All(char.IsAsciiDigit);
+
     public async Task<ProviderDetails?> GetProviderByIdAsync(string providerId)
     {
         var baseUrl = _configuration["Services:ProviderService"];
         try
         {
-            return await _httpClient.GetFromJsonAsync<ProviderDetails>($"{baseUrl}/providers/{providerId}");
+            var payload = await _httpClient.GetFromJsonAsync<JsonElement>($"{baseUrl}/providers/{providerId}");
+            return ProviderRecordProjection.ToDetails(payload, DateTime.UtcNow);
         }
         catch (HttpRequestException ex)
         {
