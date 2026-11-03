@@ -57,7 +57,9 @@ saved choice replaces what `Adjudication:Shadow:Tenants` says for that tenant,
 in either direction. `Adjudication:Shadow:Enabled` stays the deployment's
 switch: while it is off, nothing runs, whatever a tenant saved.
 
-In the portal: Imports & EDI, Setup, "Shadow adjudication for this plan".
+In the portal: Operations → Shadow Adjudication (or Imports & EDI, Setup), "Shadow adjudication for this plan".
+The Shadow Adjudication page also runs shadow adjudication on a loaded claim
+file, lists the runs, and shows each run's report and discrepancy CSV.
 Switching on "Shadow-adjudicate each claim file after it loads" there turns
 shadow adjudication on for the plan too.
 
