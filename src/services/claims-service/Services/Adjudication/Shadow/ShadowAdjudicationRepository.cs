@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Data;
 using MongoDB.Driver;
 
 namespace ClaimsService.Services.Adjudication.Shadow;
@@ -111,6 +112,7 @@ public sealed class ShadowAdjudicationRepositoryMongo : IShadowAdjudicationRepos
         return ids.ToHashSet(StringComparer.Ordinal);
     }
 
+    [CrossTenantQuery("The background shadow worker runs outside any request and takes the next queued run of any tenant; it then works the run under that run's TenantId.")]
     public Task<ShadowAdjudicationRun?> TakeNextBackgroundRunAsync(DateTime nowUtc, DateTime leaseUntilUtc, CancellationToken ct = default)
     {
         var f = Builders<ShadowAdjudicationRun>.Filter;
