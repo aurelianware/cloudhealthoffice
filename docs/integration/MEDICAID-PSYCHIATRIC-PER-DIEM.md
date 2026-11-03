@@ -31,8 +31,8 @@ A claim reaches this pricer through the Texas inpatient path: the plan sets `pri
 These hospitals are institutions for mental diseases (IMDs). Medicaid covers an IMD stay for clients under 21 and 65 or older. For adults 21 to 64, a managed care plan may cover it "in lieu of" other services for at most 15 days in a calendar month (42 CFR 438.6(e)). A longer stay costs the state federal match on that month's capitation.
 
 - The limit applies by age at admission, default 21 to 64 (`ImdLimitMinimumAge`, `ImdLimitMaximumAge`).
-- Days are counted per calendar month. Days already paid on the member's earlier claims are passed in (`ImdDaysAlreadyPaid`), and each priced claim returns the days it adds (`ImdDaysByMonth`).
-- Over the limit, the claim pends by default (`OverLimitAction = Pend`). Whether the plan still pays the hospital is the plan's decision, so the plan can set `Pay` to pay with a step noting the limit.
+- Days are counted per calendar month, including the member's days on other claims. In claim pricing, the claims service reads the member's other live institutional claims in the months the stay touches (the same live-claim query as the duplicate check: not denied, voided, superseded or a void request, and not this claim's own chain). It sends their room and board days with the stay (`PricingRequest.OtherInpatientDays`). The pricer counts only days at hospitals that have a psychiatric per diem, because only those are IMDs. If the history can't be read, the claim pends (`PRICING`) rather than being checked against half the month.
+- Over the limit, the claim pends by default. Whether the plan still pays the hospital is the plan's decision, set by `pricing.inpatient.imdOverLimitAction` (`pend` or `pay`; tenant, line of business or plan; a reason is required to change it). With `pay` the stay pays with a step noting the limit.
 - An unknown age pends, because the limit can't be checked.
 - The limit is set by `ImdMaxDaysPerMonth` (default 15). Null turns it off.
 
@@ -58,7 +58,6 @@ Results on the files Mark uploaded:
 ## Not covered yet
 
 - **Psychiatric units of general hospitals.** These are paid by APR-DRG like other acute stays (see [MEDICAID-DRG-PRICING.md](MEDICAID-DRG-PRICING.md)), not by this per diem.
-- **IMD days on the member's other claims** are not yet passed in from claims history, so the monthly limit counts only this claim's days. The pricer accepts them (`ImdDaysAlreadyPaid`); feeding them from paid claims is a follow-up.
-- **The pay-over-the-limit choice** (`OverLimitAction = Pay`) is not yet a plan setting; claims use the default (pend).
+- **Order of claims.** Every other live claim in the month counts, including one still pended. Two stays that together exceed the limit both pend, and the reviewer decides which to pay.
 - **The under-22 continuation.** A client admitted before 21 keeps the under-21 benefit until 22. Using the age at admission covers this for a single stay; a readmission after 21 is checked as an adult.
 - **Medi-Cal.** Psychiatric inpatient services are carved out to county mental health plans, so a Medi-Cal managed care plan does not price them.

@@ -211,6 +211,31 @@ public static class PlanSettings
     };
 
     /// <summary>
+    /// What happens to an adult (21-64) psychiatric hospital stay over the
+    /// 15-day monthly IMD limit (42 CFR 438.6(e)) on a plan that pays by
+    /// <see cref="MedicaidDrgMethod"/> <c>texas</c>: <c>pend</c> for review
+    /// (default) or <c>pay</c> it at the hospital's per diem. Over the limit
+    /// the state loses federal match on that month's capitation, so whether
+    /// the plan still pays the hospital is the plan's decision.
+    /// </summary>
+    public static readonly SettingDefinition ImdOverLimitAction = new()
+    {
+        Key = "pricing.inpatient.imdOverLimitAction",
+        Type = SettingType.Enum,
+        Owner = "claims-service",
+        Description = "Adult psychiatric hospital stays over the 15-day monthly IMD limit: pend for review (pend) or pay at the per diem (pay).",
+        Default = "\"pend\"",
+        AllowedLevels = new HashSet<SettingLevel>
+        {
+            SettingLevel.Tenant,
+            SettingLevel.LineOfBusiness,
+            SettingLevel.BenefitPlan,
+        },
+        Constraints = new SettingConstraints { AllowedValues = ["pend", "pay"] },
+        ChangeControl = ChangeControl.ReasonRequired,
+    };
+
+    /// <summary>
     /// Whether releasing money needs a second user (maker-checker):
     /// capitation disbursements and premium drafts cannot be released by the
     /// person who prepared them (plan-configuration.md §12 step 2b).
@@ -291,6 +316,7 @@ public static class PlanSettings
         InpatientDrgClassification,
         AprDrgVersion,
         MedicaidDrgMethod,
+        ImdOverLimitAction,
         PaymentEnforceSeparationOfDuties,
         PersonalRepresentativeRequireSecondUserActivation,
         MediCalStateOnlyAdultDental,
