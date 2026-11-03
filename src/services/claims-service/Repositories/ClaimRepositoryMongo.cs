@@ -1541,4 +1541,57 @@ public class ClaimRepositoryMongo : IClaimRepository
             .Where(r => r.TplDecision == "CostAvoided" || r.OtherPayerPaid != 0m)
             .ToList();
     }
+
+    public Task<IReadOnlyList<Finance.ClaimsSummaryClaim>> GetClaimsSummaryAdjudicatedAsync(
+        DateTime adjudicatedFrom, DateTime adjudicatedBefore, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        return ClaimsSummaryAsync(b.Gte(c => c.AdjudicatedDate, adjudicatedFrom) & b.Lt(c => c.AdjudicatedDate, adjudicatedBefore), ct);
+    }
+
+    public Task<IReadOnlyList<Finance.ClaimsSummaryClaim>> GetClaimsSummaryOpenAsync(DateTime before, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        return ClaimsSummaryAsync(
+            b.Lt(c => c.SubmittedDate, before)
+            & b.Ne(c => c.Status, ClaimStatus.Voided)
+            & (b.Eq(c => c.AdjudicatedDate, null) | b.Gte(c => c.AdjudicatedDate, before)), ct);
+    }
+
+    private async Task<IReadOnlyList<Finance.ClaimsSummaryClaim>> ClaimsSummaryAsync(FilterDefinition<Claim> window, CancellationToken ct)
+    {
+        var tenantId = GetTenantId();
+        var b = Builders<Claim>.Filter;
+        var filter = b.Eq(c => c.TenantId, tenantId) & b.Eq(c => c.LineOfBusiness, LineOfBusiness.Medicaid) & window;
+
+        // Projected: a month of a large plan's claims is hundreds of
+        // thousands of versions, of which only these fields are needed.
+        var rows = await _collection.Find(filter)
+            .Project(c => new
+            {
+                c.ClaimNumber,
+                c.VersionNumber,
+                c.MemberId,
+                c.ServiceDateFrom,
+                c.ClaimType,
+                c.SubmittedDate,
+                c.AdjudicatedDate,
+                c.Status,
+                Paid = c.AdjudicationResult == null ? 0m : c.AdjudicationResult.PayerPayment,
+                DenialCode = c.AdjudicationResult == null ? null : c.AdjudicationResult.DenialReasonCode,
+                PendCode = c.PendDetails == null ? null : c.PendDetails.PendCode,
+                Duplicates = c.PendDetails == null ? null : c.PendDetails.DuplicateFindings,
+                c.BillingProviderNPI,
+                c.PlaceOfServiceCode,
+                Lines = c.ClaimLines.Select(l => new { l.ProcedureCode, l.RevenueCode }),
+            })
+            .ToListAsync(ct);
+        return rows.Select(r => new Finance.ClaimsSummaryClaim(
+            r.ClaimNumber, r.VersionNumber, r.MemberId, r.ServiceDateFrom, r.ClaimType, r.SubmittedDate,
+            r.AdjudicatedDate, r.Status, r.Paid, r.DenialCode, r.PendCode,
+            r.Duplicates?.Any(d => d.DuplicateType == "Exact") == true,
+            r.BillingProviderNPI, r.PlaceOfServiceCode,
+            r.Lines.Select(l => l.ProcedureCode).Where(p => !string.IsNullOrEmpty(p)).ToList(),
+            r.Lines.Select(l => l.RevenueCode).OfType<string>().Where(x => x.Length > 0).ToList())).ToList();
+    }
 }
