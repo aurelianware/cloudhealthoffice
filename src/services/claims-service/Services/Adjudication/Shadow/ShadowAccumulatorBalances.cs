@@ -1,6 +1,6 @@
 using System.Globalization;
-using System.Text;
 using ClaimsService.Import.Cpcds;
+using CloudHealthOffice.Infrastructure.Import.Cpcds;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
 
@@ -158,17 +158,20 @@ public sealed class ShadowAccumulatorBalanceImporter(
         string tenantId, string content, string? sourceSystem, bool dryRun, string actorId, CancellationToken ct)
     {
         var result = new ShadowAccumulatorBalanceImportResult { DryRun = dryRun };
-        var lines = content.TrimStart('﻿').Split('\n').Select(l => l.TrimEnd('\r')).ToList();
-        var headerIndex = lines.FindIndex(l => l.Trim().Length > 0);
-        if (headerIndex < 0)
+        if (string.IsNullOrWhiteSpace(content))
         {
             result.FileErrors.Add("The file is empty.");
             return result;
         }
 
-        var delimiter = Delimiter(lines[headerIndex]);
-        var header = Split(lines[headerIndex], delimiter)
-            .Select(h => Columns.GetValueOrDefault(Normalize(h)))
+        using var records = CpcdsDelimitedReader.Read(content, CpcdsDelimitedReader.DetectDelimiter(content)).GetEnumerator();
+        if (!records.MoveNext())
+        {
+            result.FileErrors.Add("The file is empty.");
+            return result;
+        }
+        var header = records.Current.Fields
+            .Select(h => Columns.GetValueOrDefault(CpcdsHeaders.Normalize(h)))
             .ToList();
         foreach (var required in new[] { "member", "asof" })
         {
@@ -181,13 +184,13 @@ public sealed class ShadowAccumulatorBalanceImporter(
 
         var balances = new Dictionary<string, ShadowAccumulatorBalance>(StringComparer.Ordinal);
         var now = (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
-        for (var i = headerIndex + 1; i < lines.Count; i++)
+        while (records.MoveNext())
         {
-            if (lines[i].Trim().Length == 0) continue;
+            var cells = records.Current.Fields;
+            if (cells.All(c => c.Trim().Length == 0)) continue;
             ct.ThrowIfCancellationRequested();
             result.RowsInFile++;
-            var lineNumber = i + 1;
-            var cells = Split(lines[i], delimiter);
+            var lineNumber = records.Current.LineNumber;
             string? Cell(string column)
             {
                 var at = header.IndexOf(column);
@@ -266,36 +269,5 @@ public sealed class ShadowAccumulatorBalanceImporter(
         result.Loaded = balances.Count;
         if (!dryRun) await store.UpsertAsync(balances.Values.ToList(), ct);
         return result;
-    }
-
-    private static string Normalize(string header)
-        => new(header.Trim().Trim('"').ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
-
-    private static char Delimiter(string header)
-        => header.Contains('|') ? '|' : header.Contains('\t') ? '\t' : ',';
-
-    /// <summary>Splits one line, honoring double quotes.</summary>
-    internal static List<string> Split(string line, char delimiter)
-    {
-        var cells = new List<string>();
-        var cell = new StringBuilder();
-        var quoted = false;
-        for (var i = 0; i < line.Length; i++)
-        {
-            var c = line[i];
-            if (c == '"')
-            {
-                if (quoted && i + 1 < line.Length && line[i + 1] == '"') { cell.Append('"'); i++; }
-                else quoted = !quoted;
-            }
-            else if (c == delimiter && !quoted)
-            {
-                cells.Add(cell.ToString());
-                cell.Clear();
-            }
-            else cell.Append(c);
-        }
-        cells.Add(cell.ToString());
-        return cells;
     }
 }
