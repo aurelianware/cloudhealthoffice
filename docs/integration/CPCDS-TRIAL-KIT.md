@@ -89,10 +89,11 @@ can reach them, or port-forward:
 kubectl -n cloudhealthoffice port-forward svc/claims-service 5001:80 &
 kubectl -n cloudhealthoffice port-forward svc/enrollment-import-service 5011:80 &
 kubectl -n cloudhealthoffice port-forward svc/authorization-service 5005:80 &
+kubectl -n cloudhealthoffice port-forward svc/provider-service 5004:80 &
 ```
 
-Point the kit at other addresses with `CHO_CLAIMS_URL`, `CHO_ENROLLMENT_URL`
-and `CHO_AUTHORIZATION_URL`.
+Point the kit at other addresses with `CHO_CLAIMS_URL`, `CHO_ENROLLMENT_URL`,
+`CHO_AUTHORIZATION_URL` and `CHO_PROVIDER_URL` (provider-service, for a roster file).
 
 ### 2. Get a token
 
@@ -119,6 +120,7 @@ The folder's files are sorted by name, the same way the daily drop sorts them:
 | `coverage` | CPCDS coverages (one file, with the member file) |
 | `claim` | CPCDS claims (any number) |
 | `auth` or `278` | Authorizations. An X12 file (starting `ISA`) goes to the 278 import, anything else to the CSV import |
+| `roster` | The core's network roster: which providers are in which network ([NETWORK-ROSTER-IMPORTER.md](NETWORK-ROSTER-IMPORTER.md)). Loaded after members, before claims |
 | `balance` | The core's accumulator balances as of a date, for `shadow` only ([starting balances](SHADOW-ADJUDICATION.md#starting-balances)) |
 
 The kit sends each file with `dryRun=true` and prints:

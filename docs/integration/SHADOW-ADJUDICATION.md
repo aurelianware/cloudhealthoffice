@@ -249,7 +249,7 @@ links to the page or guide that loads it ("What to load next").
 | Input | Loaded through |
 |---|---|
 | Members, coverage, plan id, group | 834 (`enrollment-import-service`), or the CPCDS member and coverage files |
-| Provider network and credentialing | provider-service: each plan's in-network tier names a network (`networkTiers[].networkId`), and the provider's network participation puts it in that network. Without it every provider is out of network |
+| Provider network and credentialing | The core's roster through the [network roster importer](NETWORK-ROSTER-IMPORTER.md) (`trial.sh` loads `*roster*` files). Each plan's in-network tier names a network (`networkTiers[].networkId`), and the provider's network participation puts it in that network. Without it every provider is out of network |
 | Service categories | `POST /api/v1/service-category-mappings/seed-system-defaults` once per tenant (benefit-plan-service, needs `ServiceCategoryMapping__AdminWriteEnabled=true`). Without them a lab test or X-ray billed from an office is costed as an office visit |
 | Provider screening | See [Provider screening](#provider-screening) |
 | Medicare physician fee schedule | [Medicare PFS importer](MEDICARE-PFS-IMPORTER.md), one schedule per locality (the PricingApi uploads do not reach adjudication) |

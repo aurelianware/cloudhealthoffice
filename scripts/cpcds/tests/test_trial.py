@@ -42,6 +42,7 @@ class StubCho(BaseHTTPRequestHandler):
 
 
 BALANCES = "/api/v1/claims/shadow-adjudication/accumulator-balances/import"
+ROSTER = "/api/v1/providers/import/network-roster"
 
 
 class TrialScriptTests(unittest.TestCase):
@@ -54,6 +55,8 @@ class TrialScriptTests(unittest.TestCase):
             "/api/v1/authorizations/import/csv": (200, {"authorizationsInFile": 1, "created": 1}),
             "/api/v1/authorizations/import/x12-278": (200, {"authorizationsInFile": 2, "created": 2}),
             BALANCES: (200, {"dryRun": True, "rowsInFile": 2, "loaded": 2, "rejected": 0}),
+            ROSTER: (200, {"dryRun": True, "rowsRead": 3, "participationsAdded": 2, "unchanged": 1, "providersCreated": 1,
+                           "credentialed": 1, "rejected": 0, "networksCreated": ["Gold PPO network"]}),
         }
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.addCleanup(self.server.shutdown)
@@ -67,6 +70,7 @@ class TrialScriptTests(unittest.TestCase):
             "CPCDS_Coverages.csv": "Member id\nM1\n",
             "jiva_authorizations.csv": "authorization_number\nPA-1\n",
             "um_278_20261101.x12": "ISA*00*          *00*~",
+            "qnxt_network_roster.csv": "NPI,Network,Effective Date\n1234567893,Gold PPO network,2026-01-01\n",
             "qnxt_member_balances_20260630.csv": "member_id,as_of_date,individual_deductible_met\nM1,2026-06-30,400\n",
             "readme.txt": "not an extract",
         }.items():
@@ -76,7 +80,7 @@ class TrialScriptTests(unittest.TestCase):
         base = f"http://127.0.0.1:{self.server.server_address[1]}"
         env = os.environ.copy()
         env.update({
-            "CHO_CLAIMS_URL": base, "CHO_ENROLLMENT_URL": base, "CHO_AUTHORIZATION_URL": base,
+            "CHO_CLAIMS_URL": base, "CHO_ENROLLMENT_URL": base, "CHO_AUTHORIZATION_URL": base, "CHO_PROVIDER_URL": base,
             "CHO_SOURCE_SYSTEM": "qnxt", "CHO_LINE_OF_BUSINESS": "Medicaid",
             "CHO_TRIAL_OUT": str(Path(self.temp.name) / "out"),
             "CHO_SHADOW_POLL_SECONDS": "0",
@@ -93,6 +97,7 @@ class TrialScriptTests(unittest.TestCase):
         paths = [c["path"] for c in self.server.calls]
         self.assertEqual(paths, [
             "/api/v1/enrollment/import/cpcds",
+            ROSTER,
             "/api/v1/claims/import/cpcds",
             "/api/v1/authorizations/import/csv",
             "/api/v1/authorizations/import/x12-278",
@@ -104,9 +109,12 @@ class TrialScriptTests(unittest.TestCase):
         enrollment = self.server.calls[0]["body"]
         self.assertIn('filename="CPCDS_Members.csv"', enrollment)
         self.assertIn('filename="CPCDS_Coverages.csv"', enrollment)
-        self.assertRegex(self.server.calls[1]["body"], r'name="sourceSystem"\r\n\r\nqnxt')
+        self.assertRegex(self.server.calls[2]["body"], r'name="sourceSystem"\r\n\r\nqnxt')
+        self.assertRegex(self.server.calls[2]["body"], r'name="lineOfBusiness"\r\n\r\nMedicaid')
         self.assertRegex(self.server.calls[1]["body"], r'name="lineOfBusiness"\r\n\r\nMedicaid')
-        self.assertRegex(self.server.calls[4]["body"], r'name="sourceSystem"\r\n\r\nqnxt')
+        self.assertIn("network roster qnxt_network_roster.csv (200): 3 rows, 2 participations to add, 1 unchanged, 1 new providers, 1 credentialed, 0 refused", result.stdout)
+        self.assertIn("new networks: Gold PPO network", result.stdout)
+        self.assertRegex(self.server.calls[5]["body"], r'name="sourceSystem"\r\n\r\nqnxt')
         self.assertIn("accumulator balances qnxt_member_balances_20260630.csv (200): 2 rows, 2 to load, 0 refused", result.stdout)
         self.assertIn("skipped readme.txt", result.stdout)
         self.assertIn("Clean.", result.stdout)

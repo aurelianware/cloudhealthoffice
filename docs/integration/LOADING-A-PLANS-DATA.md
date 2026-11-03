@@ -93,12 +93,14 @@ There are two different needs here.
   [CPCDS-FILE-DROP-IMPORTER.md](CPCDS-FILE-DROP-IMPORTER.md#providers-named-on-claims).
 - **The plan's network.** This is needed for the Provider Directory API
   (Plan-Net): contracted providers, their locations and specialties, network
-  participation, and whether they're accepting new patients. Today it is loaded
+  participation, and whether they're accepting new patients. Load it from the
+  core's roster export with the [network roster importer](NETWORK-ROSTER-IMPORTER.md)
+  (`POST /api/v1/providers/import/network-roster`), or one provider at a time
   through the provider and network APIs (`POST /api/v1/providers/drafts`,
-  `POST /api/v1/networks`). A **roster file import** that loads it from the
-  core's or credentialing system's export, through the same drop, is planned.
-  A provider first created as reference-only becomes a directory provider when
-  the roster includes it (`referenceOnly: false`).
+  `POST /api/v1/networks`). A provider first created as reference-only becomes
+  a network provider when the roster includes it (`referenceOnly: false`).
+  Locations, specialties beyond NPPES's primary taxonomy and panel limits still
+  come through the provider API.
 
 The public directory is configured per plan (`PublicProviderDirectory`; see
 [davinci.md](../interop/davinci.md)) and is open without a token, as
