@@ -156,6 +156,7 @@ public sealed class RetroRateImpactService : IRetroRateImpactService
         return new RetroRateImpactResult
         {
             ClaimId = ClaimKey(paid),
+            ClaimDocumentId = paid.Id,
             ClaimNumber = paid.ClaimNumber,
             ClaimStatus = paid.Status.ToString(),
             ServiceDateFrom = paid.ServiceDateFrom,

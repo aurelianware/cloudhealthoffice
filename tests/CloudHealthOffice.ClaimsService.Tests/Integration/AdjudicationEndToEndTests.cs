@@ -277,6 +277,7 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                 services.AddSingleton(Substitute.For<global::ClaimsService.Services.Tpl.ITplRecoveryRepository>());
                 // The retro rate impact store is Mongo too.
                 services.AddSingleton(Substitute.For<global::ClaimsService.Services.RetroRate.IRetroRateImpactRepository>());
+                services.AddSingleton(Substitute.For<global::ClaimsService.Services.RetroRate.IRetroRateReprocessingRepository>());
                 services.AddSingleton<global::ClaimsService.Import.Cpcds.Drop.ICpcdsDropRunRepository>(
                     new global::ClaimsService.Import.Cpcds.Drop.InMemoryCpcdsDropRunRepository());
                 services.AddSingleton<global::ClaimsService.Import.Cpcds.Drop.ICpcdsDropTenantSettingsRepository>(
