@@ -946,7 +946,9 @@ public class EnrollmentImportService : IEnrollmentImportService
             Address = enrollment.Demographics?.Address1,
             City = enrollment.Demographics?.City,
             State = enrollment.Demographics?.State,
-            ZipCode = enrollment.Demographics?.Zip
+            ZipCode = enrollment.Demographics?.Zip,
+            // The same status a later change for this member sets.
+            Status = MapStatus(enrollment.BenefitStatus)
         });
     }
 
@@ -1816,7 +1818,8 @@ public class EnrollmentImportService : IEnrollmentImportService
             Address = dependent.Address1,
             City = dependent.City,
             State = dependent.State,
-            ZipCode = dependent.Zip
+            ZipCode = dependent.Zip,
+            Status = MapStatus(dependent.BenefitStatus)
         });
     }
 
