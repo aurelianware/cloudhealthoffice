@@ -121,12 +121,22 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         "Benefit calculation service unavailable for accumulator commits (benefit-plan-service prepares no deferred " +
         "accumulator commit; it is older than claims-service). Retried once it is upgraded.";
 
+    /// <summary>
+    /// Shadow run against a benefit-plan-service older than this
+    /// claims-service: it ignored the core's accumulation and priced from CHO's
+    /// store, so the answer is not comparable. Transient.
+    /// </summary>
+    public const string ShadowHistoryUnsupportedReason =
+        "Benefit calculation service unavailable for shadow pricing (benefit-plan-service does not take the core's " +
+        "accumulator history; it is older than claims-service). Retried once it is upgraded.";
+
     private readonly IBenefitCalculationEngine _engine;
     private readonly IMemberResolver _memberResolver;
     private readonly IAuthorizationValidationClient _authorizationValidationClient;
     private readonly ILogger<BenefitCalculationStage> _logger;
     private readonly PriorAuthAdjudicationOptions _priorAuth;
     private readonly IPriorAuthRuleScopeClient? _ruleScope;
+    private readonly Shadow.IShadowAccumulatorHistory? _shadowHistory;
 
     public BenefitCalculationStage(
         IBenefitCalculationEngine engine,
@@ -134,7 +144,8 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         IAuthorizationValidationClient authorizationValidationClient,
         ILogger<BenefitCalculationStage> logger,
         Microsoft.Extensions.Options.IOptions<PriorAuthAdjudicationOptions>? priorAuthOptions = null,
-        IPriorAuthRuleScopeClient? ruleScope = null)
+        IPriorAuthRuleScopeClient? ruleScope = null,
+        Shadow.IShadowAccumulatorHistory? shadowHistory = null)
     {
         _engine = engine;
         _memberResolver = memberResolver;
@@ -142,6 +153,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         _logger = logger;
         _priorAuth = priorAuthOptions?.Value ?? new PriorAuthAdjudicationOptions();
         _ruleScope = ruleScope;
+        _shadowHistory = shadowHistory;
     }
 
     /// <summary>
@@ -340,6 +352,28 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
         var subscriberId = await ResolveSubscriberIdAsync(context, ct).ConfigureAwait(false);
         var request = BuildRequest(context, planGuid.Value, subscriberId);
+        if (context.IsShadow)
+        {
+            // The core priced this claim against what the member had met by its
+            // own account. CHO's store has nothing for a plan not live on CHO
+            // (and must never be read or written by a shadow run).
+            PriorAccumulation prior;
+            try
+            {
+                prior = _shadowHistory is null
+                    ? new PriorAccumulation()
+                    : await _shadowHistory.BuildAsync(context, subscriberId, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Shadow accumulator history unavailable for claim {ClaimVersionId}",
+                    LogSanitizer.Sanitize(context.ClaimVersionId));
+                var reason = $"{ClaimAdjudicationOrchestrator.ServiceUnavailableReason}: the core's earlier claims for the member could not be read";
+                ClaimAdjudicationOrchestrator.RecordServiceUnavailablePend(context, reason);
+                return ClaimAdjudicationStageResult.Pend(StageName, reason).AsCheckUnavailable(context);
+            }
+            request = request with { PriorAccumulation = prior };
+        }
 
         BenefitResolutionResult result;
         try
@@ -417,7 +451,18 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         // claim's accumulators could never be written. Never pass it without
         // them — and never dead-letter it: pend with a transient reason (an
         // approval retries the check instead of overriding it).
-        if (result.PreparedAccumulatorCommit is null)
+        // A shadow pricing hands the engine the core's accumulation, and the
+        // engine then prepares no commit. One that still prepares a commit is
+        // older than this claims-service and priced from CHO's store instead.
+        if (request.PriorAccumulation is not null)
+        {
+            if (result.PreparedAccumulatorCommit is not null)
+            {
+                ClaimAdjudicationOrchestrator.RecordServiceUnavailablePend(context, ShadowHistoryUnsupportedReason);
+                return ClaimAdjudicationStageResult.Pend(StageName, ShadowHistoryUnsupportedReason).AsCheckUnavailable(context);
+            }
+        }
+        else if (result.PreparedAccumulatorCommit is null)
         {
             if (context.PendDetails is null)
             {

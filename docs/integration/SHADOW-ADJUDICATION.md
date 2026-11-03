@@ -30,7 +30,7 @@ only the stages listed in `ClaimAdjudicationOrchestrator.ShadowSafeStages`:
 | Stage | Why it is safe |
 |---|---|
 | Scrubbing, TimelyFiling, DuplicateClaim, ProviderIntegrity, NetworkCredentialing, InpatientGrouping, Pricing, CoordinationOfBenefits, NcciEdits | They read reference data, plan settings and claim history only. DuplicateClaim already excludes the claim's own chain. |
-| BenefitCalculation | Calls the benefit engine in Prospective mode, which never writes accumulators. |
+| BenefitCalculation | Calls the benefit engine in Prospective mode with the core's accumulation ([Accumulators](#accumulators)): the engine neither reads nor writes CHO's accumulator store and prepares no commit. |
 | PlanEdits | Calls the plan's own edit service, if the tenant configured one. |
 
 Left out: **Persistence** (writes the claim's projection and the accumulator
@@ -180,6 +180,33 @@ benefit-plan-service. The CPCDS laptop trial does both. On GKE,
 `render_manifests.py --leie-screening` turns LEIE on. Providers that are not in
 NPPES (the synthetic sample NPIs, for one) are still held after screening.
 
+## Accumulators
+
+The core priced each claim against what the member had already met toward the
+deductible and out-of-pocket maximum. CHO's accumulator store holds nothing for
+a plan that is not live on CHO, so a shadow run never uses it. It starts each
+claim from the core's own account instead:
+
+- The member's earlier claims loaded from the core (`externalSource` set, paid
+  or partly paid, current version) in the same calendar year and on the same
+  benefit plan. Each counts its deductible and its out-of-pocket amount
+  (`oopAppliedAmount`, or the member liability), in network or out of network
+  as the core recorded it.
+- "Earlier" is the core's order: claims the core adjudicated before this one
+  (same day: the earlier service date). Without adjudication dates, the earlier
+  service date.
+- Claims of other family members count toward the family deductible and
+  out-of-pocket maximum when they carry the same `subscriberId`. CPCDS claim
+  files name only the patient, so imported claims do not yet; the family
+  amounts start from the member's own claims.
+
+Limits: only what was loaded counts, so a member whose January claims were not
+in the files starts low (load the whole plan year, or wait for the starting
+balance file, planned next). Accumulators reset on January 1; a plan year that
+starts on another date is not handled. A benefit-plan-service older than
+claims-service ignores the history; the claim then pends `SVCUNAVAIL` rather
+than being compared against CHO's store.
+
 ## What CHO needs to decide a plan's claims
 
 Expect most claims to be `ChoUndecided` until these are loaded. The run tells
@@ -196,7 +223,7 @@ links to the page or guide that loads it ("What to load next").
 | Medicare physician fee schedule | [Medicare PFS importer](MEDICARE-PFS-IMPORTER.md), one schedule per locality (the PricingApi uploads do not reach adjudication) |
 | Provider contracts and custom fee schedules | [Contract roster importer](CONTRACT-ROSTER-IMPORTER.md) and [fee schedule CSV importer](FEE-SCHEDULE-IMPORTER.md) |
 | Benefit plan design | benefit-plan-service API / portal |
-| Accumulators to date | Not yet: CHO starts the member at zero, so deductible and out-of-pocket differences show as `PaidVariance` / `MemberLiabilityVariance` (baseline seed planned) |
+| Accumulators to date | The core's earlier claims in the same files ([Accumulators](#accumulators)). Load the whole plan year so a mid-year claim meets the deductible where the core did. A starting balance file is planned |
 | Prior authorizations | authorization-service |
 
 ## Configuration
@@ -224,8 +251,8 @@ pricing, provider, coverage, member, authorization), once per claim.
    procedure, provider) and the discrepancy CSV.
 3. Provider contract and custom fee schedule loader: the contract roster and
    fee schedule CSV importers.
-4. Accumulator baseline, seeded from a core accumulator extract or derived from
-   the imported claims, held apart from live balances.
+4. Accumulators: derived from the imported claims (done); a starting balance
+   file from the core next, held apart from live balances.
 5. Automatic run after each CPCDS file-drop batch; re-run after a configuration
    change to show the gap closing.
 6. Benefit plan template import and a portal report page.

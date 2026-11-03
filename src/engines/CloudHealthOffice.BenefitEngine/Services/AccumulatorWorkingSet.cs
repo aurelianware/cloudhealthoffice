@@ -500,6 +500,19 @@ public class AccumulatorWorkingSet
     }
 
     /// <summary>
+    /// Counts an amount already met (shadow adjudication's prior accumulation)
+    /// toward an accumulator the plan has. An accumulator the plan does not
+    /// configure is left alone.
+    /// </summary>
+    public void AddPriorAccumulation(AccumulatorType type, AccumulatorScope scope, NetworkTier networkTier, decimal amount)
+    {
+        if (amount <= 0) return;
+        if (!_entries.TryGetValue(MakeKey(type, scope, networkTier), out var entry)) return;
+        entry.OriginalAccumulated += amount;
+        entry.CurrentAccumulated += amount;
+    }
+
+    /// <summary>
     /// Takes a claim's own earlier, still-active accumulator updates out of
     /// the starting balances, so re-adjudicating the same claim prices it
     /// against the accumulators as they were without it — the same result
