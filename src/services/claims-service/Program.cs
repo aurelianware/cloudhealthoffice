@@ -579,6 +579,8 @@ builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryRepository, Cl
 builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryService, ClaimsService.Services.Tpl.TplRecoveryService>();
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationService,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationService>();
+// Background shadow runs: whole import batches, in pages, resumable across replicas.
+builder.Services.AddHostedService<ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationWorker>();
 // Retro rate reprocessing, step 2: dry-run impact of a fee schedule change on
 // paid claims (docs/integration/RETRO-RATE-REPROCESSING.md). Reads the change
 // from benefit-plan-service and re-prices through the shadow pipeline.

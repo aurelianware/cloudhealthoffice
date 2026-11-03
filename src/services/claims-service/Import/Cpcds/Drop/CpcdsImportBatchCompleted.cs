@@ -59,14 +59,15 @@ public sealed class ShadowAdjudicateAfterImport : ICpcdsImportBatchCompletedHand
         if (batch.Created + batch.Updated + batch.Unchanged == 0)
             return null;
 
+        // The whole batch, in the background: a large claim file no longer
+        // stops at MaxClaimsPerRun, and the drop run does not wait for it.
         var loaded = batch.Created + batch.Updated + batch.Unchanged;
-        var response = await _shadow.RunAsync(
-            batch.TenantId, new ShadowAdjudicationRunRequest { ImportBatchId = batch.ImportBatchId }, "cpcds-drop", ct);
-        var run = response.Run;
-        var note = $"Shadow adjudication run {run.Id} for {batch.FileName}: {run.ClaimsRequested} of {loaded} claims, {run.ClaimsCompared} compared.";
-        // One run takes at most MaxClaimsPerRun claims of the batch; say so, so nobody reads it as the whole file.
-        return run.ClaimsRequested < loaded
-            ? note + $" Partial: a run covers at most {_shadowOptions.MaxClaimsPerRun} claims."
+        var run = await _shadow.QueueAsync(
+            batch.TenantId, new ShadowAdjudicationRunRequest { ImportBatchId = batch.ImportBatchId, Background = true },
+            "cpcds-drop", ct);
+        var note = $"Shadow adjudication run {run.Id} queued for {batch.FileName}: {loaded} claims.";
+        return loaded > run.ClaimsRequested
+            ? note + $" Only the first {run.ClaimsRequested} will be compared (MaxClaimsPerBackgroundRun)."
             : note;
     }
 }

@@ -210,6 +210,124 @@ public class ShadowAdjudicationServiceTests
                 NullLogger<ShadowAdjudicationService>.Instance)
             .RunAsync("tenant-1", request, "actor-1", CancellationToken.None);
 
+    // ── background runs ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ABackgroundRun_AdjudicatesTheWholeBatch_InPages_AndSummarizes()
+    {
+        _options.MaxClaimsPerRun = 2;
+        var store = new InMemoryShadowAdjudicationRepository();
+        for (var i = 1; i <= 5; i++)
+        {
+            Store(Imported($"cpcds-{i}"));
+            await _transactions.CreateAsync(new ClaimImportTransaction
+            {
+                TenantId = "tenant-1", ImportBatchId = "batch-1", ClaimId = $"cpcds-{i}",
+            });
+        }
+        var service = Service(store);
+
+        var queued = await service.QueueAsync("tenant-1", new() { ImportBatchId = "batch-1", Background = true }, "actor-1", default);
+        Assert.Equal(ShadowRunStatus.Queued, queued.Status);
+        Assert.Empty(await store.ListResultClaimIdsAsync("tenant-1", queued.Id));
+
+        var taken = await store.TakeNextBackgroundRunAsync(DateTime.UtcNow, DateTime.UtcNow.AddMinutes(5));
+        Assert.NotNull(taken);
+        Assert.Null(await store.TakeNextBackgroundRunAsync(DateTime.UtcNow, DateTime.UtcNow.AddMinutes(5)));
+        await service.ProcessBackgroundRunAsync(taken!, default);
+
+        var run = await store.GetRunAsync("tenant-1", queued.Id);
+        Assert.Equal(ShadowRunStatus.Completed, run!.Status);
+        Assert.Equal(5, run.ClaimsRequested);
+        Assert.Equal(5, run.ClaimsProcessed);
+        Assert.Equal(5, run.ClaimsCompared);
+        Assert.Equal(1m, run.MatchRate);
+        Assert.Null(run.LeaseUntilUtc);
+        // Three pages of at most two claims.
+        await _pipeline.Received(5).EvaluateShadowAsync("tenant-1", Arg.Any<AdapterClaim>(), "actor-1", Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ABackgroundRun_ResumesAfterTheClaimsItAlreadyHas()
+    {
+        var store = new InMemoryShadowAdjudicationRepository();
+        foreach (var id in new[] { "cpcds-1", "cpcds-2", "gone" })
+            await _transactions.CreateAsync(new ClaimImportTransaction { TenantId = "tenant-1", ImportBatchId = "batch-1", ClaimId = id });
+        Store(Imported("cpcds-1"));
+        Store(Imported("cpcds-2"));
+        var run = new ShadowAdjudicationRun
+        {
+            TenantId = "tenant-1", ImportBatchId = "batch-1", Background = true, Status = ShadowRunStatus.Running,
+            ClaimsRequested = 50_000, Skipped = ["gone: not found"],
+        };
+        await store.SaveRunStateAsync(run);
+        await store.AppendResultsAsync([new ShadowAdjudicationResult { TenantId = "tenant-1", RunId = run.Id, ClaimId = "cpcds-1", Kind = ShadowDiscrepancyKind.Match }]);
+
+        await Service(store).ProcessBackgroundRunAsync(run, default);
+
+        // Only cpcds-2 is adjudicated now; the earlier result and the skip are kept.
+        await _pipeline.Received(1).EvaluateShadowAsync(Arg.Any<string>(), Arg.Any<AdapterClaim>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        Assert.Equal(2, run.ClaimsCompared);
+        Assert.Single(run.Skipped);
+        Assert.Equal(3, run.ClaimsProcessed);
+    }
+
+    [Fact]
+    public async Task ABackgroundRun_FailsWithAReason_WhenShadowWasTurnedOffMeanwhile()
+    {
+        var store = new InMemoryShadowAdjudicationRepository();
+        var run = new ShadowAdjudicationRun { TenantId = "tenant-1", ImportBatchId = "batch-1", Background = true, Status = ShadowRunStatus.Running };
+        _options.Enabled = false;
+
+        await Service(store).ProcessBackgroundRunAsync(run, default);
+
+        Assert.Equal(ShadowRunStatus.Failed, run.Status);
+        Assert.Contains("off in this deployment", run.Error);
+    }
+
+    [Fact]
+    public async Task ARunningRunWhoseLeasePassed_IsTakenOver()
+    {
+        var store = new InMemoryShadowAdjudicationRepository();
+        var run = new ShadowAdjudicationRun
+        {
+            TenantId = "tenant-1", Background = true, Status = ShadowRunStatus.Running, LeaseUntilUtc = DateTime.UtcNow.AddMinutes(1),
+        };
+        await store.SaveRunStateAsync(run);
+
+        Assert.Null(await store.TakeNextBackgroundRunAsync(DateTime.UtcNow, DateTime.UtcNow.AddMinutes(5)));
+        Assert.NotNull(await store.TakeNextBackgroundRunAsync(DateTime.UtcNow.AddMinutes(2), DateTime.UtcNow.AddMinutes(7)));
+    }
+
+    [Fact]
+    public async Task TheWorker_MarksARunFailed_WhenProcessingThrows_AndSaysWhenNothingWaits()
+    {
+        var store = new InMemoryShadowAdjudicationRepository();
+        var service = Substitute.For<IShadowAdjudicationService>();
+        service.ProcessBackgroundRunAsync(Arg.Any<ShadowAdjudicationRun>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("boom")));
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<IShadowAdjudicationRepository>(services, store);
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton(services, service);
+        using var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
+        var worker = new ShadowAdjudicationWorker(
+            Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(provider),
+            Options.Create(_options), NullLogger<ShadowAdjudicationWorker>.Instance);
+
+        Assert.False(await worker.RunNextAsync(default));
+
+        var run = new ShadowAdjudicationRun { TenantId = "tenant-1", Background = true, Status = ShadowRunStatus.Queued };
+        await store.SaveRunStateAsync(run);
+        Assert.True(await worker.RunNextAsync(default));
+
+        var stored = await store.GetRunAsync("tenant-1", run.Id);
+        Assert.Equal(ShadowRunStatus.Failed, stored!.Status);
+        Assert.Contains("InvalidOperationException", stored.Error);
+    }
+
+    private ShadowAdjudicationService Service(IShadowAdjudicationRepository store) =>
+        new(_claims, _transactions, _pipeline, store, Tenants(), NullLogger<ShadowAdjudicationService>.Instance);
+
     private ShadowAdjudicationTenants Tenants() => new(Options.Create(_options), _tenantSettings);
 
     private void Store(Claim claim) =>

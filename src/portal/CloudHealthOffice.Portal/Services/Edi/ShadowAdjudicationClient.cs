@@ -16,7 +16,7 @@ public interface IShadowAdjudicationClient
     Task<ShadowRunReport?> GetReportAsync(string runId, int top = 10);
     Task<List<ShadowResult>> ListResultsAsync(string runId, string? kind, int limit = 50);
 
-    /// <summary>Runs shadow adjudication on one CPCDS import batch.</summary>
+    /// <summary>Queues a background shadow run over every claim of one CPCDS import batch.</summary>
     Task<DataDropChange<ShadowRun>> RunBatchAsync(string importBatchId);
 
     /// <summary>The run's discrepancy CSV; null when the run is not this tenant's.</summary>
@@ -61,7 +61,7 @@ public class ShadowAdjudicationClient : IShadowAdjudicationClient
     {
         try
         {
-            using var response = await _httpClient.PostAsJsonAsync(RunsUrl, new { importBatchId }, JsonOptions);
+            using var response = await _httpClient.PostAsJsonAsync(RunsUrl, new { importBatchId, background = true }, JsonOptions);
             if (response.IsSuccessStatusCode)
                 return await response.Content.ReadFromJsonAsync<ShadowRun>(JsonOptions) is { } run
                     ? DataDropChange<ShadowRun>.Ok(run)

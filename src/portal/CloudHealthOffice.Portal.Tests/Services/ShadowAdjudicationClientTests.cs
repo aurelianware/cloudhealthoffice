@@ -36,6 +36,25 @@ public class ShadowAdjudicationClientTests
     }
 
     [Fact]
+    public async Task A_batch_run_is_queued_in_the_background()
+    {
+        var bodies = new List<string>();
+        var handler = new FakeHandler(request =>
+        {
+            bodies.Add(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            return new HttpResponseMessage(HttpStatusCode.Accepted)
+            {
+                Content = new StringContent("""{ "id": "r9", "status": "Queued", "background": true, "claimsRequested": 50000 }""", Encoding.UTF8, "application/json"),
+            };
+        });
+
+        var result = await Client(handler).RunBatchAsync("batch-1");
+
+        bodies.Single().Should().Contain("\"importBatchId\":\"batch-1\"").And.Contain("\"background\":true");
+        result.Value!.InProgress.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task The_report_and_results_come_from_the_runs_endpoints()
     {
         var handler = Answer(HttpStatusCode.OK, """
