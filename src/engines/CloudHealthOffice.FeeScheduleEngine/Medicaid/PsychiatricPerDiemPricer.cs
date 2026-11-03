@@ -222,11 +222,11 @@ public sealed class PsychiatricPerDiemPricer(PsychiatricPerDiemPolicy policy)
                     var total = prior + days;
                     if (total <= limit)
                     {
-                        steps.Add($"{month:yyyy-MM}: {total} IMD day(s) ({prior} on earlier claims), within the {limit}-day limit for age {age}.");
+                        steps.Add($"{month:yyyy-MM}: {total} IMD day(s) ({prior} on other claims), within the {limit}-day limit for age {age}.");
                         continue;
                     }
 
-                    var over = $"{month:yyyy-MM}: {total} IMD day(s) ({prior} on earlier claims) exceeds the {limit}-day monthly limit for adults {_policy.ImdLimitMinimumAge}-{_policy.ImdLimitMaximumAge} (42 CFR 438.6(e)); the state loses federal match on that month's capitation.";
+                    var over = $"{month:yyyy-MM}: {total} IMD day(s) ({prior} on other claims) exceeds the {limit}-day monthly limit for adults {_policy.ImdLimitMinimumAge}-{_policy.ImdLimitMaximumAge} (42 CFR 438.6(e)); the state loses federal match on that month's capitation.";
                     if (_policy.OverLimitAction == ImdOverLimitAction.Pend)
                         return PsychiatricStayPrice.Unpriced(over + " Pended for review.", steps);
                     steps.Add(over + " Paid under the plan's setting.");

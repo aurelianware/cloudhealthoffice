@@ -1,5 +1,6 @@
 using ClaimsService.Models;
 using ClaimsService.Models.Adjudication;
+using ClaimsService.Repositories;
 using ClaimsService.Services.Resolution;
 using CloudHealthOffice.FeeScheduleEngine.Domain;
 using CloudHealthOffice.FeeScheduleEngine.Models;
@@ -64,13 +65,21 @@ public sealed class PricingStage : IClaimAdjudicationStage
 
     private readonly IFeeSchedulePricingClient _pricingClient;
     private readonly ILogger<PricingStage> _logger;
+    private readonly IClaimRepository? _claims;
 
+    /// <param name="claims">
+    /// Reads the member's other inpatient claims for a state Medicaid stay,
+    /// so a monthly day limit (the adult IMD limit) counts the whole month.
+    /// Without it only the claim's own days count.
+    /// </param>
     public PricingStage(
         IFeeSchedulePricingClient pricingClient,
-        ILogger<PricingStage> logger)
+        ILogger<PricingStage> logger,
+        IClaimRepository? claims = null)
     {
         _pricingClient = pricingClient;
         _logger = logger;
+        _claims = claims;
     }
 
     public string Name => StageName;
@@ -111,6 +120,31 @@ public sealed class PricingStage : IClaimAdjudicationStage
         }
 
         var requests = BuildRequests(context);
+
+        if (_claims is not null && requests.Count > 0 && MedicaidDrgMethods.IsSet(requests[0].MedicaidDrgMethod))
+        {
+            IReadOnlyList<OtherInpatientDays> others;
+            try
+            {
+                others = await OtherInpatientDaysAsync(context, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Without the member's other stays a monthly day limit could
+                // be passed unseen; pend rather than price on half the month.
+                _logger.LogError(ex,
+                    "Reading the member's other inpatient claims failed for claim {ClaimVersionId}",
+                    LogSanitizer.Sanitize(context.ClaimVersionId));
+                context.PricingResult = new PricingOutcome { PricingUnavailable = true };
+                return Pend(context, PricingUnavailablePendCode,
+                    "The member's other inpatient claims could not be read to check the monthly IMD day limit.");
+            }
+            requests[0] = requests[0] with { OtherInpatientDays = others };
+        }
 
         PricingResultSet? priced;
         try
@@ -156,6 +190,66 @@ public sealed class PricingStage : IClaimAdjudicationStage
 
         return ClaimAdjudicationStageResult.Pass(StageName);
     }
+
+    /// <summary>
+    /// Room and board days (revenue codes 0100-0219, leave 0180-0189
+    /// excluded; one day per unit from the line's service date) on the
+    /// member's other live institutional claims whose service period touches
+    /// the calendar months of this stay. This claim's own chain is left out.
+    /// </summary>
+    internal async Task<IReadOnlyList<OtherInpatientDays>> OtherInpatientDaysAsync(ClaimAdjudicationContext context, CancellationToken ct)
+    {
+        var claim = context.Claim;
+        if (string.IsNullOrWhiteSpace(claim.MemberId)) return [];
+
+        var from = claim.ServiceDateFrom;
+        var to = claim.ServiceDateTo != default ? claim.ServiceDateTo : claim.ServiceDateFrom;
+        foreach (var line in claim.ClaimLines.Where(l => l.ServiceDateFrom != default))
+        {
+            if (line.ServiceDateFrom < from) from = line.ServiceDateFrom;
+            var last = line.ServiceDateFrom.AddDays(Math.Max(0, (int)Math.Ceiling(line.Units) - 1));
+            if (last > to) to = last;
+        }
+        var monthStart = new DateTime(from.Year, from.Month, 1);
+        var monthEnd = new DateTime(to.Year, to.Month, 1).AddMonths(1).AddDays(-1);
+
+        var chainKey = DuplicateClaimStage.ChainKey(claim.ClaimVersionId, claim.Id);
+        var priors = await _claims!
+            .FindDuplicateCandidatesAsync(context.TenantId, claim.MemberId, monthStart, monthEnd, chainKey, ct)
+            .ConfigureAwait(false);
+
+        var result = new List<OtherInpatientDays>();
+        foreach (var prior in priors)
+        {
+            // Same in-memory guard as the duplicate check: never this claim,
+            // its chain, its predecessor, or a dead claim.
+            if (!string.Equals(prior.TenantId, context.TenantId, StringComparison.Ordinal)) continue;
+            if (!string.Equals(prior.MemberId, claim.MemberId, StringComparison.Ordinal)) continue;
+            if (string.Equals(prior.Id, claim.Id, StringComparison.Ordinal)) continue;
+            if (string.Equals(DuplicateClaimStage.ChainKey(prior.ClaimVersionId, prior.Id), chainKey, StringComparison.Ordinal)) continue;
+            if (string.Equals(prior.Id, claim.PredecessorVersionId, StringComparison.Ordinal)) continue;
+            if (ClaimStatusSemantics.IsDenied(prior.Status) || prior.Status == ClaimStatus.Voided) continue;
+            if (prior.VersionState is ClaimVersionState.Draft or ClaimVersionState.Denied
+                or ClaimVersionState.Voided or ClaimVersionState.Adjusted) continue;
+            if (prior.SupersededAt is not null || prior.ClaimFrequencyCode?.Trim() == "8") continue;
+            if (prior.ClaimType != ClaimsService.Models.ClaimType.Institutional) continue;
+            if (string.IsNullOrWhiteSpace(prior.BillingProviderNPI)) continue;
+
+            foreach (var line in prior.ClaimLines)
+            {
+                if (!IsRoomAndBoard(line.RevenueCode)) continue;
+                var days = (int)Math.Round(line.Units, MidpointRounding.AwayFromZero);
+                if (days <= 0) continue;
+                var start = line.ServiceDateFrom != default ? line.ServiceDateFrom : prior.ServiceDateFrom;
+                result.Add(new OtherInpatientDays { FacilityNpi = prior.BillingProviderNPI.Trim(), From = start.Date, Days = days });
+            }
+        }
+        return result;
+    }
+
+    private static bool IsRoomAndBoard(string? revenueCode) =>
+        int.TryParse(revenueCode?.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var code)
+        && code is >= 100 and <= 219 && code is not (>= 180 and <= 189);
 
     internal static List<PricingRequest> BuildRequests(ClaimAdjudicationContext context)
     {
@@ -250,6 +344,7 @@ public sealed class PricingStage : IClaimAdjudicationStage
                 BillType = billType,
                 IsInstitutional = isInstitutional,
                 MedicaidDrgMethod = medicaidDrgMethod,
+                ImdOverLimitAction = context.InpatientGrouping?.ImdOverLimitAction,
                 FacilityNpi = string.IsNullOrWhiteSpace(claim.BillingProviderNPI) ? null : claim.BillingProviderNPI,
                 DischargeStatus = inpatientDetails?.PatientStatusCode,
                 PatientAgeYears = ageAtAdmission,
