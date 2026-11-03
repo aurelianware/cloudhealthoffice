@@ -239,6 +239,8 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(ShadowAdjudicationRepository);
             services.AddSingleton<global::ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationTenantSettingsRepository>(
                 new global::ClaimsService.Services.Adjudication.Shadow.InMemoryShadowAdjudicationTenantSettingsRepository());
+            services.AddSingleton<global::ClaimsService.Services.Adjudication.Shadow.IShadowAccumulatorBalanceRepository>(
+                new global::ClaimsService.Services.Adjudication.Shadow.InMemoryShadowAccumulatorBalanceRepository());
             // And the Medicaid TPL recovery case store.
             services.AddSingleton(Substitute.For<global::ClaimsService.Services.Tpl.ITplRecoveryRepository>());
             // The retro rate impact store is Mongo too.
