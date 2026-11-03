@@ -21,10 +21,14 @@ public class RetroRateReprocessingServiceTests
         Id = "impact-1", TenantId = "t1", FeeScheduleId = "t1:TMHP adult:20260901", FeeScheduleName = "TMHP adult", NewRevision = 3,
     };
 
-    private static RetroRateImpactResult Result(string id, string direction, decimal net, string plan = "STAR-TX", string status = "Paid") => new()
+    private static readonly DateTime Today = new(2026, 11, 3);
+
+    private static RetroRateImpactResult Result(string id, string direction, decimal net, string plan = "STAR-TX", string status = "Paid",
+        DateTime? serviceDate = null) => new()
     {
         ClaimId = id, ClaimDocumentId = "doc-" + id, ClaimNumber = "N-" + id, Direction = direction, NetPaidDelta = net,
         AbsoluteNetPaidDelta = Math.Abs(net), BenefitPlanId = plan, ClaimStatus = status,
+        ServiceDateFrom = serviceDate ?? new DateTime(2026, 6, 1),
     };
 
     private RetroRateReprocessingService Service(RetroRateOptions? options = null) =>
@@ -48,7 +52,7 @@ public class RetroRateReprocessingServiceTests
             Result("d", RetroRateDirection.Undecided, 0m),
             Result("e", RetroRateDirection.Unchanged, 0m),
             Result("f", RetroRateDirection.Underpaid, 2m, status: "Approved"),
-        ], new RetroRateTenantOptions { RecoupPlans = ["CHIP"] });
+        ], new RetroRateTenantOptions { RecoupPlans = ["CHIP"] }, Today);
 
         Assert.Equal(2, run.ClaimsToAdjust);
         Assert.Equal(10m, run.PlannedAdditionalPayment);
@@ -63,9 +67,42 @@ public class RetroRateReprocessingServiceTests
     }
 
     [Fact]
+    public void Plan_AppliesReportOnly_Lookback_AndMinimum()
+    {
+        var run = RetroRateReprocessingService.Plan(Impact,
+        [
+            Result("big", RetroRateDirection.Underpaid, 25m),
+            Result("small", RetroRateDirection.Underpaid, 0.75m),
+            Result("old", RetroRateDirection.Underpaid, 40m, serviceDate: new DateTime(2025, 4, 30)),
+            Result("hosp", RetroRateDirection.Underpaid, 900m, plan: "TX-HOSP"),
+            Result("smallRecoup", RetroRateDirection.Overpaid, -0.5m, plan: "CHIP"),
+        ], new RetroRateTenantOptions
+        {
+            RecoupPlans = ["CHIP"], MinimumNetAmount = 1m, LookbackMonths = 18, ReportOnlyPlans = ["tx-hosp"],
+        }, Today);
+
+        Assert.Equal(1, run.ClaimsToAdjust);
+        Assert.Equal(25m, run.PlannedAdditionalPayment);
+        Assert.Equal(RetroRateItemAction.SkipBelowMinimum, run.Items.Single(i => i.ClaimId == "small").Action);
+        Assert.Equal(RetroRateItemAction.SkipBelowMinimum, run.Items.Single(i => i.ClaimId == "smallRecoup").Action);
+        Assert.Equal(RetroRateItemAction.SkipOutsideLookback, run.Items.Single(i => i.ClaimId == "old").Action);
+        Assert.Equal(RetroRateItemAction.SkipReportOnly, run.Items.Single(i => i.ClaimId == "hosp").Action);
+    }
+
+    [Fact]
+    public void Plan_LookbackKeepsClaimsOnItsFirstDay()
+    {
+        var run = RetroRateReprocessingService.Plan(Impact,
+            [Result("edge", RetroRateDirection.Underpaid, 5m, serviceDate: new DateTime(2025, 5, 3))],
+            new RetroRateTenantOptions { LookbackMonths = 18 }, Today);
+
+        Assert.Equal(RetroRateItemAction.PayDifference, run.Items.Single().Action);
+    }
+
+    [Fact]
     public void Plan_WithoutOptIn_NeverRecoups()
     {
-        var run = RetroRateReprocessingService.Plan(Impact, [Result("b", RetroRateDirection.Overpaid, -4m)], new RetroRateTenantOptions());
+        var run = RetroRateReprocessingService.Plan(Impact, [Result("b", RetroRateDirection.Overpaid, -4m)], new RetroRateTenantOptions(), Today);
 
         Assert.Equal(0, run.ClaimsToAdjust);
         Assert.Equal(0m, run.PlannedRecoupment);

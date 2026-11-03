@@ -70,7 +70,7 @@ public sealed class RetroRateReprocessingService : IRetroRateReprocessingService
             ? new HashSet<string>(request.ClaimIds.Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id.Trim()), StringComparer.Ordinal)
             : null;
 
-        var run = Plan(impact, only is null ? results : results.Where(r => only.Contains(r.ClaimId)).ToList(), _options.For(tenantId));
+        var run = Plan(impact, only is null ? results : results.Where(r => only.Contains(r.ClaimId)).ToList(), _options.For(tenantId), DateTime.UtcNow.Date);
         run.TenantId = tenantId;
         run.CreatedBy = actorId;
         run.CreatedAtUtc = DateTime.UtcNow;
@@ -82,8 +82,11 @@ public sealed class RetroRateReprocessingService : IRetroRateReprocessingService
 
     /// <summary>Which claims get an adjustment, and why the rest do not. Pure.</summary>
     internal static RetroRateReprocessingRun Plan(
-        RetroRateImpactRun impact, IReadOnlyList<RetroRateImpactResult> results, RetroRateTenantOptions tenant)
+        RetroRateImpactRun impact, IReadOnlyList<RetroRateImpactResult> results, RetroRateTenantOptions tenant, DateTime today)
     {
+        var minimum = Math.Max(0m, tenant.MinimumNetAmount);
+        DateTime? lookbackStart = tenant.LookbackMonths is > 0 ? today.Date.AddMonths(-tenant.LookbackMonths.Value) : null;
+
         var run = new RetroRateReprocessingRun
         {
             ImpactRunId = impact.Id,
@@ -97,6 +100,9 @@ public sealed class RetroRateReprocessingService : IRetroRateReprocessingService
             var action = r.Direction switch
             {
                 RetroRateDirection.Undecided => RetroRateItemAction.SkipUndecided,
+                _ when tenant.ReportOnly(r.BenefitPlanId) => RetroRateItemAction.SkipReportOnly,
+                _ when lookbackStart is { } start && r.ServiceDateFrom.Date < start => RetroRateItemAction.SkipOutsideLookback,
+                _ when minimum > 0m && r.AbsoluteNetPaidDelta < minimum => RetroRateItemAction.SkipBelowMinimum,
                 _ when string.Equals(r.ClaimStatus, nameof(ClaimStatus.Approved), StringComparison.Ordinal) => RetroRateItemAction.SkipNotYetPaid,
                 RetroRateDirection.Underpaid => RetroRateItemAction.PayDifference,
                 RetroRateDirection.Overpaid when tenant.Recoups(r.BenefitPlanId) => RetroRateItemAction.Recoup,
