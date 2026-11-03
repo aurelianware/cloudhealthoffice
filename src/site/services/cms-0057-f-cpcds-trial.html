@@ -246,8 +246,15 @@
         <p>
           Expect most claims to be undecided at first. Shadow adjudication needs the inputs your core uses: provider
           contracts and fee schedules (importers ship for contract rosters, fee schedule CSVs and the Medicare
-          physician fee schedule by locality), benefit plan designs, and the provider network. Accumulators start at
-          zero for now, so deductible differences show up as payment differences.
+          physician fee schedule by locality), benefit plan designs, and the provider network, from your core's
+          roster file. Each member's deductible and out-of-pocket start where your core had them: from the member's
+          earlier claims in the files, or from a starting-balance file when the files begin mid-year. The run lists
+          what to load next for every claim it could not decide, so you can load it and run again to watch the gap close.
+        </p>
+        <p>
+          Turning it on takes one switch per plan in the portal, or one command in the trial kit. Runs over a whole
+          claim file go in the background, and the portal's Shadow Adjudication page shows each run, its match rate
+          and the discrepancy CSV.
         </p>
       </div>
     </section>
@@ -275,13 +282,13 @@
               <tr><td><span class="ev-what">Texas Medicaid hospital rates</span></td><td>HHSC APR-DRG weight tables and SDA files, hospital interim rates, psychiatric per diem PDFs</td><td>Inpatient, outpatient and psychiatric pricing</td><td></td></tr>
               <tr><td><span class="ev-what">Prior auth required rules</span></td><td>Your plan's PA-required list, the Texas TMPPM, Medi-Cal TAR and Non-Benefit lists</td><td>Claims that needed an authorization</td><td>CRD answers and PAS decisions</td></tr>
               <tr><td><span class="ev-what">Other coverage (TPL)</span></td><td>Texas and Medi-Cal TPL files</td><td>Cost avoidance and coordination of benefits</td><td></td></tr>
-              <tr><td><span class="ev-what">Providers and network</span></td><td>Providers and networks APIs; providers named on CPCDS claims are added for reference</td><td>Network status and credentialing</td><td>The public Provider Directory (Plan-Net)</td></tr>
+              <tr><td><span class="ev-what">Providers and network</span></td><td>Your core's network roster CSV (NPI, network, plan, dates, credentialed), or the providers and networks APIs; providers named on CPCDS claims are added for reference</td><td>Network status and credentialing</td><td>The public Provider Directory (Plan-Net)</td></tr>
+              <tr><td><span class="ev-what">Accumulators to date</span></td><td>Your core's earlier claims in the same files, or a starting-balance CSV (deductible and out-of-pocket met as of a date)</td><td>Deductible and out-of-pocket met before each claim, kept apart from live balances</td><td></td></tr>
             </tbody>
           </table>
         </div>
         <p>
-          Not loadable yet: claim history from X12 837 and 835 files, a provider roster file, and accumulators to
-          date from your core. The <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/integration/LOADING-A-PLANS-DATA.md">implementation guide</a> lists every load in order.
+          Not loadable yet: claim history from X12 837 and 835 files. The <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/integration/LOADING-A-PLANS-DATA.md">implementation guide</a> lists every load in order.
         </p>
       </div>
     </section>
@@ -289,7 +296,7 @@
     <section class="ev-section" id="how">
       <div class="ev-container">
         <span class="ev-eyebrow">How it works</span>
-        <h2>Getting your claims in: five steps, all with features that already ship.</h2>
+        <h2>From your first file to a shadow report: six steps, all with features that already ship.</h2>
         <p class="ev-sub">
           The CMS-0057-F APIs are due January 1, 2027. Most of the data behind them already lives in your core. The
           trial shows whether that data, served through Cloud Health Office, passes the kits.
@@ -305,7 +312,11 @@
           </li>
           <li>
             <strong>Load</strong>
-            <p>Members and coverage first, then claims, then authorizations. Reloading the same files is safe: unchanged records are left alone.</p>
+            <p>Members and coverage first, then your network roster, claims, authorizations and any starting balances. Reloading the same files is safe: unchanged records are left alone.</p>
+          </li>
+          <li>
+            <strong>Shadow-adjudicate</strong>
+            <p>One command turns shadow adjudication on for your plan, re-runs every loaded claim in the background and prints how often Cloud Health Office decided and matched your core, the money your core paid more or less, and what to load next.</p>
           </li>
           <li>
             <strong>Validate with Inferno</strong>
@@ -332,7 +343,7 @@
               <tr><td><span class="ev-what">Where Cloud Health Office runs</span></td><td>Your cloud or data center</td><td>Google Cloud, one tenant per plan</td></tr>
               <tr><td><span class="ev-what">How files arrive</span></td><td>Your own folder or bucket, or the import API</td><td>Key-only SFTP into your plan's folder, with logins created from the SSH keys you add in the portal</td></tr>
               <tr><td><span class="ev-what">Who sees the data</span></td><td>Only your plan</td><td>Your plan and Aurelianware, under a business associate agreement</td></tr>
-              <tr><td><span class="ev-what">When</span></td><td>Now. A laptop run on sample files takes about 15 minutes once the images are built</td><td>Set up for a plan after a pilot agreement is signed</td></tr>
+              <tr><td><span class="ev-what">When</span></td><td>Now. A laptop run on the sample files takes about 15 minutes once the images are built, and its shadow run shows a matched claim, a mismatch and an unmapped plan</td><td>Set up for a plan after a pilot agreement is signed</td></tr>
             </tbody>
           </table>
         </div>

@@ -13,22 +13,36 @@ SCRIPT = Path(__file__).resolve().parents[1] / "trial.sh"
 
 
 class StubCho(BaseHTTPRequestHandler):
-    """Records each import call and answers with the server's canned reply for its path."""
+    """Records each call and answers with the server's canned reply for its method and path.
 
-    def do_POST(self):
+    A reply is looked up as "METHOD path" first, then by path alone. A list of
+    replies is answered in turn, the last one repeating.
+    """
+
+    def _answer(self):
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length).decode("utf-8", "replace")
-        self.server.calls.append({"path": self.path, "body": body, "auth": self.headers.get("Authorization")})
-        status, reply = self.server.replies.get(self.path, (200, {}))
-        payload = json.dumps(reply).encode()
+        self.server.calls.append({"method": self.command, "path": self.path, "body": body, "auth": self.headers.get("Authorization")})
+        key = f"{self.command} {self.path}"
+        reply = self.server.replies.get(key, self.server.replies.get(self.path, (200, {})))
+        if isinstance(reply, list):
+            reply = reply.pop(0) if len(reply) > 1 else reply[0]
+        status, content = reply
+        payload = content.encode() if isinstance(content, str) else json.dumps(content).encode()
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", "text/csv" if isinstance(content, str) else "application/json")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
 
+    do_GET = do_POST = do_PUT = _answer
+
     def log_message(self, *args):
         pass
+
+
+BALANCES = "/api/v1/claims/shadow-adjudication/accumulator-balances/import"
+ROSTER = "/api/v1/providers/import/network-roster"
 
 
 class TrialScriptTests(unittest.TestCase):
@@ -37,9 +51,12 @@ class TrialScriptTests(unittest.TestCase):
         self.server.calls = []
         self.server.replies = {
             "/api/v1/enrollment/import/cpcds": (200, {"membersInFile": 2, "coverageRows": 2, "planCodes": {"unmapped": []}}),
-            "/api/v1/claims/import/cpcds": (200, {"claimsInFile": 3, "created": 3, "rejected": 0}),
+            "/api/v1/claims/import/cpcds": (200, {"batchId": "batch-1", "claimsInFile": 3, "created": 3, "rejected": 0}),
             "/api/v1/authorizations/import/csv": (200, {"authorizationsInFile": 1, "created": 1}),
             "/api/v1/authorizations/import/x12-278": (200, {"authorizationsInFile": 2, "created": 2}),
+            BALANCES: (200, {"dryRun": True, "rowsInFile": 2, "loaded": 2, "rejected": 0}),
+            ROSTER: (200, {"dryRun": True, "rowsRead": 3, "participationsAdded": 2, "unchanged": 1, "providersCreated": 1,
+                           "credentialed": 1, "rejected": 0, "networksCreated": ["Gold PPO network"]}),
         }
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.addCleanup(self.server.shutdown)
@@ -53,6 +70,8 @@ class TrialScriptTests(unittest.TestCase):
             "CPCDS_Coverages.csv": "Member id\nM1\n",
             "jiva_authorizations.csv": "authorization_number\nPA-1\n",
             "um_278_20261101.x12": "ISA*00*          *00*~",
+            "qnxt_network_roster.csv": "NPI,Network,Effective Date\n1234567893,Gold PPO network,2026-01-01\n",
+            "qnxt_member_balances_20260630.csv": "member_id,as_of_date,individual_deductible_met\nM1,2026-06-30,400\n",
             "readme.txt": "not an extract",
         }.items():
             (self.folder / name).write_text(content)
@@ -61,9 +80,10 @@ class TrialScriptTests(unittest.TestCase):
         base = f"http://127.0.0.1:{self.server.server_address[1]}"
         env = os.environ.copy()
         env.update({
-            "CHO_CLAIMS_URL": base, "CHO_ENROLLMENT_URL": base, "CHO_AUTHORIZATION_URL": base,
+            "CHO_CLAIMS_URL": base, "CHO_ENROLLMENT_URL": base, "CHO_AUTHORIZATION_URL": base, "CHO_PROVIDER_URL": base,
             "CHO_SOURCE_SYSTEM": "qnxt", "CHO_LINE_OF_BUSINESS": "Medicaid",
             "CHO_TRIAL_OUT": str(Path(self.temp.name) / "out"),
+            "CHO_SHADOW_POLL_SECONDS": "0",
         })
         env.pop("CHO_TOKEN", None)
         if token:
@@ -77,9 +97,11 @@ class TrialScriptTests(unittest.TestCase):
         paths = [c["path"] for c in self.server.calls]
         self.assertEqual(paths, [
             "/api/v1/enrollment/import/cpcds",
+            ROSTER,
             "/api/v1/claims/import/cpcds",
             "/api/v1/authorizations/import/csv",
             "/api/v1/authorizations/import/x12-278",
+            BALANCES,
         ])
         for call in self.server.calls:
             self.assertRegex(call["body"], r'name="dryRun"\r\n\r\ntrue')
@@ -87,10 +109,24 @@ class TrialScriptTests(unittest.TestCase):
         enrollment = self.server.calls[0]["body"]
         self.assertIn('filename="CPCDS_Members.csv"', enrollment)
         self.assertIn('filename="CPCDS_Coverages.csv"', enrollment)
-        self.assertRegex(self.server.calls[1]["body"], r'name="sourceSystem"\r\n\r\nqnxt')
+        self.assertRegex(self.server.calls[2]["body"], r'name="sourceSystem"\r\n\r\nqnxt')
+        self.assertRegex(self.server.calls[2]["body"], r'name="lineOfBusiness"\r\n\r\nMedicaid')
         self.assertRegex(self.server.calls[1]["body"], r'name="lineOfBusiness"\r\n\r\nMedicaid')
+        self.assertIn("network roster qnxt_network_roster.csv (200): 3 rows, 2 participations to add, 1 unchanged, 1 new providers, 1 credentialed, 0 refused", result.stdout)
+        self.assertIn("new networks: Gold PPO network", result.stdout)
+        self.assertRegex(self.server.calls[5]["body"], r'name="sourceSystem"\r\n\r\nqnxt')
+        self.assertIn("accumulator balances qnxt_member_balances_20260630.csv (200): 2 rows, 2 to load, 0 refused", result.stdout)
         self.assertIn("skipped readme.txt", result.stdout)
         self.assertIn("Clean.", result.stdout)
+
+    def test_refused_balance_rows_fail_the_check(self):
+        self.server.replies[BALANCES] = (200, {"dryRun": True, "rowsInFile": 2, "loaded": 1, "rejected": 1,
+                                               "errors": ["line 3: as_of_date '30 June' is not a date (yyyy-MM-dd)"]})
+
+        result = self.run_script("check", str(self.folder))
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("! line 3: as_of_date '30 June' is not a date", result.stdout)
 
     def test_load_writes(self):
         result = self.run_script("load", str(self.folder))
@@ -148,6 +184,78 @@ class TrialScriptTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertEqual(self.server.calls, [])
+
+
+    # ── shadow ──────────────────────────────────────────────────────────
+
+    SHADOW = "/api/v1/claims/shadow-adjudication"
+
+    def shadow_replies(self, enabled=True, deployment=True):
+        settings = {"enabledForDeployment": deployment, "enabled": enabled, "running": enabled and deployment}
+        self.server.replies.update({
+            f"GET {self.SHADOW}/settings": (200, settings),
+            f"PUT {self.SHADOW}/settings": (200, {**settings, "enabled": True, "running": True}),
+            f"POST {self.SHADOW}/runs": (202, {"id": "run-1", "status": "Queued", "claimsRequested": 50000}),
+            f"GET {self.SHADOW}/runs/run-1": [
+                (200, {"id": "run-1", "status": "Running", "claimsRequested": 3, "claimsProcessed": 1}),
+                (200, {"id": "run-1", "status": "Completed", "claimsRequested": 3, "claimsProcessed": 3}),
+            ],
+            f"GET {self.SHADOW}/runs/run-1/report?top=10": (200, {
+                "run": {"id": "run-1", "claimsCompared": 3, "matchRate": 1.0},
+                "comparableClaims": 3, "decidedClaims": 1,
+                "corePaidMore": {"claims": 0, "amount": 0}, "corePaidLess": {"claims": 0, "amount": 0},
+                "undecidedByGap": [{"key": "NOCONTRACT", "claims": 2, "corePaid": 410.5}],
+                "heldForProviderScreening": {"key": "PROVIDERSCREEN", "claims": 1, "corePaid": 60},
+            }),
+            f"GET {self.SHADOW}/runs/run-1/discrepancies.csv?includeUndecided=true": (200, "ClaimNumber,Kind\nC1,ChoUndecided\n"),
+        })
+
+    def test_shadow_turns_shadow_on_runs_each_loaded_file_and_says_what_to_load_next(self):
+        self.shadow_replies(enabled=False)
+        self.assertEqual(self.run_script("load", str(self.folder)).returncode, 0)
+
+        result = self.run_script("shadow")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Turned shadow adjudication on", result.stdout)
+        shadow_calls = [(c["method"], c["path"]) for c in self.server.calls if c["path"].startswith(self.SHADOW)]
+        self.assertIn(("PUT", f"{self.SHADOW}/settings"), shadow_calls)
+        run_post = next(c for c in self.server.calls if c["method"] == "POST" and c["path"] == f"{self.SHADOW}/runs")
+        self.assertEqual(json.loads(run_post["body"]), {"importBatchId": "batch-1", "background": True})
+        self.assertIn("Running: 1 compared so far", result.stdout)
+        self.assertIn("Completed: 3 compared", result.stdout)
+        self.assertIn("CHO would hold 1 of the decided claims until it can screen their providers", result.stdout)
+        self.assertIn("CHO decided 33.3%, matched the core on 100%", result.stdout)
+        self.assertIn("NOCONTRACT: 2 claims, core paid $410.5 -> load provider contracts", result.stdout)
+        out = Path(self.temp.name) / "out"
+        self.assertIn("ChoUndecided", (out / "shadow-run-1-discrepancies.csv").read_text())
+        self.assertTrue((out / "shadow-run-1-report.json").exists())
+
+    def test_shadow_explains_a_deployment_with_shadow_off(self):
+        self.shadow_replies(deployment=False)
+
+        result = self.run_script("shadow", "--batch", "b-9")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Adjudication__Shadow__Enabled=true", result.stderr)
+        self.assertFalse(any(c["path"].endswith("/runs") for c in self.server.calls))
+
+    def test_shadow_without_a_loaded_file_says_to_load_first(self):
+        self.shadow_replies()
+
+        result = self.run_script("shadow")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("load <folder>", result.stderr)
+
+    def test_a_failed_run_fails_the_step_with_its_reason(self):
+        self.shadow_replies()
+        self.server.replies[f"GET {self.SHADOW}/runs/run-1"] = (200, {"id": "run-1", "status": "Failed", "error": "Shadow adjudication is off for this tenant."})
+
+        result = self.run_script("shadow", "--batch", "b-9")
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("failed: Shadow adjudication is off for this tenant.", result.stdout)
 
 
 if __name__ == "__main__":

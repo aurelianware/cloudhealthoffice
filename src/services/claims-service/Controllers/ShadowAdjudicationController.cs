@@ -72,11 +72,14 @@ public class ShadowAdjudicationController : ControllerBase
     /// <summary>
     /// Runs a shadow adjudication over the named claims, or the claims of one
     /// CPCDS import batch, and returns the run's totals. Per-claim results:
-    /// <c>GET runs/{runId}/results</c>.
+    /// <c>GET runs/{runId}/results</c>. With <c>background: true</c> and an
+    /// import batch, queues a run over the whole batch and answers 202 at once;
+    /// <c>GET runs/{runId}</c> shows its status and progress.
     /// </summary>
     [HttpPost("runs")]
     [RequirePermission(ClaimsPermissions.Import)]
     [ProducesResponseType(typeof(ShadowAdjudicationRun), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ShadowAdjudicationRun), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ShadowAdjudicationRun>> Run(
@@ -92,6 +95,13 @@ public class ShadowAdjudicationController : ControllerBase
 
         try
         {
+            if (request.Background)
+            {
+                if (string.IsNullOrWhiteSpace(request.ImportBatchId))
+                    return BadRequest(new { error = "A background run takes a CPCDS import batch (importBatchId)." });
+                var queued = await _service.QueueAsync(TenantId, request, _actor.UserId, ct);
+                return AcceptedAtAction(nameof(GetRun), new { runId = queued.Id }, queued);
+            }
             var response = await _service.RunAsync(TenantId, request, _actor.UserId, ct);
             return Ok(response.Run);
         }

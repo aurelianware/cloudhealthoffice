@@ -5,6 +5,7 @@
 #
 #   ./scripts/cpcds/trial.sh check    <folder>   # dry run every file; writes nothing
 #   ./scripts/cpcds/trial.sh load     <folder>   # load them, in dependency order
+#   ./scripts/cpcds/trial.sh shadow              # shadow-adjudicate what "load" loaded
 #   ./scripts/cpcds/trial.sh validate            # Inferno US Core, CARIN BB, Plan-Net
 #
 # <folder> holds the extracts, named as the daily drop names them:
@@ -12,15 +13,27 @@
 #   *coverage*.csv       CPCDS coverages (one file, optional)
 #   *claim*.csv          CPCDS claims (any number)
 #   *auth*.csv, *278*    UM authorizations, CSV or X12 278 (any number, optional)
+#   *roster*.csv         the core's network roster: NPI, network, plan, dates
+#                        (any number, optional)
+#   *balance*.csv        the core's accumulator balances as of a date, for shadow
+#                        adjudication only (any number, optional)
 #
 # Settings (environment):
 #   CHO_TOKEN                 a tenant administrator's CHO token (required unless --local)
 #   CHO_CLAIMS_URL            claims-service           (default http://localhost:5001)
 #   CHO_ENROLLMENT_URL        enrollment-import-service (default http://localhost:5011)
 #   CHO_AUTHORIZATION_URL     authorization-service    (default http://localhost:5005)
+#   CHO_PROVIDER_URL          provider-service         (default http://localhost:5004)
 #   CHO_SOURCE_SYSTEM         the core's name, recorded on each claim (e.g. qnxt)
 #   CHO_LINE_OF_BUSINESS      Commercial (default), Medicare, Medicaid, Exchange, TRICARE or VA
 #   CHO_TRIAL_OUT             where the import reports go (default ./cpcds-trial-out)
+#
+# "shadow" turns shadow adjudication on for the tenant, re-adjudicates every
+# claim file the last "load" loaded (or --batch <importBatchId>) in CHO, and
+# prints how CHO's answers compare with the core's and what to load next. It
+# saves each run's report and discrepancy CSV in CHO_TRIAL_OUT.
+#   CHO_SHADOW_POLL_SECONDS   how often to check a running run (default 5)
+#   CHO_SHADOW_TIMEOUT_SECONDS  how long to wait for one (default 3600)
 #
 # --local signs a development token for --tenant (default "demo") with
 # scripts/dev-token.sh: only a stack running with ASPNETCORE_ENVIRONMENT=Development
@@ -36,17 +49,19 @@ if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
 fi
 set -euo pipefail
 
-usage() { sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 COMMAND="${1:-}"; [[ -n "$COMMAND" ]] || usage; shift
 FOLDER=""
+BATCH=""
 LOCAL=false
 TENANT="demo"
 while [[ $# -gt 0 ]]; do
   case $1 in
     --local)  LOCAL=true; shift ;;
     --tenant) TENANT="$2"; shift 2 ;;
+    --batch)  BATCH="$2"; shift 2 ;;
     -h|--help) usage ;;
     -*) echo "unknown option: $1" >&2; usage ;;
     *) FOLDER="$1"; shift ;;
@@ -56,6 +71,7 @@ done
 CLAIMS_URL="${CHO_CLAIMS_URL:-http://localhost:5001}"
 ENROLLMENT_URL="${CHO_ENROLLMENT_URL:-http://localhost:5011}"
 AUTHORIZATION_URL="${CHO_AUTHORIZATION_URL:-http://localhost:5005}"
+PROVIDER_URL="${CHO_PROVIDER_URL:-http://localhost:5004}"
 SOURCE_SYSTEM="${CHO_SOURCE_SYSTEM:-}"
 LINE_OF_BUSINESS="${CHO_LINE_OF_BUSINESS:-Commercial}"
 OUT="${CHO_TRIAL_OUT:-./cpcds-trial-out}"
@@ -78,7 +94,9 @@ token() {
 # loads here loads the same way when the core starts writing to the drop.
 kind() {
   local name; name="$(basename "$1")"; name="${name%.*}"; name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
-  if [[ $name == *auth* || $name == *278* ]]; then echo authorizations
+  if [[ $name == *balance* ]]; then echo balances
+  elif [[ $name == *roster* ]]; then echo rosters
+  elif [[ $name == *auth* || $name == *278* ]]; then echo authorizations
   elif [[ $name == *coverage* ]]; then echo coverages
   elif [[ $name == *member* ]]; then echo members
   elif [[ $name == *claim* ]]; then echo claims
@@ -135,6 +153,10 @@ claims() {
     ((.fileErrors // []) | .[:5] | map("\n    ! " + .) | join("")) +
     ([(.claims // [])[] | select((.errors // []) | length > 0) | "\(.claimId): \(.errors | join("; "))"] | .[:10] | map("\n    ! " + .) | join(""))' "$report"
   note_refusals "$(jq '(.rejected // 0) + ((.fileErrors // []) | length)' "$report")"
+  # A loaded file's import batch is what "shadow" re-adjudicates.
+  if [[ $dry == false ]]; then
+    jq -r '.batchId // empty' "$report" >> "$OUT/claim-batches.txt"
+  fi
 }
 
 authorizations() {
@@ -154,18 +176,47 @@ authorizations() {
   note_refusals "$(jq '(.rejected // 0) + ((.fileErrors // []) | length)' "$report")"
 }
 
+rosters() {
+  local dry="$1" file="$2"
+  local report="$OUT/roster-$(basename "$file").json"
+  post "roster $(basename "$file")" "$PROVIDER_URL/api/v1/providers/import/network-roster" "$report" \
+    -F "file=@$file" -F "dryRun=$dry" -F "lineOfBusiness=$LINE_OF_BUSINESS"
+  local code="$HTTP_CODE"
+  jq -r --arg name "$(basename "$file")" --arg code "$code" \
+    '"  network roster \($name) (\($code)): \(.rowsRead // 0) rows, \(.participationsAdded // 0) participations " + (if .dryRun then "to add" else "added" end) +
+    ", \(.unchanged // 0) unchanged, \(.providersCreated // 0) new providers, \(.credentialed // 0) credentialed, \(.rejected // 0) refused" +
+    (if ((.networksCreated // []) | length) > 0 then "\n    new networks: " + (.networksCreated | join(", ")) else "" end) +
+    ([(.fileErrors // [])[], (.errors // [])[:10][], (.warnings // [])[:5][]] | map("\n    ! " + .) | join(""))' "$report"
+  note_refusals "$(jq '(.rejected // 0) + ((.fileErrors // []) | length)' "$report")"
+}
+
+balances() {
+  local dry="$1" file="$2"
+  local report="$OUT/balances-$(basename "$file").json"
+  local args=(-F "file=@$file" -F "dryRun=$dry")
+  [[ -n "$SOURCE_SYSTEM" ]] && args+=(-F "sourceSystem=$SOURCE_SYSTEM")
+  post "balances $(basename "$file")" "$CLAIMS_URL/api/v1/claims/shadow-adjudication/accumulator-balances/import" "$report" "${args[@]}"
+  local code="$HTTP_CODE"
+  jq -r --arg name "$(basename "$file")" --arg code "$code" \
+    '"  accumulator balances \($name) (\($code)): \(.rowsInFile // 0) rows, \(.loaded // 0) " + (if .dryRun then "to load" else "loaded" end) + ", \(.rejected // 0) refused" +
+    ([(.fileErrors // [])[], (.errors // [])[:10][]] | map("\n    ! " + .) | join(""))' "$report"
+  note_refusals "$(jq '(.rejected // 0) + ((.fileErrors // []) | length)' "$report")"
+}
+
 import_folder() {
   local dry="$1"
   [[ -n "$FOLDER" && -d "$FOLDER" ]] || { echo "Give the folder that holds the extracts." >&2; usage; }
   mkdir -p "$OUT"
 
-  local members=() coverages=() claim_files=() auth_files=() unknown=()
+  local members=() coverages=() claim_files=() auth_files=() roster_files=() balance_files=() unknown=()
   while IFS= read -r -d '' file; do
     case $(kind "$file") in
       members) members+=("$file") ;;
       coverages) coverages+=("$file") ;;
       claims) claim_files+=("$file") ;;
       authorizations) auth_files+=("$file") ;;
+      balances) balance_files+=("$file") ;;
+      rosters) roster_files+=("$file") ;;
       *) unknown+=("$file") ;;
     esac
   done < <(find "$FOLDER" -maxdepth 1 -type f ! -name '.*' -print0 | sort -z)
@@ -174,27 +225,123 @@ import_folder() {
     echo "One member file and at most one coverage file per load; found ${#members[@]} and ${#coverages[@]}." >&2; exit 2; }
   [[ ${#members[@]} -eq 1 || ${#coverages[@]} -eq 0 ]] || {
     echo "A coverage file loads with its member file; add the member file." >&2; exit 2; }
-  for file in "${unknown[@]}"; do echo "  skipped $(basename "$file"): its name says neither member, coverage, claim, auth nor 278"; done
+  for file in "${unknown[@]}"; do echo "  skipped $(basename "$file"): its name says neither member, coverage, claim, auth, 278, roster nor balance"; done
 
   TOKEN="$(token)"
+  [[ $dry == true ]] || : > "$OUT/claim-batches.txt"
   echo "$([[ $dry == true ]] && echo 'Dry run (nothing is written)' || echo 'Loading') from $FOLDER; reports in $OUT"
   # The order the drop uses: claims and authorizations name members, so members first.
   [[ ${#members[@]} -eq 1 ]] && members_and_coverage "$dry" "${members[0]}" "${coverages[0]:-}"
+  for file in "${roster_files[@]}"; do rosters "$dry" "$file"; done
   for file in "${claim_files[@]}"; do claims "$dry" "$file"; done
   for file in "${auth_files[@]}"; do authorizations "$dry" "$file"; done
+  for file in "${balance_files[@]}"; do balances "$dry" "$file"; done
 
   if [[ $STATUS -ne 0 ]]; then
     echo "Some files or rows were refused; the reports in $OUT say which and why."
   elif [[ $dry == true ]]; then
     echo "Clean. Run '$(basename "$0") load $FOLDER' to load."
   else
-    echo "Loaded. Run '$(basename "$0") validate' with CHO_INTEROP_TARGET_* set to check the APIs."
+    echo "Loaded. Run '$(basename "$0") shadow' to compare CHO's adjudication with the core's,"
+    echo "and '$(basename "$0") validate' with CHO_INTEROP_TARGET_* set to check the APIs."
   fi
+  exit $STATUS
+}
+
+# api <method> <url> <out-file> [json body]: sets HTTP_CODE; stops on a refused token or no answer.
+api() {
+  local method="$1" url="$2" out="$3" body="${4:-}"
+  local args=(-sS -o "$out" -w '%{http_code}' -X "$method" "$url" -H "Authorization: Bearer $TOKEN")
+  [[ -n "$body" ]] && args+=(-H "Content-Type: application/json" -d "$body")
+  HTTP_CODE=$(curl "${args[@]}") || { echo "could not reach $url" >&2; exit 2; }
+  case $HTTP_CODE in
+    401|403) echo "$url answered $HTTP_CODE; the token is missing, expired or lacks claims:import." >&2; exit 2 ;;
+  esac
+}
+
+# What to load for each reason CHO could not decide (the portal's "What to load next").
+GAP_HINTS='{
+  "NOCONTRACT": "load provider contracts (contract roster) and fee schedules",
+  "MEMBERNOTLOADED": "load the member and coverage files before claims",
+  "PLANUNAVAIL": "create the benefit plans (plan templates) and map the core plan codes",
+  "NETWORK": "load the network roster from the core (a *roster* file)",
+  "NOAUTH": "load the authorizations (278 or CSV)",
+  "TIMELY": "check the received dates and the plan timely filing limit",
+  "SCRUB": "check the claim columns (codes, NPIs, dates) and the column map",
+  "PRICING": "a service did not answer: run again",
+  "PAUNAVAIL": "a service did not answer: run again",
+  "SVCUNAVAIL": "a service did not answer: run again"
+}'
+
+shadow() {
+  mkdir -p "$OUT"
+  TOKEN="$(token)"
+  local base="$CLAIMS_URL/api/v1/claims/shadow-adjudication"
+  local poll="${CHO_SHADOW_POLL_SECONDS:-5}" timeout="${CHO_SHADOW_TIMEOUT_SECONDS:-3600}"
+
+  api GET "$base/settings" "$OUT/shadow-settings.json"
+  [[ $HTTP_CODE == 200 ]] || { echo "This claims-service has no shadow adjudication settings ($HTTP_CODE); it predates the shadow switch." >&2; exit 2; }
+  if [[ $(jq -r '.enabledForDeployment' "$OUT/shadow-settings.json") != true ]]; then
+    echo "Shadow adjudication is off in this deployment. Set Adjudication__Shadow__Enabled=true on claims-service" >&2
+    echo "(the CPCDS trial compose file and the hosted drop profile do) and run again." >&2
+    exit 2
+  fi
+  if [[ $(jq -r '.enabled' "$OUT/shadow-settings.json") != true ]]; then
+    api PUT "$base/settings" "$OUT/shadow-settings.json" '{"enabled":true}'
+    [[ $HTTP_CODE == 200 ]] || { echo "Could not turn shadow adjudication on ($HTTP_CODE): $(head -c 300 "$OUT/shadow-settings.json")" >&2; exit 2; }
+    echo "Turned shadow adjudication on for this tenant."
+  fi
+
+  local batches=()
+  if [[ -n "$BATCH" ]]; then
+    batches=("$BATCH")
+  elif [[ -s "$OUT/claim-batches.txt" ]]; then
+    mapfile -t batches < <(grep -v '^$' "$OUT/claim-batches.txt" | sort -u)
+  fi
+  [[ ${#batches[@]} -gt 0 ]] || { echo "No claim files to shadow: run '$(basename "$0") load <folder>' first, or pass --batch <importBatchId>." >&2; exit 2; }
+
+  for batch in "${batches[@]}"; do
+    api POST "$base/runs" "$OUT/shadow-run.json" "$(jq -nc --arg b "$batch" '{importBatchId: $b, background: true}')"
+    [[ $HTTP_CODE == 202 || $HTTP_CODE == 200 ]] || { echo "Shadow run for batch $batch refused ($HTTP_CODE): $(head -c 300 "$OUT/shadow-run.json")" >&2; STATUS=1; continue; }
+    local run status waited=0
+    run=$(jq -r '.id' "$OUT/shadow-run.json")
+    status=$(jq -r '.status // "Completed"' "$OUT/shadow-run.json")
+    echo "Shadow run $run for batch $batch: $status"
+    while [[ $status == Queued || $status == Running ]]; do
+      if (( waited >= timeout )); then echo "  still $status after ${timeout}s; see the portal's Shadow Adjudication page." >&2; STATUS=1; continue 2; fi
+      sleep "$poll"; waited=$((waited + poll))
+      api GET "$base/runs/$run" "$OUT/shadow-run.json"
+      status=$(jq -r '.status // "Completed"' "$OUT/shadow-run.json")
+      jq -r 'if .status == "Queued" then "  Queued" elif .status == "Running" then "  Running: \(.claimsProcessed // 0) compared so far" else "  \(.status): \(.claimsProcessed // 0) compared" end' "$OUT/shadow-run.json"
+    done
+    if [[ $status == Failed ]]; then
+      echo "  failed: $(jq -r '.error // "no reason given"' "$OUT/shadow-run.json")"; STATUS=1; continue
+    fi
+
+    local report="$OUT/shadow-$run-report.json" csv="$OUT/shadow-$run-discrepancies.csv"
+    api GET "$base/runs/$run/report?top=10" "$report"
+    api GET "$base/runs/$run/discrepancies.csv?includeUndecided=true" "$csv"
+    jq -r --argjson hints "$GAP_HINTS" '
+      def pct: if . == null then "-" else ((. * 1000 | round) / 10 | tostring) + "%" end;
+      def money: (. * 100 | round) / 100 | tostring | "$" + .;
+      "  \(.run.claimsCompared) claims compared; CHO decided \(if .comparableClaims > 0 then (.decidedClaims / .comparableClaims | pct) else "-" end), matched the core on \(.run.matchRate | pct) of those.",
+      "  Core paid more on \(.corePaidMore.claims) claims (\(.corePaidMore.amount | money)), less on \(.corePaidLess.claims) (\(.corePaidLess.amount | money)).",
+      (if (.heldForProviderScreening.claims // 0) > 0 then
+        "  CHO would hold \(.heldForProviderScreening.claims) of the decided claims until it can screen their providers"
+        + " (OIG LEIE, SAM, NPPES): turn on exclusion screening (docs/integration/SHADOW-ADJUDICATION.md)." else empty end),
+      (if (.undecidedByGap | length) > 0 then "  What to load next:" else empty end),
+      (.undecidedByGap[:5][] | "    \(.key): \(.claims) claims, core paid \(.corePaid | money)" + (if $hints[.key] then " -> " + $hints[.key] else "" end))
+    ' "$report"
+    echo "  Report: $report"
+    echo "  Discrepancies: $csv"
+  done
+  echo "The portal shows the same runs under Operations > Shadow Adjudication."
   exit $STATUS
 }
 
 case $COMMAND in
   check) import_folder true ;;
+  shadow) shadow ;;
   load) import_folder false ;;
   validate) exec "$ROOT/scripts/interop/run.sh" deployment ;;
   *) usage ;;

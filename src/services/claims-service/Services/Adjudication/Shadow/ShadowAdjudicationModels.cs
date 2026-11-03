@@ -106,6 +106,13 @@ public class ShadowAdjudicationResult
     public string? ChoPendCode { get; set; }
     public string? ChoPendReason { get; set; }
 
+    /// <summary>
+    /// CHO would hold this claim only because it could not screen a provider
+    /// (OIG LEIE, SAM, NPPES): not a confirmed exclusion. The outcome and amounts
+    /// are what CHO decides once the provider clears, so they are still compared.
+    /// </summary>
+    public bool HeldForProviderScreening { get; set; }
+
     /// <summary>Every CHO stage that did not pass, as "Stage: reason".</summary>
     public List<string> ChoStageFindings { get; set; } = [];
 
@@ -148,6 +155,21 @@ public static class ShadowLineDifference
     public const string DenialCode = "DenialCode";
 }
 
+/// <summary>Where a run is. Runs stored before background runs existed read as Completed.</summary>
+public static class ShadowRunStatus
+{
+    /// <summary>Waiting for the background worker.</summary>
+    public const string Queued = "Queued";
+
+    /// <summary>The worker is adjudicating its claims; <see cref="ShadowAdjudicationRun.ClaimsProcessed"/> grows.</summary>
+    public const string Running = "Running";
+
+    public const string Completed = "Completed";
+
+    /// <summary>Stopped; <see cref="ShadowAdjudicationRun.Error"/> says why. Results stored so far are kept.</summary>
+    public const string Failed = "Failed";
+}
+
 /// <summary>One shadow run: what was asked, and the totals of what came back.</summary>
 [BsonIgnoreExtraElements]
 public class ShadowAdjudicationRun
@@ -156,7 +178,23 @@ public class ShadowAdjudicationRun
     public string TenantId { get; set; } = string.Empty;
     public string? RequestedBy { get; set; }
     public string? ImportBatchId { get; set; }
+
+    /// <summary>Queued, Running, Completed or Failed (<see cref="ShadowRunStatus"/>).</summary>
+    public string Status { get; set; } = ShadowRunStatus.Completed;
+
+    /// <summary>True for a run the background worker adjudicates (a whole import batch, in pages).</summary>
+    public bool Background { get; set; }
+
     public int ClaimsRequested { get; set; }
+
+    /// <summary>Claims handled so far (compared, skipped or failed). Equals <see cref="ClaimsRequested"/> once done.</summary>
+    public int ClaimsProcessed { get; set; }
+
+    /// <summary>Why a run failed.</summary>
+    public string? Error { get; set; }
+
+    /// <summary>A Running run whose lease has passed is picked up again (the replica running it stopped).</summary>
+    public DateTime? LeaseUntilUtc { get; set; }
 
     /// <summary>Asked for but not found, or not loaded from a core (no external source).</summary>
     public List<string> Skipped { get; set; } = [];
@@ -196,8 +234,17 @@ public class ShadowAdjudicationRunRequest
     /// <summary>Every claim a CPCDS import batch created, updated or left unchanged.</summary>
     public string? ImportBatchId { get; set; }
 
-    /// <summary>At most this many claims; capped by <see cref="ShadowAdjudicationOptions.MaxClaimsPerRun"/>.</summary>
+    /// <summary>
+    /// At most this many claims; capped by <see cref="ShadowAdjudicationOptions.MaxClaimsPerRun"/>,
+    /// or for a background run by <see cref="ShadowAdjudicationOptions.MaxClaimsPerBackgroundRun"/>.
+    /// </summary>
     public int? Limit { get; set; }
+
+    /// <summary>
+    /// Queue the run and return at once (202): the background worker adjudicates
+    /// every claim of the import batch, in pages. Needs <see cref="ImportBatchId"/>.
+    /// </summary>
+    public bool Background { get; set; }
 }
 
 /// <summary>The run and its per-claim results.</summary>
@@ -218,8 +265,17 @@ public class ShadowAdjudicationOptions
     /// <summary>When set, only these tenants may run. Empty: every tenant, once enabled.</summary>
     public List<string> Tenants { get; set; } = [];
 
-    /// <summary>Most claims one synchronous run adjudicates.</summary>
+    /// <summary>Most claims one synchronous run adjudicates, and the page size of a background run.</summary>
     public int MaxClaimsPerRun { get; set; } = 200;
+
+    /// <summary>Most claims one background run adjudicates (a whole import batch).</summary>
+    public int MaxClaimsPerBackgroundRun { get; set; } = 50_000;
+
+    /// <summary>How often the background worker looks for queued runs.</summary>
+    public TimeSpan WorkerInterval { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>How long a replica holds a running background run between pages before another may take it over.</summary>
+    public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromMinutes(5);
 
     /// <summary>Two amounts within this many dollars are the same.</summary>
     public decimal Tolerance { get; set; } = 0.01m;

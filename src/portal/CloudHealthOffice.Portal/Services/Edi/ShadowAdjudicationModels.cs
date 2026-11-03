@@ -39,7 +39,15 @@ public class ShadowRun
     public string Id { get; set; } = string.Empty;
     public string? RequestedBy { get; set; }
     public string? ImportBatchId { get; set; }
+
+    /// <summary>Queued, Running, Completed or Failed.</summary>
+    public string Status { get; set; } = "Completed";
+    public bool Background { get; set; }
     public int ClaimsRequested { get; set; }
+    public int ClaimsProcessed { get; set; }
+    public string? Error { get; set; }
+
+    public bool InProgress => Status is "Queued" or "Running";
     public List<string> Skipped { get; set; } = new();
     public List<string> Failed { get; set; } = new();
     public int ClaimsCompared { get; set; }
@@ -80,6 +88,9 @@ public class ShadowRunReport
     public ShadowMoneyBucket CorePaidLess { get; set; } = new();
     public List<ShadowReasonRow> ByKind { get; set; } = new();
     public List<ShadowReasonRow> UndecidedByGap { get; set; } = new();
+
+    /// <summary>Decided claims CHO would still hold until it can screen their providers (PROVIDERSCREEN).</summary>
+    public ShadowReasonRow HeldForProviderScreening { get; set; } = new();
     public List<ShadowReasonRow> ByChoStage { get; set; } = new();
     public List<ShadowReasonRow> ByDenialCodes { get; set; } = new();
     public List<ShadowReasonRow> ByProcedure { get; set; } = new();

@@ -120,6 +120,44 @@ public record BenefitResolutionRequest
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public AdjudicationExecutionMode ExecutionMode { get; init; }
         = AdjudicationExecutionMode.Production;
+
+    /// <summary>
+    /// Shadow adjudication: what the member and family had already met this
+    /// plan year by the other payer's own account (its earlier claims, and a
+    /// starting balance). When set, the engine starts from these amounts
+    /// instead of the accumulator store, writes nothing even in Production, and
+    /// returns no prepared commit, so a balance it was handed can never be
+    /// committed. Null for every real adjudication.
+    /// </summary>
+    public PriorAccumulation? PriorAccumulation { get; init; }
+}
+
+/// <summary>Accumulation the store does not hold; see <see cref="BenefitResolutionRequest.PriorAccumulation"/>.</summary>
+public record PriorAccumulation
+{
+    public List<PriorAccumulationEntry> Entries { get; init; } = [];
+}
+
+/// <summary>
+/// Amounts that counted toward the deductible and out-of-pocket maximum: one
+/// earlier claim, or a starting balance as of a date. Entries outside the
+/// claim's plan year are ignored.
+/// </summary>
+public record PriorAccumulationEntry
+{
+    /// <summary>When the amounts were incurred (a balance: its as-of date).</summary>
+    public DateOnly ServiceDate { get; init; }
+
+    /// <summary>True for the claim's member; false for another member of the family (family accumulators only).</summary>
+    public bool ThisMember { get; init; }
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public NetworkTier NetworkTier { get; init; } = NetworkTier.InNetwork;
+
+    public decimal Deductible { get; init; }
+
+    /// <summary>Member cost share that counted toward the out-of-pocket maximum (deductible included).</summary>
+    public decimal OutOfPocket { get; init; }
 }
 
 /// <summary>
