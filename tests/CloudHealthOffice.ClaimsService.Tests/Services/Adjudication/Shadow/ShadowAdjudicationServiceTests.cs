@@ -309,6 +309,8 @@ public class ShadowAdjudicationServiceTests
         var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
         Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<IShadowAdjudicationRepository>(services, store);
         Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton(services, service);
+        var tenantContext = new AdjudicationTenantContext();
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<IAdjudicationTenantContext>(services, tenantContext);
         using var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
         var worker = new ShadowAdjudicationWorker(
             Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(provider),
@@ -319,6 +321,7 @@ public class ShadowAdjudicationServiceTests
         var run = new ShadowAdjudicationRun { TenantId = "tenant-1", Background = true, Status = ShadowRunStatus.Queued };
         await store.SaveRunStateAsync(run);
         Assert.True(await worker.RunNextAsync(default));
+        Assert.Equal("tenant-1", tenantContext.TenantId);
 
         var stored = await store.GetRunAsync("tenant-1", run.Id);
         Assert.Equal(ShadowRunStatus.Failed, stored!.Status);
