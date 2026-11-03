@@ -72,7 +72,11 @@ public class ShadowAdjudicationPageTests : TestContext
         var cut = RenderComponent<ShadowAdjudication>();
 
         cut.WaitForAssertion(() => cut.Find("[data-testid=shadow-report]").TextContent.Should().Contain("40%").And.Contain("$42.50"));
-        cut.Find("[data-testid=shadow-undecided]").TextContent.Should().Contain("NOCONTRACT").And.Contain("$900.00").And.Contain("C-1");
+        var guide = cut.Find("[data-testid=shadow-gap-guide]");
+        guide.TextContent.Should().Contain("NOCONTRACT").And.Contain("$900.00").And.Contain("C-1")
+            .And.Contain("Load data").And.Contain("Contract roster importer");
+        guide.QuerySelectorAll("a").Select(a => a.GetAttribute("href")).Should().Contain("/fee-schedules");
+        cut.Find("[data-testid=shadow-accumulator-note]").TextContent.Should().Contain("accumulator baseline");
         cut.Find("[data-testid=shadow-by-kind]").TextContent.Should().Contain("CHO could not decide").And.Contain("Paid differs");
         var results = cut.Find("[data-testid=shadow-results]").TextContent;
         results.Should().Contain("C-9").And.Contain("No contract for the billing provider").And.NotContain("C-5");

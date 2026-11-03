@@ -160,6 +160,8 @@ share (group PR) and the contractual write-down (CARC 45).
 
 Expect most claims to be `ChoUndecided` until these are loaded. The run tells
 you which one is missing.
+The portal's Shadow Adjudication page lists each reason with what to load and
+links to the page or guide that loads it ("What to load next").
 
 | Input | Loaded through |
 |---|---|
