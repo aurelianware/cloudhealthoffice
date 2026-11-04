@@ -548,6 +548,41 @@ builder.Services.AddHostedService<AccumulatorOutboxDispatcher>();
 // critical log at start-up) when tenant-scoped databases are configured.
 builder.Services.AddHealthChecks().AddCheck<AccumulatorOutboxScopeHealthCheck>(
     AccumulatorOutboxScopeHealthCheck.Name, tags: ["ready"]);
+
+// Upstream warm-up (#1824): readiness waits until coverage, benefit-plan,
+// member, provider, authorization and token-service answer from this pod
+// (Adjudication:Warmup, at most 60 s), so a restarted pod gets no claims while
+// it cannot reach them yet. Before this, the first ~20 s of claims after a
+// restart pended COB (cob-coverage-service-unavailable). The probes use their
+// own client: no service token, retries or circuit breaker, so a failed probe
+// never opens the circuit the adjudication clients share.
+builder.Services.Configure<ClaimsService.HostedServices.UpstreamWarmupOptions>(
+    builder.Configuration.GetSection(ClaimsService.HostedServices.UpstreamWarmupOptions.SectionName));
+builder.Services.AddSingleton<ClaimsService.HostedServices.UpstreamWarmupState>();
+CloudHealthOffice.Infrastructure.Http.ChoServiceClientResilience.WithoutChoResilience(
+    builder.Services.AddHttpClient(ClaimsService.HostedServices.UpstreamWarmupService.HttpClientName,
+        client => client.Timeout = TimeSpan.FromSeconds(3)))
+    .ConfigureAdditionalHttpMessageHandlers((handlers, _) =>
+    {
+        for (var i = handlers.Count - 1; i >= 0; i--)
+        {
+            if (handlers[i] is ChoOutboundTokenHandler)
+                handlers.RemoveAt(i);
+        }
+    });
+builder.Services.AddSingleton(sp => ClaimsService.HostedServices.UpstreamWarmupTargets.FromClients(
+    sp.GetRequiredService<IHttpClientFactory>(),
+    [
+        UpstreamClientNames.CoverageService,
+        HttpBenefitPlanResolver.HttpClientName,
+        HttpMemberResolver.HttpClientName,
+        UpstreamClientNames.ProviderService,
+        UpstreamClientNames.AuthorizationService,
+    ],
+    builder.Configuration["ChoAuth:ServiceToken:TokenServiceUrl"]));
+builder.Services.AddHostedService<ClaimsService.HostedServices.UpstreamWarmupService>();
+builder.Services.AddHealthChecks().AddCheck<ClaimsService.HostedServices.UpstreamWarmupHealthCheck>(
+    ClaimsService.HostedServices.UpstreamWarmupHealthCheck.Name, tags: ["ready"]);
 // Operator tools: the post-rollout sweep and the ACCUMCOMMIT bulk re-run.
 builder.Services.AddScoped<IAccumulatorCommitLookup, HttpBenefitCalculationEngineClient>();
 builder.Services.AddScoped<AccumulatorOperationsService>();
