@@ -200,8 +200,8 @@ No configuration change is required. Things to know:
   codes, and the report says which plan templates to load. The first run
   denied all 4: the demo runs as a Testing host, where network and
   credentialing checks fail closed for providers the sample setup does not
-  credential. The results above come from a rerun with soft validation. A fix
-  so the trial does not need that rerun is in progress.
+  credential. The results above come from a rerun with soft validation. #1847
+  removes the need for that rerun (not yet re-run on GKE).
 - **Million Claim Challenge after a claims-service restart (#1824):** TBD.
 - **Azure:** automatic deploys are still paused (`AZURE_DEPLOYMENTS_ENABLED`)
   behind the #1217 deployment checklist.
