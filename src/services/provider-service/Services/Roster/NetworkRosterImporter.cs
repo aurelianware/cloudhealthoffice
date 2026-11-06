@@ -215,7 +215,13 @@ public sealed class NetworkRosterImporter(
         string tenantId, Provider provider, List<Row> rows, Permissions may, bool dryRun,
         string actorId, string? correlationId, NetworkRosterImportResult result, CancellationToken ct)
     {
-        if (!rows.Any(r => r.Credentialed == true) || provider.CredentialingStatus == CredentialingStatus.Approved)
+        if (!rows.Any(r => r.Credentialed == true))
+            return;
+        // The provider record can say Approved with no decision behind it (a
+        // provider created with credentialingStatus set). Claims read the
+        // decision history (status-as-of), so only a recorded approval counts.
+        if (provider.CredentialingStatus == CredentialingStatus.Approved
+            && (await credentialing.GetCurrentStatusAsync(tenantId, provider.ProviderId, ct)).Status == CredentialingStatus.Approved)
             return;
         if (!may.RecordCredentialing)
         {

@@ -8,7 +8,9 @@
 #
 # It creates, in the tenant (each step is skipped when already done):
 #   1. the standard service categories (lab, imaging, office visit, ...)
-#   2. a network, "Sample Gold PPO network", with the sample clinic (NPI 1234567893) in it
+#   2. a network, "Sample Gold PPO network", with the sample clinic (NPI 1234567893) in it,
+#      credentialed from 2026-01-01 (a delegated approval in its credentialing history,
+#      which is what claims check: setting credentialingStatus on the provider is not enough)
 #   3. the benefit plan SAMPLE-PPO-GOLD (docs/integration/samples/shadow/benefit-plan.json)
 #      with that network as its in-network tier
 #   4. a mapping from the core's plan code PPO-GOLD (group GRP-ACME) to it
@@ -39,7 +41,7 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --local)  LOCAL=true; shift ;;
     --tenant) TENANT="$2"; shift 2 ;;
-    -h|--help) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+    -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -99,16 +101,40 @@ else
   ok "network already there"
 fi
 call GET "$PROVIDER_URL/api/v1/providers/npi/$NPI"
+PROVIDER_ID=""
 if [[ "$CODE" == 200 ]]; then
+  PROVIDER_ID="$(jq -r '.providerId // empty' "$BODY")"
   ok "clinic $NPI already there (add it to the network by hand if it was created some other way)"
 else
   call POST "$PROVIDER_URL/api/v1/providers" -H "Content-Type: application/json" -d "$(jq -n \
     --arg npi "$NPI" --arg net "$NETWORK_ID" --arg plan "$PLAN_ID" '{
       npi: $npi, providerType: "Organization", organizationName: "Sample Family Clinic (synthetic)",
-      taxonomyCode: "261QP2300X", primarySpecialty: "Primary Care", credentialingStatus: "Approved",
+      taxonomyCode: "261QP2300X", primarySpecialty: "Primary Care",
       networkParticipations: [{networkId: $net, planId: $plan, lineOfBusiness: "Commercial",
                                networkTier: "Tier1", effectiveDate: "2026-01-01T00:00:00Z"}]}')"
-  [[ "$CODE" == 201 ]] && ok "clinic $NPI created, in the network" || fail "clinic not created"
+  if [[ "$CODE" == 201 ]]; then
+    PROVIDER_ID="$(jq -r '.providerId // empty' "$BODY")"
+    ok "clinic $NPI created, in the network"
+  else
+    fail "clinic not created"
+  fi
+fi
+# Claims check the credentialing history as of the date of service; the sample
+# claims start in March 2026, so record the approval from 2026-01-01.
+if [[ -n "$PROVIDER_ID" ]]; then
+  call GET "$PROVIDER_URL/api/v1/providers/$PROVIDER_ID/credentialing/status-as-of?asOfDate=2026-01-02T00:00:00Z"
+  if [[ "$CODE" == 200 && "$(jq -r '.status // empty' "$BODY")" == "Approved" ]]; then
+    ok "clinic already credentialed"
+  else
+    call POST "$PROVIDER_URL/api/v1/providers/$PROVIDER_ID/credentialing/decisions" -H "Content-Type: application/json" \
+      -d '{"decision": "Approved", "decidedAt": "2026-01-01T00:00:00Z", "credentialingDate": "2026-01-01T00:00:00Z",
+           "decisionAuthorityType": "DelegatedAuthority", "decisionAuthorityId": "cpcds-sample-setup"}'
+    case "$CODE" in
+      200|201) ok "clinic credentialed from 2026-01-01" ;;
+      403) fail "clinic not credentialed: the token lacks providers:credential" ;;
+      *) fail "clinic not credentialed" ;;
+    esac
+  fi
 fi
 
 echo "3. Benefit plan $PLAN_ID"
