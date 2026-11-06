@@ -1,4 +1,5 @@
 using ClaimsService.Models;
+using ClaimsService.Models.Adjudication;
 using ClaimsService.Services.Adjudication.Stages;
 
 namespace ClaimsService.Services.Adjudication.Shadow;
@@ -21,6 +22,12 @@ public static class ShadowDiscrepancyComparer
 
     /// <summary>Recorded when benefit calculation could not run because the claim reached it with no benefit plan.</summary>
     public const string NoPlanCode = "PLANUNAVAIL";
+
+    /// <summary>
+    /// Recorded when CHO denied only because the plan's network or the provider's
+    /// credentialing was never loaded (the same code a network pend carries).
+    /// </summary>
+    public const string NetworkSetupCode = "NETWORK";
 
     /// <summary>Prefix of the pend code recorded when a CHO stage rejected the claim (it lacks information CHO needs).</summary>
     public const string RejectCodePrefix = "REJECT:";
@@ -116,9 +123,13 @@ public static class ShadowDiscrepancyComparer
                 .Reason;
         }
 
-        var choDecided = resolved is ClaimAdjudicationOutcome.Pass or ClaimAdjudicationOutcome.Deny;
         var memberNotLoaded = resolved == ClaimAdjudicationOutcome.Deny
                               && cho.MemberLookup == MemberLookupOutcome.NotFound;
+        var setupGap = resolved == ClaimAdjudicationOutcome.Deny && !memberNotLoaded
+            ? NetworkSetupGap(cho)
+            : null;
+        var choDecided = (resolved is ClaimAdjudicationOutcome.Pass or ClaimAdjudicationOutcome.Deny)
+                         && setupGap is null;
 
         if (resolved == ClaimAdjudicationOutcome.Pend)
         {
@@ -146,6 +157,11 @@ public static class ShadowDiscrepancyComparer
             result.ChoPendCode = MemberNotLoadedCode;
             result.ChoPendReason = "The member is not loaded in CHO (load the plan's 834 or CPCDS member file).";
         }
+        else if (setupGap is { } gap)
+        {
+            result.ChoPendCode = gap.Code;
+            result.ChoPendReason = gap.Reason;
+        }
 
         if (choDecided && !memberNotLoaded)
         {
@@ -169,6 +185,57 @@ public static class ShadowDiscrepancyComparer
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// A fail-closed network or credentialing denial that comes from data CHO
+    /// was never given, not from a finding: the claim's plan is unknown, the plan
+    /// has no network configured, or the provider has no credentialing record
+    /// at all. A shadow run on a fresh deployment (or any deployment that runs
+    /// FailClosed, as Testing and Production hosts do) would otherwise report
+    /// every such claim as CHO denying what the core paid. A provider that is
+    /// in none of the plan's networks, or whose credentialing is pending,
+    /// denied, expired or suspended, is a finding and stays a denial.
+    /// </summary>
+    private static (string Code, string Reason)? NetworkSetupGap(ClaimAdjudicationContext cho)
+    {
+        var denyingStages = cho.StageResults.Where(r => r.Outcome == ClaimAdjudicationOutcome.Deny).ToList();
+        if (denyingStages.Count == 0
+            || denyingStages.Any(r => r.StageName != NetworkCredentialingStage.StageName))
+            return null;
+
+        var denials = cho.EnforcementOutcomes.Where(o => o.Decision == EnforcementDecision.Deny).ToList();
+        if (denials.Count == 0) return null;
+
+        if (string.IsNullOrWhiteSpace(cho.Claim.BenefitPlanId) || cho.ResolvedPlan is null)
+        {
+            return (NoPlanCode,
+                "The member's coverage names no CHO benefit plan, so CHO has no network to check the provider against: create the plan and map the core's plan code to it.");
+        }
+
+        var planHasNoNetwork = cho.ResolvedPlan.NetworkTiers.All(t => string.IsNullOrWhiteSpace(t.NetworkId));
+        var credentialing = new[] { cho.BillingProviderCredentialingStatus, cho.RenderingProviderCredentialingStatus }
+            .Where(s => s is not null && !s.IsApprovedAtAsOf)
+            .ToList();
+        var noCredentialingRecord = credentialing.Count > 0
+            && credentialing.All(s => string.Equals(s!.Status, "Unknown", StringComparison.OrdinalIgnoreCase));
+
+        foreach (var denial in denials)
+        {
+            var isGap = denial.Check switch
+            {
+                EnforcementCheck.Membership => planHasNoNetwork,
+                EnforcementCheck.Credentialing => noCredentialingRecord,
+                _ => false,
+            };
+            if (!isGap) return null;
+        }
+
+        return denials.Any(d => d.Check == EnforcementCheck.Membership)
+            ? (NetworkSetupCode,
+                "The member's benefit plan has no network in CHO: give its in-network tier a network and load the core's network roster.")
+            : (NetworkSetupCode,
+                "CHO has no credentialing record for the provider: load the core's network roster with its credentialed column (or record the credentialing decision).");
     }
 
     private static List<ShadowLineComparison> CompareLines(

@@ -1,4 +1,6 @@
 using ClaimsService.Models;
+using ClaimsService.Models.Adjudication;
+using ClaimsService.Services.Resolution;
 using ClaimsService.Services.Adjudication;
 using ClaimsService.Services.Adjudication.Shadow;
 using ClaimsService.Services.Adjudication.Stages;
@@ -204,6 +206,88 @@ public class ShadowDiscrepancyComparerTests
     }
 
     [Fact]
+    public void AFailClosedDenial_ForAPlanWithNoNetwork_IsUndecided()
+    {
+        var cho = NetworkDenied(EnforcementCheck.Membership, "Billing provider: no in-network tier configured for the resolved plan.", "242");
+        cho.Claim.BenefitPlanId = "SAMPLE-PLAN";
+        cho.ResolvedPlan = new ResolvedBenefitPlan { Id = "SAMPLE-PLAN" };
+
+        var result = ShadowDiscrepancyComparer.Compare(CorePaid(80m, 60m, 20m), cho, Tolerance);
+
+        Assert.Equal(ShadowDiscrepancyKind.ChoUndecided, result.Kind);
+        Assert.Equal(ShadowDiscrepancyComparer.NetworkSetupCode, result.ChoPendCode);
+        Assert.Contains("network roster", result.ChoPendReason);
+        Assert.Null(result.ChoDenialCode);
+        Assert.Equal(0m, result.PaidVariance);
+        Assert.Empty(result.Lines.Single().Differences);
+    }
+
+    [Fact]
+    public void AFailClosedNetworkDenial_WithNoPlan_IsAnUnmappedPlanCode()
+    {
+        var cho = NetworkDenied(EnforcementCheck.Membership, "Billing provider: no in-network tier configured for the resolved plan.", "242");
+
+        var result = ShadowDiscrepancyComparer.Compare(CorePaid(80m, 60m, 20m), cho, Tolerance);
+
+        Assert.Equal(ShadowDiscrepancyKind.ChoUndecided, result.Kind);
+        Assert.Equal(ShadowDiscrepancyComparer.NoPlanCode, result.ChoPendCode);
+        Assert.Contains("plan code", result.ChoPendReason);
+    }
+
+    [Fact]
+    public void AFailClosedDenial_ForAProviderWithNoCredentialingRecord_IsUndecided()
+    {
+        var cho = InNetworkPlan(NetworkDenied(EnforcementCheck.Credentialing,
+            "Billing provider credentialing status is 'Unknown' on the service date.", "B7"));
+        cho.BillingProviderCredentialingStatus = new CredentialingStatusSnapshot { Status = "Unknown" };
+
+        var result = ShadowDiscrepancyComparer.Compare(CorePaid(80m, 60m, 20m), cho, Tolerance);
+
+        Assert.Equal(ShadowDiscrepancyKind.ChoUndecided, result.Kind);
+        Assert.Equal(ShadowDiscrepancyComparer.NetworkSetupCode, result.ChoPendCode);
+        Assert.Contains("credentialing record", result.ChoPendReason);
+    }
+
+    [Theory]
+    [InlineData("Denied")]
+    [InlineData("Expired")]
+    [InlineData("Pending")]
+    public void ACredentialingStatusOnRecord_IsComparedAsTheDenialItIs(string status)
+    {
+        var cho = InNetworkPlan(NetworkDenied(EnforcementCheck.Credentialing,
+            $"Billing provider credentialing status is '{status}' on the service date.", "B7"));
+        cho.BillingProviderCredentialingStatus = new CredentialingStatusSnapshot { Status = status };
+
+        var result = ShadowDiscrepancyComparer.Compare(CorePaid(80m, 60m, 20m), cho, Tolerance);
+
+        Assert.Equal(ShadowDiscrepancyKind.OutcomeMismatch, result.Kind);
+        Assert.Equal("B7", result.ChoDenialCode);
+    }
+
+    [Fact]
+    public void AProviderInNoneOfThePlansNetworks_IsComparedAsTheDenialItIs()
+    {
+        var cho = InNetworkPlan(NetworkDenied(EnforcementCheck.Membership,
+            "Billing provider is not an active member of any plan tier on the service date.", "242"));
+
+        var result = ShadowDiscrepancyComparer.Compare(CorePaid(80m, 60m, 20m), cho, Tolerance);
+
+        Assert.Equal(ShadowDiscrepancyKind.OutcomeMismatch, result.Kind);
+        Assert.Equal("242", result.ChoDenialCode);
+    }
+
+    [Fact]
+    public void ASetupGapDenial_AlongsideAnotherStagesDenial_IsComparedAsADenial()
+    {
+        var cho = NetworkDenied(EnforcementCheck.Membership, "no in-network tier configured", "242");
+        cho.StageResults.Add(ClaimAdjudicationStageResult.Deny(TimelyFilingStage.StageName, "Filed late"));
+
+        var result = ShadowDiscrepancyComparer.Compare(CorePaid(80m, 60m, 20m), cho, Tolerance);
+
+        Assert.Equal(ShadowDiscrepancyKind.OutcomeMismatch, result.Kind);
+    }
+
+    [Fact]
     public void ALineTheCoreDenied_ButChoPaid_IsALineOutcomeDifference()
     {
         var core = CorePaid(80m, 60m, 20m, lines: 2);
@@ -346,6 +430,27 @@ public class ShadowDiscrepancyComparerTests
                 : new LineAdjudicationResult())
             .ToList();
         return context;
+    }
+
+    private static ClaimAdjudicationContext NetworkDenied(EnforcementCheck check, string reason, string carc)
+    {
+        var cho = Cho(
+            ClaimAdjudicationStageResult.Pend(ProviderIntegrityStage.StageName, "Provider verification could not reach a confident determination"),
+            ClaimAdjudicationStageResult.Deny(NetworkCredentialingStage.StageName, $"{check}: {reason} (mode=FailClosed)"));
+        cho.EnforcementOutcomes.Add(new EnforcementOutcome(check, EnforcementDecision.Deny, "FailClosed", reason, DateTime.UtcNow));
+        cho.AdjudicationResult.DenialReasonCode = carc;
+        return cho;
+    }
+
+    private static ClaimAdjudicationContext InNetworkPlan(ClaimAdjudicationContext cho)
+    {
+        cho.Claim.BenefitPlanId = "SAMPLE-PLAN";
+        cho.ResolvedPlan = new ResolvedBenefitPlan
+        {
+            Id = "SAMPLE-PLAN",
+            NetworkTiers = [new ResolvedNetworkTier { TierName = "In-Network", TierLevel = 1, NetworkId = "net-1" }],
+        };
+        return cho;
     }
 
     private static ClaimAdjudicationContext Cho(params ClaimAdjudicationStageResult[] results)
