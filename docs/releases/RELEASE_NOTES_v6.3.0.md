@@ -1,4 +1,4 @@
-# v6.3.0 — TBD
+# v6.3.0 — Full Metal Jacket
 
 **Release date:** TBD
 **Previous release:** [v6.2.0](./RELEASE_NOTES_v6.2.0.md) (October 31, 2026)

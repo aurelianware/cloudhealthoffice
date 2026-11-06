@@ -6,7 +6,7 @@ This directory contains comprehensive release documentation for CloudHealthOffic
 
 ## Next Release (not yet tagged)
 
-### v6.3.0 — codename TBD (November 2026)
+### v6.3.0 — Full Metal Jacket (November 2026)
 
 Shadow adjudication in a day, and the Texas and California Medicaid build (encounters, APR-DRG and
 Medicaid pricing, third-party liability, finance close and reports). Off by default. Release date
