@@ -849,3 +849,31 @@ def test_demo_and_cloudflare_production_render_as_before(tmp_path):
     portal = env(deployments(render(*production_args(tmp_path)))["portal"])
     assert portal["Authentication__CloudflareAccess__TeamDomain"] == ACCESS_TEAM
     assert "Authentication__CloudflareAccess__Provider" not in portal
+
+
+# ── Log levels (--log-level) ─────────────────────────────────────────────────
+
+def test_demo_services_log_at_warning_by_default():
+    for name, dep in deployments(render()).items():
+        e = env(dep)
+        assert e["Logging__LogLevel__Default"] == "Warning", name
+        # Development hosts set Microsoft.AspNetCore to Information; that would beat Default.
+        assert e["Logging__LogLevel__Microsoft.AspNetCore"] == "Warning", name
+        assert e["Logging__LogLevel__Microsoft.Hosting.Lifetime"] == "Information", name
+
+
+def test_production_security_demo_also_gets_the_log_level(tmp_path):
+    for name, dep in deployments(render(*production_args(tmp_path))).items():
+        assert env(dep)["Logging__LogLevel__Default"] == "Warning", name
+
+
+def test_log_level_can_be_chosen_or_left_to_appsettings():
+    for name, dep in deployments(render("--log-level", "Information")).items():
+        assert env(dep)["Logging__LogLevel__Default"] == "Information", name
+    for name, dep in deployments(render("--log-level", "")).items():
+        assert not [k for k in env(dep) if k.startswith("Logging__")], name
+
+
+def test_hosted_keeps_each_services_own_log_levels(tmp_path):
+    for name, dep in deployments(render(*hosted_args(tmp_path))).items():
+        assert not [k for k in env(dep) if k.startswith(("Logging__", "Serilog__"))], name

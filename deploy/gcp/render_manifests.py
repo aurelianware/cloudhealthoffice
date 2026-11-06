@@ -265,6 +265,29 @@ DEMO_ENV = {
 }
 
 
+# --log-level: the demo's services log at this level. Most run as Development
+# hosts, whose appsettings.Development.json logs at Debug, and every request and
+# health probe would otherwise reach Cloud Logging. The hosted environment keeps
+# each service's own appsettings.json levels.
+LOG_LEVELS = ("Trace", "Debug", "Information", "Warning", "Error", "Critical")
+VERBOSE_LOG_CATEGORIES = (
+    "Microsoft",
+    "Microsoft.AspNetCore",
+    "Microsoft.AspNetCore.SignalR",
+    "Microsoft.EntityFrameworkCore",
+    "OpenIddict",
+    "CloudHealthOffice.ProviderVerificationEngine",
+)
+
+
+def log_level_env(level: str) -> dict[str, str]:
+    env = {"Logging__LogLevel__Default": level, "Serilog__MinimumLevel__Default": level}
+    env.update({f"Logging__LogLevel__{category}": level for category in VERBOSE_LOG_CATEGORIES})
+    # Keep the one-line "Application started" so a pod's start still shows.
+    env["Logging__LogLevel__Microsoft.Hosting.Lifetime"] = "Information"
+    return env
+
+
 # ── Production security (--security production) ─────────────────────────────
 
 NAMESPACE = "cloudhealthoffice"
@@ -530,6 +553,9 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
         set_env(container, "ASPNETCORE_ENVIRONMENT", host_environment(name, args))
         for key, value in (HOSTED_ENV if hosted(args) else PRODUCTION_ENV if production(args) else DEMO_ENV).items():
             set_env(container, key, value)
+        if not hosted(args) and args.log_level:
+            for key, value in log_level_env(args.log_level).items():
+                set_env(container, key, value)
         if hosted(args) and any(e.get("name") == "Redis__ConnectionString" for e in container.get("env", []) or []):
             set_env_from_secret(container, "Redis__ConnectionString", "redis-secret", "connectionString")
         if name != "portal":
@@ -959,6 +985,9 @@ def main() -> int:
                         help="StorageClass for the services' volumes (default: %(default)s)")
     parser.add_argument("--resource-profile", choices=("default", "small"), default="default",
                         help="small lowers CPU requests to fit one 8-vCPU node")
+    parser.add_argument("--log-level", choices=("",) + LOG_LEVELS, default="Warning",
+                        help="log level for every demo service (default Warning; empty keeps each "
+                             "service's appsettings levels). Not applied with --hosted.")
     parser.add_argument("--documents-bucket", default="",
                         help="Google Cloud Storage bucket for documents (terraform output documents_bucket)")
     parser.add_argument("--documents-service-account", default="",

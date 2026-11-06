@@ -35,6 +35,8 @@
 #   RESOURCE_PROFILE=small   small fits one 8-vCPU node (lower CPU requests, one
 #                            replica each); default keeps the manifests' requests
 #   CLAIMS_REPLICAS  BENEFIT_PLAN_REPLICAS   (1 with the small profile, else 2)
+#   LOG_LEVEL=Warning        Log level for every demo service (Trace..Critical; empty keeps
+#                            each service's appsettings levels). Not used with HOSTED=true.
 #   ROLLOUT_TIMEOUT=900s
 #   Production security (all five, or none):
 #   TOKEN_SIGNING_KEY_VERSION     terraform output token_signing_key_version
@@ -706,6 +708,7 @@ log "Rendering and applying service manifests"
 render_args=(--registry "$GAR_REPOSITORY" --tag "$IMAGE_TAG"
   --claims-replicas "$CLAIMS_REPLICAS" --benefit-plan-replicas "$BENEFIT_PLAN_REPLICAS"
   --storage-class "$STORAGE_CLASS" --resource-profile "$RESOURCE_PROFILE")
+render_args+=(--log-level "${LOG_LEVEL-Warning}")
 [[ -n "$KAFKA_VALUE" ]] && render_args+=(--kafka-bootstrap "$KAFKA_VALUE")
 if [[ -n "${CPCDS_DROP_BUCKET:-}" && -n "${CPCDS_DROP_SERVICE_ACCOUNT:-}" ]]; then
   render_args+=(--cpcds-drop-bucket "$CPCDS_DROP_BUCKET" --cpcds-drop-service-account "$CPCDS_DROP_SERVICE_ACCOUNT")

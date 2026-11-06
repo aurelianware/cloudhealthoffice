@@ -129,6 +129,8 @@ To bring everything back, rerun the deploy workflow with the existing image tag.
 
 **Cost.** The default single e2-standard-8 node (8 vCPU, 32 GB) runs about $7 a day including the cluster fee (Google's free tier credits one zonal cluster's management fee), plus about 165 GB of standard disk and image storage. Autopilot with the full resource profile is roughly $15 a day. Set the budget alert.
 
+**Logs.** Every demo service logs at `Warning` (the deploy sets `Logging__LogLevel__*` on each Deployment), because most run as Development hosts whose own settings log at Debug and would fill Cloud Logging with every request and health probe. Set `LOG_LEVEL=Information` (or empty, to keep each service's appsettings levels) on `scripts/deploy-gke.sh` to change it. For one service while debugging: `kubectl set env deployment/claims-service -n cloudhealthoffice Logging__LogLevel__Default=Debug`. To stop app logs going to Cloud Logging at all (`kubectl logs` keeps working): `gcloud container clusters update cho-demo --location us-west1-a --logging=SYSTEM`. The hosted environment keeps each service's own levels.
+
 **Why one node by default.** A new billing account starts with 12 vCPU, 250 GB of SSD and 4 external IPs, and Google declines increases until the account has billing history. The default cluster, the `small` resource profile (lower CPU requests, one replica per service; limits unchanged) and standard persistent disk fit inside those limits. Once quota is raised, set `autopilot = true` (or a larger `node_machine_type` / `node_count`) and deploy with `resource_profile: default` for benchmark runs. The live MCC run in the demo is a small sample either way.
 
 ## Production security
