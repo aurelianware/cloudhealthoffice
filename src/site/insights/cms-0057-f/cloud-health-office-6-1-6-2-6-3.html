@@ -234,7 +234,7 @@
       <div class="wrap">
 
         <p class="lead">On January 1, 2027, the Patient Access, Provider Access and Payer-to-Payer API requirements of CMS-0057-F take effect. Most health plans we talk to are not asking whether they need these APIs. They are asking two harder questions: how do we prove they work, and do we have to replace our core to get them?</p>
-        <p>The last three Cloud Health Office releases are our answer to both. Here is what shipped, what is coming next, and what is still open.</p>
+        <p>The last three Cloud Health Office releases are our answer to both, and you don&rsquo;t have to take our word for it. Here is what shipped, what is coming next, how to check it on your own data, and what is still open.</p>
 
         <div class="stats">
           <div class="stat"><b>6 of 6</b><span>Inferno test kits passing nightly on main, shipping in 6.3</span></div>
@@ -248,6 +248,7 @@
             <li><a href="#v6-1">6.1 &ldquo;Spartacus&rdquo;: the CMS-0057-F APIs, finished</a></li>
             <li><a href="#v6-2">6.2 &ldquo;The Shining&rdquo;: keep your core, get the APIs</a></li>
             <li><a href="#v6-3">Coming in 6.3: shadow in a day, and Texas and California Medicaid</a></li>
+            <li><a href="#see-it">See it for yourself, on your own data</a></li>
             <li><a href="#open">What is still open</a></li>
             <li><a href="#evidence">Why ship this fast</a></li>
           </ol>
@@ -291,6 +292,12 @@
         <div class="keyline">
           <p>A shadow run that says &ldquo;undecided&rdquo; without saying why is useless. One that hands you a load list is a project plan.</p>
         </div>
+        <p><strong>Why does this matter?</strong> The hardest part of any decision about a core system is that you can&rsquo;t see the answer until you&rsquo;ve committed. Migrations usually take months of work before the first claim pays on the new platform. Shadow in a day turns that around: you run your own claims through a second engine next to the one you have, and nothing changes for members or providers while you look. In a day you have evidence instead of a sales deck:</p>
+        <ul>
+          <li>a match rate on your own claims;</li>
+          <li>the dollars where the two engines disagree, which deserve a payment-integrity review whether or not you ever switch;</li>
+          <li>the exact list of what is missing before the second engine could take over.</li>
+        </ul>
 
         <h3>Texas and California Medicaid</h3>
         <p>Built for both states in parallel:</p>
@@ -310,7 +317,26 @@
           <li><strong>Claims operations.</strong> Retro rate reprocessing after a fee schedule changes, with an impact report and approval-gated adjustments, plus claim entry, correction and reversal in the portal.</li>
         </ul>
 
-        <h2 id="open"><span class="num">04</span>What is still open</h2>
+        <h2 id="see-it"><span class="num">04</span>See it for yourself, on your own data</h2>
+        <p>The deadline is eight weeks away. Wherever your plan is with CMS-0057-F, you can check your APIs before January 1 rather than finding out after.</p>
+
+        <h3>Already have APIs? Test them against the same kits</h3>
+        <p>The Inferno test kits we run against Cloud Health Office every night aren&rsquo;t ours. They are the open-source kits ONC publishes, and they test any FHIR server. In a fixed-fee engagement, Aurelianware runs them against your sandbox or test endpoints, with no PHI: US Core, CARIN Blue Button, Plan-Net, and Bulk Data with SMART Backend Services. We also review your prior authorization timeframes and metrics, which no kit checks. You get every failing test and the reason it failed. It doesn&rsquo;t matter whose platform built the APIs. The engagement takes four weeks.</p>
+
+        <h3>Not there yet? Run them on your core&rsquo;s data</h3>
+        <p>For a plan that doesn&rsquo;t have the APIs yet, or whose implementation is struggling. Your core keeps paying claims. You export the CPCDS files it already produces (members, coverage and claims), plus prior authorizations from your UM platform as CSV or X12 278. Cloud Health Office loads them and serves Patient Access, Provider Access and Payer-to-Payer from them. Then you run US Core, CARIN Blue Button and Plan-Net against your own members.</p>
+        <p>The same importers load what adjudication needs, so one load also feeds a shadow run. They take network rosters, provider contracts, fee schedules as the states publish them, the Medicare physician fee schedule, prior authorization rules, TPL files and starting deductible and out-of-pocket balances.</p>
+
+        <h3>Simple, with no risk to your core</h3>
+        <ul>
+          <li>Nothing replaces your core. Shadow runs are read-only, and nothing a member, provider or API consumer sees changes.</li>
+          <li>In the plan-hosted trial, Cloud Health Office runs in your own cloud or data center, so your data never leaves your plan. You share only the kit summary with us. An Aurelianware-hosted option follows a pilot agreement.</li>
+          <li>Every load has a dry run that writes nothing, keeps your core&rsquo;s identifiers, and is safe to repeat.</li>
+          <li>The plan-hosted trial costs nothing. Our license allows evaluation without a commercial agreement.</li>
+          <li>On a laptop, our sample files go from first load to a shadow report in about 15 minutes. We built the kit so a plan&rsquo;s own files take a day, not a project. We haven&rsquo;t yet timed it on a real plan&rsquo;s files, and the first plan to try it will set that benchmark.</li>
+        </ul>
+
+        <h2 id="open"><span class="num">05</span>What is still open</h2>
         <p>We would rather you hear this from us than find it in a pilot.</p>
         <ul>
           <li>The Texas and California values marked &ldquo;verify&rdquo; (some rates, lookbacks and state file layouts) need checking against a plan&rsquo;s own contract and the state&rsquo;s current companion guides before real use.</li>
@@ -320,14 +346,14 @@
           <li>Inferno results are from our seeded test profile and our demo environment, not from a plan&rsquo;s production data.</li>
         </ul>
 
-        <h2 id="evidence"><span class="num">05</span>Why ship this fast</h2>
+        <h2 id="evidence"><span class="num">06</span>Why ship this fast</h2>
         <p>6.0, 6.1 and 6.2 all shipped between October 28 and October 31, and 6.3 is close behind. The deadline does not move, and each release carries its evidence with it: the test kit, the version, the run, and what passed. The release notes, the nightly Inferno results and the PA Timeliness Challenge are all public:</p>
         <ul>
           <li><a href="/release-notes/v6-1-0">v6.1.0 release notes</a> and <a href="/release-notes/v6-2-0">v6.2.0 release notes</a></li>
           <li><a href="/evidence/inferno-conformance">Inferno conformance results</a></li>
           <li><a href="/evidence/pa-timeliness-challenge">PA Timeliness Challenge</a></li>
         </ul>
-        <p>If you run a health plan, or a Medicaid managed care plan in Texas or California, and want to see a shadow run on your own CPCDS files, <a href="/contact?interest=cms0057-assessment">get in touch</a>.</p>
+        <p>If you want your existing APIs tested against the Inferno kits, or want to see your own claims in a shadow run, <a href="/contact?interest=cms0057-assessment">get in touch</a>.</p>
 
         <h2 id="disclosure"><span class="num">Disclosure</span>Where we sit in this</h2>
         <p>Cloud Health Office sells payer interoperability software, so read this with that in mind. All test data is synthetic, and no exchange described here has moved production member data. Passing an Inferno test kit is not CMS certification or a legal determination of compliance. We claim no certification by, affiliation with, or endorsement from CMS, ONC, HL7, the Inferno project or any other vendor.</p>
@@ -351,6 +377,7 @@
         <p>Send the CPCDS files your core already produces. We load them, serve the CMS-0057-F APIs from them, and show you claim by claim where we agree with your core and what to load next.</p>
         <div class="cta-actions">
           <a href="/contact?interest=cms0057-assessment" class="btn btn-primary" data-ga-event="cpcds_trial_interest">Ask about a CPCDS trial →</a>
+          <a href="/contact?interest=cms0057-assessment" class="btn btn-ghost">Test your existing APIs</a>
           <a href="/evidence/inferno-conformance" class="btn btn-ghost">See our Inferno results</a>
         </div>
         <p style="margin-top:1.4rem;font-size:.82rem;color:var(--text-dim)">
