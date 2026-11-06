@@ -78,6 +78,19 @@ def test_host_environments():
         assert any(e.get("configMapRef", {}).get("name") == "cho-service-tokens" for e in env_from), name
 
 
+def test_demo_logs_warnings_and_errors_only_by_default():
+    for name, dep in deployments(render()).items():
+        e = env(dep)
+        assert e["Logging__LogLevel__Default"] == "Warning", name
+        assert e["Logging__LogLevel__Microsoft.AspNetCore.SignalR"] == "Warning", name
+        assert e["Logging__Console__LogToStandardErrorThreshold"] == "Warning", name
+
+
+def test_demo_log_level_can_be_raised_for_debugging():
+    for name, dep in deployments(render("--log-level", "Information")).items():
+        assert env(dep)["Logging__LogLevel__Default"] == "Information", name
+
+
 def test_ai_examiner_is_off_unless_requested():
     off = deployments(render())
     assert off["claims-examiner-service"]["spec"]["replicas"] == 0
@@ -771,6 +784,11 @@ def test_hosted_runs_production_hosts_with_no_synthetic_data(tmp_path):
         assert "Features__BenefitPlanSyntheticValidationEnabled" not in e, name
         assert not any(k.startswith("WorkManagement__Reconcile__Tenants") for k in e), name
     assert config_map(docs, "fhir-service-config").get("FhirAdapters__DataClassification") != "synthetic"
+
+
+def test_hosted_keeps_the_appsettings_log_levels(tmp_path):
+    for name, dep in deployments(render(*hosted_args(tmp_path))).items():
+        assert not any(k.startswith("Logging__") for k in env(dep)), name
 
 
 def test_hosted_signs_in_through_google_iap(tmp_path):

@@ -294,6 +294,28 @@ PRODUCTION_ENV = {
     "SyntheticData__Allowed": "true",
 }
 
+# Log levels on the demo cluster (not hosted). The demo runs Development and
+# Testing hosts, whose appsettings log at Debug; on GKE every line is billed by
+# Cloud Logging, and benchmark runs turn that into gigabytes a day. --log-level
+# sets the default and the categories the appsettings raise to Debug. Warnings
+# and errors go to stderr, which GKE records as ERROR, so the demo's Cloud
+# Logging exclusion (infrastructure/gcp/main.tf) keeps them.
+LOG_LEVELS = ("Trace", "Debug", "Information", "Warning", "Error")
+DEBUG_LOG_CATEGORIES = (
+    "Microsoft.AspNetCore",
+    "Microsoft.AspNetCore.SignalR",
+    "CloudHealthOffice.ProviderVerificationEngine",
+)
+
+
+def demo_logging_env(level: str) -> dict[str, str]:
+    env = {"Logging__LogLevel__Default": level}
+    for category in DEBUG_LOG_CATEGORIES:
+        env[f"Logging__LogLevel__{category}"] = level
+    env["Logging__Console__LogToStandardErrorThreshold"] = "Warning"
+    return env
+
+
 # The hosted environment holds real member data: no synthetic-data components.
 HOSTED_ENV = {
     "SecretProvider__Provider": "None",
@@ -530,6 +552,9 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
         set_env(container, "ASPNETCORE_ENVIRONMENT", host_environment(name, args))
         for key, value in (HOSTED_ENV if hosted(args) else PRODUCTION_ENV if production(args) else DEMO_ENV).items():
             set_env(container, key, value)
+        if not hosted(args):
+            for key, value in demo_logging_env(args.log_level).items():
+                set_env(container, key, value)
         if hosted(args) and any(e.get("name") == "Redis__ConnectionString" for e in container.get("env", []) or []):
             set_env_from_secret(container, "Redis__ConnectionString", "redis-secret", "connectionString")
         if name != "portal":
@@ -953,6 +978,9 @@ def main() -> int:
     parser.add_argument("--leie-screening", action="store_true",
                         help="Enable real OIG LEIE dataset sync and screening (SAM remains separately configured)")
     parser.add_argument("--ai-examiner", action="store_true", help="Run the AI claims examiner (needs ANTHROPIC_API_KEY)")
+    parser.add_argument("--log-level", choices=LOG_LEVELS, default="Warning",
+                        help="Demo log level (ignored with --hosted). Information or Debug while debugging; "
+                             "every line is billed by Cloud Logging")
     parser.add_argument("--claims-replicas", type=int, default=2)
     parser.add_argument("--benefit-plan-replicas", type=int, default=2)
     parser.add_argument("--storage-class", default=DEFAULT_STORAGE_CLASS,
