@@ -191,8 +191,17 @@ No configuration change is required. Things to know:
   Each known kit issue is recorded with its reason in `interop/scenarios.json`.
 - **PA Timeliness Challenge on the GKE demo:** 2,601 of 2,601 checks matched
   (image 7a0fbed), published at `/evidence/pa-timeliness-challenge`.
-- **Shadow in a day on the GKE demo:** TBD, from the rehearsal with the
-  CPCDS sample files.
+- **Shadow in a day on the GKE demo (2026-11-06):** the CPCDS sample files
+  loaded with `sample-setup.sh` and `trial.sh load`, then `trial.sh shadow`
+  compared 4 claims with no failures. CHO decided 2 of the 4 and matched the
+  core on 1 (PRO-1001 matched; PRO-1002 denied on both sides with a different
+  denial code). The other 2 (INP-2001, DEN-3001) were left undecided with
+  `PLANUNAVAIL`, because the samples carry no benefit plan for their core plan
+  codes, and the report says which plan templates to load. The first run
+  denied all 4: the demo runs as a Testing host, where network and
+  credentialing checks fail closed for providers the sample setup does not
+  credential. The results above come from a rerun with soft validation. #1847
+  removes the need for that rerun (not yet re-run on GKE).
 - **Million Claim Challenge after a claims-service restart (#1824):** TBD.
 - **Azure:** automatic deploys are still paused (`AZURE_DEPLOYMENTS_ENABLED`)
   behind the #1217 deployment checklist.
