@@ -88,7 +88,7 @@ jobs:
       # The jar is pinned by SHA-256 in interop/versions.json and the script
       # refuses a mismatch, so the cache cannot substitute a different build.
       - name: Cache the pinned validator and its IG packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             interop/.external/hl7-validator
