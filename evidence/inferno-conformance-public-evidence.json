@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "inferno-conformance",
-  "generatedAtUtc": "2026-11-08T06:59:39Z",
+  "generatedAtUtc": "2026-11-09T07:07:02Z",
   "sourceCommit": "4d11814e6ccbed6817553983de690c2c8934ecc8",
   "sourceCommitShort": "4d11814e6ccb",
   "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/4d11814e6ccbed6817553983de690c2c8934ecc8",
@@ -34,7 +34,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-08T06:50:20.4372036+00:00",
+      "testedAtUtc": "2026-11-09T06:58:36.0682132+00:00",
       "tests": {
         "passed": 39,
         "failed": 0,
@@ -114,7 +114,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-08T06:54:01.8084875+00:00",
+      "testedAtUtc": "2026-11-09T07:01:54.1465817+00:00",
       "tests": {
         "passed": 13,
         "failed": 0,
@@ -151,7 +151,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-08T06:59:04.3442937+00:00",
+      "testedAtUtc": "2026-11-09T07:06:28.7541053+00:00",
       "tests": {
         "passed": 21,
         "failed": 0,
@@ -232,7 +232,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-08T06:43:09.8688219+00:00",
+      "testedAtUtc": "2026-11-09T06:53:16.8866651+00:00",
       "tests": {
         "passed": 41,
         "failed": 0,
@@ -387,7 +387,7 @@
       "groups": [],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-08T06:56:21.9305969+00:00",
+      "testedAtUtc": "2026-11-09T07:03:55.8199049+00:00",
       "tests": {
         "passed": 180,
         "failed": 0,
@@ -791,7 +791,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-08T06:40:14.5342031+00:00",
+      "testedAtUtc": "2026-11-09T06:50:42.4639199+00:00",
       "tests": {
         "passed": 31,
         "failed": 0,
@@ -817,11 +817,11 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-11-08T06:59:04.3453779+00:00",
+    "generatedAtUtc": "2026-11-09T07:06:28.7553304+00:00",
     "environment": "CI",
     "choCommit": "4d11814e6ccbed6817553983de690c2c8934ecc8",
     "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/4d11814e6ccbed6817553983de690c2c8934ecc8",
-    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/42454753679",
+    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/42574144817",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 6,
