@@ -39,19 +39,20 @@ replacement-card ordering from PCP changes is also absent; card rendering and a
 member event alone do not implement fulfillment. Older dated findings below
 retain their original evidence, with this section governing the new writer scope.
 
-## Illinois Chicago-area 2027 prospective business — October 24, 2026
+## Illinois Medicaid readiness assessment (hypothetical scenario) — October 24, 2026
 
 Baseline main `e7d633930222050184e98ddb851bf09fb3ef9495`, branch
-`assessment/illinois-medicaid`. User confirmed Chicago-area Medicaid plan business
-and 2027 start year; exact day, counties, legal role, contract and benefit allocation
-remain unresolved. [Illinois qualification and backlog](implementation/ILLINOIS-MEDICAID-QUALIFICATION.md)
+`assessment/illinois-medicaid`. This is a readiness exercise against a hypothetical
+Chicago-area Medicaid plan starting in 2027, not a customer or prospect; no Illinois
+plan, contract or engagement exists. Exact day, counties, legal role, contract and
+benefit allocation are therefore unspecified. [Illinois qualification and backlog](implementation/ILLINOIS-MEDICAID-QUALIFICATION.md)
 supplies applicability confidence, authoritative sources, executing paths,
 mitigations, owners and acceptance contracts. Shared CAP findings remain reusable
 platform work; these IL references add jurisdiction/engagement applicability.
 
 | Finding | Classification | Executing behavior / acceptance boundary |
 | --- | --- | --- |
-| IL-00 | Unverified | 2027 year/Chicago area confirmed; role, exact date/counties, agreement, benefits and delegated owners unresolved. |
+| IL-00 | Unverified | Hypothetical 2027 Chicago-area scenario; no engagement exists, so role, exact date/counties, agreement, benefits and delegated owners are unspecified. |
 | IL-ENROLL | Partial | Durable generic 834/member/coverage lifecycle implemented; Illinois crosswalk, roster/820/downstream and launch-transition acceptance unverified. |
 | IL-ENC / CAP-34 | Confirmed gap | Registered automatic consumer skips IL; FL-only builder refuses IL/emits JSON. Generic 837 and fixed complete-batch/syntax-only 999 behavior do not establish HFS acceptance. |
 | IL-PROVIDER | Confirmed gap | No IL/IMPACT source in inspected registered provider-enrollment package; native provider administration credited, current authorized source/network reporting unverified. |
