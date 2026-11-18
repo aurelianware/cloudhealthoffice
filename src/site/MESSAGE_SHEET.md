@@ -25,9 +25,9 @@ These implementation statements do not assert full PAS/CRD/DTR/SMART conformance
 Cloud Health Office is a source-available, FHIR-native health plan administration platform that runs in a tenant dedicated to each plan, in the plan's own cloud or operated for it, so plans keep control of their data and integrations while connecting to every partner they choose.
 
 ## Homepage lead — approved by Mark Phillips, November 18, 2026
-The homepage hero leads with the buying decision, in plain language for health plan executives. Technical depth (CMS-0057-F conformance, Inferno, FHIR, developer paths) stays on the page below the fold and one click away.
-**Homepage H1:** Modernize your health plan’s core without replacing it.
-**Homepage supporting:** Cloud Health Office runs beside QNXT, Facets or HealthEdge in a tenant your plan controls. It proves itself on your own claims, then takes on one function at a time, on your schedule.
+The homepage hero leads with the buying decision, in plain language for health plan executives. It rules out a risky, all-at-once replacement, never the destination: Cloud Health Office can take over the core one function at a time, so never say "without replacing" the core. Technical depth (CMS-0057-F conformance, Inferno, FHIR, developer paths) stays on the page below the fold and one click away.
+**Homepage H1:** Modernize your health plan’s core at your own pace.
+**Homepage supporting:** Start beside QNXT, Facets or HealthEdge in a tenant your plan controls. Prove it on your own claims, then move one function at a time, up to the core itself, on your schedule.
 **Homepage primary CTA:** See it on your own claims (→ /services/cms-0057-f-cpcds-trial). **Secondary CTA:** Overview for health plan leaders (→ /health-plan-leaders). The nav CTA (Book a readiness review) is unchanged.
 **Executive outcomes (homepage section and /health-plan-leaders):** Less dependence on one vendor · Compliance that keeps up · Data you own, ready for AI. Describe these as design goals and capabilities; never promise cost savings, a percentage or any financial outcome.
 The conformance check remains on the homepage directly after the shadow-trial section, with all of the conformance check facts below.
