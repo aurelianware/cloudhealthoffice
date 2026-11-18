@@ -24,7 +24,15 @@ These implementation statements do not assert full PAS/CRD/DTR/SMART conformance
 ## Canonical one-liner
 Cloud Health Office is a source-available, FHIR-native health plan administration platform that runs in a tenant dedicated to each plan, in the plan's own cloud or operated for it, so plans keep control of their data and integrations while connecting to every partner they choose.
 
-## Homepage lead — approved by Mark Phillips, October 30, 2026
+## Homepage lead — approved by Mark Phillips, November 18, 2026
+The homepage hero leads with the buying decision, in plain language for health plan executives. Technical depth (CMS-0057-F conformance, Inferno, FHIR, developer paths) stays on the page below the fold and one click away.
+**Homepage H1:** Modernize your health plan’s core without replacing it.
+**Homepage supporting:** Cloud Health Office runs beside QNXT, Facets or HealthEdge in a tenant your plan controls. It proves itself on your own claims, then takes on one function at a time, on your schedule.
+**Homepage primary CTA:** See it on your own claims (→ /services/cms-0057-f-cpcds-trial). **Secondary CTA:** Overview for health plan leaders (→ /health-plan-leaders). The nav CTA (Book a readiness review) is unchanged.
+**Executive outcomes (homepage section and /health-plan-leaders):** Less dependence on one vendor · Compliance that keeps up · Data you own, ready for AI. Describe these as design goals and capabilities; never promise cost savings, a percentage or any financial outcome.
+The conformance check remains on the homepage directly after the shadow-trial section, with all of the conformance check facts below.
+
+## Previous homepage lead — approved by Mark Phillips, October 30, 2026 (superseded November 18, 2026)
 The homepage hero leads with the CMS-0057-F conformance check. Sovereignty stays the category and the reason to choose Cloud Health Office; the check is the reason to engage now.
 **Homepage H1:** Find and close your CMS-0057-F gaps, in your own cloud.
 **Homepage supporting:** We test your Patient Access, Provider Access, Provider Directory and Payer-to-Payer APIs with the ONC Inferno test kits and show you what fails and why. Cloud Health Office can then run the fixes in a tenant your plan controls, alongside QNXT, Facets or HealthEdge, with no core replacement required.
