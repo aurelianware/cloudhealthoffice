@@ -158,6 +158,9 @@ Never frame Cognizant, TriZetto, QNXT, Facets, HealthEdge, Availity, clearinghou
 integrators as enemies or inferior alternatives. Never claim certification by, affiliation with,
 endorsement by, or an implementation partnership with any named vendor.
 
+## Connecting to the core (locked, November 18, 2026)
+Lead with standard files and a daily drop as the default way Cloud Health Office connects to a plan's core: CARIN CPCDS extracts, 834 enrollment, prior authorizations from X12 278 or a UM export, and fee schedule CSVs, loaded each day. Core adapters (QNXT, Facets, HealthEdge, generic DB or REST) are the option when an implementation needs direct integration, scoped per engagement. Never imply a pre-built adapter for a specific core is shipped.
+
 ## Deployment & operating models (locked status labels)
 
 | Model | Status label | Never say |
