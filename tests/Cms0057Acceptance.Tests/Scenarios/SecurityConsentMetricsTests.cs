@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using FhirService.Controllers;
+using Cms0057Acceptance.Tests.TestSupport;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -192,6 +193,33 @@ public class SecurityConsentMetricsTests
         metrics.NotYetTracked.Should().ContainSingle(
             "approved-after-appeal still depends on appeal outcomes being linked as reporting evidence; this is partial capability")
             .Which.Metric.Should().Be("Approved after appeal");
+    }
+
+    [Fact]
+    [Trait("Scenario", "METRICS-01")]
+    [Trait("Backend", FileDrop.Backend)]
+    public async Task METRICS01_FileDrop_MetricsComeFromTheUmSystemsOwnReceivedAndDecisionDates()
+    {
+        // The published sample UM export through the real authorization import.
+        // SAMPLE-PA-0001 standard, received Oct 1, decided Oct 3 (approved);
+        // SAMPLE-PA-0002 urgent, received and decided Oct 2 (modified);
+        // SAMPLE-PA-0003 standard, received Oct 4, decided Oct 9 (denied);
+        // SAMPLE-PA-0004 standard, received Oct 28, still pended.
+        var imported = await FileDrop.ImportAuthorizationsAsync(
+            "tenant-metrics-drop", FileDrop.Sample("authorizations/authorizations.csv"));
+        imported.Should().HaveCount(4);
+
+        var from = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var metrics = global::AuthorizationService.Services.Cms0057.Cms0057Reporting.ComputeMetrics(
+            imported, from, from.AddMonths(1), null);
+
+        metrics.TotalRequests.Should().Be(4);
+        metrics.OpenRequests.Should().Be(1);
+        metrics.DecidedRequests.Should().Be(3);
+        metrics.Expedited.Requests.Should().Be(1);
+        metrics.Expedited.DecidedWithinTimeframe.Should().Be(1);
+        metrics.Standard.DecidedWithinTimeframe.Should().Be(2, "48 and 120 hours are both inside seven calendar days");
+        metrics.Standard.Denied.Should().Be(1);
     }
 
     // ── SEC-01 read/write scope separation ──────────────────────────────────────

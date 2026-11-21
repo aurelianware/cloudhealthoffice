@@ -19,10 +19,13 @@ public static class Status
 /// an unimplemented backend cannot silently enter the evidence.</summary>
 public static class AugmentBackends
 {
+    /// <summary>The plan's core and UM system feed CHO through the daily file drop
+    /// (CPCDS extracts and the authorization import). The default integration.</summary>
+    public const string FileDrop = "filedrop";
     public const string Qnxt = "qnxt";
 
     public static readonly IReadOnlySet<string> Known =
-        new HashSet<string>(StringComparer.Ordinal) { Qnxt, "facets", "healthedge" };
+        new HashSet<string>(StringComparer.Ordinal) { FileDrop, Qnxt, "facets", "healthedge" };
 }
 
 public sealed class ManifestDocument

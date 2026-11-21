@@ -181,7 +181,7 @@
         <p>Not covered by any kit run yet: the PDex payer-to-payer query workflow (CHO exchanges data the PDex 2.1.0 bulk way, which kit v0.13.2 does not test), CHO acting as the requesting payer, system-level <code>$export</code> (not served), and Inferno kits for PAS and CRD. PAS <code>$submit</code>, CRD and DTR are instead exchanged with the HL7 Da Vinci burden-reduction reference implementation, and all three pass; PAS <code>$inquire</code> is not yet run against it. No kit can check decision timeframes, attribution, consent or metrics reporting; those are covered by the acceptance scenarios below.</p>
 
         <h3 id="acceptance-status">Acceptance scenarios and platform capabilities</h3>
-        <p>From the acceptance snapshot published November 6, 2026 (456 acceptance tests passing): <strong>6 PASSABLE, 15 PARTIAL, 0 GAP</strong> of 21 scenarios, in Replace mode, where Cloud Health Office is the system of record. Running alongside a core admin system such as QNXT (Augment mode) is scored separately: those external-core adapters are built per engagement and are not ready today.</p>
+        <p>From the acceptance snapshot published November 6, 2026 (456 acceptance tests passing): <strong>6 PASSABLE, 15 PARTIAL, 0 GAP</strong> of 21 scenarios, in Replace mode, where Cloud Health Office is the system of record. A plan that keeps its core admin system (QNXT, Facets, HealthEdge or its own) feeds Cloud Health Office through the daily file drop, and that path is scored separately as &ldquo;core via file drop&rdquo;: 1 PASSABLE, 10 PARTIAL, 2 GAP, 8 N/A. The two gaps are writing prior-authorization decisions back into the plan&rsquo;s own UM system (PAS-03) and clinical data, which the drop does not carry yet (PAT-02). Live core connectors are an optional integration point, built per engagement, and are not scored.</p>
 
         <table>
           <thead><tr><th>Requirement</th><th>Status</th><th>Evidence</th><th>Standard</th></tr></thead>
@@ -365,7 +365,7 @@
 
         <div class="callout callout-info">
           <div class="callout-title">Augment, don't replace</div>
-          <p>CHO deploys as a compliance layer alongside your existing core admin platform &mdash; QNXT, Facets, HealthEdge, Amisys, or any other system. No replatforming. No rip-and-replace. Your CAPS stays in place. CHO handles FHIR, EDI, terminology, provider verification, and CMS compliance. The <code>ICoreAdminAdapter</code> pattern means CHO can operate in <strong>Augment</strong> mode (compliance overlay on your CAPS) or <strong>Replace</strong> mode (standalone core admin) per tenant. Today the CMS-0057-F evidence above is for Replace mode; each core&rsquo;s Augment adapter (QNXT, Facets, HealthEdge) is built and validated during the engagement, and plans can feed CHO from their core through CPCDS and X12 278 imports in the meantime.</p>
+          <p>CHO deploys as a compliance layer alongside your existing core admin platform &mdash; QNXT, Facets, HealthEdge, Amisys, or any other system. No replatforming. No rip-and-replace. Your CAPS stays in place. CHO handles FHIR, EDI, terminology, provider verification, and CMS compliance. The <code>ICoreAdminAdapter</code> pattern means CHO can operate in <strong>Augment</strong> mode (compliance overlay on your CAPS) or <strong>Replace</strong> mode (standalone core admin) per tenant. The default way a core feeds CHO is the daily file drop: CPCDS members, coverage and claims, and UM authorizations as CSV or X12 278. Every CMS-0057-F API reads what the drop loaded, and the evidence above scores that path on its own. Live connectors that call the core per request (QNXT, Facets, HealthEdge) are an optional integration point, built and validated during an engagement for a plan that prefers them.</p>
         </div>
 
 
@@ -408,7 +408,8 @@
         <h3>Planned</h3>
         <ul style="margin-top:8px;">
           <li><strong>SOC 2:</strong> Aurelianware plans to pursue a SOC 2 examination. No SOC 2 report exists today; see <a href="/trust">Trust &amp; security</a> for the current security posture and what is not claimed.</li>
-          <li><strong>Augment-mode adapters:</strong> QNXT, Facets and HealthEdge adapters, built and validated with the plan that runs each core.</li>
+          <li><strong>Live core connectors:</strong> optional QNXT, Facets and HealthEdge connectors, built and validated with a plan that prefers them over the file drop. Off by default and not scored.</li>
+          <li><strong>File-drop gaps:</strong> write-back of prior-authorization decisions into the plan&rsquo;s UM system, and clinical data in the drop.</li>
           <li><strong>System-level bulk export:</strong> not served today; not required by CMS-0057-F.</li>
         </ul>
 
