@@ -27,7 +27,12 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
         _indexes = indexes ?? new AuthorizationIndexes();
+        _texasClock = configuration.GetSection(AuthorizationService.Services.StatePrograms.TexasMedicaidDecisionClockOptions.SectionName)
+            .Get<AuthorizationService.Services.StatePrograms.TexasMedicaidDecisionClockOptions>()
+            ?? new AuthorizationService.Services.StatePrograms.TexasMedicaidDecisionClockOptions();
     }
+
+    private readonly AuthorizationService.Services.StatePrograms.TexasMedicaidDecisionClockOptions _texasClock;
 
     public Task EnsureIndexesAsync(CancellationToken ct = default) => _indexes.EnsureAsync(_collection, ct);
 
@@ -314,6 +319,8 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         authorization.Id ??= Guid.NewGuid().ToString();
         authorization.Revision = 0;
         AuthorizationService.Services.AuthorizationDeadlinePolicy.Initialize(authorization);
+        // TX-05: a configured Texas Medicaid tenant's state clock, where earlier.
+        AuthorizationService.Services.StatePrograms.TexasMedicaidDecisionClock.Apply(authorization, _texasClock);
         PaReportingEvidence.Initialize(authorization, DateTime.UtcNow);
 
         await EnsureIndexesAsync(_httpContextAccessor.HttpContext?.RequestAborted ?? default);
