@@ -1,0 +1,73 @@
+name: Texas Medicaid demo (on / off)
+
+# Turns the GKE demo cluster's node on or off and loads the Texas Medicaid
+# demo, so the demo costs next to nothing between showings. Same steps as
+# scripts/demo/texas/demo.sh on a laptop; runbook in
+# docs/deploy/TEXAS-MEDICAID-DEMO.md.
+#
+#   up      add the node, wait for the services, apply the Texas settings
+#   seed    load plans, providers, today's CPCDS file drop and the Texas PA clocks
+#   up+seed both, in that order
+#   status  nodes, pods and running cost
+#   down    remove the node (data stays on the volumes)
+#
+# Every night at 2 AM Central it turns the demo off if it was left on. Set the
+# repository variable DEMO_KEEP_RUNNING=true to skip that for a night.
+#
+# Uses the deploy workflow's settings (deploy-gcp-gke.yml): the
+# GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_DEPLOYER_SERVICE_ACCOUNT secrets and
+# the GCP_PROJECT_ID, GKE_CLUSTER and GKE_LOCATION variables. Synthetic data only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "What to do"
+        type: choice
+        options: [status, up, seed, up+seed, down]
+        default: status
+  schedule:
+    - cron: "0 8 * * *" # 02:00 CST / 03:00 CDT
+
+concurrency:
+  group: deploy-gke
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+  GKE_LOCATION: ${{ vars.GKE_LOCATION }}
+  ACTION: ${{ github.event_name == 'schedule' && 'down' || inputs.action }}
+
+jobs:
+  power:
+    name: Demo ${{ github.event_name == 'schedule' && 'nightly off' || inputs.action }}
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.DEMO_KEEP_RUNNING != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: gke-gcloud-auth-plugin
+
+      - name: ${{ env.ACTION }}
+        run: |
+          set -euo pipefail
+          demo=./scripts/demo/texas/demo.sh
+          case "$ACTION" in
+            up+seed) "$demo" up; "$demo" seed ;;
+            seed) "$demo" status; "$demo" seed ;;
+            *) "$demo" "$ACTION" ;;
+          esac
