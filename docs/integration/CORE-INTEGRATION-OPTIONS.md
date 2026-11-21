@@ -87,28 +87,30 @@ The drop already loads members, coverage, claims, the providers claims name,
 and authorizations. These are the gaps between it and serving all four
 CMS-0057-F APIs from a plan's files, in the order we plan to close them:
 
-1. **Score the acceptance suite against the file drop.** The public evidence
-   reports a QNXT live-connector column (11 GAP, 10 N/A). Replace it with a
-   "core via file drop" column that loads the sample CPCDS and authorization
-   files and runs each scenario against what they loaded. This is the
-   evidence a plan on another core asks for.
-2. **Pharmacy claims.** The CPCDS importer refuses `pharmacy` claims today.
-   Patient Access must include the plan's drug claims (only the prior
-   authorization data excludes drugs). Add the CARIN BB pharmacy EOB
-   projection and accept pharmacy rows.
-3. **Network roster through the drop.** The [network roster importer](NETWORK-ROSTER-IMPORTER.md)
-   works as an API call. Add a `roster` file kind so the Provider Directory
-   and in-network decisions stay current from the same daily drop.
-4. **EOB coverage reference.** An imported claim names the core's coverage id,
+Done:
+
+- **Acceptance scored against the file drop.** The public evidence's
+  integration column is now "core via file drop" (`augment.filedrop`): tests
+  load the sample CPCDS and authorization files through the real importers
+  and run scenarios on what they loaded. 1 PASSABLE, 10 PARTIAL, 2 GAP, 8 N/A.
+  The two gaps are PAS-03 (no write-back of a decision into the plan's UM
+  system) and PAT-02 (no clinical data in the drop, item 2 below). The old
+  QNXT live-connector column is gone: live connectors are not scored until
+  one is built.
+- **Pharmacy claims** and **network rosters in the drop** (#1867).
+
+Still open:
+
+1. **EOB coverage reference.** An imported claim names the core's coverage id,
    so an EOB's `insurance.coverage` does not yet resolve to the Coverage the
    member import created. Resolve it through the member's coverage on the
    date of service.
-5. **Clinical data.** Patient Access and Payer-to-Payer serve USCDI clinical
+2. **Clinical data.** Patient Access and Payer-to-Payer serve USCDI clinical
    resources, but today they are filled only by Payer-to-Payer imports. Add
    a clinical drop (FHIR NDJSON, the bulk export format most HIEs and lab
    vendors already produce) loaded through the existing clinical payload
    validator.
-6. **Provider Access attribution from the member file.** Attribution comes
+3. **Provider Access attribution from the member file.** Attribution comes
    from claims history and a configured panel. Read the PCP assignment from
    the member file (Medicaid extracts usually carry it; the CPCDS member
    import does not read it yet), so a PCP who has not seen the member yet is

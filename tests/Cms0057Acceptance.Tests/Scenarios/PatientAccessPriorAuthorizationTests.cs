@@ -4,6 +4,7 @@ using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services.Fhir;
 using FhirService.Controllers;
+using Cms0057Acceptance.Tests.TestSupport;
 using FluentAssertions;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
@@ -298,6 +299,37 @@ public class PatientAccessPriorAuthorizationTests
         var after = Parser.Parse<ExplanationOfBenefit>(Body(await path.ReadAsMember(Member, "pa-AUTH-1")));
         after.Disposition.Should().Be("Approval period has ended");
         after.Meta.LastUpdated.Should().Be(new DateTimeOffset(authorization.LastUpdatedDate));
+    }
+
+    // ── PAT-03 over the file drop ────────────────────────────────────────────
+
+    [Fact]
+    [Trait("Scenario", "PAT-03")]
+    [Trait("Backend", FileDrop.Backend)]
+    public async Task PAT03_FileDrop_AMemberReadsAPriorAuthorizationTheirUmSystemDecided()
+    {
+        // The published sample UM export, loaded by the real authorization
+        // import: decisions made in the plan's UM platform, read-only in CHO.
+        var imported = await FileDrop.ImportAuthorizationsAsync(
+            Tenant, FileDrop.Sample("authorizations/authorizations.csv"));
+        var path = new Path([.. imported]);
+
+        var approved = Parser.Parse<ExplanationOfBenefit>(Body(
+            await path.ReadAsMember("SAMPLE-M-001", "pa-SAMPLE-PA-0001")));
+
+        approved.Use.Should().Be(ClaimUseCode.Preauthorization);
+        approved.Patient.Reference.Should().Be("Patient/SAMPLE-M-001");
+        approved.Identifier.Should().ContainSingle().Which.Value.Should().Be("SAMPLE-PA-0001");
+        approved.Outcome.Should().Be(ClaimProcessingCodes.Complete);
+        approved.Item.Should().ContainSingle().Which.ProductOrService.Coding[0].Code.Should().Be("27447");
+
+        // A denial the UM system made carries its reason through to the member.
+        var denied = Body(await path.ReadAsMember("SAMPLE-M-003", "pa-SAMPLE-PA-0003"));
+        denied.Should().Contain("Not medically necessary");
+
+        // And one member cannot read another's.
+        Status(await path.ReadAsMember("SAMPLE-M-002", "pa-SAMPLE-PA-0001"))
+            .Should().Be(HttpStatusCode.NotFound);
     }
 
     // ── synthetic records ────────────────────────────────────────────────────

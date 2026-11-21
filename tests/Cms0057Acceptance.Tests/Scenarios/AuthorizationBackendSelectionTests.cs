@@ -45,7 +45,7 @@ public class AuthorizationBackendSelectionTests
 
     [Fact]
     [Trait("Scenario", "PAS-03")]
-    [Trait("Backend", "Augment")]
+    [Trait("Backend", "augment.qnxt")]
     public void Config_AugmentMode_SelectsConfiguredExternalBackend()
     {
         var selector = Selector(EngineOperatingMode.Augment, augment: "qnxt");
@@ -57,7 +57,7 @@ public class AuthorizationBackendSelectionTests
 
     [Fact]
     [Trait("Scenario", "PAS-03")]
-    [Trait("Backend", "Augment")]
+    [Trait("Backend", "augment.qnxt")]
     [Trait("Kind", "GAP")]
     public async Task PAS03_Augment_QnxtBackendIsNotImplementedStub()
     {
@@ -73,7 +73,7 @@ public class AuthorizationBackendSelectionTests
 
     [Fact]
     [Trait("Scenario", "PAS-03")]
-    [Trait("Backend", "Augment")]
+    [Trait("Backend", "augment.qnxt")]
     public void Config_AugmentMode_NeverSilentlyFallsBackToCho()
     {
         // Augment configured, but the external backend is NOT registered.
@@ -93,7 +93,7 @@ public class AuthorizationBackendSelectionTests
 
     [Fact]
     [Trait("Scenario", "PAS-03")]
-    [Trait("Backend", "Augment")]
+    [Trait("Backend", "augment.qnxt")]
     public void Config_InvalidAugmentBackend_FailsClearly()
     {
         // Augment pointed at an unregistered external backend (e.g. "facets"
