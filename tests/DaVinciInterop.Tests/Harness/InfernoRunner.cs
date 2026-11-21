@@ -539,10 +539,12 @@ public sealed class InfernoRunner
         string testRunId,
         TimeSpan timeout,
         TimeSpan pollInterval,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<InfernoResult, CancellationToken, Task>? onWaiting = null)
     {
         var deadline = DateTimeOffset.UtcNow + timeout;
         InfernoTestRun? last = null;
+        var answered = new HashSet<string>(StringComparer.Ordinal);
 
         while (DateTimeOffset.UtcNow < deadline)
         {
@@ -553,6 +555,17 @@ public sealed class InfernoRunner
             if (last.IsFinished)
             {
                 return last;
+            }
+
+            // A test that waits is asking for something outside Inferno: a
+            // user to sign in, an EHR to launch the app, a payer to decide a
+            // pended request. The scenario plays that part, once per wait.
+            if (onWaiting is not null)
+            {
+                foreach (var waiting in last.Results.Where(r => r.Result == "wait" && answered.Add(r.Id)))
+                {
+                    await onWaiting(waiting, cancellationToken);
+                }
             }
 
             await Task.Delay(pollInterval, cancellationToken);

@@ -89,22 +89,36 @@ public static class InfernoSuiteScenario
                     "data the deployment holds."));
             }
 
-            await PreflightAsync(
-                run, client, remote?.BaseUrl(scenario.ChoSurface) ?? ChoUnderTest.HostBaseUrl(scenario.ChoSurface),
-                cancellationToken);
+            if (scenario.ChoSurface == ChoSurfaces.CdsHooks)
+            {
+                await PreflightCdsHooksAsync(run, client, ChoUnderTest.HostBaseUrl(scenario.ChoSurface), cancellationToken);
+            }
+            else
+            {
+                await PreflightAsync(
+                    run, client, remote?.BaseUrl(scenario.ChoSurface) ?? ChoUnderTest.HostBaseUrl(scenario.ChoSurface),
+                    cancellationToken);
+            }
 
             var runner = new InfernoRunner(kit.ApiBaseUrl);
             var fixture = ChoSeedFixture.Load();
 
             if (remote is null
                 && scenario.InfernoAuth is InfernoAuthModes.BackendServices or InfernoAuthModes.PayerBackendServices
-                    or InfernoAuthModes.DtrClientBackendServices)
+                    or InfernoAuthModes.DtrClientBackendServices or InfernoAuthModes.PasClientBackendServices
+                    or InfernoAuthModes.SmartApp)
             {
                 run.Record(InteropFinding.Info(
                     "inferno.auth.backendClient",
                     await InfernoBackendClient.RegisterAsync(
                         kit.ApiBaseUrl, JwksSuiteFor(scenario), fixture,
                         BackendClientFor(scenario, fixture), cancellationToken)));
+            }
+
+            if (remote is null && scenario.InfernoAuth == InfernoAuthModes.SmartApp)
+            {
+                run.Record(InteropFinding.Info(
+                    "inferno.auth.smartApps", await InfernoSmartApp.RegisterAsync(fixture, cancellationToken)));
             }
 
             string? patientToken = null;
@@ -130,7 +144,18 @@ public static class InfernoSuiteScenario
                     $"{DtrPayerServerRequests.MriOrderCode}."));
             }
 
-            var inputs = remote?.BuildInputs(scenario) ?? BuildInputs(scenario, fixture, patientToken, dtrSource);
+            CrdSourceData? crdSource = null;
+            if (remote is null && scenario.InfernoInputs.Contains("order_sign_request_bodies"))
+            {
+                crdSource = await CrdSourceData.ObtainAsync(fixture, ChoUnderTest.HostRootUrl, cancellationToken);
+                run.Record(InteropFinding.Info(
+                    "inferno.crd.sourceData",
+                    $"The CRD hook requests name the member's Coverage/{crdSource.CoverageId}, read from CHO, and the " +
+                    $"lapsed member's Coverage/{crdSource.LapsedCoverageId}."));
+            }
+
+            var inputs = remote?.BuildInputs(scenario) ?? BuildInputs(scenario, fixture, patientToken, dtrSource, crdSource);
+            var onWaiting = WaitHandlerFor(scenario, fixture, kit.ApiBaseUrl);
 
             var suiteId = scenario.RequiredInfernoSuite;
             var sessionId = await runner.CreateSessionAsync(suiteId, cancellationToken);
@@ -142,7 +167,7 @@ public static class InfernoSuiteScenario
                 var suiteInputs = WithKitDefaults(run, suiteId, inputs, suite.Inputs);
                 runs.Add(await ExecuteAsync(
                     runner, () => runner.StartSuiteRunAsync(sessionId, suiteId, suiteInputs, cancellationToken),
-                    cancellationToken));
+                    cancellationToken, onWaiting));
             }
             else
             {
@@ -165,7 +190,7 @@ public static class InfernoSuiteScenario
 
                     runs.Add(await ExecuteAsync(
                         runner, () => runner.StartGroupRunAsync(sessionId, groupId, groupInputs, cancellationToken),
-                        cancellationToken));
+                        cancellationToken, onWaiting));
                 }
             }
 
@@ -258,13 +283,45 @@ public static class InfernoSuiteScenario
     }
 
     /// <summary>
+    /// The CDS Hooks counterpart of <see cref="PreflightAsync"/>: CHO's own
+    /// discovery document, read before the kit is started, so a kit that could
+    /// not reach CHO is not mistaken for a verdict on CHO.
+    /// </summary>
+    private static async Task PreflightCdsHooksAsync(
+        InteropScenarioRun run, InteropHttpClient client, string rootUrl, CancellationToken cancellationToken)
+    {
+        var (discovery, response) = await client.GetCdsHooksDiscoveryAsync(
+            $"{rootUrl.TrimEnd('/')}/cds-services", cancellationToken);
+        if (discovery is null)
+        {
+            throw new InteropEnvironmentException(
+                $"CHO's CDS Hooks discovery answered HTTP {(int)response.StatusCode} at {rootUrl}/cds-services, so " +
+                "the kit was never started.");
+        }
+
+        run.Record(InteropFinding.Info(
+            "inferno.preflight.cdsHooksDiscovery",
+            $"CHO served CDS Hooks discovery before the run: {string.Join(", ", discovery.Services.Select(s => $"{s.Id} ({s.Hook})"))}."));
+    }
+
+    /// <summary>
     /// Builds the suite inputs the scenario declares, by the names the suite
     /// declares them under.
     /// </summary>
     public static List<InfernoInput> BuildInputs(
         InteropScenarioDefinition scenario, ChoSeedFixture fixture, string? patientToken = null,
-        DtrSourceData? dtrSource = null)
+        DtrSourceData? dtrSource = null, CrdSourceData? crdSource = null,
+        IReadOnlyDictionary<string, string>? pasInputs = null)
     {
+        CrdSourceData Crd() => crdSource ?? throw new InteropEnvironmentException(
+            $"Scenario '{scenario.Id}' declares CRD hook request inputs, and no Coverage id was read from CHO.");
+
+        var pas = pasInputs;
+        string Pas(string name) => (pas ??= PasServerRequests.Inputs(fixture)).TryGetValue(name, out var value)
+            ? value
+            : throw new InteropEnvironmentException(
+                $"The PAS kit's server preset at the pinned tag sets no '{name}', which scenario '{scenario.Id}' declares.");
+
         DtrSourceData Dtr() => dtrSource ?? throw new InteropEnvironmentException(
             $"Scenario '{scenario.Id}' declares DTR request inputs, and no DTR source data (Coverage id and CRD " +
             "context id) was read from CHO.");
@@ -276,7 +333,50 @@ public static class InfernoSuiteScenario
 
         return scenario.InfernoInputs.Select(name => name switch
         {
-            "url" or "bulk_server_url" => new InfernoInput { Name = name, Value = ChoUnderTest.ContainerBaseUrl(scenario.ChoSurface) },
+            "url" or "bulk_server_url" or "base_url" or "server_endpoint" =>
+                new InfernoInput { Name = name, Value = ChoUnderTest.ContainerBaseUrl(scenario.ChoSurface) },
+            "smart_credentials" => SmartAuthInfo(name, scenario, fixture, token),
+            "standalone_smart_auth_info" => InfernoSmartApp.AuthInfo(
+                name, fixture.SmartApp.ClientId, fixture.SmartApp.StandaloneScopes),
+            "ehr_smart_auth_info" => InfernoSmartApp.AuthInfo(
+                name, fixture.SmartApp.EhrClientId, fixture.SmartApp.EhrScopes),
+            "encryption_method" => new InfernoInput { Name = name, Value = "ES384" },
+            "order_sign_request_bodies" => new InfernoInput
+            {
+                Name = name, Value = CrdServerRequests.OrderSign(fixture, Crd().CoverageId).ToJsonString(),
+            },
+            "order_select_request_bodies" => new InfernoInput
+            {
+                Name = name, Value = CrdServerRequests.OrderSelect(fixture, Crd().CoverageId).ToJsonString(),
+            },
+            "any_hook_request_body" => new InfernoInput
+            {
+                Name = name, Value = CrdServerRequests.AnyHook(fixture, Crd().CoverageId).ToJsonString(),
+            },
+            "technical_issues_request_body" => new InfernoInput
+            {
+                Name = name, Value = CrdServerRequests.TechnicalIssues(fixture, Crd().CoverageId).ToJsonString(),
+            },
+            "no_member_found_request_body" => new InfernoInput
+            {
+                Name = name, Value = CrdServerRequests.NoMemberFound(fixture).ToJsonString(),
+            },
+            "coverage_not_found_request_body" => new InfernoInput
+            {
+                Name = name, Value = CrdServerRequests.CoverageNotFound(fixture).ToJsonString(),
+            },
+            "no_active_coverage_request_body" => new InfernoInput
+            {
+                Name = name,
+                Value = CrdServerRequests.NoActiveCoverage(fixture, Crd().LapsedMemberId, Crd().LapsedCoverageId).ToJsonString(),
+            },
+            "access_token" => new InfernoInput { Name = name, Value = PasNotificationToken },
+            "subscription_resource" or "approval_pa_submit_request_payload" or "denial_pa_submit_request_payload"
+                or "pended_pa_submit_request_payload" or "pended_pa_inquire_request_payload"
+                or "must_support_pa_submit_request_payload" or "must_support_pa_inquire_request_payload"
+                or "claim_update_initial_submit_payload" or "claim_update_add_item_submit_payload"
+                or "claim_update_modify_cancel_submit_payload" or "claim_update_cancel_all_submit_payload"
+                => new InfernoInput { Name = name, Value = Pas(name) },
             "patient_ids" => new InfernoInput { Name = "patient_ids", Value = fixture.Member.MemberId },
             "smart_auth_info" or "backend_services_smart_auth_info" => SmartAuthInfo(name, scenario, fixture, token),
             "questionnaire_package_request_parameters" => new InfernoInput
@@ -324,6 +424,12 @@ public static class InfernoSuiteScenario
     /// longer than this is a defect rather than a slow server.
     /// </summary>
     public const string BulkTimeoutSeconds = "300";
+
+    /// <summary>
+    /// The bearer token CHO sends on its PAS notifications, by which the kit
+    /// ties each one to the test session. It names the session, not a person.
+    /// </summary>
+    public const string PasNotificationToken = "cho-interop-pas-notifications";
 
     /// <summary>Lines of each NDJSON file the kit validates. Every line, at this data size.</summary>
     public const string BulkLinesToValidate = "1000";
@@ -382,7 +488,8 @@ public static class InfernoSuiteScenario
         {
             InfernoAuthModes.ChoToken or InfernoAuthModes.PatientApp => InfernoInput.AccessToken(name, token),
             InfernoAuthModes.BackendServices or InfernoAuthModes.PayerBackendServices
-                or InfernoAuthModes.DtrClientBackendServices => InfernoInput.BackendServices(
+                or InfernoAuthModes.DtrClientBackendServices or InfernoAuthModes.PasClientBackendServices
+                or InfernoAuthModes.SmartApp => InfernoInput.BackendServices(
                 name,
                 ChoUnderTest.ContainerTokenUrl,
                 BackendClientFor(scenario, fixture).ClientId,
@@ -408,6 +515,8 @@ public static class InfernoSuiteScenario
         // The DTR suite's Backend Services group is the SMART App Launch kit's,
         // which signs with the keys that kit serves under its smart_stu2 suite.
         InfernoAuthModes.DtrClientBackendServices => SmartAppLaunchJwksSuite,
+        // The PAS server suite publishes no JWKS route; it signs with the core keys.
+        InfernoAuthModes.PasClientBackendServices => null,
         _ => scenario.RequiredInfernoSuite,
     };
 
@@ -420,21 +529,45 @@ public static class InfernoSuiteScenario
         {
             InfernoAuthModes.PayerBackendServices => fixture.PayerBackendClient,
             InfernoAuthModes.DtrClientBackendServices => fixture.DtrBackendClient,
+            InfernoAuthModes.PasClientBackendServices => fixture.PasBackendClient,
+            // The SMART kit's backend services group: a provider's backend
+            // client like the Bulk Data kit's, under its own id.
+            InfernoAuthModes.SmartApp => fixture.BackendClient with
+            {
+                ClientId = "inferno-smart-backend",
+                DisplayName = "Inferno SMART App Launch test kit, backend services (interop)",
+            },
             _ => fixture.BackendClient,
         };
 
     private static async Task<InfernoTestRun> ExecuteAsync(
         InfernoRunner runner,
         Func<Task<InfernoTestRun>> start,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<InfernoResult, CancellationToken, Task>? onWaiting = null)
     {
         var started = await start();
         return await runner.WaitForCompletionAsync(
             started.Id,
             InteropSettings.Timeouts.InfernoRun,
             InteropSettings.Timeouts.InfernoPoll,
-            cancellationToken);
+            cancellationToken,
+            onWaiting);
     }
+
+    /// <summary>
+    /// Who answers a test that waits on something outside the kit: the user
+    /// and the EHR for the SMART kit, the utilization reviewer for the PAS
+    /// kit's pended request. Null for a kit that never waits on the harness.
+    /// </summary>
+    private static Func<InfernoResult, CancellationToken, Task>? WaitHandlerFor(
+        InteropScenarioDefinition scenario, ChoSeedFixture fixture, string kitApiBaseUrl)
+        => scenario.InfernoAuth switch
+        {
+            InfernoAuthModes.SmartApp => (waiting, ct) => InfernoSmartApp.AnswerAsync(waiting, fixture, kitApiBaseUrl, ct),
+            InfernoAuthModes.PasClientBackendServices => (waiting, ct) => PasPendedDecision.AnswerAsync(waiting, fixture, ct),
+            _ => null,
+        };
 
     /// <summary>
     /// Records every non-passing Inferno result as a finding, so the evidence
@@ -563,6 +696,9 @@ public static class InfernoSuiteScenario
         "Bulk Data" => "2.0.0",
         "PDex" => "2.1.0",
         "DTR" => "2.2.0",
+        "CRD" => "2.2.1",
+        "PAS" => "2.2.1",
+        "SMART App Launch" => "2.2.0",
         _ => null,
     };
 

@@ -27,7 +27,9 @@ public static class ChoUnderTest
     public const string Profile = "interop-cho";
 
     /// <summary>fhir-service, as a kit on the Compose network addresses it.</summary>
-    public const string ContainerFhirBaseUrl = "http://cho-fhir-service:8080/fhir/r4";
+    public const string ContainerRootUrl = "http://cho-fhir-service:8080";
+
+    public const string ContainerFhirBaseUrl = ContainerRootUrl + "/fhir/r4";
 
     /// <summary>fhir-service, from the host.</summary>
     public static string HostFhirBaseUrl => $"{HostRootUrl}/fhir/r4";
@@ -67,6 +69,7 @@ public static class ChoUnderTest
     {
         ChoSurfaces.Fhir => ContainerFhirBaseUrl,
         ChoSurfaces.PublicDirectory => ContainerPublicDirectoryUrl,
+        ChoSurfaces.CdsHooks => ContainerRootUrl,
         _ => throw new InteropEnvironmentException($"Unknown CHO surface '{surface}' in interop/scenarios.json."),
     };
 
@@ -75,6 +78,7 @@ public static class ChoUnderTest
     {
         ChoSurfaces.Fhir => HostFhirBaseUrl,
         ChoSurfaces.PublicDirectory => HostPublicDirectoryUrl,
+        ChoSurfaces.CdsHooks => HostRootUrl,
         _ => throw new InteropEnvironmentException($"Unknown CHO surface '{surface}' in interop/scenarios.json."),
     };
 
@@ -104,7 +108,11 @@ public static class ChoUnderTest
         ["INTEROP_CHO_ENCOUNTER_PORT"] = 18028,
         ["INTEROP_CHO_PROVIDER_PORT"] = 18029,
         ["INTEROP_CHO_BENEFIT_PLAN_PORT"] = 18030,
+        ["INTEROP_CHO_AUTHORIZATION_PORT"] = 18031,
     };
+
+    /// <summary>authorization-service on the host, where a reviewer decides a pended request.</summary>
+    public static string HostAuthorizationUrl => Host("INTEROP_CHO_AUTHORIZATION_PORT", 18031);
 
     private static string Host(string variable, int fallback)
     {
