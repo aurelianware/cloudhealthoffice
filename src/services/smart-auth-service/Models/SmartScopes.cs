@@ -1,8 +1,9 @@
 namespace SmartAuthService.Models;
 
 /// <summary>
-/// SMART App Launch scope constants. These are SMART v1-style scopes (e.g. patient/*.read);
-/// SMART v2 scopes (.cruds, .rs, granular ?category=) are not yet supported (see docs/epa-gap-matrix.md §4.6).
+/// SMART App Launch scope constants. Each SMART v1 resource scope (e.g. patient/*.read) is
+/// also issued in its exact SMART v2 form (patient/*.rs; .write as .cud), which fhir-service
+/// reads as the same grant. Granular v2 scopes (?category=) are not issued.
 /// https://hl7.org/fhir/smart-app-launch/scopes-and-launch-context.html
 /// </summary>
 public static class SmartScopes
@@ -102,8 +103,8 @@ public static class SmartScopes
         UserQuestionnaireResponseWrite, SystemQuestionnaireResponseWrite,
     ];
 
-    /// <summary>Every SMART scope this server seeds, with its display name.</summary>
-    public static readonly IReadOnlyList<(string Name, string Display)> Catalog =
+    // Declared before Catalog: static initializers run in textual order.
+    private static readonly (string Name, string Display)[] V1Catalog =
     [
         (FhirUser,          "FHIR user identity"),
         (Launch,            "EHR launch"),
@@ -145,6 +146,38 @@ public static class SmartScopes
         (UserQuestionnaireResponseWrite, "User: submit QuestionnaireResponses"),
         (SystemQuestionnaireResponseWrite, "System: submit QuestionnaireResponses"),
     ];
+
+    /// <summary>Every SMART scope this server seeds, with its display name: the v1 scopes and their v2 forms.</summary>
+    public static readonly IReadOnlyList<(string Name, string Display)> Catalog =
+        WithV2Forms(V1Catalog);
+
+    /// <summary>
+    /// The SMART v2 form of a v1 resource scope, exactly equivalent to it:
+    /// <c>.read</c> is <c>.rs</c> (read and search) and <c>.write</c> is
+    /// <c>.cud</c> (create, update, delete). Null for anything else.
+    /// </summary>
+    public static string? V2Form(string scope)
+    {
+        if (!scope.Contains('/') || scope.StartsWith("launch", StringComparison.Ordinal))
+            return null;
+        if (scope.EndsWith(".read", StringComparison.Ordinal))
+            return scope[..^".read".Length] + ".rs";
+        if (scope.EndsWith(".write", StringComparison.Ordinal))
+            return scope[..^".write".Length] + ".cud";
+        return null;
+    }
+
+    private static List<(string Name, string Display)> WithV2Forms(IEnumerable<(string Name, string Display)> v1)
+    {
+        var all = v1.ToList();
+        all.AddRange(all
+            .Select(c => (Name: V2Form(c.Name), c.Display))
+            .Where(c => c.Name is not null)
+            .Select(c => (c.Name!, c.Display))
+            .ToList());
+        return all;
+    }
+
 
     /// <summary>Scopes a client registration may name: the catalog plus <c>openid</c>.</summary>
     public static readonly IReadOnlySet<string> Registered =
