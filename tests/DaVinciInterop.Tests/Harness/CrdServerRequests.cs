@@ -53,7 +53,8 @@ public static class CrdServerRequests
     /// <summary>
     /// A hook with no prefetch at all, so CHO has to read the Coverage from
     /// the EHR's FHIR API. The kit answers those reads 500, which CHO must
-    /// report as indeterminate for a technical reason, not as a determination.
+    /// report as indeterminate for a technical reason, not as a determination;
+    /// the Coverage it names is the one the order's <c>insurance</c> carries.
     /// </summary>
     public static JsonObject TechnicalIssues(ChoSeedFixture fixture, string coverageId)
     {
@@ -70,11 +71,32 @@ public static class CrdServerRequests
         return Hook("order-sign", UnknownMemberId, Coverage(UnknownMemberId, UnknownCoverageId, "active"), order);
     }
 
-    /// <summary>A known member, with a Coverage CHO does not hold: not-covered, coverage-not-found.</summary>
+    /// <summary>A group CHO has never enrolled anyone in.</summary>
+    public const string UnknownGroupNumber = "INTEROP-GRP-UNKNOWN";
+
+    /// <summary>
+    /// A known member, with a Coverage CHO does not hold: the EHR's Coverage
+    /// names a group, as printed on the member's card, that the member has no
+    /// coverage under with CHO. not-covered, coverage-not-found.
+    /// </summary>
     public static JsonObject CoverageNotFound(ChoSeedFixture fixture)
-        => Hook("order-sign", fixture.Member.MemberId,
-            Coverage(fixture.Member.MemberId, UnknownCoverageId, "active"),
+    {
+        var coverage = Coverage(fixture.Member.MemberId, UnknownCoverageId, "active");
+        coverage["class"] = new JsonArray(new JsonObject
+        {
+            ["type"] = new JsonObject
+            {
+                ["coding"] = new JsonArray(new JsonObject
+                {
+                    ["system"] = "http://terminology.hl7.org/CodeSystem/coverage-class",
+                    ["code"] = "group",
+                }),
+            },
+            ["value"] = UnknownGroupNumber,
+        });
+        return Hook("order-sign", fixture.Member.MemberId, coverage,
             DtrPayerServerRequests.Order(fixture, UnknownCoverageId));
+    }
 
     /// <summary>
     /// A known member whose only Coverage with CHO has ended (the seed's

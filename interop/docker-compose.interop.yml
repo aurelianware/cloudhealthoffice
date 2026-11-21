@@ -455,6 +455,12 @@ services:
       # own order-sign service and hand the DTR kit its context-only request
       # (DTR spec-107). The code is one of the MRI form's focus codes.
       Cms0057__Crd__DocumentationRequiredCodes__0: "72148"
+      # The CRD kit (INFERNO-CRD-SERVER-001) plays the EHR: it signs each CDS
+      # Hooks call with a key from its own JWK Set (CDS Hooks 2.0). CHO trusts
+      # that one client, by issuer and key set, in the interop tenant.
+      CdsHooks__TrustedClients__0__Issuer: http://inferno-crd:4567/custom/crd_server_v221
+      CdsHooks__TrustedClients__0__JwksUrl: http://inferno-crd:4567/custom/crd_server_v221/jwks.json
+      CdsHooks__TrustedClients__0__TenantId: interop-tenant
       SmartAuth__Issuer: ${INTEROP_SMART_ISSUER:-http://cho-smart-auth-service:8080}
       SmartAuth__RequireHttpsMetadata: "false"
       # The bundled issuer serves this tenant. appsettings.Development.json

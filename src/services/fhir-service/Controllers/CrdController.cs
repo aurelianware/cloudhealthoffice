@@ -83,7 +83,9 @@ public class CrdController : FhirControllerBase
     /// CDS Hooks execution endpoint. Evaluates coverage requirements for the given hook.
     /// </summary>
     [HttpPost("{hookId}")]
-    [FhirAccess(smart: true, cho: "authorizations:read")]
+    // An EHR calls with its CDS Hooks client JWT (CDS Hooks 2.0); SMART apps
+    // and CHO callers are admitted as before.
+    [FhirAccess(smart: true, cho: "authorizations:read", cdsHooks: true)]
     public async Task<IActionResult> ExecuteHook(
         string hookId,
         [FromBody] CrdHookRequest request,

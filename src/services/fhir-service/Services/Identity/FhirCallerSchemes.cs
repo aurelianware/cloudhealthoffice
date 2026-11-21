@@ -33,7 +33,13 @@ public static class FhirCallerSchemes
     /// <summary>SMART on FHIR tokens from the SMART trust registry.</summary>
     public const string Smart = "Smart";
 
-    /// <summary>Default scheme: routes a request to <see cref="Cho"/> or <see cref="Smart"/>.</summary>
+    /// <summary>
+    /// CDS Hooks client JWTs (CDS Hooks 2.0) from a configured EHR, on
+    /// <c>/cds-services</c> only. See <see cref="CdsHooksClientHandler"/>.
+    /// </summary>
+    public const string CdsHooks = "CdsHooks";
+
+    /// <summary>Default scheme: routes a request to <see cref="Cho"/>, <see cref="Smart"/> or <see cref="CdsHooks"/>.</summary>
     public const string Selector = "FhirCaller";
 
     /// <summary>
@@ -43,18 +49,26 @@ public static class FhirCallerSchemes
     /// </summary>
     internal const string ChoMarker = "fhir-caller:cho";
     internal const string SmartMarker = "fhir-caller:smart";
+    internal const string CdsHooksMarker = "fhir-caller:cds-hooks";
+
+    private static readonly string[] Markers = [ChoMarker, SmartMarker, CdsHooksMarker];
 
     /// <summary>A caller authenticated by the CHO scheme.</summary>
-    public static bool IsCho(ClaimsPrincipal? principal)
-        => principal?.Identity?.IsAuthenticated == true
-           && principal.Identities.Any(i => i.AuthenticationType == ChoMarker)
-           && !principal.Identities.Any(i => i.AuthenticationType == SmartMarker);
+    public static bool IsCho(ClaimsPrincipal? principal) => HasOnly(principal, ChoMarker);
 
     /// <summary>A caller authenticated by the SMART scheme.</summary>
-    public static bool IsSmart(ClaimsPrincipal? principal)
+    public static bool IsSmart(ClaimsPrincipal? principal) => HasOnly(principal, SmartMarker);
+
+    /// <summary>An EHR authenticated by its CDS Hooks client JWT.</summary>
+    public static bool IsCdsHooksClient(ClaimsPrincipal? principal) => HasOnly(principal, CdsHooksMarker);
+
+    /// <summary>A caller from outside CHO (SMART or CDS Hooks): its own token is never forwarded to CHO services.</summary>
+    public static bool IsExternal(ClaimsPrincipal? principal) => IsSmart(principal) || IsCdsHooksClient(principal);
+
+    private static bool HasOnly(ClaimsPrincipal? principal, string marker)
         => principal?.Identity?.IsAuthenticated == true
-           && principal.Identities.Any(i => i.AuthenticationType == SmartMarker)
-           && !principal.Identities.Any(i => i.AuthenticationType == ChoMarker);
+           && principal.Identities.Any(i => i.AuthenticationType == marker)
+           && !principal.Identities.Any(i => i.AuthenticationType != marker && Markers.Contains(i.AuthenticationType));
 
     internal static void Mark(ClaimsPrincipal? principal, string marker, IEnumerable<Claim>? claims = null)
         => principal?.AddIdentity(new ClaimsIdentity(claims, marker));
@@ -64,12 +78,16 @@ public static class FhirCallerSchemes
     /// Call after <c>AddChoAuthentication</c> and <c>AddSmartTrust</c>.
     /// </summary>
     public static IServiceCollection AddFhirCallerSchemes(
-        this IServiceCollection services, IConfiguration configuration)
+        this IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
     {
         var cho = new ChoAuthOptions();
         configuration.GetSection(ChoAuthOptions.SectionName).Bind(cho);
         var smart = new SmartTrustOptions();
         configuration.GetSection(SmartTrustOptions.SectionName).Bind(smart);
+
+        var cds = new CdsHooksOptions();
+        configuration.GetSection(CdsHooksOptions.SectionName).Bind(cds);
+        cds.Validate(environment?.IsDevelopment() == true);
 
         var choIssuers = cho.Issuers.Select(i => i.Issuer).ToHashSet(StringComparer.Ordinal);
         // The Demo issuer is checked as configured too: it is trusted in the
@@ -86,6 +104,22 @@ public static class FhirCallerSchemes
                 + $"(SmartAuth): {string.Join(", ", overlap)}. Each issuer must belong to exactly one scheme.");
         }
 
+        var cdsIssuers = cds.TrustedClients.Select(c => c.Issuer).ToHashSet(StringComparer.Ordinal);
+        var cdsOverlap = cdsIssuers.Where(i => choIssuers.Contains(i)
+                || smart.NormalizedIssuers().Any(s => string.Equals(s.Issuer, i, StringComparison.Ordinal)))
+            .ToList();
+        if (cdsOverlap.Count > 0)
+        {
+            throw new SmartTrustValidationException(
+                "These issuers are trusted as CDS Hooks clients (CdsHooks:TrustedClients) and also as CHO or SMART "
+                + $"issuers: {string.Join(", ", cdsOverlap)}. Each issuer must belong to exactly one scheme.");
+        }
+
+        services.Configure<CdsHooksOptions>(configuration.GetSection(CdsHooksOptions.SectionName));
+        services.AddSingleton<CdsHooksClientKeys>();
+        services.AddSingleton<CdsHooksReplayCache>();
+        services.AddHttpClient(CdsHooksClientKeys.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
+
         services.AddAuthentication(options =>
             {
                 options.DefaultScheme = Selector;
@@ -93,10 +127,11 @@ public static class FhirCallerSchemes
                 options.DefaultChallengeScheme = Selector;
                 options.DefaultForbidScheme = Selector;
             })
-            .AddPolicyScheme(Selector, "CHO or SMART bearer", policy =>
+            .AddPolicyScheme(Selector, "CHO, SMART or CDS Hooks bearer", policy =>
             {
-                policy.ForwardDefaultSelector = context => SelectScheme(context, choIssuers);
-            });
+                policy.ForwardDefaultSelector = context => SelectScheme(context, choIssuers, cdsIssuers);
+            })
+            .AddScheme<CdsHooksClientSchemeOptions, CdsHooksClientHandler>(CdsHooks, "CDS Hooks client JWT", _ => { });
 
         // Mark principals the CHO scheme validated. PostConfigure wraps the
         // shared handler's own events rather than replacing them.
@@ -118,11 +153,15 @@ public static class FhirCallerSchemes
 
     /// <summary>
     /// Routes by the token's <c>iss</c>: a CHO issuer goes to the CHO scheme,
-    /// anything else (including no token) to SMART. Routing never grants
+    /// a configured CDS Client calling <c>/cds-services</c> to the CDS Hooks
+    /// scheme, anything else (including no token) to SMART. Routing never grants
     /// anything; the chosen scheme still validates signature, issuer,
     /// audience and lifetime.
     /// </summary>
     internal static string SelectScheme(HttpContext context, IReadOnlySet<string> choIssuers)
+        => SelectScheme(context, choIssuers, new HashSet<string>(StringComparer.Ordinal));
+
+    internal static string SelectScheme(HttpContext context, IReadOnlySet<string> choIssuers, IReadOnlySet<string> cdsIssuers)
     {
         var header = context.Request.Headers.Authorization.ToString();
         if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
@@ -131,8 +170,14 @@ public static class FhirCallerSchemes
             try
             {
                 var handler = new JsonWebTokenHandler();
-                if (handler.CanReadToken(raw) && choIssuers.Contains(handler.ReadJsonWebToken(raw).Issuer))
-                    return Cho;
+                if (handler.CanReadToken(raw))
+                {
+                    var issuer = handler.ReadJsonWebToken(raw).Issuer;
+                    if (choIssuers.Contains(issuer))
+                        return Cho;
+                    if (cdsIssuers.Contains(issuer) && context.Request.Path.StartsWithSegments("/cds-services"))
+                        return CdsHooks;
+                }
             }
             catch (ArgumentException)
             {

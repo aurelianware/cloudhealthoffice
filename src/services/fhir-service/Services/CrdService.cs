@@ -23,6 +23,7 @@ public class CrdService : ICrdService
     private readonly string? _dtrLaunchUrl;
     private readonly string? _portalQuestionnaireUrl;
     private readonly TimeSpan _assertionRetention;
+    private readonly ICrdEhrCoverageReader? _ehrCoverage;
 
     public CrdService(
         IHttpClientFactory httpClientFactory,
@@ -33,8 +34,10 @@ public class CrdService : ICrdService
         ILogger<CrdService> logger,
         IDtrService? dtrService = null,
         ICrdAssertionStore? assertionStore = null,
-        IOptions<DtrConfig>? dtrConfig = null)
+        IOptions<DtrConfig>? dtrConfig = null,
+        ICrdEhrCoverageReader? ehrCoverage = null)
     {
+        _ehrCoverage = ehrCoverage;
         _terminologyClient = httpClientFactory.CreateClient("TerminologyService");
         _priorAuthRuleEngine = priorAuthRuleEngine;
         _defaultClassification = LoadFromConfig(config.Value);
@@ -76,8 +79,22 @@ public class CrdService : ICrdService
         //    It is the same member for every draft order in the hook, and a
         //    per-code lookup would read CHO's stores n times to get n identical
         //    answers.
-        var context = await _contextResolver.ResolveAsync(
-            request, tenantId, ExtractCodes(request).Select(c => c.Code).ToList(), ct);
+        //    The EHR's Coverage comes first: from the prefetch, or, when the EHR
+        //    sent none, read from its FHIR server. A read that fails leaves CHO
+        //    unable to say which coverage the order is under, and every answer
+        //    is then indeterminate for a technical reason (CRD 2.2.1).
+        request.EhrCoverage = CrdPrefetch.ActiveCoverage(request);
+        var ehrRead = CrdEhrCoverageRead.NotAttempted;
+        if (request.EhrCoverage is null && _ehrCoverage is not null)
+        {
+            ehrRead = await _ehrCoverage.ReadAsync(request, ct);
+            request.EhrCoverage = ehrRead.Coverage;
+        }
+
+        var context = ehrRead.Failed
+            ? CrdContextResolution.Unresolved(CrdContextFailure.EhrCoverageUnreadable)
+            : await _contextResolver.ResolveAsync(
+                request, tenantId, ExtractCodes(request).Select(c => c.Code).ToList(), ct);
 
         if (!context.IsResolved)
         {
@@ -136,7 +153,10 @@ public class CrdService : ICrdService
         // 5. Documentation-required answers name the DTR forms that collect the
         //    documentation (resp-38), and their cards say how to complete them.
         var questionnaires = await QuestionnairesForAsync(assertions, tenantId, ct);
-        var (systemActions, issued) = BuildSystemActions(request, tenantId, assertions, questionnaires);
+        var coverageReference = CrdPrefetch.ActiveCoverageReference(request)
+            ?? (request.EhrCoverage is { } ehrCoverage ? CrdPrefetch.ReferenceOf(ehrCoverage) : null)
+            ?? CrdPrefetch.OrderInsuranceReference(request);
+        var (systemActions, issued) = BuildSystemActions(request, tenantId, coverageReference, assertions, questionnaires);
         await RememberAsync(issued, tenantId, ct);
 
         foreach (var assertion in assertions.Where(a => a.Determination == CrdDetermination.DocumentationRequired))
@@ -163,7 +183,8 @@ public class CrdService : ICrdService
     /// draft order, with CHO's <c>coverage-information</c> extension added.
     ///
     /// <para>
-    /// Returns nothing when the request's prefetch carries no active Coverage.
+    /// Returns nothing when there is no EHR Coverage to name: none in the
+    /// prefetch, none read from the EHR, and none in the orders' <c>insurance</c>.
     /// The extension requires a Coverage reference, and CHO will not invent one:
     /// a fabricated reference inside a resource the EHR is being asked to store
     /// is worse than the card-only answer this replaces. The cards still carry
@@ -174,11 +195,11 @@ public class CrdService : ICrdService
         List<(CrdAssertionDraft Draft, CrdCoverageAssertion Record)> Issued) BuildSystemActions(
         CrdHookRequest request,
         string tenantId,
+        string? coverageReference,
         IReadOnlyList<CrdAssertionDraft> assertions,
         IReadOnlyDictionary<CrdAssertionDraft, IReadOnlyList<string>> questionnaires)
     {
         var issued = new List<(CrdAssertionDraft, CrdCoverageAssertion)>();
-        var coverageReference = CrdPrefetch.ActiveCoverageReference(request);
         if (coverageReference is null)
         {
             return ([], issued);
@@ -444,6 +465,28 @@ public class CrdService : ICrdService
         // whatever that rule set said was reported as this member's coverage
         // determination (D-21, second part; G-05). An unresolved member means
         // no rule set applies — not that a different member's does.
+        // No coverage to evaluate under. CHO knows the answer is not-covered
+        // when the patient is not a member, their coverage has ended, or the
+        // coverage on the order is not one CHO holds (CRD 2.2.1). And when the
+        // EHR's coverage could not be read, CHO cannot say which coverage the
+        // order is under at all, so the answer is indeterminate. Neither
+        // depends on the service, so no classification applies.
+        switch (context.Failure)
+        {
+            case CrdContextFailure.MemberNotFound:
+                return new(BuildNotCoveredCard(display, CrdIndeterminateReason.MemberNotFound),
+                    CrdDetermination.NotCovered, CrdIndeterminateReason.MemberNotFound);
+            case CrdContextFailure.NoActiveCoverage:
+                return new(BuildNotCoveredCard(display, CrdIndeterminateReason.NoActiveCoverage),
+                    CrdDetermination.NotCovered, CrdIndeterminateReason.NoActiveCoverage);
+            case CrdContextFailure.CoverageNotFound:
+                return new(BuildNotCoveredCard(display, CrdIndeterminateReason.CoverageNotFound),
+                    CrdDetermination.NotCovered, CrdIndeterminateReason.CoverageNotFound);
+            case CrdContextFailure.EhrCoverageUnreadable:
+                return new(BuildRequirementsUnknownCard(display),
+                    CrdDetermination.Indeterminate, CrdIndeterminateReason.Technical);
+        }
+
         var ruleDecision = context.IsResolved
             ? await EvaluatePriorAuthRuleAsync(context.Context!, effectiveCode, ct)
             : null;
@@ -854,6 +897,25 @@ public class CrdService : ICrdService
     /// Fail-closed answer (D-21): CHO could not positively determine the
     /// coverage requirements. Never phrased as "not required".
     /// </summary>
+    /// <summary>The card for a not-covered answer: CHO holds no coverage the service could be covered under.</summary>
+    internal static CrdCard BuildNotCoveredCard(string serviceDisplay, CrdIndeterminateReason reason) => new()
+    {
+        Uuid = Guid.NewGuid().ToString(),
+        Summary = $"No coverage with this payer for {serviceDisplay}",
+        Detail = CrdCoverageInformation.DefaultReasonText(reason)
+                 + " Check the patient's insurance information, or contact the payer, before proceeding.",
+        Indicator = "warning",
+        Source = new CrdCardSource
+        {
+            Topic = new CrdCoding
+            {
+                System = "http://hl7.org/fhir/us/davinci-crd/CodeSystem/temp",
+                Code = "coverage",
+                Display = "Coverage",
+            },
+        },
+    };
+
     internal static CrdCard BuildRequirementsUnknownCard(string serviceDisplay) => new()
     {
         Uuid = Guid.NewGuid().ToString(),

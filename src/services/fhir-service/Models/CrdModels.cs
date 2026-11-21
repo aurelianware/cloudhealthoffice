@@ -19,8 +19,38 @@ public class CrdHookRequest
     [JsonPropertyName("context")]
     public CrdHookContext? Context { get; set; }
 
+    [JsonPropertyName("fhirAuthorization")]
+    public CrdFhirAuthorization? FhirAuthorization { get; set; }
+
     [JsonPropertyName("prefetch")]
     public Dictionary<string, System.Text.Json.JsonElement>? Prefetch { get; set; }
+
+    /// <summary>
+    /// The EHR's active Coverage for this hook, once CrdService has found it
+    /// (prefetch, or a read of <see cref="FhirServer"/>). Never read from the
+    /// request body.
+    /// </summary>
+    [JsonIgnore]
+    public JsonElement? EhrCoverage { get; set; }
+}
+
+/// <summary>CDS Hooks <c>fhirAuthorization</c>: the token the EHR grants the service for reading its FHIR server.</summary>
+public class CrdFhirAuthorization
+{
+    [JsonPropertyName("access_token")]
+    public string? AccessToken { get; set; }
+
+    [JsonPropertyName("token_type")]
+    public string? TokenType { get; set; }
+
+    [JsonPropertyName("expires_in")]
+    public int? ExpiresIn { get; set; }
+
+    [JsonPropertyName("scope")]
+    public string? Scope { get; set; }
+
+    [JsonPropertyName("subject")]
+    public string? Subject { get; set; }
 }
 
 public class CrdHookContext
