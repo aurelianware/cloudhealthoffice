@@ -153,4 +153,21 @@ public class AuthorizationDecisionTimeframeTests : TestContext
         cut.FindAll("[data-testid=send-extension-notice]").Should().BeEmpty();
         cut.Find("[data-testid=extension-summary]").TextContent.Should().Contain("plan needs additional information");
     }
+
+    [Fact]
+    public void A_texas_clock_is_named_with_its_statute_and_whether_it_was_inferred()
+    {
+        var a = Open();
+        a.DecisionDeadlinePolicy = "cho-receipt-v1+tx-gc-540-v1:Hospitalized+inferred";
+        var clock = Render(a).Find("[data-testid=decision-clock]").TextContent;
+        clock.Should().Contain("1 business day").And.Contain("§540.0302(b)(1)").And.Contain("inferred");
+    }
+
+    [Fact]
+    public void The_federal_clock_alone_has_no_state_label()
+    {
+        var a = Open();
+        a.DecisionDeadlinePolicy = "cho-receipt-v1";
+        Render(a).FindAll("[data-testid=decision-clock]").Should().BeEmpty();
+    }
 }
