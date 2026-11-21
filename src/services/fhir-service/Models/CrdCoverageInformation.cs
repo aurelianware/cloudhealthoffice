@@ -29,6 +29,17 @@ public enum CrdDetermination
     /// and requires a reason alongside it.
     /// </summary>
     Indeterminate,
+
+    /// <summary>
+    /// The service is not covered because CHO holds no coverage it could be
+    /// covered under: the patient is not a member, the member's coverage has
+    /// ended, or the Coverage the order names is not one CHO holds. CRD 2.2.1
+    /// answers these with <c>not-covered</c> and the matching reason
+    /// (no-member-found, no-active-coverage, coverage-not-found). It is a
+    /// statement about eligibility, never about the service's rules, and it
+    /// carries no <c>pa-needed</c> (crd-ci-q2).
+    /// </summary>
+    NotCovered,
 }
 
 /// <summary>
@@ -70,6 +81,13 @@ public enum CrdIndeterminateReason
     /// are keyed on, so no rule set resolves. IG code <c>coverage-not-found</c>.
     /// </summary>
     CoverageContextIncomplete,
+
+    /// <summary>
+    /// The member is known, but the Coverage the EHR sent (by its plan or group)
+    /// is not one CHO holds for them. IG code <c>coverage-not-found</c>; used
+    /// with <see cref="CrdDetermination.NotCovered"/>.
+    /// </summary>
+    CoverageNotFound,
 }
 
 /// <summary>
@@ -98,8 +116,9 @@ public enum CrdIndeterminateReason
 /// The invariants this construction respects, by never producing the shapes they
 /// forbid: <c>q1</c> (no questionnaire without doc-needed — CHO names
 /// questionnaires only on a documentation-required determination, which always
-/// carries doc-needed), <c>q2</c> (no pa-needed under not-covered — CHO never asserts
-/// not-covered, because it does not evaluate benefit exclusions here),
+/// carries doc-needed), <c>q2</c> (no pa-needed under not-covered — CHO asserts
+/// not-covered only for eligibility, never for a benefit exclusion, and omits
+/// pa-needed there),
 /// <c>q3</c>/<c>q5</c> (CHO emits neither <c>conditional</c> nor
 /// <c>satisfied</c>), <c>q4</c> (doc-purpose <c>withpa</c> is never paired with a
 /// satisfied or no-auth determination), <c>q7</c> (every reason carries text),
@@ -146,11 +165,18 @@ public sealed record CrdCoverageInformation
     public IReadOnlyList<string> Questionnaires { get; init; } = [];
 
     /// <summary>`covered` / `not-covered` / `conditional` / `indeterminate`.</summary>
-    public string Covered => Determination == CrdDetermination.Indeterminate ? "indeterminate" : "covered";
+    public string Covered => Determination switch
+    {
+        CrdDetermination.Indeterminate => "indeterminate",
+        CrdDetermination.NotCovered => "not-covered",
+        _ => "covered",
+    };
 
     /// <summary>`no-auth` / `auth-needed` / `satisfied` / `performpa` / `conditional` / `indeterminate`.</summary>
-    public string PaNeeded => Determination switch
+    /// <remarks>Null under not-covered: crd-ci-q2 forbids pa-needed there.</remarks>
+    public string? PaNeeded => Determination switch
     {
+        CrdDetermination.NotCovered => null,
         CrdDetermination.AuthorizationRequired => "auth-needed",
         CrdDetermination.NoAuthorizationRequired => "no-auth",
         // CHO classified the service as needing documentation. That says nothing
@@ -167,8 +193,9 @@ public sealed record CrdCoverageInformation
         {
             Part("coverage", "valueReference", new Dictionary<string, object?> { ["reference"] = CoverageReference }),
             Part("covered", "valueCode", Covered),
-            Part("pa-needed", "valueCode", PaNeeded),
         };
+        if (PaNeeded is { } paNeeded)
+            parts.Add(Part("pa-needed", "valueCode", paNeeded));
 
         if (Determination == CrdDetermination.DocumentationRequired)
         {
@@ -244,6 +271,7 @@ public sealed record CrdCoverageInformation
         CrdIndeterminateReason.MemberNotFound => ("no-member-found", "Member not found"),
         CrdIndeterminateReason.NoActiveCoverage => ("no-active-coverage", "Coverage not active"),
         CrdIndeterminateReason.CoverageContextIncomplete => ("coverage-not-found", "Coverage not found"),
+        CrdIndeterminateReason.CoverageNotFound => ("coverage-not-found", "Coverage not found"),
         _ => null,
     };
 
@@ -270,6 +298,8 @@ public sealed record CrdCoverageInformation
         CrdIndeterminateReason.CoverageContextIncomplete =>
             "Cloud Health Office could not determine the state and line of business this member's coverage "
             + "rules are selected by, so no rule set applies.",
+        CrdIndeterminateReason.CoverageNotFound =>
+            "The coverage on this order is not a coverage Cloud Health Office holds for this member.",
         _ => "Cloud Health Office could not determine the coverage requirements for this service.",
     };
 

@@ -53,7 +53,7 @@ override it.
 | Capitation (`capitation-service`) | 8.1K | — |
 | Prior authorization (`authorization-service`, PriorAuthRuleEngine) | 6.2K + 2.1K | See CAP-01–CAP-26; CRD classifications in memory (CAP-16); QNXT backend throws (CAP-17) |
 | Appeals and grievances (`appeals-service`) | 8.7K | Medicaid rule packs for 10 States; no Medicare Part C pack |
-| FHIR, SMART, consent (`fhir-service`, `smart-auth-service`, `consent-service`) | 28.5K + 4.2K + 2.0K | Bulk export is a scaffold (CAP-14); Encounter/Claim and the Payer-to-Payer member source read mock data (CAP-22) |
+| FHIR, SMART, consent (`fhir-service`, `smart-auth-service`, `consent-service`) | 28.5K + 4.2K + 2.0K | Durable bulk export and bulk payer-to-payer ($bulk-member-match, $davinci-data-export) need the Mongo-backed store configured, else the legacy stub is used (CAP-14, superseded October 28); native Patient, Coverage, Encounter, Claim and payer-to-payer bindings exist, deployment acceptance separate (CAP-22) |
 | Members, enrollment, 834 (`member-service`, `enrollment-import-service`, `sponsor-service`) | 7.2K + 4.8K + 3.1K | — |
 | Eligibility, 270/271 (`eligibility-service`) | 6.2K | — |
 | Encounters, risk adjustment (`encounter-service`, `encounter-submission-service`, `risk-adjustment-service`, engines) | 1.7K + 1.7K + 1.4K + 1.4K | No MARx/TRR or Part D (PDE) processing |

@@ -90,6 +90,9 @@ public static class ChoSurfaces
 {
     public const string Fhir = "fhir";
     public const string PublicDirectory = "publicDirectory";
+
+    /// <summary>The CDS Hooks root, whose <c>/cds-services</c> a CRD client calls.</summary>
+    public const string CdsHooks = "cdsHooks";
 }
 
 /// <summary>How a conformance kit authenticates to CHO (see <see cref="InteropScenarioDefinition.InfernoAuth"/>).</summary>
@@ -111,6 +114,26 @@ public static class InfernoAuthModes
     /// </summary>
     public const string DtrClientBackendServices = "dtrClientBackendServices";
     public const string PatientApp = "patientApp";
+
+    /// <summary>
+    /// CDS Hooks client authentication: the kit, as the EHR, signs each hook
+    /// call with a JWT from its own key set. fhir-service trusts that issuer
+    /// through CdsHooks:TrustedClients; the harness supplies no token.
+    /// </summary>
+    public const string CdsHooksClient = "cdsHooksClient";
+
+    /// <summary>
+    /// SMART Backend Services as a provider's PAS client: the kit is registered
+    /// as the seed's <c>pasBackendClient</c> and obtains its own token.
+    /// </summary>
+    public const string PasClientBackendServices = "pasClientBackendServices";
+
+    /// <summary>
+    /// The kit is a SMART app the harness registers (the seed's
+    /// <c>smartApp</c>), and the harness plays the user and the EHR while the
+    /// kit waits on a redirect or a launch (see <see cref="InfernoSmartApp"/>).
+    /// </summary>
+    public const string SmartApp = "smartApp";
 }
 
 /// <summary>The scenario inventory as loaded from interop/scenarios.json.</summary>

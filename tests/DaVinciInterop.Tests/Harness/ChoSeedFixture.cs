@@ -50,6 +50,8 @@ public sealed record ChoSeedFixture
     [JsonPropertyName("payerBackendClient")] public ChoSeedBackendClient PayerBackendClient { get; init; } = new();
     [JsonPropertyName("dtrBackendClient")] public ChoSeedBackendClient DtrBackendClient { get; init; } = new();
     [JsonPropertyName("patientApp")] public ChoSeedPatientApp PatientApp { get; init; } = new();
+    [JsonPropertyName("pasBackendClient")] public ChoSeedBackendClient PasBackendClient { get; init; } = new();
+    [JsonPropertyName("smartApp")] public ChoSeedSmartApp SmartApp { get; init; } = new();
 
     public static ChoSeedFixture Load() => LoadFrom(InteropPaths.ChoSeedFixture);
 
@@ -156,4 +158,24 @@ public sealed record ChoSeedPatientApp
     [JsonPropertyName("username")] public string Username { get; init; } = "";
 
     [JsonPropertyName("scopes")] public List<string> Scopes { get; init; } = new();
+}
+
+/// <summary>
+/// The SMART app the SMART App Launch kit is registered as (INFERNO-SMART-SERVER-001):
+/// an interactive, confidential asymmetric client whose keys are the kit's own.
+/// </summary>
+public sealed record ChoSeedSmartApp
+{
+    [JsonPropertyName("clientId")] public string ClientId { get; init; } = "";
+    [JsonPropertyName("displayName")] public string DisplayName { get; init; } = "";
+    [JsonPropertyName("redirectUri")] public string RedirectUri { get; init; } = "";
+    [JsonPropertyName("launchUri")] public string LaunchUri { get; init; } = "";
+    [JsonPropertyName("username")] public string Username { get; init; } = "";
+    [JsonPropertyName("scopes")] public List<string> Scopes { get; init; } = new();
+    [JsonPropertyName("standaloneScopes")] public string StandaloneScopes { get; init; } = "";
+    [JsonPropertyName("ehrScopes")] public string EhrScopes { get; init; } = "";
+    [JsonPropertyName("ehrClientId")] public string EhrClientId { get; init; } = "";
+    [JsonPropertyName("ehrUsername")] public string EhrUsername { get; init; } = "";
+    [JsonPropertyName("ehrProviderId")] public string EhrProviderId { get; init; } = "";
+    [JsonPropertyName("ehrProviderNpi")] public string EhrProviderNpi { get; init; } = "";
 }

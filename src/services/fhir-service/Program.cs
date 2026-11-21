@@ -69,7 +69,7 @@ builder.Services.AddSingleton(new CloudHealthOffice.Infrastructure.Middleware.Te
     ],
 });
 builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment);
-builder.Services.AddFhirCallerSchemes(builder.Configuration);
+builder.Services.AddFhirCallerSchemes(builder.Configuration, builder.Environment);
 builder.Services.AddFhirAccessPolicies();
 
 // ── Public Provider Directory (CMS-9115-F, D-29) ─────────────────────────────
@@ -735,6 +735,10 @@ builder.Services.AddSingleton<ICrdClassificationStore, CrdClassificationStore>()
 // program code for a member's benefit plan from one program record.
 builder.Services.AddProgramDirectoryClient(builder.Configuration);
 builder.Services.AddScoped<ICrdContextResolver, CrdContextResolver>();
+// The EHR's Coverage, read from the hook's fhirServer when it was not
+// prefetched (only for a trusted CDS Client, on its own origin).
+builder.Services.AddHttpClient(CrdEhrCoverageReader.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddScoped<ICrdEhrCoverageReader, CrdEhrCoverageReader>();
 // The coverage assertions CRD returns, so a DTR $questionnaire-package can
 // resolve a coverage-assertion-id context (DTR spec-107). Singleton: the store
 // ensures its indexes at construction.

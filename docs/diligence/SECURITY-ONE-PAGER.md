@@ -4,6 +4,8 @@
 **Audience:** payer CISO / security architecture review
 **Scope:** CMS-0057-F Compliance Accelerator (Layer 1), founding-partner pilot
 
+For the Aurelianware-hosted environment on Google Cloud (customer-managed keys, private cluster, Cloud Armor, IAP; written, not yet applied), see [GCP-HOSTED-HIPAA.md](../deploy/GCP-HOSTED-HIPAA.md) and the [security review readiness plan](../compliance/security-readiness/README.md). This page predates it and describes the Azure and plan-hosted paths.
+
 This is a current-state architecture note. It is not a SOC 2 Type II, HITRUST, or pentest letter. Those artifacts are produced per pilot, not claimed as already in hand.
 
 ## What you are reviewing

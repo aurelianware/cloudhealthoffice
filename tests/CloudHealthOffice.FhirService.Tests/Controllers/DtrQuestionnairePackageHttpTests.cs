@@ -122,11 +122,11 @@ public class DtrQuestionnairePackageHttpTests : IClassFixture<FhirTestWebAppFact
                   "hook": "order-sign",
                   "context": {
                     "userId": "Practitioner/p1",
-                    "patientId": "pat-1",
+                    "patientId": "pat-001",
                     "draftOrders": { "resourceType": "Bundle", "entry": [ { "resource": {
                       "resourceType": "ServiceRequest", "id": "sr-1", "status": "draft", "intent": "order",
                       "code": { "coding": [ { "system": "http://www.ama-assn.org/go/cpt", "code": "72148" } ] },
-                      "subject": { "reference": "Patient/pat-1" } } } ] }
+                      "subject": { "reference": "Patient/pat-001" } } } ] }
                   },
                   "prefetch": { "coverage": { "resourceType": "Bundle", "type": "searchset", "entry": [
                     { "resource": { "resourceType": "Coverage", "id": "cov-1", "status": "active" } } ] } }

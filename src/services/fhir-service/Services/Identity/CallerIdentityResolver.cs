@@ -31,10 +31,7 @@ public sealed class CallerIdentityResolver
     {
         if (principal?.Identity?.IsAuthenticated != true) return null;
 
-        var issuerValue = FirstNonEmpty(principal, "iss")
-            ?? principal.Claims.FirstOrDefault()?.Issuer;
-
-        var issuer = _registry.Resolve(issuerValue);
+        var issuer = _registry.Resolve(IssuerOf(principal));
         if (issuer == null) return null;
 
         var map = issuer.Claims;
@@ -120,6 +117,13 @@ public sealed class CallerIdentityResolver
         if (scopes.Any(s => s.StartsWith("system/", StringComparison.Ordinal))) return SmartCallerType.System;
         return SmartCallerType.Unknown;
     }
+
+    /// <summary>
+    /// The issuer a principal's token names: its <c>iss</c> claim, else the
+    /// issuer the handler stamped on its claims.
+    /// </summary>
+    public static string? IssuerOf(ClaimsPrincipal principal)
+        => FirstNonEmpty(principal, "iss") ?? principal.Claims.FirstOrDefault()?.Issuer;
 
     /// <summary>
     /// The granted scopes, by the one shared rule (<see cref="SmartScopeClaims"/>):

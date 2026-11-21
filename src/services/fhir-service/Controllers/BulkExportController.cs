@@ -16,8 +16,11 @@ namespace FhirService.Controllers;
 /// FHIR Bulk Data Access endpoints for system-level and group-level export.
 /// The default service explicitly refuses initiation until durable export exists.
 /// With <c>BulkExport:Enabled</c>, a provider exports its own attributed panel
-/// as <c>Group/{its provider id}/$export</c> or <c>Patient/$export</c> (G-34);
-/// a system-level export is still refused.
+/// as <c>Group/{its provider id}/$export</c> or <c>Patient/$export</c> (G-34).
+/// A system-level <c>/$export</c> (every member in the tenant) is open only to
+/// the backend clients named in <c>BulkExport:SystemExport:Clients</c>; with
+/// none named it is refused as not implemented (501), and any other caller
+/// is refused (403).
 ///
 /// Every job belongs to the caller that started it. Another caller, in the same
 /// tenant or not, is answered as if the job did not exist, whether it polls,
@@ -35,13 +38,16 @@ public class BulkExportController : FhirControllerBase
 {
     private readonly IBulkExportService _exportService;
     private readonly ILogger<BulkExportController> _logger;
+    private readonly BulkExportOptions _options;
 
     public BulkExportController(
         IBulkExportService exportService,
-        ILogger<BulkExportController> logger)
+        ILogger<BulkExportController> logger,
+        Microsoft.Extensions.Options.IOptions<BulkExportOptions>? options = null)
     {
         _exportService = exportService;
         _logger = logger;
+        _options = options?.Value ?? new BulkExportOptions();
     }
 
     /// <summary>GET /fhir/r4/$export — initiate system-level bulk export</summary>
@@ -296,6 +302,21 @@ public class BulkExportController : FhirControllerBase
         if (!TryResolveParameters(query, body, out var parameters, out var parameterError))
             return FhirBadRequest(parameterError);
 
+        if (level == BulkExportLevel.System)
+        {
+            // Off unless bulk export is on AND at least one system exporter
+            // is named: then it does not exist, exactly as before.
+            if (!_options.Enabled || !_options.SystemExport.IsOn)
+                return BulkExportNotImplemented();
+            if (!IsSystemExporter())
+            {
+                _logger.LogWarning(
+                    "System-level bulk export refused: caller is not a configured system exporter (tenant {TenantId})",
+                    LogSanitizer.Sanitize(TenantId));
+                return FhirForbidden("This client is not authorized for a system-level export.");
+            }
+        }
+
         path ??= level switch
         {
             BulkExportLevel.Group => $"Group/{Uri.EscapeDataString(groupId!)}/$export",
@@ -429,6 +450,17 @@ public class BulkExportController : FhirControllerBase
         static string? Text(Parameters.ParameterComponent p) => (p.Value as PrimitiveType)?.ToString();
     }
 
+    /// <summary>
+    /// Whether the caller is a SMART backend (system-context) caller whose
+    /// issuer and client id are a configured system exporter.
+    /// </summary>
+    private bool IsSystemExporter()
+        => HttpContext.Items[AuthenticatedCaller.HttpContextItemKey] is AuthenticatedCaller
+           {
+               CallerType: SmartCallerType.System,
+           } caller
+           && _options.SystemExport.Allows(caller.Issuer, caller.ClientId);
+
     /// <summary>The validated caller, as Provider Access identifies it.</summary>
     private string? CallerId => ProviderAccessAuthorizationFilter.ResolveCallerId(HttpContext);
 
@@ -444,6 +476,11 @@ public class BulkExportController : FhirControllerBase
         if (job is null
             || string.IsNullOrEmpty(caller)
             || !string.Equals(job.RequestedBy, caller, StringComparison.Ordinal))
+            return null;
+
+        // A system export stays the system exporter's only while it is one:
+        // a client removed from the list can no longer poll or download.
+        if (job.Level == BulkExportLevel.System && !IsSystemExporter())
             return null;
 
         if (job.Level == BulkExportLevel.PayerToPayer
