@@ -161,6 +161,8 @@ endorsement by, or an implementation partnership with any named vendor.
 ## Connecting to the core (locked, November 18, 2026)
 Lead with standard files and a daily drop as the default way Cloud Health Office connects to a plan's core: CARIN CPCDS extracts, 834 enrollment, prior authorizations from X12 278 or a UM export, and fee schedule CSVs, loaded each day. Core adapters (QNXT, Facets, HealthEdge, generic DB or REST) are the option when an implementation needs direct integration, scoped per engagement. Never imply a pre-built adapter for a specific core is shipped.
 
+**Updated November 21, 2026:** live core adapters are an optional, alternate integration point, off by default in the product (`CoreIntegration:LiveConnectors:Enabled`). Offer them for real-time reads or write-back, after the file drop is running. The CMS-0057-F APIs are served from what the file drop loads, not through a live adapter. See docs/integration/CORE-INTEGRATION-OPTIONS.md.
+
 ## Deployment & operating models (locked status labels)
 
 | Model | Status label | Never say |
@@ -210,14 +212,16 @@ candidates under evaluation, never as shipped features.
 
 ## QNXT CMS-0057-F adapter scoping (locked) — `/services/qnxt-cms-0057-f-adapter`
 
-**H1:** Scoping a QNXT-to-CMS-0057-F adapter.
+**H1:** Scoping QNXT for CMS-0057-F. (Updated November 21, 2026; was "Scoping a QNXT-to-CMS-0057-F adapter.")
 
 **Subhead:** The four required APIs — Patient Access, Provider Access, Payer-to-Payer, and Prior
 Authorization — are due January 1, 2027, and most of the data behind them already lives in QNXT. The hard
-part is getting it out cleanly.
+part is getting it out cleanly. Most plans start with the extracts QNXT already produces, sent to a daily
+file drop. A live adapter is an option when you need real-time reads or write-back.
 
-**Process:** questionnaire → 90-minute discovery workshop → fixed-scope SOW. Read path first (Patient
-Access, Provider Access, Payer-to-Payer, metrics); Prior Authorization write-back is phase 2.
+**Process:** questionnaire → 90-minute discovery workshop → fixed-scope SOW. Phase 1 is the daily file drop
+(Patient Access, Provider Access, Payer-to-Payer, metrics), with no QNXT API license or database access.
+Phase 2, only if needed, is an optional live adapter for real-time reads and Prior Authorization write-back.
 
 **Credibility line:** Scoped by an architect with 25+ years in payer core systems, nearly two decades of
 them on QNXT.
