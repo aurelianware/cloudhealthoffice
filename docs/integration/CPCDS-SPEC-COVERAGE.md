@@ -21,7 +21,9 @@ column map instead of renaming its file
   `unrecognizedColumns`. An ignored column never refuses a row.
 
 The importers themselves are documented in
-[CPCDS-FILE-DROP-IMPORTER.md](CPCDS-FILE-DROP-IMPORTER.md).
+[CPCDS-FILE-DROP-IMPORTER.md](CPCDS-FILE-DROP-IMPORTER.md). CHO also writes
+CPCDS, with the same element names, so its export loads back without a column
+map ([CPCDS-EXPORT.md](CPCDS-EXPORT.md)).
 
 ## Members
 

@@ -733,6 +733,22 @@ builder.Services.AddSingleton<ClaimsService.Extracts.IExtractDestination>(sp =>
 });
 builder.Services.AddScoped<ClaimsService.Extracts.IClaimExtractStore, ClaimsService.Extracts.ClaimExtractStoreMongo>();
 builder.Services.AddScoped<ClaimsService.Extracts.IClaimExtractSource, ClaimsService.Extracts.ClaimExtractSourceMongo>();
+// The CPCDS export (a tenant's IncludeCpcds) reads the whole membership and
+// its coverage a page at a time; a large plan takes minutes.
+builder.Services.AddHttpClient(ClaimsService.Extracts.Cpcds.HttpCpcdsEnrollmentSource.MemberClientName, client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:MemberService"] ?? "http://member-service:8080");
+    client.Timeout = TimeSpan.FromMinutes(2);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+builder.Services.AddHttpClient(ClaimsService.Extracts.Cpcds.HttpCpcdsEnrollmentSource.CoverageClientName, client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:CoverageService"] ?? "http://coverage-service:8080");
+    client.Timeout = TimeSpan.FromMinutes(2);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+builder.Services.AddScoped<ClaimsService.Extracts.Cpcds.ICpcdsEnrollmentSource,
+    ClaimsService.Extracts.Cpcds.HttpCpcdsEnrollmentSource>();
 builder.Services.AddScoped<ClaimsService.Extracts.ClaimExtractRunner>();
 builder.Services.AddHostedService<ClaimsService.Extracts.ClaimExtractWorker>();
 

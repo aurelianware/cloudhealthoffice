@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using ClaimsService.Controllers;
 using ClaimsService.Extracts;
+using ClaimsService.Extracts.Cpcds;
 using ClaimsService.Models;
 using CloudHealthOffice.Infrastructure.Security;
 using FluentAssertions;
@@ -247,6 +248,70 @@ public sealed class ClaimExtractTests : IDisposable
         (await Controller().Start(full: false)).Should().BeOfType<ConflictObjectResult>();
     }
 
+    [Fact]
+    public async Task With_cpcds_on_the_run_also_delivers_the_cpcds_member_coverage_and_claim_files()
+    {
+        await _store.SaveSettingsAsync(Tenant, true, "DUA-2026-014", "admin-1", Now.AddDays(-10), includeCpcds: true);
+        var paid = Claim("c1", "v1", Now.AddDays(-3), ClaimVersionState.Paid);
+        paid.Status = ClaimStatus.Paid;
+        var pending = Claim("c2", "v2", Now.AddDays(-2), ClaimVersionState.Submitted);
+        pending.Status = ClaimStatus.Pended;
+        _source.Claims.AddRange([paid, pending]);
+        var enrollment = new InMemoryCpcdsEnrollmentSource();
+        enrollment.Members.Add(new CpcdsExportMember("M-1, Jr", "Ana", "Diaz", null, new DateTime(1980, 5, 1), "F",
+            "1 Main St", "Austin", "TX", "78701", null, "18", true, null));
+        enrollment.Members.Add(new CpcdsExportMember("M-2", "Leo", "Diaz", null, new DateTime(2015, 2, 3), "M",
+            null, null, null, null, "M-1, Jr", "19", false, null));
+        enrollment.Coverages.Add(new CpcdsExportCoverage("cov-2", "M-2", "G-1", "Acme", "PLAN-A", "Gold", "HLT",
+            new DateTime(2026, 1, 1), null));
+
+        var run = (await Runner(enrollment: enrollment).RunAsync(Tenant, "schedule", false, default)).Run!;
+
+        run.Status.Should().Be(ClaimExtractRunStatus.Succeeded);
+        run.Cpcds.Should().BeTrue();
+        run.Files.Select(f => f.Name).Should().Equal(
+            "claims.csv", "claim-lines.csv", "CPCDS_Members.csv", "CPCDS_Coverages.csv", "CPCDS_Claims.csv", "manifest.json");
+        var folder = Path.Combine(_root, Tenant, "outbound", "extracts", "claims", run.Id);
+
+        var claims = File.ReadAllLines(Path.Combine(folder, "CPCDS_Claims.csv"));
+        claims.Should().HaveCount(3, "a header and the paid claim's two lines; the pending claim is not adjudicated");
+        claims.Skip(1).Should().AllSatisfy(l => l.Should().StartWith("CLM-c1,\"M-1, Jr\","));
+
+        var members = File.ReadAllLines(Path.Combine(folder, "CPCDS_Members.csv"));
+        members.Should().HaveCount(3);
+        members[2].Should().Be("M-2,Leo,Diaz,,2015-02-03,,male,,,,,\"M-1, Jr\",child");
+        var coverages = File.ReadAllLines(Path.Combine(folder, "CPCDS_Coverages.csv"));
+        coverages[1].Should().Be("cov-2,M-2,\"M-1, Jr\",medical,active,2026-01-01,,G-1,Acme,PLAN-A,Gold,child");
+
+        using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "manifest.json")));
+        manifest.RootElement.GetProperty("cpcds").GetBoolean().Should().BeTrue();
+        var files = manifest.RootElement.GetProperty("files");
+        files.GetArrayLength().Should().Be(5);
+        files[4].GetProperty("rows").GetInt64().Should().Be(2);
+        files[2].GetProperty("columns")[0].GetString().Should().Be("Member id");
+    }
+
+    [Fact]
+    public async Task With_cpcds_on_and_no_enrollment_source_the_run_fails_and_keeps_the_watermark()
+    {
+        await _store.SaveSettingsAsync(Tenant, true, "DUA-2026-014", "admin-1", Now.AddDays(-10), includeCpcds: true);
+
+        var run = (await Runner().RunAsync(Tenant, "schedule", false, default)).Run!;
+
+        run.Status.Should().Be(ClaimExtractRunStatus.Failed);
+        (await _store.GetSettingsAsync(Tenant))!.Watermark.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Cpcds_is_turned_on_with_the_settings()
+    {
+        var saved = await Controller().Put(
+            new ClaimExtractSettingsRequest { Enabled = true, DataUseAgreement = "DUA-7", IncludeCpcds = true }, default);
+
+        ((ClaimExtractSettingsView)((OkObjectResult)saved.Result!).Value!).IncludeCpcds.Should().BeTrue();
+        (await _store.GetSettingsAsync(Tenant))!.IncludeCpcds.Should().BeTrue();
+    }
+
     private ClaimExtractsController Controller()
     {
         var actor = Substitute.For<ICurrentActor>();
@@ -262,9 +327,9 @@ public sealed class ClaimExtractTests : IDisposable
 
     private Task Enable() => _store.SaveSettingsAsync(Tenant, true, "DUA-2026-014", "admin-1", Now.AddDays(-10));
 
-    private ClaimExtractRunner Runner(IExtractDestination? destination = null) => new(
+    private ClaimExtractRunner Runner(IExtractDestination? destination = null, ICpcdsEnrollmentSource? enrollment = null) => new(
         _store, _source, destination ?? new FolderExtractDestination(_root), Options.Create(_options),
-        NullLogger<ClaimExtractRunner>.Instance, _clock);
+        NullLogger<ClaimExtractRunner>.Instance, _clock, enrollment);
 
     private IEnumerable<string> Ids(ClaimExtractRun run) =>
         File.ReadAllLines(Path.Combine(_root, Tenant, "outbound", "extracts", "claims", run.Id, "claims.csv"))
