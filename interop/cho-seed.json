@@ -337,7 +337,7 @@
         "servicingProviderNPI": "1234567893",
         "requestedServiceDateFrom": "2026-01-01T00:00:00Z",
         "requestedServiceDateTo": "2099-12-30T00:00:00Z",
-        "status": 4,
+        "status": "Approved",
         "reviewDecision": "A1",
         "approvedServiceDateFrom": "2026-01-01T00:00:00Z",
         "approvedServiceDateTo": "2099-12-30T00:00:00Z",

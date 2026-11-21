@@ -314,7 +314,7 @@ async function verify(fixture, token) {
       throw new Error(`authorization ${authorization.authorizationNumber} answered ${status}.\n${text.slice(0, 2000)}`);
     }
     const stored = JSON.parse(text);
-    if (stored.status !== authorization.status && stored.status !== 'Approved') {
+    if (stored.status !== authorization.status) {
       throw new Error(`authorization ${authorization.authorizationNumber} is ${stored.status}, not ${authorization.status}.`);
     }
   }
