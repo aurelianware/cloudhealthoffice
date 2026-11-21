@@ -8,6 +8,9 @@
 #   ./scripts/interop/fetch-inferno.sh us-core
 #   ./scripts/interop/fetch-inferno.sh plan-net
 #   ./scripts/interop/fetch-inferno.sh bulk-data
+#   ./scripts/interop/fetch-inferno.sh crd
+#   ./scripts/interop/fetch-inferno.sh pas
+#   ./scripts/interop/fetch-inferno.sh smart
 #   ./scripts/interop/fetch-inferno.sh us-core c4bb   # several at once
 #
 # Upstream publishes no container image for these kits, so the harness builds one
@@ -43,7 +46,10 @@ case "$KIT" in
   us-core) KEY="inferno-us-core"; DIR_NAME="us-core-test-kit" ;;
   plan-net) KEY="inferno-plan-net"; DIR_NAME="davinci-plan-net-test-kit" ;;
   bulk-data) KEY="inferno-bulk-data"; DIR_NAME="bulk-data-test-kit" ;;
-  *)       echo "Usage: $0 {pdex|dtr|c4bb|us-core|plan-net|bulk-data}" >&2; exit 2 ;;
+  crd)     KEY="inferno-crd";     DIR_NAME="davinci-crd-test-kit" ;;
+  pas)     KEY="inferno-pas";     DIR_NAME="davinci-pas-test-kit" ;;
+  smart)   KEY="inferno-smart";   DIR_NAME="smart-app-launch-test-kit" ;;
+  *)       echo "Usage: $0 {pdex|dtr|c4bb|us-core|plan-net|bulk-data|crd|pas|smart}" >&2; exit 2 ;;
 esac
 
 read -r REPO TAG COMMIT < <(python3 - "$VERSIONS" "$KEY" <<'PY'

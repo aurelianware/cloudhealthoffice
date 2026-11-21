@@ -22,6 +22,18 @@ public enum CrdContextFailure
 
     /// <summary>A store CHO needed was unreachable or errored. IG reason <c>technical</c>.</summary>
     Unavailable,
+
+    /// <summary>
+    /// The member is known, but the EHR's Coverage names a plan or group CHO
+    /// holds no active coverage under for them. IG reason <c>coverage-not-found</c>.
+    /// </summary>
+    CoverageNotFound,
+
+    /// <summary>
+    /// The hook sent no Coverage and CHO's read of the EHR's FHIR server failed,
+    /// so which coverage the order is under is unknown. IG reason <c>technical</c>.
+    /// </summary>
+    EhrCoverageUnreadable,
 }
 
 /// <summary>
@@ -124,7 +136,24 @@ public sealed class CrdContextResolver : ICrdContextResolver
                 return CrdContextResolution.Unresolved(CrdContextFailure.MemberNotFound);
             }
 
-            coverage = await ActiveCoverageAsync(patientId, tenantId, ct);
+            var active = await ActiveCoveragesAsync(patientId, tenantId, ct);
+            coverage = active.FirstOrDefault();
+
+            // The EHR's Coverage names the plan or group the order is under,
+            // as printed on the member's card. When it does, CHO answers under
+            // that coverage or, holding none that matches, says so: a
+            // determination under some other coverage of the member's would
+            // be about benefits the order is not billed against.
+            if (coverage is not null && request.EhrCoverage is { } ehrCoverage)
+            {
+                var named = CoverageClasses(ehrCoverage);
+                if (named.Count > 0)
+                {
+                    coverage = active.FirstOrDefault(c => Matches(c, ehrCoverage, named));
+                    if (coverage is null)
+                        return CrdContextResolution.Unresolved(CrdContextFailure.CoverageNotFound);
+                }
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -211,7 +240,7 @@ public sealed class CrdContextResolver : ICrdContextResolver
         });
     }
 
-    private async Task<Coverage?> ActiveCoverageAsync(string patientId, string tenantId, CancellationToken ct)
+    private async Task<List<Coverage>> ActiveCoveragesAsync(string patientId, string tenantId, CancellationToken ct)
     {
         var (items, _) = await _adapter.SearchCoverageAsync(
             new CoverageSearchParams { Patient = patientId, Status = "active" }, tenantId, ct);
@@ -219,7 +248,50 @@ public sealed class CrdContextResolver : ICrdContextResolver
         // The search filter is honoured by the ChoNative adapter, but an adapter
         // that ignored it must not be allowed to produce a determination against
         // lapsed coverage.
-        return items.FirstOrDefault(c => c.Status is null or FinancialResourceStatusCodes.Active);
+        return items.Where(c => c.Status is null or FinancialResourceStatusCodes.Active).ToList();
+    }
+
+    /// <summary>The <c>group</c> and <c>plan</c> classes a FHIR Coverage (JSON) carries, as (type, value).</summary>
+    internal static List<(string Type, string Value)> CoverageClasses(System.Text.Json.JsonElement coverage)
+    {
+        var classes = new List<(string, string)>();
+        if (coverage.ValueKind != System.Text.Json.JsonValueKind.Object
+            || !coverage.TryGetProperty("class", out var items)
+            || items.ValueKind != System.Text.Json.JsonValueKind.Array)
+            return classes;
+
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != System.Text.Json.JsonValueKind.Object
+                || !item.TryGetProperty("value", out var value) || value.ValueKind != System.Text.Json.JsonValueKind.String
+                || !item.TryGetProperty("type", out var type) || !type.TryGetProperty("coding", out var codings)
+                || codings.ValueKind != System.Text.Json.JsonValueKind.Array)
+                continue;
+
+            foreach (var coding in codings.EnumerateArray())
+            {
+                if (coding.TryGetProperty("code", out var code) && code.ValueKind == System.Text.Json.JsonValueKind.String
+                    && code.GetString() is "group" or "plan")
+                    classes.Add((code.GetString()!, value.GetString()!));
+            }
+        }
+
+        return classes;
+    }
+
+    /// <summary>
+    /// A CHO Coverage is the one the EHR means when it carries the same id, or
+    /// every group and plan class the EHR's Coverage names.
+    /// </summary>
+    private static bool Matches(Coverage cho, System.Text.Json.JsonElement ehr, List<(string Type, string Value)> named)
+    {
+        if (ehr.TryGetProperty("id", out var id) && id.ValueKind == System.Text.Json.JsonValueKind.String
+            && string.Equals(id.GetString(), cho.Id, StringComparison.Ordinal))
+            return true;
+
+        return named.All(n => cho.Class.Any(c =>
+            string.Equals(c.Value, n.Value, StringComparison.OrdinalIgnoreCase)
+            && c.Type?.Coding.Any(t => t.Code == n.Type) == true));
     }
 
     /// <summary>

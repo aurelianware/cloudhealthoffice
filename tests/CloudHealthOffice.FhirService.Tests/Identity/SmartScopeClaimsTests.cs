@@ -101,4 +101,27 @@ public class SmartScopeClaimsTests
         // it literally does not get it read as a grant.
         => SmartScopeClaims.Parse(Principal(("http://schemas.microsoft.com/identity/claims/scope", "system/*.read")))
             .Should().BeEmpty();
+
+    // ── SMART v2 ──────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("patient/*.rs", "patient/*.read")]
+    [InlineData("user/Coverage.rs", "user/Coverage.read")]
+    [InlineData("system/Claim.cud", "system/Claim.write")]
+    public void AV2Scope_AlsoReadsAsItsExactV1Equivalent(string v2, string v1)
+        => SmartScopeClaims.Parse(Principal(("scope", v2))).Should().BeEquivalentTo([v2, v1]);
+
+    [Fact]
+    public void Cruds_IsBothReadAndWrite()
+        => SmartScopeClaims.Parse(Principal(("scope", "patient/Patient.cruds")))
+            .Should().BeEquivalentTo(["patient/Patient.cruds", "patient/Patient.read", "patient/Patient.write"]);
+
+    [Theory]
+    [InlineData("patient/Observation.r")]
+    [InlineData("patient/Observation.s")]
+    [InlineData("user/Claim.c")]
+    [InlineData("patient/Observation.rs?category=laboratory")]
+    [InlineData("patient/Observation.sr")]
+    public void AV2ScopeNarrowerThanAnyV1Scope_GrantsNoV1Scope(string v2)
+        => SmartScopeClaims.Parse(Principal(("scope", v2))).Should().BeEquivalentTo([v2]);
 }

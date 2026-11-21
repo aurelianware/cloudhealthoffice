@@ -63,6 +63,13 @@ on:
       - 'src/services/smart-auth-service/**'
       - 'src/engines/CloudHealthOffice.PriorAuthRuleEngine/**'
   workflow_dispatch:
+    inputs:
+      kits:
+        description: >-
+          Inferno kits to run, comma-separated (us-core, c4bb, plan-net,
+          bulk-data, pdex, dtr, crd, pas, smart), or all
+        required: false
+        default: all
   schedule:
     # Nightly, so an upstream registry or IG-package change is caught before it
     # surprises a pull request. Pins never move on their own — a nightly failure
@@ -258,6 +265,17 @@ jobs:
   #                              adaptive form, ValueSet/$expand, error cases
   #                              and $log-questionnaire-errors; the kit is a
   #                              provider's DTR client
+  #   INFERNO-CRD-SERVER-001     CRD 2.2.1 server — CDS Hooks discovery, the
+  #                              order-select and order-sign services, and the
+  #                              specific coverage responses; the kit is the
+  #                              EHR, signing each hook call with its own key
+  #   INFERNO-PAS-SERVER-001     PAS 2.2.1 server — rest-hook Subscription,
+  #                              approval, denial and pended $submit, claim
+  #                              updates, $inquire and error cases; the kit is
+  #                              a provider's PAS client
+  #   INFERNO-SMART-SERVER-001   SMART App Launch 2.2 — standalone and EHR
+  #                              launch, OpenID Connect, refresh, backend
+  #                              services and introspection; the kit is the app
   #
   # The kits publish no upstream image, so each is fetched at the tag pinned in
   # interop/versions.json and built locally. The fetch script refuses a checkout
@@ -273,10 +291,15 @@ jobs:
   # secret, no Docker socket mounted, host ports bound to 127.0.0.1, all data
   # synthetic.
   inferno:
-    name: Inferno conformance kits judging CHO (US Core, CARIN BB, Plan-Net, Bulk Data, PDex, DTR)
+    name: Inferno conformance kits judging CHO (US Core, CARIN BB, Plan-Net, Bulk Data, PDex, DTR, CRD, PAS, SMART)
     runs-on: ubuntu-latest
     needs: harness
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # TEMPORARY (remove before this PR leaves draft): the pull request that
+    # adds the CRD, PAS and SMART kits runs just those three on every push, so
+    # each fix is judged by the kits without a manual dispatch.
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && github.head_ref == 'claude/inferno-pas-crd-smart-kits')
     continue-on-error: true
     # Five kit builds, eight CHO service builds, and five suites that validate
     # every resource they read. The outer bound, not an expectation.
@@ -307,13 +330,23 @@ jobs:
           docker system prune --all --force >/dev/null
           df -h /
 
+      # A dispatch can name a subset (`crd,pas,smart`) to confirm a fix without
+      # paying for every kit; the nightly always runs all of them.
       - name: Fetch the pinned conformance kits
-        run: ./scripts/interop/fetch-inferno.sh us-core c4bb plan-net bulk-data pdex dtr
+        env:
+          KITS: ${{ github.event.inputs.kits || (github.event_name == 'pull_request' && 'crd,pas,smart') || 'all' }}
+        run: |
+          if [ "$KITS" = "all" ]; then
+            ./scripts/interop/fetch-inferno.sh us-core c4bb plan-net bulk-data pdex dtr crd pas smart
+          else
+            ./scripts/interop/fetch-inferno.sh $(echo "$KITS" | tr ',' ' ')
+          fi
 
       - name: Run the conformance kits against CHO
         env:
           CHO_INTEROP_ENVIRONMENT: CI
-        run: ./scripts/interop/run.sh inferno all
+          KITS: ${{ github.event.inputs.kits || (github.event_name == 'pull_request' && 'crd,pas,smart') || 'all' }}
+        run: ./scripts/interop/run.sh inferno "$KITS"
 
       # Every kit validates through the inferno-validator sidecar, and when it
       # answers with anything but 200 the kits report "Unable to connect to
@@ -384,7 +417,8 @@ jobs:
   # whose inferno job left evidence. The push-triggered publish above never
   # writes it, so a push cannot replace the last nightly's results with
   # "not run". A manual dispatch on main publishes too, because that is how
-  # a fix is confirmed before the next nightly.
+  # a fix is confirmed before the next nightly, unless it ran only some kits:
+  # publishing that would drop the others from the snapshot.
   publish-inferno:
     name: Publish latest Inferno conformance evidence
     runs-on: ubuntu-latest
@@ -393,6 +427,7 @@ jobs:
       always() && needs.inferno.result != 'skipped' && needs.inferno.result != 'cancelled'
       && github.ref == 'refs/heads/main'
       && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      && (github.event.inputs.kits == '' || github.event.inputs.kits == 'all' || github.event.inputs.kits == null)
     permissions:
       contents: write
       actions: write
@@ -446,6 +481,9 @@ jobs:
           artifacts/interop/badges/inferno-bulk-data.json:badges/inferno-bulk-data.json
           artifacts/interop/badges/inferno-pdex.json:badges/inferno-pdex.json
           artifacts/interop/badges/inferno-dtr.json:badges/inferno-dtr.json
+          artifacts/interop/badges/inferno-crd.json:badges/inferno-crd.json
+          artifacts/interop/badges/inferno-pas.json:badges/inferno-pas.json
+          artifacts/interop/badges/inferno-smart.json:badges/inferno-smart.json
 
       - name: Redeploy the site
         if: steps.publish.outputs.published == 'true'

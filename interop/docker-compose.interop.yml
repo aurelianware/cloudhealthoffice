@@ -19,6 +19,9 @@
 #   interop-us-core      Inferno US Core test kit      (INFERNO-USCORE-SERVER-001; the US Core floor)
 #   interop-plan-net     Inferno Plan-Net test kit     (INFERNO-PLANNET-SERVER-001; judges the public Provider Directory)
 #   interop-bulk-data    Inferno Bulk Data test kit    (INFERNO-BULK-SERVER-001; judges SMART Backend Services, Group and Patient export)
+#   interop-crd          Inferno CRD test kit          (INFERNO-CRD-SERVER-001; judges CHO's CDS Hooks CRD services)
+#   interop-pas          Inferno PAS test kit          (INFERNO-PAS-SERVER-001; judges $submit, $inquire and pended-decision notifications)
+#   interop-smart        Inferno SMART App Launch kit  (INFERNO-SMART-SERVER-001; judges cho-smart-auth-service)
 #
 # Normally you do not run this file by hand — `scripts/interop/run.sh` and the
 # harness (InteropEnvironment) bring up exactly the services a scenario needs.
@@ -59,6 +62,9 @@ volumes:
   inferno_us_core_data:
   inferno_plan_net_data:
   inferno_bulk_data_data:
+  inferno_crd_data:
+  inferno_pas_data:
+  inferno_smart_data:
   inferno_redis_data:
   inferno_validator_igs:
 
@@ -249,6 +255,10 @@ services:
         REGISTRY: ${CHO_IMAGE_REGISTRY:-mcr.microsoft.com}
     profiles: [interop-cho]
     networks: [interop]
+    # Published so the harness can decide a pended PAS request as a
+    # utilization reviewer would (INFERNO-PAS-SERVER-001).
+    ports:
+      - "127.0.0.1:${INTEROP_CHO_AUTHORIZATION_PORT:-18031}:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       MongoDb__ConnectionString: mongodb://interop-mongo:27017
@@ -354,6 +364,12 @@ services:
       MongoDb__ConnectionString: mongodb://interop-mongo:27017
       MongoDb__DatabaseName: InteropSmartAuthDB
       SmartAuth__Issuer: ${INTEROP_SMART_ISSUER:-http://cho-smart-auth-service:8080}
+      # The SMART kit (INFERNO-SMART-SERVER-001) is the app: its redirect and
+      # launch URIs are on http://inferno-smart:4567, reached by host name in
+      # this network. Development only; production redirects are https.
+      SmartAuth__AllowedHttpRedirectHosts__0: inferno-smart
+      # Browser-based (public) SMART apps call the token endpoint cross-origin.
+      Cors__AllowedOrigins__0: http://inferno-smart:4567
       # No SmartAuth:SigningCertificates here, so OpenIddict makes development
       # signing and encryption certificates and saves them to the current
       # user's X509 store under $HOME. The image's appuser is a system account
@@ -445,8 +461,16 @@ services:
       # own order-sign service and hand the DTR kit its context-only request
       # (DTR spec-107). The code is one of the MRI form's focus codes.
       Cms0057__Crd__DocumentationRequiredCodes__0: "72148"
+      # The CRD kit (INFERNO-CRD-SERVER-001) plays the EHR: it signs each CDS
+      # Hooks call with a key from its own JWK Set (CDS Hooks 2.0). CHO trusts
+      # that one client, by issuer and key set, in the interop tenant.
+      CdsHooks__TrustedClients__0__Issuer: http://inferno-crd:4567/custom/crd_server_v221
+      CdsHooks__TrustedClients__0__JwksUrl: http://inferno-crd:4567/custom/crd_server_v221/jwks.json
+      CdsHooks__TrustedClients__0__TenantId: interop-tenant
       SmartAuth__Issuer: ${INTEROP_SMART_ISSUER:-http://cho-smart-auth-service:8080}
       SmartAuth__RequireHttpsMetadata: "false"
+      # The SMART kit reads .well-known/smart-configuration cross-origin.
+      Cors__AllowedOrigins__0: http://inferno-smart:4567
       # The bundled issuer serves this tenant. appsettings.Development.json
       # confines it to demo-tenant, which would refuse every SMART token here.
       SmartAuth__Tenants__0: interop-tenant
@@ -853,13 +877,200 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # The kit that judges CHO as a CRD server (INFERNO-CRD-SERVER-001). It is the
+  # EHR: it signs each hook call with its own key and serves the EHR FHIR API
+  # CHO reads when a hook carries no prefetch. The worker makes the hook calls.
+  inferno-crd-migrate:
+    profiles: [interop-crd]
+    networks: [interop]
+    image: cho-interop/inferno-crd:local
+    build:
+      context: ${INTEROP_INFERNO_CRD_DIR:-./.external/davinci-crd-test-kit}
+    command: ["bundle", "exec", "inferno", "migrate"]
+    volumes:
+      - inferno_crd_data:/opt/inferno/data
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-crd:
+    profiles: [interop-crd]
+    networks: [interop]
+    image: cho-interop/inferno-crd:local
+    build:
+      context: ${INTEROP_INFERNO_CRD_DIR:-./.external/davinci-crd-test-kit}
+    environment:
+      <<: *inferno-sidecars
+      # The kit tells CHO where to reach it (a hook's fhirServer and jku, a
+      # Subscription's endpoint, a redirect_uri) from INFERNO_HOST. Its own
+      # default, http://localhost, is the kit's container to CHO, so CHO
+      # could never answer it.
+      INFERNO_HOST: http://inferno-crd:4567
+    volumes:
+      - inferno_crd_data:/opt/inferno/data
+    ports:
+      - "127.0.0.1:${INTEROP_INFERNO_CRD_PORT:-14573}:4567"
+    depends_on:
+      <<: *inferno-depends
+      inferno-crd-migrate:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-crd-worker:
+    profiles: [interop-crd]
+    networks: [interop]
+    image: cho-interop/inferno-crd:local
+    build:
+      context: ${INTEROP_INFERNO_CRD_DIR:-./.external/davinci-crd-test-kit}
+    command: ["bundle", "exec", "sidekiq", "-r", "./worker.rb"]
+    environment:
+      <<: *inferno-sidecars
+      # The kit tells CHO where to reach it (a hook's fhirServer and jku, a
+      # Subscription's endpoint, a redirect_uri) from INFERNO_HOST. Its own
+      # default, http://localhost, is the kit's container to CHO, so CHO
+      # could never answer it.
+      INFERNO_HOST: http://inferno-crd:4567
+    volumes:
+      - inferno_crd_data:/opt/inferno/data
+    depends_on:
+      <<: *inferno-depends
+      inferno-crd-migrate:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+
+  # The kit that judges CHO as a PAS server (INFERNO-PAS-SERVER-001): $submit,
+  # $inquire, and the rest-hook notification CHO sends when a pended prior
+  # authorization is decided.
+  inferno-pas-migrate:
+    profiles: [interop-pas]
+    networks: [interop]
+    image: cho-interop/inferno-pas:local
+    build:
+      context: ${INTEROP_INFERNO_PAS_DIR:-./.external/davinci-pas-test-kit}
+    command: ["bundle", "exec", "inferno", "migrate"]
+    volumes:
+      - inferno_pas_data:/opt/inferno/data
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-pas:
+    profiles: [interop-pas]
+    networks: [interop]
+    image: cho-interop/inferno-pas:local
+    build:
+      context: ${INTEROP_INFERNO_PAS_DIR:-./.external/davinci-pas-test-kit}
+    environment:
+      <<: *inferno-sidecars
+      # The kit tells CHO where to reach it (a hook's fhirServer and jku, a
+      # Subscription's endpoint, a redirect_uri) from INFERNO_HOST. Its own
+      # default, http://localhost, is the kit's container to CHO, so CHO
+      # could never answer it.
+      INFERNO_HOST: http://inferno-pas:4567
+    volumes:
+      - inferno_pas_data:/opt/inferno/data
+    ports:
+      - "127.0.0.1:${INTEROP_INFERNO_PAS_PORT:-14574}:4567"
+    depends_on:
+      <<: *inferno-depends
+      inferno-pas-migrate:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-pas-worker:
+    profiles: [interop-pas]
+    networks: [interop]
+    image: cho-interop/inferno-pas:local
+    build:
+      context: ${INTEROP_INFERNO_PAS_DIR:-./.external/davinci-pas-test-kit}
+    command: ["bundle", "exec", "sidekiq", "-r", "./worker.rb"]
+    environment:
+      <<: *inferno-sidecars
+      # The kit tells CHO where to reach it (a hook's fhirServer and jku, a
+      # Subscription's endpoint, a redirect_uri) from INFERNO_HOST. Its own
+      # default, http://localhost, is the kit's container to CHO, so CHO
+      # could never answer it.
+      INFERNO_HOST: http://inferno-pas:4567
+    volumes:
+      - inferno_pas_data:/opt/inferno/data
+    depends_on:
+      <<: *inferno-depends
+      inferno-pas-migrate:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+
+  # The kit that judges cho-smart-auth-service as a SMART App Launch 2.2
+  # authorization server (INFERNO-SMART-SERVER-001). The harness plays the user
+  # and the EHR; the kit is the app.
+  inferno-smart-migrate:
+    profiles: [interop-smart]
+    networks: [interop]
+    image: cho-interop/inferno-smart:local
+    build:
+      context: ${INTEROP_INFERNO_SMART_DIR:-./.external/smart-app-launch-test-kit}
+    command: ["bundle", "exec", "inferno", "migrate"]
+    volumes:
+      - inferno_smart_data:/opt/inferno/data
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-smart:
+    profiles: [interop-smart]
+    networks: [interop]
+    image: cho-interop/inferno-smart:local
+    build:
+      context: ${INTEROP_INFERNO_SMART_DIR:-./.external/smart-app-launch-test-kit}
+    environment:
+      <<: *inferno-sidecars
+      # The kit tells CHO where to reach it (a hook's fhirServer and jku, a
+      # Subscription's endpoint, a redirect_uri) from INFERNO_HOST. Its own
+      # default, http://localhost, is the kit's container to CHO, so CHO
+      # could never answer it.
+      INFERNO_HOST: http://inferno-smart:4567
+    volumes:
+      - inferno_smart_data:/opt/inferno/data
+    ports:
+      - "127.0.0.1:${INTEROP_INFERNO_SMART_PORT:-14575}:4567"
+    depends_on:
+      <<: *inferno-depends
+      inferno-smart-migrate:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-smart-worker:
+    profiles: [interop-smart]
+    networks: [interop]
+    image: cho-interop/inferno-smart:local
+    build:
+      context: ${INTEROP_INFERNO_SMART_DIR:-./.external/smart-app-launch-test-kit}
+    command: ["bundle", "exec", "sidekiq", "-r", "./worker.rb"]
+    environment:
+      <<: *inferno-sidecars
+      # The kit tells CHO where to reach it (a hook's fhirServer and jku, a
+      # Subscription's endpoint, a redirect_uri) from INFERNO_HOST. Its own
+      # default, http://localhost, is the kit's container to CHO, so CHO
+      # could never answer it.
+      INFERNO_HOST: http://inferno-smart:4567
+    volumes:
+      - inferno_smart_data:/opt/inferno/data
+    depends_on:
+      <<: *inferno-depends
+      inferno-smart-migrate:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+
   # ── Shared sidecars for the kit profiles ──────────────────────────────────
   # Both carry every kit profile, so starting a kit starts them and nothing
   # else does. Pinned by digest for the same reason the reference
   # implementations are: the validator's output IS the conformance verdict, so a
   # floating tag would mean the verdict could change without a reviewable diff.
   inferno-redis:
-    profiles: [interop-pdex, interop-dtr-inferno, interop-c4bb, interop-us-core, interop-plan-net, interop-bulk-data]
+    profiles: [interop-pdex, interop-dtr-inferno, interop-c4bb, interop-us-core, interop-plan-net, interop-bulk-data,
+               interop-crd, interop-pas, interop-smart]
     networks: [interop]
     # redis:7-alpine, resolved on 2026-10-23. Upstream's own compose uses a
     # floating `redis`; the queue's exact version does not affect a verdict, but
@@ -877,7 +1088,8 @@ services:
       - no-new-privileges:true
 
   inferno-validator:
-    profiles: [interop-pdex, interop-dtr-inferno, interop-c4bb, interop-us-core, interop-plan-net, interop-bulk-data]
+    profiles: [interop-pdex, interop-dtr-inferno, interop-c4bb, interop-us-core, interop-plan-net, interop-bulk-data,
+               interop-crd, interop-pas, interop-smart]
     networks: [interop]
     # infernocommunity/inferno-resource-validator:latest, resolved on
     # 2026-10-23. This is the service each suite's `fhir_resource_validator`

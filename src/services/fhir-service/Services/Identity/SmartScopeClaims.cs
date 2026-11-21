@@ -68,13 +68,80 @@ public static class SmartScopeClaims
         if (scope is null && scp is null)
             return new Result(new HashSet<string>(StringComparer.Ordinal), false);
         if (scp is null)
-            return new Result(scope!, false);
+            return new Result(WithV1Equivalents(scope!), false);
         if (scope is null)
-            return new Result(scp, false);
+            return new Result(WithV1Equivalents(scp), false);
 
         return scope.SetEquals(scp)
-            ? new Result(scope, false)
+            ? new Result(WithV1Equivalents(scope), false)
             : new Result(new HashSet<string>(StringComparer.Ordinal), true);
+    }
+
+    /// <summary>
+    /// Adds the SMART v1 scope each SMART v2 resource scope is exactly
+    /// equivalent to (SMART App Launch 2.x §Scopes for requesting FHIR
+    /// resources), so every check, which is written in v1 terms, reads both.
+    ///
+    /// <list type="bullet">
+    ///   <item><c>{ctx}/{T}.rs</c> (read and search) is <c>{ctx}/{T}.read</c>.</item>
+    ///   <item><c>{ctx}/{T}.cud</c> (create, update and delete) is <c>{ctx}/{T}.write</c>.</item>
+    ///   <item><c>{ctx}/{T}.cruds</c> is both.</item>
+    /// </list>
+    ///
+    /// Only an exact equivalent is added. A v2 scope narrower than any v1
+    /// scope (<c>.r</c> without <c>s</c>, <c>.c</c> alone, or a granular
+    /// <c>?category=</c> scope) adds nothing, so it grants nothing here: fail
+    /// closed rather than widen a grant the client did not receive.
+    /// </summary>
+    internal static HashSet<string> WithV1Equivalents(HashSet<string> scopes)
+    {
+        List<string>? added = null;
+        foreach (var scope in scopes)
+        {
+            var slash = scope.IndexOf('/');
+            var dot = scope.LastIndexOf('.');
+            if (slash <= 0 || dot <= slash + 1 || scope.Contains('?'))
+                continue;
+
+            var context = scope[..slash];
+            if (context is not ("patient" or "user" or "system"))
+                continue;
+
+            var permissions = scope[(dot + 1)..];
+            if (!IsV2Permissions(permissions))
+                continue;
+
+            var prefix = scope[..dot];
+            if (permissions.Contains('r') && permissions.Contains('s'))
+                (added ??= []).Add(prefix + ".read");
+            if (permissions.Contains('c') && permissions.Contains('u') && permissions.Contains('d'))
+                (added ??= []).Add(prefix + ".write");
+        }
+
+        if (added is null)
+            return scopes;
+
+        var result = new HashSet<string>(scopes, StringComparer.Ordinal);
+        result.UnionWith(added);
+        return result;
+    }
+
+    /// <summary>A non-empty subsequence of <c>cruds</c>, in that order, each letter at most once.</summary>
+    private static bool IsV2Permissions(string permissions)
+    {
+        if (permissions.Length is 0 or > 5)
+            return false;
+
+        var at = 0;
+        foreach (var letter in permissions)
+        {
+            var next = "cruds".IndexOf(letter, at);
+            if (next < 0)
+                return false;
+            at = next + 1;
+        }
+
+        return true;
     }
 
     /// <summary>The scopes, or none when the two claims conflict.</summary>

@@ -228,6 +228,106 @@
       "requiredServices": ["cho-fhir-service", "inferno-pdex"],
       "implemented": false,
       "description": "Run the davinci-pdex-test-kit pdex_payer_client suite with CHO acting as the payer client performing $member-match and clinical data retrieval."
+    },
+    {
+      "id": "INFERNO-CRD-SERVER-001",
+      "title": "Inferno CRD 2.2.1 server suite against CHO's CDS Hooks services",
+      "protocol": "CRD",
+      "choRole": "Server",
+      "externalTarget": "inferno-crd",
+      "requiredServices": [
+        "cho-fhir-service",
+        "cho-smart-auth-service",
+        "cho-member-service",
+        "cho-coverage-service",
+        "cho-authorization-service",
+        "inferno-crd"
+      ],
+      "implemented": true,
+      "infernoSuite": "crd_server_v221",
+      "infernoGroups": [],
+      "infernoInputs": [
+        "base_url",
+        "encryption_method",
+        "order_sign_request_bodies",
+        "order_select_request_bodies",
+        "any_hook_request_body",
+        "technical_issues_request_body",
+        "no_member_found_request_body",
+        "coverage_not_found_request_body",
+        "no_active_coverage_request_body",
+        "mock_ehr_bundle"
+      ],
+      "infernoAuth": "cdsHooksClient",
+      "choSurface": "cdsHooks",
+      "description": "Run the davinci-crd-test-kit crd_server_v221 suite against CHO's CDS Hooks services, with the kit as the EHR. It reads CHO's discovery document, then calls CHO's order-select and order-sign services with the draft orders in tests/DaVinciInterop.Tests/Harness/CrdServerRequests.cs, signing each call with a JWT from its own key set as CDS Hooks 2.0 requires; CHO trusts that issuer because the interop profile lists it under CdsHooks:TrustedClients. Every card and system action is validated against CRD 2.2.1, and the kit sends the extra calls it uses to probe unknown configuration, context and CDS Hooks elements. The specific coverage responses group sends a member CHO does not know (not-covered, no-member-found), a known member whose Coverage CHO does not hold (coverage-not-found), a member whose coverage has ended (no-active-coverage), and a hook with no prefetch whose fhirServer answers 500 (indeterminate, technical). The appointment-book, encounter-start, encounter-discharge and order-dispatch hook groups are optional in the suite and skip, because CHO's discovery lists no service for them."
+    },
+    {
+      "id": "INFERNO-PAS-SERVER-001",
+      "title": "Inferno PAS 2.2.1 server suite against CHO",
+      "protocol": "PAS",
+      "choRole": "Server",
+      "externalTarget": "inferno-pas",
+      "requiredServices": [
+        "cho-fhir-service",
+        "cho-smart-auth-service",
+        "cho-member-service",
+        "cho-coverage-service",
+        "cho-authorization-service",
+        "cho-provider-service",
+        "inferno-pas"
+      ],
+      "implemented": true,
+      "infernoSuite": "davinci_pas_server_suite_v221",
+      "infernoGroups": [],
+      "infernoInputs": [
+        "server_endpoint",
+        "smart_credentials",
+        "access_token",
+        "subscription_resource",
+        "approval_pa_submit_request_payload",
+        "denial_pa_submit_request_payload",
+        "pended_pa_submit_request_payload",
+        "pended_pa_inquire_request_payload",
+        "must_support_pa_submit_request_payload",
+        "must_support_pa_inquire_request_payload",
+        "claim_update_initial_submit_payload",
+        "claim_update_add_item_submit_payload",
+        "claim_update_modify_cancel_submit_payload",
+        "claim_update_cancel_all_submit_payload"
+      ],
+      "infernoAuth": "pasClientBackendServices",
+      "description": "Run the davinci-pas-test-kit davinci_pas_server_suite_v221 suite against the interop-cho profile, with the kit as a provider's PAS client authenticating with SMART Backend Services as the seed's pasBackendClient. It creates a rest-hook Subscription to the PAS pended-authorization topic and waits for CHO's handshake, then submits the approval, denial and pended prior authorization requests. The requests are the kit's own examples (config/presets/pas_server_v221_run_against_pas_client.json.erb at the pinned tag), re-pointed by tests/DaVinciInterop.Tests/Harness/PasServerRequests.cs at the seeded member, Coverage and provider and at the services CHO's rules approve, deny and pend. While the pended test waits, the harness decides the pended request through authorization-service as a utilization reviewer would, and CHO notifies the kit, which then reads the decision with $inquire. It also runs the claim update steps (add an item, cancel one, cancel all), the must-support requests, and the error cases (an invalid $submit and an invalid $inquire answered with an OperationOutcome)."
+    },
+    {
+      "id": "INFERNO-SMART-SERVER-001",
+      "title": "Inferno SMART App Launch 2.2 suite against cho-smart-auth-service",
+      "protocol": "SMART App Launch",
+      "choRole": "Server",
+      "externalTarget": "inferno-smart",
+      "requiredServices": [
+        "cho-fhir-service",
+        "cho-smart-auth-service",
+        "cho-member-service",
+        "cho-coverage-service",
+        "inferno-smart"
+      ],
+      "implemented": true,
+      "infernoSuite": "smart_stu2_2",
+      "infernoGroups": [
+        "smart_full_standalone_launch",
+        "smart_full_ehr_launch",
+        "smart_backend_services",
+        "smart_token_introspection_stu2_2"
+      ],
+      "infernoInputs": [
+        "url",
+        "standalone_smart_auth_info",
+        "ehr_smart_auth_info",
+        "backend_services_smart_auth_info"
+      ],
+      "infernoAuth": "smartApp",
+      "description": "Run the smart-app-launch-test-kit smart_stu2_2 suite against cho-smart-auth-service and fhir-service, with the kit as the app. The harness registers the kit as a confidential asymmetric client (private_key_jwt, the kit's own JWKS) with the kit's redirect and launch URIs, and plays the user and the EHR. Standalone launch: the kit redirects to CHO's authorize endpoint with SMART v2 scopes (launch/patient openid fhirUser offline_access patient/*.rs) and PKCE, the harness signs in as the seeded member and approves the consent page, and the kit exchanges the code, checks the token response and its patient context, validates the OpenID Connect id_token and fhirUser, and refreshes with and without scopes. EHR launch: the harness creates a launch context for the member through smart-auth-service, opens the kit's launch URI with iss and launch, and approves; the kit checks the same, with the launch context. Backend services: the kit authenticates with private_key_jwt as the seed's backendClient. Token introspection: the kit introspects the tokens it received. The TLS tests report omit, as for every kit here."
     }
   ]
 }

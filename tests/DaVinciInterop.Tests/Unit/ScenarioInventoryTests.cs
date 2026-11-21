@@ -25,6 +25,9 @@ public sealed class ScenarioInventoryTests
     [InlineData("INFERNO-C4BB-SERVER-001")]
     [InlineData("INFERNO-PLANNET-SERVER-001")]
     [InlineData("INFERNO-BULK-SERVER-001")]
+    [InlineData("INFERNO-CRD-SERVER-001")]
+    [InlineData("INFERNO-PAS-SERVER-001")]
+    [InlineData("INFERNO-SMART-SERVER-001")]
     public void The_planned_scenario_inventory_is_present(string scenarioId)
     {
         Inventory.Scenario(scenarioId).Should().NotBeNull();
@@ -44,6 +47,7 @@ public sealed class ScenarioInventoryTests
                 "INFERNO-USCORE-SERVER-001", "INFERNO-C4BB-SERVER-001",
                 "INFERNO-PLANNET-SERVER-001", "INFERNO-BULK-SERVER-001", "INFERNO-PDEX-SERVER-001",
                 "INFERNO-DTR-PAYER-001",
+                "INFERNO-CRD-SERVER-001", "INFERNO-PAS-SERVER-001", "INFERNO-SMART-SERVER-001",
             ]);
     }
 
@@ -253,11 +257,16 @@ public sealed class ScenarioInventoryTests
             var patientToken = scenario.InfernoAuth == InfernoAuthModes.PatientApp ? "patient-app-token" : null;
             // A DTR suite is given the Coverage and CRD context the run reads from CHO; any ids stand in here.
             var dtrSource = new DtrSourceData("coverage-id", "context-id");
-            var act = () => InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken, dtrSource);
+            // A CRD suite is given the Coverage ids the run reads from CHO; any ids stand in here.
+            var crdSource = new CrdSourceData("coverage-id", CrdSourceData.LapsedMember, "lapsed-coverage-id");
+            // A PAS suite is given the kit's own example requests, read from its checkout at run time,
+            // which a unit test does not have; any value stands in for each.
+            var pasInputs = scenario.InfernoInputs.ToDictionary(name => name, _ => "{}");
+            var act = () => InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken, dtrSource, crdSource, pasInputs);
 
             act.Should().NotThrow($"'{scenario.Id}' declares inputs [{string.Join(", ", scenario.InfernoInputs)}]");
 
-            InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken, dtrSource)
+            InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken, dtrSource, crdSource, pasInputs)
                 .Select(input => input.Name)
                 .Should().BeEquivalentTo(scenario.InfernoInputs);
         }
@@ -279,9 +288,10 @@ public sealed class ScenarioInventoryTests
                 "'{0}' is implemented against a conformance kit, so it must say which suite it runs",
                 scenario.Id);
 
-            // A Bulk Data suite names its base bulk_server_url; every other kit, url.
+            // A Bulk Data suite names its base bulk_server_url, a CRD suite base_url, a
+            // PAS suite server_endpoint; every other kit, url.
             scenario.InfernoInputs.Should().Contain(
-                input => input == "url" || input == "bulk_server_url",
+                input => input == "url" || input == "bulk_server_url" || input == "base_url" || input == "server_endpoint",
                 "'{0}' must tell the suite where CHO is", scenario.Id);
         }
     }
@@ -445,8 +455,10 @@ public sealed class ScenarioInventoryTests
         workers.Should().NotBeEmpty();
         foreach (Match worker in workers)
         {
-            worker.Groups["body"].Value.Should().Contain(
-                "environment: *inferno-sidecars",
+            // Either the shared environment as it is, or merged into one that
+            // adds the kit's own INFERNO_HOST.
+            var body = worker.Groups["body"].Value;
+            (body.Contains("environment: *inferno-sidecars") || body.Contains("<<: *inferno-sidecars")).Should().BeTrue(
                 "'{0}' runs the TLS tests, so it must take the shared kit environment", worker.Groups["name"].Value);
         }
     }
@@ -521,7 +533,8 @@ public sealed class ScenarioInventoryTests
         {
             scenario.InfernoAuth.Should().BeOneOf(
                 InfernoAuthModes.ChoToken, InfernoAuthModes.BackendServices, InfernoAuthModes.PayerBackendServices,
-                InfernoAuthModes.DtrClientBackendServices, InfernoAuthModes.PatientApp);
+                InfernoAuthModes.DtrClientBackendServices, InfernoAuthModes.PatientApp,
+                InfernoAuthModes.CdsHooksClient, InfernoAuthModes.PasClientBackendServices, InfernoAuthModes.SmartApp);
         }
     }
 
@@ -530,7 +543,7 @@ public sealed class ScenarioInventoryTests
     {
         foreach (var scenario in Inventory.Scenarios)
         {
-            scenario.ChoSurface.Should().BeOneOf(ChoSurfaces.Fhir, ChoSurfaces.PublicDirectory);
+            scenario.ChoSurface.Should().BeOneOf(ChoSurfaces.Fhir, ChoSurfaces.PublicDirectory, ChoSurfaces.CdsHooks);
         }
     }
 }

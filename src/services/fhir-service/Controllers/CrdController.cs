@@ -21,6 +21,24 @@ public class CrdController : FhirControllerBase
     private readonly CrdConfig _config;
     private readonly ILogger<CrdController> _logger;
 
+    /// <summary>The CRD version every service answers, and the options a client may set per call.</summary>
+    private static Dictionary<string, object> CrdExtension() => new()
+    {
+        ["davinci-crd.version"] = new[] { "2.2" },
+        ["davinci-crd.configuration-options"] = new[]
+        {
+            new CrdConfigurationOption
+            {
+                Code = "coverage-info",
+                Type = "boolean",
+                Name = "Coverage information",
+                Description = "Return coverage-information system actions recording CHO's coverage "
+                              + "determination on each order. Cards are returned either way.",
+                Default = true,
+            },
+        },
+    };
+
     private static readonly CrdDiscoveryResponse DiscoveryPayload = new()
     {
         Services = new List<CrdServiceDefinition>
@@ -36,6 +54,7 @@ public class CrdController : FhirControllerBase
                     ["patient"] = "Patient/{{context.patientId}}",
                     ["coverage"] = "Coverage?patient={{context.patientId}}&status=active",
                 },
+                Extension = CrdExtension(),
             },
             new()
             {
@@ -48,6 +67,7 @@ public class CrdController : FhirControllerBase
                     ["patient"] = "Patient/{{context.patientId}}",
                     ["coverage"] = "Coverage?patient={{context.patientId}}&status=active",
                 },
+                Extension = CrdExtension(),
             },
         },
     };
@@ -83,7 +103,9 @@ public class CrdController : FhirControllerBase
     /// CDS Hooks execution endpoint. Evaluates coverage requirements for the given hook.
     /// </summary>
     [HttpPost("{hookId}")]
-    [FhirAccess(smart: true, cho: "authorizations:read")]
+    // An EHR calls with its CDS Hooks client JWT (CDS Hooks 2.0); SMART apps
+    // and CHO callers are admitted as before.
+    [FhirAccess(smart: true, cho: "authorizations:read", cdsHooks: true)]
     public async Task<IActionResult> ExecuteHook(
         string hookId,
         [FromBody] CrdHookRequest request,

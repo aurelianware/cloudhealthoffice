@@ -29,26 +29,39 @@ public sealed class FhirAccessAttribute : AuthorizeAttribute
     public const string PolicyPrefix = "fhir-access:";
 
     public FhirAccessAttribute(bool smart, string? cho)
+        : this(smart, cho, cdsHooks: false)
+    {
+    }
+
+    /// <param name="cdsHooks">An EHR authenticated by its CDS Hooks client JWT is admitted (CDS Hooks endpoints only).</param>
+    public FhirAccessAttribute(bool smart, string? cho, bool cdsHooks)
     {
         Smart = smart;
         Cho = cho;
-        Policy = $"{PolicyPrefix}{(smart ? "smart" : "-")}|{cho ?? "-"}";
+        CdsHooks = cdsHooks;
+        var callers = string.Join('+', new[] { smart ? "smart" : null, cdsHooks ? "cds-hooks" : null }.OfType<string>());
+        Policy = $"{PolicyPrefix}{(callers.Length > 0 ? callers : "-")}|{cho ?? "-"}";
     }
 
     public bool Smart { get; }
+
+    public bool CdsHooks { get; }
 
     public string? Cho { get; }
 }
 
 public sealed class FhirAccessRequirement : IAuthorizationRequirement
 {
-    public FhirAccessRequirement(bool smart, IReadOnlyList<string> choAnyOf)
+    public FhirAccessRequirement(bool smart, IReadOnlyList<string> choAnyOf, bool cdsHooks = false)
     {
         Smart = smart;
         ChoAnyOf = choAnyOf;
+        CdsHooks = cdsHooks;
     }
 
     public bool Smart { get; }
+
+    public bool CdsHooks { get; }
 
     public IReadOnlyList<string> ChoAnyOf { get; }
 }
@@ -60,6 +73,8 @@ public sealed class FhirAccessAuthorizationHandler : AuthorizationHandler<FhirAc
         var user = context.User;
 
         if (requirement.Smart && FhirCallerSchemes.IsSmart(user))
+            context.Succeed(requirement);
+        else if (requirement.CdsHooks && FhirCallerSchemes.IsCdsHooksClient(user))
             context.Succeed(requirement);
         else if (requirement.ChoAnyOf.Count > 0
                  && FhirCallerSchemes.IsCho(user)
@@ -91,14 +106,16 @@ public sealed class FhirAccessPolicyProvider : IAuthorizationPolicyProvider
             return _shared.GetPolicyAsync(policyName);
 
         var parts = policyName[FhirAccessAttribute.PolicyPrefix.Length..].Split('|');
-        var smart = parts[0] == "smart";
+        var callers = parts[0].Split('+');
+        var smart = callers.Contains("smart");
+        var cdsHooks = callers.Contains("cds-hooks");
         var cho = parts.Length > 1 && parts[1] != "-"
             ? parts[1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             : [];
 
         return Task.FromResult<AuthorizationPolicy?>(new AuthorizationPolicyBuilder()
             .RequireAuthenticatedUser()
-            .AddRequirements(new FhirAccessRequirement(smart, cho))
+            .AddRequirements(new FhirAccessRequirement(smart, cho, cdsHooks))
             .Build());
     }
 }

@@ -473,6 +473,21 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             return false;
         uri = parsed;
         if (parsed.Scheme == Uri.UriSchemeHttps) return true;
-        return _environment.IsDevelopment() && parsed.Scheme == Uri.UriSchemeHttp && parsed.IsLoopback;
+        if (!_environment.IsDevelopment() || parsed.Scheme != Uri.UriSchemeHttp) return false;
+        return parsed.IsLoopback || AllowedHttpRedirectHosts().Contains(parsed.Host);
     }
+
+    /// <summary>
+    /// Development only: hosts other than loopback an http redirect may name,
+    /// from <c>SmartAuth:AllowedHttpRedirectHosts</c>. A test harness whose
+    /// SMART app runs in another container (the Inferno SMART kit, at
+    /// http://inferno-smart:4567) is reached by host name, not loopback.
+    /// Never consulted outside Development.
+    /// </summary>
+    private HashSet<string> AllowedHttpRedirectHosts()
+        => (HttpContext?.RequestServices.GetService<IConfiguration>()
+                ?.GetSection("SmartAuth:AllowedHttpRedirectHosts").Get<string[]>() ?? [])
+            .Where(h => !string.IsNullOrWhiteSpace(h))
+            .Select(h => h.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 }
