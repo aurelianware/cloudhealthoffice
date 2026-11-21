@@ -154,16 +154,23 @@ public interface IPriorAuthorizationStore
     /// </summary>
     Task<PriorAuthorizationRecord?> GetByAuthorizationNumberAsync(
         string authorizationNumber, CancellationToken ct = default);
+}
 
+/// <summary>
+/// The member's decided-approved authorizations, read live from
+/// authorization-service, for CRD to answer pa-needed <c>satisfied</c>. A
+/// separate seam from <see cref="IPriorAuthorizationStore"/>, which stays the
+/// single PAS inquiry lookup; like it, this reads and never writes or keeps.
+/// </summary>
+public interface IApprovedAuthorizationSearch
+{
     /// <summary>
-    /// The member's approved (and approved-as-modified) authorizations, for CRD
-    /// to answer pa-needed <c>satisfied</c>. Empty when there are none or they
-    /// cannot be read: a requirement CHO cannot show is satisfied stays a
-    /// requirement.
+    /// The member's approved (and approved-as-modified) authorizations. Empty
+    /// when there are none or they cannot be read: a requirement CHO cannot
+    /// show is satisfied stays a requirement.
     /// </summary>
     Task<IReadOnlyList<PriorAuthorizationRecord>> FindApprovedForMemberAsync(
-        string memberId, CancellationToken ct = default)
-        => System.Threading.Tasks.Task.FromResult<IReadOnlyList<PriorAuthorizationRecord>>([]);
+        string memberId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -171,7 +178,7 @@ public interface IPriorAuthorizationStore
 /// the read endpoint that already exists (<c>GET api/authorizations/number/{n}</c>).
 /// No new store, no new status field, no second copy of the state.
 /// </summary>
-public sealed class HttpPriorAuthorizationStore : IPriorAuthorizationStore
+public sealed class HttpPriorAuthorizationStore : IPriorAuthorizationStore, IApprovedAuthorizationSearch
 {
     public const string HttpClientName = "AuthorizationService";
 

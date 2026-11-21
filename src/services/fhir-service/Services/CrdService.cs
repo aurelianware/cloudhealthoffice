@@ -26,7 +26,7 @@ public class CrdService : ICrdService
     private readonly ICrdEhrCoverageReader? _ehrCoverage;
     private readonly CrdPayerContact? _payerContact;
     private readonly string? _policyUrl;
-    private readonly IPriorAuthorizationStore? _priorAuthorizations;
+    private readonly IApprovedAuthorizationSearch? _priorAuthorizations;
 
     public CrdService(
         IHttpClientFactory httpClientFactory,
@@ -40,7 +40,7 @@ public class CrdService : ICrdService
         IOptions<DtrConfig>? dtrConfig = null,
         ICrdEhrCoverageReader? ehrCoverage = null,
         IOptions<FhirService.Services.PlanOrganization.PlanOrganizationOptions>? planOrganization = null,
-        IPriorAuthorizationStore? priorAuthorizations = null)
+        IApprovedAuthorizationSearch? priorAuthorizations = null)
     {
         _ehrCoverage = ehrCoverage;
         // Optional: without it, an authorization requirement is never

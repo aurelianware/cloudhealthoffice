@@ -344,7 +344,7 @@ public class CrdCoverageInformationTests
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private CrdService Service(
-        IPriorAuthorizationStore? authorizations = null, DateOnly? coverageEnd = null) => new(
+        IApprovedAuthorizationSearch? authorizations = null, DateOnly? coverageEnd = null) => new(
         new UnavailableTerminology(),
         _engine.Object,
         Options.Create(Config),
@@ -463,12 +463,9 @@ public class CrdCoverageInformationTests
         RequestedServices = [new PriorAuthorizationService { ProcedureCode = code, ServiceStatus = lineStatus }],
     };
 
-    private sealed class ApprovedAuthorizations(params PriorAuthorizationRecord[] records) : IPriorAuthorizationStore
+    private sealed class ApprovedAuthorizations(params PriorAuthorizationRecord[] records) : IApprovedAuthorizationSearch
     {
         public List<string> Members { get; } = [];
-
-        public Task<PriorAuthorizationRecord?> GetByAuthorizationNumberAsync(string authorizationNumber, CancellationToken ct = default)
-            => Task.FromResult(records.FirstOrDefault(r => r.AuthorizationNumber == authorizationNumber));
 
         public Task<IReadOnlyList<PriorAuthorizationRecord>> FindApprovedForMemberAsync(string memberId, CancellationToken ct = default)
         {

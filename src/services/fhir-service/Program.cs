@@ -552,6 +552,10 @@ builder.Services.AddScoped<FhirService.Services.Pas.IPasAuthorizationRecorder,
 // no inquiry-specific status.
 builder.Services.AddScoped<FhirService.Services.IPriorAuthorizationStore,
     FhirService.Services.HttpPriorAuthorizationStore>();
+// CRD's pa-needed "satisfied": the member's approved authorizations, read live
+// from the same service through the same client.
+builder.Services.AddScoped<FhirService.Services.IApprovedAuthorizationSearch,
+    FhirService.Services.HttpPriorAuthorizationStore>();
 builder.Services.AddScoped<FhirService.Services.IPriorAuthorizationInquiryService,
     FhirService.Services.PriorAuthorizationInquiryService>();
 // D-26 caller binding. Absent configuration the patient binding observes and
