@@ -246,9 +246,17 @@ builder.Services.AddHttpClient(ClaimTenantConfigCache.HttpClientName)
     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddSingleton<ClaimTenantConfigCache>();
 builder.Services.AddScoped<IClaimAdapter, ChoClaimAdapter>();
-builder.Services.AddScoped<IClaimAdapter, QnxtClaimAdapter>();
-builder.Services.AddScoped<IClaimAdapter, FacetsClaimAdapter>();
-builder.Services.AddScoped<IClaimAdapter, HealthEdgeClaimAdapter>();
+// Live core connectors (QNXT, Facets, HealthEdge) are an optional integration
+// point, off by default: plans feed CHO through the daily file drop instead
+// (docs/integration/CORE-INTEGRATION-OPTIONS.md). Registered only when
+// CoreIntegration:LiveConnectors:Enabled is true; otherwise a tenant naming a
+// vendor platform is refused with 501 by the adapter factory.
+if (CloudHealthOffice.Infrastructure.Tenancy.LiveCoreConnectors.IsEnabled(builder.Configuration))
+{
+    builder.Services.AddScoped<IClaimAdapter, QnxtClaimAdapter>();
+    builder.Services.AddScoped<IClaimAdapter, FacetsClaimAdapter>();
+    builder.Services.AddScoped<IClaimAdapter, HealthEdgeClaimAdapter>();
+}
 builder.Services.AddScoped<ClaimAdapterFactory>();
 
 // Canonical claim submission orchestration (5.3). Wraps the
