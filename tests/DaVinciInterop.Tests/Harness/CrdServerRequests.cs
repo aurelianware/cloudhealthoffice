@@ -30,6 +30,16 @@ public static class CrdServerRequests
     /// <summary>The EHR's Coverage for the unknown member (a different id from the coverage-not-found one).</summary>
     public const string UnknownMemberCoverageId = "interop-coverage-unknown-member";
 
+    /// <summary>
+    /// Each specific-case request orders the MRI under its own id. They differ
+    /// (another patient, another Coverage), and the kit's simulated EHR holds
+    /// one resource per id: shared, the EHR's copy would not be the order the
+    /// request sent, and CHO's answer would look like it changed the order.
+    /// </summary>
+    public const string NoMemberFoundOrderId = "interop-crd-order-no-member";
+    public const string CoverageNotFoundOrderId = "interop-crd-order-coverage-not-found";
+    public const string NoActiveCoverageOrderId = "interop-crd-order-no-active-coverage";
+
     /// <summary>The draft order for the order-select hook.</summary>
     public const string SelectOrderId = "interop-crd-order-select";
 
@@ -70,6 +80,7 @@ public static class CrdServerRequests
     public static JsonObject NoMemberFound(ChoSeedFixture fixture)
     {
         var order = DtrPayerServerRequests.Order(fixture, UnknownMemberCoverageId);
+        order["id"] = NoMemberFoundOrderId;
         order["subject"] = new JsonObject { ["reference"] = $"Patient/{UnknownMemberId}" };
         return Hook("order-sign", UnknownMemberId, Coverage(UnknownMemberId, UnknownMemberCoverageId, "active"), order);
     }
@@ -97,8 +108,9 @@ public static class CrdServerRequests
             },
             ["value"] = UnknownGroupNumber,
         });
-        return Hook("order-sign", fixture.Member.MemberId, coverage,
-            DtrPayerServerRequests.Order(fixture, UnknownCoverageId));
+        var order = DtrPayerServerRequests.Order(fixture, UnknownCoverageId);
+        order["id"] = CoverageNotFoundOrderId;
+        return Hook("order-sign", fixture.Member.MemberId, coverage, order);
     }
 
     /// <summary>
@@ -108,6 +120,7 @@ public static class CrdServerRequests
     public static JsonObject NoActiveCoverage(ChoSeedFixture fixture, string lapsedMemberId, string lapsedCoverageId)
     {
         var order = DtrPayerServerRequests.Order(fixture, lapsedCoverageId);
+        order["id"] = NoActiveCoverageOrderId;
         order["subject"] = new JsonObject { ["reference"] = $"Patient/{lapsedMemberId}" };
         var coverage = Coverage(lapsedMemberId, lapsedCoverageId, "active");
         coverage["period"] = new JsonObject { ["start"] = "2025-01-01", ["end"] = "2025-12-31" };
@@ -171,6 +184,16 @@ public static class CrdServerRequests
     {
         ["hookInstance"] = Guid.NewGuid().ToString(),
         ["hook"] = hook,
+        // The EHR's grant to the CDS service. The kit fills in access_token
+        // (its simulated EHR's) and expires_in; the rest is the EHR's to say,
+        // and CDS Hooks 2.0 requires all of it.
+        ["fhirAuthorization"] = new JsonObject
+        {
+            ["token_type"] = "Bearer",
+            ["expires_in"] = 300,
+            ["scope"] = "patient/Patient.read patient/Coverage.read",
+            ["subject"] = "cho-crd",
+        },
         ["context"] = new JsonObject
         {
             ["userId"] = "Practitioner/interop-dtr-practitioner",

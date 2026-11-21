@@ -58,9 +58,22 @@ public static class PasServerRequests
 
             if (name.EndsWith("_payload", StringComparison.Ordinal))
             {
-                var bundle = JsonNode.Parse(value)!.AsObject();
-                Repoint(bundle, fixture);
-                value = bundle.ToJsonString();
+                // A payload is one bundle or, for the must-support and
+                // inquiry inputs, a list of them.
+                var payload = JsonNode.Parse(value)!;
+                var bundles = payload is JsonArray list ? list.OfType<JsonObject>().ToList() : [payload.AsObject()];
+                foreach (var bundle in bundles)
+                {
+                    Repoint(bundle, fixture);
+                    if (ServiceTypeFor(name) is { } serviceType)
+                        SetServiceType(bundle, serviceType);
+                }
+
+                value = payload.ToJsonString();
+            }
+            else if (name == "subscription_resource")
+            {
+                value = RepointSubscription(JsonNode.Parse(value)!.AsObject()).ToJsonString();
             }
 
             inputs[name] = value;
@@ -69,7 +82,69 @@ public static class PasServerRequests
         return inputs;
     }
 
-    /// <summary>The Subscription the kit creates, from its own example, unchanged: the kit points it at itself.</summary>
+    /// <summary>The service type (X12 1365) CHO's interop profile approves on sight.</summary>
+    public const string ApprovedServiceType = "3";
+
+    /// <summary>The service type the interop profile does not cover, so a request for it is denied.</summary>
+    public const string DeniedServiceType = "4";
+
+    /// <summary>A service type neither list names, so with no state on the request it is pended.</summary>
+    public const string PendedServiceType = "2";
+
+    private const string ServiceTypeSystem = "https://codesystem.x12.org/005010/1365";
+
+    /// <summary>
+    /// The kit's approval, denial and pended examples are the same request, so
+    /// each is given the service type that has CHO decide it the way the test
+    /// expects. Every other request keeps its own.
+    /// </summary>
+    public static string? ServiceTypeFor(string input) => input switch
+    {
+        "approval_pa_submit_request_payload" => ApprovedServiceType,
+        "denial_pa_submit_request_payload" => DeniedServiceType,
+        "pended_pa_submit_request_payload" => PendedServiceType,
+        _ => null,
+    };
+
+    /// <summary>Sets every Claim item's X12 service type code to <paramref name="code"/>.</summary>
+    public static void SetServiceType(JsonObject bundle, string code)
+    {
+        var claims = ((bundle["entry"] as JsonArray)?.OfType<JsonObject>() ?? [])
+            .Select(e => e["resource"] as JsonObject)
+            .Where(r => r?["resourceType"]?.GetValue<string>() == "Claim");
+        foreach (var item in claims.SelectMany(c => (c!["item"] as JsonArray)?.OfType<JsonObject>() ?? []))
+        {
+            foreach (var coding in (item["productOrService"]?["coding"] as JsonArray)?.OfType<JsonObject>() ?? [])
+            {
+                if (coding["system"]?.GetValue<string>() == ServiceTypeSystem)
+                    coding["code"] = code;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The kit's example Subscription filters on its example organization and
+    /// ended in 2020. It is re-pointed at the seeded provider, the one the
+    /// kit's requests are submitted for, and given an end in the future. Its
+    /// notification credential is the session's (<see cref="InfernoSuiteScenario.PasNotificationToken"/>)
+    /// alone: the kit adds that one beside the example's, and a subscriber
+    /// cannot read two. The kit points the endpoint at itself.
+    /// </summary>
+    public static JsonObject RepointSubscription(JsonObject subscription)
+    {
+        foreach (var filter in (subscription["_criteria"]?["extension"] as JsonArray)?.OfType<JsonObject>() ?? [])
+        {
+            if (filter["url"]?.GetValue<string>()?.EndsWith("/backport-filter-criteria", StringComparison.Ordinal) == true)
+                filter["valueString"] = $"org-identifier={ProviderNpi}";
+        }
+
+        subscription["end"] = DateTimeOffset.UtcNow.AddYears(1).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        if (subscription["channel"] is JsonObject channel)
+            channel["header"] = new JsonArray($"Authorization: Bearer {InfernoSuiteScenario.PasNotificationToken}");
+        return subscription;
+    }
+
+    /// <summary>The Subscription the kit creates, from its own example, re-pointed by <see cref="RepointSubscription"/>.</summary>
     public static string Subscription(ChoSeedFixture fixture)
         => Inputs(fixture).TryGetValue("subscription_resource", out var subscription)
             ? subscription

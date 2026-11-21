@@ -260,11 +260,31 @@ public class CrdCard
     [JsonPropertyName("source")]
     public CrdCardSource Source { get; set; } = new();
 
-    [JsonPropertyName("suggestions")]
+    [JsonIgnore]
     public List<CrdCardSuggestion> Suggestions { get; set; } = new();
 
-    [JsonPropertyName("links")]
+    [JsonIgnore]
     public List<CrdCardLink> Links { get; set; } = new();
+
+    /// <summary>
+    /// CDS Hooks omits an empty array: a card with no suggestions or links
+    /// carries neither property (CRD's response profiles refuse an empty one).
+    /// </summary>
+    [JsonPropertyName("suggestions")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<CrdCardSuggestion>? SuggestionsForJson
+    {
+        get => Suggestions.Count > 0 ? Suggestions : null;
+        set => Suggestions = value ?? new();
+    }
+
+    [JsonPropertyName("links")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<CrdCardLink>? LinksForJson
+    {
+        get => Links.Count > 0 ? Links : null;
+        set => Links = value ?? new();
+    }
 }
 
 public class CrdCardSource

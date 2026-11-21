@@ -70,7 +70,9 @@
     "providerId": "1234567893",
     "scopes": [
       "system/Claim.write",
-      "system/Claim.read"
+      "system/Claim.read",
+      "system/Subscription.write",
+      "system/Subscription.read"
     ]
   },
   "smartApp": {

@@ -73,6 +73,16 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
             StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// The resources the SMART layer knows that are about no member, so there
+    /// is no member's consent to decide: a PAS Subscription belongs to the
+    /// provider system that created it. Named here, one by one, so that the
+    /// structural test still fails for any other resource missing from
+    /// <see cref="GovernedResources"/>.
+    /// </summary>
+    public static readonly IReadOnlySet<string> NotMemberScopedResources =
+        new HashSet<string>(["Subscription"], StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// <c>HttpContext.Items</c> key under which an ALLOWED Provider Access
     /// decision records the member it authorized (bare id, no
     /// <c>Patient/</c> prefix). Controllers pin the read to it

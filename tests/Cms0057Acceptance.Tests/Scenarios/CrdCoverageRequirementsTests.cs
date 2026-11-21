@@ -204,9 +204,10 @@ public class CrdCoverageRequirementsTests
 
         card.Indicator.Should().Be("warning");
         card.Summary.Should().Contain("Prior authorization required");
-        // Governing rule is identified on the card source topic.
+        // The card is a CRD Coverage Information card: its topic is the CRD
+        // card type (coverage-info), and the determination is its summary.
         card.Source.Should().NotBeNull();
-        card.Source!.Topic!.Code.Should().Be("auth-required");
+        card.Source!.Topic!.Code.Should().Be("coverage-info");
     }
 
     [Fact]
@@ -298,7 +299,10 @@ public class CrdCoverageRequirementsTests
     {
         // The fail-closed half of D-21. An unresolved member used to be
         // evaluated against a hard-coded Texas Medicaid STAR rule set; it is
-        // now not evaluated at all, and the determination says why.
+        // now not evaluated at all, and the determination says why. CRD 2.2.1
+        // answers a member the payer cannot find as not covered, with reason
+        // no-member-found, and with no pa-needed at all (invariant crd-ci-q2):
+        // never "no authorization needed".
         var controller = BuildController(memberKnown: false);
 
         var result = await controller.ExecuteHook(
@@ -315,7 +319,8 @@ public class CrdCoverageRequirementsTests
             .Single(e => e.GetProperty("url").GetString() == CrdCoverageInformation.ExtensionUrl)
             .GetProperty("extension").EnumerateArray().ToList();
 
-        Value(parts, "pa-needed").Should().Be("indeterminate");
+        Value(parts, "covered").Should().Be("not-covered");
+        Value(parts, "pa-needed").Should().BeNull();
         parts.Single(p => p.GetProperty("url").GetString() == "reason")
             .GetProperty("valueCodeableConcept").GetProperty("coding")[0].GetProperty("code")
             .GetString().Should().Be("no-member-found");

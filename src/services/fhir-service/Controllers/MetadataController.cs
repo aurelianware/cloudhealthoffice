@@ -413,6 +413,21 @@ public class MetadataController : FhirControllerBase
                                     ("davinci-data-export", "http://hl7.org/fhir/us/davinci-atr/OperationDefinition/davinci-data-export"),
                                 ])]
                             : Array.Empty<CapabilityStatement.ResourceComponent>(),
+                        // ── PAS pended-decision Subscriptions (R4 backport) ─
+                        // Only when Subscriptions are enabled: a subscriber
+                        // on the PAS topic is told when a pended request is
+                        // decided.
+                        .. SubscriptionsEnabled
+                            ? [BuildResource("Subscription", [],
+                                interactions:
+                                [
+                                    CapabilityStatement.TypeRestfulInteraction.Create,
+                                    CapabilityStatement.TypeRestfulInteraction.Read,
+                                    CapabilityStatement.TypeRestfulInteraction.Update,
+                                    CapabilityStatement.TypeRestfulInteraction.Delete,
+                                ],
+                                supportedProfiles: [FhirService.Services.Subscriptions.PasSubscriptionTopic.BackportSubscriptionProfile])]
+                            : Array.Empty<CapabilityStatement.ResourceComponent>(),
                         // ── USCDI clinical resources (PAT-02) ─────────────
                         // Generated from ClinicalResourceInventory, the same
                         // table ClinicalResourceController routes from and the
@@ -513,6 +528,9 @@ public class MetadataController : FhirControllerBase
         => BulkExportEnabled
            && (_config.GetSection($"{Services.BulkExport.BulkExportOptions.SectionName}:SystemExport")
                    .Get<Services.BulkExport.SystemExportOptions>()?.IsOn ?? false);
+
+    private bool SubscriptionsEnabled
+        => _config.GetValue<bool>($"{Services.Subscriptions.PasSubscriptionOptions.SectionName}:Enabled");
 
     /// <summary>
     /// The FHIR search-parameter type for a clinical parameter name. <c>_id</c>

@@ -313,6 +313,7 @@ public class PasController : FhirControllerBase
                 break;
             case PriorAuthorizationStatus.Pended:
                 responseBundle = _responseBuilder.BuildPendedResponse(claim, kept.AuthorizationNumber, kept.RequestedServices);
+                await WatchForDecisionAsync(record.RequestingProviderNPI, kept.AuthorizationNumber, HttpContext.RequestAborted);
                 break;
             default:
                 RecordMetrics(sw, "error", "unanswerable-stored-status");
@@ -332,6 +333,31 @@ public class PasController : FhirControllerBase
             LogSanitizer.Sanitize(answer.RuleName));
 
         return Ok(responseBundle);
+    }
+
+    /// <summary>
+    /// A pended request is watched, so the provider's PAS Subscription is told
+    /// when it is decided. Off unless Subscriptions are enabled; a failure to
+    /// watch never fails the $submit, whose answer is already stored.
+    /// </summary>
+    private async System.Threading.Tasks.Task WatchForDecisionAsync(string? providerNpi, string authorizationNumber, CancellationToken ct)
+    {
+        var subscriptions = HttpContext?.RequestServices?
+            .GetService<FhirService.Services.Subscriptions.PasSubscriptionService>();
+        if (subscriptions is not { Enabled: true })
+            return;
+
+        try
+        {
+            await subscriptions.Store.WatchAsync(new FhirService.Services.Subscriptions.PasPendedWatch(
+                TenantId, authorizationNumber, string.IsNullOrWhiteSpace(providerNpi) ? null : providerNpi,
+                DateTimeOffset.UtcNow), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "PAS $submit: authorization {AuthNumber} is pended but could not be watched "
+                + "for a Subscription notification", LogSanitizer.Sanitize(authorizationNumber));
+        }
     }
 
     /// <summary>Recorded on a pended request; the ClaimResponse says the same (queued for review).</summary>

@@ -171,7 +171,7 @@ public class CrdUnresolvedMemberTests
 
     /// <summary>CRD configuration option coverage-info=false: cards only, no coverage-information.</summary>
     [Fact]
-    public async Task Coverage_info_switched_off_returns_cards_and_no_system_actions()
+    public async Task Coverage_info_switched_off_returns_no_coverage_information_cards_or_system_actions()
     {
         var hook = Hook("27447");
         hook.Extension = JsonDocument.Parse(
@@ -179,7 +179,9 @@ public class CrdUnresolvedMemberTests
 
         var result = await EvaluateAsync(hook, CrdContextResolverDouble.Unresolved(CrdContextFailure.ContextIncomplete));
 
-        result.Cards.Should().NotBeEmpty();
+        // Every CHO card is a coverage-information card (topic coverage-info),
+        // so with coverage-info off there is nothing to return, and still a 200.
+        result.Cards.Should().BeEmpty();
         result.SystemActions.Should().BeEmpty();
     }
 
