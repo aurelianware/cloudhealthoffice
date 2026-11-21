@@ -465,9 +465,11 @@ services:
       # one for the member (INTEROP-PA-KNEE-1), so the CRD kit sees CHO answer
       # pa-needed "satisfied" with that authorization as satisfied-pa-id.
       Cms0057__Crd__AuthRequiredCodes__0: "27447"
-      # The plan's coverage policy, which every coverage assertion links to
-      # (a coverage-information policy-link detail). Synthetic.
-      Cms0057__Crd__CoveragePolicyUrl: https://example.org/interop-health-plan/coverage-policies
+      # The policy page every coverage assertion links to (a
+      # coverage-information policy-link detail): CHO's own CMS-0057-F page,
+      # since the plan is synthetic. Not example.org: the CRD kit's validator
+      # refuses example URLs in a url value.
+      Cms0057__Crd__CoveragePolicyUrl: https://cloudhealthoffice.com/cms-0057f-compliance.html
       # The CRD kit (INFERNO-CRD-SERVER-001) plays the EHR: it signs each CDS
       # Hooks call with a key from its own JWK Set (CDS Hooks 2.0). CHO trusts
       # that one client, by issuer and key set, in the interop tenant.

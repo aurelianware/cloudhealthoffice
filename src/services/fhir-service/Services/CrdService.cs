@@ -336,7 +336,7 @@ public class CrdService : ICrdService
         CrdContextResolution context, CrdHookRequest request,
         List<CrdAssertionDraft> assertions, List<CrdCard> cards, CancellationToken ct)
     {
-        if (_priorAuthorizations is null || context.Context?.MemberId is not { Length: > 0 } memberId
+        if (_priorAuthorizations is null || (context.MemberId ?? context.Context?.MemberId) is not { Length: > 0 } memberId
             || !assertions.Any(a => a.Determination == CrdDetermination.AuthorizationRequired))
             return;
 

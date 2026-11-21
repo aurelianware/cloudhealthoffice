@@ -47,11 +47,21 @@ public sealed record CrdContextResolution
 
     public bool IsResolved => Context is not null;
 
-    /// <summary>The last day of the coverage CHO answered under, when it states one.</summary>
+    /// <summary>
+    /// The last day of the coverage CHO answered under, when it states one.
+    /// Known whenever the member and their coverage are, even when the rule
+    /// context is incomplete.
+    /// </summary>
     public DateOnly? CoverageEnd { get; init; }
 
+    /// <summary>
+    /// The member CHO matched, whenever it matched one and holds active
+    /// coverage for them, even when the rule context is incomplete.
+    /// </summary>
+    public string? MemberId { get; init; }
+
     public static CrdContextResolution Resolved(PaRuleContext context, DateOnly? coverageEnd = null)
-        => new() { Context = context, CoverageEnd = coverageEnd };
+        => new() { Context = context, CoverageEnd = coverageEnd, MemberId = context.MemberId };
     public static CrdContextResolution Unresolved(CrdContextFailure failure) => new() { Failure = failure };
 }
 
@@ -211,7 +221,14 @@ public sealed class CrdContextResolver : ICrdContextResolver
         // one.
         if (state is null || lob is null)
         {
-            return CrdContextResolution.Unresolved(CrdContextFailure.ContextIncomplete);
+            // No rule set, but the member and their coverage are known, so
+            // what depends only on those (an approved authorization, the
+            // coverage's end) can still be answered.
+            return CrdContextResolution.Unresolved(CrdContextFailure.ContextIncomplete) with
+            {
+                MemberId = patientId,
+                CoverageEnd = CoverageEnd(coverage),
+            };
         }
 
         var npi = PractitionerNpi(request);

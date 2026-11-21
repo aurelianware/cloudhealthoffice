@@ -344,14 +344,40 @@ public class CrdCoverageInformationTests
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private CrdService Service(
-        IApprovedAuthorizationSearch? authorizations = null, DateOnly? coverageEnd = null) => new(
+        IApprovedAuthorizationSearch? authorizations = null, DateOnly? coverageEnd = null,
+        ICrdContextResolver? resolver = null) => new(
         new UnavailableTerminology(),
         _engine.Object,
         Options.Create(Config),
         new CrdClassificationStore(new MemoryCache(new MemoryCacheOptions { SizeLimit = 1024 })),
-        CrdContextResolverDouble.Resolved(coverageEnd: coverageEnd),
+        resolver ?? CrdContextResolverDouble.Resolved(coverageEnd: coverageEnd),
         NullLogger<CrdService>.Instance,
         priorAuthorizations: authorizations);
+
+    /// <summary>
+    /// The interop member's coverage resolves no rule set (no state and line
+    /// of business), yet the member and the coverage are known: the approved
+    /// authorization and the coverage's end still apply (CRD kit run 6).
+    /// </summary>
+    [Fact]
+    public async Task A_known_member_without_a_rule_context_is_still_answered_satisfied_and_conditional()
+    {
+        var store = new ApprovedAuthorizations(Approved("PA-778", "27447"));
+        var satisfied = Extensions((await Service(store,
+                resolver: CrdContextResolverDouble.Incomplete("pat-001"))
+            .EvaluateCoverageRequirementsAsync(Hook("27447"), Tenant)).SystemActions).Single();
+        Part(satisfied, "pa-needed").Should().Be("satisfied");
+        AssertInvariants(satisfied);
+
+        var request = Hook("27447");
+        request.Context!.DraftOrders!.Entry![0].Resource!.OccurrenceDateTime = "2100-01-15";
+        var conditional = Extensions((await Service(
+                resolver: CrdContextResolverDouble.Incomplete("pat-002", new DateOnly(2099, 12, 31)))
+            .EvaluateCoverageRequirementsAsync(request, Tenant)).SystemActions).Single();
+        Part(conditional, "covered").Should().Be("conditional");
+        Part(conditional, "info-needed").Should().Be("contract-window");
+        AssertInvariants(conditional);
+    }
 
     // ── Satisfied, conditional and dependent answers ─────────────────────────
 
