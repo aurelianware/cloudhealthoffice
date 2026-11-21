@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "davinci-interoperability",
-  "generatedAtUtc": "2026-11-21T19:08:59Z",
-  "sourceCommit": "4abed4c67e038f31795b222d3fa2bf16891ef99e",
-  "sourceCommitShort": "4abed4c67e03",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/4abed4c67e038f31795b222d3fa2bf16891ef99e",
+  "generatedAtUtc": "2026-11-21T19:28:27Z",
+  "sourceCommit": "57169a34e49aae5ec7441c6adc2893227b2ff187",
+  "sourceCommitShort": "57169a34e49a",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/57169a34e49aae5ec7441c6adc2893227b2ff187",
   "inventoryReviewedUtc": "2026-10-23T00:00:00Z",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence. External interoperability results never change a CMS-0057-F scenario status, and CMS acceptance statuses never imply an interoperability result. See docs/interop/davinci.md and docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md.",
@@ -182,6 +182,68 @@
       "exercised": true
     },
     {
+      "name": "inferno-framework/davinci-crd-test-kit",
+      "key": "inferno-crd",
+      "role": "ConformanceRunner",
+      "protocols": [
+        "CRD"
+      ],
+      "upstreamRepository": "https://github.com/inferno-framework/davinci-crd-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "reference": "https://github.com/inferno-framework/davinci-crd-test-kit@v0.15.0",
+        "sourceCommit": "86be7f4bf6817960aa204f8ce134cea466bd73d2"
+      },
+      "implementationGuides": {
+        "CRD": "2.0.1 and 2.2.1",
+        "CDS Hooks": "2.0"
+      },
+      "igVersionProvenance": "Read from lib/davinci_crd_test_kit/server/v2.2.1/crd_server_suite.rb at the pinned tag (fhir_resource_validator igs 'hl7.fhir.us.davinci-crd#2.2.1') and the bundled igs/davinci_crd_2.2.1.tgz.",
+      "exercised": true
+    },
+    {
+      "name": "inferno-framework/davinci-pas-test-kit",
+      "key": "inferno-pas",
+      "role": "ConformanceRunner",
+      "protocols": [
+        "PAS"
+      ],
+      "upstreamRepository": "https://github.com/inferno-framework/davinci-pas-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "reference": "https://github.com/inferno-framework/davinci-pas-test-kit@v0.16.0",
+        "sourceCommit": "1db14e7899d0519138ed9ac72de8ad2c996c10ac"
+      },
+      "implementationGuides": {
+        "PAS": "2.0.1 and 2.2.1",
+        "Subscriptions R5 Backport": "1.1.0"
+      },
+      "igVersionProvenance": "Read from lib/davinci_pas_test_kit/server/generated/v2.2.1/server_suite.rb at the pinned tag (V221_VALIDATOR_IGS) and the bundled igs/.",
+      "exercised": true
+    },
+    {
+      "name": "inferno-framework/smart-app-launch-test-kit",
+      "key": "inferno-smart",
+      "role": "ConformanceRunner",
+      "protocols": [
+        "SMART App Launch"
+      ],
+      "upstreamRepository": "https://github.com/inferno-framework/smart-app-launch-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "reference": "https://github.com/inferno-framework/smart-app-launch-test-kit@v1.0.3",
+        "sourceCommit": "980e54e4ed632b28267d797013399a8588772174"
+      },
+      "implementationGuides": {
+        "SMART App Launch": "1.0.0, 2.0.0 and 2.2.0"
+      },
+      "igVersionProvenance": "Read from the suite ids and titles in lib/smart_app_launch/ at the pinned tag.",
+      "exercised": true
+    },
+    {
       "name": "hl7/fhir-validator (validator_cli.jar)",
       "key": "hl7-validator",
       "role": "ConformanceRunner",
@@ -349,20 +411,59 @@
       "status": "NotRun",
       "linkedArtifact": null,
       "testedVersion": null
+    },
+    {
+      "id": "INFERNO-CRD-SERVER-001",
+      "title": "Inferno CRD 2.2.1 server suite against CHO's CDS Hooks services",
+      "protocol": "CRD",
+      "choRole": "Server",
+      "externalTarget": "inferno-crd",
+      "implemented": true,
+      "linkedFromScenario": null,
+      "description": "Run the davinci-crd-test-kit crd_server_v221 suite against CHO's CDS Hooks services, with the kit as the EHR. It reads CHO's discovery document, then calls CHO's order-select and order-sign services with the draft orders in tests/DaVinciInterop.Tests/Harness/CrdServerRequests.cs, signing each call with a JWT from its own key set as CDS Hooks 2.0 requires; CHO trusts that issuer because the interop profile lists it under CdsHooks:TrustedClients. Every card and system action is validated against CRD 2.2.1, and the kit sends the extra calls it uses to probe unknown configuration, context and CDS Hooks elements. The specific coverage responses group sends a member CHO does not know (not-covered, no-member-found), a known member whose Coverage CHO does not hold (coverage-not-found), a member whose coverage has ended (no-active-coverage), and a hook with no prefetch whose fhirServer answers 500 (indeterminate, technical). The appointment-book, encounter-start, encounter-discharge and order-dispatch hook groups are optional in the suite and skip, because CHO's discovery lists no service for them.",
+      "status": "NotRun",
+      "linkedArtifact": null,
+      "testedVersion": null
+    },
+    {
+      "id": "INFERNO-PAS-SERVER-001",
+      "title": "Inferno PAS 2.2.1 server suite against CHO",
+      "protocol": "PAS",
+      "choRole": "Server",
+      "externalTarget": "inferno-pas",
+      "implemented": true,
+      "linkedFromScenario": null,
+      "description": "Run the davinci-pas-test-kit davinci_pas_server_suite_v221 suite against the interop-cho profile, with the kit as a provider's PAS client authenticating with SMART Backend Services as the seed's pasBackendClient. It creates a rest-hook Subscription to the PAS pended-authorization topic and waits for CHO's handshake, then submits the approval, denial and pended prior authorization requests. The requests are the kit's own examples (config/presets/pas_server_v221_run_against_pas_client.json.erb at the pinned tag), re-pointed by tests/DaVinciInterop.Tests/Harness/PasServerRequests.cs at the seeded member, Coverage and provider and at the services CHO's rules approve, deny and pend. While the pended test waits, the harness decides the pended request through authorization-service as a utilization reviewer would, and CHO notifies the kit, which then reads the decision with $inquire. It also runs the claim update steps (add an item, cancel one, cancel all), the must-support requests, and the error cases (an invalid $submit and an invalid $inquire answered with an OperationOutcome).",
+      "status": "NotRun",
+      "linkedArtifact": null,
+      "testedVersion": null
+    },
+    {
+      "id": "INFERNO-SMART-SERVER-001",
+      "title": "Inferno SMART App Launch 2.2 suite against cho-smart-auth-service",
+      "protocol": "SMART App Launch",
+      "choRole": "Server",
+      "externalTarget": "inferno-smart",
+      "implemented": true,
+      "linkedFromScenario": null,
+      "description": "Run the smart-app-launch-test-kit smart_stu2_2 suite against cho-smart-auth-service and fhir-service, with the kit as the app. The harness registers the kit as a confidential asymmetric client (private_key_jwt, the kit's own JWKS) with the kit's redirect and launch URIs, and plays the user and the EHR. Standalone launch: the kit redirects to CHO's authorize endpoint with SMART v2 scopes (launch/patient openid fhirUser offline_access patient/*.rs) and PKCE, the harness signs in as the seeded member and approves the consent page, and the kit exchanges the code, checks the token response and its patient context, validates the OpenID Connect id_token and fhirUser, and refreshes with and without scopes. EHR launch: the harness creates a launch context for the member through smart-auth-service, opens the kit's launch URI with iss and launch, and approves; the kit checks the same, with the launch context. Backend services: the kit authenticates with private_key_jwt as the seed's backendClient. Token introspection: the kit introspects the tokens it received. The TLS tests report omit, as for every kit here.",
+      "status": "NotRun",
+      "linkedArtifact": null,
+      "testedVersion": null
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-11-21T19:06:09.0758880+00:00",
+    "generatedAtUtc": "2026-11-21T19:28:09.7787363+00:00",
     "environment": "CI",
-    "choCommit": "4abed4c67e038f31795b222d3fa2bf16891ef99e",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/4abed4c67e038f31795b222d3fa2bf16891ef99e",
+    "choCommit": "57169a34e49aae5ec7441c6adc2893227b2ff187",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/57169a34e49aae5ec7441c6adc2893227b2ff187",
     "dataClassification": "synthetic",
     "summary": {
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "notRun": 8,
-      "total": 11
+      "notRun": 11,
+      "total": 14
     },
     "findings": [
       {
