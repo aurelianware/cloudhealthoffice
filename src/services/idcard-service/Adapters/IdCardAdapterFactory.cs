@@ -68,6 +68,14 @@ public class IdCardAdapterFactory
 
         if (adapter == null)
         {
+            // A vendor platform with no registered connector is refused, never
+            // answered with CHO's own data (ADR 027). Live connectors are off
+            // unless CoreIntegration:LiveConnectors:Enabled is true.
+            if (LiveCoreConnectors.IsVendorPlatform(platform))
+            {
+                throw new LiveCoreConnectorNotEnabledException("ID card", platform);
+            }
+
             _logger.LogWarning(
                 "No id-card adapter found for platform '{Platform}', falling back to 'cho'", LogSanitizer.Sanitize(platform));
             adapter = _adapters.First(a =>

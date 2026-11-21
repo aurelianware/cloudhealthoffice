@@ -165,9 +165,17 @@ builder.Services.AddHttpClient(BenefitPlanTenantConfigCache.HttpClientName)
     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddSingleton<BenefitPlanTenantConfigCache>();
 builder.Services.AddScoped<IBenefitPlanAdapter, ChoBenefitPlanAdapter>();
-builder.Services.AddScoped<IBenefitPlanAdapter, QnxtBenefitPlanAdapter>();
-builder.Services.AddScoped<IBenefitPlanAdapter, FacetsBenefitPlanAdapter>();
-builder.Services.AddScoped<IBenefitPlanAdapter, HealthEdgeBenefitPlanAdapter>();
+// Live core connectors (QNXT, Facets, HealthEdge) are an optional integration
+// point, off by default: plans feed CHO through the daily file drop instead
+// (docs/integration/CORE-INTEGRATION-OPTIONS.md). Registered only when
+// CoreIntegration:LiveConnectors:Enabled is true; otherwise a tenant naming a
+// vendor platform is refused with 501 by the adapter factory.
+if (CloudHealthOffice.Infrastructure.Tenancy.LiveCoreConnectors.IsEnabled(builder.Configuration))
+{
+    builder.Services.AddScoped<IBenefitPlanAdapter, QnxtBenefitPlanAdapter>();
+    builder.Services.AddScoped<IBenefitPlanAdapter, FacetsBenefitPlanAdapter>();
+    builder.Services.AddScoped<IBenefitPlanAdapter, HealthEdgeBenefitPlanAdapter>();
+}
 builder.Services.AddScoped<BenefitPlanAdapterFactory>();
 builder.Services.AddScoped<IBenefitEngineTenantContext, HttpContextTenantContext>();
 

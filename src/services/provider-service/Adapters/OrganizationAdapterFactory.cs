@@ -1,3 +1,5 @@
+using CloudHealthOffice.Infrastructure.Tenancy;
+
 namespace ProviderService.Adapters;
 
 /// <summary>
@@ -43,6 +45,14 @@ public class OrganizationAdapterFactory
 
         if (adapter == null)
         {
+            // A vendor platform with no registered connector is refused, never
+            // answered with CHO's own data (ADR 027). Live connectors are off
+            // unless CoreIntegration:LiveConnectors:Enabled is true.
+            if (LiveCoreConnectors.IsVendorPlatform(platform))
+            {
+                throw new LiveCoreConnectorNotEnabledException("organization", platform);
+            }
+
             _logger.LogWarning(
                 "No organization adapter found for platform '{Platform}', falling back to 'cho'",
                 platform);

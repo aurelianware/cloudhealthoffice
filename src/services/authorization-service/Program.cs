@@ -157,8 +157,16 @@ builder.Services.AddSingleton<AuthorizationService.Services.Fhir.IPriorAuthoriza
 
 builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackend,
     AuthorizationService.Backends.ChoAuthorizationBackend>();
-builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackend,
-    AuthorizationService.Backends.QnxtAuthorizationBackend>();
+// Live core connectors (QNXT, Facets, HealthEdge) are an optional integration
+// point, off by default: plans feed CHO through the daily file drop instead
+// (docs/integration/CORE-INTEGRATION-OPTIONS.md). Registered only when
+// CoreIntegration:LiveConnectors:Enabled is true; otherwise a tenant naming a
+// vendor platform is refused with 501 by the adapter factory.
+if (CloudHealthOffice.Infrastructure.Tenancy.LiveCoreConnectors.IsEnabled(builder.Configuration))
+{
+    builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackend,
+        AuthorizationService.Backends.QnxtAuthorizationBackend>();
+}
 builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackendSelector,
     AuthorizationService.Backends.AuthorizationBackendSelector>();
 
