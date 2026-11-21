@@ -90,6 +90,16 @@ Nothing in this BAA makes Business Associate the Covered Entity’s compliance o
 
 If this BAA conflicts with the MSA or Order Form regarding PHI, this BAA controls. Commercial license terms in the Order Form control production use under BSL 1.1.
 
+## 13. State Medicaid rider (use when Covered Entity is a Medicaid or CHIP plan)
+
+_Drafting note: include this section only for a Medicaid or CHIP plan, and check each term against the plan's own state contract and Data Use Agreement. The terms below follow the Texas HHS Data Use Agreement (v8.5). See `docs/compliance/security-readiness/BAA-APPROACH.md`._
+
+- (a) **Flow-down.** Business Associate agrees to the subcontractor terms of Covered Entity's Data Use Agreement with the state Medicaid agency, attached as Exhibit A, for any state confidential information it receives under the Services. Where Exhibit A is stricter than this BAA, Exhibit A controls.
+- (b) **Initial notice.** Business Associate shall notify Covered Entity of a discovered or suspected Breach or Security Incident involving state confidential information within one (1) clock hour of discovery for federal data from a federal system of records, including Medicaid confidential information, and within twenty-four (24) hours of discovery otherwise, by phone and email to the contacts Covered Entity names.
+- (c) **Written report.** Business Associate shall deliver a written report by 5 p.m. local time on the third (3rd) business day after discovery, and updates at least every three (3) business days until Covered Entity agrees the matter is closed.
+- (d) **Location.** Business Associate shall not store, process, access or view PHI or state confidential information outside the United States, and shall not use offshore workforce or subcontractors for the Services.
+- (e) **Evidence.** Business Associate shall provide its security and privacy policies within three (3) business days of a request, proof of encryption within forty-eight (48) hours of a request, and evidence of workforce training on request.
+
 ## Signature
 
 Covered Entity: ___________________________ Date: ________
