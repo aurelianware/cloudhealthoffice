@@ -119,6 +119,22 @@ public static class SmartTrustServiceCollectionExtensions
                 var resolver = context.HttpContext.RequestServices
                     .GetRequiredService<CallerIdentityResolver>();
 
+                // G-39: an issuer confined to an AllowedScopes list cannot
+                // grant anything outside it. Narrowed here, before the caller
+                // (and its scopes) is resolved and before any scope check,
+                // so no reader ever sees the scopes the issuer may not grant.
+                if (context.Principal is { } principal
+                    && registryService.Resolve(CallerIdentityResolver.IssuerOf(principal)) is { } scopedIssuer
+                    && IssuerScopePolicy.Narrow(principal, scopedIssuer) is var dropped and > 0)
+                {
+                    context.HttpContext.RequestServices
+                        .GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("FhirService.Identity")
+                        .LogInformation(
+                            "SMART token from issuer {Issuer}: {Count} scope(s) outside the issuer's AllowedScopes were removed",
+                            LogSanitizer.Sanitize(scopedIssuer.Issuer), dropped);
+                }
+
                 var caller = resolver.Resolve(context.Principal);
 
                 // The tenant a SMART caller acts in comes from its token only:
