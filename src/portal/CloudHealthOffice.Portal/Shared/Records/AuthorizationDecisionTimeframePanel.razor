@@ -16,6 +16,10 @@
         <MudAlert Severity="Severity.Error" Dense="true" Class="my-2" data-testid="timeframe-error">@_error</MudAlert>
     }
     <MudText Class="mt-2" data-testid="decision-due">Decision due @Format(Authorization.DecisionDueAt)</MudText>
+    @if (ClockLabel(Authorization.DecisionDeadlinePolicy) is { } clock)
+    {
+        <MudText Typo="Typo.body2" Class="mt-1" data-testid="decision-clock">@clock</MudText>
+    }
 
     @if (Authorization.DecisionExtension is { } extension)
     {
@@ -81,6 +85,31 @@
     private bool IsOpen => Authorization.StatusText is "Submitted" or "InReview" or "Pended";
     private bool AllowsExtension => Authorization.LineOfBusiness is "Medicare" or "Medicaid";
     private string GrievanceRight => Authorization.LineOfBusiness == "Medicare" ? "an expedited grievance" : "a grievance";
+
+    /// <summary>
+    /// Which clock set the deadline, for a state clock (TX-05). The federal
+    /// receipt clock alone needs no label.
+    /// </summary>
+    internal static string? ClockLabel(string? policy)
+    {
+        const string texas = "+tx-gc-540-v1:";
+        var at = policy?.IndexOf(texas, StringComparison.Ordinal) ?? -1;
+        if (at < 0) return null;
+        var scenario = policy![(at + texas.Length)..];
+        var inferred = scenario.EndsWith("+inferred", StringComparison.Ordinal);
+        if (inferred) scenario = scenario[..^"+inferred".Length];
+        var (clock, cite) = scenario switch
+        {
+            "PoststabilizationOrLifeThreatening" => ("1 hour: poststabilization or life-threatening, hospitalized member", "§540.0302(b)(3)"),
+            "InpatientDischarge" => ("72 hours: needed to discharge a hospitalized member", "§540.0302(b)(2)"),
+            "Hospitalized" => ("1 business day: hospitalized member", "§540.0302(b)(1)"),
+            "NotHospitalized" => ("3 business days: member not hospitalized", "§540.0303(b)(1)"),
+            _ => (scenario, "ch. 540"),
+        };
+        return $"Texas Medicaid clock, {clock} (Tex. Gov't Code {cite})"
+               + (inferred ? ". Scenario inferred from the request type; none was stated at intake." : ".")
+               + " The earlier of this and the federal deadline applies.";
+    }
 
     private static string Format(DateTime? value) => value?.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'") ?? "not set";
 
