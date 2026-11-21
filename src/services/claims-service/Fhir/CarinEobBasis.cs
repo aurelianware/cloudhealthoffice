@@ -35,6 +35,8 @@ internal static class CarinEobBasis
         ProfileBase + "C4BB-ExplanationOfBenefit-Outpatient-Institutional-Basis";
     internal const string OralBasisProfile =
         ProfileBase + "C4BB-ExplanationOfBenefit-Oral-Basis";
+    internal const string PharmacyBasisProfile =
+        ProfileBase + "C4BB-ExplanationOfBenefit-Pharmacy-Basis";
 
     internal const string ClaimTypeSystem = "http://terminology.hl7.org/CodeSystem/claim-type";
 
@@ -53,6 +55,15 @@ internal static class CarinEobBasis
     internal const string NpiSystem = "http://hl7.org/fhir/sid/us-npi";
     internal const string RevenueCodeSystem = "https://www.nubc.org/CodeSystem/RevenueCodes";
     internal const string TypeOfBillSystem = "https://www.nubc.org/CodeSystem/TypeOfBill";
+    internal const string NdcSystem = "http://hl7.org/fhir/sid/ndc";
+
+    // The NCPDP code systems the Pharmacy profile binds its supporting
+    // information to, as THO names them.
+    internal const string NcpdpDawSystem = "http://terminology.hl7.org/CodeSystem/NCPDPDispensedAsWrittenOrProductSelectionCode";
+    internal const string NcpdpBrandGenericSystem = "http://terminology.hl7.org/CodeSystem/NCPDPBrandGenericIndicator";
+    internal const string NcpdpPrescriptionOriginSystem = "http://terminology.hl7.org/CodeSystem/NCPDPPrescriptionOriginCode";
+    internal const string NcpdpCompoundCodeSystem = "http://terminology.hl7.org/CodeSystem/NCPDPCompoundCode";
+    internal const string NcpdpRejectCodeSystem = "http://terminology.hl7.org/CodeSystem/NCPDPRejectCode";
 
     internal const string C4BbBase = "http://hl7.org/fhir/us/carin-bb/CodeSystem/";
     internal const string IdentifierTypeSystem = C4BbBase + "C4BBIdentifierType";
@@ -62,6 +73,7 @@ internal static class CarinEobBasis
     internal const string PayerAdjudicationStatusSystem = C4BbBase + "C4BBPayerAdjudicationStatus";
     internal const string SupportingInfoTypeSystem = C4BbBase + "C4BBSupportingInfoType";
     internal const string CareTeamRoleSystem = C4BbBase + "C4BBClaimCareTeamRole";
+    internal const string CompoundLiteralSystem = C4BbBase + "C4BBCompoundLiteral";
 
     /// <summary>The plan's own name, used as the insurer's display when none is configured.</summary>
     internal const string InsurerDisplay = "CloudHealthOffice";
@@ -145,7 +157,11 @@ internal static class CarinEobBasis
         if (supportingInfo.Count > 0)
             eob["supportingInfo"] = supportingInfo;
 
-        eob["diagnosis"] = Diagnoses(claim, shape);
+        // A FHIR array is never empty. A pharmacy claim usually carries no
+        // diagnosis, and the Pharmacy profile does not require one.
+        var diagnoses = Diagnoses(claim, shape);
+        if (diagnoses.Count > 0 || !shape.IsPharmacy)
+            eob["diagnosis"] = diagnoses;
         eob["insurance"] = Insurance(claim);
         eob["item"] = Items(claim, shape, augmentItem);
 
@@ -177,7 +193,8 @@ internal static class CarinEobBasis
         string SecondaryDiagnosisCode,
         string DefaultCareTeamRoleSystem,
         string DefaultCareTeamRole,
-        bool Financial);
+        bool Financial,
+        bool IsPharmacy = false);
 
     /// <summary>
     /// Resolves the profile shape for a claim.
@@ -210,6 +227,14 @@ internal static class CarinEobBasis
             Canonical(OralBasisProfile, financial),
             "oral", null, false, false, true,
             "secondary", CareTeamRoleSystem, "rendering", financial),
+
+        // The Pharmacy profile narrows serviced[x] to a date, requires the
+        // benefit payment status at the header (not on each item), and its
+        // care team holds the prescriber.
+        ClaimType.Pharmacy => new ProfileShape(
+            Canonical(PharmacyBasisProfile, financial),
+            "pharmacy", null, false, true, false,
+            "secondary", CareTeamRoleSystem, "prescribing", financial, IsPharmacy: true),
 
         _ => new ProfileShape(
             Canonical(ProfessionalBasisProfile, financial),
@@ -362,6 +387,22 @@ internal static class CarinEobBasis
     {
         var careTeam = new JsonArray();
 
+        // A pharmacy claim's care team is the prescriber. The pharmacy is the
+        // header's provider; the pharmacist who dispensed is not in the file.
+        if (shape.IsPharmacy)
+        {
+            if (!string.IsNullOrWhiteSpace(claim.Pharmacy?.PrescriberNpi))
+            {
+                careTeam.Add(new JsonObject
+                {
+                    ["sequence"] = 1,
+                    ["provider"] = ProviderReference(claim.Pharmacy.PrescriberNpi, null, "Practitioner"),
+                    ["role"] = Concept(shape.DefaultCareTeamRoleSystem, shape.DefaultCareTeamRole, null),
+                });
+            }
+            return careTeam;
+        }
+
         if (!string.IsNullOrWhiteSpace(claim.RenderingProviderNPI))
         {
             careTeam.Add(new JsonObject
@@ -388,6 +429,12 @@ internal static class CarinEobBasis
                 ["category"] = Concept(SupportingInfoTypeSystem, "clmrecvddate", null),
                 ["timingDate"] = AsUtc(received).ToString("yyyy-MM-dd"),
             });
+        }
+
+        if (shape.IsPharmacy)
+        {
+            AddPharmacySupportingInfo(claim.Pharmacy ?? new PharmacyClaimDetails(), entries, ref sequence);
+            return entries;
         }
 
         if (!shape.IsInstitutional)
@@ -431,6 +478,70 @@ internal static class CarinEobBasis
         }
 
         return entries;
+    }
+
+    /// <summary>
+    /// The Pharmacy profile's supporting information. Days supply, the
+    /// dispense-as-written code, the fill number and the refills authorized
+    /// are required (the importer refuses a pharmacy claim without days
+    /// supply, and the others have NCPDP defaults); brand or generic,
+    /// prescription origin and compound code are emitted when the claim
+    /// carries them.
+    /// </summary>
+    private static void AddPharmacySupportingInfo(PharmacyClaimDetails rx, JsonArray entries, ref int sequence)
+    {
+        entries.Add(new JsonObject
+        {
+            ["sequence"] = sequence++,
+            ["category"] = Concept(SupportingInfoTypeSystem, "dayssupply", null),
+            ["valueQuantity"] = new JsonObject { ["value"] = rx.DaysSupply },
+        });
+        entries.Add(new JsonObject
+        {
+            ["sequence"] = sequence++,
+            ["category"] = Concept(SupportingInfoTypeSystem, "dawcode", null),
+            ["code"] = Concept(NcpdpDawSystem, rx.DispenseAsWrittenCode, null),
+        });
+        entries.Add(new JsonObject
+        {
+            ["sequence"] = sequence++,
+            ["category"] = Concept(SupportingInfoTypeSystem, "refillnum", null),
+            ["valueQuantity"] = new JsonObject { ["value"] = rx.RefillNumber },
+        });
+        entries.Add(new JsonObject
+        {
+            ["sequence"] = sequence++,
+            ["category"] = Concept(SupportingInfoTypeSystem, "refillsauthorized", null),
+            ["valueQuantity"] = new JsonObject { ["value"] = rx.RefillsAuthorized },
+        });
+
+        if (!string.IsNullOrWhiteSpace(rx.BrandGenericIndicator))
+        {
+            entries.Add(new JsonObject
+            {
+                ["sequence"] = sequence++,
+                ["category"] = Concept(SupportingInfoTypeSystem, "brandgenericindicator", null),
+                ["code"] = Concept(NcpdpBrandGenericSystem, rx.BrandGenericIndicator, null),
+            });
+        }
+        if (!string.IsNullOrWhiteSpace(rx.PrescriptionOriginCode))
+        {
+            entries.Add(new JsonObject
+            {
+                ["sequence"] = sequence++,
+                ["category"] = Concept(SupportingInfoTypeSystem, "rxorigincode", null),
+                ["code"] = Concept(NcpdpPrescriptionOriginSystem, rx.PrescriptionOriginCode, null),
+            });
+        }
+        if (!string.IsNullOrWhiteSpace(rx.CompoundCode))
+        {
+            entries.Add(new JsonObject
+            {
+                ["sequence"] = sequence++,
+                ["category"] = Concept(SupportingInfoTypeSystem, "compoundcode", null),
+                ["code"] = Concept(NcpdpCompoundCodeSystem, rx.CompoundCode, null),
+            });
+        }
     }
 
     internal static JsonArray Diagnoses(Claim claim, ProfileShape shape)
@@ -496,8 +607,17 @@ internal static class CarinEobBasis
     /// procedure, gets that coding as well, and keeps its own beside it.
     /// Inferno's CARIN BB kit rejected the local coding alone (run 40979709678).
     /// </summary>
-    private static JsonObject ProductOrService(ClaimLine line)
+    private static JsonObject ProductOrService(ClaimLine line, ProfileShape shape, Claim claim)
     {
+        // The Pharmacy profile binds the item to an NDC, or to the literal
+        // "compound" for a compounded prescription.
+        if (shape.IsPharmacy)
+        {
+            if (claim.Pharmacy?.CompoundCode == "2" || string.IsNullOrWhiteSpace(line.NationalDrugCode))
+                return Concept(CompoundLiteralSystem, "compound", "Compound");
+            return Concept(NdcSystem, line.NationalDrugCode, null);
+        }
+
         var concept = ClaimProcedureCoding.Concept(line);
         var codings = concept["coding"]!.AsArray();
         if (codings.Any(c => (string?)c!["system"] == ClaimProcedureCoding.LocalSystem))
@@ -528,7 +648,7 @@ internal static class CarinEobBasis
             var item = new JsonObject
             {
                 ["sequence"] = line.LineNumber,
-                ["productOrService"] = ProductOrService(line),
+                ["productOrService"] = ProductOrService(line, shape, claim),
             };
 
             if (line.Modifiers.Count > 0)
@@ -579,6 +699,11 @@ internal static class CarinEobBasis
                 if (!string.IsNullOrWhiteSpace(line.RevenueCode))
                     item["revenue"] = Concept(RevenueCodeSystem, line.RevenueCode, null);
             }
+            else if (shape.IsPharmacy)
+            {
+                // A dispensing has no CMS place of service on the EOB: the
+                // pharmacy is the header's provider.
+            }
             else
             {
                 var placeOfService = line.PlaceOfServiceCode ?? claim.PlaceOfServiceCode;
@@ -586,7 +711,16 @@ internal static class CarinEobBasis
                     item["locationCodeableConcept"] = Concept(ClaimFhirProjector.PlaceOfServiceSystem, placeOfService, null);
             }
 
-            if (line.Units > 0)
+            if (shape.IsPharmacy)
+            {
+                // The quantity dispensed, in the NCPDP unit the drug is
+                // measured in (each, mL, gram), which the extract does not
+                // name, so no unit code is asserted.
+                var dispensed = line.DrugQuantity ?? line.Units;
+                if (dispensed > 0)
+                    item["quantity"] = new JsonObject { ["value"] = dispensed };
+            }
+            else if (line.Units > 0)
             {
                 var quantity = new JsonObject { ["value"] = line.Units };
                 if (!string.IsNullOrWhiteSpace(line.UnitType))
@@ -602,8 +736,25 @@ internal static class CarinEobBasis
             // The professional and oral profiles require benefitpaymentstatus on
             // each item. No amount travels with it: it is a status, which is
             // exactly what a non-financial EOB is allowed to carry.
-            if (!shape.IsInstitutional)
+            if (!shape.IsInstitutional && !shape.IsPharmacy)
                 item["adjudication"] = new JsonArray { BenefitPaymentStatus(claim) };
+
+            // A pharmacy claim's denial is an NCPDP reject code, not a CARC,
+            // and the Pharmacy profile puts it on the item. It is a code, not
+            // an amount, so the Basis profile carries it too.
+            if (shape.IsPharmacy && PharmacyRejectCodes(claim, line) is { Count: > 0 } rejects)
+            {
+                var adjudication = new JsonArray();
+                foreach (var reject in rejects)
+                {
+                    adjudication.Add(new JsonObject
+                    {
+                        ["category"] = Concept(AdjudicationDiscriminatorSystem, "rejectreason", null),
+                        ["reason"] = Concept(NcpdpRejectCodeSystem, reject, null),
+                    });
+                }
+                item["adjudication"] = adjudication;
+            }
 
             augment?.Invoke(item, line);
 
@@ -613,6 +764,23 @@ internal static class CarinEobBasis
         return items;
     }
 
+    /// <summary>
+    /// The NCPDP reject codes for a pharmacy line: the line's own, else the
+    /// claim's. The importer records a line's code as an adjustment reason
+    /// described "Line {n}", and the claim's as the denial reason.
+    /// </summary>
+    internal static List<string> PharmacyRejectCodes(Claim claim, ClaimLine line)
+    {
+        var codes = (claim.AdjudicationResult?.AdjustmentReasons ?? [])
+            .Where(r => r.Description == $"Line {line.LineNumber}" && !string.IsNullOrWhiteSpace(r.ReasonCode))
+            .Select(r => r.ReasonCode)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (codes.Count == 0 && claim.AdjudicationResult?.DenialReasonCode is { Length: > 0 } denial)
+            codes.Add(denial);
+        return codes;
+    }
+
     internal static JsonArray HeaderAdjudication(Claim claim, ProfileShape shape)
     {
         var entries = new JsonArray();
@@ -620,7 +788,7 @@ internal static class CarinEobBasis
         // The institutional profiles require benefitpaymentstatus at the header;
         // the oral profile requires it in both places, which is why this is not
         // an either/or with the item-level entry.
-        if (shape.IsInstitutional || shape.RequiresHeaderRenderingNetworkStatus)
+        if (shape.IsInstitutional || shape.IsPharmacy || shape.RequiresHeaderRenderingNetworkStatus)
             entries.Add(BenefitPaymentStatus(claim));
 
         // The oral profile alone requires a rendering network status. It can only

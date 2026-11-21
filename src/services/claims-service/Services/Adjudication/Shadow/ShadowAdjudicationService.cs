@@ -214,6 +214,12 @@ public sealed class ShadowAdjudicationService : IShadowAdjudicationService
                 run.Skipped.Add($"{claimId}: not loaded from a core system");
                 continue;
             }
+            if (core.ClaimType == ClaimType.Pharmacy)
+            {
+                // CHO has no pharmacy adjudication to compare the core's with.
+                run.Skipped.Add($"{claimId}: pharmacy claim");
+                continue;
+            }
 
             ShadowAdjudicationResult result;
             if (ShadowDiscrepancyComparer.CoreOutcome(core.Status) == ShadowOutcome.NotFinal)

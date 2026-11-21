@@ -7,6 +7,10 @@ internal static class CpcdsTestFiles
 
     public static string Sample() => File.ReadAllText(Path.Combine(RepoRoot(), SamplePath));
 
+    public const string PharmacySamplePath = "docs/integration/samples/cpcds/pharmacy-claims.csv";
+
+    public static string PharmacySample() => File.ReadAllText(Path.Combine(RepoRoot(), PharmacySamplePath));
+
     /// <summary>The sample with only the named claim's rows kept (header included).</summary>
     public static string SampleClaim(string claimId)
     {

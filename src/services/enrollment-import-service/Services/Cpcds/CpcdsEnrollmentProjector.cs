@@ -75,7 +75,15 @@ public static class CpcdsEnrollmentProjector
         public int CoverageRows { get; set; }
     }
 
-    public static Projection Project(string membersContent, string? coveragesContent, string fileName)
+    /// <param name="columnMap">
+    /// CPCDS column name → the file's header, for columns an extract names
+    /// differently. The same map a tenant gives its claim files: entries for
+    /// columns these files do not have are ignored, so one map serves the
+    /// whole feed.
+    /// </param>
+    public static Projection Project(
+        string membersContent, string? coveragesContent, string fileName,
+        IReadOnlyDictionary<string, string>? columnMap = null)
     {
         var projection = new Projection
         {
@@ -86,10 +94,10 @@ public static class CpcdsEnrollmentProjector
             },
         };
 
-        var members = ReadTable(membersContent, MemberColumns, ["MemberId"], "member", projection.FileErrors);
+        var members = ReadTable(membersContent, MemberColumns, ["MemberId"], "member", projection.FileErrors, columnMap);
         var coverages = coveragesContent is null
             ? []
-            : ReadTable(coveragesContent, CoverageColumns, ["MemberId", "PlanId", "GroupId"], "coverage", projection.FileErrors);
+            : ReadTable(coveragesContent, CoverageColumns, ["MemberId", "PlanId", "GroupId"], "coverage", projection.FileErrors, columnMap);
         if (projection.FileErrors.Count > 0)
             return projection;
 
@@ -222,7 +230,8 @@ public static class CpcdsEnrollmentProjector
         IReadOnlyDictionary<string, string[]> columns,
         IReadOnlyList<string> required,
         string kind,
-        List<string> fileErrors)
+        List<string> fileErrors,
+        IReadOnlyDictionary<string, string>? columnMap = null)
     {
         var delimiter = CpcdsDelimitedReader.DetectDelimiter(content);
         using var records = CpcdsDelimitedReader.Read(content, delimiter).GetEnumerator();
@@ -236,6 +245,21 @@ public static class CpcdsEnrollmentProjector
         foreach (var (field, names) in columns)
             foreach (var name in names)
                 lookup.TryAdd(CpcdsHeaders.Normalize(name), field);
+
+        // A column map entry wins over the built-in names: the target is a
+        // CPCDS column name (or this importer's field name), the value the
+        // header the file uses for it.
+        if (columnMap is not null)
+        {
+            foreach (var (field, names) in columns)
+                lookup.TryAdd(CpcdsHeaders.Normalize(field), field);
+            foreach (var (target, fileHeader) in columnMap)
+            {
+                if (string.IsNullOrWhiteSpace(fileHeader)) continue;
+                if (lookup.TryGetValue(CpcdsHeaders.Normalize(target), out var mapped))
+                    lookup[CpcdsHeaders.Normalize(fileHeader)] = mapped;
+            }
+        }
 
         var positions = new Dictionary<string, int>(StringComparer.Ordinal);
         var headers = records.Current.Fields;

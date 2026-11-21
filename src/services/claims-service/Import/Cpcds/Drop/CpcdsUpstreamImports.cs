@@ -14,7 +14,8 @@ public interface ICpcdsUpstreamImports
 {
     Task<CpcdsDropStep> ImportMembersAsync(
         string tenantId, CpcdsDropFile members, string membersContent,
-        CpcdsDropFile? coverages, string? coveragesContent, CancellationToken ct);
+        CpcdsDropFile? coverages, string? coveragesContent,
+        IReadOnlyDictionary<string, string>? columnMap, CancellationToken ct);
 
     Task<CpcdsDropStep> ImportClaimProvidersAsync(
         string tenantId, CpcdsDropFile claims, string claimsContent,
@@ -26,6 +27,13 @@ public interface ICpcdsUpstreamImports
     /// </summary>
     Task<CpcdsDropStep> ImportAuthorizationsAsync(
         string tenantId, CpcdsDropFile file, string content, string? sourceSystem, string? lineOfBusiness, CancellationToken ct);
+
+    /// <summary>
+    /// A network roster file (provider-service): which providers are in which
+    /// network, for which plan and dates. See NETWORK-ROSTER-IMPORTER.md.
+    /// </summary>
+    Task<CpcdsDropStep> ImportNetworkRosterAsync(
+        string tenantId, CpcdsDropFile file, string content, string? lineOfBusiness, CancellationToken ct);
 }
 
 public sealed class HttpCpcdsUpstreamImports : ICpcdsUpstreamImports
@@ -40,12 +48,15 @@ public sealed class HttpCpcdsUpstreamImports : ICpcdsUpstreamImports
 
     public async Task<CpcdsDropStep> ImportMembersAsync(
         string tenantId, CpcdsDropFile members, string membersContent,
-        CpcdsDropFile? coverages, string? coveragesContent, CancellationToken ct)
+        CpcdsDropFile? coverages, string? coveragesContent,
+        IReadOnlyDictionary<string, string>? columnMap, CancellationToken ct)
     {
         using var form = new MultipartFormDataContent();
         form.Add(FileContent(membersContent), "members", members.Name);
         if (coverages is not null && coveragesContent is not null)
             form.Add(FileContent(coveragesContent), "coverages", coverages.Name);
+        if (columnMap is { Count: > 0 })
+            form.Add(new StringContent(JsonSerializer.Serialize(columnMap)), "columnMap");
 
         var step = new CpcdsDropStep
         {
@@ -115,6 +126,24 @@ public sealed class HttpCpcdsUpstreamImports : ICpcdsUpstreamImports
                     }
                 }
             }, ct);
+        return step;
+    }
+
+    public async Task<CpcdsDropStep> ImportNetworkRosterAsync(
+        string tenantId, CpcdsDropFile file, string content, string? lineOfBusiness, CancellationToken ct)
+    {
+        using var form = new MultipartFormDataContent();
+        form.Add(FileContent(content), "file", file.Name);
+        if (!string.IsNullOrWhiteSpace(lineOfBusiness))
+            form.Add(new StringContent(lineOfBusiness), "lineOfBusiness");
+
+        var step = new CpcdsDropStep { Name = "network-roster", Files = [file.Name] };
+        await SendAsync(ProviderClientName, "api/v1/providers/import/network-roster", tenantId, form, step, json =>
+        {
+            Count(json, step, "rowsRead", "providersCreated", "participationsAdded", "unchanged",
+                "madeNetworkProviders", "credentialed", "rejected");
+            Errors(json, step, "fileErrors", "errors");
+        }, ct);
         return step;
     }
 

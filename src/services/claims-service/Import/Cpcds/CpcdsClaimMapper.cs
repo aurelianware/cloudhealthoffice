@@ -166,9 +166,14 @@ internal static class CpcdsClaimMapper
             LineOfBusiness = options.LineOfBusiness,
             ClaimType = claimType!.Value,
             BillingProviderNPI = billingNpi!,
+            // An NCPDP claim's service provider is the dispensing pharmacy,
+            // which bills under its organization (type 2) NPI.
+            BillingProviderEntityType = claimType == ClaimType.Pharmacy ? "2" : null,
             RenderingProviderNPI = Header(C.ClaimPerformingProviderNpi) ?? Header(C.ClaimAttendingProviderNpi),
             FacilityNPI = Header(C.ClaimSiteOfServiceNpi),
-            PlaceOfServiceCode = lines.Select(l => l.PlaceOfServiceCode).FirstOrDefault(p => p is not null) ?? "11",
+            // CMS place of service 01 is "Pharmacy".
+            PlaceOfServiceCode = lines.Select(l => l.PlaceOfServiceCode).FirstOrDefault(p => p is not null)
+                                 ?? (claimType == ClaimType.Pharmacy ? "01" : "11"),
             ClaimFrequencyCode = Header(C.ClaimFrequencyCode) ?? "1",
             OriginalClaimReference = Header(C.ClaimAdjustedFromIdentifier),
             TotalChargeAmount = totalCharge,
@@ -190,6 +195,8 @@ internal static class CpcdsClaimMapper
 
         if (claimType == ClaimType.Institutional)
             claim.Institutional = Institutional(Header, claimTypeCode, institutionalProcedures, errors, warnings);
+        if (claimType == ClaimType.Pharmacy)
+            claim.Pharmacy = Pharmacy(Header, errors, warnings);
 
         if (errors.Count > 0)
             return result;
@@ -216,10 +223,7 @@ internal static class CpcdsClaimMapper
             case "dental":
                 return ClaimType.Dental;
             case "pharmacy":
-                errors.Add(
-                    "Pharmacy claims are not loaded yet: CHO has no CARIN BB Pharmacy EOB projection. " +
-                    "Leave them out of the file, or load them once that projection exists.");
-                return null;
+                return ClaimType.Pharmacy;
             case null:
                 errors.Add("\"Claim type\" is empty.");
                 return null;
@@ -327,6 +331,92 @@ internal static class CpcdsClaimMapper
             OtherProcedures = procedures.Select(p => p.Code).Where(p => !ReferenceEquals(p, principal)).ToList(),
         };
         return details;
+    }
+
+    // ── pharmacy ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The NCPDP header of a pharmacy claim. CARIN BB's Pharmacy EOB requires
+    /// days supply, the dispense-as-written code, the fill number and the
+    /// refills authorized. Days supply has no safe default, so a claim without
+    /// it is refused. The other three have an NCPDP default (0: no product
+    /// selection indicated, original fill, no refills), which is used with a
+    /// warning when the file leaves them empty, as a PBM claim would have sent
+    /// them.
+    /// </summary>
+    private static PharmacyClaimDetails Pharmacy(Func<C, string?> header, List<string> errors, List<string> warnings)
+    {
+        var details = new PharmacyClaimDetails();
+
+        var daysSupply = Amount(header(C.DaysSupply), C.DaysSupply, null, errors);
+        if (daysSupply is null && header(C.DaysSupply) is null)
+            errors.Add("\"Days supply\" is empty; a pharmacy claim needs it.");
+        else if (daysSupply is <= 0)
+            errors.Add($"\"Days supply\" '{header(C.DaysSupply)}' is not a positive number.");
+        details.DaysSupply = daysSupply ?? 0m;
+
+        details.DispenseAsWrittenCode = NcpdpCode(header(C.DawProductSelectionCode), C.DawProductSelectionCode, 9, "0", errors, warnings) ?? "0";
+        details.RefillNumber = Count(header(C.RefillNumber), C.RefillNumber, errors, warnings);
+        details.RefillsAuthorized = Count(header(C.RefillsAuthorized), C.RefillsAuthorized, errors, warnings);
+        if (details.RefillNumber > details.RefillsAuthorized && header(C.RefillsAuthorized) is not null)
+        {
+            warnings.Add(
+                $"\"Refill number\" {details.RefillNumber} is more than \"Refills authorized\" {details.RefillsAuthorized}.");
+        }
+
+        details.PrescriptionOriginCode = NcpdpCode(header(C.PrescriptionOriginCode), C.PrescriptionOriginCode, 5, null, errors, warnings);
+        details.CompoundCode = NcpdpCode(header(C.CompoundCode), C.CompoundCode, 2, null, errors, warnings);
+        details.BrandGenericIndicator = header(C.PlanReportedBrandGenericCode);
+        details.PrescriptionNumber = header(C.RxServiceReferenceNumber);
+        details.PharmacyServiceType = header(C.PharmacyServiceTypeCode);
+        details.PatientResidenceCode = header(C.PatientResidenceCode);
+
+        var prescriber = header(C.ClaimPrescribingProviderNpi);
+        if (prescriber is not null && !IsNpiShape(prescriber))
+            warnings.Add($"\"Claim prescribing provider NPI\" '{prescriber}' is not a 10-digit NPI and was left off the EOB.");
+        else
+            details.PrescriberNpi = prescriber;
+
+        return details;
+    }
+
+    /// <summary>
+    /// A single-digit NCPDP code between 0 and <paramref name="max"/>. Empty
+    /// gives <paramref name="fallback"/>, with a warning when there is one;
+    /// anything else is an error, since the EOB binds the element to the NCPDP
+    /// code list.
+    /// </summary>
+    private static string? NcpdpCode(
+        string? value, C column, int max, string? fallback, List<string> errors, List<string> warnings)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            if (fallback is not null)
+                warnings.Add($"\"{CpcdsClaimColumns.DisplayName(column)}\" is empty; taken as {fallback}.");
+            return fallback;
+        }
+
+        var code = value.Trim();
+        if (code.Length == 1 && char.IsAsciiDigit(code[0]) && code[0] - '0' <= max)
+            return code;
+
+        errors.Add($"\"{CpcdsClaimColumns.DisplayName(column)}\" '{value}' is not an NCPDP code (0-{max}).");
+        return fallback;
+    }
+
+    /// <summary>A whole number of fills; empty is 0, with a warning.</summary>
+    private static int Count(string? value, C column, List<string> errors, List<string> warnings)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            warnings.Add($"\"{CpcdsClaimColumns.DisplayName(column)}\" is empty; taken as 0.");
+            return 0;
+        }
+        if (int.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) && count >= 0)
+            return count;
+
+        errors.Add($"\"{CpcdsClaimColumns.DisplayName(column)}\" '{value}' is not a whole number.");
+        return 0;
     }
 
     // ── diagnoses ────────────────────────────────────────────────────────────
@@ -499,10 +589,32 @@ internal static class CpcdsClaimMapper
                 });
             }
 
-            // Every C4BB profile requires item.productOrService. An
-            // institutional line can be identified by its revenue code alone;
-            // any other line needs its procedure code.
-            if (string.IsNullOrEmpty(line.ProcedureCode)
+            // Every C4BB profile requires item.productOrService. A pharmacy
+            // line is the drug: its NDC, or the "compound" literal for a
+            // compound (compound code 2). An institutional line can be
+            // identified by its revenue code alone; any other line needs its
+            // procedure code.
+            if (claimType == ClaimType.Pharmacy)
+            {
+                line.DrugQuantity ??= Amount(row.Get(C.NumberOfUnits), C.NumberOfUnits, row.LineNumber, errors);
+                if (row.Get(C.NumberOfUnits) is null && line.DrugQuantity is { } dispensed)
+                    line.Units = dispensed;
+                if (line.NationalDrugCode is { } ndc)
+                    line.NationalDrugCode = NormalizeNdc(ndc);
+                var compound = row.Get(C.CompoundCode)?.Trim() == "2";
+                if (line.NationalDrugCode is null && !compound)
+                {
+                    errors.Add(
+                        $"Line {lineNumber} (file line {row.LineNumber}) of a pharmacy claim has no \"National drug code\".");
+                }
+                else if (line.NationalDrugCode is { Length: not 11 } && !compound)
+                {
+                    errors.Add(
+                        $"Line {lineNumber} (file line {row.LineNumber}): \"National drug code\" '{row.Get(C.NationalDrugCode)}' " +
+                        "is not an 11-digit NDC.");
+                }
+            }
+            else if (string.IsNullOrEmpty(line.ProcedureCode)
                 && !(claimType == ClaimType.Institutional && line.RevenueCode is not null))
             {
                 errors.Add(
@@ -514,6 +626,24 @@ internal static class CpcdsClaimMapper
         }
 
         return lines.Values.ToList();
+    }
+
+    /// <summary>
+    /// The NDC as CARIN BB codes it: the 11-digit 5-4-2 form without hyphens.
+    /// A hyphenated 10-digit NDC (4-4-2, 5-3-2, 5-4-1) is padded to 5-4-2 by
+    /// its short segment, which is the standard conversion; a value already
+    /// 11 digits passes through. Anything else is returned with its hyphens
+    /// removed, for the caller to refuse.
+    /// </summary>
+    internal static string NormalizeNdc(string ndc)
+    {
+        var trimmed = ndc.Trim();
+        var parts = trimmed.Split('-');
+        if (parts.Length == 3 && parts.All(p => p.Length > 0 && p.All(char.IsAsciiDigit)))
+        {
+            return parts[0].PadLeft(5, '0') + parts[1].PadLeft(4, '0') + parts[2].PadLeft(2, '0');
+        }
+        return trimmed.Replace("-", string.Empty).Replace(" ", string.Empty);
     }
 
     private static bool IsIcd10Pcs(string? codeType)
