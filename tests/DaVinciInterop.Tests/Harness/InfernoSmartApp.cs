@@ -234,8 +234,24 @@ public static class InfernoSmartApp
         }
 
         // Back to the kit, carrying the code (or the error) CHO issued. The
-        // kit judges what it receives; the harness only delivers it.
+        // kit judges what it receives; the harness only delivers it. A
+        // redirect anywhere else (CHO's own login, an error page) would leave
+        // the kit waiting until the run timed out, so it is reported here.
+        var redirectPath = new Uri(app.RedirectUri).AbsolutePath;
+        if (!string.Equals(location.IsAbsoluteUri ? location.AbsolutePath : location.OriginalString.Split('?')[0],
+                redirectPath, StringComparison.Ordinal))
+        {
+            throw new InteropEnvironmentException(
+                $"smart-auth-service sent the {(ehr ? "EHR" : "standalone")} authorization to {Redaction.Url(location.ToString())} " +
+                $"rather than back to the app's redirect URI {app.RedirectUri}.");
+        }
+
         using var back = await browser.GetAsync(ToHost(location.ToString(), kitApiBaseUrl), ct);
+        if ((int)back.StatusCode >= 400)
+        {
+            throw new InteropEnvironmentException(
+                $"The kit answered its own redirect URI with HTTP {(int)back.StatusCode}.");
+        }
     }
 
     private static async Task<string> EnrolAsync(HttpClient admin, string url, object body, string what, CancellationToken ct)

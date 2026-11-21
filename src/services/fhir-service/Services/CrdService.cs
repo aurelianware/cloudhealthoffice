@@ -174,7 +174,9 @@ public class CrdService : ICrdService
         sw.Stop();
         return new CrdEvaluationResult
         {
-            Cards = cards,
+            // Every card is a coverage-information card, so a client that
+            // turned coverage-info off gets none of them either.
+            Cards = request.CoverageInfoEnabled ? cards : [],
             SystemActions = systemActions,
             CodesEvaluated = codes.Count,
             TranslationsPerformed = translated.Count(t => t.WasTranslated),
@@ -744,12 +746,7 @@ public class CrdService : ICrdService
         Indicator = "warning",
         Source = new CrdCardSource
         {
-            Topic = new CrdCoding
-            {
-                System = "http://hl7.org/fhir/us/davinci-crd/CodeSystem/temp",
-                Code = "auth-required",
-                Display = "Authorization Required",
-            },
+            Topic = CoverageInfoTopic(),
         },
     };
 
@@ -802,12 +799,7 @@ public class CrdService : ICrdService
             Indicator = "warning",
             Source = new CrdCardSource
             {
-                Topic = new CrdCoding
-                {
-                    System = "http://hl7.org/fhir/us/davinci-crd/CodeSystem/temp",
-                    Code = "doc-required",
-                    Display = "Documentation Required",
-                },
+                Topic = CoverageInfoTopic(),
             },
         };
 
@@ -888,12 +880,7 @@ public class CrdService : ICrdService
         Indicator = "info",
         Source = new CrdCardSource
         {
-            Topic = new CrdCoding
-            {
-                System = "http://hl7.org/fhir/us/davinci-crd/CodeSystem/temp",
-                Code = "no-auth",
-                Display = "No Authorization Required",
-            },
+            Topic = CoverageInfoTopic(),
         },
     };
 
@@ -911,13 +898,21 @@ public class CrdService : ICrdService
         Indicator = "warning",
         Source = new CrdCardSource
         {
-            Topic = new CrdCoding
-            {
-                System = "http://hl7.org/fhir/us/davinci-crd/CodeSystem/temp",
-                Code = "coverage",
-                Display = "Coverage",
-            },
+            Topic = CoverageInfoTopic(),
         },
+    };
+
+    /// <summary>
+    /// Every CHO card is a CRD Coverage Information card (CRD Card Types,
+    /// <c>coverage-info</c>): covered, prior authorization or documentation
+    /// needed, not covered, or undetermined. The card type is the topic; the
+    /// determination is in the card's text and the system action.
+    /// </summary>
+    internal static CrdCoding CoverageInfoTopic() => new()
+    {
+        System = CrdCoverageInformation.TempCodeSystem,
+        Code = "coverage-info",
+        Display = "Coverage Information",
     };
 
     internal static CrdCard BuildRequirementsUnknownCard(string serviceDisplay) => new()
@@ -930,12 +925,7 @@ public class CrdService : ICrdService
         Indicator = "warning",
         Source = new CrdCardSource
         {
-            Topic = new CrdCoding
-            {
-                System = "http://hl7.org/fhir/us/davinci-crd/CodeSystem/temp",
-                Code = "info-needed",
-                Display = "Coverage Requirements Unknown",
-            },
+            Topic = CoverageInfoTopic(),
         },
     };
 

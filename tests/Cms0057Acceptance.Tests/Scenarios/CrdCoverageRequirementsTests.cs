@@ -204,9 +204,10 @@ public class CrdCoverageRequirementsTests
 
         card.Indicator.Should().Be("warning");
         card.Summary.Should().Contain("Prior authorization required");
-        // Governing rule is identified on the card source topic.
+        // The card is a CRD Coverage Information card: its topic is the CRD
+        // card type (coverage-info), and the determination is its summary.
         card.Source.Should().NotBeNull();
-        card.Source!.Topic!.Code.Should().Be("auth-required");
+        card.Source!.Topic!.Code.Should().Be("coverage-info");
     }
 
     [Fact]
