@@ -433,12 +433,23 @@ public class MetadataController : FhirControllerBase
                                 entry.ResourceType,
                                 [.. entry.SearchParameters.Select(p => (p, SearchParamTypeFor(p)))])),
                     ],
-                    // No system-level $export: BulkExportController refuses
-                    // it (an export of every member in a tenant has no
-                    // approved caller), so it is not claimed. Patient and
-                    // Group export are declared on their resources above.
+                    // System-level $export is declared only when it can be
+                    // started: bulk export on and at least one system
+                    // exporter named (BulkExport:SystemExport:Clients).
+                    // Patient and Group export are declared on their
+                    // resources above.
                     Operation =
                     [
+                        .. SystemExportEnabled
+                            ? new[]
+                            {
+                                new CapabilityStatement.OperationComponent
+                                {
+                                    Name = SystemExportOperation.Name,
+                                    Definition = SystemExportOperation.Definition,
+                                },
+                            }
+                            : [],
                         new CapabilityStatement.OperationComponent
                         {
                             Name = AppealSubmitController.OperationName,
@@ -492,8 +503,16 @@ public class MetadataController : FhirControllerBase
     private static readonly (string Name, string Definition) GroupExportOperation =
         ("export", "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/group-export");
 
+    private static readonly (string Name, string Definition) SystemExportOperation =
+        ("export", "http://hl7.org/fhir/uv/bulkdata/OperationDefinition/export");
+
     private bool BulkExportEnabled
         => _config.GetValue<bool>($"{Services.BulkExport.BulkExportOptions.SectionName}:Enabled");
+
+    private bool SystemExportEnabled
+        => BulkExportEnabled
+           && (_config.GetSection($"{Services.BulkExport.BulkExportOptions.SectionName}:SystemExport")
+                   .Get<Services.BulkExport.SystemExportOptions>()?.IsOn ?? false);
 
     /// <summary>
     /// The FHIR search-parameter type for a clinical parameter name. <c>_id</c>

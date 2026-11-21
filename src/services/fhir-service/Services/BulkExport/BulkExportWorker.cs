@@ -185,11 +185,13 @@ public sealed class BulkExportWorker : BackgroundService
         var payerToPayer = job.Level == BulkExportLevel.PayerToPayer;
         var members = payerToPayer
             ? await PayerToPayerMembersAsync(job, services, transactionTime, ct)
-            : await AuthorizedMembersAsync(
-                job,
-                services.GetRequiredService<IProviderAttributionSource>(),
-                services.GetRequiredService<IProviderAccessAuthorizationService>(),
-                ct);
+            : job.Level == BulkExportLevel.System
+                ? await AllMembersAsync(job, services.GetRequiredService<IFhirDataAdapter>(), ct)
+                : await AuthorizedMembersAsync(
+                    job,
+                    services.GetRequiredService<IProviderAttributionSource>(),
+                    services.GetRequiredService<IProviderAccessAuthorizationService>(),
+                    ct);
 
         // The patient parameter narrows the members, never widens them.
         var notExported = new List<string>();
@@ -340,6 +342,35 @@ public sealed class BulkExportWorker : BackgroundService
 
         return await services.GetRequiredService<IPayerToPayerConsentAttestationStore>()
             .ListMembersInForceAsync(job.TenantId, job.ReceivingPayerId!, now.UtcDateTime, ct);
+    }
+
+    /// <summary>
+    /// Every member in the tenant, for a system-level export: each Patient the
+    /// tenant's data adapter holds, paged until the adapter's total is read,
+    /// a page is empty, or a page adds no one new (an adapter that ignores the
+    /// page number must not loop forever). An adapter may serve a smaller page
+    /// than asked for, so a short page is not taken as the last. The kick-off
+    /// already required a configured system exporter.
+    /// </summary>
+    internal static async Task<IReadOnlyList<string>> AllMembersAsync(
+        BulkExportJobRecord job, IFhirDataAdapter adapter, CancellationToken ct)
+    {
+        const int pageSize = 500;
+        var members = new SortedSet<string>(StringComparer.Ordinal);
+        var fetched = 0;
+        for (var page = 1; ; page++)
+        {
+            var (items, total) = await adapter.SearchPatientsAsync(
+                new PatientSearchParams { Count = pageSize, Page = page }, job.TenantId, ct);
+            var before = members.Count;
+            foreach (var patient in items)
+                if (!string.IsNullOrWhiteSpace(patient.Id))
+                    members.Add(patient.Id);
+            fetched += items.Count;
+            if (items.Count == 0 || fetched >= total || members.Count == before)
+                break;
+        }
+        return members.ToList();
     }
 
     /// <summary>
