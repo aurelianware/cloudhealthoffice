@@ -333,14 +333,25 @@
         "patientFirstName": "Testcase",
         "patientLastName": "Interop",
         "patientDateOfBirth": "1970-01-01T00:00:00Z",
+        "lineOfBusiness": "Commercial",
         "requestingProviderNPI": "1234567893",
         "servicingProviderNPI": "1234567893",
+        "authorizationType": "PreAuthorization",
+        "certificationType": "I",
+        "serviceTypeCode": "2",
+        "levelOfService": "E",
+        "diagnosisCodes": [
+          { "code": "M1711", "codeQualifier": "BK", "description": "Unilateral primary osteoarthritis, right knee" }
+        ],
         "requestedServiceDateFrom": "2026-01-01T00:00:00Z",
         "requestedServiceDateTo": "2099-12-30T00:00:00Z",
         "status": "Approved",
         "reviewDecision": "A1",
         "approvedServiceDateFrom": "2026-01-01T00:00:00Z",
         "approvedServiceDateTo": "2099-12-30T00:00:00Z",
+        "approvedUnits": 1,
+        "submittedDate": "2026-01-05T00:00:00Z",
+        "reviewedDate": "2026-01-06T00:00:00Z",
         "requestedServices": [
           {
             "lineNumber": 1,
@@ -348,7 +359,10 @@
             "productOrServiceSystem": "http://www.ama-assn.org/go/cpt",
             "procedureDescription": "Total knee arthroplasty (synthetic)",
             "requestedUnits": 1,
-            "approvedUnits": 1
+            "unitType": "UN",
+            "placeOfServiceCode": "21",
+            "approvedUnits": 1,
+            "serviceStatus": "A1"
           }
         ]
       }
