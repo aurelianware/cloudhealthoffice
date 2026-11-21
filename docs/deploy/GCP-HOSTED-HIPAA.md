@@ -122,7 +122,7 @@ Steps after the Terraform apply:
 | 5 | Secrets in Secret Manager | Database passwords in Secret Manager (`hosted-secrets.tf`), copied into Kubernetes secrets encrypted with the `gke-secrets` key |
 | 6 | Security alerts on the audit logs (`hosted-operations.tf`) | In this module. Failed sign-ins in CHO itself are next |
 | 7 | Backup for GKE, daily, 35 days, encrypted with its own key (`hosted-operations.tf`) | In this module. The restore drill runs after the first apply |
-| 8 | Administrative safeguards: risk analysis, policies, training record, quarterly access review, plan BAA template | Next |
+| 8 | Administrative safeguards: risk analysis, policies, training record, quarterly access review, plan BAA template | Drafted in `docs/compliance/hipaa-hosted/`, not adopted. Readiness plan: `docs/compliance/security-readiness/` |
 
 Cloudflare Tunnel and Access stay on the demo only. Cloudflare decrypts traffic at its edge, so it would need its own BAA before it could carry PHI.
 
