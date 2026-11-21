@@ -49,6 +49,7 @@ host does not start, and the error names the setting.
       "DiscoveryUrl": null,             // defaults to {Issuer}/.well-known/openid-configuration
       "JwksUri": null,                  // set to skip discovery entirely
       "Tenants": ["tenant-a"],          // empty = any tenant
+      "AllowedScopes": ["openid", "fhirUser", "user/*.read"], // empty = any scope (G-39)
       "AllowedAlgorithms": ["RS256"],   // empty = every supported asymmetric algorithm
       "AdditionalJwksHosts": [],        // hosts other than the issuer's own that may serve JWKS
       "Claims": {
@@ -287,6 +288,23 @@ would be an unauthenticated tenant selector.
 Where an issuer declares `Tenants`, the resolved tenant must be one of them, so
 customer A's IdP cannot authenticate into customer B's data however its claims
 are shaped.
+
+### Per-issuer scope allowlist (G-39)
+
+Where an issuer declares `AllowedScopes`, every scope it grants that is not on
+the list is removed from the token's `scope` and `scp` claims at
+authentication, after the D-32 conflict check and before any scope check,
+identity resolution or controller reads them. The caller keeps the scopes the
+issuer may grant; a request that needed a removed scope is a 403, as for any
+missing scope. Entries are exact, case-sensitive scope tokens, not patterns:
+`system/*.read` admits that token only, not `system/Patient.read`. List
+non-resource scopes (`openid`, `fhirUser`, `launch/patient`, `offline_access`)
+if they should survive. An empty list keeps the old behaviour (any scope), and
+a blank entry or one containing whitespace is a startup error.
+
+Use it to keep a provider-app or workforce IdP from ever minting system grants
+such as `system/PayerToPayer.read` or a system-level export scope, even when
+that IdP is misconfigured.
 
 Tenant is never taken from a FHIR body or query parameter.
 
