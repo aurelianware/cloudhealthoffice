@@ -133,6 +133,9 @@ public sealed record CrdCoverageInformation
     public const string ExtensionUrl =
         "http://hl7.org/fhir/us/davinci-crd/StructureDefinition/ext-coverage-information";
 
+    /// <summary>The code system of the coverage-information detail codes (CRD 2.2.1 coverageDetailNew).</summary>
+    public const string CoverageDetailCodeSystem = "http://terminology.hl7.org/CodeSystem/crd-coverage-detail";
+
     /// <summary>The IG's temp code system, which carries the Coverage Assertion Reasons.</summary>
     public const string TempCodeSystem = "http://hl7.org/fhir/us/davinci-crd/CodeSystem/temp";
 
@@ -163,6 +166,21 @@ public sealed record CrdCoverageInformation
     /// invariant crd-ci-q1 holds whatever a caller puts here.
     /// </summary>
     public IReadOnlyList<string> Questionnaires { get; init; } = [];
+
+    /// <summary>
+    /// The last day the assertion holds: CHO keeps it, and answers its
+    /// coverage-assertion-id, until then (<c>Cms0057:Crd:AssertionRetentionDays</c>).
+    /// </summary>
+    public DateOnly? ExpiryDate { get; init; }
+
+    /// <summary>Who to contact about the determination: the plan, by name, phone and website.</summary>
+    public CrdPayerContact? Contact { get; init; }
+
+    /// <summary>
+    /// The payer's published coverage policy, emitted as a <c>policy-link</c>
+    /// detail: the document the determination's basis is in.
+    /// </summary>
+    public string? PolicyUrl { get; init; }
 
     /// <summary>`covered` / `not-covered` / `conditional` / `indeterminate`.</summary>
     public string Covered => Determination switch
@@ -226,8 +244,39 @@ public sealed record CrdCoverageInformation
             parts.Add(Part("reason", "valueCodeableConcept", ReasonConcept(reason, ReasonText)));
         }
 
+        if (PolicyUrl is not null)
+        {
+            parts.Add(new Dictionary<string, object?>
+            {
+                ["url"] = "detail",
+                ["extension"] = new[]
+                {
+                    Part("category", "valueCode", "cat-other"),
+                    Part("code", "valueCodeableConcept", new Dictionary<string, object?>
+                    {
+                        ["coding"] = new[]
+                        {
+                            new Dictionary<string, object?>
+                            {
+                                ["system"] = CoverageDetailCodeSystem,
+                                ["code"] = "policy-link",
+                                ["display"] = "Policy Link",
+                            },
+                        },
+                    }),
+                    Part("value", "valueUrl", PolicyUrl),
+                },
+            });
+        }
+
         parts.Add(Part("date", "valueDate", Date.ToString("yyyy-MM-dd")));
         parts.Add(Part("coverage-assertion-id", "valueString", CoverageAssertionId));
+
+        if (Contact?.ToContactDetail() is { } contact)
+            parts.Add(Part("contact", "valueContactDetail", contact));
+
+        if (ExpiryDate is { } expiry)
+            parts.Add(Part("expiry-date", "valueDate", expiry.ToString("yyyy-MM-dd")));
 
         return new Dictionary<string, object?>
         {
@@ -322,4 +371,25 @@ public class CdsHooksSystemAction
 
     [JsonPropertyName("resource")]
     public JsonElement? Resource { get; set; }
+}
+
+/// <summary>The plan's contact details, as a coverage-information <c>contact</c>.</summary>
+public sealed record CrdPayerContact(string? Name, string? Phone, string? Website)
+{
+    /// <summary>A FHIR ContactDetail, or null when there is nothing to contact.</summary>
+    public Dictionary<string, object?>? ToContactDetail()
+    {
+        var telecom = new List<Dictionary<string, object?>>();
+        if (!string.IsNullOrWhiteSpace(Phone))
+            telecom.Add(new() { ["system"] = "phone", ["value"] = Phone.Trim() });
+        if (!string.IsNullOrWhiteSpace(Website))
+            telecom.Add(new() { ["system"] = "url", ["value"] = Website.Trim() });
+        if (telecom.Count == 0)
+            return null;
+
+        var contact = new Dictionary<string, object?> { ["telecom"] = telecom };
+        if (!string.IsNullOrWhiteSpace(Name))
+            contact["name"] = Name.Trim();
+        return contact;
+    }
 }

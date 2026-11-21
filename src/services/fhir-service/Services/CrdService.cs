@@ -24,6 +24,8 @@ public class CrdService : ICrdService
     private readonly string? _portalQuestionnaireUrl;
     private readonly TimeSpan _assertionRetention;
     private readonly ICrdEhrCoverageReader? _ehrCoverage;
+    private readonly CrdPayerContact? _payerContact;
+    private readonly string? _policyUrl;
 
     public CrdService(
         IHttpClientFactory httpClientFactory,
@@ -35,9 +37,18 @@ public class CrdService : ICrdService
         IDtrService? dtrService = null,
         ICrdAssertionStore? assertionStore = null,
         IOptions<DtrConfig>? dtrConfig = null,
-        ICrdEhrCoverageReader? ehrCoverage = null)
+        ICrdEhrCoverageReader? ehrCoverage = null,
+        IOptions<FhirService.Services.PlanOrganization.PlanOrganizationOptions>? planOrganization = null)
     {
         _ehrCoverage = ehrCoverage;
+        // Who to contact about an assertion: the plan, as its Organization is configured.
+        _payerContact = planOrganization?.Value is { } plan
+                        && (!string.IsNullOrWhiteSpace(plan.Phone) || !string.IsNullOrWhiteSpace(plan.Website))
+            ? new CrdPayerContact(plan.Name, plan.Phone, plan.Website)
+            : null;
+        _policyUrl = Uri.TryCreate(config.Value.CoveragePolicyUrl?.Trim(), UriKind.Absolute, out var policy)
+            ? policy.AbsoluteUri
+            : null;
         _terminologyClient = httpClientFactory.CreateClient("TerminologyService");
         _priorAuthRuleEngine = priorAuthRuleEngine;
         _defaultClassification = LoadFromConfig(config.Value);
@@ -197,7 +208,7 @@ public class CrdService : ICrdService
     /// the determination in that case, exactly as before.
     /// </para>
     /// </summary>
-    private static (List<CdsHooksSystemAction> Actions,
+    private (List<CdsHooksSystemAction> Actions,
         List<(CrdAssertionDraft Draft, CrdCoverageAssertion Record)> Issued) BuildSystemActions(
         CrdHookRequest request,
         string tenantId,
@@ -250,6 +261,9 @@ public class CrdService : ICrdService
                     BillingCodeSystem = hasCode ? assertion.Coding.System : null,
                     BillingCode = hasCode ? assertion.Coding.Code : null,
                     Questionnaires = forms,
+                    ExpiryDate = DateOnly.FromDateTime((now + _assertionRetention).UtcDateTime),
+                    Contact = _payerContact,
+                    PolicyUrl = _policyUrl,
                 };
                 extensions.Add(info.ToExtension());
                 issued.Add((assertion, new CrdCoverageAssertion

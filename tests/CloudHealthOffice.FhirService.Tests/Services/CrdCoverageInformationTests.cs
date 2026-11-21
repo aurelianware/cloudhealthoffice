@@ -357,6 +357,50 @@ public class CrdCoverageInformationTests
         return Extensions(result.SystemActions).Should().ContainSingle().Subject;
     }
 
+    [Fact]
+    public void The_plan_contact_expiry_and_policy_link_are_carried_when_configured()
+    {
+        var info = new CrdCoverageInformation
+        {
+            CoverageReference = "Coverage/c1",
+            CoverageAssertionId = "a1",
+            Date = new DateOnly(2026, 11, 21),
+            Determination = CrdDetermination.AuthorizationRequired,
+            ExpiryDate = new DateOnly(2027, 2, 19),
+            Contact = new CrdPayerContact("Interop Health Plan", "555-0199", "https://example.org/plan"),
+            PolicyUrl = "https://example.org/plan/policies",
+        };
+
+        var extension = JsonSerializer.SerializeToElement(info.ToExtension());
+
+        Sub(extension, "expiry-date")!.Value.GetProperty("valueDate").GetString().Should().Be("2027-02-19");
+        var contact = Sub(extension, "contact")!.Value.GetProperty("valueContactDetail");
+        contact.GetProperty("name").GetString().Should().Be("Interop Health Plan");
+        contact.GetProperty("telecom").GetArrayLength().Should().Be(2);
+        var detail = Sub(extension, "detail")!.Value.GetProperty("extension").EnumerateArray().ToList();
+        detail.Select(d => d.GetProperty("url").GetString()).Should().Equal("category", "code", "value");
+        detail[2].GetProperty("valueUrl").GetString().Should().Be("https://example.org/plan/policies");
+    }
+
+    [Fact]
+    public void Nothing_is_invented_when_the_plan_configures_none_of_them()
+    {
+        var info = new CrdCoverageInformation
+        {
+            CoverageReference = "Coverage/c1",
+            CoverageAssertionId = "a1",
+            Date = new DateOnly(2026, 11, 21),
+            Determination = CrdDetermination.AuthorizationRequired,
+            Contact = new CrdPayerContact("Plan", null, null),
+        };
+
+        var extension = JsonSerializer.SerializeToElement(info.ToExtension());
+
+        Sub(extension, "expiry-date").Should().BeNull();
+        Sub(extension, "contact").Should().BeNull();
+        Sub(extension, "detail").Should().BeNull();
+    }
+
     private static List<JsonElement> Extensions(IEnumerable<CdsHooksSystemAction> actions) =>
         actions
             .SelectMany(a => a.Resource!.Value.GetProperty("extension").EnumerateArray())
