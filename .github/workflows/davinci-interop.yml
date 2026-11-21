@@ -294,7 +294,12 @@ jobs:
     name: Inferno conformance kits judging CHO (US Core, CARIN BB, Plan-Net, Bulk Data, PDex, DTR, CRD, PAS, SMART)
     runs-on: ubuntu-latest
     needs: harness
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # TEMPORARY (remove before this PR leaves draft): the pull request that
+    # adds the CRD, PAS and SMART kits runs just those three on every push, so
+    # each fix is judged by the kits without a manual dispatch.
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && github.head_ref == 'claude/inferno-pas-crd-smart-kits')
     continue-on-error: true
     # Five kit builds, eight CHO service builds, and five suites that validate
     # every resource they read. The outer bound, not an expectation.
@@ -329,7 +334,7 @@ jobs:
       # paying for every kit; the nightly always runs all of them.
       - name: Fetch the pinned conformance kits
         env:
-          KITS: ${{ github.event.inputs.kits || 'all' }}
+          KITS: ${{ github.event.inputs.kits || (github.event_name == 'pull_request' && 'crd,pas,smart') || 'all' }}
         run: |
           if [ "$KITS" = "all" ]; then
             ./scripts/interop/fetch-inferno.sh us-core c4bb plan-net bulk-data pdex dtr crd pas smart
@@ -340,7 +345,7 @@ jobs:
       - name: Run the conformance kits against CHO
         env:
           CHO_INTEROP_ENVIRONMENT: CI
-          KITS: ${{ github.event.inputs.kits || 'all' }}
+          KITS: ${{ github.event.inputs.kits || (github.event_name == 'pull_request' && 'crd,pas,smart') || 'all' }}
         run: ./scripts/interop/run.sh inferno "$KITS"
 
       # Every kit validates through the inferno-validator sidecar, and when it
