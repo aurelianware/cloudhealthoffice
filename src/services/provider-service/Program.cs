@@ -136,9 +136,17 @@ builder.Services.AddHttpClient(ProviderTenantConfigCache.HttpClientName)
     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddSingleton<ProviderTenantConfigCache>();
 builder.Services.AddScoped<IProviderAdapter, ChoProviderAdapter>();
-builder.Services.AddScoped<IProviderAdapter, QnxtProviderAdapter>();
-builder.Services.AddScoped<IProviderAdapter, FacetsProviderAdapter>();
-builder.Services.AddScoped<IProviderAdapter, HealthEdgeProviderAdapter>();
+// Live core connectors (QNXT, Facets, HealthEdge) are an optional integration
+// point, off by default: plans feed CHO through the daily file drop instead
+// (docs/integration/CORE-INTEGRATION-OPTIONS.md). Registered only when
+// CoreIntegration:LiveConnectors:Enabled is true; otherwise a tenant naming a
+// vendor platform is refused with 501 by the adapter factory.
+if (CloudHealthOffice.Infrastructure.Tenancy.LiveCoreConnectors.IsEnabled(builder.Configuration))
+{
+    builder.Services.AddScoped<IProviderAdapter, QnxtProviderAdapter>();
+    builder.Services.AddScoped<IProviderAdapter, FacetsProviderAdapter>();
+    builder.Services.AddScoped<IProviderAdapter, HealthEdgeProviderAdapter>();
+}
 builder.Services.AddScoped<ProviderAdapterFactory>();
 
 // Organization (Network) services + adapters (5.3 — network as first-class
@@ -146,8 +154,12 @@ builder.Services.AddScoped<ProviderAdapterFactory>();
 // entity lives in provider-service and reads the same tenant config block.
 builder.Services.AddScoped<IOrganizationService, OrganizationService>();
 builder.Services.AddScoped<IOrganizationAdapter, ChoOrganizationAdapter>();
-builder.Services.AddScoped<IOrganizationAdapter, QnxtOrganizationAdapter>();
-builder.Services.AddScoped<IOrganizationAdapter, FacetsOrganizationAdapter>();
+// Vendor organization connectors: live core connectors only (see above).
+if (CloudHealthOffice.Infrastructure.Tenancy.LiveCoreConnectors.IsEnabled(builder.Configuration))
+{
+    builder.Services.AddScoped<IOrganizationAdapter, QnxtOrganizationAdapter>();
+    builder.Services.AddScoped<IOrganizationAdapter, FacetsOrganizationAdapter>();
+}
 builder.Services.AddScoped<OrganizationAdapterFactory>();
 
 // Network roster (5.4 — paginated, filterable provider roster scoped to
