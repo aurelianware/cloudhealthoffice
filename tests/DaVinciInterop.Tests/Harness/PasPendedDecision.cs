@@ -61,21 +61,39 @@ public static class PasPendedDecision
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", fixture.DevelopmentToken());
         var root = ChoUnderTest.HostAuthorizationUrl.TrimEnd('/');
 
-        var search = await http.GetAsync(
-            $"{root}/api/authorizations/search?memberId={Uri.EscapeDataString(fixture.Member.MemberId)}&status=Pended", ct);
-        var body = await search.Content.ReadAsStringAsync(ct);
-        if (!search.IsSuccessStatusCode)
+        // The $submit's record is written before the kit is answered, but
+        // poll briefly anyway: a wait answered too early must not be reported
+        // as CHO holding nothing.
+        JsonObject? pended = null;
+        JsonArray all = [];
+        for (var attempt = 0; attempt < 6 && pended is null; attempt++)
         {
-            throw new InteropEnvironmentException(
-                $"authorization-service answered HTTP {(int)search.StatusCode} to the pended-request search: {Redaction.Body(body)}");
+            if (attempt > 0) await Task.Delay(TimeSpan.FromSeconds(5), ct);
+            var search = await http.GetAsync(
+                $"{root}/api/authorizations/search?memberId={Uri.EscapeDataString(fixture.Member.MemberId)}&pageSize=100", ct);
+            var body = await search.Content.ReadAsStringAsync(ct);
+            if (!search.IsSuccessStatusCode)
+            {
+                throw new InteropEnvironmentException(
+                    $"authorization-service answered HTTP {(int)search.StatusCode} to the member's authorization search: {Redaction.Body(body)}");
+            }
+
+            all = JsonNode.Parse(body) as JsonArray ?? [];
+            pended = all.OfType<JsonObject>()
+                .Where(a => IsPended(a["status"]))
+                .OrderByDescending(a => a["submittedDate"]?.GetValue<string>() ?? "", StringComparer.Ordinal)
+                .FirstOrDefault();
         }
 
-        var pended = (JsonNode.Parse(body) as JsonArray)?.OfType<JsonObject>()
-            .OrderByDescending(a => a["submittedDate"]?.GetValue<string>() ?? "", StringComparer.Ordinal)
-            .FirstOrDefault()
-            ?? throw new InteropEnvironmentException(
+        if (pended is null)
+        {
+            var held = string.Join(", ", all.OfType<JsonObject>().Select(a =>
+                $"{a["authorizationNumber"]?.ToString() ?? "?"}={a["status"]?.ToString() ?? "?"}"));
+            throw new InteropEnvironmentException(
                 "The PAS kit is waiting for the pended decision, and authorization-service holds no pended request " +
-                $"for {fixture.Member.MemberId}, so there is nothing for a reviewer to decide.");
+                $"for {fixture.Member.MemberId}, so there is nothing for a reviewer to decide. " +
+                $"It holds {all.Count} for the member: {(held.Length == 0 ? "none" : held)}.");
+        }
 
         var id = pended["id"]!.GetValue<string>();
         using var decided = await http.PutAsync($"{root}/api/authorizations/{Uri.EscapeDataString(id)}/status",
@@ -87,6 +105,15 @@ public static class PasPendedDecision
                 Redaction.Body(await decided.Content.ReadAsStringAsync(ct)));
         }
     }
+
+    /// <summary>Pended, whether authorization-service writes the status by name or by number (3).</summary>
+    private static bool IsPended(JsonNode? status)
+        => status?.GetValueKind() switch
+        {
+            System.Text.Json.JsonValueKind.String => string.Equals(status.GetValue<string>(), "Pended", StringComparison.OrdinalIgnoreCase),
+            System.Text.Json.JsonValueKind.Number => status.GetValue<int>() == 3,
+            _ => false,
+        };
 
     /// <summary>
     /// The handshake test waits for the person running the kit to say the

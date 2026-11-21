@@ -25,6 +25,22 @@ public sealed class KitHarnessRequestTests
             .Should().BeTrue();
 
     [Fact]
+    public void The_kits_post_authorization_page_becomes_a_form_post_to_the_authorization_endpoint()
+    {
+        const string page = "http://inferno-smart:4567/custom/smart_stu2_2/post_auth_redirect"
+            + "?auth_url=http%3A%2F%2Fcho-smart-auth%3A8080%2Fconnect%2Fauthorize&response_type=code&client_id=app&scope=openid+launch%2Fpatient&state=s1";
+
+        var form = InfernoSmartApp.PostRedirectForm(page, "<title>Inferno POST Authorization Redirect</title>");
+
+        form.Should().NotBeNull();
+        form!.Value.Action.Should().Be("http://cho-smart-auth:8080/connect/authorize");
+        form.Value.Fields.Should().Contain(new KeyValuePair<string, string>("scope", "openid launch/patient"))
+            .And.Contain(new KeyValuePair<string, string>("state", "s1"))
+            .And.NotContain(f => f.Key == "auth_url");
+        InfernoSmartApp.PostRedirectForm(page, "<title>Consent</title>").Should().BeNull();
+    }
+
+    [Fact]
     public void The_pas_pended_decision_wait_is_answered_with_its_use_case_suffix()
     {
         PasPendedDecision.IsDecisionWait(

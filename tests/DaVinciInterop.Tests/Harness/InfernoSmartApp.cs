@@ -223,7 +223,7 @@ public static class InfernoSmartApp
             }
         }
 
-        using var first = await browser.GetAsync(ToHost(authorizationUrl, kitApiBaseUrl), ct);
+        using var first = await OpenAuthorizationAsync(browser, authorizationUrl, kitApiBaseUrl, ct);
         Uri location;
         if (first.StatusCode == HttpStatusCode.OK)
         {
@@ -263,6 +263,48 @@ public static class InfernoSmartApp
             throw new InteropEnvironmentException(
                 $"The kit answered its own redirect URI with HTTP {(int)back.StatusCode}.");
         }
+    }
+
+    /// <summary>
+    /// Opens the authorization request as a browser would. For the POST
+    /// authorization test the kit's link is its own page, which a browser's
+    /// script turns into a form POST of the request to <c>auth_url</c>; the
+    /// harness has no script engine, so it sends that POST itself.
+    /// </summary>
+    private static async Task<HttpResponseMessage> OpenAuthorizationAsync(
+        HttpClient browser, string authorizationUrl, string kitApiBaseUrl, CancellationToken ct)
+    {
+        var first = await browser.GetAsync(ToHost(authorizationUrl, kitApiBaseUrl), ct);
+        if (first.StatusCode != HttpStatusCode.OK)
+            return first;
+
+        var html = await first.Content.ReadAsStringAsync(ct);
+        if (PostRedirectForm(authorizationUrl, html) is not { } form)
+            return first;
+
+        first.Dispose();
+        return await browser.PostAsync(ToHost(form.Action, kitApiBaseUrl), new FormUrlEncodedContent(form.Fields), ct);
+    }
+
+    /// <summary>
+    /// The form the kit's "POST Authorization Redirect" page submits: every
+    /// query parameter of its own URL except <c>auth_url</c>, posted to
+    /// <c>auth_url</c>. Null for any other page.
+    /// </summary>
+    public static (string Action, List<KeyValuePair<string, string>> Fields)? PostRedirectForm(string pageUrl, string html)
+    {
+        if (!html.Contains("Inferno POST Authorization Redirect", StringComparison.Ordinal))
+            return null;
+
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(pageUrl).Query);
+        if (!query.TryGetValue("auth_url", out var action) || string.IsNullOrWhiteSpace(action))
+            return null;
+
+        var fields = query
+            .Where(q => q.Key != "auth_url")
+            .SelectMany(q => q.Value.Select(v => new KeyValuePair<string, string>(q.Key, v ?? "")))
+            .ToList();
+        return (action.ToString(), fields);
     }
 
     private static async Task<string> EnrolAsync(HttpClient admin, string url, object body, string what, CancellationToken ct)
