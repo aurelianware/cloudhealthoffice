@@ -255,7 +255,8 @@
         "technical_issues_request_body",
         "no_member_found_request_body",
         "coverage_not_found_request_body",
-        "no_active_coverage_request_body"
+        "no_active_coverage_request_body",
+        "mock_ehr_bundle"
       ],
       "infernoAuth": "cdsHooksClient",
       "choSurface": "cdsHooks",

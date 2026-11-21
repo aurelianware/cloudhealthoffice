@@ -365,6 +365,11 @@ public static class InfernoSuiteScenario
             {
                 Name = name, Value = CrdServerRequests.CoverageNotFound(fixture).ToJsonString(),
             },
+            "mock_ehr_bundle" => new InfernoInput
+            {
+                Name = name,
+                Value = CrdServerRequests.MockEhrBundle(fixture, Crd().CoverageId, Crd().LapsedMemberId, Crd().LapsedCoverageId).ToJsonString(),
+            },
             "no_active_coverage_request_body" => new InfernoInput
             {
                 Name = name,

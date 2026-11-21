@@ -169,7 +169,24 @@ public class CrdUnresolvedMemberTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private async Task<CrdEvaluationResult> EvaluateAsync(string code, ICrdContextResolver resolver)
+    /// <summary>CRD configuration option coverage-info=false: cards only, no coverage-information.</summary>
+    [Fact]
+    public async Task Coverage_info_switched_off_returns_cards_and_no_system_actions()
+    {
+        var hook = Hook("27447");
+        hook.Extension = JsonDocument.Parse(
+            """{"davinci-crd.configuration":{"coverage-info":false,"unknown-option":true}}""").RootElement.Clone();
+
+        var result = await EvaluateAsync(hook, CrdContextResolverDouble.Unresolved(CrdContextFailure.ContextIncomplete));
+
+        result.Cards.Should().NotBeEmpty();
+        result.SystemActions.Should().BeEmpty();
+    }
+
+    private Task<CrdEvaluationResult> EvaluateAsync(string code, ICrdContextResolver resolver)
+        => EvaluateAsync(Hook(code), resolver);
+
+    private async Task<CrdEvaluationResult> EvaluateAsync(CrdHookRequest hook, ICrdContextResolver resolver)
     {
         var service = new CrdService(
             new UnreachableTerminology(),
@@ -179,7 +196,7 @@ public class CrdUnresolvedMemberTests
             resolver,
             NullLogger<CrdService>.Instance);
 
-        return await service.EvaluateCoverageRequirementsAsync(Hook(code), Tenant);
+        return await service.EvaluateCoverageRequirementsAsync(hook, Tenant);
     }
 
     private static JsonElement Reason(CrdEvaluationResult result)

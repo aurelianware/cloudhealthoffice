@@ -156,7 +156,11 @@ public class CrdService : ICrdService
         var coverageReference = CrdPrefetch.ActiveCoverageReference(request)
             ?? (request.EhrCoverage is { } ehrCoverage ? CrdPrefetch.ReferenceOf(ehrCoverage) : null)
             ?? CrdPrefetch.OrderInsuranceReference(request);
-        var (systemActions, issued) = BuildSystemActions(request, tenantId, coverageReference, assertions, questionnaires);
+        // coverage-info false (a CRD configuration option): the client asked
+        // for no coverage-information on this call, so none is issued or kept.
+        var (systemActions, issued) = request.CoverageInfoEnabled
+            ? BuildSystemActions(request, tenantId, coverageReference, assertions, questionnaires)
+            : ([], []);
         await RememberAsync(issued, tenantId, ct);
 
         foreach (var assertion in assertions.Where(a => a.Determination == CrdDetermination.DocumentationRequired))

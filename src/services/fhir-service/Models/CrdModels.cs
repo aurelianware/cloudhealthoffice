@@ -22,6 +22,23 @@ public class CrdHookRequest
     [JsonPropertyName("fhirAuthorization")]
     public CrdFhirAuthorization? FhirAuthorization { get; set; }
 
+    /// <summary>CDS Hooks request extensions, e.g. <c>davinci-crd.configuration</c>.</summary>
+    [JsonPropertyName("extension")]
+    public JsonElement? Extension { get; set; }
+
+    /// <summary>
+    /// The client's <c>coverage-info</c> configuration: false asks CHO for no
+    /// coverage-information system actions on this call. True when absent
+    /// (the option's default); unknown options are ignored.
+    /// </summary>
+    [JsonIgnore]
+    public bool CoverageInfoEnabled
+        => !(Extension is { ValueKind: JsonValueKind.Object } extension
+             && extension.TryGetProperty("davinci-crd.configuration", out var configuration)
+             && configuration.ValueKind == JsonValueKind.Object
+             && configuration.TryGetProperty("coverage-info", out var coverageInfo)
+             && coverageInfo.ValueKind == JsonValueKind.False);
+
     [JsonPropertyName("prefetch")]
     public Dictionary<string, System.Text.Json.JsonElement>? Prefetch { get; set; }
 
@@ -347,4 +364,31 @@ public class CrdServiceDefinition
 
     [JsonPropertyName("prefetch")]
     public Dictionary<string, string>? Prefetch { get; set; }
+
+    /// <summary>
+    /// CDS Hooks extensions: CRD 2.2's <c>davinci-crd.version</c> (the CRD
+    /// versions the service answers) and <c>davinci-crd.configuration-options</c>
+    /// (what a client may switch per call, at minimum one per type of card).
+    /// </summary>
+    [JsonPropertyName("extension")]
+    public Dictionary<string, object>? Extension { get; set; }
+}
+
+/// <summary>One CRD configuration option a CDS service offers in discovery (CRD 2.2 §Configuration options).</summary>
+public class CrdConfigurationOption
+{
+    [JsonPropertyName("code")]
+    public string Code { get; set; } = string.Empty;
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "boolean";
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = string.Empty;
+
+    [JsonPropertyName("default")]
+    public object? Default { get; set; }
 }

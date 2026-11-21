@@ -47,15 +47,24 @@ public static class InfernoSmartApp
         var smart = ChoUnderTest.HostSmartAuthUrl.TrimEnd('/');
 
         await PostAsync(admin, $"{smart}/api/admin/smart/clients", Registration(
-            app.ClientId, "patient-app", app.DisplayName, app.Scopes, app.RedirectUri), "the standalone app registration",
+            app.ClientId, "patient-app", app.DisplayName, ScopesOf(app.StandaloneScopes), app.RedirectUri),
+            "the standalone app registration",
             cancellationToken, conflictIsOk: true);
         await PostAsync(admin, $"{smart}/api/admin/smart/clients", Registration(
             app.EhrClientId, "provider-app", $"{app.DisplayName}, EHR launch",
-            app.Scopes, app.RedirectUri), "the EHR launch app registration", cancellationToken, conflictIsOk: true);
+            ScopesOf(app.EhrScopes), app.RedirectUri), "the EHR launch app registration", cancellationToken, conflictIsOk: true);
 
         return $"SMART apps '{app.ClientId}' (patient app, standalone launch) and '{app.EhrClientId}' (provider app, " +
                $"EHR launch) registered with redirect URI {app.RedirectUri}";
     }
+
+    /// <summary>
+    /// The scopes one app requests, which are the ones it is registered for:
+    /// a patient app may not hold <c>launch</c>, nor a provider app request
+    /// what it was not registered for.
+    /// </summary>
+    private static IReadOnlyList<string> ScopesOf(string requested)
+        => requested.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
     /// <summary>The registration body for one of the kit's apps.</summary>
     public static JsonObject Registration(

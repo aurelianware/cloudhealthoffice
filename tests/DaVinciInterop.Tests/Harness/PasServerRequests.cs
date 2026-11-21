@@ -47,7 +47,8 @@ public static class PasServerRequests
                 $"The PAS kit's server preset is not at {path}. Fetch the kit first: ./scripts/interop/fetch-inferno.sh pas");
         }
 
-        var preset = JsonNode.Parse(Erb.Replace(File.ReadAllText(path), "\"\""))!;
+        // The ERB sits inside JSON strings, so it is removed, not replaced by a literal.
+        var preset = JsonNode.Parse(Erb.Replace(File.ReadAllText(path), string.Empty))!;
         var inputs = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var input in preset["inputs"]!.AsArray().OfType<JsonObject>())
         {

@@ -27,6 +27,9 @@ public static class CrdServerRequests
     /// <summary>A Coverage id CHO does not hold, for a member it does: coverage-not-found.</summary>
     public const string UnknownCoverageId = "interop-coverage-unknown";
 
+    /// <summary>The EHR's Coverage for the unknown member (a different id from the coverage-not-found one).</summary>
+    public const string UnknownMemberCoverageId = "interop-coverage-unknown-member";
+
     /// <summary>The draft order for the order-select hook.</summary>
     public const string SelectOrderId = "interop-crd-order-select";
 
@@ -66,9 +69,9 @@ public static class CrdServerRequests
     /// <summary>A patient CHO has no member for, whose EHR Coverage names CHO's plan: not-covered, no-member-found.</summary>
     public static JsonObject NoMemberFound(ChoSeedFixture fixture)
     {
-        var order = DtrPayerServerRequests.Order(fixture, UnknownCoverageId);
+        var order = DtrPayerServerRequests.Order(fixture, UnknownMemberCoverageId);
         order["subject"] = new JsonObject { ["reference"] = $"Patient/{UnknownMemberId}" };
-        return Hook("order-sign", UnknownMemberId, Coverage(UnknownMemberId, UnknownCoverageId, "active"), order);
+        return Hook("order-sign", UnknownMemberId, Coverage(UnknownMemberId, UnknownMemberCoverageId, "active"), order);
     }
 
     /// <summary>A group CHO has never enrolled anyone in.</summary>
@@ -109,6 +112,59 @@ public static class CrdServerRequests
         var coverage = Coverage(lapsedMemberId, lapsedCoverageId, "active");
         coverage["period"] = new JsonObject { ["start"] = "2025-01-01", ["end"] = "2025-12-31" };
         return Hook("order-sign", lapsedMemberId, coverage, order);
+    }
+
+    /// <summary>
+    /// The data the kit's simulated EHR serves on its FHIR API and resolves
+    /// references against: every Patient, Coverage, order and practitioner the
+    /// requests above name, so a reference in CHO's answer (the Coverage a
+    /// coverage-information extension names, say) resolves to the resource the
+    /// EHR holds. Built from the requests themselves, so the two cannot drift.
+    /// </summary>
+    public static JsonObject MockEhrBundle(ChoSeedFixture fixture, string coverageId, string lapsedMemberId, string lapsedCoverageId)
+    {
+        var resources = new List<JsonObject>
+        {
+            new()
+            {
+                ["resourceType"] = "Practitioner",
+                ["id"] = "interop-dtr-practitioner",
+                ["identifier"] = new JsonArray(new JsonObject
+                {
+                    ["system"] = "http://hl7.org/fhir/sid/us-npi",
+                    ["value"] = DtrPayerServerRequests.PractitionerNpi,
+                }),
+                ["name"] = new JsonArray(new JsonObject { ["family"] = "Practitioner", ["given"] = new JsonArray("Ordering") }),
+            },
+        };
+
+        var hooks = new List<JsonObject>
+        {
+            AnyHook(fixture, coverageId),
+            (JsonObject)OrderSelect(fixture, coverageId)[0]!,
+            NoMemberFound(fixture),
+            CoverageNotFound(fixture),
+            NoActiveCoverage(fixture, lapsedMemberId, lapsedCoverageId),
+        };
+        foreach (var hook in hooks)
+        {
+            resources.Add((JsonObject)hook["prefetch"]!["patient"]!.DeepClone());
+            foreach (var entry in hook["prefetch"]!["coverage"]!["entry"]!.AsArray())
+                resources.Add((JsonObject)entry!["resource"]!.DeepClone());
+            foreach (var entry in hook["context"]!["draftOrders"]!["entry"]!.AsArray())
+                resources.Add((JsonObject)entry!["resource"]!.DeepClone());
+        }
+
+        var unique = resources
+            .GroupBy(r => $"{r["resourceType"]}/{r["id"]}")
+            .Select(g => g.First());
+
+        return new JsonObject
+        {
+            ["resourceType"] = "Bundle",
+            ["type"] = "collection",
+            ["entry"] = new JsonArray(unique.Select(r => (JsonNode)new JsonObject { ["resource"] = r }).ToArray()),
+        };
     }
 
     private static JsonObject Hook(string hook, string patientId, JsonObject coverage, JsonObject order) => new()
