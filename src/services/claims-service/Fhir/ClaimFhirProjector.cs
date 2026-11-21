@@ -148,6 +148,7 @@ public sealed class ClaimFhirProjector : IClaimFhirProjector
     {
         ClaimType.Institutional => Concept(ClaimTypeSystem, "institutional", "Institutional"),
         ClaimType.Dental => Concept(ClaimTypeSystem, "oral", "Oral Health"),
+        ClaimType.Pharmacy => Concept(ClaimTypeSystem, "pharmacy", "Pharmacy"),
         _ => Concept(ClaimTypeSystem, "professional", "Professional"),
     };
 

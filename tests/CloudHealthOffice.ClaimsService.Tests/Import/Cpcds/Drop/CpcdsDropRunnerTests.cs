@@ -34,7 +34,7 @@ public sealed class CpcdsDropRunnerTests : IDisposable
     public CpcdsDropRunnerTests()
     {
         _options.Root = _root;
-        _upstream.ImportMembersAsync(Tenant, Arg.Any<CpcdsDropFile>(), Arg.Any<string>(), Arg.Any<CpcdsDropFile?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+        _upstream.ImportMembersAsync(Tenant, Arg.Any<CpcdsDropFile>(), Arg.Any<string>(), Arg.Any<CpcdsDropFile?>(), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
             .Returns(ci =>
             {
                 _calls.Add("members:" + ci.ArgAt<CpcdsDropFile>(1).Name + "+" + ci.ArgAt<CpcdsDropFile?>(3)?.Name);
@@ -51,6 +51,12 @@ public sealed class CpcdsDropRunnerTests : IDisposable
             {
                 _calls.Add($"authorizations:{ci.ArgAt<CpcdsDropFile>(1).Name}:{ci.ArgAt<string?>(3)}:{ci.ArgAt<string?>(4)}");
                 return new CpcdsDropStep { Name = "authorizations", Status = CpcdsDropStepStatus.Succeeded };
+            });
+        _upstream.ImportNetworkRosterAsync(Tenant, Arg.Any<CpcdsDropFile>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                _calls.Add($"roster:{ci.ArgAt<CpcdsDropFile>(1).Name}:{ci.ArgAt<string?>(3)}");
+                return new CpcdsDropStep { Name = "network-roster", Status = CpcdsDropStepStatus.Succeeded };
             });
         _claims.ImportAsync(Tenant, Arg.Any<string>(), Arg.Any<CpcdsImportOptions>(), CpcdsDropRunner.Actor, Arg.Any<CancellationToken>())
             .Returns(ci =>
@@ -140,6 +146,24 @@ public sealed class CpcdsDropRunnerTests : IDisposable
         Directory.EnumerateFiles(Path.Combine(_root, Tenant, "processed", run.Id)).Select(Path.GetFileName)
             .Should().BeEquivalentTo("CPCDS_Claims.csv", "CPCDS_Coverages.csv", "CPCDS_Members.csv");
         (await _runs.GetAsync(Tenant, run.Id)).Should().BeSameAs(run);
+    }
+
+    [Fact]
+    public async Task A_network_roster_loads_after_members_and_before_the_claims()
+    {
+        Drop("CPCDS_Claims.csv");
+        Drop("qnxt_network_roster_20261101.csv");
+        Drop("CPCDS_Members.csv");
+
+        var run = await Runner().RunAsync(Tenant, default);
+
+        _calls.Should().Equal(
+            "members:CPCDS_Members.csv+",
+            "roster:qnxt_network_roster_20261101.csv:Commercial",
+            "providers:CPCDS_Claims.csv",
+            $"claims:CPCDS_Claims.csv:qnxt:{Tenant}");
+        run!.Steps.Select(s => s.Name).Should().Equal("members-and-coverage", "network-roster", "claim-providers", "claims");
+        run.Files.Single(f => f.Name.Contains("roster")).Kind.Should().Be(CpcdsDropFileKind.Rosters);
     }
 
     [Fact]
@@ -275,6 +299,7 @@ public sealed class CpcdsDropRunnerTests : IDisposable
     [InlineData("CPCDS_Claims.csv", CpcdsDropFileKind.Claims)]
     [InlineData("qnxt_member_coverage_20261101.txt", CpcdsDropFileKind.Coverages)]
     [InlineData("facets-claims-2026-11-01.psv", CpcdsDropFileKind.Claims)]
+    [InlineData("qnxt_network_roster_20261101.csv", CpcdsDropFileKind.Rosters)]
     [InlineData("readme.txt", CpcdsDropFileKind.Unknown)]
     public void File_kinds_come_from_the_name(string name, CpcdsDropFileKind kind)
         => CpcdsDropFileKinds.Classify(name).Should().Be(kind);
@@ -397,7 +422,7 @@ public sealed class CpcdsDropRunnerTests : IDisposable
               "import": { "membersCreated": 3, "coverageRecordsCreated": 2, "errors": [] } }
             """);
 
-        var step = await imports.ImportMembersAsync(Tenant, File_("m.csv"), "a", File_("c.csv"), "b", default);
+        var step = await imports.ImportMembersAsync(Tenant, File_("m.csv"), "a", File_("c.csv"), "b", null, default);
 
         step.Status.Should().Be(CpcdsDropStepStatus.CompletedWithErrors);
         step.Counts.Should().Contain(new KeyValuePair<string, decimal>("membersCreated", 3))

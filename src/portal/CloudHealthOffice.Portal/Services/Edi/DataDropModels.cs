@@ -79,6 +79,8 @@ public class DataDropFreshnessWindow
     public decimal MembersUpdated { get; set; }
     public decimal ProvidersCreated { get; set; }
     public decimal ProvidersNotInNppes { get; set; }
+    public decimal RosterParticipationsAdded { get; set; }
+    public decimal RosterRowsRejected { get; set; }
     public decimal? UnmappedPlanCodesInLastMemberLoad { get; set; }
 }
 

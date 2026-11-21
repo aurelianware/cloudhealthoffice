@@ -369,6 +369,18 @@ public class ClaimSubmissionService : IClaimSubmissionService
             });
         }
 
+        // Pharmacy claims are loaded already adjudicated (CPCDS import); CHO
+        // has no NCPDP adjudication to run one through.
+        if (claim.ClaimType == ClaimType.Pharmacy)
+        {
+            errors.Add(new ValidationError
+            {
+                Field = nameof(AdapterClaim.ClaimType),
+                Code = "Unsupported",
+                Message = "Pharmacy claims cannot be submitted for adjudication; load them through the CPCDS import"
+            });
+        }
+
         if (claim.ClaimLines is null || claim.ClaimLines.Count == 0)
         {
             errors.Add(new ValidationError

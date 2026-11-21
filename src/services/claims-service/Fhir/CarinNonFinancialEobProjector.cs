@@ -41,6 +41,8 @@ namespace ClaimsService.Fhir;
 ///     <see cref="IsInpatient"/>.</description></item>
 ///   <item><term><see cref="ClaimType.Dental"/></term>
 ///     <description>Oral Basis.</description></item>
+///   <item><term><see cref="ClaimType.Pharmacy"/></term>
+///     <description>Pharmacy Basis (claims loaded from a CPCDS extract).</description></item>
 /// </list>
 ///
 /// <para>
@@ -64,6 +66,7 @@ public sealed class CarinNonFinancialEobProjector : ICarinNonFinancialEobProject
     public const string InpatientInstitutionalBasisProfile = CarinEobBasis.InpatientInstitutionalBasisProfile;
     public const string OutpatientInstitutionalBasisProfile = CarinEobBasis.OutpatientInstitutionalBasisProfile;
     public const string OralBasisProfile = CarinEobBasis.OralBasisProfile;
+    public const string PharmacyBasisProfile = CarinEobBasis.PharmacyBasisProfile;
 
     private readonly CarinEobInsurerOptions? _insurer;
 

@@ -377,6 +377,12 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
         if (claim.AdjudicationResult is not { } adj)
             return;
 
+        // A pharmacy claim's denial codes are NCPDP reject codes, which the
+        // Basis shaping already put on the items; read as CARCs they would
+        // say something else entirely.
+        if (claim.ClaimType == ClaimType.Pharmacy)
+            return;
+
         if (!string.IsNullOrEmpty(adj.DenialReasonCode))
         {
             entries.Add(AdjustmentReason(
