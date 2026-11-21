@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace DaVinciInterop.Tests.Harness;
 
@@ -18,9 +19,25 @@ namespace DaVinciInterop.Tests.Harness;
 /// </summary>
 public static class PasPendedDecision
 {
-    /// <summary>Answers the kit's wait for the pended-decision notification; ignores every other wait.</summary>
-    public static async Task AnswerAsync(InfernoResult waiting, ChoSeedFixture fixture, CancellationToken ct)
+    /// <summary>How long the harness lets CHO's handshake reach the kit before confirming it.</summary>
+    public static readonly TimeSpan HandshakeAllowance = TimeSpan.FromSeconds(10);
+
+    private static readonly Regex ResumeLink = new(@"\]\((?<url>https?://[^)\s]+/resume_pass\?[^)\s]+)\)", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Answers the kit's two waits: the Subscription handshake (confirmed once
+    /// CHO has had time to send it) and the pended-decision notification (by
+    /// deciding the request). Ignores every other wait.
+    /// </summary>
+    public static async Task AnswerAsync(
+        InfernoResult waiting, ChoSeedFixture fixture, string kitApiBaseUrl, CancellationToken ct)
     {
+        if (waiting.TestId?.EndsWith("notification_delivery", StringComparison.Ordinal) == true)
+        {
+            await ConfirmHandshakeAsync(waiting, kitApiBaseUrl, ct);
+            return;
+        }
+
         if (waiting.TestId?.EndsWith("subscription_notification_wait", StringComparison.Ordinal) != true)
         {
             return;
@@ -54,6 +71,43 @@ public static class PasPendedDecision
             throw new InteropEnvironmentException(
                 $"authorization-service refused to approve the pended request with HTTP {(int)decided.StatusCode}: " +
                 Redaction.Body(await decided.Content.ReadAsStringAsync(ct)));
+        }
+    }
+
+    /// <summary>
+    /// The handshake test waits for the person running the kit to say the
+    /// server has sent its notifications, by opening the kit's "Click here"
+    /// link. CHO sends the handshake a moment after it accepts the
+    /// Subscription, so the harness waits for that, then opens the link the
+    /// kit gave, on the port the harness reaches the kit on. Whether the
+    /// handshake arrived, and was right, is the kit's to judge.
+    /// </summary>
+    private static async Task ConfirmHandshakeAsync(InfernoResult waiting, string kitApiBaseUrl, CancellationToken ct)
+    {
+        var text = string.Join('\n', new[] { waiting.ResultMessage ?? "" }.Concat(waiting.Messages.Select(m => m.Message)));
+        var link = ResumeLink.Match(text);
+        if (!link.Success)
+        {
+            throw new InteropEnvironmentException(
+                $"The kit's handshake test {waiting.TestId} is waiting without a confirmation link in its message.");
+        }
+
+        await Task.Delay(HandshakeAllowance, ct);
+
+        var kitRoot = kitApiBaseUrl.TrimEnd('/');
+        if (kitRoot.EndsWith("/api", StringComparison.Ordinal)) kitRoot = kitRoot[..^4];
+        var resume = new Uri(link.Groups["url"].Value);
+        // The kit answers with a redirect to its own UI, on its in-network
+        // name; the resume is done by then, so the redirect is not followed.
+        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+        {
+            Timeout = InteropSettings.Timeouts.ProtocolCall,
+        };
+        using var response = await http.GetAsync($"{kitRoot}{resume.PathAndQuery}", ct);
+        if (!response.IsSuccessStatusCode && (int)response.StatusCode is not (>= 300 and < 400))
+        {
+            throw new InteropEnvironmentException(
+                $"The kit answered HTTP {(int)response.StatusCode} to the handshake confirmation link.");
         }
     }
 }

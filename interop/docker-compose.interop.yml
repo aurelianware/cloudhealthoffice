@@ -467,6 +467,18 @@ services:
       CdsHooks__TrustedClients__0__Issuer: http://inferno-crd:4567/custom/crd_server_v221
       CdsHooks__TrustedClients__0__JwksUrl: http://inferno-crd:4567/custom/crd_server_v221/jwks.json
       CdsHooks__TrustedClients__0__TenantId: interop-tenant
+      # The PAS kit (INFERNO-PAS-SERVER-001) subscribes to the PAS pended
+      # topic with a rest-hook endpoint on itself, and is told when the
+      # pended request it submitted is decided. Only its host may be named.
+      Subscriptions__Enabled: "true"
+      Subscriptions__AllowedEndpointHosts__0: inferno-pas
+      Subscriptions__PollInterval: "00:00:03"
+      Subscriptions__FhirBaseUrl: http://cho-fhir-service:8080/fhir/r4
+      # The PAS kit's approval, denial and pended requests are re-pointed at
+      # these service types (PasServerRequests): one CHO approves, one it
+      # does not cover, and the pended one matches neither, so it pends.
+      Cms0057__PasAutoAdjudication__AutoApproveServiceTypes__0: "3"
+      Cms0057__PasAutoAdjudication__AutoDenyServiceTypes__0: "4"
       SmartAuth__Issuer: ${INTEROP_SMART_ISSUER:-http://cho-smart-auth-service:8080}
       SmartAuth__RequireHttpsMetadata: "false"
       # The SMART kit reads .well-known/smart-configuration cross-origin.

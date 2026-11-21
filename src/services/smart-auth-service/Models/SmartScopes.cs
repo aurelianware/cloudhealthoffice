@@ -94,6 +94,15 @@ public static class SmartScopes
     public const string UserQuestionnaireResponseWrite = "user/QuestionnaireResponse.write";
     public const string SystemQuestionnaireResponseWrite = "system/QuestionnaireResponse.write";
 
+    /// <summary>
+    /// Da Vinci PAS pended-decision Subscriptions (R4 backport): a provider
+    /// system subscribing to be told when a pended request is decided.
+    /// </summary>
+    public const string UserSubscriptionRead = "user/Subscription.read";
+    public const string SystemSubscriptionRead = "system/Subscription.read";
+    public const string UserSubscriptionWrite = "user/Subscription.write";
+    public const string SystemSubscriptionWrite = "system/Subscription.write";
+
     /// <summary>All write scopes this authorization server issues.</summary>
     public static readonly string[] AllWriteScopes =
     [
@@ -101,6 +110,7 @@ public static class SmartScopes
         UserClaimWrite, SystemClaimWrite,
         UserTaskWrite, SystemTaskWrite,
         UserQuestionnaireResponseWrite, SystemQuestionnaireResponseWrite,
+        UserSubscriptionWrite, SystemSubscriptionWrite,
     ];
 
     // Declared before Catalog: static initializers run in textual order.
@@ -145,6 +155,10 @@ public static class SmartScopes
         (SystemTaskWrite,        "System: submit attachments and appeals"),
         (UserQuestionnaireResponseWrite, "User: submit QuestionnaireResponses"),
         (SystemQuestionnaireResponseWrite, "System: submit QuestionnaireResponses"),
+        (UserSubscriptionRead,    "User: read prior authorization Subscriptions"),
+        (SystemSubscriptionRead,  "System: read prior authorization Subscriptions"),
+        (UserSubscriptionWrite,   "User: subscribe to prior authorization decisions"),
+        (SystemSubscriptionWrite, "System: subscribe to prior authorization decisions"),
     ];
 
     /// <summary>Every SMART scope this server seeds, with its display name: the v1 scopes and their v2 forms.</summary>

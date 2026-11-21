@@ -570,7 +570,7 @@ public static class InfernoSuiteScenario
         => scenario.InfernoAuth switch
         {
             InfernoAuthModes.SmartApp => (waiting, ct) => InfernoSmartApp.AnswerAsync(waiting, fixture, kitApiBaseUrl, ct),
-            InfernoAuthModes.PasClientBackendServices => (waiting, ct) => PasPendedDecision.AnswerAsync(waiting, fixture, ct),
+            InfernoAuthModes.PasClientBackendServices => (waiting, ct) => PasPendedDecision.AnswerAsync(waiting, fixture, kitApiBaseUrl, ct),
             _ => null,
         };
 

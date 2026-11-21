@@ -743,6 +743,17 @@ builder.Services.AddScoped<ICrdEhrCoverageReader, CrdEhrCoverageReader>();
 // resolve a coverage-assertion-id context (DTR spec-107). Singleton: the store
 // ensures its indexes at construction.
 builder.Services.AddSingleton<ICrdAssertionStore, MongoCrdAssertionStore>();
+// PAS pended-decision Subscriptions (R4 backport). Off unless
+// Subscriptions:Enabled; the endpoints a Subscription may name are allowlisted.
+builder.Services.Configure<FhirService.Services.Subscriptions.PasSubscriptionOptions>(
+    builder.Configuration.GetSection(FhirService.Services.Subscriptions.PasSubscriptionOptions.SectionName));
+builder.Services.AddSingleton<FhirService.Services.Subscriptions.IPasSubscriptionStore,
+    FhirService.Services.Subscriptions.MongoPasSubscriptionStore>();
+builder.Services.AddSingleton<FhirService.Services.Subscriptions.PasSubscriptionService>();
+builder.Services.AddHttpClient(FhirService.Services.Subscriptions.PasSubscriptionService.HttpClientName,
+        client => client.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHostedService<FhirService.Services.Subscriptions.PasSubscriptionNotificationWorker>();
 builder.Services.AddScoped<ICrdService, CrdService>();
 builder.Services.Configure<DtrConfig>(builder.Configuration.GetSection("Cms0057:Dtr"));
 // Singleton: the store ensures its indexes at construction.
