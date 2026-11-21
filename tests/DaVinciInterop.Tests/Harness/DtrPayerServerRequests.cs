@@ -57,7 +57,7 @@ public static class DtrPayerServerRequests
 
     public const string PractitionerNpi = "1679576722";
 
-    private const string CptSystem = "http://www.ama-assn.org/go/cpt";
+    public const string CptSystem = "http://www.ama-assn.org/go/cpt";
     private const string OriginExtension = "http://hl7.org/fhir/us/davinci-dtr/StructureDefinition/information-origin";
     private const string SleepStudySystem = "https://cloudhealthoffice.com/fhir/CodeSystem/dtr-sleep-study";
 

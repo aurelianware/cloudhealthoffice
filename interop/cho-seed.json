@@ -246,7 +246,8 @@
         "planName": "Interop Gold HMO (synthetic)",
         "coverageLevel": "EMP",
         "insuranceLineCode": "HM",
-        "effectiveDate": "2026-01-01T00:00:00Z"
+        "effectiveDate": "2026-01-01T00:00:00Z",
+        "terminationDate": "2099-12-31T00:00:00Z"
       },
       "claims": [
         {
@@ -323,6 +324,36 @@
       "claims": []
     }
   ],
+  "authorizations": {
+    "_comment": "An approved prior authorization for the member's total knee arthroplasty (CPT 27447, which the interop profile requires authorization for), seeded through authorization-service's development seed. The CRD kit's order-sign request for that procedure is answered pa-needed satisfied, with this authorization's number as satisfied-pa-id. INTEROP-MEM-2's coverage ends 2099-12-31 so a request planned after that is answered covered conditional, info-needed contract-window.",
+    "items": [
+      {
+        "authorizationNumber": "INTEROP-PA-KNEE-1",
+        "memberId": "INTEROP-MEM-1",
+        "patientFirstName": "Testcase",
+        "patientLastName": "Interop",
+        "patientDateOfBirth": "1970-01-01T00:00:00Z",
+        "requestingProviderNPI": "1234567893",
+        "servicingProviderNPI": "1234567893",
+        "requestedServiceDateFrom": "2026-01-01T00:00:00Z",
+        "requestedServiceDateTo": "2099-12-30T00:00:00Z",
+        "status": 4,
+        "reviewDecision": "A1",
+        "approvedServiceDateFrom": "2026-01-01T00:00:00Z",
+        "approvedServiceDateTo": "2099-12-30T00:00:00Z",
+        "requestedServices": [
+          {
+            "lineNumber": 1,
+            "procedureCode": "27447",
+            "productOrServiceSystem": "http://www.ama-assn.org/go/cpt",
+            "procedureDescription": "Total knee arthroplasty (synthetic)",
+            "requestedUnits": 1,
+            "approvedUnits": 1
+          }
+        ]
+      }
+    ]
+  },
   "encounters": [
     {
       "_comment": "The visit behind INTEROP-CLM-PROF-1, as an encounter record (837P). Unlike claims-service, encounter-service reads its enums as names (Commercial, Professional, Original), not numbers. fhir-service serves it as FHIR Encounter, which INTEROP-USCORE-SERVER-001 judges; without one the kit had no Encounter to test.",

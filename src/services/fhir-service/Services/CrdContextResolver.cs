@@ -47,7 +47,11 @@ public sealed record CrdContextResolution
 
     public bool IsResolved => Context is not null;
 
-    public static CrdContextResolution Resolved(PaRuleContext context) => new() { Context = context };
+    /// <summary>The last day of the coverage CHO answered under, when it states one.</summary>
+    public DateOnly? CoverageEnd { get; init; }
+
+    public static CrdContextResolution Resolved(PaRuleContext context, DateOnly? coverageEnd = null)
+        => new() { Context = context, CoverageEnd = coverageEnd };
     public static CrdContextResolution Unresolved(CrdContextFailure failure) => new() { Failure = failure };
 }
 
@@ -237,7 +241,7 @@ public sealed class CrdContextResolver : ICrdContextResolver
             // CHO will be charged. Left at zero, as before, rather than invented.
             EstimatedCost = 0m,
             MemberDateOfBirth = BirthDate(patient),
-        });
+        }, CoverageEnd(coverage));
     }
 
     private async Task<List<Coverage>> ActiveCoveragesAsync(string patientId, string tenantId, CancellationToken ct)
@@ -404,6 +408,13 @@ public sealed class CrdContextResolver : ICrdContextResolver
 
         return DateOnly.FromDateTime(DateTime.UtcNow);
     }
+
+    /// <summary>The coverage period's last day, when it has one.</summary>
+    internal static DateOnly? CoverageEnd(Coverage coverage)
+        => coverage.Period?.End is { Length: >= 10 } end
+           && DateOnly.TryParseExact(end[..10], "yyyy-MM-dd", out var day)
+            ? day
+            : null;
 
     /// <summary>The practitioner identifier from the hook's <c>context.userId</c>.</summary>
     internal static string PractitionerNpi(CrdHookRequest request) =>

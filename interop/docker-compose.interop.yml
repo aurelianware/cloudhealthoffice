@@ -461,6 +461,10 @@ services:
       # own order-sign service and hand the DTR kit its context-only request
       # (DTR spec-107). The code is one of the MRI form's focus codes.
       Cms0057__Crd__DocumentationRequiredCodes__0: "72148"
+      # Prior authorization for a total knee arthroplasty. The seed approves
+      # one for the member (INTEROP-PA-KNEE-1), so the CRD kit sees CHO answer
+      # pa-needed "satisfied" with that authorization as satisfied-pa-id.
+      Cms0057__Crd__AuthRequiredCodes__0: "27447"
       # The plan's coverage policy, which every coverage assertion links to
       # (a coverage-information policy-link detail). Synthetic.
       Cms0057__Crd__CoveragePolicyUrl: https://example.org/interop-health-plan/coverage-policies

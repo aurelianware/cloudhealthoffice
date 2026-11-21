@@ -154,6 +154,16 @@ public interface IPriorAuthorizationStore
     /// </summary>
     Task<PriorAuthorizationRecord?> GetByAuthorizationNumberAsync(
         string authorizationNumber, CancellationToken ct = default);
+
+    /// <summary>
+    /// The member's approved (and approved-as-modified) authorizations, for CRD
+    /// to answer pa-needed <c>satisfied</c>. Empty when there are none or they
+    /// cannot be read: a requirement CHO cannot show is satisfied stays a
+    /// requirement.
+    /// </summary>
+    Task<IReadOnlyList<PriorAuthorizationRecord>> FindApprovedForMemberAsync(
+        string memberId, CancellationToken ct = default)
+        => System.Threading.Tasks.Task.FromResult<IReadOnlyList<PriorAuthorizationRecord>>([]);
 }
 
 /// <summary>
@@ -191,6 +201,50 @@ public sealed class HttpPriorAuthorizationStore : IPriorAuthorizationStore
     {
         _factory = factory;
         _logger = logger;
+    }
+
+    public async Task<IReadOnlyList<PriorAuthorizationRecord>> FindApprovedForMemberAsync(
+        string memberId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(memberId))
+            return [];
+
+        var found = new List<PriorAuthorizationRecord>();
+        foreach (var status in new[] { PriorAuthorizationStatus.Approved, PriorAuthorizationStatus.Modified })
+        {
+            var page = await SearchAsync(
+                $"api/authorizations/search?memberId={Uri.EscapeDataString(memberId.Trim())}&status={status}&pageSize=50", ct);
+            found.AddRange(page.Where(r => r.Status == status));
+        }
+
+        return found;
+    }
+
+    private async Task<List<PriorAuthorizationRecord>> SearchAsync(string path, CancellationToken ct)
+    {
+        var client = _factory.CreateClient(HttpClientName);
+        try
+        {
+            using var response = await client.GetAsync(path, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Prior-authorization search returned {Status}; treating as none.", (int)response.StatusCode);
+                return [];
+            }
+
+            return await response.Content.ReadFromJsonAsync<List<PriorAuthorizationRecord>>(WireFormat, ct) ?? [];
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Category only — never the URL (it carries the member id) or the body.
+            _logger.LogWarning("Prior-authorization search failed ({Fault}); treating as none.", ex.GetType().Name);
+            return [];
+        }
     }
 
     public async Task<PriorAuthorizationRecord?> GetByAuthorizationNumberAsync(

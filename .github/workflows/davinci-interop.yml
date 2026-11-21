@@ -299,7 +299,7 @@ jobs:
     # push, so each fix is judged by the kits without a manual dispatch.
     if: >-
       github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-      || (github.event_name == 'pull_request' && github.head_ref == 'claude/inferno-kits-followup')
+      || (github.event_name == 'pull_request' && github.head_ref == 'claude/inferno-kits-run4')
     continue-on-error: true
     # Five kit builds, eight CHO service builds, and five suites that validate
     # every resource they read. The outer bound, not an expectation.

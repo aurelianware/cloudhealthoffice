@@ -343,13 +343,139 @@ public class CrdCoverageInformationTests
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private CrdService Service() => new(
+    private CrdService Service(
+        IPriorAuthorizationStore? authorizations = null, DateOnly? coverageEnd = null) => new(
         new UnavailableTerminology(),
         _engine.Object,
         Options.Create(Config),
         new CrdClassificationStore(new MemoryCache(new MemoryCacheOptions { SizeLimit = 1024 })),
-        CrdContextResolverDouble.Resolved(),
-        NullLogger<CrdService>.Instance);
+        CrdContextResolverDouble.Resolved(coverageEnd: coverageEnd),
+        NullLogger<CrdService>.Instance,
+        priorAuthorizations: authorizations);
+
+    // ── Satisfied, conditional and dependent answers ─────────────────────────
+
+    [Fact]
+    public async Task An_approved_authorization_for_the_service_satisfies_the_requirement()
+    {
+        var store = new ApprovedAuthorizations(Approved("PA-778", "27447"));
+
+        var result = await Service(store).EvaluateCoverageRequirementsAsync(Hook("27447"), Tenant);
+
+        var extension = Extensions(result.SystemActions).Should().ContainSingle().Subject;
+        Part(extension, "covered").Should().Be("covered");
+        Part(extension, "pa-needed").Should().Be("satisfied");
+        Sub(extension, "satisfied-pa-id")!.Value.GetProperty("valueString").GetString().Should().Be("PA-778");
+        AssertInvariants(extension);
+        result.Cards.Should().ContainSingle().Which.Detail.Should().Contain("PA-778");
+        store.Members.Should().Equal("pat-001");
+    }
+
+    [Theory]
+    [InlineData("99215", 30, null)]         // another service
+    [InlineData("27447", -30, null)]        // ended before the order's date
+    [InlineData("27447", 30, "Denied")]     // that line was denied
+    public async Task An_authorization_that_does_not_cover_the_order_leaves_the_requirement(
+        string code, int endsInDays, string? lineStatus)
+    {
+        var approved = Approved("PA-1", code, lineStatus) with
+        {
+            ApprovedServiceDateFrom = DateTime.UtcNow.Date.AddDays(-60),
+            ApprovedServiceDateTo = DateTime.UtcNow.Date.AddDays(endsInDays),
+        };
+
+        var extension = Extensions((await Service(new ApprovedAuthorizations(approved))
+            .EvaluateCoverageRequirementsAsync(Hook("27447"), Tenant)).SystemActions).Single();
+
+        Part(extension, "pa-needed").Should().Be("auth-needed");
+        Sub(extension, "satisfied-pa-id").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task An_order_planned_after_the_coverage_ends_is_covered_conditionally()
+    {
+        var request = Hook("27447");
+        request.Context!.DraftOrders!.Entry![0].Resource!.OccurrenceDateTime =
+            DateTime.UtcNow.Date.AddDays(60).ToString("yyyy-MM-dd");
+
+        var result = await Service(coverageEnd: DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10)))
+            .EvaluateCoverageRequirementsAsync(request, Tenant);
+
+        var extension = Extensions(result.SystemActions).Single();
+        Part(extension, "covered").Should().Be("conditional");
+        Part(extension, "info-needed").Should().Be("contract-window");
+        Part(extension, "pa-needed").Should().Be("auth-needed");
+        AssertInvariants(extension);
+        result.Cards.Single().Detail.Should().Contain("after the member's current coverage ends");
+    }
+
+    [Fact]
+    public async Task An_order_within_the_coverage_period_is_not_conditional()
+    {
+        var request = Hook("27447");
+        request.Context!.DraftOrders!.Entry![0].Resource!.OccurrenceDateTime =
+            DateTime.UtcNow.Date.AddDays(5).ToString("yyyy-MM-dd");
+
+        var extension = Extensions((await Service(coverageEnd: DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10)))
+            .EvaluateCoverageRequirementsAsync(request, Tenant)).SystemActions).Single();
+
+        Part(extension, "covered").Should().Be("covered");
+        Sub(extension, "info-needed").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task An_order_based_on_another_draft_order_depends_on_it()
+    {
+        var request = Hook("27447");
+        var entries = request.Context!.DraftOrders!.Entry!;
+        entries[0].RawResource = JsonDocument.Parse("""
+            { "resourceType": "ServiceRequest", "id": "sr-surgery",
+              "code": { "coding": [ { "system": "http://www.ama-assn.org/go/cpt", "code": "27447" } ] } }
+            """).RootElement.Clone();
+        entries.Add(new CrdDraftOrderEntry
+        {
+            RawResource = JsonDocument.Parse("""
+                { "resourceType": "ServiceRequest", "id": "sr-therapy",
+                  "basedOn": [ { "reference": "ServiceRequest/sr-surgery" }, { "reference": "ServiceRequest/elsewhere" } ],
+                  "code": { "coding": [ { "system": "http://www.ama-assn.org/go/cpt", "code": "99213" } ] } }
+                """).RootElement.Clone(),
+        });
+
+        var actions = (await Service().EvaluateCoverageRequirementsAsync(request, Tenant)).SystemActions;
+
+        var therapy = actions.Single(a => a.Resource!.Value.GetProperty("id").GetString() == "sr-therapy");
+        var dependent = Extensions([therapy]).Single();
+        dependent.GetProperty("extension").EnumerateArray()
+            .Where(e => e.GetProperty("url").GetString() == "dependency")
+            .Select(e => e.GetProperty("valueReference").GetProperty("reference").GetString())
+            .Should().Equal(["ServiceRequest/sr-surgery"], "only an order in this request is a dependency");
+        var surgery = actions.Single(a => a.Resource!.Value.GetProperty("id").GetString() == "sr-surgery");
+        Sub(Extensions([surgery]).Single(), "dependency").Should().BeNull();
+    }
+
+    private static PriorAuthorizationRecord Approved(string number, string code, string? lineStatus = null) => new()
+    {
+        AuthorizationNumber = number,
+        MemberId = "pat-001",
+        Status = PriorAuthorizationStatus.Approved,
+        ApprovedServiceDateFrom = DateTime.UtcNow.Date.AddDays(-1),
+        ApprovedServiceDateTo = DateTime.UtcNow.Date.AddDays(30),
+        RequestedServices = [new PriorAuthorizationService { ProcedureCode = code, ServiceStatus = lineStatus }],
+    };
+
+    private sealed class ApprovedAuthorizations(params PriorAuthorizationRecord[] records) : IPriorAuthorizationStore
+    {
+        public List<string> Members { get; } = [];
+
+        public Task<PriorAuthorizationRecord?> GetByAuthorizationNumberAsync(string authorizationNumber, CancellationToken ct = default)
+            => Task.FromResult(records.FirstOrDefault(r => r.AuthorizationNumber == authorizationNumber));
+
+        public Task<IReadOnlyList<PriorAuthorizationRecord>> FindApprovedForMemberAsync(string memberId, CancellationToken ct = default)
+        {
+            Members.Add(memberId);
+            return Task.FromResult<IReadOnlyList<PriorAuthorizationRecord>>(records.Where(r => r.MemberId == memberId).ToList());
+        }
+    }
 
     private async Task<JsonElement> OnlyExtensionAsync(string code)
     {

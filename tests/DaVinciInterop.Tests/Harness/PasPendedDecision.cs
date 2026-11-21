@@ -25,6 +25,20 @@ public static class PasPendedDecision
     private static readonly Regex ResumeLink = new(@"\]\((?<url>https?://[^)\s]+/resume_pass\?[^)\s]+)\)", RegexOptions.Compiled);
 
     /// <summary>
+    /// The Subscription handshake wait. Matched anywhere in the id: the kit
+    /// prefixes its suite and group, and may suffix a variant.
+    /// </summary>
+    public static bool IsHandshakeWait(string? testId)
+        => testId?.Contains("notification_delivery", StringComparison.Ordinal) == true;
+
+    /// <summary>
+    /// The pended-decision notification wait, e.g.
+    /// <c>pas_server_v221_subscription_notification_wait_pended</c>.
+    /// </summary>
+    public static bool IsDecisionWait(string? testId)
+        => testId?.Contains("subscription_notification_wait", StringComparison.Ordinal) == true;
+
+    /// <summary>
     /// Answers the kit's two waits: the Subscription handshake (confirmed once
     /// CHO has had time to send it) and the pended-decision notification (by
     /// deciding the request). Ignores every other wait.
@@ -32,13 +46,13 @@ public static class PasPendedDecision
     public static async Task AnswerAsync(
         InfernoResult waiting, ChoSeedFixture fixture, string kitApiBaseUrl, CancellationToken ct)
     {
-        if (waiting.TestId?.EndsWith("notification_delivery", StringComparison.Ordinal) == true)
+        if (IsHandshakeWait(waiting.TestId))
         {
             await ConfirmHandshakeAsync(waiting, kitApiBaseUrl, ct);
             return;
         }
 
-        if (waiting.TestId?.EndsWith("subscription_notification_wait", StringComparison.Ordinal) != true)
+        if (!IsDecisionWait(waiting.TestId))
         {
             return;
         }

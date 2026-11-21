@@ -105,13 +105,13 @@ public static class InfernoSmartApp
         var testId = waiting.TestId ?? "";
         var ehr = testId.Contains("ehr_launch", StringComparison.Ordinal);
 
-        if (testId.EndsWith("smart_app_launch", StringComparison.Ordinal))
+        if (IsLaunchWait(testId))
         {
             await LaunchAsync(fixture, kitApiBaseUrl, cancellationToken);
             return;
         }
 
-        if (testId.EndsWith("app_redirect", StringComparison.Ordinal))
+        if (IsRedirectWait(testId))
         {
             var authorizationUrl = AuthorizationUrl(waiting)
                 ?? throw new InteropEnvironmentException(
@@ -119,6 +119,17 @@ public static class InfernoSmartApp
             await AuthorizeAsync(fixture, authorizationUrl, ehr, kitApiBaseUrl, cancellationToken);
         }
     }
+
+    /// <summary>The EHR launch wait (<c>smart_app_launch</c>), wherever it sits in the id.</summary>
+    public static bool IsLaunchWait(string? testId)
+        => testId?.Contains("smart_app_launch", StringComparison.Ordinal) == true;
+
+    /// <summary>
+    /// The redirect wait. STU2.2 names it <c>smart_app_redirect_stu2</c>, so
+    /// the match is anywhere in the id, not at its end.
+    /// </summary>
+    public static bool IsRedirectWait(string? testId)
+        => testId?.Contains("app_redirect", StringComparison.Ordinal) == true;
 
     /// <summary>The authorization URL the kit's redirect test is waiting on, from its message.</summary>
     public static string? AuthorizationUrl(InfernoResult waiting)
