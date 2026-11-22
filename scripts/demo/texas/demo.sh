@@ -199,6 +199,8 @@ cmd_drop() {
 
 cmd_seed() {
   need python3 curl
+  # A deploy since "up" resets the deployments to the shared manifests.
+  cmd_overlay
   local own=""
   if ! ports_open; then
     say "Opening port-forwards for this run"
