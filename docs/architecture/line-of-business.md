@@ -87,9 +87,10 @@ today, each with the PR that removes it:
    their names and already match.
 6. Coverage, claims and authorization intake take the line of business from the program
    (done), through `ProgramLineOfBusiness` (`CloudHealthOffice.PlanConfiguration`):
-   - coverage-service: a coverage written through the API (or moved to another plan)
-     takes its plan's program's line of business. The create body has none, so before
-     this every such coverage was Commercial.
+   - coverage-service: a coverage written or updated through the API takes its plan's
+     program's line of business, so one written before its plan had a program is
+     corrected the next time it is saved. The create body has none, so before this every
+     such coverage was Commercial.
    - claims-service: adjudication sets the claim's line of business from its benefit
      plan's program, after an 837 claim's plan is found from the member's coverage. An
      837 carries no line of business, so the mapper's Commercial is replaced.

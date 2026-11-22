@@ -411,8 +411,11 @@ public class CoverageController : ControllerBase
         {
             coverage.PlanId = request.PlanId;
             coverage.PlanName = null;
-            await TakeLineOfBusinessFromProgramAsync(coverage, HttpContext.RequestAborted);
         }
+        // On every update, not only a plan change: a plan can be given its
+        // program after its coverages were written, and they were Commercial
+        // until then. Saving a coverage brings it in line with its program.
+        await TakeLineOfBusinessFromProgramAsync(coverage, HttpContext.RequestAborted);
         if (!string.IsNullOrWhiteSpace(request.PlanName)) coverage.PlanName = request.PlanName.Trim();
         if (request.CoverageLevel != null) coverage.CoverageLevel = request.CoverageLevel;
         if (request.Status.HasValue) coverage.Status = request.Status.Value;

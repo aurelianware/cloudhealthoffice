@@ -106,4 +106,22 @@ public class CoverageLineOfBusinessTests
 
         ((Coverage)((OkObjectResult)result).Value!).LineOfBusiness.Should().Be(LineOfBusiness.Medicare);
     }
+
+    [Fact]
+    public async Task Updating_a_coverage_takes_a_program_its_plan_was_given_later()
+    {
+        var programs = new InMemoryProgramDirectory();
+        programs.Add(Tenant, Program("STAR", "Medicaid"), "PLAN-STAR");
+        var (ctl, repo) = Build(programs);
+        var existing = new Coverage
+        {
+            Id = "cov-1", TenantId = Tenant, MemberId = "M1", GroupNumber = "GRP0001", PlanId = "PLAN-STAR",
+            LineOfBusiness = LineOfBusiness.Commercial, EffectiveDate = DateTime.UtcNow.AddYears(-1),
+        };
+        repo.Setup(r => r.GetByIdAsync(Tenant, "cov-1")).ReturnsAsync(existing);
+
+        var result = await ctl.UpdateCoverage("cov-1", new UpdateCoverageRequest());
+
+        ((Coverage)((OkObjectResult)result).Value!).LineOfBusiness.Should().Be(LineOfBusiness.Medicaid);
+    }
 }

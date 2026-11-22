@@ -55,6 +55,7 @@ PROVIDER_URL = os.environ.get("PROVIDER_URL", "http://localhost:5004")
 AUTH_URL = os.environ.get("AUTH_URL", "http://localhost:5006")
 FHIR_URL = os.environ.get("FHIR_URL", "http://localhost:5023")
 TENANT_URL = os.environ.get("TENANT_URL", "http://localhost:5013")
+COVERAGE_URL = os.environ.get("COVERAGE_URL", "http://localhost:5012")
 PORTAL_URL = os.environ.get("PORTAL_URL", "http://localhost:8080")
 
 FIXTURES = HERE / "fixtures"
@@ -512,6 +513,31 @@ def _link_program(s: Steps, token: str, plan_id: str, program_id: str) -> None:
     s.ok(f"{plan_id} -> {program_id}")
 
 
+def _refresh_coverage_line_of_business(s: Steps, token: str) -> None:
+    """Coverages loaded before their plan had a program were written as
+    Commercial. Saving one (an empty update) makes coverage-service take its
+    program's line of business; a coverage already on Medicaid is left alone."""
+    stale, saved, cont = [], 0, ""
+    while True:
+        url = f"{COVERAGE_URL}/api/v1/coverage?groupNumber={GROUP_ID}&pageSize=100" + (f"&continuationToken={cont}" if cont else "")
+        status, _, page = _call("GET", url, token)
+        if status != 200 or not isinstance(page, dict):
+            s.fail("coverages not listed", status, page)
+            return
+        stale += [c["id"] for c in page.get("coverage", []) if str(c.get("lineOfBusiness")) not in ("Medicaid", "3")]
+        cont = page.get("continuationToken") or ""
+        if not cont:
+            break
+    for coverage_id in stale:
+        status, _, body = _call("PUT", f"{COVERAGE_URL}/api/v1/coverage/{coverage_id}", token, {})
+        if status == 200:
+            saved += 1
+        else:
+            s.fail(f"coverage {coverage_id} not updated", status, body)
+            return
+    s.ok(f"coverage line of business: {saved} updated to the plans' programs" if saved else "coverage line of business already Medicaid")
+
+
 def cmd_setup(_args) -> int:
     token = cho_demo.mint_token(TENANT)
     s = Steps()
@@ -615,6 +641,7 @@ def cmd_setup(_args) -> int:
                 s.fail(f"program {code} not created", created, body)
         if program_ids.get(code):
             _link_program(s, token, program["planId"], program_ids[code])
+    _refresh_coverage_line_of_business(s, token)
 
     print("4. Plan code mappings")
     for code, program in PROGRAMS.items():

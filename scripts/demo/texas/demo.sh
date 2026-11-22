@@ -162,7 +162,7 @@ cmd_overlay() {
 }
 
 FORWARDS=("portal 8080" "claims-service 5001" "benefit-plan-service 5002" "provider-service 5004"
-          "authorization-service 5006" "tenant-service 5013" "fhir-service 5023")
+          "authorization-service 5006" "coverage-service 5012" "tenant-service 5013" "fhir-service 5023")
 
 cmd_connect() {
   need kubectl
