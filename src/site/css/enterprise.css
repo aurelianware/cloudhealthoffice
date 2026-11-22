@@ -490,3 +490,10 @@ body.ent .demo-steps { margin: 32px 0 0; padding-left: 1.4em; max-width: 780px; 
 body.ent .demo-steps li { margin-top: 12px; padding-left: 4px; }
 body.ent .demo-steps strong { color: var(--cho-ink); }
 body.ent #texas-steps .lede { margin-top: 32px; }
+body.ent .demo-steps + .lede { margin-top: 32px; }
+body.ent .demo-more { list-style: none; margin: 32px 0 0; padding: 0; display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); max-width: 1040px; }
+body.ent .demo-more a { display: block; color: var(--cho-ink); text-decoration: none; }
+body.ent .demo-more img { display: block; width: 100%; height: auto; border: 1px solid var(--cho-line-strong); border-radius: 8px; margin-bottom: 12px; }
+body.ent .demo-more a:hover strong, body.ent .demo-more a:focus-visible strong { text-decoration: underline; }
+body.ent .demo-more span { display: block; margin-top: 6px; color: var(--cho-body); }
+body.ent .demo-more-note { margin-top: 24px; font-size: 15px; color: var(--cho-body); }

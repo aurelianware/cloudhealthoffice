@@ -2,8 +2,9 @@ name: Record demo walkthrough
 
 # Records a captioned video and per-step screenshots of the demo portal, for
 # prospect follow-ups. Run `cho_demo.py seed-story` against the demo first so
-# the prior-auth steps have their records; for `texas`, run the Texas Medicaid
-# demo workflow's `seed` the same day.
+# the prior-auth steps have their records; for `texas`, `cms0057-prior-auth`
+# and `shadow-adjudication`, run the Texas Medicaid demo workflow's `seed` the
+# same day (the prior auth video submits a new request on the Texas tenant).
 #
 # connect: port-forward (default) reaches the GKE demo's portal from the
 # runner with kubectl, as the Texas demo workflow does (Workload Identity
@@ -22,6 +23,8 @@ on:
           - prior-auth
           - full-tour
           - texas
+          - cms0057-prior-auth
+          - shadow-adjudication
         default: prior-auth
       connect:
         description: "How the runner reaches the portal"
