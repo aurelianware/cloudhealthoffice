@@ -143,6 +143,52 @@ public class PasSubmitRecordingTests
         _recorder.Calls.Should().BeEmpty();
     }
 
+    // ── A preferred alternative: certified in place of the requested line ──
+
+    private static string? ReviewActionCode(IEnumerable<ClaimResponse.AdjudicationComponent> adjudication)
+        => adjudication.SelectMany(a => a.Extension.Where(e => e.Url.EndsWith("/extension-reviewAction")))
+            .SelectMany(e => e.Extension.Where(x => x.Url.EndsWith("/extension-reviewActionCode")))
+            .Select(x => ((CodeableConcept)x.Value).Coding.Single().Code).Single();
+
+    [Fact]
+    public async Task PreferredAlternative_IsRecordedAsAModification_AndAnsweredWithAnAddedItem()
+    {
+        var policy = new PasPreferredAlternative
+        {
+            ServiceCode = "27447", ServiceCodeSystem = PasBundles.CptSystem,
+            AlternativeCode = "27446", AlternativeSystem = PasBundles.CptSystem,
+            AlternativeDisplay = "Partial knee arthroplasty",
+            ReasonCode = "PREFERRED_ALTERNATIVE", Reason = "The plan certifies the preferred alternative.",
+        };
+        var decision = new PasDecisionResult
+        {
+            HasDecision = true, Decision = "modified", RuleName = PasAutoAdjudicator.PreferredAlternativeRule,
+            Alternatives = [new PasAlternativeService(policy, new PasProcedureCode(PasBundles.CptSystem, "27447"))],
+        };
+
+        var result = await Controller(decision).ClaimSubmit(PasBundles.Complete());
+
+        var recorded = _recorder.Last!.Decision!;
+        recorded.Outcome.Should().Be("Modified");
+        recorded.ApprovedServiceDateFrom.Should().NotBeNull("a modification certifies, so it has an approved period");
+        var alternative = recorded.Alternatives.Should().ContainSingle().Subject;
+        alternative.ForLineNumber.Should().Be(1);
+        alternative.ProcedureCode.Should().Be("27446");
+        alternative.DenialReasonCode.Should().Be("PREFERRED_ALTERNATIVE");
+
+        var response = (ClaimResponse)result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<Bundle>()
+            .Subject.Entry[0].Resource;
+        response.Outcome.Should().Be(ClaimProcessingCodes.Partial);
+        response.PreAuthRef.Should().NotBeNullOrEmpty();
+        ReviewActionCode(response.Item.Single().Adjudication).Should().Be("A3");
+        var added = response.AddItem.Should().ContainSingle().Subject;
+        added.ItemSequence.Should().Equal(1);
+        added.ProductOrService.Coding.Single().Code.Should().Be("27446");
+        ReviewActionCode(added.Adjudication).Should().Be("A1");
+        added.Quantity.Value.Should().Be(1);
+        response.ProcessNote.Should().Contain(n => n.Text.Contains("preferred alternative"));
+    }
+
     // ── Persistence failure: no ClaimResponse, no preAuthRef ─────────────
 
     [Theory]

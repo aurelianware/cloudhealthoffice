@@ -991,4 +991,21 @@ public sealed class PasAutomatedDecision
 
     /// <summary>When the provider's documentation is due.</summary>
     public DateTime? InformationDueDate { get; set; }
+
+    /// <summary>
+    /// A modification: the requested lines not certified as asked, each with
+    /// the preferred alternative certified in its place.
+    /// </summary>
+    public List<PasAlternativeServiceDecision>? Alternatives { get; set; }
+}
+
+/// <summary>The alternative certified in place of one requested line, and why.</summary>
+public sealed class PasAlternativeServiceDecision
+{
+    public int ForLineNumber { get; set; }
+    public string ProcedureCode { get; set; } = string.Empty;
+    public string? ProductOrServiceSystem { get; set; }
+    public string? ProcedureDescription { get; set; }
+    public string DenialReasonCode { get; set; } = string.Empty;
+    public string DenialReason { get; set; } = string.Empty;
 }

@@ -47,6 +47,9 @@ public sealed record PasStoredAuthorization
 {
     public List<PriorAuthorizationService> RequestedServices { get; init; } = new();
 
+    [JsonPropertyName("payerAddedServices")]
+    public List<PriorAuthorizationAddedService> PayerAddedServices { get; init; } = new();
+
     [JsonPropertyName("tenantId")]
     public string TenantId { get; init; } = string.Empty;
 

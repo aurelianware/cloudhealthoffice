@@ -77,6 +77,33 @@ public static class PasResponseDetail
     public const string CareTeamClaimScopeUrl = PasSd + "extension-careTeamClaimScope";
     public const string ReviewActionUrl = PasSd + "extension-reviewAction";
     public const string ReviewActionCodeUrl = PasSd + "extension-reviewActionCode";
+    public const string ServiceItemRequestTypeUrl = PasSd + "extension-serviceItemRequestType";
+    public const string CertificationTypeUrl = PasSd + "extension-certificationType";
+    public const string RequestedServiceUrl = PasSd + "extension-requestedService";
+    public const string EpsdtIndicatorUrl = PasSd + "extension-epsdtIndicator";
+    public const string NursingHomeResidentialStatusUrl = PasSd + "extension-nursingHomeResidentialStatus";
+    public const string NursingHomeLevelOfCareUrl = PasSd + "extension-nursingHomeLevelOfCare";
+    public const string RevenueUnitRateLimitUrl = PasSd + "extension-revenueUnitRateLimit";
+    public const string ProductOrServiceCodeEndUrl = PasSd + "extension-productOrServiceCodeEnd";
+    public const string RevenueCodeUrl = PasSd + "extension-revenueCode";
+    public const string AuthorizedProviderTypeUrl = PasSd + "extension-authorizedProviderType";
+
+    /// <summary>
+    /// The request-line extensions an added line restates from the line it
+    /// replaces: the alternative answers the same request, so its trace
+    /// number, the kind of review and certification asked for, the order it
+    /// fulfils and the member's EPSDT and nursing-home context are the
+    /// request's own.
+    /// </summary>
+    private static readonly string[] RestatedOnAddedLine =
+    [
+        ItemTraceNumberUrl, ServiceItemRequestTypeUrl, CertificationTypeUrl, RequestedServiceUrl,
+        EpsdtIndicatorUrl, NursingHomeResidentialStatusUrl, NursingHomeLevelOfCareUrl, RevenueUnitRateLimitUrl,
+    ];
+
+    /// <summary>X12 98 SJ: the provider who renders the service (the 278's 2010F service provider).</summary>
+    private const string ServiceProviderEntityCode = "SJ";
+    private const string X12EntityIdentifierSystem = "https://codesystem.x12.org/005010/98";
 
     /// <summary>The system CHO identifies its own prior authorizations under.</summary>
     public const string ChoAuthorizationSystem = "http://cloudhealthoffice.com/prior-authorization";
@@ -127,6 +154,12 @@ public static class PasResponseDetail
             item.NoteNumber = response.ProcessNote
                 .Select(n => n.Number).Where(n => n.HasValue).Select(n => n!.Value)
                 .Distinct().Select(n => (int?)n).ToList();
+        }
+
+        foreach (var added in response.AddItem)
+        {
+            var replaced = requestClaim?.Item.FirstOrDefault(i => added.ItemSequence.Contains(i.Sequence));
+            AddAddedLineDetail(added, replaced, requestClaim, requestBundle, context);
         }
     }
 
@@ -298,7 +331,7 @@ public static class PasResponseDetail
                     item.Extension.Add(provider);
 
                 item.Extension.Add(AuthorizedDetail(item, requested));
-                AddInpatientDates(item, requested, requestClaim);
+                AddInpatientDates(item.Extension, requested, requestClaim);
             }
         }
         // Not certified or pended: the 278 tracks it by its administrative
@@ -307,6 +340,85 @@ public static class PasResponseDetail
         {
             item.Extension.Add(new Extension(AdministrationReferenceNumberUrl, new FhirString(context.AuthorizationNumber)));
         }
+    }
+
+    /// <summary>
+    /// A line the payer added in place of a requested one it did not certify
+    /// (a preferred alternative). It is certified, so it carries what a
+    /// certified line does (number, issue date, period); it restates the
+    /// replaced line's request detail (<see cref="RestatedOnAddedLine"/>, the
+    /// modifiers, price, dates, place, revenue code and providers asked for);
+    /// and it carries the administrative reference of the disallowed outcome
+    /// it replaces, so the two can be matched.
+    /// </summary>
+    private static void AddAddedLineDetail(
+        ClaimResponse.AddedItemComponent added, Claim.ItemComponent? replaced, Claim? requestClaim,
+        Bundle? requestBundle, PasResponseContext context)
+    {
+        if (context.DecidedAt is { } decidedAt)
+            added.Extension.Add(new Extension(ItemPreAuthIssueDateUrl, new Date(decidedAt.ToString("yyyy-MM-dd"))));
+        if (context.ApprovedPeriod is { } period)
+            added.Extension.Add(new Extension(ItemPreAuthPeriodUrl, (Period)period.DeepCopy()));
+        if (!string.IsNullOrWhiteSpace(context.AuthorizationNumber))
+        {
+            added.Extension.Add(new Extension(AuthorizationNumberUrl, new FhirString(context.AuthorizationNumber)));
+            added.Extension.Add(new Extension(AdministrationReferenceNumberUrl, new FhirString(context.AuthorizationNumber)));
+            foreach (var action in added.Adjudication.SelectMany(a => a.Extension.Where(e => e.Url == ReviewActionUrl)))
+            {
+                if (!action.Extension.Any(e => e.Url == "number"))
+                    action.Extension.Insert(0, new Extension("number", new FhirString(context.AuthorizationNumber)));
+            }
+        }
+
+        if (replaced is null || requestClaim is null) return;
+
+        foreach (var restated in replaced.Extension.Where(e => RestatedOnAddedLine.Contains(e.Url)))
+            added.Extension.Add((Extension)restated.DeepCopy());
+        // A code range the request asked for is restated as the alternative alone.
+        if (replaced.Extension.Any(e => e.Url == ProductOrServiceCodeEndUrl) && added.ProductOrService is { } service)
+            added.Extension.Add(new Extension(ProductOrServiceCodeEndUrl, (CodeableConcept)service.DeepCopy()));
+        if (replaced.Revenue is { } revenue)
+            added.Extension.Add(new Extension(RevenueCodeUrl, (CodeableConcept)revenue.DeepCopy()));
+
+        foreach (var modifier in replaced.Modifier)
+            added.Modifier.Add((CodeableConcept)modifier.DeepCopy());
+        if (replaced.UnitPrice is { } price)
+            added.UnitPrice = (Money)price.DeepCopy();
+        if (replaced.Serviced is { } serviced)
+            added.Serviced = (DataType)serviced.DeepCopy();
+        if (replaced.Location is { } location)
+            added.Location = (DataType)location.DeepCopy();
+
+        var team = replaced.CareTeamSequence
+            .Select(s => requestClaim.CareTeam.FirstOrDefault(c => c.Sequence == s))
+            .OfType<Claim.CareTeamComponent>();
+        foreach (var provider in AuthorizedProviders(requestBundle, team)
+                     .Select(e => e.Extension.FirstOrDefault(x => x.Url == "provider")?.Value)
+                     .OfType<ResourceReference>())
+        {
+            provider.Extension.Add(new Extension(AuthorizedProviderTypeUrl,
+                new CodeableConcept(X12EntityIdentifierSystem, ServiceProviderEntityCode, "Service Provider")));
+            added.Provider.Add(provider);
+        }
+
+        AddInpatientDates(added.Extension, replaced, requestClaim);
+    }
+
+    /// <summary>
+    /// A count of units in the unit the request stated (its code and system,
+    /// else its label), or UCUM's unity when it stated none, so the quantity
+    /// always states its unit (prof-2).
+    /// </summary>
+    public static Quantity Units(decimal value, string? unit, string? code, string? system)
+    {
+        var quantity = new Quantity { Value = value, Unit = unit, Code = code, System = system };
+        if (string.IsNullOrWhiteSpace(quantity.Unit) && string.IsNullOrWhiteSpace(quantity.Code))
+        {
+            quantity.System = "http://unitsofmeasure.org";
+            quantity.Code = "1";
+            quantity.Unit = "unit";
+        }
+        return quantity;
     }
 
     /// <summary>
@@ -355,7 +467,7 @@ public static class PasResponseDetail
     /// names its supportingInfo by informationSequence, and dates the request
     /// gives for the whole admission apply to every line.
     /// </summary>
-    private static void AddInpatientDates(ClaimResponse.ItemComponent item, Claim.ItemComponent requested, Claim requestClaim)
+    private static void AddInpatientDates(List<Extension> extensions, Claim.ItemComponent requested, Claim requestClaim)
     {
         IEnumerable<Claim.SupportingInformationComponent> Of(string code)
         {
@@ -366,9 +478,9 @@ public static class PasResponseDetail
         }
 
         if (Of("admissionDates").Select(s => s.Timing).FirstOrDefault(t => t is Date or Period) is { } admission)
-            item.Extension.Add(new Extension(AdmissionDatesUrl, (DataType)admission.DeepCopy()));
+            extensions.Add(new Extension(AdmissionDatesUrl, (DataType)admission.DeepCopy()));
         if (Of("dischargeDates").Select(s => s.Timing).FirstOrDefault(t => t is Date) is Date discharge)
-            item.Extension.Add(new Extension(DischargeDateUrl, (Date)discharge.DeepCopy()));
+            extensions.Add(new Extension(DischargeDateUrl, (Date)discharge.DeepCopy()));
     }
 
     /// <summary>The diagnosis codes the request tied to the line (item.diagnosisSequence).</summary>

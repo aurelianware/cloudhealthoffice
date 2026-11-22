@@ -172,7 +172,8 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
         // or pend stands.
         var stateDental = await StateDentalAsync(authorization, ct);
         if (stateDental is not null
-            && (stateDental.Outcome == StateDentalPaOutcome.Deny || decision.Outcome == AutomatedDecisionOutcome.Approved))
+            && (stateDental.Outcome == StateDentalPaOutcome.Deny
+                || decision.Outcome is AutomatedDecisionOutcome.Approved or AutomatedDecisionOutcome.Modified))
         {
             ApplyStateDental(authorization, stateDental, decidedAt);
             authorization.StatusHistory.Add(new AuthorizationStatusChange
@@ -214,11 +215,16 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
                 authorization.PendReason = decision.PendReason;
                 reason = decision.PendReason;
                 break;
+            case AutomatedDecisionOutcome.Modified:
+                ApplyAlternatives(authorization, decision, decidedAt);
+                reason = authorization.DenialReason;
+                break;
             default:
                 throw new ArgumentException("An automated decision needs an outcome.", nameof(decision));
         }
 
-        ApplyWholeRequestDecision(authorization);
+        if (decision.Outcome != AutomatedDecisionOutcome.Modified)
+            ApplyWholeRequestDecision(authorization);
         authorization.StatusHistory.Add(new AuthorizationStatusChange
         {
             LineDecisions = AuthorizationDecisionPolicy.Snapshot(authorization),
@@ -231,6 +237,61 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
         });
 
         return await _repository.CreateAsync(authorization);
+    }
+
+    /// <summary>
+    /// A modification: each replaced line is not certified (A3) with the
+    /// reason, the alternative is certified in its place in the quantity the
+    /// line asked for, and every other line is certified as requested. The
+    /// request as a whole is certified in part (A2).
+    /// </summary>
+    private static void ApplyAlternatives(Authorization authorization, AutomatedDecision decision, DateTime decidedAt)
+    {
+        var alternatives = (decision.Alternatives ?? [])
+            .ToDictionary(a => a.ForLineNumber);
+        if (alternatives.Count == 0)
+            throw new ArgumentException("A modification names the alternative it certifies.", nameof(decision));
+
+        authorization.Status = AuthorizationStatus.Modified;
+        authorization.ReviewDecision = "A2";
+        authorization.ApprovedServiceDateFrom = decision.ApprovedServiceDateFrom;
+        authorization.ApprovedServiceDateTo = decision.ApprovedServiceDateTo;
+        authorization.ExpirationDate = decision.ApprovedServiceDateTo;
+        authorization.ReviewedDate = decidedAt;
+        authorization.PayerAddedServices = new List<PayerAddedService>();
+
+        foreach (var service in authorization.RequestedServices)
+        {
+            if (service.LineNumber is { } line && alternatives.TryGetValue(line, out var alternative))
+            {
+                service.ServiceStatus = "A3";
+                service.ApprovedUnits = 0;
+                service.DenialReasonCode = alternative.DenialReasonCode;
+                service.DenialReason = alternative.DenialReason;
+                authorization.PayerAddedServices.Add(new PayerAddedService
+                {
+                    ForLineNumber = line,
+                    ProcedureCode = alternative.ProcedureCode,
+                    ProductOrServiceSystem = alternative.ProductOrServiceSystem,
+                    ProcedureDescription = alternative.ProcedureDescription,
+                    ApprovedUnits = service.RequestedUnits,
+                });
+                authorization.DenialReasonCode ??= alternative.DenialReasonCode;
+                authorization.DenialReason ??= alternative.DenialReason;
+            }
+            else
+            {
+                service.ServiceStatus = "A1";
+                service.ApprovedUnits = service.RequestedUnits;
+            }
+        }
+
+        if (authorization.PayerAddedServices.Count != alternatives.Count)
+            throw new ArgumentException("An alternative replaces a requested line.", nameof(decision));
+        authorization.ApprovedUnits = authorization.RequestedServices.Count == 1
+            ? authorization.RequestedServices[0].ApprovedUnits
+            : null;
+        authorization.LastUpdatedDate = DateTime.UtcNow;
     }
 
     /// <summary>

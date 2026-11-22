@@ -516,6 +516,15 @@ services:
       # does not cover, and the pended one matches neither, so it pends.
       Cms0057__PasAutoAdjudication__AutoApproveServiceTypes__0: "3"
       Cms0057__PasAutoAdjudication__AutoDenyServiceTypes__0: "4"
+      # Rent, don't buy: a request to purchase durable medical equipment (X12
+      # 1365 "12") is certified as a rental ("18") instead, stated as a PAS
+      # addItem in place of the requested line (PAS must-support addItem).
+      Cms0057__PasAutoAdjudication__PreferredAlternatives__0__ServiceCode: "12"
+      Cms0057__PasAutoAdjudication__PreferredAlternatives__0__ServiceCodeSystem: https://codesystem.x12.org/005010/1365
+      Cms0057__PasAutoAdjudication__PreferredAlternatives__0__AlternativeCode: "18"
+      Cms0057__PasAutoAdjudication__PreferredAlternatives__0__AlternativeSystem: https://codesystem.x12.org/005010/1365
+      Cms0057__PasAutoAdjudication__PreferredAlternatives__0__AlternativeDisplay: Durable Medical Equipment Rental
+      Cms0057__PasAutoAdjudication__PreferredAlternatives__0__Reason: The plan certifies a rental of durable medical equipment, not its purchase.
       # The pended service type needs documentation (PAS-07): a procedure
       # note from the last three months and CHO's MRI form. A pended request
       # for it raises a CDex request, and the response carries it as a PAS

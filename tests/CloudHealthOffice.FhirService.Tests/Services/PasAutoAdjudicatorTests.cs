@@ -158,6 +158,66 @@ public class PasAutoAdjudicatorTests
         result.RuleName.Should().Be("ConfigDisabled");
     }
 
+    private static PasPreferredAlternative Rental => new()
+    {
+        ServiceCode = "E0260", ServiceCodeSystem = "http://www.ama-assn.org/go/cpt",
+        AlternativeCode = "E0260RR", AlternativeDisplay = "Hospital bed, rental",
+        Reason = "The plan certifies a rental of this equipment, not its purchase.",
+    };
+
+    [Fact]
+    public async System.Threading.Tasks.Task TryDecide_EveryLineHasAPreferredAlternative_IsModified()
+    {
+        _config.PreferredAlternatives.Add(Rental);
+        var claim = CreateClaim("E0260");
+
+        var result = await CreateAdjudicator().TryDecideAsync(claim, new Bundle(), "test-tenant", Basis(claim), 12000);
+
+        result.HasDecision.Should().BeTrue();
+        result.Decision.Should().Be("modified");
+        result.RuleName.Should().Be(PasAutoAdjudicator.PreferredAlternativeRule);
+        var alternative = result.Alternatives.Should().ContainSingle().Subject;
+        alternative.Policy.AlternativeCode.Should().Be("E0260RR");
+        alternative.Requested.Should().Be(new PasProcedureCode("http://www.ama-assn.org/go/cpt", "E0260"));
+    }
+
+    [Theory]
+    [InlineData("http://example.org/other-system")] // the policy's code in another system
+    [InlineData(null)]                               // a line the policy does not cover
+    public async System.Threading.Tasks.Task TryDecide_ALineWithoutAnAlternative_IsDecidedByTheOtherRules(string? otherSystem)
+    {
+        _config.PreferredAlternatives.Add(Rental);
+        var claim = CreateClaim("E0260");
+        if (otherSystem is not null)
+            claim.Item[0].ProductOrService = new CodeableConcept(otherSystem, "E0260");
+        else
+            claim.Item.Add(new Claim.ItemComponent
+            {
+                Sequence = 2,
+                ProductOrService = new CodeableConcept("http://www.ama-assn.org/go/cpt", "27447"),
+                UnitPrice = new Money { Value = 15000m, Currency = Money.Currencies.USD },
+            });
+
+        var result = await CreateAdjudicator().TryDecideAsync(claim, new Bundle(), "test-tenant", Basis(claim), 12000);
+
+        result.Decision.Should().NotBe("modified");
+        result.Alternatives.Should().BeNull();
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task TryDecide_ANonCoveredService_IsDenied_EvenWithAnAlternative()
+    {
+        _config.PreferredAlternatives.Add(new PasPreferredAlternative
+        {
+            ServiceCode = "V2020", AlternativeCode = "V2021", Reason = "x",
+        });
+        var claim = CreateClaim("V2020");
+
+        var result = await CreateAdjudicator().TryDecideAsync(claim, new Bundle(), "test-tenant", Basis(claim), 12000);
+
+        result.Decision.Should().Be("denied");
+    }
+
     private PasAutoAdjudicator CreateAdjudicator()
     {
         var options = Options.Create(_config);

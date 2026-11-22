@@ -94,6 +94,14 @@ public sealed record PriorAuthorizationRecord
     public List<PriorAuthorizationService> RequestedServices { get; init; } = new();
 
     /// <summary>
+    /// Services the payer certified in place of requested lines it did not
+    /// (a preferred alternative), each naming the line it replaces. PAS
+    /// states them as <c>ClaimResponse.addItem</c>.
+    /// </summary>
+    [JsonPropertyName("payerAddedServices")]
+    public List<PriorAuthorizationAddedService> PayerAddedServices { get; init; } = new();
+
+    /// <summary>
     /// The record's status changes, oldest first: what each one moved to and
     /// which path moved it. Read only to say whether a person made the
     /// decision (<see cref="HumanReviewed"/>); the reasons and actors in
@@ -208,6 +216,29 @@ public sealed record PriorAuthorizationService
 
     [JsonPropertyName("approvedUnits")]
     public decimal? ApprovedUnits { get; init; }
+}
+
+/// <summary>A service the payer certified in place of a requested line.</summary>
+public sealed record PriorAuthorizationAddedService
+{
+    /// <summary>The requested line (<see cref="PriorAuthorizationService.LineNumber"/>) it replaces.</summary>
+    [JsonPropertyName("forLineNumber")]
+    public int ForLineNumber { get; init; }
+
+    [JsonPropertyName("procedureCode")]
+    public string? ProcedureCode { get; init; }
+
+    [JsonPropertyName("productOrServiceSystem")]
+    public string? ProductOrServiceSystem { get; init; }
+
+    [JsonPropertyName("procedureDescription")]
+    public string? ProcedureDescription { get; init; }
+
+    [JsonPropertyName("approvedUnits")]
+    public decimal? ApprovedUnits { get; init; }
+
+    [JsonPropertyName("serviceStatus")]
+    public string? ServiceStatus { get; init; }
 }
 
 /// <summary>

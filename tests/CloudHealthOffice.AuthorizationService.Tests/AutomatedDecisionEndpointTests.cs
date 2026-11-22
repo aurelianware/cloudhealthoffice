@@ -457,6 +457,85 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
     }
 
+    /// <summary>A body with two requested lines whose decision certifies an alternative for some of them.</summary>
+    private static System.Text.Json.Nodes.JsonObject WithAlternatives(string outcome, params int[] forLines)
+    {
+        var body = JsonSerializer.SerializeToNode(Body(outcome: outcome, withApprovedPeriod: outcome is "Approved" or "Modified"), Json)!.AsObject();
+        body["requestedServices"] = JsonSerializer.SerializeToNode(new object[]
+        {
+            new { lineNumber = 1, procedureCode = "E0260", productOrServiceSystem = "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets", requestedUnits = 1 },
+            new { lineNumber = 2, procedureCode = "27447", productOrServiceSystem = "http://www.ama-assn.org/go/cpt", requestedUnits = 2 },
+        }, Json);
+        body["decision"]!["alternatives"] = JsonSerializer.SerializeToNode(forLines.Select(line => new
+        {
+            forLineNumber = line,
+            procedureCode = "E0260RR",
+            procedureDescription = "Hospital bed, rental",
+            denialReasonCode = "PREFERRED_ALTERNATIVE",
+            denialReason = "The plan certifies a rental of this equipment, not its purchase.",
+        }).ToArray(), Json);
+        return body;
+    }
+
+    [Fact]
+    public async Task Modification_CertifiesTheAlternative_InPlaceOfTheLineItReplaces()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, WithAlternatives("Modified", 1), Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(AuthorizationStatus.Modified, _stored!.Status);
+        Assert.Equal("A2", _stored.ReviewDecision);
+        Assert.NotNull(_stored.ReviewedDate);
+        Assert.NotNull(_stored.ApprovedServiceDateFrom);
+
+        var replaced = _stored.RequestedServices.Single(s => s.LineNumber == 1);
+        Assert.Equal("A3", replaced.ServiceStatus);
+        Assert.Equal(0, replaced.ApprovedUnits);
+        Assert.Equal("PREFERRED_ALTERNATIVE", replaced.DenialReasonCode);
+        var kept = _stored.RequestedServices.Single(s => s.LineNumber == 2);
+        Assert.Equal("A1", kept.ServiceStatus);
+        Assert.Equal(2, kept.ApprovedUnits);
+
+        var added = Assert.Single(_stored.PayerAddedServices);
+        Assert.Equal(1, added.ForLineNumber);
+        Assert.Equal("E0260RR", added.ProcedureCode);
+        Assert.Equal(1, added.ApprovedUnits);
+        Assert.Equal("A1", added.ServiceStatus);
+        Assert.Equal("PREFERRED_ALTERNATIVE", _stored.DenialReasonCode);
+        Assert.Equal("A2", _stored.StatusHistory[^1].ReviewDecision);
+        Assert.Contains(_stored.StatusHistory[^1].LineDecisions, l => l.LineNumber == 1 && l.ReviewDecision == "A3");
+    }
+
+    [Theory]
+    [InlineData("Modified", new int[0])]   // a modification names its alternative
+    [InlineData("Modified", new[] { 3 })]  // ...for a line the request has
+    [InlineData("Modified", new[] { 1, 1 })] // ...once
+    [InlineData("Approved", new[] { 1 })]  // only a modification carries one
+    public async Task InconsistentAlternatives_Return400(string outcome, int[] forLines)
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, WithAlternatives(outcome, forLines), Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    [Fact]
+    public async Task ModificationWithoutPeriod_Returns400()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var body = WithAlternatives("Modified", 1);
+        body["decision"]!["approvedServiceDateFrom"] = null;
+        body["decision"]!["approvedServiceDateTo"] = null;
+
+        var response = await client.PostAsJsonAsync(Path, body, Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Fact]
     public async Task ApprovalWithoutPeriod_Returns400()
     {

@@ -297,6 +297,7 @@ public class PasResponseBuilder
 
         AddRequestedServices(claimResponse, authorization,
             reviewActionCode is null ? null : (reviewActionCode, reviewActionDisplay), inquiryClaim);
+        AddPayerAddedServices(claimResponse, authorization);
 
         // The inquiry Claim restates the request, so its trace numbers, dates,
         // care team and diagnoses are the ones the response hands back.
@@ -395,6 +396,45 @@ public class PasResponseBuilder
                     },
                 });
             }
+        }
+    }
+
+    /// <summary>
+    /// The services the payer certified in place of requested lines (a
+    /// preferred alternative): each an addItem naming the line it replaces,
+    /// certified (A1) in the quantity that line asked for. Only on a decided
+    /// record; a line's other detail comes from the request in
+    /// <see cref="PasResponseDetail"/>.
+    /// </summary>
+    private static void AddPayerAddedServices(ClaimResponse claimResponse, PriorAuthorizationRecord authorization)
+    {
+        if (authorization.Status is not (PriorAuthorizationStatus.Modified or PriorAuthorizationStatus.Approved))
+            return;
+
+        foreach (var added in authorization.PayerAddedServices)
+        {
+            if (string.IsNullOrWhiteSpace(added.ProcedureCode) || added.ServiceStatus != "A1")
+                continue;
+
+            var replaced = authorization.RequestedServices.FirstOrDefault(s => s.LineNumber == added.ForLineNumber);
+            var addItem = new ClaimResponse.AddedItemComponent
+            {
+                ItemSequence = new List<int?> { added.ForLineNumber },
+                ProductOrService = new CodeableConcept
+                {
+                    Coding = [new Coding(added.ProductOrServiceSystem, added.ProcedureCode, added.ProcedureDescription)],
+                },
+            };
+            if (added.ApprovedUnits is { } units)
+                addItem.Quantity = PasResponseDetail.Units(units, replaced?.UnitType, replaced?.UnitCode, replaced?.UnitSystem);
+
+            addItem.Adjudication.Add(new ClaimResponse.AdjudicationComponent
+            {
+                Category = DecisionCategory(),
+                Value = added.ApprovedUnits,
+                Extension = new List<Extension> { ReviewAction("A1", "Certified in total") },
+            });
+            claimResponse.AddItem.Add(addItem);
         }
     }
 

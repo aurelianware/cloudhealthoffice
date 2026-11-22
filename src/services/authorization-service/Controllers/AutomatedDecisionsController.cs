@@ -364,10 +364,27 @@ public sealed class AutomatedDecisionsController : ControllerBase
             Add("Decision.InformationDueDate", "A due date needs something requested.");
         }
 
+        // A modification names the requested lines it replaces, each once.
+        if (decision.Alternatives is { Count: > 0 } alternatives)
+        {
+            var lines = request.RequestedServices.Select((s, i) => s.LineNumber ?? i + 1).ToHashSet();
+            if (decision.Outcome != AutomatedDecisionOutcome.Modified)
+                Add("Decision.Alternatives", "Only a modification certifies an alternative.");
+            else if (alternatives.Any(a => !lines.Contains(a.ForLineNumber)))
+                Add("Decision.Alternatives", "An alternative replaces a requested line.");
+            else if (alternatives.Select(a => a.ForLineNumber).Distinct().Count() != alternatives.Count)
+                Add("Decision.Alternatives", "A requested line is replaced by at most one alternative.");
+        }
+        else if (decision.Outcome == AutomatedDecisionOutcome.Modified)
+        {
+            Add("Decision.Alternatives", "A modification names the alternative it certifies.");
+        }
+
         var hasApprovedPeriod = decision.ApprovedServiceDateFrom.HasValue || decision.ApprovedServiceDateTo.HasValue;
         switch (decision.Outcome)
         {
             case AutomatedDecisionOutcome.Approved:
+            case AutomatedDecisionOutcome.Modified:
                 if (!decision.ApprovedServiceDateFrom.HasValue)
                     Add("Decision.ApprovedServiceDateFrom", "An approval needs an approved period.");
                 else if (decision.ApprovedServiceDateTo < decision.ApprovedServiceDateFrom)

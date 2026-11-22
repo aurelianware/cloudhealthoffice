@@ -177,6 +177,102 @@ public class PasResponseDetailTests
     }
 
     [Fact]
+    public void Modification_StatesTheAlternativeAsAnAddedLine_RestatingTheRequestLineItReplaces()
+    {
+        var (claim, request) = Request(inquiry: true);
+        var line = claim.Item.Single();
+        line.Revenue = new CodeableConcept("https://www.nubc.org/revenue-code", "0105");
+        line.Modifier = [new CodeableConcept("http://www.ama-assn.org/go/cpt", "RT")];
+        line.Location = new CodeableConcept("https://www.cms.gov/Medicare/Coding/place-of-service-codes/Place_of_Service_Code_Set", "11");
+        line.InformationSequence = [4, 5];
+        foreach (var (name, value) in new (string, DataType)[]
+                 {
+                     ("serviceItemRequestType", new CodeableConcept("https://codesystem.x12.org/005010/1525", "SC")),
+                     ("certificationType", new CodeableConcept("https://codesystem.x12.org/005010/1322", "I")),
+                     ("requestedService", new ResourceReference("ServiceRequest/sr-1")),
+                     ("epsdtIndicator", new FhirBoolean(false)),
+                     ("nursingHomeResidentialStatus", new CodeableConcept("https://codesystem.x12.org/005010/1345", "2")),
+                     ("nursingHomeLevelOfCare", new CodeableConcept("https://codesystem.x12.org/005010/1337", "2")),
+                     ("revenueUnitRateLimit", new FhirDecimal(100)),
+                     ("productOrServiceCodeEnd", new CodeableConcept("http://www.ama-assn.org/go/cpt", "72149")),
+                     ("infoChanged", new Code("changed")),
+                 })
+            line.Extension.Add(new Extension(Sd + "extension-" + name, value));
+
+        var record = new PriorAuthorizationRecord
+        {
+            AuthorizationNumber = "PAS-5", Status = PriorAuthorizationStatus.Modified, ReviewDecision = "A2",
+            ReviewedDate = new DateTime(2026, 11, 20), ApprovedServiceDateFrom = new DateTime(2026, 12, 1),
+            ApprovedServiceDateTo = new DateTime(2026, 12, 31),
+            DenialReasonCode = "PREFERRED_ALTERNATIVE", DenialReason = "The plan certifies the preferred alternative.",
+            RequestedServices =
+            [
+                new() { LineNumber = 1, ProcedureCode = "72148", RequestedUnits = 2, ApprovedUnits = 0, ServiceStatus = "A3",
+                        DenialReasonCode = "PREFERRED_ALTERNATIVE", DenialReason = "The plan certifies the preferred alternative." },
+            ],
+            PayerAddedServices =
+            [
+                new() { ForLineNumber = 1, ProcedureCode = "72141", ProductOrServiceSystem = "http://www.ama-assn.org/go/cpt",
+                        ProcedureDescription = "MRI cervical spine without contrast", ApprovedUnits = 2, ServiceStatus = "A1" },
+            ],
+        };
+
+        var bundle = _builder.BuildInquiryResponse(record, request, Base);
+        var response = ClaimResponseOf(bundle);
+
+        response.Outcome.Should().Be(ClaimProcessingCodes.Partial);
+        ActionCode(response.Item.Single().Adjudication.First()).Should().Be("A3");
+        var added = response.AddItem.Should().ContainSingle().Subject;
+        added.ItemSequence.Should().Equal(1);
+        added.ProductOrService.Coding.Single().Code.Should().Be("72141");
+        added.Quantity.Value.Should().Be(2);
+        added.Quantity.Code.Should().Be("1", "a bare count is in UCUM's unity");
+        var adjudication = added.Adjudication.Single();
+        ActionCode(adjudication).Should().Be("A1");
+        HeaderNumber(adjudication).Should().Be("PAS-5");
+
+        string Url(string name) => Sd + "extension-" + name;
+        added.Extension.Select(e => e.Url).Should().Contain(new[]
+        {
+            Url("itemTraceNumber"), Url("serviceItemRequestType"), Url("certificationType"), Url("requestedService"),
+            Url("epsdtIndicator"), Url("nursingHomeResidentialStatus"), Url("nursingHomeLevelOfCare"),
+            Url("revenueUnitRateLimit"), Url("productOrServiceCodeEnd"), Url("revenueCode"),
+            Url("itemPreAuthIssueDate"), Url("itemPreAuthPeriod"), Url("authorizationNumber"),
+            Url("administrationReferenceNumber"), Url("admissionDates"), Url("dischargeDate"),
+        });
+        var infoChanged = Url("infoChanged");
+        added.Extension.Should().NotContain(e => e.Url == infoChanged, "only what PAS defines on an added line");
+        var codeEnd = Url("productOrServiceCodeEnd");
+        ((CodeableConcept)added.Extension.Single(e => e.Url == codeEnd).Value).Coding.Single().Code
+            .Should().Be("72141", "the requested range is restated as the alternative alone");
+        added.Modifier.Single().Coding.Single().Code.Should().Be("RT");
+        added.UnitPrice.Value.Should().Be(450);
+        added.Serviced.Should().BeOfType<Date>();
+        added.Location.Should().BeOfType<CodeableConcept>();
+
+        var provider = added.Provider.Should().ContainSingle().Subject;
+        provider.Reference.Should().Be("Practitioner/doc-1");
+        var providerType = Url("authorizedProviderType");
+        ((CodeableConcept)provider.Extension.Single(e => e.Url == providerType).Value).Coding.Single().Code
+            .Should().Be("SJ");
+        bundle.Entry.Should().Contain(e => e.Resource is Practitioner, "the provider it names is in the response");
+    }
+
+    [Fact]
+    public void AnUndecidedRecord_StatesNoAddedLine()
+    {
+        var (_, request) = Request(inquiry: true);
+        var record = new PriorAuthorizationRecord
+        {
+            AuthorizationNumber = "PAS-6", Status = PriorAuthorizationStatus.Pended, ReviewDecision = "A4",
+            RequestedServices = Services(),
+            PayerAddedServices = [new() { ForLineNumber = 1, ProcedureCode = "72141", ApprovedUnits = 2, ServiceStatus = "A1" }],
+        };
+
+        ClaimResponseOf(_builder.BuildInquiryResponse(record, request, Base)).AddItem.Should().BeEmpty();
+    }
+
+    [Fact]
     public void ARequestWithoutTheData_GetsNoneOfIt()
     {
         var claim = new Claim

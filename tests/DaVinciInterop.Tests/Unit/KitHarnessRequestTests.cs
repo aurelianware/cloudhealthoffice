@@ -66,7 +66,12 @@ public sealed class KitHarnessRequestTests
 
         var added = PasServerRequests.MustSupportAdditions("must_support_pa_submit_request_payload", [kit]);
 
-        added.Should().HaveCount(2);
+        added.Should().HaveCount(3);
+        added[1]["entry"]![0]!["resource"]!["identifier"]![0]!["value"]!.GetValue<string>()
+            .Should().Be(PasServerRequests.AlternativeIdentifier);
+        added[1]["entry"]![0]!["resource"]!["item"]!.AsArray()
+            .Select(i => i!["productOrService"]!["coding"]![0]!["code"]!.GetValue<string>())
+            .Should().OnlyContain(c => c == PasServerRequests.PurchasedEquipmentServiceType);
         var claim = added[0]["entry"]![0]!["resource"]!;
         claim["identifier"]![0]!["value"]!.GetValue<string>().Should().Be(PasServerRequests.DocumentationPendIdentifier);
         claim["item"]![0]!["productOrService"]!["coding"]![0]!["code"]!.GetValue<string>()
@@ -80,7 +85,7 @@ public sealed class KitHarnessRequestTests
     {
         var kit = KitPasRequest();
 
-        var refused = PasServerRequests.MustSupportAdditions("must_support_pa_submit_request_payload", [kit])[1];
+        var refused = PasServerRequests.MustSupportAdditions("must_support_pa_submit_request_payload", [kit])[2];
 
         var entry = refused["entry"]![0]!;
         entry["fullUrl"]!.GetValue<string>().Should().Be(PasServerRequests.UnnamedClaimFullUrl);
@@ -105,6 +110,30 @@ public sealed class KitHarnessRequestTests
         added[1]["entry"]![0]!["resource"]!["id"].Should().NotBeNull("an inquiry about an unknown request is otherwise the kit's own");
 
         PasServerRequests.MustSupportAdditions("approval_pa_submit_request_payload", [KitPasRequest()]).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void The_inquiry_about_the_equipment_request_restates_its_lines_and_what_they_reference()
+    {
+        var request = KitPasRequest();
+        var line = request["entry"]![0]!["resource"]!["item"]![0]!.AsObject();
+        line["extension"] = new JsonArray(
+            JsonNode.Parse("""{"url":"http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-requestedService","valueReference":{"reference":"DeviceRequest/dr-1"}}"""),
+            JsonNode.Parse("""{"url":"http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-epsdtIndicator","valueBoolean":false}"""),
+            JsonNode.Parse("""{"url":"http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-infoChanged","valueCode":"changed"}"""));
+        request["entry"]!.AsArray().Add(JsonNode.Parse(
+            """{"fullUrl":"http://example.org/fhir/DeviceRequest/dr-1","resource":{"resourceType":"DeviceRequest","id":"dr-1"}}"""));
+
+        var added = PasServerRequests.MustSupportAdditions("must_support_pa_inquire_request_payload", [KitPasRequest()], [request]);
+
+        added.Should().HaveCount(3);
+        var inquiry = added[1];
+        var claim = inquiry["entry"]![0]!["resource"]!;
+        claim["identifier"]![0]!["value"]!.GetValue<string>().Should().Be(PasServerRequests.AlternativeIdentifier);
+        claim["item"]![0]!["extension"]!.AsArray().Select(e => e!["url"]!.GetValue<string>().Split("extension-")[1])
+            .Should().Equal("requestedService", "epsdtIndicator");
+        claim["item"]![1]!["extension"].Should().BeNull("the request's second line restates nothing");
+        inquiry["entry"]!.AsArray().Should().Contain(e => e!["resource"]!["resourceType"]!.GetValue<string>() == "DeviceRequest");
     }
 
     [Fact]

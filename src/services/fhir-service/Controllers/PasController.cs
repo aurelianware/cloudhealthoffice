@@ -213,6 +213,32 @@ public class PasController : FhirControllerBase
     }
 
     /// <summary>
+    /// The requested lines a modification replaces: every line whose code an
+    /// alternative names gets that alternative. Empty when it names none of
+    /// the record's lines, so the request is pended instead.
+    /// </summary>
+    private static List<PasAlternativeServiceDecision> AlternativesFor(
+        PasAuthorizationRecordRequest record, List<PasAlternativeService>? alternatives)
+    {
+        if (alternatives is not { Count: > 0 }) return [];
+        return record.RequestedServices
+            .Select((service, index) => (service, line: service.LineNumber ?? index + 1,
+                alternative: alternatives.FirstOrDefault(a =>
+                    a.Requested == new PasProcedureCode(service.ProductOrServiceSystem, service.ProcedureCode))))
+            .Where(x => x.alternative is not null)
+            .Select(x => new PasAlternativeServiceDecision
+            {
+                ForLineNumber = x.line,
+                ProcedureCode = x.alternative!.Policy.AlternativeCode,
+                ProductOrServiceSystem = x.alternative.Policy.AlternativeSystem,
+                ProcedureDescription = x.alternative.Policy.AlternativeDisplay,
+                DenialReasonCode = x.alternative.Policy.ReasonCode,
+                DenialReason = x.alternative.Policy.Reason,
+            })
+            .ToList();
+    }
+
+    /// <summary>
     /// Stores the request and its decision, then answers with what was STORED.
     /// Every outcome (approved, denied, pended) gets its tracking number before
     /// the write, and the response carries it only after the write succeeded:
@@ -226,14 +252,19 @@ public class PasController : FhirControllerBase
     {
         decision.AuthorizationNumber ??= NewAuthorizationNumber();
 
+        var alternatives = decision.HasDecision && decision.Decision == "modified"
+            ? AlternativesFor(record, decision.Alternatives)
+            : [];
         var outcome = decision.HasDecision && decision.Decision == "approved" ? "Approved"
             : decision.HasDecision && decision.Decision == "denied" ? "Denied"
+            : alternatives.Count > 0 ? "Modified"
             : "Pended";
+        var certifies = outcome is "Approved" or "Modified";
 
         // The approved period is the requested one (D-03); see
         // PasAuthorizationMapper for the open-ended fallback. An adjudicator
         // that states its own period is respected.
-        if (outcome == "Approved" && decision.EffectiveFrom is null)
+        if (certifies && decision.EffectiveFrom is null)
         {
             decision.EffectiveFrom = mapping.ApprovedFrom;
             decision.EffectiveTo ??= mapping.ApprovedTo;
@@ -255,8 +286,9 @@ public class PasController : FhirControllerBase
             DenialReason = outcome == "Denied" ? decision.DenialReason : null,
             PendReason = outcome != "Pended" ? null
                 : decision.PendReason ?? (requestedInformation.Count > 0 ? PasAdditionalInformationPlanner.PendReason : PendReason),
-            ApprovedServiceDateFrom = outcome == "Approved" ? decision.EffectiveFrom : null,
-            ApprovedServiceDateTo = outcome == "Approved" ? decision.EffectiveTo : null,
+            ApprovedServiceDateFrom = certifies ? decision.EffectiveFrom : null,
+            ApprovedServiceDateTo = certifies ? decision.EffectiveTo : null,
+            Alternatives = alternatives.Count > 0 ? alternatives : null,
             DecidedAt = decidedAt,
             RequestedInformation = requestedInformation.Count > 0 ? requestedInformation : null,
             InformationDueDate = requestedInformation.Count > 0
@@ -323,6 +355,7 @@ public class PasController : FhirControllerBase
                     PendReason = kept.PendReason,
                     StatusHistory = kept.StatusHistory,
                     RequestedServices = kept.RequestedServices,
+                    PayerAddedServices = kept.PayerAddedServices,
                 }, requestBundle, FhirBaseUrl);
                 break;
             case PriorAuthorizationStatus.Denied:
