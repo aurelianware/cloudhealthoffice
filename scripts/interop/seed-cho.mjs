@@ -37,6 +37,7 @@ const SERVICES = {
   fhir: process.env.INTEROP_FHIR_URL ?? 'http://127.0.0.1:18023',
   provider: process.env.INTEROP_PROVIDER_URL ?? 'http://127.0.0.1:18029',
   benefitPlan: process.env.INTEROP_BENEFIT_PLAN_URL ?? 'http://127.0.0.1:18030',
+  authorization: process.env.INTEROP_AUTHORIZATION_URL ?? 'http://127.0.0.1:18031',
 };
 
 
@@ -155,6 +156,21 @@ async function seed(fixture, token) {
 
   await seedClaimsProviders(fixture.claimsProviders, token);
   await seedDirectory(fixture.directory, token);
+  await seedAuthorizations(fixture.authorizations, token);
+}
+
+/**
+ * Decided prior authorizations, through authorization-service's development
+ * seed (Development only, authorizations:decide). It creates or replaces each
+ * by authorization number, so a re-run leaves one record per number.
+ */
+async function seedAuthorizations(authorizations, token) {
+  if (!authorizations?.items?.length) return;
+  console.log(`==> authorization-service ${SERVICES.authorization}`);
+  await put(
+    `${authorizations.items.length} authorization(s)`, 'POST',
+    `${SERVICES.authorization}/api/authorizations/dev-seed`, token,
+    { authorizations: asPayload(authorizations.items) });
 }
 
 /**
@@ -288,6 +304,19 @@ async function seedDirectory(directory, token) {
 async function verify(fixture, token) {
   for (const household of households(fixture)) {
     await verifyHousehold(household, token);
+  }
+
+  for (const authorization of fixture.authorizations?.items ?? []) {
+    const url = `${SERVICES.authorization}/api/authorizations/number/${authorization.authorizationNumber}`;
+    console.log(`==> verifying the authorization ${url}`);
+    const { status, text } = await call('GET', url, token);
+    if (status !== 200) {
+      throw new Error(`authorization ${authorization.authorizationNumber} answered ${status}.\n${text.slice(0, 2000)}`);
+    }
+    const stored = JSON.parse(text);
+    if (stored.status !== authorization.status) {
+      throw new Error(`authorization ${authorization.authorizationNumber} is ${stored.status}, not ${authorization.status}.`);
+    }
   }
 
   // The encounters as the US Core kit will find them: by patient, through

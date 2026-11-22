@@ -252,6 +252,9 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
     public Task<Authorization?> GetByNumberAsync(string authorizationNumber, CancellationToken ct = default)
         => _repository.GetByAuthorizationNumberAsync(authorizationNumber);
 
+    public Task<Authorization?> GetBySubmitterIdentifierAsync(string submitterIdentifier, CancellationToken ct = default)
+        => _repository.GetBySubmitterIdentifierAsync(submitterIdentifier);
+
     public async Task<Authorization> UpdateStatusAsync(
         Authorization authorization,
         AuthorizationStatus status,

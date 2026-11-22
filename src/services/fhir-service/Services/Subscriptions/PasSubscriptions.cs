@@ -458,7 +458,7 @@ public sealed class PasSubscriptionService
     /// <summary>
     /// An R4 backport notification: a history Bundle whose first entry is the
     /// SubscriptionStatus (Parameters), followed, for full-resource, by the
-    /// ClaimResponse and what it references.
+    /// PAS Response Bundle (the ClaimResponse and what it references).
     /// </summary>
     internal static JsonObject Notification(
         PasSubscriptionRecord subscription, string fhirBaseUrl, string type, string status,
@@ -482,28 +482,27 @@ public sealed class PasSubscriptionService
         var resources = new List<JsonObject>();
         if (eventNumber is { } number && focus is not null)
         {
+            // The focus is the PAS Response Bundle itself, as $inquire would
+            // answer it: PAS notifications carry the decision in the same
+            // shape the submitter reads every other answer in.
             var serialized = JsonNode.Parse(
                 new Hl7.Fhir.Serialization.FhirJsonSerializer().SerializeToString(focus))!.AsObject();
-            foreach (var entry in (serialized["entry"] as JsonArray)?.OfType<JsonObject>() ?? [])
-            {
-                if (entry["resource"] is JsonObject resource && resource["id"] is not null)
-                    resources.Add((JsonObject)resource.DeepClone());
-            }
-
-            var claimResponse = resources.FirstOrDefault(r => r["resourceType"]?.GetValue<string>() == "ClaimResponse");
+            serialized["id"] ??= Guid.NewGuid().ToString();
+            resources.Add(serialized);
+            var focusBundle = serialized;
             var parts = new JsonArray
             {
                 new JsonObject { ["name"] = "event-number", ["valueString"] = number.ToString() },
                 new JsonObject { ["name"] = "timestamp", ["valueInstant"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") },
             };
-            if (claimResponse is not null && subscription.PayloadContent != "empty")
+            if (subscription.PayloadContent != "empty")
             {
                 parts.Add(new JsonObject
                 {
                     ["name"] = "focus",
                     ["valueReference"] = new JsonObject
                     {
-                        ["reference"] = $"{baseUrl}/ClaimResponse/{claimResponse["id"]!.GetValue<string>()}",
+                        ["reference"] = $"{baseUrl}/Bundle/{focusBundle["id"]!.GetValue<string>()}",
                     },
                 });
             }
@@ -630,7 +629,8 @@ public sealed class PasSubscriptionNotificationWorker : BackgroundService
                     || record.Status == PriorAuthorizationStatus.Pended)
                     continue;
 
-                var decision = scope.ServiceProvider.GetRequiredService<PasResponseBuilder>().BuildInquiryResponse(record);
+                var decision = scope.ServiceProvider.GetRequiredService<PasResponseBuilder>()
+                    .BuildInquiryResponse(record, fhirBaseUrl: fhirBase);
                 await scope.ServiceProvider.GetRequiredService<PasSubscriptionService>()
                     .NotifyAsync(watch, decision, fhirBase, ct);
                 await store.UnwatchAsync(watch, ct);

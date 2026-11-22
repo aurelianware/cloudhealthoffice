@@ -154,7 +154,9 @@ public static class InfernoSuiteScenario
                     $"lapsed member's Coverage/{crdSource.LapsedCoverageId}."));
             }
 
-            var inputs = remote?.BuildInputs(scenario) ?? BuildInputs(scenario, fixture, patientToken, dtrSource, crdSource);
+            var inputs = remote?.BuildInputs(scenario) ?? BuildInputs(
+                scenario, fixture, patientToken, dtrSource, crdSource,
+                introspectionHeader: InfernoSmartApp.IntrospectionAuthorizationHeader);
             var onWaiting = WaitHandlerFor(scenario, fixture, kit.ApiBaseUrl);
 
             var suiteId = scenario.RequiredInfernoSuite;
@@ -311,7 +313,7 @@ public static class InfernoSuiteScenario
     public static List<InfernoInput> BuildInputs(
         InteropScenarioDefinition scenario, ChoSeedFixture fixture, string? patientToken = null,
         DtrSourceData? dtrSource = null, CrdSourceData? crdSource = null,
-        IReadOnlyDictionary<string, string>? pasInputs = null)
+        IReadOnlyDictionary<string, string>? pasInputs = null, string? introspectionHeader = null)
     {
         CrdSourceData Crd() => crdSource ?? throw new InteropEnvironmentException(
             $"Scenario '{scenario.Id}' declares CRD hook request inputs, and no Coverage id was read from CHO.");
@@ -341,6 +343,14 @@ public static class InfernoSuiteScenario
             "ehr_smart_auth_info" => InfernoSmartApp.AuthInfo(
                 name, fixture.SmartApp.EhrClientId, fixture.SmartApp.EhrScopes),
             "encryption_method" => new InfernoInput { Name = name, Value = "ES384" },
+            "custom_authorization_header" => new InfernoInput
+            {
+                Name = name,
+                Value = introspectionHeader
+                    ?? throw new InteropEnvironmentException(
+                        $"Scenario '{scenario.Id}' declares the introspection authorization header, and no resource " +
+                        "server was registered with smart-auth-service."),
+            },
             "order_sign_request_bodies" => new InfernoInput
             {
                 Name = name, Value = CrdServerRequests.OrderSign(fixture, Crd().CoverageId).ToJsonString(),
@@ -500,8 +510,12 @@ public static class InfernoSuiteScenario
                 BackendClientFor(scenario, fixture).ClientId,
                 string.Join(' ', BackendClientFor(scenario, fixture).Scopes),
                 // The Bulk Data and DTR kits run SMART Backend Services tests
-                // that obtain the token; the PDex server suite has none.
-                startExpired: scenario.InfernoAuth == InfernoAuthModes.PayerBackendServices),
+                // that obtain the token; the PDex and PAS server suites have
+                // none, so they start from an expired token that inferno_core
+                // refreshes on the first request. A blank token is never
+                // refreshed, and every call would go out unauthenticated.
+                startExpired: scenario.InfernoAuth
+                    is InfernoAuthModes.PayerBackendServices or InfernoAuthModes.PasClientBackendServices),
             _ => throw new InteropEnvironmentException(
                 $"Scenario '{scenario.Id}' declares infernoAuth '{scenario.InfernoAuth}', which the harness " +
                 $"does not know. Known: {InfernoAuthModes.ChoToken}, {InfernoAuthModes.BackendServices}, " +

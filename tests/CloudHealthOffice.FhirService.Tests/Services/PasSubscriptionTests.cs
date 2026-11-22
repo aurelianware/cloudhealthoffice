@@ -84,7 +84,7 @@ public class PasSubscriptionTests
     }
 
     [Fact]
-    public async System.Threading.Tasks.Task ADecision_IsSentToTheProvidersSubscription_WithTheClaimResponse()
+    public async System.Threading.Tasks.Task ADecision_IsSentToTheProvidersSubscription_WithThePasResponseBundle()
     {
         var service = Service(out var handler);
         var (record, _) = service.Parse(Subscription(), "t1", "s1");
@@ -101,8 +101,12 @@ public class PasSubscriptionTests
         var focus = sent["entry"]![0]!["resource"]!["parameter"]!.AsArray()
             .Single(p => p!["name"]!.GetValue<string>() == "notification-event")!["part"]!.AsArray()
             .Single(p => p!["name"]!.GetValue<string>() == "focus")!["valueReference"]!["reference"]!.GetValue<string>();
-        focus.Should().Be($"{Base}/ClaimResponse/cr-1");
-        sent["entry"]!.AsArray().Select(e => e!["fullUrl"]!.GetValue<string>()).Should().Contain(focus);
+        // PAS: the focus is the PAS Response Bundle, holding the ClaimResponse.
+        focus.Should().Be($"{Base}/Bundle/decision-1");
+        var focusEntry = sent["entry"]!.AsArray().Single(e => e!["fullUrl"]!.GetValue<string>() == focus)!;
+        focusEntry["resource"]!["resourceType"]!.GetValue<string>().Should().Be("Bundle");
+        focusEntry["resource"]!["type"]!.GetValue<string>().Should().Be("collection");
+        focusEntry["resource"]!["entry"]![0]!["resource"]!["resourceType"]!.GetValue<string>().Should().Be("ClaimResponse");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -113,6 +117,7 @@ public class PasSubscriptionTests
 
     private static Bundle Decision() => new()
     {
+        Id = "decision-1",
         Type = Bundle.BundleType.Collection,
         Entry =
         [

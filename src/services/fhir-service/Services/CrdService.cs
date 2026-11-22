@@ -24,6 +24,9 @@ public class CrdService : ICrdService
     private readonly string? _portalQuestionnaireUrl;
     private readonly TimeSpan _assertionRetention;
     private readonly ICrdEhrCoverageReader? _ehrCoverage;
+    private readonly CrdPayerContact? _payerContact;
+    private readonly string? _policyUrl;
+    private readonly IApprovedAuthorizationSearch? _priorAuthorizations;
 
     public CrdService(
         IHttpClientFactory httpClientFactory,
@@ -35,9 +38,22 @@ public class CrdService : ICrdService
         IDtrService? dtrService = null,
         ICrdAssertionStore? assertionStore = null,
         IOptions<DtrConfig>? dtrConfig = null,
-        ICrdEhrCoverageReader? ehrCoverage = null)
+        ICrdEhrCoverageReader? ehrCoverage = null,
+        IOptions<FhirService.Services.PlanOrganization.PlanOrganizationOptions>? planOrganization = null,
+        IApprovedAuthorizationSearch? priorAuthorizations = null)
     {
         _ehrCoverage = ehrCoverage;
+        // Optional: without it, an authorization requirement is never
+        // reported satisfied, which is the answer CHO gave before.
+        _priorAuthorizations = priorAuthorizations;
+        // Who to contact about an assertion: the plan, as its Organization is configured.
+        _payerContact = planOrganization?.Value is { } plan
+                        && (!string.IsNullOrWhiteSpace(plan.Phone) || !string.IsNullOrWhiteSpace(plan.Website))
+            ? new CrdPayerContact(plan.Name, plan.Phone, plan.Website)
+            : null;
+        _policyUrl = Uri.TryCreate(config.Value.CoveragePolicyUrl?.Trim(), UriKind.Absolute, out var policy)
+            ? policy.AbsoluteUri
+            : null;
         _terminologyClient = httpClientFactory.CreateClient("TerminologyService");
         _priorAuthRuleEngine = priorAuthRuleEngine;
         _defaultClassification = LoadFromConfig(config.Value);
@@ -150,6 +166,22 @@ public class CrdService : ICrdService
                 CrdIndeterminateReason.NoCodedService, new CrdCoding(), label, cards.Count - 1));
         }
 
+        // 4b. A requirement an approved authorization already meets is
+        //     satisfied, and the answer names that authorization.
+        await SatisfyFromApprovedAuthorizationsAsync(context, request, tenantId, assertions, cards, ct);
+
+        // 4c. An order planned for after the coverage ends is covered only
+        //     conditionally, and its card says so as the extension does.
+        foreach (var assertion in assertions.Where(a => OutsideCoverage(context, request, a)))
+        {
+            var card = cards[assertion.CardIndex];
+            card.Detail = string.Join(" ", new[]
+            {
+                card.Detail,
+                CrdCoverageInformation.DefaultReasonText(CrdIndeterminateReason.OutsideCoveragePeriod),
+            }.Where(t => !string.IsNullOrWhiteSpace(t)));
+        }
+
         // 5. Documentation-required answers name the DTR forms that collect the
         //    documentation (resp-38), and their cards say how to complete them.
         var questionnaires = await QuestionnairesForAsync(assertions, tenantId, ct);
@@ -159,7 +191,7 @@ public class CrdService : ICrdService
         // coverage-info false (a CRD configuration option): the client asked
         // for no coverage-information on this call, so none is issued or kept.
         var (systemActions, issued) = request.CoverageInfoEnabled
-            ? BuildSystemActions(request, tenantId, coverageReference, assertions, questionnaires)
+            ? BuildSystemActions(request, tenantId, coverageReference, assertions, questionnaires, context)
             : ([], []);
         await RememberAsync(issued, tenantId, ct);
 
@@ -197,13 +229,14 @@ public class CrdService : ICrdService
     /// the determination in that case, exactly as before.
     /// </para>
     /// </summary>
-    private static (List<CdsHooksSystemAction> Actions,
+    private (List<CdsHooksSystemAction> Actions,
         List<(CrdAssertionDraft Draft, CrdCoverageAssertion Record)> Issued) BuildSystemActions(
         CrdHookRequest request,
         string tenantId,
         string? coverageReference,
         IReadOnlyList<CrdAssertionDraft> assertions,
-        IReadOnlyDictionary<CrdAssertionDraft, IReadOnlyList<string>> questionnaires)
+        IReadOnlyDictionary<CrdAssertionDraft, IReadOnlyList<string>> questionnaires,
+        CrdContextResolution context)
     {
         var issued = new List<(CrdAssertionDraft, CrdCoverageAssertion)>();
         if (coverageReference is null)
@@ -220,6 +253,10 @@ public class CrdService : ICrdService
         var now = DateTimeOffset.UtcNow;
         var today = DateOnly.FromDateTime(now.UtcDateTime);
         var actions = new List<CdsHooksSystemAction>();
+        var draftOrders = entries
+            .Select(e => e.RawResource is { ValueKind: JsonValueKind.Object } r ? OrderReference(r) : null)
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
 
         foreach (var group in assertions
                      .Where(a => a.EntryIndex >= 0 && a.EntryIndex < entries.Count)
@@ -232,6 +269,11 @@ public class CrdService : ICrdService
             }
 
             var orderReference = OrderReference(resource);
+            // An order based on another order in this request is covered as
+            // part of it: the assertion depends on that order.
+            var dependencies = BasedOn(resource)
+                .Where(r => draftOrders.Contains(r) && !string.Equals(r, orderReference, StringComparison.Ordinal))
+                .ToList();
             var extensions = new List<Dictionary<string, object?>>();
             foreach (var assertion in group)
             {
@@ -250,6 +292,12 @@ public class CrdService : ICrdService
                     BillingCodeSystem = hasCode ? assertion.Coding.System : null,
                     BillingCode = hasCode ? assertion.Coding.Code : null,
                     Questionnaires = forms,
+                    ExpiryDate = DateOnly.FromDateTime((now + _assertionRetention).UtcDateTime),
+                    Contact = _payerContact,
+                    PolicyUrl = _policyUrl,
+                    SatisfiedPaId = assertion.SatisfiedPaId,
+                    OutsideContractWindow = OutsideCoverage(context, request, assertion),
+                    Dependencies = dependencies,
                 };
                 extensions.Add(info.ToExtension());
                 issued.Add((assertion, new CrdCoverageAssertion
@@ -276,6 +324,124 @@ public class CrdService : ICrdService
         }
 
         return (actions, issued);
+    }
+
+    /// <summary>
+    /// Replaces each authorization-required answer that an approved
+    /// authorization of the member's already meets — same procedure code, a
+    /// service line not denied, and the order's date within the approved
+    /// period — with a satisfied answer naming that authorization.
+    /// </summary>
+    private async Task SatisfyFromApprovedAuthorizationsAsync(
+        CrdContextResolution context, CrdHookRequest request, string tenantId,
+        List<CrdAssertionDraft> assertions, List<CrdCard> cards, CancellationToken ct)
+    {
+        if (_priorAuthorizations is null || (context.MemberId ?? context.Context?.MemberId) is not { Length: > 0 } memberId
+            || !assertions.Any(a => a.Determination == CrdDetermination.AuthorizationRequired))
+            return;
+
+        IReadOnlyList<PriorAuthorizationRecord> approved;
+        try
+        {
+            approved = await _priorAuthorizations.FindApprovedForMemberAsync(tenantId, memberId, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("CRD could not read the member's authorizations ({Fault}); requirements stand",
+                ex.GetType().Name);
+            return;
+        }
+
+        if (approved.Count == 0)
+            return;
+
+        for (var i = 0; i < assertions.Count; i++)
+        {
+            var assertion = assertions[i];
+            if (assertion.Determination != CrdDetermination.AuthorizationRequired
+                || string.IsNullOrWhiteSpace(assertion.Coding.Code))
+                continue;
+
+            var date = PlannedDate(request, assertion.EntryIndex) ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            var match = approved.FirstOrDefault(a => Covers(a, assertion.Coding.Code!, date));
+            if (match is null)
+                continue;
+
+            assertions[i] = assertion with
+            {
+                Determination = CrdDetermination.AuthorizationSatisfied,
+                SatisfiedPaId = match.AuthorizationNumber,
+            };
+            cards[assertion.CardIndex] = BuildAuthSatisfiedCard(assertion.Display, match.AuthorizationNumber);
+        }
+    }
+
+    /// <summary>Whether an approved authorization covers this procedure code on this date.</summary>
+    internal static bool Covers(PriorAuthorizationRecord authorization, string code, DateOnly date)
+    {
+        if (string.IsNullOrWhiteSpace(authorization.AuthorizationNumber)
+            || authorization.Status is not (PriorAuthorizationStatus.Approved or PriorAuthorizationStatus.Modified))
+            return false;
+
+        var day = date.ToDateTime(TimeOnly.MinValue);
+        if (authorization.ApprovedServiceDateFrom is { } from && day < from.Date) return false;
+        if (authorization.ApprovedServiceDateTo is { } to && day > to.Date) return false;
+        if (authorization.ExpirationDate is { } expires && day > expires.Date) return false;
+
+        return authorization.RequestedServices.Any(s =>
+            string.Equals(s.ProcedureCode?.Trim(), code.Trim(), StringComparison.OrdinalIgnoreCase)
+            && !IsRefused(s.ServiceStatus)
+            && s.ApprovedUnits is not <= 0m);
+    }
+
+    private static bool IsRefused(string? serviceStatus)
+        => serviceStatus is not null
+           && (serviceStatus.Contains("denied", StringComparison.OrdinalIgnoreCase)
+               || serviceStatus.Contains("cancel", StringComparison.OrdinalIgnoreCase)
+               || serviceStatus.Contains("pend", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Whether the order is planned for after the coverage CHO answered under
+    /// ends. Never for an answer that is already not-covered or indeterminate.
+    /// </summary>
+    private static bool OutsideCoverage(CrdContextResolution context, CrdHookRequest request, CrdAssertionDraft assertion)
+        => context.CoverageEnd is { } end
+           && assertion.Determination is not (CrdDetermination.NotCovered or CrdDetermination.Indeterminate)
+           && PlannedDate(request, assertion.EntryIndex) is { } planned
+           && planned > end;
+
+    /// <summary>When the draft order at this index is to be performed, when it says.</summary>
+    private static DateOnly? PlannedDate(CrdHookRequest request, int entryIndex)
+    {
+        var entries = request.Context?.DraftOrders?.Entry;
+        if (entries is null || entryIndex < 0 || entryIndex >= entries.Count)
+            return null;
+        var stated = entries[entryIndex].Resource?.OccurrenceDateTime
+                     ?? entries[entryIndex].Resource?.OccurrencePeriod?.Start;
+        return DateTimeOffset.TryParse(stated, out var occurrence)
+            ? DateOnly.FromDateTime(occurrence.UtcDateTime)
+            : stated is { Length: >= 10 } && DateOnly.TryParseExact(stated[..10], "yyyy-MM-dd", out var day)
+                ? day
+                : null;
+    }
+
+    /// <summary>The draft order's <c>basedOn</c> references.</summary>
+    private static IEnumerable<string> BasedOn(JsonElement resource)
+    {
+        if (!resource.TryGetProperty("basedOn", out var basedOn) || basedOn.ValueKind != JsonValueKind.Array)
+            yield break;
+        foreach (var item in basedOn.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.Object
+                && item.TryGetProperty("reference", out var reference)
+                && reference.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(reference.GetString()))
+                yield return reference.GetString()!.Trim();
+        }
     }
 
     /// <summary><c>{resourceType}/{id}</c> of the draft order, when it carries an id.</summary>
@@ -363,7 +529,7 @@ public class CrdService : ICrdService
     /// <summary>One code's answer, before it becomes a system action and a stored assertion.</summary>
     private sealed record CrdAssertionDraft(
         int EntryIndex, CrdDetermination Determination, CrdIndeterminateReason? Reason,
-        CrdCoding Coding, string Display, int CardIndex);
+        CrdCoding Coding, string Display, int CardIndex, string? SatisfiedPaId = null);
 
     /// <summary>
     /// The EHR's resource with the given extensions appended to its own, and
@@ -867,6 +1033,23 @@ public class CrdService : ICrdService
         }
         return JsonSerializer.Serialize(context);
     }
+
+    /// <summary>
+    /// Prior authorization would be required, and the member's approved
+    /// authorization already covers the service.
+    /// </summary>
+    internal static CrdCard BuildAuthSatisfiedCard(string serviceDisplay, string authorizationNumber) => new()
+    {
+        Uuid = Guid.NewGuid().ToString(),
+        Summary = $"Prior authorization on file for {serviceDisplay}",
+        Detail = $"Prior authorization is required for this service, and authorization {authorizationNumber} "
+                 + "already covers it on the ordered date. No new request is needed.",
+        Indicator = "info",
+        Source = new CrdCardSource
+        {
+            Topic = CoverageInfoTopic(),
+        },
+    };
 
     /// <summary>
     /// The ONLY "not required" card: issued when the tenant's classification

@@ -65,21 +65,39 @@ public class PasResponseBuilder
                 : string.IsNullOrWhiteSpace(reasonCode) ? reason : $"{reason} ({reasonCode})",
         };
 
-    /// <summary>The reviewAction extension carrying one X12 certification action code.</summary>
+    /// <summary>
+    /// The reviewAction extension carrying one X12 certification action code.
+    /// PAS 2.2.1 types its code as a CodeableConcept and allows the extension
+    /// only on an adjudication (<c>ClaimResponse.item.adjudication</c>, and the
+    /// header and added-item adjudications), never on the ClaimResponse itself.
+    /// </summary>
     private static Extension ReviewAction(string actionCode, string? display = null)
         => new()
         {
             Url = ReviewActionExtensionUrl,
             Extension = new List<Extension>
             {
-                new(ReviewActionCodeUrl, new Coding(X12CertificationActionSystem, actionCode, display)),
+                new(ReviewActionCodeUrl, new CodeableConcept(X12CertificationActionSystem, actionCode, display)),
             },
         };
+
+    /// <summary>The adjudication category a decision on a line is stated under.</summary>
+    private static CodeableConcept DecisionCategory()
+        => new("http://terminology.hl7.org/CodeSystem/adjudication", "submitted");
+
+    /// <summary>A process note, numbered as PAS requires (<c>processNote.number</c> 1..1).</summary>
+    private static void AddNote(ClaimResponse claimResponse, ClaimResponse.NoteComponent note)
+    {
+        note.Number = claimResponse.ProcessNote.Count + 1;
+        claimResponse.ProcessNote.Add(note);
+    }
 
     /// <summary>
     /// Builds an approved ClaimResponse bundle.
     /// </summary>
-    public Bundle BuildApprovedResponse(Claim claim, PasDecisionResult decision, List<PriorAuthorizationService>? services = null)
+    public Bundle BuildApprovedResponse(
+        Claim claim, PasDecisionResult decision, List<PriorAuthorizationService>? services = null,
+        Bundle? request = null, string? fhirBaseUrl = null)
     {
         var claimResponse = BuildBase(claim);
         claimResponse.Outcome = ClaimProcessingCodes.Complete;
@@ -95,14 +113,17 @@ public class PasResponseBuilder
             };
         }
 
-        AddRequestedServices(claimResponse, new PriorAuthorizationRecord { RequestedServices = services ?? new() });
-        return WrapInBundle(claimResponse);
+        AddRequestedServices(claimResponse, new PriorAuthorizationRecord { RequestedServices = services ?? new() },
+            ("A1", "Certified in total"), claim);
+        return WrapInBundle(claimResponse, request, fhirBaseUrl);
     }
 
     /// <summary>
     /// Builds a denied ClaimResponse bundle.
     /// </summary>
-    public Bundle BuildDeniedResponse(Claim claim, PasDecisionResult decision, List<PriorAuthorizationService>? services = null)
+    public Bundle BuildDeniedResponse(
+        Claim claim, PasDecisionResult decision, List<PriorAuthorizationService>? services = null,
+        Bundle? request = null, string? fhirBaseUrl = null)
     {
         var claimResponse = BuildBase(claim);
         claimResponse.Outcome = ClaimProcessingCodes.Complete;
@@ -111,34 +132,36 @@ public class PasResponseBuilder
         // it carries the same tracking handle an approval does.
         claimResponse.PreAuthRef = decision.AuthorizationNumber;
 
-        // A3, not certified. The denied path previously carried no review action
-        // at all, so a denial was the one decision whose outcome a PAS consumer
-        // could not read from the element the IG defines for it.
-        claimResponse.Extension.Add(ReviewAction("A3", "Not Certified"));
-        claimResponse.ProcessNote.Add(DenialNote(decision.DenialReasonCode, decision.DenialReason));
+        // A3, not certified, on every line: the element the IG defines for a
+        // decision is the line's adjudication reviewAction.
+        AddNote(claimResponse, DenialNote(decision.DenialReasonCode, decision.DenialReason));
 
-        AddRequestedServices(claimResponse, new PriorAuthorizationRecord { RequestedServices = services ?? new() });
-        return WrapInBundle(claimResponse);
+        AddRequestedServices(claimResponse, new PriorAuthorizationRecord { RequestedServices = services ?? new() },
+            ("A3", "Not Certified"), claim);
+        return WrapInBundle(claimResponse, request, fhirBaseUrl);
     }
 
     /// <summary>
     /// Builds a pended ClaimResponse bundle with X12 review action code A4.
     /// </summary>
-    public Bundle BuildPendedResponse(Claim claim, string? authorizationNumber = null, List<PriorAuthorizationService>? services = null)
+    public Bundle BuildPendedResponse(
+        Claim claim, string? authorizationNumber = null, List<PriorAuthorizationService>? services = null,
+        Bundle? request = null, string? fhirBaseUrl = null)
     {
         var claimResponse = BuildBase(claim);
-        claimResponse.Outcome = ClaimProcessingCodes.Queued;
+        // PAS 2.2.1 binds outcome to complete | error | partial: receiving
+        // and recording the request is complete; the pend is the review action.
+        claimResponse.Outcome = ClaimProcessingCodes.Complete;
         claimResponse.Disposition = "pended";
         // Without this a pended decision had no tracking handle at all, so the
         // submitter could never inquire about the one outcome that most needs
         // following up. PAS-04 depends on it.
         claimResponse.PreAuthRef = authorizationNumber;
 
-        // Add Da Vinci PAS reviewAction extension with A4 (pended) code
-        claimResponse.Extension.Add(ReviewAction("A4", "Pending"));
-
-        AddRequestedServices(claimResponse, new PriorAuthorizationRecord { RequestedServices = services ?? new() });
-        return WrapInBundle(claimResponse);
+        // A4 (pended) on every line's adjudication reviewAction.
+        AddRequestedServices(claimResponse, new PriorAuthorizationRecord { RequestedServices = services ?? new() },
+            ("A4", "Pending"), claim);
+        return WrapInBundle(claimResponse, request, fhirBaseUrl);
     }
 
 
@@ -170,7 +193,8 @@ public class PasResponseBuilder
     /// The A4 reviewAction says a decision is outstanding pending information —
     /// it is NOT a CDex exchange, which CHO does not implement.
     /// </summary>
-    public Bundle BuildInquiryResponse(PriorAuthorizationRecord authorization)
+    public Bundle BuildInquiryResponse(
+        PriorAuthorizationRecord authorization, Bundle? request = null, string? fhirBaseUrl = null)
     {
         var (status, outcome, disposition, reviewActionCode, reviewActionDisplay) =
             MapStatus(authorization.Status, authorization.ReviewDecision);
@@ -196,6 +220,8 @@ public class PasResponseBuilder
                 $"Patient/{StripPatientPrefix(authorization.PatientReference ?? authorization.MemberId)}"),
             Created = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             Insurer = new ResourceReference { Display = "CHO Payer" },
+            // The inquiry's own Claim, which PAS requires the response to name.
+            Request = new ResourceReference { Display = "Prior authorization inquiry" },
             Outcome = outcome,
             Disposition = disposition,
             // The tracking handle the caller inquired with, echoed back.
@@ -220,33 +246,38 @@ public class PasResponseBuilder
             };
         }
 
-        if (reviewActionCode is not null)
+        // The inquiring Claim names the patient, insurer and requestor the
+        // response describes, as the submitter knows them.
+        var inquiryClaim = request?.Entry.Select(e => e.Resource).OfType<Claim>().FirstOrDefault();
+        if (inquiryClaim is not null)
         {
-            claimResponse.Extension.Add(ReviewAction(reviewActionCode, reviewActionDisplay));
+            if (inquiryClaim.Insurer?.Reference is not null) claimResponse.Insurer = inquiryClaim.Insurer;
+            if (inquiryClaim.Provider?.Reference is not null) claimResponse.Requestor = inquiryClaim.Provider;
+            if (inquiryClaim.Id is not null) claimResponse.Request = new ResourceReference($"Claim/{inquiryClaim.Id}");
         }
 
         // A denial says why, in the same shape $submit uses. See DenialNote.
         if (!string.IsNullOrWhiteSpace(authorization.DenialReasonCode)
             || !string.IsNullOrWhiteSpace(authorization.DenialReason))
         {
-            claimResponse.ProcessNote.Add(
-                DenialNote(authorization.DenialReasonCode, authorization.DenialReason));
+            AddNote(claimResponse, DenialNote(authorization.DenialReasonCode, authorization.DenialReason));
         }
 
         // A pended decision says what is outstanding, when the record holds it.
         var pendNote = authorization.PendReason ?? authorization.FollowUpAction;
         if (!string.IsNullOrWhiteSpace(pendNote))
         {
-            claimResponse.ProcessNote.Add(new ClaimResponse.NoteComponent
+            AddNote(claimResponse, new ClaimResponse.NoteComponent
             {
                 Type = Hl7.Fhir.Model.NoteType.Print,
                 Text = pendNote,
             });
         }
 
-        AddRequestedServices(claimResponse, authorization);
+        AddRequestedServices(claimResponse, authorization,
+            reviewActionCode is null ? null : (reviewActionCode, reviewActionDisplay), inquiryClaim);
 
-        return WrapInBundle(claimResponse);
+        return WrapInBundle(claimResponse, request, fhirBaseUrl);
     }
 
     /// <summary>
@@ -255,7 +286,8 @@ public class PasResponseBuilder
     /// an approved quantity for a decision that has not been made.
     /// </summary>
     private static void AddRequestedServices(
-        ClaimResponse claimResponse, PriorAuthorizationRecord authorization)
+        ClaimResponse claimResponse, PriorAuthorizationRecord authorization,
+        (string Code, string? Display)? decision = null, Claim? claim = null)
     {
         var sequence = 1;
         foreach (var service in authorization.RequestedServices)
@@ -269,7 +301,7 @@ public class PasResponseBuilder
             {
                 item.Adjudication.Add(new ClaimResponse.AdjudicationComponent
                 {
-                    Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "benefit"),
+                    Category = DecisionCategory(),
                     Value = service.ApprovedUnits,
                     Reason = service.ServiceStatus is "A2" or "A3"
                         ? new CodeableConcept { Coding = new List<Coding> { new() { Code = service.DenialReasonCode } }, Text = service.DenialReason }
@@ -291,19 +323,51 @@ public class PasResponseBuilder
                 Value = service.RequestedUnits,
             });
 
-            if (service.ApprovedUnits.HasValue && service.ServiceStatus is not ("A1" or "A2" or "A3" or "A4"))
+            // A line with no decision of its own carries the request's.
+            if (service.ServiceStatus is not ("A1" or "A2" or "A3" or "A4") && decision is { } overall)
+            {
+                item.Adjudication.Insert(0, new ClaimResponse.AdjudicationComponent
+                {
+                    Category = DecisionCategory(),
+                    Value = overall.Code is "A1" or "A2" ? service.ApprovedUnits : null,
+                    Extension = new List<Extension> { ReviewAction(overall.Code, overall.Display) },
+                });
+            }
+            else if (service.ApprovedUnits.HasValue && service.ServiceStatus is not ("A1" or "A2" or "A3" or "A4"))
             {
                 item.Adjudication.Add(new ClaimResponse.AdjudicationComponent
                 {
-                    Category = new CodeableConcept(
-                        "http://terminology.hl7.org/CodeSystem/adjudication",
-                        "benefit",
-                        service.ProcedureCode),
+                    // PAS 2.2.1 fixes every line adjudication's category to "submitted".
+                    Category = DecisionCategory(),
                     Value = service.ApprovedUnits,
                 });
             }
 
             claimResponse.Item.Add(item);
+        }
+
+        // A decision is stated on a line, so a response with none states it on
+        // each line of the request: the request's own item sequences.
+        if (claimResponse.Item.Count == 0 && decision is { } stated)
+        {
+            var sequences = claim?.Item.Select(i => i.Sequence).OfType<int>().ToList() is { Count: > 0 } claimed
+                ? claimed
+                : [1];
+            foreach (var itemSequence in sequences)
+            {
+                claimResponse.Item.Add(new ClaimResponse.ItemComponent
+                {
+                    ItemSequence = itemSequence,
+                    Adjudication = new List<ClaimResponse.AdjudicationComponent>
+                    {
+                        new()
+                        {
+                            Category = DecisionCategory(),
+                            Extension = new List<Extension> { ReviewAction(stated.Code, stated.Display) },
+                        },
+                    },
+                });
+            }
         }
     }
 
@@ -316,11 +380,11 @@ public class PasResponseBuilder
         MapStatus(PriorAuthorizationStatus status, string? reviewDecision) => status switch
         {
             PriorAuthorizationStatus.Submitted
-                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued, "pending", null, null),
+                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete, "pending", null, null),
             PriorAuthorizationStatus.InReview
-                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued, "pending", null, null),
+                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete, "pending", null, null),
             PriorAuthorizationStatus.Pended
-                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued,
+                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete,
                     "pended-additional-information", "A4", "Pending"),
             PriorAuthorizationStatus.Approved
                 => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete, "approved", "A1", "Certified in total"),
@@ -336,7 +400,7 @@ public class PasResponseBuilder
             // An unrecognised or absent status is never reported as a decision:
             // it reads as still in progress rather than as an approval CHO
             // cannot vouch for.
-            _ => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued, "pending", null, null),
+            _ => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete, "pending", null, null),
         };
 
     private static string StripPatientPrefix(string value)
@@ -360,25 +424,130 @@ public class PasResponseBuilder
             Patient = claim.Patient,
             Created = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             Insurer = claim.Insurer ?? new ResourceReference { Display = "CHO Payer" },
+            // The party that asked: PAS names it on the response as the request did.
+            Requestor = claim.Provider,
             Request = new ResourceReference($"Claim/{claim.Id}"),
         };
     }
 
-    private static Bundle WrapInBundle(ClaimResponse claimResponse)
+    /// <summary>The system CHO identifies its PAS response bundles under (PAS: Bundle.identifier 1..1).</summary>
+    public const string ResponseBundleIdentifierSystem = "http://cloudhealthoffice.com/fhir/pas-response";
+
+    /// <summary>
+    /// The PAS Response Bundle: the ClaimResponse first, then every resource it
+    /// references (patient, insurer, requestor) and, in turn, what those
+    /// reference, each exactly once, together with the request's people and
+    /// organizations. All are taken from the request as the submitter sent
+    /// them; the request Claim itself is not echoed (PAS: ClaimResponse.request
+    /// is a back-reference). Entries are addressed under <paramref name="fhirBaseUrl"/>
+    /// so a relative reference resolves against the ClaimResponse's own fullUrl.
+    /// </summary>
+    private static Bundle WrapInBundle(ClaimResponse claimResponse, Bundle? request = null, string? fhirBaseUrl = null)
     {
-        return new Bundle
+        var baseUrl = string.IsNullOrWhiteSpace(fhirBaseUrl) ? null : fhirBaseUrl.TrimEnd('/');
+        string FullUrl(Resource resource) => baseUrl is null
+            ? $"urn:uuid:{Guid.NewGuid()}"
+            : $"{baseUrl}/{resource.TypeName}/{resource.Id}";
+
+        var bundleId = Guid.NewGuid().ToString();
+        var bundle = new Bundle
         {
-            Id = Guid.NewGuid().ToString(),
+            Id = bundleId,
+            Meta = new Meta { Profile = new[] { PasResponseBundleProfile } },
+            Identifier = new Identifier(ResponseBundleIdentifierSystem, bundleId),
             Type = Bundle.BundleType.Collection,
             Timestamp = DateTimeOffset.UtcNow,
             Entry = new List<Bundle.EntryComponent>
             {
                 new()
                 {
-                    FullUrl = $"urn:uuid:{claimResponse.Id}",
+                    FullUrl = baseUrl is null ? $"urn:uuid:{claimResponse.Id}" : $"{baseUrl}/ClaimResponse/{claimResponse.Id}",
                     Resource = claimResponse,
                 }
             },
         };
+
+        if (request is null || baseUrl is null)
+            return bundle;
+
+        // The request's resources by Type/id (the form references take).
+        // An echoed resource keeps the fullUrl the request gave it (PAS: the
+        // same fullUrl, id and identifiers as in the request).
+        var byKey = new Dictionary<string, Resource>(StringComparer.Ordinal);
+        var requestFullUrl = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var entry in request.Entry)
+        {
+            var resource = entry.Resource;
+            if (resource?.Id is null || resource is Claim) continue;
+            var key = $"{resource.TypeName}/{resource.Id}";
+            if (byKey.TryAdd(key, resource) && !string.IsNullOrWhiteSpace(entry.FullUrl))
+                requestFullUrl[key] = entry.FullUrl;
+        }
+
+        var included = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Queue<Resource>();
+        void Include(Resource resource)
+        {
+            if (included.Add($"{resource.TypeName}/{resource.Id}")) pending.Enqueue(resource);
+        }
+        void IncludeReferenced(Base from)
+        {
+            foreach (var reference in References(from))
+            {
+                if (KeyOf(reference.Reference) is { } key && byKey.TryGetValue(key, out var target))
+                    Include(target);
+            }
+        }
+
+        // What the ClaimResponse names, except the back-reference to the request.
+        var request_ = claimResponse.Request;
+        claimResponse.Request = null;
+        IncludeReferenced(claimResponse);
+        claimResponse.Request = request_;
+
+        // The request's people and organizations, which a PAS consumer reads
+        // the response against (beneficiary, insurer, requestor, practitioner).
+        foreach (var resource in byKey.Values.Where(r => r is Patient or Organization or Practitioner or PractitionerRole))
+            Include(resource);
+
+        while (pending.Count > 0)
+        {
+            var resource = pending.Dequeue();
+            var copy = (Resource)resource.DeepCopy();
+            bundle.Entry.Add(new Bundle.EntryComponent
+            {
+                FullUrl = requestFullUrl.TryGetValue($"{copy.TypeName}/{copy.Id}", out var echoed) ? echoed : FullUrl(copy),
+                Resource = copy,
+            });
+            IncludeReferenced(copy);
+        }
+
+        return bundle;
+    }
+
+    private const string PasResponseBundleProfile =
+        "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-pas-response-bundle";
+
+    /// <summary><c>Type/id</c> of a relative or absolute literal reference, or null.</summary>
+    private static string? KeyOf(string? reference)
+    {
+        if (string.IsNullOrWhiteSpace(reference) || reference.StartsWith("urn:", StringComparison.OrdinalIgnoreCase)
+            || reference.StartsWith('#'))
+            return null;
+        var parts = reference.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var historyAt = Array.IndexOf(parts, "_history");
+        if (historyAt >= 0) parts = parts[..historyAt];
+        return parts.Length >= 2 ? $"{parts[^2]}/{parts[^1]}" : null;
+    }
+
+    /// <summary>Every ResourceReference inside an element, walked over the FHIR model.</summary>
+    private static IEnumerable<ResourceReference> References(Base element)
+    {
+        if (element is ResourceReference reference) yield return reference;
+        foreach (var child in element.Children)
+        {
+            foreach (var nested in References(child))
+                yield return nested;
+        }
     }
 }

@@ -46,6 +46,7 @@ public sealed record ChoSeedFixture
     [JsonPropertyName("tenantId")] public string TenantId { get; init; } = "";
     [JsonPropertyName("auth")] public ChoSeedAuth Auth { get; init; } = new();
     [JsonPropertyName("member")] public ChoSeedMember Member { get; init; } = new();
+    [JsonPropertyName("coverage")] public ChoSeedCoverage Coverage { get; init; } = new();
     [JsonPropertyName("backendClient")] public ChoSeedBackendClient BackendClient { get; init; } = new();
     [JsonPropertyName("payerBackendClient")] public ChoSeedBackendClient PayerBackendClient { get; init; } = new();
     [JsonPropertyName("dtrBackendClient")] public ChoSeedBackendClient DtrBackendClient { get; init; } = new();
@@ -112,6 +113,13 @@ public sealed record ChoSeedFixture
 }
 
 /// <summary>The one seeded member. Its id is what a suite is told to search for.</summary>
+/// <summary>The seeded member's coverage, as far as the harness reads it.</summary>
+public sealed record ChoSeedCoverage
+{
+    /// <summary>The X12 claim filing indicator (insurance line) the seed gives the coverage.</summary>
+    [JsonPropertyName("insuranceLineCode")] public string InsuranceLineCode { get; init; } = "";
+}
+
 public sealed record ChoSeedMember
 {
     [JsonPropertyName("memberId")] public string MemberId { get; init; } = "";

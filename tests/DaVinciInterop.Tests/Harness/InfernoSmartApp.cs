@@ -54,9 +54,68 @@ public static class InfernoSmartApp
             app.EhrClientId, "provider-app", $"{app.DisplayName}, EHR launch",
             ScopesOf(app.EhrScopes), app.RedirectUri), "the EHR launch app registration", cancellationToken, conflictIsOk: true);
 
+        IntrospectionAuthorizationHeader = await RegisterResourceServerAsync(admin, smart, cancellationToken);
+
         return $"SMART apps '{app.ClientId}' (patient app, standalone launch) and '{app.EhrClientId}' (provider app, " +
-               $"EHR launch) registered with redirect URI {app.RedirectUri}";
+               $"EHR launch) registered with redirect URI {app.RedirectUri}; resource server '{ResourceServerClientId}' " +
+               "registered to introspect tokens";
     }
+
+    /// <summary>
+    /// The client id the kit introspects as: the audience of CHO's access
+    /// tokens (smart-auth-service's SmartIntrospection.ResourceServerClientId),
+    /// to which alone CHO returns a token's launch context.
+    /// </summary>
+    public const string ResourceServerClientId = "fhir-api";
+
+    /// <summary>
+    /// The <c>custom_authorization_header</c> input for the token introspection
+    /// group: HTTP Basic with the resource server's credentials (RFC 7662
+    /// section 2.1, RFC 6749 section 2.3.1). Set by <see cref="RegisterAsync"/>,
+    /// whose registration response is the only place the secret appears.
+    /// </summary>
+    public static string? IntrospectionAuthorizationHeader { get; private set; }
+
+    /// <summary>
+    /// Registers the resource server: a backend client with the introspection
+    /// permission and no scopes, so it can introspect and is issued nothing.
+    /// </summary>
+    private static async Task<string> RegisterResourceServerAsync(HttpClient admin, string smart, CancellationToken ct)
+    {
+        using var response = await admin.PostAsync($"{smart}/api/admin/smart/clients", JsonContent.Create(
+            ResourceServerRegistration()), ct);
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InteropEnvironmentException(
+                $"smart-auth-service refused the resource server registration with HTTP {(int)response.StatusCode}: " +
+                Redaction.Body(body));
+        }
+
+        var secret = JsonNode.Parse(body)?["clientSecret"]?.GetValue<string>()
+            ?? throw new InteropEnvironmentException(
+                "smart-auth-service registered the resource server without issuing a client secret.");
+        return BasicAuthorizationHeader(ResourceServerClientId, secret);
+    }
+
+    /// <summary>The resource server's registration body.</summary>
+    public static JsonObject ResourceServerRegistration() => new()
+    {
+        ["clientId"] = ResourceServerClientId,
+        ["kind"] = "backend",
+        ["displayName"] = "Inferno SMART kit token introspection (resource server)",
+        ["scopes"] = new JsonArray(),
+        ["introspection"] = true,
+    };
+
+    /// <summary>
+    /// One <c>Name: value</c> line, as the kit's header input takes it. The id
+    /// and secret are form-encoded before Base64 (RFC 6749 section 2.3.1), so a
+    /// secret holding <c>+</c>, <c>/</c> or <c>=</c> survives the server's decoding.
+    /// </summary>
+    public static string BasicAuthorizationHeader(string clientId, string secret)
+        => "Authorization: Basic " + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+            $"{Uri.EscapeDataString(clientId)}:{Uri.EscapeDataString(secret)}"));
 
     /// <summary>
     /// The scopes one app requests, which are the ones it is registered for:
@@ -105,13 +164,13 @@ public static class InfernoSmartApp
         var testId = waiting.TestId ?? "";
         var ehr = testId.Contains("ehr_launch", StringComparison.Ordinal);
 
-        if (testId.EndsWith("smart_app_launch", StringComparison.Ordinal))
+        if (IsLaunchWait(testId))
         {
             await LaunchAsync(fixture, kitApiBaseUrl, cancellationToken);
             return;
         }
 
-        if (testId.EndsWith("app_redirect", StringComparison.Ordinal))
+        if (IsRedirectWait(testId))
         {
             var authorizationUrl = AuthorizationUrl(waiting)
                 ?? throw new InteropEnvironmentException(
@@ -119,6 +178,17 @@ public static class InfernoSmartApp
             await AuthorizeAsync(fixture, authorizationUrl, ehr, kitApiBaseUrl, cancellationToken);
         }
     }
+
+    /// <summary>The EHR launch wait (<c>smart_app_launch</c>), wherever it sits in the id.</summary>
+    public static bool IsLaunchWait(string? testId)
+        => testId?.Contains("smart_app_launch", StringComparison.Ordinal) == true;
+
+    /// <summary>
+    /// The redirect wait. STU2.2 names it <c>smart_app_redirect_stu2</c>, so
+    /// the match is anywhere in the id, not at its end.
+    /// </summary>
+    public static bool IsRedirectWait(string? testId)
+        => testId?.Contains("app_redirect", StringComparison.Ordinal) == true;
 
     /// <summary>The authorization URL the kit's redirect test is waiting on, from its message.</summary>
     public static string? AuthorizationUrl(InfernoResult waiting)
@@ -212,7 +282,7 @@ public static class InfernoSmartApp
             }
         }
 
-        using var first = await browser.GetAsync(ToHost(authorizationUrl, kitApiBaseUrl), ct);
+        using var first = await OpenAuthorizationAsync(browser, authorizationUrl, kitApiBaseUrl, ct);
         Uri location;
         if (first.StatusCode == HttpStatusCode.OK)
         {
@@ -252,6 +322,48 @@ public static class InfernoSmartApp
             throw new InteropEnvironmentException(
                 $"The kit answered its own redirect URI with HTTP {(int)back.StatusCode}.");
         }
+    }
+
+    /// <summary>
+    /// Opens the authorization request as a browser would. For the POST
+    /// authorization test the kit's link is its own page, which a browser's
+    /// script turns into a form POST of the request to <c>auth_url</c>; the
+    /// harness has no script engine, so it sends that POST itself.
+    /// </summary>
+    private static async Task<HttpResponseMessage> OpenAuthorizationAsync(
+        HttpClient browser, string authorizationUrl, string kitApiBaseUrl, CancellationToken ct)
+    {
+        var first = await browser.GetAsync(ToHost(authorizationUrl, kitApiBaseUrl), ct);
+        if (first.StatusCode != HttpStatusCode.OK)
+            return first;
+
+        var html = await first.Content.ReadAsStringAsync(ct);
+        if (PostRedirectForm(authorizationUrl, html) is not { } form)
+            return first;
+
+        first.Dispose();
+        return await browser.PostAsync(ToHost(form.Action, kitApiBaseUrl), new FormUrlEncodedContent(form.Fields), ct);
+    }
+
+    /// <summary>
+    /// The form the kit's "POST Authorization Redirect" page submits: every
+    /// query parameter of its own URL except <c>auth_url</c>, posted to
+    /// <c>auth_url</c>. Null for any other page.
+    /// </summary>
+    public static (string Action, List<KeyValuePair<string, string>> Fields)? PostRedirectForm(string pageUrl, string html)
+    {
+        if (!html.Contains("Inferno POST Authorization Redirect", StringComparison.Ordinal))
+            return null;
+
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(pageUrl).Query);
+        if (!query.TryGetValue("auth_url", out var action) || string.IsNullOrWhiteSpace(action))
+            return null;
+
+        var fields = query
+            .Where(q => q.Key != "auth_url")
+            .SelectMany(q => q.Value.Select(v => new KeyValuePair<string, string>(q.Key, v ?? "")))
+            .ToList();
+        return (action.ToString(), fields);
     }
 
     private static async Task<string> EnrolAsync(HttpClient admin, string url, object body, string what, CancellationToken ct)

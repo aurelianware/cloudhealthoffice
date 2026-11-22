@@ -66,6 +66,18 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         return await _collection.Find(filter).FirstOrDefaultAsync();
     }
 
+    public async Task<Authorization?> GetBySubmitterIdentifierAsync(string submitterIdentifier)
+    {
+        var tenantId = GetTenantId();
+        var filter = Builders<Authorization>.Filter.And(
+            Builders<Authorization>.Filter.Eq(x => x.SubmitterIdentifier, submitterIdentifier),
+            Builders<Authorization>.Filter.Eq(x => x.TenantId, tenantId)
+        );
+        return await _collection.Find(filter)
+            .SortByDescending(x => x.SubmittedDate)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<IEnumerable<Authorization>> SearchAsync(
         string? memberId,
         string? providerNPI,

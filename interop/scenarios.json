@@ -324,7 +324,8 @@
         "url",
         "standalone_smart_auth_info",
         "ehr_smart_auth_info",
-        "backend_services_smart_auth_info"
+        "backend_services_smart_auth_info",
+        "custom_authorization_header"
       ],
       "infernoAuth": "smartApp",
       "description": "Run the smart-app-launch-test-kit smart_stu2_2 suite against cho-smart-auth-service and fhir-service, with the kit as the app. The harness registers the kit as a confidential asymmetric client (private_key_jwt, the kit's own JWKS) with the kit's redirect and launch URIs, and plays the user and the EHR. Standalone launch: the kit redirects to CHO's authorize endpoint with SMART v2 scopes (launch/patient openid fhirUser offline_access patient/*.rs) and PKCE, the harness signs in as the seeded member and approves the consent page, and the kit exchanges the code, checks the token response and its patient context, validates the OpenID Connect id_token and fhirUser, and refreshes with and without scopes. EHR launch: the harness creates a launch context for the member through smart-auth-service, opens the kit's launch URI with iss and launch, and approves; the kit checks the same, with the launch context. Backend services: the kit authenticates with private_key_jwt as the seed's backendClient. Token introspection: the kit introspects the tokens it received. The TLS tests report omit, as for every kit here."

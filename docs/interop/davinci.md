@@ -404,7 +404,16 @@ kit's `mock_ehr_bundle` come from the seed (`Harness/CrdServerRequests.cs`).
 They cover the member, the order, a member CHO does not know (not-covered,
 `no-member-found`), a lapsed Coverage (`no-active-coverage`), a Coverage whose
 plan CHO does not hold (`coverage-not-found`), and an EHR that fails the
-Coverage read (indeterminate, technical).
+Coverage read (indeterminate, technical). Two more order-sign requests cover
+the rest of what a coverage-information extension can say. In the first, a
+total knee arthroplasty (CPT 27447, which the profile requires authorization
+for) is already approved for the member by a seeded authorization
+(`INTEROP-PA-KNEE-1`). CHO answers pa-needed `satisfied` with that number as
+`satisfied-pa-id`, and a therapy order based on it in the same request carries
+a `dependency` on the procedure's order. In the second, the procedure is
+planned for 2100 for a member whose coverage ends 2099-12-31, and CHO answers
+covered `conditional` with info-needed `contract-window`. Every assertion also
+names the plan's `contact`, its `expiry-date` and a policy-link `detail`.
 
 `INFERNO-PAS-SERVER-001` has the kit play a provider's PAS client
 (`infernoAuth: pasClientBackendServices`, `pasBackendClient` in the seed). Its

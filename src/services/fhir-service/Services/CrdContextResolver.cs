@@ -47,7 +47,21 @@ public sealed record CrdContextResolution
 
     public bool IsResolved => Context is not null;
 
-    public static CrdContextResolution Resolved(PaRuleContext context) => new() { Context = context };
+    /// <summary>
+    /// The last day of the coverage CHO answered under, when it states one.
+    /// Known whenever the member and their coverage are, even when the rule
+    /// context is incomplete.
+    /// </summary>
+    public DateOnly? CoverageEnd { get; init; }
+
+    /// <summary>
+    /// The member CHO matched, whenever it matched one and holds active
+    /// coverage for them, even when the rule context is incomplete.
+    /// </summary>
+    public string? MemberId { get; init; }
+
+    public static CrdContextResolution Resolved(PaRuleContext context, DateOnly? coverageEnd = null)
+        => new() { Context = context, CoverageEnd = coverageEnd, MemberId = context.MemberId };
     public static CrdContextResolution Unresolved(CrdContextFailure failure) => new() { Failure = failure };
 }
 
@@ -194,7 +208,12 @@ public sealed class CrdContextResolver : ICrdContextResolver
             _logger.LogWarning(ex,
                 "CRD could not read the program for {PatientId}'s benefit plan; the rule engine will not be called",
                 LogSanitizer.MaskId(patientId));
-            return CrdContextResolution.Unresolved(CrdContextFailure.Unavailable);
+            // The member and their coverage are still known (see ContextIncomplete below).
+            return CrdContextResolution.Unresolved(CrdContextFailure.Unavailable) with
+            {
+                MemberId = patientId,
+                CoverageEnd = CoverageEnd(coverage),
+            };
         }
 
         // A program states all three keys together. Without one, the member's
@@ -207,7 +226,14 @@ public sealed class CrdContextResolver : ICrdContextResolver
         // one.
         if (state is null || lob is null)
         {
-            return CrdContextResolution.Unresolved(CrdContextFailure.ContextIncomplete);
+            // No rule set, but the member and their coverage are known, so
+            // what depends only on those (an approved authorization, the
+            // coverage's end) can still be answered.
+            return CrdContextResolution.Unresolved(CrdContextFailure.ContextIncomplete) with
+            {
+                MemberId = patientId,
+                CoverageEnd = CoverageEnd(coverage),
+            };
         }
 
         var npi = PractitionerNpi(request);
@@ -237,7 +263,7 @@ public sealed class CrdContextResolver : ICrdContextResolver
             // CHO will be charged. Left at zero, as before, rather than invented.
             EstimatedCost = 0m,
             MemberDateOfBirth = BirthDate(patient),
-        });
+        }, CoverageEnd(coverage));
     }
 
     private async Task<List<Coverage>> ActiveCoveragesAsync(string patientId, string tenantId, CancellationToken ct)
@@ -404,6 +430,13 @@ public sealed class CrdContextResolver : ICrdContextResolver
 
         return DateOnly.FromDateTime(DateTime.UtcNow);
     }
+
+    /// <summary>The coverage period's last day, when it has one.</summary>
+    internal static DateOnly? CoverageEnd(Coverage coverage)
+        => coverage.Period?.End is { Length: >= 10 } end
+           && DateOnly.TryParseExact(end[..10], "yyyy-MM-dd", out var day)
+            ? day
+            : null;
 
     /// <summary>The practitioner identifier from the hook's <c>context.userId</c>.</summary>
     internal static string PractitionerNpi(CrdHookRequest request) =>

@@ -95,6 +95,7 @@ public static class ChoUnderTest
         ["INTEROP_FHIR_URL"] = Host("INTEROP_CHO_FHIR_PORT", 18023),
         ["INTEROP_PROVIDER_URL"] = Host("INTEROP_CHO_PROVIDER_PORT", 18029),
         ["INTEROP_BENEFIT_PLAN_URL"] = Host("INTEROP_CHO_BENEFIT_PLAN_PORT", 18030),
+        ["INTEROP_AUTHORIZATION_URL"] = Host("INTEROP_CHO_AUTHORIZATION_PORT", 18031),
     };
 
     /// <summary>The compose port variables and their defaults, for the guard test.</summary>

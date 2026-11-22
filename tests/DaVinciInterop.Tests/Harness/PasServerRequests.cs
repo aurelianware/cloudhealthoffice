@@ -93,6 +93,9 @@ public static class PasServerRequests
 
     private const string ServiceTypeSystem = "https://codesystem.x12.org/005010/1365";
 
+    /// <summary>X12 1032, the claim filing indicator: the system fhir-service reads a Coverage's line of business from.</summary>
+    public const string ClaimFilingIndicatorSystem = "https://codesystem.x12.org/005010/1032";
+
     /// <summary>
     /// The kit's approval, denial and pended examples are the same request, so
     /// each is given the service type that has CHO decide it the way the test
@@ -179,11 +182,14 @@ public static class PasServerRequests
                         ["system"] = MemberSystem,
                         ["value"] = fixture.Member.MemberId,
                     });
-                    resource["name"] = new JsonArray(new JsonObject
-                    {
-                        ["family"] = fixture.Member.LastName,
-                        ["given"] = new JsonArray(fixture.Member.FirstName),
-                    });
+                    // The seeded member's name, keeping the rest of the kit's
+                    // (prefix, suffix, use), which its must-support tests look for.
+                    var name = ((resource["name"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault()?.DeepClone()
+                        as JsonObject) ?? new JsonObject();
+                    name["family"] = fixture.Member.LastName;
+                    name["given"] = new JsonArray(fixture.Member.FirstName);
+                    name.Remove("text");
+                    resource["name"] = new JsonArray(name);
                     resource["birthDate"] = fixture.Member.DateOfBirth.Length >= 10
                         ? fixture.Member.DateOfBirth[..10]
                         : fixture.Member.DateOfBirth;
@@ -193,6 +199,21 @@ public static class PasServerRequests
                 case "Coverage":
                     resource["subscriberId"] = fixture.Member.MemberId;
                     resource["status"] = "active";
+                    // The kit's example types its Coverage as v3 EHCPOL, which
+                    // names no line of business, so CHO pended every request
+                    // without adjudicating it (run 10). The seeded coverage's
+                    // own insurance line, as its X12 claim filing indicator.
+                    if (!string.IsNullOrEmpty(fixture.Coverage.InsuranceLineCode))
+                    {
+                        resource["type"] = new JsonObject
+                        {
+                            ["coding"] = new JsonArray(new JsonObject
+                            {
+                                ["system"] = ClaimFilingIndicatorSystem,
+                                ["code"] = fixture.Coverage.InsuranceLineCode,
+                            }),
+                        };
+                    }
                     break;
 
                 case "Organization" when Matches(resource, providerRef):
