@@ -189,6 +189,10 @@ public class PasAdditionalInformationTests
 
         var tasks = bundle.Entry.Select(e => e.Resource).OfType<FhirTask>().ToList();
         tasks.Select(t => t.Code.Coding.Single().Code).Should().Equal("attachment-request-code", "attachment-request-questionnaire");
+        // A relative reference resolves against its own entry's base, so the
+        // Task names the bundle's resources by their fullUrls (Inferno PAS bundle validation).
+        bundle.Entry.Where(e => e.Resource is FhirTask).Should()
+            .OnlyContain(e => e.FullUrl.StartsWith(Base + "/Task/"));
         foreach (var task in tasks)
         {
             task.Meta.Profile.Should().Equal(PasAdditionalInformationResources.TaskProfile);
@@ -196,10 +200,10 @@ public class PasAdditionalInformationTests
             task.Status.Should().Be(FhirTask.TaskStatus.Requested);
             task.StatusReason.Text.Should().NotBeNullOrWhiteSpace();
             task.Intent.Should().Be(FhirTask.TaskIntent.Order);
-            task.For.Reference.Should().Be("Patient/p");
-            task.Requester.Reference.Should().Be("Organization/payer");
+            task.For.Reference.Should().Be("http://example.org/fhir/Patient/p");
+            task.Requester.Reference.Should().Be("http://example.org/fhir/Organization/payer");
             task.Requester.Identifier.Value.Should().Be("PAYER-1");
-            task.Owner.Reference.Should().Be("Organization/clinic");
+            task.Owner.Reference.Should().Be("http://example.org/fhir/Organization/clinic");
             task.Owner.Identifier.Value.Should().Be("1234567893");
             task.ReasonCode.Coding.Single().Code.Should().Be("priorAuthorization");
             task.ReasonReference.Should().NotBeNull();
@@ -236,9 +240,9 @@ public class PasAdditionalInformationTests
         communicationRequest.Identifier.Single().Value.Should().Be("RFAI-TRK-1-1");
         communicationRequest.Category.Single().Coding.Single().Code.Should().Be("09");
         communicationRequest.Medium.Single().Coding.Single().Code.Should().Be("CDEX");
-        communicationRequest.Requester.Reference.Should().Be("Organization/payer");
-        communicationRequest.Sender.Reference.Should().Be("Organization/clinic");
-        communicationRequest.Recipient.Single().Reference.Should().Be("Organization/clinic");
+        communicationRequest.Requester.Reference.Should().Be("http://example.org/fhir/Organization/payer");
+        communicationRequest.Sender.Reference.Should().Be("http://example.org/fhir/Organization/clinic");
+        communicationRequest.Recipient.Single().Reference.Should().Be("http://example.org/fhir/Organization/clinic");
         ((PositiveInt)communicationRequest.Extension.Single().Value).Value.Should().Be(1);
         var payload = communicationRequest.Payload.Single();
         ((FhirString)payload.Content).Value.Should().Be("28570-0");

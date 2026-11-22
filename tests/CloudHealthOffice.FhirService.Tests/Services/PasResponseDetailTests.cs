@@ -89,7 +89,8 @@ public class PasResponseDetailTests
             .Should().Be("72148");
         var quantity = (Quantity)detail.Extension.Single(e => e.Url == "quantity").Value;
         quantity.Value.Should().Be(2);
-        quantity.Code.Should().Be("1", "a bare count is stated in UCUM units (prof-2)");
+        quantity.Code.Should().Be("UN", "a bare count is stated in units, in X12 673 (prof-2, prof-3)");
+        quantity.System.Should().Be(PasResponseDetail.X12QuantityUnitSystem);
         ((Money)detail.Extension.Single(e => e.Url == "unitPrice").Value).Value.Should().Be(450);
 
         // The whole request's authorized provider: the claim-scoped care team member.
@@ -226,7 +227,7 @@ public class PasResponseDetailTests
         added.ItemSequence.Should().Equal(1);
         added.ProductOrService.Coding.Single().Code.Should().Be("72141");
         added.Quantity.Value.Should().Be(2);
-        added.Quantity.Code.Should().Be("1", "a bare count is in UCUM's unity");
+        added.Quantity.Code.Should().Be("UN", "a bare count is in X12 units");
         var adjudication = added.Adjudication.Single();
         ActionCode(adjudication).Should().Be("A1");
         HeaderNumber(adjudication).Should().Be("PAS-5");
@@ -256,6 +257,20 @@ public class PasResponseDetailTests
         ((CodeableConcept)provider.Extension.Single(e => e.Url == providerType).Value).Coding.Single().Code
             .Should().Be("SJ");
         bundle.Entry.Should().Contain(e => e.Resource is Practitioner, "the provider it names is in the response");
+    }
+
+    [Theory]
+    [InlineData("visit", null, null, "visit", null)]                       // a label is kept
+    [InlineData(null, "{visit}", "http://unitsofmeasure.org", "{visit}", null)] // another system's code becomes the label
+    [InlineData("days", "DA", "https://codesystem.x12.org/005010/673", "days", "DA")] // X12 673 is kept
+    [InlineData(null, null, null, "Unit", "UN")]                           // nothing stated: units
+    public void AQuantity_StatesItsUnitAsPasAllows(string? unit, string? code, string? system, string expectedUnit, string? expectedCode)
+    {
+        var quantity = PasResponseDetail.Units(2, unit, code, system);
+
+        quantity.Unit.Should().Be(expectedUnit);
+        quantity.Code.Should().Be(expectedCode);
+        quantity.System.Should().Be(expectedCode is null ? null : PasResponseDetail.X12QuantityUnitSystem);
     }
 
     [Fact]

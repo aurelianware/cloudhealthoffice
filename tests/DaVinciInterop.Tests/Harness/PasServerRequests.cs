@@ -149,7 +149,7 @@ public static class PasServerRequests
     /// </summary>
     public const string RefusedRequestIdentifier = "111099-PASERR";
 
-    /// <summary>The fullUrl of the refused request's Claim, which has no id.</summary>
+    /// <summary>The fullUrl of the unnamed request's Claim, which has no id.</summary>
     public const string UnnamedClaimFullUrl = "urn:uuid:9b2e4f60-1c7a-4d2b-8e51-0f3c6a7d2e14";
 
     /// <summary>
@@ -178,8 +178,9 @@ public static class PasServerRequests
     /// (<see cref="PurchasedEquipmentServiceType"/>): CHO certifies the rental
     /// in place of each line, so the response carries addItem;</item>
     /// <item>one CHO refuses (<see cref="RefusedRequest"/>), so the response
-    /// carries ClaimResponse.error and a request reference that says why it
-    /// cannot name the Claim.</item>
+    /// carries ClaimResponse.error;</item>
+    /// <item>one whose Claim has no id (<see cref="UnnameClaim"/>), so the
+    /// response's request reference says why it cannot name the Claim.</item>
     /// </list>
     /// And the inquiries: about exactly the pended request, so the inquiry
     /// response carries the Task too; about the equipment request, restating
@@ -218,6 +219,14 @@ public static class PasServerRequests
         SetSubmitterIdentifier(refused, RefusedRequestIdentifier);
         if (!submit || RefusedRequest(refused))
             additions.Add(refused);
+
+        if (submit)
+        {
+            var unnamed = (JsonObject)kitBundles[0].DeepClone();
+            SetSubmitterIdentifier(unnamed, UnnamedClaimIdentifier);
+            if (UnnameClaim(unnamed))
+                additions.Add(unnamed);
+        }
         return additions;
     }
 
@@ -281,25 +290,39 @@ public static class PasServerRequests
         return restated;
     }
 
+    /// <summary>The submitter's identifier on the must-support request whose Claim has no id.</summary>
+    public const string UnnamedClaimIdentifier = "111099-PASDAR";
+
     /// <summary>
     /// Makes a conformant request CHO refuses: its last service line asks for
-    /// no units (Claim.item.quantity 0), and its Claim has no id, only a <c>urn:uuid</c> fullUrl. The
-    /// response then names the Claim by identifier, with a data-absent reason
-    /// on the reference. False when the request has no line with a quantity.
+    /// no units (Claim.item.quantity 0). False when the request has no line
+    /// with a quantity.
     /// </summary>
     public static bool RefusedRequest(JsonObject bundle)
     {
-        var entry = ((bundle["entry"] as JsonArray)?.OfType<JsonObject>() ?? [])
-            .FirstOrDefault(e => e["resource"]?["resourceType"]?.GetValue<string>() == "Claim");
-        if (entry?["resource"] is not JsonObject claim) return false;
-        var line = (claim["item"] as JsonArray)?.OfType<JsonObject>().LastOrDefault(i => i["quantity"] is JsonObject);
+        var claim = ClaimEntry(bundle)?["resource"] as JsonObject;
+        var line = (claim?["item"] as JsonArray)?.OfType<JsonObject>().LastOrDefault(i => i["quantity"] is JsonObject);
         if (line is null) return false;
-
         ((JsonObject)line["quantity"]!)["value"] = 0;
+        return true;
+    }
+
+    /// <summary>
+    /// Takes the Claim's id away, leaving it a <c>urn:uuid</c> fullUrl: the
+    /// response then names the Claim by identifier, with a data-absent reason
+    /// on the reference, since it cannot name a Claim it does not echo.
+    /// </summary>
+    public static bool UnnameClaim(JsonObject bundle)
+    {
+        if (ClaimEntry(bundle) is not { } entry || entry["resource"] is not JsonObject claim) return false;
         claim.Remove("id");
         entry["fullUrl"] = UnnamedClaimFullUrl;
         return true;
     }
+
+    private static JsonObject? ClaimEntry(JsonObject bundle)
+        => ((bundle["entry"] as JsonArray)?.OfType<JsonObject>() ?? [])
+            .FirstOrDefault(e => e["resource"]?["resourceType"]?.GetValue<string>() == "Claim");
 
     /// <summary>Replaces the Claim's patient-event trace number; false when it carries none.</summary>
     public static bool SetSubmitterIdentifier(JsonObject bundle, string value)

@@ -66,9 +66,9 @@ public sealed class KitHarnessRequestTests
 
         var added = PasServerRequests.MustSupportAdditions("must_support_pa_submit_request_payload", [kit]);
 
-        added.Should().HaveCount(3);
-        added[1]["entry"]![0]!["resource"]!["identifier"]![0]!["value"]!.GetValue<string>()
-            .Should().Be(PasServerRequests.AlternativeIdentifier);
+        added.Select(b => b["entry"]![0]!["resource"]!["identifier"]![0]!["value"]!.GetValue<string>()).Should().Equal(
+            PasServerRequests.DocumentationPendIdentifier, PasServerRequests.AlternativeIdentifier,
+            PasServerRequests.RefusedRequestIdentifier, PasServerRequests.UnnamedClaimIdentifier);
         added[1]["entry"]![0]!["resource"]!["item"]!.AsArray()
             .Select(i => i!["productOrService"]!["coding"]![0]!["code"]!.GetValue<string>())
             .Should().OnlyContain(c => c == PasServerRequests.PurchasedEquipmentServiceType);
@@ -81,20 +81,23 @@ public sealed class KitHarnessRequestTests
     }
 
     [Fact]
-    public void The_refused_must_support_request_asks_for_no_units_on_an_unnamed_claim()
+    public void The_refused_must_support_request_asks_for_no_units_on_one_line()
     {
         var kit = KitPasRequest();
 
-        var refused = PasServerRequests.MustSupportAdditions("must_support_pa_submit_request_payload", [kit])[2];
+        var added = PasServerRequests.MustSupportAdditions("must_support_pa_submit_request_payload", [kit]);
 
-        var entry = refused["entry"]![0]!;
-        entry["fullUrl"]!.GetValue<string>().Should().Be(PasServerRequests.UnnamedClaimFullUrl);
-        var claim = entry["resource"]!.AsObject();
-        claim.ContainsKey("id").Should().BeFalse();
-        claim["identifier"]![0]!["value"]!.GetValue<string>().Should().Be(PasServerRequests.RefusedRequestIdentifier);
+        var claim = added[2]["entry"]![0]!["resource"]!.AsObject();
+        claim["id"]!.GetValue<string>().Should().Be("c1", "the refused request is otherwise the kit's own");
         var quantities = claim["item"]!.AsArray().Select(i => decimal.Parse(i!["quantity"]!["value"]!.ToJsonString())).ToList();
         quantities[^1].Should().Be(0);
         quantities[..^1].Should().OnlyContain(q => q != 0, "only one line is wrong, so the error names one line");
+
+        var unnamed = added[3]["entry"]![0]!;
+        unnamed["fullUrl"]!.GetValue<string>().Should().Be(PasServerRequests.UnnamedClaimFullUrl);
+        unnamed["resource"]!.AsObject().ContainsKey("id").Should().BeFalse();
+        unnamed["resource"]!["item"]!.AsArray().Select(i => i!["quantity"]!["value"]!.ToJsonString())
+            .Should().OnlyContain(q => q == "1");
         kit["entry"]![0]!["resource"]!["id"].Should().NotBeNull("the kit's own request is left as it is");
     }
 

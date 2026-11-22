@@ -404,19 +404,33 @@ public static class PasResponseDetail
         AddInpatientDates(added.Extension, replaced, requestClaim);
     }
 
+    /// <summary>X12 673, the quantity units PAS requires of a coded quantity (prof-3).</summary>
+    public const string X12QuantityUnitSystem = "https://codesystem.x12.org/005010/673";
+
     /// <summary>
-    /// A count of units in the unit the request stated (its code and system,
-    /// else its label), or UCUM's unity when it stated none, so the quantity
-    /// always states its unit (prof-2).
+    /// A count of units in the unit the request stated, as PAS allows a
+    /// quantity to state it: a code only in X12 673 (prof-3), and always a
+    /// unit or a code (prof-2). A code in another system is kept as its
+    /// label; a count with neither is in X12 <c>UN</c>, units.
     /// </summary>
     public static Quantity Units(decimal value, string? unit, string? code, string? system)
+        => Conform(new Quantity { Value = value, Unit = unit, Code = code, System = system });
+
+    /// <summary>Makes <paramref name="quantity"/>'s unit one PAS allows (see <see cref="Units"/>).</summary>
+    public static Quantity Conform(Quantity quantity)
     {
-        var quantity = new Quantity { Value = value, Unit = unit, Code = code, System = system };
+        if (!string.IsNullOrWhiteSpace(quantity.Code) && quantity.System != X12QuantityUnitSystem)
+        {
+            if (string.IsNullOrWhiteSpace(quantity.Unit))
+                quantity.Unit = quantity.Code;
+            quantity.Code = null;
+            quantity.System = null;
+        }
         if (string.IsNullOrWhiteSpace(quantity.Unit) && string.IsNullOrWhiteSpace(quantity.Code))
         {
-            quantity.System = "http://unitsofmeasure.org";
-            quantity.Code = "1";
-            quantity.Unit = "unit";
+            quantity.System = X12QuantityUnitSystem;
+            quantity.Code = "UN";
+            quantity.Unit = "Unit";
         }
         return quantity;
     }
@@ -447,15 +461,7 @@ public static class PasResponseDetail
         }
         if (quantity?.Value is not null)
         {
-            // A quantity states its unit (prof-2). A count the request gave
-            // bare is in units: UCUM's unity.
-            if (string.IsNullOrWhiteSpace(quantity.Unit) && string.IsNullOrWhiteSpace(quantity.Code))
-            {
-                quantity.System = "http://unitsofmeasure.org";
-                quantity.Code = "1";
-                quantity.Unit = "unit";
-            }
-            detail.Extension.Add(new Extension("quantity", quantity));
+            detail.Extension.Add(new Extension("quantity", Conform(quantity)));
         }
 
         return detail;

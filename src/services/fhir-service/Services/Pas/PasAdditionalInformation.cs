@@ -265,11 +265,41 @@ public static class PasAdditionalInformationResources
         }
     }
 
+    /// <summary>
+    /// Adds the resource under the ClaimResponse's base (a <c>urn:uuid</c>
+    /// only when the ClaimResponse has one), with every reference it makes to
+    /// a resource in the bundle written as that entry's fullUrl: a relative
+    /// reference in an entry resolves against that entry's own base, and the
+    /// bundle echoes the request's resources under the request's base.
+    /// </summary>
     private static string Add(Bundle bundle, Resource resource)
     {
-        var fullUrl = $"urn:uuid:{resource.Id}";
+        var anchor = bundle.Entry.FirstOrDefault()?.FullUrl;
+        var at = anchor?.LastIndexOf("/ClaimResponse/", StringComparison.Ordinal) ?? -1;
+        var fullUrl = at > 0 && anchor!.StartsWith("http", StringComparison.Ordinal)
+            ? $"{anchor[..at]}/{resource.TypeName}/{resource.Id}"
+            : $"urn:uuid:{resource.Id}";
+
+        foreach (var reference in References(resource))
+        {
+            if (string.IsNullOrWhiteSpace(reference.Reference)) continue;
+            var target = bundle.Entry.FirstOrDefault(e => e.Resource is not null && !string.IsNullOrWhiteSpace(e.FullUrl)
+                && (string.Equals(e.FullUrl, reference.Reference, StringComparison.Ordinal)
+                    || string.Equals($"{e.Resource.TypeName}/{e.Resource.Id}", reference.Reference, StringComparison.Ordinal)));
+            if (target is not null)
+                reference.Reference = target.FullUrl;
+        }
+
         bundle.Entry.Add(new Bundle.EntryComponent { FullUrl = fullUrl, Resource = resource });
         return fullUrl;
+    }
+
+    private static IEnumerable<ResourceReference> References(Base element)
+    {
+        if (element is ResourceReference reference) yield return reference;
+        foreach (var child in element.Children)
+            foreach (var nested in References(child))
+                yield return nested;
     }
 
     private static FhirTask BuildTask(
