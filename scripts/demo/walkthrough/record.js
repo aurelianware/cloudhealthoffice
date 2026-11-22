@@ -17,9 +17,11 @@
 // first, or those pages show "not found". The texas walkthrough (about 2
 // minutes) follows docs/deploy/TEXAS-MEDICAID-DEMO.md and needs
 // `demo.sh seed` (scripts/demo/texas) run the same day, as do
-// cms0057-prior-auth (DTR form -> PAS request -> decision clock -> metrics)
-// and shadow-adjudication (report -> discrepancy CSV -> claim line -> fee
-// schedule).
+// cms0057-prior-auth (CRD answer -> DTR form -> PAS request -> decision clock
+// -> metrics) and shadow-adjudication (report -> discrepancy CSV -> claim line
+// -> fee schedule). cms0057-prior-auth also calls CRD directly, as an EHR
+// would: set CRD_URL to fhir-service (http://localhost:5023 through
+// `demo.sh connect`) and CHO_TOKEN to `python3 scripts/demo/gcp/cho_demo.py token`.
 
 import { chromium } from 'playwright';
 import { mkdir, rename, writeFile } from 'node:fs/promises';
@@ -301,6 +303,74 @@ const PA = {
   diagnoses: 'R51.9, R20.2',
 };
 const submitted = {}; // the authorization number PAS returned
+const plannedDate = new Date(Date.now() + 7 * 864e5);
+
+// CRD is called the way an EHR calls it at order signing: fhir-service's
+// cds-services endpoint, with the member's active Coverage as prefetch. The
+// recorder needs fhir-service (CRD_URL) and a CHO token (CHO_TOKEN); the
+// workflow port-forwards one and mints the other.
+const CRD_URL = (process.env.CRD_URL || '').replace(/\/$/, '');
+const CHO_TOKEN = process.env.CHO_TOKEN || '';
+const TENANT = process.env.TENANT_ID || 'demo';
+const CRD_INFO = 'http://hl7.org/fhir/us/davinci-crd/StructureDefinition/ext-coverage-information';
+
+async function crdCall(method, url, body) {
+  const res = await fetch(url, {
+    method,
+    headers: { Authorization: `Bearer ${CHO_TOKEN}`, 'X-Tenant-ID': TENANT, Accept: 'application/json',
+      ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  // Status only: the bodies are member data and stay out of the job log.
+  if (!res.ok) throw new Error(`${method} ${new URL(url).pathname} answered HTTP ${res.status}`);
+  return res.json();
+}
+
+async function showCrdAnswer(page) {
+  if (!CRD_URL || !CHO_TOKEN) throw new Error('CRD_URL and CHO_TOKEN are needed to call CRD (see the workflow)');
+  const coverage = await crdCall('GET', `${CRD_URL}/fhir/r4/Coverage?patient=${TX_MEMBER}&status=active`);
+  const planned = plannedDate.toISOString().slice(0, 10);
+  const [system, code] = PA.code.split('|');
+  const answer = await crdCall('POST', `${CRD_URL}/cds-services/cho-order-sign`, {
+    hookInstance: crypto.randomUUID(), hook: 'order-sign',
+    context: { userId: `Practitioner/${PA.npi}`, patientId: TX_MEMBER, draftOrders: { resourceType: 'Bundle', type: 'collection',
+      entry: [{ resource: { resourceType: 'ServiceRequest', id: 'mri-order', status: 'draft', intent: 'order',
+        code: { coding: [{ system, code, display: 'MRI brain without and with contrast' }] },
+        subject: { reference: `Patient/${TX_MEMBER}` }, occurrenceDateTime: planned } }] } },
+    prefetch: { coverage },
+  });
+  const card = (answer.cards || [])[0];
+  if (!card) throw new Error('CRD answered with no card');
+  const info = (answer.systemActions || []).flatMap((a) => a.resource?.extension || []).find((e) => e.url === CRD_INFO);
+  const part = (name) => info?.extension?.find((e) => e.url === name);
+  const form = part('questionnaire')?.valueCanonical || '';
+  const rows = [
+    ['Covered', part('covered')?.valueCode],
+    ['Documentation needed', part('doc-needed')?.valueCode],
+    ['Prior authorization', part('pa-needed')?.valueCode === 'indeterminate' ? 'not decided at order time' : part('pa-needed')?.valueCode],
+    ['Form to complete (DTR)', form.replace(/^https?:\/\/[^/]+\/fhir\//, '')],
+    ['Coverage assertion', part('coverage-assertion-id')?.valueString],
+  ].filter(([, v]) => v);
+  const color = card.indicator === 'critical' ? '#b42318' : card.indicator === 'warning' ? '#b54708' : '#0e7490';
+  await page.setContent(`<!doctype html><html><body style="margin:0;background:#eef1f5;font-family:system-ui,sans-serif;color:#1f2933">
+    <div style="max-width:1120px;margin:44px auto">
+      <div style="font:600 15px system-ui;color:#52606d;letter-spacing:.04em;text-transform:uppercase">EHR · order signing · CDS Hooks order-sign</div>
+      <div style="background:#fff;border:1px solid #d5dde6;border-radius:10px;padding:22px 28px;margin-top:10px">
+        <div style="font:700 26px system-ui">MRI brain without and with contrast</div>
+        <div style="font:400 18px system-ui;color:#52606d;margin-top:6px">CPT ${escapeHtml(code)} · planned ${escapeHtml(planned)} · member ${TX_MEMBER} · ordered by ${escapeHtml(PA.practice)}</div>
+      </div>
+      <div style="background:#fff;border:1px solid #d5dde6;border-left:8px solid ${color};border-radius:10px;padding:22px 28px;margin-top:18px">
+        <div style="font:600 14px system-ui;color:#52606d">CARD FROM THE PLAN · Da Vinci CRD · Cloud Health Office</div>
+        <div style="font:700 24px system-ui;color:${color};margin-top:6px">${escapeHtml(card.summary || '')}</div>
+        <div style="font:400 18px system-ui;line-height:1.5;margin-top:8px">${escapeHtml(card.detail || '')}</div>
+      </div>
+      <div style="background:#fff;border:1px solid #d5dde6;border-radius:10px;padding:18px 28px;margin-top:18px">
+        <div style="font:600 14px system-ui;color:#52606d;margin-bottom:6px">COVERAGE INFORMATION RETURNED WITH THE ORDER</div>
+        <table style="border-collapse:collapse;width:100%;font-size:18px">${rows.map(([k, v]) => `<tr>
+          <td style="padding:7px 0;color:#52606d;width:270px">${k}</td><td style="padding:7px 0;font-family:ui-monospace,monospace">${escapeHtml(v)}</td></tr>`).join('')}</table>
+      </div>
+    </div></body></html>`);
+}
 
 const dtrField = (page, linkId) => page.locator(`[data-testid="dtr-item-${linkId}"]`).first();
 const inputIn = (scope) => scope.locator('input, textarea').first();
@@ -359,7 +429,7 @@ async function dtrSave(page) {
   await typeSlowly(npi, PA.npi);
   await typeSlowly(byLabel(page, 'Provider or practice name'), PA.practice);
   await page.locator('.mud-checkbox', { hasText: 'organization' }).first().click();
-  const planned = new Date(Date.now() + 7 * 864e5).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+  const planned = plannedDate.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
   await typeSlowly(byLabel(page, 'Planned service date'), planned);
   await page.keyboard.press('Escape'); // close the date picker
   await typeSlowly(byLabel(page, 'Diagnosis codes'), PA.diagnoses);
@@ -408,10 +478,12 @@ const dtrUrl = `/dtr/questionnaire?questionnaire=${encodeURIComponent(PA.questio
 
 const CMS0057_PA = [
   { card: ['CMS-0057-F prior authorization, end to end',
-    'A provider documents a request, sends it through the Da Vinci PAS API, and the plan\'s decision clock and public metrics follow. Every record shown is synthetic.'],
-    caption: 'Prior authorization on a synthetic Texas Medicaid plan, from the provider\'s request to the published metrics.' },
+    'The EHR asks what an MRI needs (Da Vinci CRD), the office documents it (DTR) and sends it (PAS), and the plan\'s decision clock and public metrics follow. Every record shown is synthetic.'],
+    caption: 'Prior authorization on a synthetic Texas Medicaid plan, from the provider\'s order to the published metrics.' },
+  { path: null, action: showCrdAnswer,
+    caption: 'The doctor signs an MRI order and the EHR asks the plan\'s CRD service what it needs. The answer: documentation, on the plan\'s MRI form.' },
   { path: dtrUrl, action: dtrFindMember, captionFirst: true,
-    caption: 'A provider office opens the plan\'s MRI documentation form (Da Vinci DTR) for a member. EHRs get the same form through the DTR API.' },
+    caption: 'The office opens that form (Da Vinci DTR) in the plan\'s provider portal and finds the member. EHRs get the same form through the DTR API.' },
   { path: null, action: dtrAnswer, captionFirst: true,
     caption: 'The office answers the plan\'s questions. Answers are typed, never pulled from a chart, and saved as a FHIR QuestionnaireResponse.' },
   { path: null, action: dtrSave, captionFirst: true,
@@ -419,7 +491,7 @@ const CMS0057_PA = [
   { path: null, action: dtrSubmit, captionFirst: true,
     caption: 'Sent as a Da Vinci PAS request. The plan answers at once: received, documentation attached, pended for clinical review.' },
   { path: '/authorizations', action: openSubmittedAuthorization,
-    caption: 'The decision clock starts at receipt: a standard request is due within 7 calendar days, an expedited one within 72 hours.' },
+    caption: 'The decision clock starts at receipt. For a Texas Medicaid member the Texas clock (3 business days) and the federal one (7 days) both run, and the earlier deadline applies.' },
   { path: null, action: openSubmittedDocuments,
     caption: 'The DTR answers travel with the request, so the reviewer sees exactly what the office sent.' },
   { path: '/compliance/cms-0057f', captions: [
