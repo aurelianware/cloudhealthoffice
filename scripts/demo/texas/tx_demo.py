@@ -740,6 +740,9 @@ def build_pa_fixtures(now_utc: dt.datetime, members: list[dict], holidays: set[d
             "texasDue": texas_due(received, effective, holidays), "federalDue": federal_due(received, level),
             "scenario": effective + ("" if scenario else "+inferred"), "shows": shows,
         }
+        # The earlier clock wins (TexasMedicaidDecisionClock): a holiday week can push
+        # three Texas business days past the federal 7 days.
+        fx["_expected"]["due"] = min(fx["_expected"]["texasDue"], fx["_expected"]["federalDue"])
         fixtures.append(fx)
     return fixtures
 
@@ -752,6 +755,12 @@ def _parse_utc(value) -> dt.datetime | None:
 
 def _ct(value: dt.datetime) -> str:
     return value.astimezone(CENTRAL).strftime("%a %b %d %I:%M %p CT")
+
+
+def clock_agrees(expected: dict, due: dt.datetime | None, policy) -> bool:
+    """CHO stored the earlier of the Texas and federal deadlines, under the Texas policy."""
+    return (due is not None and abs((due - expected["due"]).total_seconds()) < 60
+            and "tx-gc-540" in str(policy))
 
 
 def cmd_seed_pa(_args) -> int:
@@ -772,11 +781,13 @@ def cmd_seed_pa(_args) -> int:
         status, _, stored = _call("GET", f"{AUTH_URL}/api/authorizations/{fx['id']}", token)
         due = _parse_utc(stored.get("decisionDueAt")) if status == 200 and isinstance(stored, dict) else None
         policy = stored.get("decisionDeadlinePolicy", "?") if isinstance(stored, dict) else "?"
-        agrees = due is not None and abs((due - exp["texasDue"]).total_seconds()) < 60 and "tx-gc-540" in str(policy)
+        agrees = clock_agrees(exp, due, policy)
         mismatches += 0 if agrees else 1
         print(f"  {fx['authorizationNumber']}  {exp['shows']}")
         print(f"     received {_ct(_parse_utc(fx['submittedDate']))}; Texas due {_ct(exp['texasDue'])}; "
               f"federal would be {_ct(exp['federalDue'])}")
+        if exp["federalDue"] < exp["texasDue"]:
+            print("     The federal clock is earlier here (holidays push the Texas business days out), so it stands.")
         print(f"     CHO: due {(_ct(due) if due else 'not set')}  policy {policy}  {'✓' if agrees else '✗ differs'}")
         print(f"     {PORTAL_URL}/authorizations/{fx['id']}")
     if mismatches:
