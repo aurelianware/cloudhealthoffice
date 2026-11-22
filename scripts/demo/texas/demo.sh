@@ -113,37 +113,38 @@ cmd_down() {
 }
 
 # strategic-merge patches: containers, env, volumes and mounts merge by name,
-# so rerunning changes nothing and causes no restart.
+# so rerunning changes nothing and causes no restart. Each env entry clears
+# valueFrom: where the shared manifests take a setting from a ConfigMap,
+# setting "value" alone would leave both, which the API refuses.
 cmd_overlay() {
   need kubectl
   say "Applying the Texas Medicaid demo settings"
   local holidays="" i=0 d
   for d in $(python3 -c "import sys; sys.path.insert(0, '$HERE'); import tx_demo; print(' '.join(tx_demo.DEMO_HOLIDAYS))"); do
-    holidays+="{\"name\":\"PriorAuthDeadlines__TexasMedicaid__Holidays__$i\",\"value\":\"$d\"},"; i=$((i + 1))
+    holidays+="{\"name\":\"PriorAuthDeadlines__TexasMedicaid__Holidays__$i\",\"value\":\"$d\",\"valueFrom\":null},"; i=$((i + 1))
   done
   kubectl patch deploy/authorization-service -n "$NAMESPACE" --type strategic -p "{
     \"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"authorization-service\",\"env\":[
-      {\"name\":\"PriorAuthDeadlines__TexasMedicaid__Tenants__0\",\"value\":\"$TENANT\"},
+      {\"name\":\"PriorAuthDeadlines__TexasMedicaid__Tenants__0\",\"value\":\"$TENANT\",\"valueFrom\":null},
       ${holidays}
-      {\"name\":\"PriorAuthDeadlines__TexasMedicaid__TimeZone\",\"value\":\"America/Chicago\"}]}]}}}}"
+      {\"name\":\"PriorAuthDeadlines__TexasMedicaid__TimeZone\",\"value\":\"America/Chicago\",\"valueFrom\":null}]}]}}}}"
   kubectl patch deploy/claims-service -n "$NAMESPACE" --type strategic -p '{
     "spec":{"template":{"spec":{
       "volumes":[{"name":"cpcds-drops","emptyDir":{"sizeLimit":"1Gi"}}],
       "containers":[{"name":"claims-service",
         "volumeMounts":[{"name":"cpcds-drops","mountPath":"/drops"}],
         "env":[
-          {"name":"CpcdsDrop__Enabled","value":"true"},
-          {"name":"CpcdsDrop__Store","value":"Folder"},
-          {"name":"CpcdsDrop__Root","value":"/drops"},
-          {"name":"CpcdsDrop__Interval","value":"00:00:30"},
-          {"name":"CpcdsDrop__QuietPeriod","value":"00:00:15"},
-          {"name":"Adjudication__Shadow__Enabled","value":"true"},
-          {"name":"Services__EnrollmentImportService","value":"http://enrollment-import-service"},
-          {"name":"Services__ProviderService","value":"http://provider-service"},
-          {"name":"Services__DocumentService","value":"http://document-service"}]}]}}}}'
+          {"name":"CpcdsDrop__Enabled","value":"true","valueFrom":null},
+          {"name":"CpcdsDrop__Store","value":"Folder","valueFrom":null},
+          {"name":"CpcdsDrop__Root","value":"/drops","valueFrom":null},
+          {"name":"CpcdsDrop__Interval","value":"00:00:30","valueFrom":null},
+          {"name":"CpcdsDrop__QuietPeriod","value":"00:00:15","valueFrom":null},
+          {"name":"Adjudication__Shadow__Enabled","value":"true","valueFrom":null},
+          {"name":"Services__EnrollmentImportService","value":"http://enrollment-import-service","valueFrom":null},
+          {"name":"Services__DocumentService","value":"http://document-service","valueFrom":null}]}]}}}}'
   kubectl patch deploy/benefit-plan-service -n "$NAMESPACE" --type strategic -p '{
     "spec":{"template":{"spec":{"containers":[{"name":"benefit-plan-service","env":[
-      {"name":"ServiceCategoryMapping__AdminWriteEnabled","value":"true"}]}]}}}}'
+      {"name":"ServiceCategoryMapping__AdminWriteEnabled","value":"true","valueFrom":null}]}]}}}}'
   for d in authorization-service claims-service benefit-plan-service; do
     kubectl rollout status "deploy/$d" -n "$NAMESPACE" --timeout=10m >/dev/null
   done
