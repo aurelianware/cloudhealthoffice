@@ -129,8 +129,8 @@ public sealed class DockerCompose
     }
 
     /// <summary>
-    /// The compose services of this project that currently have a running
-    /// container, as Compose itself names them.
+    /// The compose services of this project that have a container, running or
+    /// stopped, as Compose itself names them.
     ///
     /// <para>
     /// Log capture asks for this rather than iterating the scenario's declared
@@ -139,12 +139,17 @@ public sealed class DockerCompose
     /// and a validator, and when a run goes wrong the sentence explaining why is
     /// usually in one of the three the scenario never names.
     /// </para>
+    ///
+    /// <para>
+    /// Stopped containers are included: a validator that crashed mid-run has
+    /// exited, and its log is the one that says why.
+    /// </para>
     /// </summary>
-    public async Task<IReadOnlyList<string>> RunningServicesAsync(
+    public async Task<IReadOnlyList<string>> ServicesWithContainersAsync(
         IEnumerable<string> profiles, TimeSpan timeout, CancellationToken cancellationToken = default)
     {
         var args = BaseArgs(profiles);
-        args.AddRange(["ps", "--status", "running", "--format", "{{.Service}}"]);
+        args.AddRange(["ps", "--all", "--format", "{{.Service}}"]);
         var outcome = await InvokeAsync(args, timeout, cancellationToken);
 
         return outcome.Succeeded
