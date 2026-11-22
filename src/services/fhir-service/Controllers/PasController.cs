@@ -692,10 +692,20 @@ public class PasController : FhirControllerBase
 
     // ── Input validation ─────────────────────────────────────────────────────
 
+    /// <summary>
+    /// The resource types a request bundle may carry: those the PAS 2.2.1
+    /// request bundle profiles (the Claim, its subscriber and beneficiary,
+    /// coverage, insurer, requestor and provider as Practitioner,
+    /// PractitionerRole or Organization, its location and encounter, and the
+    /// ordered service as a ServiceRequest, DeviceRequest, MedicationRequest,
+    /// NutritionOrder or CommunicationRequest, with the Device a DeviceRequest
+    /// names), plus the clinical and documentation resources CHO reads.
+    /// </summary>
     private static readonly HashSet<string> AllowedResourceTypes = new(StringComparer.Ordinal)
     {
-        "Claim", "Patient", "Coverage", "Practitioner",
-        "Organization", "Condition", "Observation", "ServiceRequest",
+        "Claim", "Patient", "Coverage", "Practitioner", "PractitionerRole",
+        "Organization", "Location", "Encounter", "Condition", "Observation",
+        "ServiceRequest", "DeviceRequest", "MedicationRequest", "NutritionOrder", "CommunicationRequest", "Device",
         "DocumentReference", "QuestionnaireResponse"
     };
 
