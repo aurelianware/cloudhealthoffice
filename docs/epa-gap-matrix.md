@@ -218,16 +218,16 @@ CAP-linked entries summarize reconciled behavior. Other entries retain the dated
 | `Claim/$submit` operation | P | `PasController.cs` `ClaimSubmit`. Persists through the real seam (`PasSubmitPersistenceSeamTests`); `Claim.use` unchecked, no profile validation, response not STU2-complete. | G-06, G-13, G-14 |
 | Request Bundle validation against PAS profiles | M | Presence checks only (`Cms0057ComplianceChecker.cs:513-600`). No FHIR validator. | G-14 |
 | `Claim.use = preauthorization` enforced on submit | M | Checked only on `$inquire` (`:314`). | G-13 |
-| Supporting resources (Patient, Coverage, Practitioner, Organization) read from the Bundle | I+T | `PasAuthorizationMapper` (PR #1300); `PasAuthorizationMapperTests`, seam test. PractitionerRole is followed if present but is not an allowed entry type yet. | — |
+| Supporting resources (Patient, Coverage, Practitioner, Organization) read from the Bundle | I+T | `PasAuthorizationMapper` (PR #1300); `PasAuthorizationMapperTests`, seam test. PractitionerRole, Location, Encounter and the PAS request types (DeviceRequest, MedicationRequest, NutritionOrder, CommunicationRequest, Device) are allowed entries (PR #1873). | — |
 | Durable record of each request and decision | I+T | Internal automated-decision path (D-01, D-02 fixed, PR #1300); seam test over a real Mongo repository. | — |
 | `ClaimResponse` PAS profile (bundle contents, identifiers) | P | Response Bundle holds only the ClaimResponse (`PasResponseBuilder.cs:317-333`). | G-13 |
 | `reviewAction` / `reviewActionCode` at `item.adjudication` | P | Stored service-line review actions are projected by AddRequestedServices; full STU2 reason/profile semantics not established (CAP-02). | G-13 |
 | Item-level decisions (A1 / A2 / A3 / A4 per line) | I+T | CHO decision policy writes stable line outcomes; PAS submit/inquiry project them on item adjudications. Full PAS STU2 validation remains. | G-13, G-17 |
 | Denial reason in `reviewAction.reasonCode` (X12 HCR03) | P | `reasonCode` is **absent**, and deliberately so: it binds required to X12 external list 886, which X12 licenses and the IG package enumerates none of, and the element is 0..* so absent is conformant where invented is not. What CHO does state is coded: the certification action `A3` on the reviewAction extension, from X12 list 306 — the system the pended path already uses for `A4`. The prose reason is a `ProcessNote`. It is no longer put in `ClaimResponse.error`, which bound required to list 901 and asked whether the *request* was rejected rather than whether the service was denied. | G-17 |
 | `preAuthRef` / `preAuthPeriod` | I+T | Issued only after the record is stored; period = requested period (PR #1300). | — |
-| Pended response (A4 / queued) | I+T | `PAS07_PendedResponse_SignalsOutstandingReviewViaX12A4`. | — |
+| Pended response (A4) | I+T | `PAS07_PendedResponse_SignalsOutstandingReviewViaX12A4`. Outcome is `complete` (PAS 2.2.1 allows complete, error, partial); the pend is the A4 review action. | — |
 | `Claim/$inquire` | I+T | `PasInquiryTests`; finds PAS-issued numbers end to end (seam test, PR #1300). The caller is bound to the token where the token carries an identity: a verified NPI that is not the record's requesting provider is refused outright, and a verified patient that is not the record's member is refused under `Pas:CallerBinding:EnforcePatientBinding` and otherwise logged (D-26). | G-27 |
-| Pended → final via R5-backport topic-based Subscription | M | No Subscription / SubscriptionTopic anywhere. | G-15 |
+| Pended → final via R5-backport topic-based Subscription | I+T | PAS pended-decision Subscriptions (PR #1869); the Inferno PAS kit's pended notification tests pass (PR #1873). | — |
 | Update / cancel of a submitted request | M | Only `$submit` / `$inquire` exist. | G-16 |
 | Additional information (CDex, attachments) | I+T | PAS-07 (42 tests). Never triggered by PAS pends. | G-16 |
 | QuestionnaireResponse in the PAS Bundle used in adjudication | P | Read from `Claim.supportingInfo`, stored and recorded on the authorization as a clinical attachment for the reviewer (`PasDocumentationTests`). Not yet an input to the automated decision. | G-16 |
@@ -236,7 +236,7 @@ CAP-linked entries summarize reconciled behavior. Other entries retain the dated
 | 278 inquiry (X215 / X217) | M | JSON schemas referenced only by docs. | G-51 |
 | Intermediary pattern (FHIR ↔ X12 payer) | M | — | G-52 (Phase 4) |
 | Capability statement declares PAS operations | P | `$submit` / `$inquire` declared; no supportedProfile. | G-36 |
-| CHO tested as a PAS **server** against RI / Inferno | M | Interop harness tests CHO as client only; BR-PAS-INQUIRE-001 `implemented=false`. | G-60 |
+| CHO tested as a PAS **server** against RI / Inferno | P | INFERNO-PAS-SERVER-001 (davinci_pas_server_suite_v221, PR #1873, 2026-11-22): every use case passes (approval, denial, pended with the Subscription notification, `$inquire`, claim updates, error handling). Six must-support tests fail, recorded here as CHO gaps rather than kit issues (owner decision, 2026-11-22): the optional ClaimResponse elements (`addItem`, `error`, `item.noteNumber`, the PAS extensions such as transmissionIdentifiers and claimResponseReviewer); the CDex `Task` and `CommunicationRequest` that request additional information in a PAS response; and the replaced-authorization reference on `$inquire`. | G-60, G-16 |
 
 ### 4.2 Da Vinci CRD (STU 2.x) — CDS Hooks
 
