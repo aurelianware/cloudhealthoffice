@@ -159,12 +159,17 @@ Talking points to keep straight:
 
 **Actions → Record demo walkthrough → Run workflow**, walkthrough `texas`,
 connect `port-forward`, with the demo on and seeded that day. It drives the
-portal with Playwright through the click-through above (the daily drop, a
-member and her claims, the APIs, the shadow report and its 97110 finding, the
-CMS-0057-F console and the poststabilization request) with a caption on each
-screen, about 2½ minutes. Download `texas.webm` and a screenshot per caption
-from the run's artifact. The job fails, and names the step, if a page did not
-render; the screenshots show what it saw.
+portal with Playwright: a title card, the daily drop, a member's coverage and
+claims, one claim's lines, the shadow report (scrolled to the 97110 finding and
+then to what CHO could not decide), the CMS-0057-F console, the
+poststabilization request, and a closing card. Each screen has a caption;
+the whole video runs about 2 minutes. Download `texas.webm` and a screenshot
+per caption from the run's artifact. The job fails, and names the step, if a
+page did not render; the screenshots show what it saw.
+
+`seed-pa` first cancels open requests left by earlier runs (ids starting
+`txpa-`) and any open request more than a day past its deadline, so the
+console shows only today's Texas requests.
 
 ## When something is off
 

@@ -46,25 +46,54 @@ const FULL_TOUR = [
   { path: '/mass-adjudication-runs', caption: 'Batch adjudication runs: claim counts, throughput and dead letters.' },
 ];
 
-// Texas Medicaid (scripts/demo/texas): the daily file drop, Patient Access from
-// it, shadow adjudication, and the Texas prior-authorization clocks. A step may
-// show several captions in turn, and may act on the page (open a report,
-// follow a link) before its captions.
+// Texas Medicaid (scripts/demo/texas): the daily file drop, the claims it
+// loaded, shadow adjudication, and the Texas prior-authorization clocks. A step
+// may be a title card, may act on the page first, and may show several
+// captions, each after its own action (a scroll to the part it describes).
 const TX_MEMBER = 'TXM7100001';
 
-async function openShadowReport(page) {
-  // The run after the medical claim file (183 claims); pharmacy runs have nothing to compare.
-  const runs = page.locator('[data-testid="shadow-runs"] tbody tr');
-  await runs.first().waitFor({ timeout: 15000 });
-  const medical = runs.filter({ hasText: '183' }).locator('[data-testid="shadow-open-run"]');
-  await ((await medical.count()) ? medical.first() : page.locator('[data-testid="shadow-open-run"]').first()).click();
-  const report = page.locator('[data-testid="shadow-report"]');
-  await report.waitFor({ timeout: 20000 });
-  await report.scrollIntoViewIfNeeded();
+async function titleCard(page, title, subtitle) {
+  await page.setContent(`<!doctype html><html><body style="margin:0;height:100vh;display:flex;flex-direction:column;
+    justify-content:center;align-items:center;background:#0f2742;color:#fff;font-family:system-ui,sans-serif;text-align:center">
+    <div style="font-size:52px;font-weight:700;max-width:80%;line-height:1.2">${title}</div>
+    <div style="font-size:24px;margin-top:28px;max-width:70%;line-height:1.5;color:#cfe0f2">${subtitle}</div>
+    </body></html>`);
 }
 
-async function scrollDown(page) {
-  await page.mouse.wheel(0, 700);
+async function scrollTo(page, selector) {
+  const target = page.locator(selector).first();
+  await target.waitFor({ timeout: 15000 });
+  await target.evaluate((el) => el.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  await page.waitForTimeout(800);
+}
+
+async function searchClaimsForMember(page) {
+  // The claims list is empty until searched: pick the member in the Member box, then Search.
+  const member = page.locator('.mud-input-control', { hasText: /^\s*Member\s*$/ }).locator('input').first();
+  await member.waitFor({ timeout: 15000 });
+  await member.click();
+  await member.pressSequentially(TX_MEMBER, { delay: 60 });
+  const option = page.locator('.mud-popover-open .mud-list-item', { hasText: TX_MEMBER }).first();
+  await option.waitFor({ timeout: 15000 });
+  await option.click();
+  await page.getByRole('button', { name: /^\s*Search\s*$/ }).first().click();
+  await page.locator('a[href*="/claims/TX"]').first().waitFor({ timeout: 20000 });
+}
+
+async function openFirstTexasClaim(page) {
+  await page.locator('a[href*="/claims/TXC-"]').first().click();
+  await page.waitForLoadState('load');
+}
+
+async function openShadowReport(page) {
+  // The latest run after a medical claim file; pharmacy runs have nothing to compare.
+  const runs = page.locator('[data-testid="shadow-runs"] tbody tr');
+  await runs.first().waitFor({ timeout: 15000 });
+  // A cell holding a three-digit claim count marks a medical run (pharmacy runs compare a few dozen).
+  const medical = runs.filter({ has: page.locator('td', { hasText: /^\s*[1-9]\d{2}\s*$/ }) })
+    .locator('[data-testid="shadow-open-run"]');
+  await ((await medical.count()) ? medical.first() : page.locator('[data-testid="shadow-open-run"]').first()).click();
+  await scrollTo(page, '[data-testid="shadow-report"]');
 }
 
 async function openTexasPoststabilization(page) {
@@ -85,21 +114,26 @@ async function openTexasPoststabilization(page) {
 // The shadow report says how many claims were skipped as "not found or not
 // loaded from a core", so those steps do not treat "not found" as a failure.
 const TEXAS = [
-  { path: '/edi-transactions', captions: [
-    'A Texas Medicaid plan keeps its core system. Cloud Health Office takes the core\'s nightly CPCDS extract. Everything here is synthetic.',
-    'The daily file drop: members and coverage load first, then medical and pharmacy claims and UM authorizations. Counts, nothing refused.',
-  ] },
+  { card: ['Texas Medicaid on Cloud Health Office',
+    'A plan keeps its core system. CHO takes the core\'s nightly CPCDS file and adds CMS-0057-F APIs, a second opinion on every claim, and the Texas prior-authorization clocks. Every record shown is synthetic.'],
+    caption: 'A three-minute tour of a synthetic Texas Medicaid plan.' },
+  { path: '/edi-transactions', caption: 'The daily file drop: members and coverage load first, then medical and pharmacy claims and UM authorizations. Counts for each file, nothing refused.' },
   { path: `/members/${TX_MEMBER}/coverage`, caption: 'A STAR member loaded from the drop, with coverage mapped from the core\'s plan code.' },
-  { path: `/members/${TX_MEMBER}/claims`, caption: 'Her claims, as the core paid them. The same records serve Patient Access and Provider Access as CARIN Blue Button EOBs.' },
-  { path: '/apis', caption: 'CMS-0057-F Patient Access, Provider Access and Prior Authorization APIs, served from the file drop. No core connector.' },
-  { path: '/shadow-adjudication', action: openShadowReport, mayMentionNotFound: true, captions: [
-    'Shadow adjudication: CHO re-adjudicates every loaded claim and compares its answer with the core\'s.',
-    'The finding: the core still pays therapeutic exercise (97110) at last year\'s rate, $23.45 a unit against $21.30.',
+  { path: '/claims', action: searchClaimsForMember, caption: 'This member\'s claims, as the core paid them. The same records serve Patient Access and Provider Access as CARIN Blue Button EOBs.' },
+  { path: null, action: openFirstTexasClaim, caption: 'One claim, line by line, exactly as the core adjudicated it.' },
+  { path: '/shadow-adjudication', action: openShadowReport, mayMentionNotFound: true,
+    caption: 'Shadow adjudication: CHO re-adjudicates every loaded claim against the plan\'s own fee schedule and compares its answer with the core\'s.' },
+  { path: null, mayMentionNotFound: true, captions: [
+    { action: (page) => scrollTo(page, '[data-testid="shadow-by-procedure"]'),
+      text: 'The finding: the core still pays therapeutic exercise (97110) at last year\'s rate, $23.45 a unit against $21.30. CHO shows the overpayment by code and by provider.' },
+    { action: (page) => scrollTo(page, '[data-testid="shadow-gap-guide"]'),
+      text: 'What CHO could not decide is listed with what to load next. A claims team works from the discrepancy CSV. The core is never changed.' },
   ] },
-  { path: null, action: scrollDown, mayMentionNotFound: true, caption: 'Claims CHO could not decide are listed with what to load next. A claims team works from the discrepancy CSV. The core is never changed.' },
   { path: '/compliance/cms-0057f', caption: 'Prior authorization on the Texas clocks: Tex. Gov\'t Code ch. 540 alongside the federal timeframes. The earlier deadline wins.' },
   { path: '/authorizations', action: openTexasPoststabilization, caption: 'Poststabilization care for a hospitalized member: due one hour after receipt, under §540.0302(b)(3).' },
-  { path: '/compliance/cms-0057f', caption: 'The plan sends files it already produces. No change to its core. Cloud Health Office: cloudhealthoffice.com' },
+  { card: ['No core connector. No change to the core.',
+    'The plan sends files it already produces. Cloud Health Office · cloudhealthoffice.com'],
+    caption: 'Synthetic data only. Not a TMHP, HHSC or CMS certification.' },
 ];
 
 const WALKTHROUGHS = { 'prior-auth': PRIOR_AUTH, 'full-tour': FULL_TOUR, texas: TEXAS };
@@ -145,33 +179,40 @@ async function main() {
   // The demo portal's local sign-in sets the session cookie and redirects.
   await page.goto(`${BASE_URL}/local-demo/sign-in?redirectUri=${encodeURIComponent('/demo')}`, { waitUntil: 'load' });
 
-  const total = steps.reduce((n, step) => n + (step.captions ? step.captions.length : 1), 0);
+  const captionsOf = (step) => (step.captions || [step.caption]).map((c) => (typeof c === 'string' ? { text: c } : c));
+  const total = steps.reduce((n, step) => n + captionsOf(step).length, 0);
   let shown = 0;
+  const attempt = async (label, action) => {
+    try {
+      await action(page);
+      await page.waitForTimeout(1500);
+    } catch (err) {
+      failures.push(`${label}: ${err.message.split('\n')[0]}`);
+    }
+  };
   for (const [i, step] of steps.entries()) {
-    const label = step.path || steps.slice(0, i).reverse().find((s) => s.path)?.path || '/';
+    const label = step.card ? 'title' : step.path || steps.slice(0, i).reverse().find((s) => s.path)?.path || '/';
     let response = null;
-    if (step.path) {
+    if (step.card) {
+      await titleCard(page, ...step.card);
+    } else if (step.path) {
       response = await page.goto(`${BASE_URL}${step.path}`, { waitUntil: 'load' });
       // Blazor renders after the circuit connects; give it a moment to fill the page.
       await page.waitForTimeout(2500);
     }
-    if (step.action) {
-      try {
-        await step.action(page);
-        await page.waitForTimeout(1500);
-      } catch (err) {
-        failures.push(`${label}: ${err.message.split('\n')[0]}`);
+    if (step.action) await attempt(label, step.action);
+    if (!step.card) {
+      const body = (await page.textContent('body')) || '';
+      if ((step.path && (!response || response.status() >= 400))
+          || (step.mayMentionNotFound ? /could not be loaded|error occurred|unable to connect|failed to load/i
+            : /not found|could not be loaded|error occurred|unable to connect|failed to load/i).test(body)) {
+        failures.push(`${label} (HTTP ${response ? response.status() : 'n/a'})`);
       }
     }
-    const body = (await page.textContent('body')) || '';
-    if ((step.path && (!response || response.status() >= 400))
-        || (step.mayMentionNotFound ? /could not be loaded|error occurred|unable to connect|failed to load/i
-          : /not found|could not be loaded|error occurred|unable to connect|failed to load/i).test(body)) {
-      failures.push(`${label} (HTTP ${response ? response.status() : 'n/a'})`);
-    }
-    for (const caption of step.captions || [step.caption]) {
+    for (const caption of captionsOf(step)) {
+      if (caption.action) await attempt(label, caption.action);
       shown += 1;
-      await showCaption(page, caption, shown, total);
+      await showCaption(page, caption.text, shown, total);
       await page.screenshot({ path: path.join(OUT, `${String(shown).padStart(2, '0')}${label.replace(/[^a-z0-9]+/gi, '-')}.png`) });
       await page.waitForTimeout(PAUSE_MS);
     }
