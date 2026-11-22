@@ -155,6 +155,17 @@ Talking points to keep straight:
   timeframes shorter than statute are plan policy inputs, not modeled.
 - Not a TMHP, HHSC or CMS certification, and not live payer data.
 
+## Record a video of it
+
+**Actions → Record demo walkthrough → Run workflow**, walkthrough `texas`,
+connect `port-forward`, with the demo on and seeded that day. It drives the
+portal with Playwright through the click-through above (the daily drop, a
+member and her claims, the APIs, the shadow report and its 97110 finding, the
+CMS-0057-F console and the poststabilization request) with a caption on each
+screen, about 2½ minutes. Download `texas.webm` and a screenshot per caption
+from the run's artifact. The job fails, and names the step, if a page did not
+render; the screenshots show what it saw.
+
 ## When something is off
 
 | Symptom | Check |
