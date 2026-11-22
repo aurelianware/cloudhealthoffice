@@ -87,11 +87,23 @@ public class SmartIntrospectionTests
     [Fact]
     public async Task ClientWithoutIntrospectionPermission_CannotIntrospect()
     {
+        // A real, active token of the client's own tenant: the client must
+        // learn nothing about it. (OpenIddict answers an unknown token
+        // {"active": false} before it checks the endpoint permission, so an
+        // invalid token would not show the permission check at all.)
         var tenant = SmartAuthDriver.NewTenant();
         var (backend, secret) = await _smart.RegisterClientAsync(tenant, "backend", "system/Patient.read");
+        var (app, _) = await _smart.RegisterClientAsync(tenant, "patient-app", "openid", "launch/patient", "patient/*.read");
+        var browser = await _smart.LinkedMemberAsync(tenant, "mbr-4403", username: "inb-" + tenant);
+        var token = await _smart.MemberAccessTokenAsync(browser, app, MemberScope);
 
-        var (status, _) = await IntrospectAsync(backend, secret!, "anything");
-        ((int)status).Should().BeOneOf(400, 401);
+        var (status, body) = await IntrospectAsync(backend, secret!, token);
+        if ((int)status is not (400 or 401))
+        {
+            status.Should().Be(HttpStatusCode.OK, body.ToString());
+            body.GetProperty("active").GetBoolean().Should().BeFalse(body.ToString());
+            body.ToString().Should().NotContain("mbr-4403");
+        }
     }
 
     [Theory]
