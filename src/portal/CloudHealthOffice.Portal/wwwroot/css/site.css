@@ -99,11 +99,18 @@ code, pre, kbd, samp { font-family: var(--cho-mono); }
   letter-spacing: 0.1em;
 }
 
+/* The footer follows the menu: pushed to the bottom while the menu is short,
+   below the last item when the menu is long and the drawer scrolls, never over
+   it. (It was position: absolute, so an expanded section ran under it.) */
+.cho-drawer .mud-drawer-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.cho-drawer .mud-drawer-content > * { flex-shrink: 0; }
+
 .cho-drawer-footer {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  margin-top: auto;
   padding: 14px 16px;
   border-top: 1px solid var(--cho-line);
   text-align: center;
