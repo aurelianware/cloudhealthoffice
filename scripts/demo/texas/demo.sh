@@ -18,7 +18,8 @@
 #   overlay        apply only the Texas settings (up does this): the CPCDS drop
 #                  folder and shadow adjudication on claims-service, the Texas
 #                  decision clock on authorization-service, service categories
-#                  on benefit-plan-service. Idempotent; rerun after any deploy.
+#                  on benefit-plan-service, the CRD MRI documentation rule on
+#                  fhir-service. Idempotent; rerun after any deploy.
 #   drop [DIR]     copy one day's drop into the tenant's inbound folder and load
 #                  it (DIR defaults to a freshly generated drop for today)
 #
@@ -146,14 +147,22 @@ cmd_overlay() {
   kubectl patch deploy/benefit-plan-service -n "$NAMESPACE" --type strategic -p '{
     "spec":{"template":{"spec":{"containers":[{"name":"benefit-plan-service","env":[
       {"name":"ServiceCategoryMapping__AdminWriteEnabled","value":"true","valueFrom":null}]}]}}}}'
-  for d in authorization-service claims-service benefit-plan-service; do
+  # CRD on fhir-service: the plan's documentation rule for the MRI the prior
+  # authorization walkthrough orders, so CRD answers with a documentation-
+  # required card and coverage-information naming the DTR form. (No portal
+  # link: fhir-service links only an https portal, and this one is reached
+  # by port-forward.)
+  kubectl patch deploy/fhir-service -n "$NAMESPACE" --type strategic -p '{
+    "spec":{"template":{"spec":{"containers":[{"name":"fhir-service","env":[
+      {"name":"Cms0057__Crd__DocumentationRequiredCodes__0","value":"70553","valueFrom":null}]}]}}}}'
+  for d in authorization-service claims-service benefit-plan-service fhir-service; do
     kubectl rollout status "deploy/$d" -n "$NAMESPACE" --timeout=10m >/dev/null
   done
-  echo "  Texas decision clock on for tenant '$TENANT'; CPCDS drop and shadow adjudication on."
+  echo "  Texas decision clock on for tenant '$TENANT'; CPCDS drop and shadow adjudication on; CRD documentation rule for 70553."
 }
 
 FORWARDS=("portal 8080" "claims-service 5001" "benefit-plan-service 5002" "provider-service 5004"
-          "authorization-service 5006" "fhir-service 5023")
+          "authorization-service 5006" "tenant-service 5013" "fhir-service 5023")
 
 cmd_connect() {
   need kubectl

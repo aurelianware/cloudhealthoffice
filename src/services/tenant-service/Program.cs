@@ -110,7 +110,7 @@ builder.Services.AddSingleton<CloudHealthOffice.PlanConfiguration.ISettingCatalo
 // AddChoAuthentication puts ChoOutboundTokenHandler on factory clients.
 builder.Services.AddHttpClient(TenantService.Configuration.HttpSponsorLineOfBusinessLookup.HttpClientName, client =>
 {
-    client.BaseAddress = new Uri((builder.Configuration["Services:SponsorService"] ?? "http://sponsor-service").TrimEnd('/') + "/");
+    client.BaseAddress = new Uri((builder.Configuration["Services:SponsorService"] ?? "http://sponsor-service.cloudhealthoffice").TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(5);
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
@@ -128,7 +128,7 @@ builder.Services.AddHostedService<TenantService.Configuration.ConfigurationIndex
 builder.Services.AddScoped<TenantService.Hierarchy.IHierarchyStore, TenantService.Hierarchy.MongoHierarchyStore>();
 builder.Services.AddHttpClient(TenantService.Hierarchy.HttpBenefitPlanProgramLookup.HttpClientName, client =>
 {
-    client.BaseAddress = new Uri((builder.Configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service").TrimEnd('/') + "/");
+    client.BaseAddress = new Uri((builder.Configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cloudhealthoffice").TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(5);
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
@@ -139,7 +139,7 @@ builder.Services.AddScoped<TenantService.Hierarchy.IBenefitPlanProgramLookup, Te
 // list. tenant-service never writes a contract.
 builder.Services.AddHttpClient(TenantService.Hierarchy.HttpSponsorPolicyLookup.HttpClientName, client =>
 {
-    client.BaseAddress = new Uri((builder.Configuration["Services:SponsorService"] ?? "http://sponsor-service").TrimEnd('/') + "/");
+    client.BaseAddress = new Uri((builder.Configuration["Services:SponsorService"] ?? "http://sponsor-service.cloudhealthoffice").TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(5);
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });

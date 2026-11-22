@@ -35,9 +35,12 @@ internal sealed class InMemoryCacheProvider : ICacheProvider
 
     public Task SetAsync<T>(string key, T value, TimeSpan ttl, CacheScope scope = CacheScope.Tenant, CancellationToken ct = default)
     {
+        // Size = 1: a host can share one size-limited IMemoryCache (fhir-service
+        // sets SizeLimit for CRD), and there an entry without a size throws.
         _cache.Set(key, value, new MemoryCacheEntryOptions
         {
-            AbsoluteExpirationRelativeToNow = ttl
+            AbsoluteExpirationRelativeToNow = ttl,
+            Size = 1,
         });
         return Task.CompletedTask;
     }

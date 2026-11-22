@@ -115,7 +115,7 @@ public static class PlanSettingsServiceCollectionExtensions
         services.AddMemoryCache();
         services.AddHttpClient(HttpPlanSettings.HttpClientName, client =>
         {
-            client.BaseAddress = new Uri((configuration["Services:TenantService"] ?? "http://tenant-service").TrimEnd('/') + "/");
+            client.BaseAddress = new Uri((configuration["Services:TenantService"] ?? "http://tenant-service.cloudhealthoffice").TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromSeconds(5);
             client.DefaultRequestHeaders.Add("Accept", "application/json");
         }).SetHandlerLifetime(TimeSpan.FromMinutes(5));
