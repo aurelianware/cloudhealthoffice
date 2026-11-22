@@ -209,10 +209,22 @@ public static class PasResponseDetail
         if (response.Adjudication.Any(a => a.Extension.Any(e => e.Url == ReviewActionUrl)))
             return;
 
+        // PAS 2.2.1 allows the reviewActionCode only on a line's (or added
+        // line's) adjudication, so the header's reviewAction carries the
+        // decision's number; the code is on every line.
+        if (string.IsNullOrWhiteSpace(context.AuthorizationNumber))
+            return;
         response.Adjudication.Add(new ClaimResponse.AdjudicationComponent
         {
             Category = new CodeableConcept(AdjudicationSystem, "submitted"),
-            Extension = [ReviewAction(code, display, context.AuthorizationNumber)],
+            Extension =
+            [
+                new Extension
+                {
+                    Url = ReviewActionUrl,
+                    Extension = [new Extension("number", new FhirString(context.AuthorizationNumber))],
+                },
+            ],
         });
     }
 
@@ -289,7 +301,9 @@ public static class PasResponseDetail
                 AddInpatientDates(item, requested, requestClaim);
             }
         }
-        else if (decision == "A3" && !string.IsNullOrWhiteSpace(context.AuthorizationNumber))
+        // Not certified or pended: the 278 tracks it by its administrative
+        // reference number (REF*NT), not a certification number.
+        else if (decision is "A3" or "A4" && !string.IsNullOrWhiteSpace(context.AuthorizationNumber))
         {
             item.Extension.Add(new Extension(AdministrationReferenceNumberUrl, new FhirString(context.AuthorizationNumber)));
         }
@@ -320,7 +334,17 @@ public static class PasResponseDetail
             quantity.Value = units;
         }
         if (quantity?.Value is not null)
+        {
+            // A quantity states its unit (prof-2). A count the request gave
+            // bare is in units: UCUM's unity.
+            if (string.IsNullOrWhiteSpace(quantity.Unit) && string.IsNullOrWhiteSpace(quantity.Code))
+            {
+                quantity.System = "http://unitsofmeasure.org";
+                quantity.Code = "1";
+                quantity.Unit = "unit";
+            }
             detail.Extension.Add(new Extension("quantity", quantity));
+        }
 
         return detail;
     }

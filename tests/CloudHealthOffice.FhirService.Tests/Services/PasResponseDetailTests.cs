@@ -51,7 +51,10 @@ public class PasResponseDetailTests
 
         var header = response.Adjudication.Single();
         header.Category.Coding.Single().Code.Should().Be("submitted");
-        ActionCode(header).Should().Be("A1");
+        // PAS allows the action code only on a line's adjudication: the
+        // header's reviewAction names the decision's number.
+        HeaderNumber(header).Should().Be("PAS-1");
+        header.Extension.Single().Extension.Should().NotContain(e => e.Url == Sd + "extension-reviewActionCode");
 
         var note = response.ProcessNote.Single();
         note.Number.Should().Be(1);
@@ -84,7 +87,9 @@ public class PasResponseDetailTests
         var detail = line.Extension.Single(e => e.Url == Sd + "extension-itemAuthorizedDetail");
         ((CodeableConcept)detail.Extension.Single(e => e.Url == "productOrServiceCode").Value).Coding.Single().Code
             .Should().Be("72148");
-        ((Quantity)detail.Extension.Single(e => e.Url == "quantity").Value).Value.Should().Be(2);
+        var quantity = (Quantity)detail.Extension.Single(e => e.Url == "quantity").Value;
+        quantity.Value.Should().Be(2);
+        quantity.Code.Should().Be("1", "a bare count is stated in UCUM units (prof-2)");
         ((Money)detail.Extension.Single(e => e.Url == "unitPrice").Value).Value.Should().Be(450);
 
         // The whole request's authorized provider: the claim-scoped care team member.
@@ -115,7 +120,7 @@ public class PasResponseDetailTests
         line.Extension.Should().NotContain(e => e.Url == Sd + "extension-authorizationNumber"
                                                 || e.Url == Sd + "extension-itemAuthorizedDetail"
                                                 || e.Url == Sd + "extension-itemPreAuthPeriod");
-        ActionCode(response.Adjudication.Single()).Should().Be("A3");
+        HeaderNumber(response.Adjudication.Single()).Should().NotBeNullOrEmpty();
         line.NoteNumber.Should().Equal(1);
     }
 
@@ -132,6 +137,7 @@ public class PasResponseDetailTests
         line.Extension.Should().Contain(e => e.Url == Sd + "extension-itemTraceNumber");
         line.Extension.Should().NotContain(e => e.Url == Sd + "extension-authorizationNumber"
                                                 || e.Url == Sd + "extension-itemAuthorizedProvider");
+        Ext<FhirString>(line, "extension-administrationReferenceNumber").Value.Should().Be("PAS-3");
     }
 
     [Theory]
@@ -313,6 +319,10 @@ public class PasResponseDetailTests
 
     private static string? Part(Extension extension, string name)
         => (extension.Extension.Single(e => e.Url == name).Value as FhirString)?.Value;
+
+    private static string? HeaderNumber(ClaimResponse.AdjudicationComponent adjudication)
+        => ((FhirString)adjudication.Extension.Single(e => e.Url == Sd + "extension-reviewAction")
+            .Extension.Single(e => e.Url == "number").Value).Value;
 
     private static string? ActionCode(ClaimResponse.AdjudicationComponent adjudication)
         => ((CodeableConcept)adjudication.Extension.Single(e => e.Url == Sd + "extension-reviewAction")
