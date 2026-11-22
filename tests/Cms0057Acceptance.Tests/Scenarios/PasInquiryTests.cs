@@ -574,8 +574,10 @@ public class PasInquiryTests
 
         var result = await controller.ClaimInquire(BundleWith(InquiryClaim()));
 
-        var bundle = result.Should().BeOfType<OkObjectResult>()
-            .Which.Value.Should().BeOfType<Bundle>().Subject;
+        // PAS 2.2.1: $inquire returns 0..* Bundles, so a Parameters holding one.
+        var parameters = result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<Parameters>().Subject;
+        var bundle = PasInquiryResponse.Bundles(parameters).Should().ContainSingle().Subject;
 
         bundle.Type.Should().Be(Bundle.BundleType.Collection);
         var response = bundle.Entry.Select(e => e.Resource).OfType<ClaimResponse>().Single();

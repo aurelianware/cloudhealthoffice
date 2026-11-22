@@ -159,12 +159,13 @@ public class PasResponseBuilderTests
         bundle.Entry.Select(e => e.FullUrl).Should().BeEquivalentTo(
             [
                 bundle.Entry[0].FullUrl,
-                "https://cho.example/fhir/r4/Patient/pat-001",
-                "https://cho.example/fhir/r4/Organization/cho-payer",
-                "https://cho.example/fhir/r4/PractitionerRole/role-1",
-                "https://cho.example/fhir/r4/Practitioner/dr-1",
+                "http://provider.example/fhir/Patient/pat-001",
+                "http://provider.example/fhir/Organization/cho-payer",
+                "http://provider.example/fhir/PractitionerRole/role-1",
+                "http://provider.example/fhir/Practitioner/dr-1",
             ],
-            "every resource the ClaimResponse reaches appears once; the request Claim and its documents are not echoed");
+            "every resource the ClaimResponse reaches appears once, under the fullUrl the request gave it; "
+            + "the request Claim and its documents are not echoed");
     }
 
     private static List<string> ItemReviewActions(ClaimResponse claimResponse)

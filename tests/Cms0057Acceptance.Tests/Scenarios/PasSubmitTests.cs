@@ -279,7 +279,7 @@ public class PasSubmitTests
             Entry = [new() { Resource = inquiryClaim }],
         });
 
-        var answer = ((Bundle)result.Should().BeOfType<OkObjectResult>().Subject.Value!)
+        var answer = PasInquiryResponse.Bundles((Parameters)result.Should().BeOfType<OkObjectResult>().Subject.Value!).Single()
             .Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
         answer.PreAuthRef.Should().Be(submitted.PreAuthRef);
         answer.Disposition.Should().Be("denied");
@@ -334,7 +334,7 @@ public class PasSubmitTests
             return;
         }
 
-        var answer = ((Bundle)result.Should().BeOfType<OkObjectResult>().Subject.Value!)
+        var answer = PasInquiryResponse.Bundles((Parameters)result.Should().BeOfType<OkObjectResult>().Subject.Value!).Single()
             .Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
         answer.PreAuthRef.Should().Be(submitted!.PreAuthRef);
         answer.Disposition.Should().Be("denied");

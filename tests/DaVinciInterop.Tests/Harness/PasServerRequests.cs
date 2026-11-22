@@ -182,11 +182,14 @@ public static class PasServerRequests
                         ["system"] = MemberSystem,
                         ["value"] = fixture.Member.MemberId,
                     });
-                    resource["name"] = new JsonArray(new JsonObject
-                    {
-                        ["family"] = fixture.Member.LastName,
-                        ["given"] = new JsonArray(fixture.Member.FirstName),
-                    });
+                    // The seeded member's name, keeping the rest of the kit's
+                    // (prefix, suffix, use), which its must-support tests look for.
+                    var name = ((resource["name"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault()?.DeepClone()
+                        as JsonObject) ?? new JsonObject();
+                    name["family"] = fixture.Member.LastName;
+                    name["given"] = new JsonArray(fixture.Member.FirstName);
+                    name.Remove("text");
+                    resource["name"] = new JsonArray(name);
                     resource["birthDate"] = fixture.Member.DateOfBirth.Length >= 10
                         ? fixture.Member.DateOfBirth[..10]
                         : fixture.Member.DateOfBirth;

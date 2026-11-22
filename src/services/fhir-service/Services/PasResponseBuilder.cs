@@ -83,7 +83,7 @@ public class PasResponseBuilder
 
     /// <summary>The adjudication category a decision on a line is stated under.</summary>
     private static CodeableConcept DecisionCategory()
-        => new("http://terminology.hl7.org/CodeSystem/adjudication", "benefit");
+        => new("http://terminology.hl7.org/CodeSystem/adjudication", "submitted");
 
     /// <summary>A process note, numbered as PAS requires (<c>processNote.number</c> 1..1).</summary>
     private static void AddNote(ClaimResponse claimResponse, ClaimResponse.NoteComponent note)
@@ -299,7 +299,7 @@ public class PasResponseBuilder
             {
                 item.Adjudication.Add(new ClaimResponse.AdjudicationComponent
                 {
-                    Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "benefit"),
+                    Category = DecisionCategory(),
                     Value = service.ApprovedUnits,
                     Reason = service.ServiceStatus is "A2" or "A3"
                         ? new CodeableConcept { Coding = new List<Coding> { new() { Code = service.DenialReasonCode } }, Text = service.DenialReason }
@@ -335,10 +335,8 @@ public class PasResponseBuilder
             {
                 item.Adjudication.Add(new ClaimResponse.AdjudicationComponent
                 {
-                    Category = new CodeableConcept(
-                        "http://terminology.hl7.org/CodeSystem/adjudication",
-                        "benefit",
-                        service.ProcedureCode),
+                    // PAS 2.2.1 fixes every line adjudication's category to "submitted".
+                    Category = DecisionCategory(),
                     Value = service.ApprovedUnits,
                 });
             }
@@ -471,11 +469,17 @@ public class PasResponseBuilder
             return bundle;
 
         // The request's resources by Type/id (the form references take).
+        // An echoed resource keeps the fullUrl the request gave it (PAS: the
+        // same fullUrl, id and identifiers as in the request).
         var byKey = new Dictionary<string, Resource>(StringComparer.Ordinal);
-        foreach (var resource in request.Entry.Select(e => e.Resource))
+        var requestFullUrl = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var entry in request.Entry)
         {
+            var resource = entry.Resource;
             if (resource?.Id is null || resource is Claim) continue;
-            byKey.TryAdd($"{resource.TypeName}/{resource.Id}", resource);
+            var key = $"{resource.TypeName}/{resource.Id}";
+            if (byKey.TryAdd(key, resource) && !string.IsNullOrWhiteSpace(entry.FullUrl))
+                requestFullUrl[key] = entry.FullUrl;
         }
 
         var included = new HashSet<string>(StringComparer.Ordinal);
@@ -508,7 +512,11 @@ public class PasResponseBuilder
         {
             var resource = pending.Dequeue();
             var copy = (Resource)resource.DeepCopy();
-            bundle.Entry.Add(new Bundle.EntryComponent { FullUrl = FullUrl(copy), Resource = copy });
+            bundle.Entry.Add(new Bundle.EntryComponent
+            {
+                FullUrl = requestFullUrl.TryGetValue($"{copy.TypeName}/{copy.Id}", out var echoed) ? echoed : FullUrl(copy),
+                Resource = copy,
+            });
             IncludeReferenced(copy);
         }
 

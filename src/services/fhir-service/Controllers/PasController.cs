@@ -494,7 +494,10 @@ public class PasController : FhirControllerBase
             });
         }
 
-        return Ok(_responseBuilder.BuildInquiryResponse(result.Authorization!, requestBundle, FhirBaseUrl));
+        // PAS 2.2.1's Claim/$inquire returns 0..* inquiry response Bundles,
+        // so the answer is a Parameters with one "return" per Bundle.
+        return Ok(PasInquiryResponse.Wrap(
+            _responseBuilder.BuildInquiryResponse(result.Authorization!, requestBundle, FhirBaseUrl)));
     }
 
     /// <summary>
@@ -829,4 +832,23 @@ public class PasController : FhirControllerBase
             Status = "Unavailable",
         };
     }
+}
+
+/// <summary>
+/// The PAS 2.2.1 <c>Claim/$inquire</c> answer: its output parameter
+/// <c>return</c> is 0..*, so (FHIR operations) the response is a Parameters,
+/// not a bare Bundle.
+/// </summary>
+public static class PasInquiryResponse
+{
+    public const string ReturnParameter = "return";
+
+    public static Parameters Wrap(Bundle bundle) => new()
+    {
+        Parameter = [new Parameters.ParameterComponent { Name = ReturnParameter, Resource = bundle }],
+    };
+
+    /// <summary>The inquiry response Bundles in a $inquire answer.</summary>
+    public static IEnumerable<Bundle> Bundles(Parameters parameters)
+        => parameters.Parameter.Where(p => p.Name == ReturnParameter).Select(p => p.Resource).OfType<Bundle>();
 }
