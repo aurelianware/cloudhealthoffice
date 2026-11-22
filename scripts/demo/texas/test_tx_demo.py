@@ -112,6 +112,14 @@ def test_npis_are_valid_and_below_the_issued_range():
     assert tx_demo.is_valid_npi("1234567893")  # the CMS documentation example
 
 
+def test_providers_fit_provider_service_field_limits():
+    # src/services/provider-service/Models/Provider.cs: PrimarySpecialty 20, TaxonomyCode 10, OrganizationName 300
+    for p in tx_demo.PROVIDERS:
+        assert len(p["specialty"]) <= 20, p["specialty"]
+        assert len(p["taxonomy"]) == 10, p["taxonomy"]
+        assert len(p["name"]) <= 300, p["name"]
+
+
 def test_one_business_day_skips_the_weekend():
     friday_noon = dt.datetime(2026, 11, 20, 12, 0, tzinfo=CT).astimezone(UTC)
     due = tx_demo.texas_due(friday_noon, "Hospitalized", set())

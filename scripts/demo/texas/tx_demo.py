@@ -104,11 +104,11 @@ def is_valid_npi(npi: str) -> bool:
 # The network. Kinds drive which services each provider bills.
 PROVIDERS = [
     {"key": "peds", "npi": synthetic_npi(1001), "name": "Trinity Pediatrics (synthetic)", "taxonomy": "208000000X", "specialty": "Pediatrics", "kind": "primary"},
-    {"key": "fqhc", "npi": synthetic_npi(1002), "name": "Elm Fork Community Clinic FQHC (synthetic)", "taxonomy": "261QF0400X", "specialty": "Federally Qualified Health Center", "kind": "primary"},
+    {"key": "fqhc", "npi": synthetic_npi(1002), "name": "Elm Fork Community Clinic FQHC (synthetic)", "taxonomy": "261QF0400X", "specialty": "FQHC", "kind": "primary"},
     {"key": "family", "npi": synthetic_npi(1003), "name": "Cedar Hill Family Medicine (synthetic)", "taxonomy": "207Q00000X", "specialty": "Family Medicine", "kind": "primary"},
-    {"key": "therapy", "npi": synthetic_npi(1004), "name": "Bluestem Pediatric Therapy (synthetic)", "taxonomy": "235Z00000X", "specialty": "Speech-Language Pathology", "kind": "therapy"},
+    {"key": "therapy", "npi": synthetic_npi(1004), "name": "Bluestem Pediatric Therapy (synthetic)", "taxonomy": "235Z00000X", "specialty": "Speech Therapy", "kind": "therapy"},
     {"key": "imaging", "npi": synthetic_npi(1005), "name": "North Texas Imaging Center (synthetic)", "taxonomy": "261QR0200X", "specialty": "Radiology", "kind": "imaging"},
-    {"key": "hospital", "npi": synthetic_npi(1006), "name": "Prairie Regional Hospital (synthetic)", "taxonomy": "282N00000X", "specialty": "General Acute Care Hospital", "kind": "hospital"},
+    {"key": "hospital", "npi": synthetic_npi(1006), "name": "Prairie Regional Hospital (synthetic)", "taxonomy": "282N00000X", "specialty": "Acute Care Hospital", "kind": "hospital"},
 ]
 PHARMACY_NPI = synthetic_npi(2001)
 PRESCRIBER_NPI = synthetic_npi(3001)
