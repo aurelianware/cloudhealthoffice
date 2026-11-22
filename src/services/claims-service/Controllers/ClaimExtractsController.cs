@@ -56,7 +56,8 @@ public sealed class ClaimExtractsController : ControllerBase
                 ["dataUseAgreement"] = ["The extract carries PHI for every member: name the data-use agreement it is delivered under."],
             }));
 
-        var saved = await _store.SaveSettingsAsync(TenantId(), request.Enabled, agreement, _actor.UserId, _clock.GetUtcNow().UtcDateTime, ct);
+        var saved = await _store.SaveSettingsAsync(
+            TenantId(), request.Enabled, agreement, _actor.UserId, _clock.GetUtcNow().UtcDateTime, request.IncludeCpcds, ct);
         return Ok(View(saved));
     }
 
@@ -107,6 +108,7 @@ public sealed class ClaimExtractsController : ControllerBase
     {
         Enabled = s?.Enabled ?? false,
         DataUseAgreement = s?.DataUseAgreement,
+        IncludeCpcds = s?.IncludeCpcds ?? false,
         DeliveredThrough = s?.Watermark,
         LastSucceededAt = s?.LastSucceededAt,
         Running = s?.LeaseUntil is { } until && until >= _clock.GetUtcNow().UtcDateTime,
@@ -124,12 +126,16 @@ public sealed class ClaimExtractSettingsRequest
     [StringLength(200)]
     [RegularExpression(@"^[^\x00-\x1F\x7F]*$", ErrorMessage = "dataUseAgreement: no control characters.")]
     public string? DataUseAgreement { get; set; }
+
+    /// <summary>Also deliver each run as CPCDS member, coverage and claim files.</summary>
+    public bool IncludeCpcds { get; set; }
 }
 
 public sealed class ClaimExtractSettingsView
 {
     public bool Enabled { get; set; }
     public string? DataUseAgreement { get; set; }
+    public bool IncludeCpcds { get; set; }
 
     /// <summary>Every claim change up to this instant has been delivered.</summary>
     public DateTime? DeliveredThrough { get; set; }

@@ -421,8 +421,12 @@ public class ProviderAccessConsentTests
             .GetValue(null) as HashSet<string>;
 
         smartKnown.Should().NotBeNull();
+        // Less only the resources that are about no member, each named
+        // (a PAS Subscription belongs to the provider system that made it).
+        ProviderAccessAuthorizationFilter.NotMemberScopedResources
+            .Should().BeEquivalentTo(["Subscription"]);
         ProviderAccessAuthorizationFilter.GovernedResources
-            .Should().BeEquivalentTo(smartKnown!,
+            .Should().BeEquivalentTo(smartKnown!.Except(ProviderAccessAuthorizationFilter.NotMemberScopedResources),
                 "every member-scoped resource the FHIR surface serves must pass the "
                 + "Provider Access authorization layer, not just Patient");
     }

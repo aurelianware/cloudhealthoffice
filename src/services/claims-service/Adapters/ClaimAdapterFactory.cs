@@ -1,3 +1,5 @@
+using CloudHealthOffice.Infrastructure.Tenancy;
+
 namespace ClaimsService.Adapters;
 
 /// <summary>
@@ -12,6 +14,13 @@ namespace ClaimsService.Adapters;
 /// <see cref="IClaimAdapter.Platform"/> property (case-insensitive). On any
 /// failure or unknown platform the factory falls back to <c>"cho"</c> so a
 /// flaky tenant-service never breaks claim reads.
+/// </para>
+/// <para>
+/// A vendor platform key (<c>qnxt</c>, <c>facets</c>, <c>healthedge</c>) with no
+/// registered connector is the exception: it throws
+/// <see cref="CloudHealthOffice.Infrastructure.Tenancy.LiveCoreConnectorNotEnabledException"/>
+/// (501) instead of serving CHO's data. Live connectors are registered only when
+/// <c>CoreIntegration:LiveConnectors:Enabled</c> is true.
 /// </para>
 /// </summary>
 public class ClaimAdapterFactory
@@ -58,6 +67,14 @@ public class ClaimAdapterFactory
 
         if (adapter == null)
         {
+            // A vendor platform with no registered connector is refused, never
+            // answered with CHO's own data (ADR 027). Live connectors are off
+            // unless CoreIntegration:LiveConnectors:Enabled is true.
+            if (LiveCoreConnectors.IsVendorPlatform(platform))
+            {
+                throw new LiveCoreConnectorNotEnabledException("claims", platform);
+            }
+
             _logger.LogWarning(
                 "No claim adapter found for platform '{Platform}', falling back to 'cho'",
                 platform);

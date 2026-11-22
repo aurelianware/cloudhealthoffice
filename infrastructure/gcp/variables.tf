@@ -51,6 +51,24 @@ variable "artifact_repository_id" {
   default     = "cho"
 }
 
+variable "artifact_keep_count" {
+  description = "Most recent versions of each image the Artifact Registry cleanup always keeps."
+  type        = number
+  default     = 5
+}
+
+variable "artifact_delete_after_days" {
+  description = "Image versions older than this (in days), other than the most recent artifact_keep_count, are deleted."
+  type        = number
+  default     = 7
+}
+
+variable "lean_observability" {
+  description = "Demo only (ignored when hosted): exclude container logs below WARNING from Cloud Logging and turn off Managed Prometheus and the billed GKE metric packages. Set false while you need full logs or metrics, such as when debugging a benchmark run."
+  type        = bool
+  default     = true
+}
+
 variable "github_repo" {
   description = "GitHub repository (owner/name) allowed to deploy through Workload Identity Federation."
   type        = string

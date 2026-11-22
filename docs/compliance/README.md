@@ -24,6 +24,10 @@ or payer attestation artifacts.
 
 Administrative safeguards for the environment Aurelianware hosts on Google Cloud: [hipaa-hosted/](hipaa-hosted/README.md). It holds the risk analysis, policies, incident response and breach notification, the contingency plan, the training record and the quarterly access review. All are drafts until the Security Officer and the CEO adopt them.
 
+## Security Review Readiness
+
+The plan for passing a health plan's security review and going live within days of signing: [security-readiness/](security-readiness/README.md). It covers the SOC 2 roadmap, the HIPAA posture safeguard by safeguard, the BAA approach (including Texas Medicaid flow-downs), draft answers to a payer security questionnaire, and the checklist for applying the hosted environment.
+
 ## Package Workflow
 
 1. Start with the canonical capability ledger for verified status, then use the readiness matrix for requirement and deployment context.

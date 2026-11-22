@@ -8,6 +8,11 @@ November 2, 2026 after the CPCDS, authorization and shadow adjudication
 importers merged. Re-check the interfaces named here before relying on a
 method list.
 
+> **November 21, 2026:** live connectors are now an optional integration
+> point, off by default. The daily file drop is the default path; see
+> [Connecting a plan's core](CORE-INTEGRATION-OPTIONS.md). A deployment that
+> builds a connector turns them on with `CoreIntegration:LiveConnectors:Enabled`.
+
 The [core adapter QRE](../features/questionnaires/qre-core-admin-adapter-questions.md)
 tells you what to find out from the plan. The
 [onboarding checklist](../implementation/CORE-CONNECTOR-ONBOARDING.md) and
@@ -65,7 +70,8 @@ from tier 2. Price and scope tier 2 and 3 separately.
 
 ## 3. Rules every live adapter follows
 
-**Selection.** Each service registers its adapters as `IEnumerable<T>` and a
+**Selection.** Vendor connectors are registered only when
+`CoreIntegration:LiveConnectors:Enabled` is true. Each service registers its adapters as `IEnumerable<T>` and a
 factory picks one by comparing the tenant's configured platform with the
 adapter's `Platform` (or `BackendKey`) property, case-insensitively. Use a
 lowercase key such as `qnxt`. The tenant's `platformSettings` dictionary
@@ -248,7 +254,11 @@ engagement relies on it.
    [CPCDS file drop](CPCDS-FILE-DROP-IMPORTER.md) loads them with the core's
    adjudication results. An X12 837/835 source through the same pipeline is
    planned as the second path.
-2. **Platform lookup falls back to CHO.** `TenantPlatformLookup` uses `cho`
+2. **Platform lookup falls back to CHO.** *Partly closed November 21, 2026:*
+   every factory now refuses (501) a vendor platform key (`qnxt`, `facets`,
+   `healthedge`) that has no registered connector, including eligibility,
+   instead of answering with CHO's data. An unrecognized key and a
+   tenant-service outage still use `cho`. Original finding: `TenantPlatformLookup` uses `cho`
    when tenant-service is unreachable or answers 5xx, and every adapter factory
    (claims, eligibility, benefit plan, provider, organization, ID card) uses
    `cho` for a platform key it has no adapter for. For a QNXT tenant that means

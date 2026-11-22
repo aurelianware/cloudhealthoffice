@@ -317,11 +317,20 @@ public sealed class CpcdsClaimImportService : ICpcdsClaimImportService
         string tenantId, Claim claim, CpcdsClaimResult claimResult, CancellationToken ct)
     {
         if (_coverage is null) return null;
-        var resolution = await _coverage.ResolveCoverageAsync(
-            tenantId, claim.MemberId, claim.ServiceDateFrom,
-            ClaimAdjudicationOrchestrator.MapInsuranceLineCode(claim.ClaimType), ct);
-        if (resolution?.CoverageId is { } coverageId)
-            return coverageId;
+
+        // A pharmacy claim belongs to the member's prescription drug line
+        // (834 HD03 PDG) where the plan carries one, and otherwise to the
+        // medical line, which is where most plans put the drug benefit.
+        var lines = claim.ClaimType == ClaimType.Pharmacy
+            ? new[] { "PDG", "HLT" }
+            : new[] { ClaimAdjudicationOrchestrator.MapInsuranceLineCode(claim.ClaimType) };
+        foreach (var line in lines)
+        {
+            var resolution = await _coverage.ResolveCoverageAsync(
+                tenantId, claim.MemberId, claim.ServiceDateFrom, line, ct);
+            if (resolution?.CoverageId is { } coverageId)
+                return coverageId;
+        }
 
         claimResult.Warnings.Add(
             $"No CHO coverage found for member '{claim.MemberId}' on {claim.ServiceDateFrom:yyyy-MM-dd}; " +

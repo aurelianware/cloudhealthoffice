@@ -44,6 +44,14 @@ console inspection through the Million Claim Challenge.
 
 ## Reference backend and core connectors
 
+A plan that keeps its core feeds CHO through the **daily file drop**: the core
+writes its usual extracts (CPCDS members, coverage and claims, plus UM
+authorizations) and CHO loads them, so every CMS-0057-F API and shadow
+adjudication run on the plan's own data with no vendor connector. Live core
+connectors are an optional integration point, off unless a deployment sets
+`CoreIntegration:LiveConnectors:Enabled`. See
+[Connecting a plan's core](docs/integration/CORE-INTEGRATION-OPTIONS.md).
+
 CHO is the reference backend implementation behind the domain adapter contracts.
 QNXT, Facets and HealthEdge use separate connectors implemented per payer
 engagement, based on platform version/configuration, licensed interfaces,

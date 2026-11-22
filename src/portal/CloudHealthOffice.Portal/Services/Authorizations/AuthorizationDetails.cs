@@ -19,6 +19,12 @@ public class AuthorizationDetails : AuthorizationSummary
     public string? LineOfBusiness { get; set; }
     /// <summary>The decision deadline in force, including a lawful extension.</summary>
     public DateTime? DecisionDueAt { get; set; }
+    /// <summary>
+    /// The clock that set <see cref="DecisionDueAt"/>, as authorization-service
+    /// records it: <c>cho-receipt-v1</c> (federal), or with a state clock, e.g.
+    /// <c>cho-receipt-v1+tx-gc-540-v1:Hospitalized+inferred</c>.
+    /// </summary>
+    public string? DecisionDeadlinePolicy { get; set; }
     public DecisionExtensionView? DecisionExtension { get; set; }
     /// <summary>The record's revision, for the timeframe actions to reload against.</summary>
     public long Revision { get; set; }

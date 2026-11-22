@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using CloudHealthOffice.FhirService.Tests.TestSupport;
 using CloudHealthOffice.Testing.Mongo;
+using FhirService.Controllers;
 using FhirService.Models;
 using FhirService.Services;
 using FluentAssertions;
@@ -391,7 +392,8 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
         var response = await client.SendAsync(request);
         var body = await response.Content.ReadAsStringAsync();
         return response.StatusCode == HttpStatusCode.OK
-            ? (response.StatusCode, JsonSerializer.Deserialize<Bundle>(body, FhirJson))
+            // PAS 2.2.1: a Parameters holding the inquiry response Bundle.
+            ? (response.StatusCode, PasInquiryResponse.Bundles(JsonSerializer.Deserialize<Parameters>(body, FhirJson)!).Single())
             : (response.StatusCode, null);
     }
 

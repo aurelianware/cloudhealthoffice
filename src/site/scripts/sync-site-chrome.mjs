@@ -24,6 +24,7 @@ export const HEAD_ASSETS = [
 
 const NAV_GROUPS = [
   ['Solutions', [
+    ['/health-plan-leaders', 'For health plan leaders'],
     ['/solutions-payers', 'For health plans'],
     ['/cms-0057f-compliance', 'CMS-0057-F compliance'],
     ['/claims-repricing', 'Claims repricing'],
@@ -90,7 +91,7 @@ export const FOOTER = `<footer class="cho-footer">
 <div class="cho-footer-inner">
 <div class="cho-footer-brand">
 <strong>Cloud Health Office</strong>
-<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+<p>Sovereign, interoperable health plan administration. A product of <a href="https://aurelianware.com">Aurelianware, Inc.</a></p>
 </div>
 <div class="cho-footer-col">
 <p class="cho-footer-heading">Platform</p>
@@ -120,6 +121,7 @@ export const FOOTER = `<footer class="cho-footer">
 <p class="cho-footer-heading">Company</p>
 <a href="/founder">Founder</a>
 <a href="/insights">Insights</a>
+<a href="https://cms-0057-f.com/">CMS-0057-F guide</a>
 <a href="/contact">Contact</a>
 <a href="/legal/privacy-policy">Privacy</a>
 <a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>

@@ -18,11 +18,13 @@ public class ClaimAccessLogController : ControllerBase
 {
     private readonly IClaimAccessAuditRepository _audit;
     private readonly ICurrentActor _actor;
+    private readonly IClaimRepository _claims;
 
-    public ClaimAccessLogController(IClaimAccessAuditRepository audit, ICurrentActor actor)
+    public ClaimAccessLogController(IClaimAccessAuditRepository audit, ICurrentActor actor, IClaimRepository claims)
     {
         _audit = audit;
         _actor = actor;
+        _claims = claims;
     }
 
     private string TenantId =>
@@ -71,7 +73,20 @@ public class ClaimAccessLogController : ControllerBase
     {
         limit = Math.Clamp(limit, 1, 50);
         var events = await _audit.QueryAsync(new ClaimAccessQuery(TenantId, ActorId: _actor.UserId, Limit: 300), ct);
-        return Ok(RecentClaimView.From(events, limit));
+
+        // The access log keeps every view, including of claims since removed
+        // (a reset demo, a purge). Recent lists only claims that still open,
+        // so Home never links to "Claim not found". The log is not changed.
+        var recent = new List<RecentClaimView>(limit);
+        foreach (var view in RecentClaimView.From(events, 50))
+        {
+            if (recent.Count == limit || ct.IsCancellationRequested)
+                break;
+            if (await _claims.GetByIdAsync(view.ClaimId) is not null
+                || (view.ClaimNumber is { Length: > 0 } number && await _claims.GetByClaimNumberAsync(number) is not null))
+                recent.Add(view);
+        }
+        return Ok(recent);
     }
 }
 

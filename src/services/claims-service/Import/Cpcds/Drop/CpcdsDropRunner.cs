@@ -7,8 +7,9 @@ namespace ClaimsService.Import.Cpcds.Drop;
 /// <summary>
 /// Loads what is waiting in one tenant's drop, in the order the data depends
 /// on: members and coverage first (so claims find their members and CHO
-/// coverage), then for each claim file the providers it names, then the
-/// claims. Every import is idempotent, so a file dropped twice, or a run
+/// coverage), then the network roster (so the providers the claims name are
+/// network providers before the claims load), then for each claim file the
+/// providers it names, then the claims. Every import is idempotent, so a file dropped twice, or a run
 /// retried after a failure, writes nothing it already wrote.
 /// </summary>
 public sealed class CpcdsDropRunner
@@ -69,19 +70,21 @@ public sealed class CpcdsDropRunner
             : ready.FirstOrDefault(f => CpcdsDropFileKinds.Classify(f.Name) == CpcdsDropFileKind.Coverages);
         var claimFiles = ready.Where(f => CpcdsDropFileKinds.Classify(f.Name) == CpcdsDropFileKind.Claims).ToList();
         var authorizationFiles = ready.Where(f => CpcdsDropFileKinds.Classify(f.Name) == CpcdsDropFileKind.Authorizations).ToList();
+        var rosterFiles = ready.Where(f => CpcdsDropFileKinds.Classify(f.Name) == CpcdsDropFileKind.Rosters).ToList();
 
         foreach (var file in ready)
         {
             var kind = CpcdsDropFileKinds.Classify(file.Name);
             if (kind == CpcdsDropFileKind.Unknown)
-                notes.Add($"{file.Name} left in inbound: the name says neither members, coverage, claims nor authorizations.");
+                notes.Add($"{file.Name} left in inbound: the name says neither members, coverage, roster, claims nor authorizations.");
             else if (kind == CpcdsDropFileKind.Coverages && members is null)
                 notes.Add($"{file.Name} left in inbound: a coverage file loads with its member file, and none is waiting.");
             else if ((kind == CpcdsDropFileKind.Members && file != members) || (kind == CpcdsDropFileKind.Coverages && file != coverages))
                 notes.Add($"{file.Name} left in inbound for the next run: one member and coverage pair loads per run.");
         }
 
-        var picked = new[] { members, coverages }.OfType<CpcdsDropFile>().Concat(claimFiles).Concat(authorizationFiles).ToList();
+        var picked = new[] { members, coverages }.OfType<CpcdsDropFile>()
+            .Concat(rosterFiles).Concat(claimFiles).Concat(authorizationFiles).ToList();
         if (picked.Count == 0)
             return null;
 
@@ -131,7 +134,19 @@ public sealed class CpcdsDropRunner
                     coveragesFile = c;
                     coveragesContent = await _store.ReadAllTextAsync(c, ct);
                 }
-                run.Steps.Add(await _upstream.ImportMembersAsync(tenantId, membersFile, membersContent, coveragesFile, coveragesContent, ct));
+                run.Steps.Add(await _upstream.ImportMembersAsync(
+                    tenantId, membersFile, membersContent, coveragesFile, coveragesContent, tenant.ColumnMap, ct));
+            }
+
+            // After members, before claims: the roster makes providers the
+            // claims name network providers, and the provider import that
+            // runs per claim file then leaves them alone.
+            foreach (var original in rosterFiles)
+            {
+                if (!taken.TryGetValue(original, out var file)) continue;
+                var content = await _store.ReadAllTextAsync(file, ct);
+                run.Steps.Add(await _upstream.ImportNetworkRosterAsync(
+                    tenantId, file, content, tenant.LineOfBusiness.ToString(), ct));
             }
 
             foreach (var original in claimFiles)

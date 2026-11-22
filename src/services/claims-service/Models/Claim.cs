@@ -240,6 +240,14 @@ public class Claim
     public InstitutionalClaimDetails? Institutional { get; set; }
 
     /// <summary>
+    /// Pharmacy (NCPDP) claim detail: days supply, dispense-as-written code,
+    /// fill number, refills authorized, prescriber and the like. Set only on
+    /// <see cref="ClaimType.Pharmacy"/> claims, which CHO loads from a core or
+    /// PBM extract (CPCDS) and does not adjudicate. Null otherwise.
+    /// </summary>
+    public PharmacyClaimDetails? Pharmacy { get; set; }
+
+    /// <summary>
     /// 837 2000B SBR01: this plan's payer responsibility sequence for the
     /// claim (P primary, S secondary, T tertiary, A–H payers four to eleven,
     /// U unknown). Null when the claim did not come from an 837 carrying it.
@@ -921,6 +929,48 @@ public class ClaimPayToPlan
 /// rate and pends for pricing rather than being grouped.
 /// </para>
 /// </summary>
+/// <summary>
+/// Pharmacy (NCPDP) claim header detail, as a PBM or core extract states it.
+/// Additive: a document without it deserializes to <c>null</c>. The codes are
+/// the NCPDP ones CARIN BB's Pharmacy EOB binds to, stored as given.
+/// </summary>
+[BsonIgnoreExtraElements]
+public class PharmacyClaimDetails
+{
+    /// <summary>Days the dispensed quantity is expected to last (NCPDP 405-D5).</summary>
+    public decimal DaysSupply { get; set; }
+
+    /// <summary>Dispense as written / product selection code, 0-9 (NCPDP 408-D8).</summary>
+    public string DispenseAsWrittenCode { get; set; } = "0";
+
+    /// <summary>Fill number: 0 for the original fill, 1 for the first refill (NCPDP 403-D3).</summary>
+    public int RefillNumber { get; set; }
+
+    /// <summary>Number of refills the prescriber authorized (NCPDP 415-DF).</summary>
+    public int RefillsAuthorized { get; set; }
+
+    /// <summary>Prescription / service reference number (NCPDP 402-D2).</summary>
+    public string? PrescriptionNumber { get; set; }
+
+    /// <summary>Prescription origin code, 0-5 (NCPDP 419-DJ).</summary>
+    public string? PrescriptionOriginCode { get; set; }
+
+    /// <summary>Compound code: 0 not specified, 1 not a compound, 2 compound (NCPDP 406-D6).</summary>
+    public string? CompoundCode { get; set; }
+
+    /// <summary>Brand / generic indicator as the plan reports it (NCPDP code list).</summary>
+    public string? BrandGenericIndicator { get; set; }
+
+    /// <summary>NPI of the prescriber (NCPDP 411-DB).</summary>
+    public string? PrescriberNpi { get; set; }
+
+    /// <summary>Pharmacy service type (NCPDP 147-U7), e.g. 1 community retail, 5 mail order.</summary>
+    public string? PharmacyServiceType { get; set; }
+
+    /// <summary>Patient residence code (NCPDP 384-4X).</summary>
+    public string? PatientResidenceCode { get; set; }
+}
+
 [BsonIgnoreExtraElements]
 public class InstitutionalClaimDetails
 {
@@ -1526,7 +1576,15 @@ public enum ClaimType
     /// <summary>
     /// 837D - Dental
     /// </summary>
-    Dental = 3
+    Dental = 3,
+
+    /// <summary>
+    /// NCPDP pharmacy claim. Loaded from a core or PBM extract (CPCDS) and
+    /// served as a CARIN BB Pharmacy EOB. CHO does not adjudicate pharmacy
+    /// claims: no 837 carries one, and the adjudication pipeline and shadow
+    /// adjudication leave them alone.
+    /// </summary>
+    Pharmacy = 4
 }
 
 /// <summary>

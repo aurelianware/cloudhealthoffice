@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Cloud Health Office 6.1, 6.2 and What&rsquo;s Coming in 6.3 | Cloud Health Office</title>
+  <meta name="description" content="What changed in Cloud Health Office 6.1 and 6.2, what is coming in 6.3, and what is still open: CMS-0057-F APIs tested by Inferno, a CPCDS drop for plans that keep their core, shadow adjudication, and a Texas and California Medicaid build."/>
+  <meta name="keywords" content="Cloud Health Office release, CMS-0057-F, Inferno test kits, CPCDS, shadow adjudication, Texas Medicaid, Medi-Cal, SMART Backend Services, Plan-Net"/>
+  <meta name="author" content="Aurelianware, Inc."/>
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/cms-0057-f/cloud-health-office-6-1-6-2-6-3"/>
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article"/>
+  <meta property="og:site_name" content="Cloud Health Office"/>
+  <meta property="og:title" content="Cloud Health Office 6.1, 6.2 and What's Coming in 6.3"/>
+  <meta property="og:description" content="CMS-0057-F APIs finished and tested by Inferno, a way in for plans that keep their core, and a Texas and California Medicaid build."/>
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/cms-0057-f/cloud-health-office-6-1-6-2-6-3"/>
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png"/>
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image"/>
+  <meta name="twitter:title" content="Cloud Health Office 6.1, 6.2 and What's Coming in 6.3"/>
+  <meta name="twitter:description" content="CMS-0057-F APIs finished and tested by Inferno, a way in for plans that keep their core, and a Texas and California Medicaid build."/>
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png"/>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Article",
+      "headline": "Cloud Health Office 6.1, 6.2 and What's Coming in 6.3",
+      "description": "What changed in Cloud Health Office 6.1 and 6.2, what is coming in 6.3, and what is still open: CMS-0057-F APIs tested by Inferno, a CPCDS drop for plans that keep their core, shadow adjudication, and a Texas and California Medicaid build.",
+      "url": "https://cloudhealthoffice.com/insights/cms-0057-f/cloud-health-office-6-1-6-2-6-3",
+      "datePublished": "2026-11-06",
+      "dateModified": "2026-11-06",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc."
+      },
+      "about": [
+        "CMS-0057-F",
+        "Cloud Health Office releases",
+        "CPCDS",
+        "Shadow adjudication",
+        "Inferno test kits"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com/" },
+        { "@type": "ListItem", "position": 2, "name": "Insights", "item": "https://cloudhealthoffice.com/insights" },
+        { "@type": "ListItem", "position": 3, "name": "CMS-0057-F & Payer Modernization", "item": "https://cloudhealthoffice.com/insights/cms-0057-f/" },
+        { "@type": "ListItem", "position": 4, "name": "6.1, 6.2 and what's coming in 6.3", "item": "https://cloudhealthoffice.com/insights/cms-0057-f/cloud-health-office-6-1-6-2-6-3" }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --cyan:#0E7490;--green:#0F766E;--blue:#0E7490;
+      --bg:#F5F7FA;--surface:rgba(245, 247, 250, 0.92);--surface-alt:rgba(14, 116, 144, 0.03);
+      --border:rgba(14, 116, 144, 0.12);--border-bright:rgba(14, 116, 144, 0.3);
+      --text:#334155;--text-muted:#334155;--text-dim:#475569;
+      --font:'Outfit',system-ui,sans-serif;--mono:'JetBrains Mono',monospace;--max:1140px;--measure:760px;
+    }
+    html{scroll-behavior:smooth}
+    @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+    body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.8;overflow-x:hidden}
+    a{color:var(--cyan)}
+    .skip-to-main{position:absolute;left:-999px;top:0;background:var(--cyan);color:#FFFFFF;padding:.6rem 1rem;z-index:200}
+    .skip-to-main:focus{left:8px;top:8px}
+
+    body>nav{position:sticky;top:0;z-index:100;background:rgba(255, 255, 255, 0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 2rem}
+    .nav-inner{max-width:var(--max);margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
+    .nav-brand{font-weight:800;font-size:1.05rem;color:#0B1F33;text-decoration:none;display:flex;align-items:center;gap:.6rem}
+    .nav-brand span{opacity:.5;font-weight:400;font-size:.8rem}
+    .nav-links{display:flex;gap:1.8rem;align-items:center}
+    .nav-links a{color:var(--text-muted);text-decoration:none;font-size:.82rem;font-weight:500;transition:color .2s}
+    .nav-links a:hover{color:var(--cyan)}
+    .nav-cta{background:rgba(14, 116, 144, 0.08);border:1px solid rgba(14, 116, 144, 0.25);color:var(--cyan);padding:.35rem .9rem;border-radius:6px;font-size:.78rem;font-weight:600;text-decoration:none;transition:all .25s}
+    .nav-cta:hover{background:rgba(14, 116, 144, 0.15);box-shadow:0 0 20px rgba(14, 116, 144, 0.1)}
+
+    .article-head{padding:3.4rem 2rem 1rem;position:relative;overflow:hidden}
+    .article-head::before{content:'';position:absolute;top:-240px;left:15%;width:760px;height:760px;background:radial-gradient(circle,rgba(14, 116, 144, 0.05) 0%,transparent 70%);pointer-events:none}
+    .wrap{max-width:var(--measure);margin:0 auto}
+    .breadcrumb{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);margin-bottom:1.4rem}
+    .breadcrumb a{color:var(--text-muted);text-decoration:none}
+    .breadcrumb a:hover{color:var(--cyan)}
+    .eyebrow{font-family:var(--mono);font-size:.72rem;font-weight:500;color:var(--cyan);text-transform:uppercase;letter-spacing:3px;margin-bottom:1rem;opacity:.85}
+    h1{font-size:clamp(1.9rem,4.6vw,2.9rem);font-weight:900;color:#0B1F33;line-height:1.18;margin-bottom:1rem}
+    .subtitle{font-size:1.12rem;color:var(--text-muted);line-height:1.75;margin-bottom:1.4rem}
+    .meta{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:.8rem 0;margin:1.4rem 0 0;display:flex;flex-wrap:wrap;gap:1.2rem}
+    .meta strong{color:var(--text-muted);font-weight:500}
+
+    article{padding:1.5rem 2rem 4rem}
+    article h2{font-size:clamp(1.3rem,3vw,1.75rem);font-weight:800;color:#0B1F33;margin:3rem 0 .4rem;line-height:1.3}
+    article h2 .num{font-family:var(--mono);font-size:.85rem;color:var(--cyan);display:block;margin-bottom:.3rem;letter-spacing:2px}
+    article h3{font-size:1.05rem;font-weight:700;color:var(--cyan);margin:1.6rem 0 .3rem;font-family:var(--mono);letter-spacing:.5px}
+    article p{margin:.9rem 0;color:var(--text)}
+    article ul,article ol{margin:1rem 0 1rem 1.3rem;color:var(--text)}
+    article li{margin:.4rem 0}
+    article strong{color:#0B1F33}
+    code{font-family:var(--mono);font-size:.86em;color:var(--green);background:rgba(15, 118, 110, 0.08);padding:.1rem .35rem;border-radius:4px;overflow-wrap:anywhere}
+    .lead{font-size:1.05rem}
+
+    .callout{border-left:3px solid var(--blue);background:rgba(14, 116, 144, 0.06);padding:1.1rem 1.3rem;border-radius:0 8px 8px 0;margin:1.6rem 0}
+    .callout.green{border-left-color:var(--green);background:rgba(15, 118, 110, 0.06)}
+    .callout.amber{border-left-color:#B45309;background:rgba(180, 83, 9, 0.07)}
+    .callout p{margin:.4rem 0;font-size:.95rem;color:var(--text-muted)}
+    .callout strong{color:#0B1F33}
+    .callout .k{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:2px;color:var(--blue);display:block;margin-bottom:.4rem}
+    .callout.green .k{color:var(--green)}
+    .callout.amber .k{color:#B45309}
+
+    /* answer / warning pair under each question */
+    .ans{border:1px solid var(--border);border-radius:10px;background:var(--surface-alt);padding:1.1rem 1.3rem;margin:1.2rem 0}
+    .ans .k{font-family:var(--mono);font-size:.64rem;text-transform:uppercase;letter-spacing:2px;display:block;margin-bottom:.5rem}
+    .ans.good{border-color:rgba(15, 118, 110, 0.28)}
+    .ans.good .k{color:var(--green)}
+    .ans.weak{border-color:rgba(180, 83, 9, 0.28)}
+    .ans.weak .k{color:#B45309}
+    .ans p{margin:.3rem 0;font-size:.93rem;color:var(--text-muted)}
+    .ans strong{color:#0B1F33}
+
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:1rem;margin:1.8rem 0}
+    .stat{border:1px solid var(--border);border-radius:10px;padding:1.1rem;background:var(--surface)}
+    .stat b{display:block;font-family:var(--mono);font-size:1.5rem;color:var(--cyan);line-height:1.2;margin-bottom:.3rem}
+    .stat span{font-size:.84rem;color:var(--text-muted);line-height:1.6;display:block}
+
+    .keyline{border:1px solid var(--border-bright);border-radius:12px;padding:1.4rem 1.6rem;margin:2rem 0;background:linear-gradient(135deg,rgba(14, 116, 144, 0.05),rgba(15, 118, 110, 0.03))}
+    .keyline p{font-size:1.02rem;color:#0B1F33;margin:0}
+
+    .toc{border:1px solid var(--border);border-radius:12px;padding:1.3rem 1.6rem;margin:2rem 0;background:var(--surface)}
+    .toc h2{font-size:.72rem!important;font-family:var(--mono);text-transform:uppercase;letter-spacing:2px;color:var(--cyan);margin:0 0 .7rem!important}
+    .toc ol{margin:0 0 0 1.2rem;font-size:.92rem}
+    .toc li{margin:.25rem 0}
+    .toc a{text-decoration:none;color:var(--text-muted)}
+    .toc a:hover{color:var(--cyan)}
+
+    .related{border-top:1px solid var(--border);margin-top:3rem;padding-top:1.8rem}
+    .related-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:1rem;margin-top:1rem}
+    .rc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.1rem;text-decoration:none;display:block;transition:border-color .3s}
+    .rc:hover{border-color:var(--border-bright)}
+    .rc .k{font-family:var(--mono);font-size:.6rem;color:var(--cyan);text-transform:uppercase;letter-spacing:1.5px;display:block;margin-bottom:.4rem}
+    .rc h4{color:#0B1F33;font-size:.95rem;margin-bottom:.2rem}
+    .rc p{font-size:.8rem;color:var(--text-muted);margin:0}
+
+    .cta-section{text-align:center;padding:4rem 2rem;background:linear-gradient(180deg,transparent,rgba(14, 116, 144, 0.02),transparent);border-top:1px solid var(--border)}
+    .cta-section h2{font-size:clamp(1.4rem,3vw,2rem);color:#0B1F33;margin-bottom:.8rem}
+    .cta-section p{color:var(--text-muted);max-width:560px;margin:0 auto 1.6rem}
+    .btn{display:inline-flex;align-items:center;gap:.4rem;padding:.7rem 1.4rem;border-radius:8px;font-size:.85rem;font-weight:600;text-decoration:none;transition:all .25s}
+    .btn-primary{background:rgba(14, 116, 144, 0.1);border:1px solid rgba(14, 116, 144, 0.3);color:var(--cyan)}
+    .btn-primary:hover{background:rgba(14, 116, 144, 0.18);box-shadow:0 0 30px rgba(14, 116, 144, 0.1)}
+    .btn-ghost{background:transparent;border:1px solid rgba(11, 31, 51, 0.14);color:var(--text-muted)}
+    .btn-ghost:hover{border-color:rgba(11, 31, 51, 0.14);color:#0B1F33}
+    .cta-actions{display:flex;flex-wrap:wrap;gap:.8rem;justify-content:center}
+
+    .tbl{overflow-x:auto;margin:1.2rem 0 1.4rem}
+    .tbl table{width:100%;border-collapse:collapse;font-size:.88rem;min-width:640px}
+    .tbl th,.tbl td{text-align:left;vertical-align:top;padding:.6rem .7rem;border-bottom:1px solid var(--border)}
+    .tbl th{font-weight:700;color:#0B1F33}
+    footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;color:var(--text-dim);font-size:.82rem}
+    footer a{color:#0E7490;text-decoration:none}
+
+    @media(max-width:820px){
+      /* Never hide the primary nav without a way back to it: there is no mobile
+         toggle on these article pages, so the links stack and scroll instead of
+         disappearing. Keyboard and screen-reader users keep full reach. */
+      body>nav{padding:0 1rem}
+      .nav-inner{height:auto;flex-direction:column;align-items:flex-start;gap:.45rem;padding:.55rem 0}
+      .nav-links{width:100%;gap:1.1rem;overflow-x:auto;padding-bottom:.15rem;scrollbar-width:none}
+      .nav-links::-webkit-scrollbar{display:none}
+      .nav-links a,.nav-cta{white-space:nowrap;flex:0 0 auto}
+    }
+    @media(max-width:768px){article,.article-head{padding-left:1.2rem;padding-right:1.2rem}}
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="https://cloudhealthoffice.com" class="nav-brand">Cloud Health Office <span>Insights</span></a>
+      <div class="nav-links">
+        <a href="/solutions-payers">Solutions</a>
+        <a href="/cms-0057f-compliance">CMS Compliance</a>
+        <a href="/evidence">Evidence</a>
+        <a href="/platform">Platform</a>
+        <a href="/services">Services</a>
+        <a href="/insights/cms-0057-f/">Series</a>
+        <a href="/docs">Docs</a>
+        <a href="/contact" class="nav-cta">Contact →</a>
+      </div>
+    </div>
+  </nav>
+
+    <main id="main-content">
+    <header class="article-head">
+      <div class="wrap">
+        <nav class="breadcrumb" aria-label="Breadcrumb">
+          <a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/insights/cms-0057-f/">CMS-0057-F &amp; Payer Modernization</a> / <span>6.1, 6.2 and what&rsquo;s coming in 6.3</span>
+        </nav>
+        <div class="eyebrow">Release round-up</div>
+        <h1>Cloud Health Office 6.1, 6.2 and What&rsquo;s Coming in 6.3</h1>
+        <p class="subtitle">The CMS-0057-F APIs finished and tested by Inferno, a way in for plans that keep their core, and a Texas and California Medicaid build.</p>
+        <div class="meta">
+          <span><strong>Series:</strong> CMS-0057-F &amp; Payer Modernization</span>
+          <span><strong>Published:</strong> <time datetime="2026-11-06">November 6, 2026</time></span>
+          <span><strong>For:</strong> Health plan IT, interoperability and Medicaid leads</span>
+        </div>
+      </div>
+    </header>
+
+    <article>
+      <div class="wrap">
+
+        <p class="lead">On January 1, 2027, the Patient Access, Provider Access and Payer-to-Payer API requirements of CMS-0057-F take effect. Most health plans we talk to are not asking whether they need these APIs. They are asking two harder questions: how do we prove they work, and do we have to replace our core to get them?</p>
+        <p>The last three Cloud Health Office releases are our answer to both, and you don&rsquo;t have to take our word for it. Here is what shipped, what is coming next, how to check it on your own data, and what is still open.</p>
+
+        <div class="stats">
+          <div class="stat"><b>6 of 6</b><span>Inferno test kits passing nightly on main, shipping in 6.3</span></div>
+          <div class="stat"><b>13 of 13</b><span>Inferno PDex payer-server tests passing, from 6.2</span></div>
+          <div class="stat"><b>2,601 of 2,601</b><span>PA Timeliness Challenge checks matched on the GKE demo</span></div>
+        </div>
+
+        <nav class="toc" aria-label="On this page">
+          <h2>On this page</h2>
+          <ol>
+            <li><a href="#v6-1">6.1 &ldquo;Spartacus&rdquo;: the CMS-0057-F APIs, finished</a></li>
+            <li><a href="#v6-2">6.2 &ldquo;The Shining&rdquo;: keep your core, get the APIs</a></li>
+            <li><a href="#v6-3">Coming in 6.3: shadow in a day, and Texas and California Medicaid</a></li>
+            <li><a href="#see-it">See it for yourself, on your own data</a></li>
+            <li><a href="#open">What is still open</a></li>
+            <li><a href="#evidence">Why ship this fast</a></li>
+          </ol>
+        </nav>
+
+        <h2 id="v6-1"><span class="num">01</span>6.1 &ldquo;Spartacus&rdquo;: the CMS-0057-F APIs, finished</h2>
+        <p>6.0 delivered the CMS-0057-F APIs. 6.1 closed most of what 6.0 listed as not yet done.</p>
+        <ul>
+          <li><strong>SMART Backend Services, both directions.</strong> A backend client now proves who it is with its own signed key, not a shared secret. Cloud Health Office does the same when it calls another payer for Payer-to-Payer. (&ldquo;I&rsquo;m Spartacus&rdquo; is where the name came from.)</li>
+          <li><strong>A public Provider Directory on Da Vinci Plan-Net 1.2.0</strong>, with every required search, chain and include.</li>
+          <li><strong>Bulk Data <code>$export</code> completed</strong>, for providers, patients and Payer-to-Payer, including Da Vinci bulk member match.</li>
+          <li><strong>CAQH CORE real-time</strong> eligibility (270/271) and claim status (276/277), plus dental claim (837D) intake that keeps tooth and oral-cavity data on the claim line.</li>
+        </ul>
+        <p>The part we are proudest of is the boring part: the conformance tests. The first nightly runs of the Inferno test kits found real defects in our code. We fixed them in the open, and we published the results, failures included, before we published the passes.</p>
+
+        <h2 id="v6-2"><span class="num">02</span>6.2 &ldquo;The Shining&rdquo;: keep your core, get the APIs</h2>
+        <p>Most plans are not going to rip out QNXT, Facets or HealthRules eight weeks before a federal deadline, and they shouldn&rsquo;t have to. 6.2 is built for them.</p>
+        <ul>
+          <li><strong>A daily CPCDS file drop.</strong> A plan sends the CARIN CPCDS files its core already produces. Cloud Health Office loads members, coverage, claims, providers and prior authorizations, and serves Patient Access, Provider Access and Payer-to-Payer from them. It reports every day whether the data is current and adds up. On our hosted option the drop is a private bucket behind SSH-key-only SFTP, and every file is archived exactly as received.</li>
+          <li><strong>Shadow adjudication.</strong> Cloud Health Office can re-adjudicate claims the core already paid, without touching anything a member sees, and compare the results line by line. It is a payment-integrity check and a migration rehearsal at the same time.</li>
+          <li><strong>Payer-to-Payer, judged by an outside kit.</strong> The Inferno PDex payer-server kit now runs every night against our HRex <code>$member-match</code>. 13 of 13 tests pass.</li>
+          <li><strong>DTR 2.2.0 <code>$questionnaire-package</code></strong>, with CQL prepopulation, linked from CRD.</li>
+          <li><strong>Benefit plans from public data.</strong> An importer for the CMS Exchange QHP files, and 25 state Medicaid and CHIP templates for Texas, California, Florida, Arizona and New York. Each value is cited to its source or marked &ldquo;verify&rdquo;. They are a starting point to check against the state contract, not a certified benefit design.</li>
+        </ul>
+        <p>With 6.2, all five Inferno kits we ran passed with no failing tests, apart from a small set of documented issues in the kits themselves.</p>
+
+        <h2 id="v6-3"><span class="num">03</span>Coming in 6.3: shadow in a day, and Texas and California Medicaid</h2>
+        <div class="callout amber">
+          <span class="k">Not released yet</span>
+          <p>6.3 is not tagged yet. The release notes are drafted, and these are the headline items. Details may change before release.</p>
+        </div>
+
+        <h3>Shadow in a day</h3>
+        <p>A plan drops its CPCDS files and, the same day, sees claim by claim where Cloud Health Office agrees with its core.</p>
+        <ul>
+          <li>It is switched on per plan from the portal, without a redeploy.</li>
+          <li>It runs whole files in the background.</li>
+          <li>The report shows where the core paid more or less than Cloud Health Office would have, in claims and in dollars.</li>
+          <li>Every claim it could not decide says what is missing (no contract, member not loaded, no authorization) and which file or setting closes the gap.</li>
+        </ul>
+        <div class="keyline">
+          <p>A shadow run that says &ldquo;undecided&rdquo; without saying why is useless. One that hands you a load list is a project plan.</p>
+        </div>
+        <p><strong>Why does this matter?</strong> The hardest part of any decision about a core system is that you can&rsquo;t see the answer until you&rsquo;ve committed. Migrations usually take months of work before the first claim pays on the new platform. Shadow in a day turns that around: you run your own claims through a second engine next to the one you have, and nothing changes for members or providers while you look. In a day you have evidence instead of a sales deck:</p>
+        <ul>
+          <li>a match rate on your own claims;</li>
+          <li>the dollars where the two engines disagree, which deserve a payment-integrity review whether or not you ever switch;</li>
+          <li>the exact list of what is missing before the second engine could take over.</li>
+        </ul>
+
+        <h3>Texas and California Medicaid</h3>
+        <p>Built for both states in parallel:</p>
+        <ul>
+          <li><strong>Encounters.</strong> 837P/837I encounter submission to HHSC through TMHP, and to DHCS, with 999 and 277CA reconciliation and a rework queue.</li>
+          <li><strong>Medicaid pricing.</strong> APR-DRG and EAPG through the plan&rsquo;s own licensed grouper, Texas and Medi-Cal DRG payment, FQHC/RHC, nursing facility per diem, and Texas psychiatric per diem with the IMD limit.</li>
+          <li><strong>Third-party liability.</strong> Cost avoidance, the states&rsquo; pay-and-chase rules, and recovery cases on California&rsquo;s 12-month clock.</li>
+          <li><strong>Finance close.</strong> Capitation reconciled by member, month and rate cell, IBNR, the 42 CFR 438.8 Medicaid MLR, and 1099 totals.</li>
+          <li><strong>State reports.</strong> Texas HHSC deliverables (appeals and complaints, MLR, claims lag, TPL/TPR) filled into HHSC&rsquo;s own workbook, and the Medi-Cal grievance log on California&rsquo;s clocks.</li>
+        </ul>
+
+        <h3>Also in 6.3</h3>
+        <ul>
+          <li><strong>Six of six Inferno kits pass every night.</strong> The DTR payer-server kit joined US Core, CARIN BB, Plan-Net, Bulk Data and PDex.</li>
+          <li><strong>DTR without a DTR app.</strong> The provider portal renders the plan&rsquo;s documentation forms for practices whose EHR has no DTR client, and submits the prior authorization request that carries the answers.</li>
+          <li><strong>The PA Timeliness Challenge.</strong> 10,000 synthetic prior authorization requests on our Google Cloud demo, and 2,601 of 2,601 timeliness checks matched.</li>
+          <li><strong>Claims operations.</strong> Retro rate reprocessing after a fee schedule changes, with an impact report and approval-gated adjustments, plus claim entry, correction and reversal in the portal.</li>
+        </ul>
+
+        <h2 id="see-it"><span class="num">04</span>See it for yourself, on your own data</h2>
+        <p>The deadline is eight weeks away. Wherever your plan is with CMS-0057-F, you can check your APIs before January 1 rather than finding out after.</p>
+
+        <h3>Already have APIs? Test them against the same kits</h3>
+        <p>The Inferno test kits we run against Cloud Health Office every night aren&rsquo;t ours. They are the open-source kits ONC publishes, and they test any FHIR server. In a fixed-fee engagement, Aurelianware runs them against your sandbox or test endpoints, with no PHI: US Core, CARIN Blue Button, Plan-Net, and Bulk Data with SMART Backend Services. We also review your prior authorization timeframes and metrics, which no kit checks. You get every failing test and the reason it failed. It doesn&rsquo;t matter whose platform built the APIs. The engagement takes four weeks.</p>
+
+        <h3>Not there yet? Run them on your core&rsquo;s data</h3>
+        <p>For a plan that doesn&rsquo;t have the APIs yet, or whose implementation is struggling. Your core keeps paying claims. You export the CPCDS files it already produces (members, coverage and claims), plus prior authorizations from your UM platform as CSV or X12 278. Cloud Health Office loads them and serves Patient Access, Provider Access and Payer-to-Payer from them. Then you run US Core, CARIN Blue Button and Plan-Net against your own members.</p>
+        <p>The same importers load what adjudication needs, so one load also feeds a shadow run. They take network rosters, provider contracts, fee schedules as the states publish them, the Medicare physician fee schedule, prior authorization rules, TPL files and starting deductible and out-of-pocket balances.</p>
+
+        <h3>Simple, with no risk to your core</h3>
+        <ul>
+          <li>Nothing replaces your core. Shadow runs are read-only, and nothing a member, provider or API consumer sees changes.</li>
+          <li>In the plan-hosted trial, Cloud Health Office runs in your own cloud or data center, so your data never leaves your plan. You share only the kit summary with us. An Aurelianware-hosted option follows a pilot agreement.</li>
+          <li>Every load has a dry run that writes nothing, keeps your core&rsquo;s identifiers, and is safe to repeat.</li>
+          <li>The plan-hosted trial costs nothing. Our license allows evaluation without a commercial agreement.</li>
+          <li>On a laptop, our sample files go from first load to a shadow report in about 15 minutes. We built the kit so a plan&rsquo;s own files take a day, not a project. We haven&rsquo;t yet timed it on a real plan&rsquo;s files, and the first plan to try it will set that benchmark.</li>
+          <li>You won&rsquo;t be on your own. If you get stuck on an export, a mapping or a load, or just need information, we&rsquo;ll talk you through it.</li>
+        </ul>
+
+        <h3>Struggling with something else?</h3>
+        <p>If your CMS-0057-F problem isn&rsquo;t one of these, we&rsquo;re happy to look at your environment with you. We&rsquo;ll tell you honestly where Cloud Health Office could help, and where it can&rsquo;t.</p>
+
+        <h2 id="open"><span class="num">05</span>What is still open</h2>
+        <p>We would rather you hear this from us than find it in a pilot.</p>
+        <ul>
+          <li>The Texas and California values marked &ldquo;verify&rdquo; (some rates, lookbacks and state file layouts) need checking against a plan&rsquo;s own contract and the state&rsquo;s current companion guides before real use.</li>
+          <li>Medicaid notice printing and mailing, PCP auto-assignment and network adequacy are next, not done.</li>
+          <li>System-level <code>$export</code> is not enabled, and there is no X12 278 bridge for FHIR prior authorization. We rely on HHS enforcement discretion there.</li>
+          <li>Almost everything new is off by default and is turned on per deployment or per plan.</li>
+          <li>Inferno results are from our seeded test profile and our demo environment, not from a plan&rsquo;s production data.</li>
+        </ul>
+
+        <h2 id="evidence"><span class="num">06</span>Why ship this fast</h2>
+        <p>6.0, 6.1 and 6.2 all shipped between October 28 and October 31, and 6.3 is close behind. The deadline does not move, and each release carries its evidence with it: the test kit, the version, the run, and what passed. The release notes, the nightly Inferno results and the PA Timeliness Challenge are all public:</p>
+        <ul>
+          <li><a href="/release-notes/v6-1-0">v6.1.0 release notes</a> and <a href="/release-notes/v6-2-0">v6.2.0 release notes</a></li>
+          <li><a href="/evidence/inferno-conformance">Inferno conformance results</a></li>
+          <li><a href="/evidence/pa-timeliness-challenge">PA Timeliness Challenge</a></li>
+        </ul>
+        <p>If you want your existing APIs tested against the Inferno kits, or want to see your own claims in a shadow run, <a href="/contact?interest=cms0057-assessment">get in touch</a>.</p>
+
+        <h2 id="disclosure"><span class="num">Disclosure</span>Where we sit in this</h2>
+        <p>Cloud Health Office sells payer interoperability software, so read this with that in mind. All test data is synthetic, and no exchange described here has moved production member data. Passing an Inferno test kit is not CMS certification or a legal determination of compliance. We claim no certification by, affiliation with, or endorsement from CMS, ONC, HL7, the Inferno project or any other vendor.</p>
+
+        <div class="related">
+          <div class="eyebrow">Keep reading</div>
+          <div class="related-cards">
+            <a class="rc" href="/services/cms-0057-f-cpcds-trial"><span class="k">Services</span><h4>CMS-0057-F CPCDS trial</h4><p>Load your core&rsquo;s CPCDS files and see the APIs and a shadow run on your data.</p></a>
+            <a class="rc" href="/evidence/inferno-conformance"><span class="k">Evidence</span><h4>Inferno conformance results</h4><p>Nightly kit verdicts, failing tests and known kit issues.</p></a>
+            <a class="rc" href="/insights/cms-0057-f/medicaid-cms-0057-f-blueprint"><span class="k">Medicaid</span><h4>The Medicaid CMS-0057-F blueprint</h4><p>Each blueprint item mapped to working software, evidence and open gaps.</p></a>
+            <a class="rc" href="/release-notes/v6-2-0"><span class="k">Release notes</span><h4>v6.2.0 &ldquo;The Shining&rdquo;</h4><p>The full notes, with upgrade steps and what is off by default.</p></a>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <section class="cta-section">
+      <div class="wrap">
+        <div class="eyebrow" style="text-align:center">Keep your core</div>
+        <h2>See a shadow run on your own CPCDS files</h2>
+        <p>Send the CPCDS files your core already produces. We load them, serve the CMS-0057-F APIs from them, and show you claim by claim where we agree with your core and what to load next.</p>
+        <div class="cta-actions">
+          <a href="/contact?interest=cms0057-assessment" class="btn btn-primary" data-ga-event="cpcds_trial_interest">Ask about a CPCDS trial →</a>
+          <a href="/contact?interest=cms0057-assessment" class="btn btn-ghost">Test your existing APIs</a>
+          <a href="/evidence/inferno-conformance" class="btn btn-ghost">See our Inferno results</a>
+        </div>
+        <p style="margin-top:1.4rem;font-size:.82rem;color:var(--text-dim)">
+          Please do not send PHI, member data, claim data, production credentials, or other sensitive production information through the contact form.
+        </p>
+      </div>
+    </section>
+  </main>
+
+
+
+  <footer>
+    <p>&copy; 2026 Cloud Health Office — <a href="https://github.com/aurelianware">Aurelianware, Inc.</a> &nbsp;·&nbsp; Source-available platform (BSL 1.1) &nbsp;·&nbsp; <a href="mailto:licensing@cloudhealthoffice.com">Commercial licensing</a></p>
+    <p style="margin-top:.4rem"><a href="/insights/cms-0057-f/">CMS-0057-F Series</a> &nbsp;·&nbsp; <a href="/cms-0057f-compliance">CMS-0057-F</a> &nbsp;·&nbsp; <a href="/services">Services</a> &nbsp;·&nbsp; <a href="/platform">Platform</a> &nbsp;·&nbsp; <a href="/docs">Docs</a> &nbsp;·&nbsp; <a href="/contact">Contact</a></p>
+  </footer>
+</body>
+</html>

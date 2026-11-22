@@ -37,6 +37,19 @@ public class OrganizationAdapterFactoryTests
     }
 
     [Fact]
+    public async Task GetAdapterAsync_refuses_a_vendor_platform_with_no_registered_connector()
+    {
+        // No HealthEdge organization connector exists. A tenant that names it
+        // is refused (501) rather than served CHO's own networks.
+        var factory = NewFactory(out _, platform: "healthedge");
+
+        var act = () => factory.GetAdapterAsync("tenant-he");
+
+        await act.Should()
+            .ThrowAsync<CloudHealthOffice.Infrastructure.Tenancy.LiveCoreConnectorNotEnabledException>();
+    }
+
+    [Fact]
     public async Task GetAdapterAsync_routes_to_qnxt_when_configured()
     {
         var factory = NewFactory(out _, platform: "qnxt");

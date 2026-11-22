@@ -79,6 +79,7 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
             receivedAt = received,
             memberId = "MBR-778899",
             patientReference = "Patient/pat-001",
+            submitterIdentifier = "http://example.org/PATIENT_EVENT_TRACE_NUMBER|111099",
             patientFirstName = "Ana",
             patientLastName = "Rivera",
             patientDateOfBirth = new DateTime(1984, 3, 7, 0, 0, 0, DateTimeKind.Utc),
@@ -160,6 +161,37 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
     }
 
+    // ── Lookup by the submitter's own identifier ($inquire) ────────────
+
+    [Fact]
+    public async Task BySubmitterIdentifier_OtherServiceToken_Returns403()
+    {
+        using var client = ClientWithToken(ServiceToken("claims-service"));
+        var response = await client.GetAsync(Path + "/by-submitter-identifier?identifier=x%7C1");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task BySubmitterIdentifier_FhirServiceToken_ReturnsTheRecord_OrNotFound()
+    {
+        const string key = "http://example.org/PATIENT_EVENT_TRACE_NUMBER|111099";
+        _repo.GetBySubmitterIdentifierAsync(key).Returns(new Authorization
+        {
+            TenantId = Tenant, AuthorizationNumber = "PAS-20261011-AAAA0001", SubmitterIdentifier = key,
+        });
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var found = await client.GetAsync(Path + "/by-submitter-identifier?identifier=" + Uri.EscapeDataString(key));
+        Assert.Equal(HttpStatusCode.OK, found.StatusCode);
+        Assert.Contains("PAS-20261011-AAAA0001", await found.Content.ReadAsStringAsync());
+
+        var missing = await client.GetAsync(Path + "/by-submitter-identifier?identifier=other%7C2");
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+
+        var empty = await client.GetAsync(Path + "/by-submitter-identifier");
+        Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
+    }
+
     // ── What it stores ─────────────────────────────────────────────────
 
     [Fact]
@@ -176,6 +208,7 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         Assert.Equal(Tenant, _stored!.TenantId);
         Assert.Equal("fhir-service", _stored.CreatedBy);
         Assert.Equal("fhir-service", _stored.LastUpdatedBy);
+        Assert.Equal("http://example.org/PATIENT_EVENT_TRACE_NUMBER|111099", _stored.SubmitterIdentifier);
         Assert.Equal(AuthorizationStatus.Approved, _stored.Status);
         Assert.Equal("A1", _stored.ReviewDecision);
         Assert.Equal(new DateTime(2026, 11, 2), _stored.ApprovedServiceDateFrom);

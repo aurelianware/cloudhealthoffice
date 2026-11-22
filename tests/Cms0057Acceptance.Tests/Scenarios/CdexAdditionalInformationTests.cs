@@ -1,3 +1,4 @@
+using Cms0057Acceptance.Tests.TestSupport;
 using System.Security.Claims;
 using System.Text;
 using AuthorizationService.Consumers;
@@ -943,8 +944,7 @@ public class CdexAdditionalInformationTests
 
         var before = InquiryResponse(builder, await authorizations.GetByAuthorizationNumberAsync(AuthNumber));
         before.Disposition.Should().Be("pended-additional-information");
-        before.Extension.Should().Contain(e =>
-            e.Url == "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewAction");
+        PasReviewActions.OnLines(before).Should().Contain(c => c.Code == "A4");
 
         await SubmitAsync(harness, rfai.TrackingId, AuthNumber);
         var announcement = harness.Kafka.DocsReceivedMessages.Single();
@@ -953,7 +953,7 @@ public class CdexAdditionalInformationTests
         var after = InquiryResponse(builder, await authorizations.GetByAuthorizationNumberAsync(AuthNumber));
         after.Disposition.Should().Be("pending",
             "once the information is in, the authorization is back in review — not still waiting on the provider");
-        after.Outcome.Should().Be(ClaimProcessingCodes.Queued);
+        after.Outcome.Should().Be(ClaimProcessingCodes.Complete);
         after.Disposition.Should().NotBe("approved");
     }
 

@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1100" role="img" aria-labelledby="bp-title bp-desc" font-family="Outfit, system-ui, sans-serif">
+<title id="bp-title">Cloud Health Office blueprint architecture on Google Cloud</title>
+<desc id="bp-desc">Members, providers, phone platforms, trading partners, other plans and the state connect through CMS-0057-F FHIR APIs (Patient Access, Provider Access, Payer-to-Payer, Provider Directory, CRD, DTR, PAS, SMART, Bulk export) and X12 EDI (270/271, 276/277, 834, 837, 999, 835, 837 encounters, 820, 278 import). Behind them, twelve plan operations modules run in one tenant: member service and call tracking, appeals and grievances, utilization management and prior authorization, care management, enrollment and eligibility, provider management, benefit plan management, claims adjudication, fee schedules and pricing, payment and capitation with 835, accounts receivable, and premium billing. An advisory AI layer suggests EDI fixes and reviews pended claims with PHI redaction and human decisions. The current core feeds a daily file drop into the tenant's data, which can be exported as CPCDS. All of it sits on a Google Cloud security foundation; items marked dashed are configured or built per plan.</desc>
+<defs><marker id="bp-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0E7490"/></marker></defs>
+<rect x="0" y="0" width="1200" height="1100" fill="#FFFFFF"/>
+<text x="24" y="38" font-size="19" font-weight="800" fill="#0B1F33" text-anchor="start">Cloud Health Office blueprint: everything a health plan runs, in one tenant on Google Cloud</text>
+<text x="24" y="60" font-size="13" font-weight="400" fill="#475569" text-anchor="start">Each plan gets its own tenant in its own Google Cloud project. Start with the daily file drop beside your current core, then move one function at a time.</text>
+<text x="24" y="88" font-size="11" font-weight="600" fill="#0E7490" text-anchor="start" font-family="JetBrains Mono, ui-monospace, monospace">WHO CONNECTS</text>
+<rect x="24.0" y="98" width="182.0" height="40" rx="8" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1"/>
+<text x="115.0" y="123" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="middle">Members and their apps</text>
+<rect x="218.0" y="98" width="182.0" height="40" rx="8" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1"/>
+<text x="309.0" y="123" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="middle">Providers and EHRs</text>
+<rect x="412.0" y="98" width="182.0" height="40" rx="8" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1"/>
+<text x="503.0" y="123" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="middle">Phone platform and reps</text>
+<rect x="606.0" y="98" width="182.0" height="40" rx="8" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1"/>
+<text x="697.0" y="123" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="middle">Clearinghouses, partners</text>
+<rect x="800.0" y="98" width="182.0" height="40" rx="8" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1"/>
+<text x="891.0" y="123" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="middle">Other health plans</text>
+<rect x="994.0" y="98" width="182.0" height="40" rx="8" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1"/>
+<text x="1085.0" y="123" font-size="12.5" font-weight="600" fill="#0B1F33" text-anchor="middle">State Medicaid agency</text>
+<line x1="115.0" y1="140" x2="115.0" y2="164" stroke="#94A3B8" stroke-width="1.8" marker-end="url(#bp-arrow)"/>
+<line x1="309.0" y1="140" x2="309.0" y2="164" stroke="#94A3B8" stroke-width="1.8" marker-end="url(#bp-arrow)"/>
+<line x1="503.0" y1="140" x2="503.0" y2="164" stroke="#94A3B8" stroke-width="1.8" marker-end="url(#bp-arrow)"/>
+<line x1="697.0" y1="140" x2="697.0" y2="164" stroke="#94A3B8" stroke-width="1.8" marker-end="url(#bp-arrow)"/>
+<line x1="891.0" y1="140" x2="891.0" y2="164" stroke="#94A3B8" stroke-width="1.8" marker-end="url(#bp-arrow)"/>
+<line x1="1085.0" y1="140" x2="1085.0" y2="164" stroke="#94A3B8" stroke-width="1.8" marker-end="url(#bp-arrow)"/>
+<rect x="24" y="170" width="1152" height="172" rx="12" fill="rgba(14,116,144,0.05)" stroke="#0E7490" stroke-width="1.6"/>
+<text x="40" y="192" font-size="11" font-weight="600" fill="#0E7490" text-anchor="start" font-family="JetBrains Mono, ui-monospace, monospace">FRONT DOOR: STANDARD APIS AND EDI</text>
+<text x="40" y="216" font-size="15" font-weight="700" fill="#0B1F33" text-anchor="start">CMS-0057-F FHIR APIs</text>
+<rect x="40" y="228" width="118" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="99.0" y="245.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">Patient Access</text>
+<rect x="166" y="228" width="125" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="228.5" y="245.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">Provider Access</text>
+<rect x="299" y="228" width="118" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="358.0" y="245.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">Payer-to-Payer</text>
+<rect x="425" y="228" width="146" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="498.0" y="245.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">Provider Directory</text>
+<rect x="40" y="262" width="125" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="102.5" y="279.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">Prior auth: CRD</text>
+<rect x="173" y="262" width="42" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="194.0" y="279.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">DTR</text>
+<rect x="223" y="262" width="42" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="244.0" y="279.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">PAS</text>
+<rect x="273" y="262" width="111" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="328.5" y="279.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">SMART on FHIR</text>
+<rect x="392" y="262" width="104" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="444.0" y="279.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">Bulk $export</text>
+<text x="620" y="216" font-size="15" font-weight="700" fill="#0B1F33" text-anchor="start">X12 EDI</text>
+<rect x="620" y="228" width="153" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="696.5" y="245.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">270/271 eligibility</text>
+<rect x="781" y="228" width="160" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="861.0" y="245.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">276/277 claim status</text>
+<rect x="949" y="228" width="118" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="1008.0" y="245.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">834 enrollment</text>
+<rect x="620" y="262" width="146" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="693.0" y="279.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">837 claims in, 999</text>
+<rect x="774" y="262" width="118" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="833.0" y="279.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">835 remittance</text>
+<rect x="900" y="262" width="180" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="990.0" y="279.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">837 encounters to state</text>
+<rect x="620" y="296" width="160" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="700.0" y="313.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">820 premium payments</text>
+<rect x="788" y="296" width="125" height="26" rx="6" fill="#FFFFFF" stroke="#0E7490" stroke-width="1"/>
+<text x="850.5" y="313.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">278 auth import</text>
+<rect x="24" y="366" width="900" height="412" rx="12" fill="#FFFFFF" stroke="#0E7490" stroke-width="1.6"/>
+<text x="40" y="388" font-size="11" font-weight="600" fill="#0E7490" text-anchor="start" font-family="JetBrains Mono, ui-monospace, monospace">PLAN OPERATIONS: ONE PLATFORM, ONE TENANT</text>
+<rect x="40.0" y="404" width="208.0" height="96" rx="9" fill="#F8FAFC" stroke="#0E7490" stroke-width="1.2"/>
+<text x="54.0" y="432" font-size="13.5" font-weight="700" fill="#0B1F33" text-anchor="start">Calls and member service</text>
+<text x="54.0" y="456" font-size="12" font-weight="400" fill="#334155" text-anchor="start">Every call, chat or email logged;</text>
+<text x="54.0" y="474" font-size="12" font-weight="400" fill="#334155" text-anchor="start">opens cases with the right clock</text>
+<rect x="260.0" y="404" width="208.0" height="96" rx="9" fill="#F8FAFC" stroke="#0E7490" stroke-width="1.2"/>
+<text x="274.0" y="432" font-size="13.5" font-weight="700" fill="#0B1F33" text-anchor="start">Appeals and grievances</text>
+<text x="274.0" y="456" font-size="12" font-weight="400" fill="#334155" text-anchor="start">Case clocks, categories,</text>
+<text x="274.0" y="474" font-size="12" font-weight="400" fill="#334155" text-anchor="start">resolution letters</text>
+<rect x="480.0" y="404" width="208.0" height="96" rx="9" fill="#F8FAFC" stroke="#0E7490" stroke-width="1.2"/>
+<text x="494.0" y="432" font-size="13.5" font-weight="700" fill="#0B1F33" text-anchor="start">UM and prior authorization</text>
+<text x="494.0" y="456" font-size="12" font-weight="400" fill="#334155" text-anchor="start">Rules engine, clinical criteria,</text>
+<text x="494.0" y="474" font-size="12" font-weight="400" fill="#334155" text-anchor="start">decision clocks, CMS metrics</text>
+<rect x="700.0" y="404" width="208.0" height="96" rx="9" fill="#F8FAFC" stroke="#0E7490" stroke-width="1.2"/>
+<text x="714.0" y="432" font-size="13.5" font-weight="700" fill="#0B1F33" text-anchor="start">Care management</text>
+<text x="714.0" y="456" font-size="12" font-weight="400" fill="#334155" text-anchor="start">Programs, assessments</text>
+<text x="714.0" y="474" font-size="12" font-weight="400" fill="#334155" text-anchor="start">and care plans</text>
+<rect x="40.0" y="512" width="208.0" height="96" rx="9" fill="#F8FAFC" stroke="#0E7490" stroke-width="1.2"/>
+<text x="54.0" y="540" font-size="13.5" font-weight="700" fill="#0B1F33" text-anchor="start">Enrollment and eligibility</text>
+<text x="54.0" y="564" font-size="12" font-weight="400" fill="#334155" text-anchor="start">834 intake, coverage,</text>
+<text x="54.0" y="582" font-size="12" font-weight="400" fill="#334155" text-anchor="start">real-time 270/271</text>
+<rect x="260.0" y="512" width="208.0" height="96" rx="9" fill="#F8FAFC" stroke="#0E7490" stroke-width="1.2"/>
+<text x="274.0" y="540" font-size="13.5" font-weight="700" fill="#0B1F33" text-anchor="start">Provider management</text>
+<text x="274.0" y="564" font-size="12" font-weight="400" fill="#334155" text-anchor="start">Directory, enrollment, verification,</text>
+<text x="274.0" y="582" font-size="12" font-weight="400" fill="#334155" text-anchor="start">contracts</text>
+<rect x="480.0" y="512" width="208.0" height="96" rx="9" fill="#F8FAFC" stroke="#0E7490" stroke-width="1.2"/>
+<text x="494.0" y="540" font-size="13.5" font-weight="700" fill="#0B1F33" text-anchor="start">Benefit plan management</text>
+<text x="494.0" y="564" font-size="12" font-weight="400" fill="#334155" text-anchor="start">Plan design, benefit engine,</text>
+<text x="494.0" y="582" font-size="12" font-weight="400" fill="#334155" text-anchor="start">accumulators</text>
+<rect x="700.0" y="512" width="208.0" height="96" rx="9" fill="#F8FAFC" stroke="#0E7490" stroke-width="1.2"/>
+<text x="714.0" y="540" font-size="13.5" font-weight="700" fill="#0B1F33" text-anchor="start">Claims adjudication</text>
+<text x="714.0" y="564" font-size="12" font-weight="400" fill="#334155" text-anchor="start">Scrubbing, NCCI, COB, grouping,</text>
+<text x="714.0" y="582" font-size="12" font-weight="400" fill="#334155" text-anchor="start">shadow adjudication</text>
+<rect x="40.0" y="620" width="208.0" height="96" rx="9" fill="#F8FAFC" stroke="#0E7490" stroke-width="1.2"/>
+<text x="54.0" y="648" font-size="13.5" font-weight="700" fill="#0B1F33" text-anchor="start">Fee schedules and pricing</text>
+<text x="54.0" y="672" font-size="12" font-weight="400" fill="#334155" text-anchor="start">Contract rates, fee schedule</text>
+<text x="54.0" y="690" font-size="12" font-weight="400" fill="#334155" text-anchor="start">engine, pricing API</text>
+<rect x="260.0" y="620" width="208.0" height="96" rx="9" fill="#F8FAFC" stroke="#0E7490" stroke-width="1.2"/>
+<text x="274.0" y="648" font-size="13.5" font-weight="700" fill="#0B1F33" text-anchor="start">Payment, capitation and 835</text>
+<text x="274.0" y="672" font-size="12" font-weight="400" fill="#334155" text-anchor="start">Fee-for-service and capitation</text>
+<text x="274.0" y="690" font-size="12" font-weight="400" fill="#334155" text-anchor="start">payments, remittance</text>
+<rect x="480.0" y="620" width="208.0" height="96" rx="9" fill="#F8FAFC" stroke="#0E7490" stroke-width="1.2"/>
+<text x="494.0" y="648" font-size="13.5" font-weight="700" fill="#0B1F33" text-anchor="start">Accounts receivable</text>
+<text x="494.0" y="672" font-size="12" font-weight="400" fill="#334155" text-anchor="start">Overpayments, recoveries,</text>
+<text x="494.0" y="690" font-size="12" font-weight="400" fill="#334155" text-anchor="start">balances</text>
+<rect x="700.0" y="620" width="208.0" height="96" rx="9" fill="#F8FAFC" stroke="#0E7490" stroke-width="1.2"/>
+<text x="714.0" y="648" font-size="13.5" font-weight="700" fill="#0B1F33" text-anchor="start">Premium billing</text>
+<text x="714.0" y="672" font-size="12" font-weight="400" fill="#334155" text-anchor="start">Invoices, 820 remittance,</text>
+<text x="714.0" y="690" font-size="12" font-weight="400" fill="#334155" text-anchor="start">sponsor accounts</text>
+<text x="40" y="746" font-size="12.5" font-weight="500" fill="#475569" text-anchor="start">Also in the platform: correspondence, ID cards, member documents, work queues, encounter submission, risk adjustment, terminology.</text>
+<rect x="940" y="366" width="236" height="412" rx="12" fill="rgba(180,83,9,0.05)" stroke="#B45309" stroke-width="1.6"/>
+<text x="956" y="388" font-size="11" font-weight="600" fill="#B45309" text-anchor="start" font-family="JetBrains Mono, ui-monospace, monospace">AI LAYER, ADVISORY</text>
+<text x="956" y="418" font-size="13" font-weight="700" fill="#0B1F33" text-anchor="start">Built today</text>
+<text x="956" y="438" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">EDI rejection fix suggestions</text>
+<text x="956" y="458" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">Advisory claims examiner</text>
+<text x="956" y="478" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">for pended claims</text>
+<text x="956" y="498" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">PHI redaction before</text>
+<text x="956" y="518" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">any model call</text>
+<text x="956" y="548" font-size="13" font-weight="700" fill="#0B1F33" text-anchor="start">Ready for your own models</text>
+<text x="956" y="568" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">Clean FHIR data and event</text>
+<text x="956" y="588" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">streams in your cloud</text>
+<text x="956" y="608" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">Governed use cases,</text>
+<text x="956" y="628" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">one at a time</text>
+<text x="956" y="658" font-size="13" font-weight="700" fill="#0B1F33" text-anchor="start">Always</text>
+<text x="956" y="678" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">A named person decides.</text>
+<text x="956" y="698" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">Suggestions are logged</text>
+<text x="956" y="718" font-size="12.5" font-weight="400" fill="#334155" text-anchor="start">and reviewable.</text>
+<text x="24" y="804" font-size="11" font-weight="600" fill="#0E7490" text-anchor="start" font-family="JetBrains Mono, ui-monospace, monospace">DATA: START BESIDE YOUR CORE, KEEP A COPY YOU OWN</text>
+<rect x="24" y="816" width="250" height="110" rx="10" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1.2"/>
+<text x="40" y="846" font-size="14" font-weight="700" fill="#0B1F33" text-anchor="start">Your current core</text>
+<text x="40" y="868" font-size="12" font-weight="400" fill="#334155" text-anchor="start">QNXT, Facets, HealthEdge</text>
+<text x="40" y="886" font-size="12" font-weight="400" fill="#334155" text-anchor="start">or another system</text>
+<text x="40" y="908" font-size="12" font-weight="400" fill="#475569" text-anchor="start">Keeps running until you move</text>
+<line x1="276" y1="871" x2="306" y2="871" stroke="#0E7490" stroke-width="1.8" marker-end="url(#bp-arrow)"/>
+<rect x="310" y="816" width="300" height="110" rx="10" fill="#FFFFFF" stroke="#0F766E" stroke-width="1.6"/>
+<text x="326" y="846" font-size="14" font-weight="700" fill="#0B1F33" text-anchor="start">Daily file drop (SFTP)</text>
+<text x="326" y="868" font-size="12" font-weight="400" fill="#334155" text-anchor="start">CPCDS claims, members, coverage;</text>
+<text x="326" y="886" font-size="12" font-weight="400" fill="#334155" text-anchor="start">834; 278 or UM authorizations;</text>
+<text x="326" y="904" font-size="12" font-weight="400" fill="#334155" text-anchor="start">fee schedules; provider rosters</text>
+<line x1="612" y1="871" x2="642" y2="871" stroke="#0E7490" stroke-width="1.8" marker-end="url(#bp-arrow)"/>
+<rect x="646" y="816" width="530" height="110" rx="10" fill="#FFFFFF" stroke="#0F766E" stroke-width="1.6"/>
+<text x="662" y="846" font-size="14" font-weight="700" fill="#0B1F33" text-anchor="start">Your tenant&#x27;s data</text>
+<text x="662" y="868" font-size="12" font-weight="400" fill="#334155" text-anchor="start">Claims, members, authorizations, providers and FHIR stores;</text>
+<text x="662" y="886" font-size="12" font-weight="400" fill="#334155" text-anchor="start">event streams; documents; shadow adjudication results;</text>
+<text x="662" y="904" font-size="12" font-weight="400" fill="#334155" text-anchor="start">CPCDS export, so the data can always leave with you</text>
+<rect x="24" y="944" width="1152" height="112" rx="12" fill="rgba(15,118,110,0.05)" stroke="#0F766E" stroke-width="1.6"/>
+<text x="40" y="966" font-size="11" font-weight="600" fill="#0F766E" text-anchor="start" font-family="JetBrains Mono, ui-monospace, monospace">GOOGLE CLOUD SECURITY FOUNDATION</text>
+<rect x="40" y="978" width="298" height="26" rx="6" fill="#FFFFFF" stroke="#0F766E" stroke-width="1"/>
+<text x="189.0" y="995.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">Tenant taken only from a validated token</text>
+<rect x="346" y="978" width="249" height="26" rx="6" fill="#FFFFFF" stroke="#0F766E" stroke-width="1"/>
+<text x="470.5" y="995.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">Workload Identity, no static keys</text>
+<rect x="603" y="978" width="173" height="26" rx="6" fill="#FFFFFF" stroke="#0F766E" stroke-width="1"/>
+<text x="689.5" y="995.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">Cloud KMS signing keys</text>
+<rect x="784" y="978" width="180" height="26" rx="6" fill="#FFFFFF" stroke="#0F766E" stroke-width="1"/>
+<text x="874.0" y="995.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">Keyless deploys from CI</text>
+<rect x="972" y="978" width="111" height="26" rx="6" fill="#FFFFFF" stroke="#0F766E" stroke-width="1"/>
+<text x="1027.5" y="995.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">PHI-safe logs</text>
+<rect x="40" y="1012" width="256" height="26" rx="6" fill="#FFFFFF" stroke="#B45309" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="168.0" y="1029.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">One project per plan, org policies</text>
+<rect x="304" y="1012" width="187" height="26" rx="6" fill="#FFFFFF" stroke="#B45309" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="397.5" y="1029.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">Private GKE across zones</text>
+<rect x="499" y="1012" width="104" height="26" rx="6" fill="#FFFFFF" stroke="#B45309" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="551.0" y="1029.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">CMEK on data</text>
+<rect x="611" y="1012" width="187" height="26" rx="6" fill="#FFFFFF" stroke="#B45309" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="704.5" y="1029.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">Cloud Armor single entry</text>
+<rect x="806" y="1012" width="201" height="26" rx="6" fill="#FFFFFF" stroke="#B45309" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="906.5" y="1029.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">Separate audit log project</text>
+<rect x="1015" y="1012" width="132" height="26" rx="6" fill="#FFFFFF" stroke="#B45309" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="1081.0" y="1029.5" font-size="12" font-weight="600" fill="#0B1F33" text-anchor="middle">Google Cloud BAA</text>
+<text x="24" y="1080" font-size="11.5" font-weight="500" fill="#475569" text-anchor="start">Solid outline: in the repository today.   Dashed amber: configured or built per plan at deployment.   HIPAA posture and BAA approach are drafted; SOC 2 is planned.</text>
+</svg>

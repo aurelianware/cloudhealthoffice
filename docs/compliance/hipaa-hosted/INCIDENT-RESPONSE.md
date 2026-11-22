@@ -44,6 +44,7 @@ Anyone in the workforce who notices a possible incident tells the Security Offic
 
 - **Deadline.** Without unreasonable delay, and no later than the BAA's deadline from discovery. The [BAA template](../../diligence/BAA-TEMPLATE.md) says fifteen (15) calendar days. HIPAA's outer limit is 60 days (164.410(b)), but the shorter contract term wins. Discovery is the first day the breach is known to anyone in the workforce, or would have been known with reasonable diligence.
 - **For S1 incidents,** give the plan's named compliance contact an early heads-up by phone or email within 2 business days, even before the assessment ends, unless law enforcement asks for a delay (164.412).
+- **Medicaid and CHIP plans have much shorter clocks.** A Texas Medicaid plan's Data Use Agreement flow-down requires notice within one clock hour of discovery for Medicaid confidential information from a federal system of records, within 24 hours otherwise, and a written report by the third business day (the BAA template's section 13 rider). Before signing such a plan, route security alerts to a phone on an on-call rota, and use the plan's clocks in place of the ones above. See [BAA-APPROACH.md](../security-readiness/BAA-APPROACH.md).
 - **The written notice includes (164.410(c)):**
   - each member affected, or the best list available so far
   - what happened, the date of the breach and the date of discovery

@@ -25,6 +25,9 @@ public sealed class ScenarioInventoryTests
     [InlineData("INFERNO-C4BB-SERVER-001")]
     [InlineData("INFERNO-PLANNET-SERVER-001")]
     [InlineData("INFERNO-BULK-SERVER-001")]
+    [InlineData("INFERNO-CRD-SERVER-001")]
+    [InlineData("INFERNO-PAS-SERVER-001")]
+    [InlineData("INFERNO-SMART-SERVER-001")]
     public void The_planned_scenario_inventory_is_present(string scenarioId)
     {
         Inventory.Scenario(scenarioId).Should().NotBeNull();
@@ -44,6 +47,7 @@ public sealed class ScenarioInventoryTests
                 "INFERNO-USCORE-SERVER-001", "INFERNO-C4BB-SERVER-001",
                 "INFERNO-PLANNET-SERVER-001", "INFERNO-BULK-SERVER-001", "INFERNO-PDEX-SERVER-001",
                 "INFERNO-DTR-PAYER-001",
+                "INFERNO-CRD-SERVER-001", "INFERNO-PAS-SERVER-001", "INFERNO-SMART-SERVER-001",
             ]);
     }
 
@@ -243,6 +247,24 @@ public sealed class ScenarioInventoryTests
     }
 
     [Fact]
+    public void The_pas_kit_starts_from_an_expired_token_so_inferno_fetches_a_real_one()
+    {
+        // The PAS server suite has no Backend Services group: given no token,
+        // inferno_core sends every $submit unauthenticated (run 8: all 401).
+        var scenario = Inventory.Scenario("INFERNO-PAS-SERVER-001");
+        var fixture = ChoSeedFixture.Load();
+        var pasInputs = scenario.InfernoInputs.ToDictionary(name => name, _ => "{}");
+
+        var inputs = InfernoSuiteScenario.BuildInputs(scenario, fixture, pasInputs: pasInputs).ToDictionary(i => i.Name);
+
+        var auth = System.Text.Json.JsonDocument.Parse(inputs["smart_credentials"].Value).RootElement;
+        auth.GetProperty("auth_type").GetString().Should().Be("backend_services");
+        auth.GetProperty("client_id").GetString().Should().Be(fixture.PasBackendClient.ClientId);
+        auth.GetProperty("access_token").GetString().Should().Be(InfernoInput.ExpiredPlaceholderToken);
+        auth.GetProperty("expires_in").GetString().Should().Be("0");
+    }
+
+    [Fact]
     public void Every_inferno_scenario_declares_only_inputs_the_harness_can_supply()
     {
         var fixture = ChoSeedFixture.Load();
@@ -253,11 +275,19 @@ public sealed class ScenarioInventoryTests
             var patientToken = scenario.InfernoAuth == InfernoAuthModes.PatientApp ? "patient-app-token" : null;
             // A DTR suite is given the Coverage and CRD context the run reads from CHO; any ids stand in here.
             var dtrSource = new DtrSourceData("coverage-id", "context-id");
-            var act = () => InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken, dtrSource);
+            // A CRD suite is given the Coverage ids the run reads from CHO; any ids stand in here.
+            var crdSource = new CrdSourceData("coverage-id", CrdSourceData.LapsedMember, "lapsed-coverage-id");
+            // A PAS suite is given the kit's own example requests, read from its checkout at run time,
+            // which a unit test does not have; any value stands in for each.
+            var pasInputs = scenario.InfernoInputs.ToDictionary(name => name, _ => "{}");
+            // A SMART suite is given the resource server's header its registration returns; any value stands in here.
+            const string introspection = "Authorization: Basic c3RhbmQtaW4=";
+            var act = () => InfernoSuiteScenario.BuildInputs(
+                scenario, fixture, patientToken, dtrSource, crdSource, pasInputs, introspection);
 
             act.Should().NotThrow($"'{scenario.Id}' declares inputs [{string.Join(", ", scenario.InfernoInputs)}]");
 
-            InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken, dtrSource)
+            InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken, dtrSource, crdSource, pasInputs, introspection)
                 .Select(input => input.Name)
                 .Should().BeEquivalentTo(scenario.InfernoInputs);
         }
@@ -279,9 +309,10 @@ public sealed class ScenarioInventoryTests
                 "'{0}' is implemented against a conformance kit, so it must say which suite it runs",
                 scenario.Id);
 
-            // A Bulk Data suite names its base bulk_server_url; every other kit, url.
+            // A Bulk Data suite names its base bulk_server_url, a CRD suite base_url, a
+            // PAS suite server_endpoint; every other kit, url.
             scenario.InfernoInputs.Should().Contain(
-                input => input == "url" || input == "bulk_server_url",
+                input => input == "url" || input == "bulk_server_url" || input == "base_url" || input == "server_endpoint",
                 "'{0}' must tell the suite where CHO is", scenario.Id);
         }
     }
@@ -445,8 +476,10 @@ public sealed class ScenarioInventoryTests
         workers.Should().NotBeEmpty();
         foreach (Match worker in workers)
         {
-            worker.Groups["body"].Value.Should().Contain(
-                "environment: *inferno-sidecars",
+            // Either the shared environment as it is, or merged into one that
+            // adds the kit's own INFERNO_HOST.
+            var body = worker.Groups["body"].Value;
+            (body.Contains("environment: *inferno-sidecars") || body.Contains("<<: *inferno-sidecars")).Should().BeTrue(
                 "'{0}' runs the TLS tests, so it must take the shared kit environment", worker.Groups["name"].Value);
         }
     }
@@ -521,7 +554,8 @@ public sealed class ScenarioInventoryTests
         {
             scenario.InfernoAuth.Should().BeOneOf(
                 InfernoAuthModes.ChoToken, InfernoAuthModes.BackendServices, InfernoAuthModes.PayerBackendServices,
-                InfernoAuthModes.DtrClientBackendServices, InfernoAuthModes.PatientApp);
+                InfernoAuthModes.DtrClientBackendServices, InfernoAuthModes.PatientApp,
+                InfernoAuthModes.CdsHooksClient, InfernoAuthModes.PasClientBackendServices, InfernoAuthModes.SmartApp);
         }
     }
 
@@ -530,7 +564,7 @@ public sealed class ScenarioInventoryTests
     {
         foreach (var scenario in Inventory.Scenarios)
         {
-            scenario.ChoSurface.Should().BeOneOf(ChoSurfaces.Fhir, ChoSurfaces.PublicDirectory);
+            scenario.ChoSurface.Should().BeOneOf(ChoSurfaces.Fhir, ChoSurfaces.PublicDirectory, ChoSurfaces.CdsHooks);
         }
     }
 }

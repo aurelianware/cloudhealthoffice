@@ -46,6 +46,32 @@ public sealed class TrustedIssuerOptions
     public List<string> Tenants { get; set; } = [];
 
     /// <summary>
+    /// The scopes this issuer may grant (G-39). Empty means every scope, as
+    /// before. A populated list is exact, ordinal and per scope token: a
+    /// scope the issuer grants that is not on it is removed from the token's
+    /// <c>scope</c> and <c>scp</c> claims at authentication, before any
+    /// scope check, identity resolution or resource handling reads them.
+    ///
+    /// <para>
+    /// The point is that trusting an issuer to say who a caller is does not
+    /// have to mean trusting it with every grant CHO honours. A customer's
+    /// workforce IdP that only serves provider apps can be confined to
+    /// <c>user/*.read</c>, so it can never mint
+    /// <c>system/PayerToPayer.read</c> or a system-level export scope, even if
+    /// it is misconfigured or compromised.
+    /// </para>
+    ///
+    /// <para>
+    /// Entries are matched literally, never as patterns: listing
+    /// <c>system/*.read</c> admits that exact scope token, not every
+    /// <c>system/...</c> read. Non-resource scopes the issuer's tokens carry
+    /// (<c>openid</c>, <c>fhirUser</c>, <c>launch/patient</c>,
+    /// <c>offline_access</c>) must be listed too if they should survive.
+    /// </para>
+    /// </summary>
+    public List<string> AllowedScopes { get; set; } = [];
+
+    /// <summary>
     /// Signing algorithms accepted from this issuer. Asymmetric only — see
     /// <see cref="SupportedAlgorithms"/>.
     /// </summary>
@@ -191,6 +217,19 @@ public sealed class TrustedIssuerOptions
                 throw new SmartTrustValidationException(
                     $"Trusted issuer '{Issuer}' allows signing algorithm '{algorithm}', which is "
                     + $"not supported. Supported: {string.Join(", ", SupportedAlgorithms.OrderBy(a => a, StringComparer.Ordinal))}.");
+            }
+        }
+
+        // A scope is one space-free token (RFC 6749 §3.3). A blank entry or
+        // one with a space can never equal a granted scope, so it is an
+        // allowlist entry that silently does nothing: refuse it at startup.
+        foreach (var scope in AllowedScopes)
+        {
+            if (string.IsNullOrWhiteSpace(scope) || scope.Any(char.IsWhiteSpace))
+            {
+                throw new SmartTrustValidationException(
+                    $"Trusted issuer '{Issuer}' has an AllowedScopes entry that is blank or contains "
+                    + "whitespace. List each scope as its own entry.");
             }
         }
 

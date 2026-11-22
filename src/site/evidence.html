@@ -84,6 +84,7 @@
 <details>
 <summary>Solutions</summary>
 <div>
+<a href="/health-plan-leaders">For health plan leaders</a>
 <a href="/solutions-payers">For health plans</a>
 <a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
 <a href="/claims-repricing">Claims repricing</a>
@@ -349,12 +350,12 @@
           <h3>Limitations that apply across the hub</h3>
           <ul>
             <li><strong>This is implementation evidence, not CMS certification.</strong> No scenario status, and no interoperability result, constitutes certification by CMS, ONC, HL7 or anyone else.</li>
-            <li><strong>Inferno kit results are published as the kits report them.</strong> Six ONC Inferno kits (US Core, CARIN Blue Button, Plan-Net, Bulk Data, Da Vinci PDex and Da Vinci DTR) judge Cloud Health Office nightly, and the <a href="/evidence/inferno-conformance">conformance results page</a> shows their latest verdicts, failures included. The CRD and PAS kits and the PDex client suite are not run yet, and no Touchstone suite has been run.</li>
+            <li><strong>Inferno kit results are published as the kits report them.</strong> Nine ONC Inferno kits (US Core, CARIN Blue Button, Plan-Net, Bulk Data, Da Vinci PDex, Da Vinci DTR, Da Vinci CRD, Da Vinci PAS and SMART App Launch) judge Cloud Health Office nightly, and the <a href="/evidence/inferno-conformance">conformance results page</a> shows their latest verdicts, failures included. As of November 22, 2026, eight pass; the PAS kit passes every use case and fails six must-support tests, logged as gaps. The PDex client suite is not run yet, and no Touchstone suite has been run.</li>
             <li><strong>All test data is synthetic.</strong> No exchange described here has moved production member data.</li>
             <li><strong>Passing every acceptance scenario is not complete CMS-0057-F compliance.</strong> The suite proves the scenarios this repository defines, at the revision it was run against.</li>
             <li><strong>External interoperability is not production validation.</strong> It shows that a pinned reference implementation accepted Cloud Health Office's requests and that Cloud Health Office accepted its responses.</li>
             <li><strong>No customer identity provider has been onboarded.</strong> The platform implements production external-issuer trust; that is a capability, not a statement that a particular payer's IdP is connected.</li>
-            <li><strong>QNXT, Facets and HealthEdge adapters are documented stubs in this repository.</strong> Integration with a specific core administration platform is engagement work, and it is scored on its own axis so it can never be read as product capability.</li>
+            <li><strong>A plan&rsquo;s core is scored through the file drop, on its own axis.</strong> The &ldquo;core via file drop&rdquo; column loads the published sample CPCDS and authorization files through the real importers and runs scenarios on what they loaded. It shows the data path works, not that a given plan&rsquo;s extract maps cleanly; that is per-plan column mapping. Live QNXT, Facets and HealthEdge connectors are documented templates, built per engagement, and are not scored.</li>
             <li><strong>Protocol interoperability is not payer rule parity.</strong> Two payers running different rule content can interoperate perfectly and still reach different coverage decisions.</li>
           </ul>
         </div>
@@ -405,7 +406,7 @@
 <div class="cho-footer-inner">
 <div class="cho-footer-brand">
 <strong>Cloud Health Office</strong>
-<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+<p>Sovereign, interoperable health plan administration. A product of <a href="https://aurelianware.com">Aurelianware, Inc.</a></p>
 </div>
 <div class="cho-footer-col">
 <p class="cho-footer-heading">Platform</p>
@@ -435,6 +436,7 @@
 <p class="cho-footer-heading">Company</p>
 <a href="/founder">Founder</a>
 <a href="/insights">Insights</a>
+<a href="https://cms-0057-f.com/">CMS-0057-F guide</a>
 <a href="/contact">Contact</a>
 <a href="/legal/privacy-policy">Privacy</a>
 <a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>

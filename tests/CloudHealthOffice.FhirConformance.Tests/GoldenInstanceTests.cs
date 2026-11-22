@@ -88,6 +88,11 @@ public class GoldenInstanceTests
             new ExplanationOfBenefitProjector().Project(DentalClaim()));
 
     [Fact]
+    public void Carin_pharmacy_financial_eob()
+        => Golden("carin-pharmacy-financial",
+            new ExplanationOfBenefitProjector().Project(PharmacyClaim()));
+
+    [Fact]
     public void Claim_as_billed()
         => Golden("claim-as-billed", new ClaimFhirProjector().Project(Claim()));
 
@@ -122,6 +127,11 @@ public class GoldenInstanceTests
     public void Carin_oral_non_financial_eob()
         => Golden("carin-oral-basis",
             new CarinNonFinancialEobProjector().Project(DentalClaim()));
+
+    [Fact]
+    public void Carin_pharmacy_non_financial_eob()
+        => Golden("carin-pharmacy-basis",
+            new CarinNonFinancialEobProjector().Project(PharmacyClaim()));
 
     // ── the golden file ──────────────────────────────────────────────────────
 
@@ -318,6 +328,63 @@ public class GoldenInstanceTests
                 Units = 1,
                 ChargeAmount = 1200m,
                 DiagnosisPointers = [1],
+                ServiceDateFrom = new DateTime(2026, 9, 16, 0, 0, 0, DateTimeKind.Utc),
+                ServiceDateTo = new DateTime(2026, 9, 16, 0, 0, 0, DateTimeKind.Utc),
+            },
+        ];
+        return claim;
+    }
+
+    /// <summary>
+    /// A paid retail prescription loaded from a CPCDS pharmacy extract: the
+    /// pharmacy bills, the prescriber is the care team, and the NCPDP header
+    /// fills the four supporting-info slices the Pharmacy profile requires.
+    /// </summary>
+    private static ChoClaim PharmacyClaim()
+    {
+        var claim = Claim();
+        claim.Id = "clm-gold-pharmacy";
+        claim.ClaimVersionId = claim.Id;
+        claim.ClaimNumber = "CLM-GOLD-RX";
+        claim.ClaimType = ChoClaimType.Pharmacy;
+        claim.BillingProviderNPI = "1003000126";
+        claim.BillingProviderEntityType = "2";
+        claim.BillingProviderName = null;
+        claim.RenderingProviderNPI = null;
+        claim.RenderingProviderName = null;
+        claim.PlaceOfServiceCode = "01";
+        claim.DiagnosisCodes = [];
+        claim.TotalChargeAmount = 24.50m;
+        claim.Pharmacy = new ClaimsService.Models.PharmacyClaimDetails
+        {
+            DaysSupply = 30,
+            DispenseAsWrittenCode = "0",
+            RefillNumber = 1,
+            RefillsAuthorized = 5,
+            PrescriptionNumber = "RX7700112",
+            PrescriptionOriginCode = "1",
+            CompoundCode = "1",
+            PrescriberNpi = "1588667638",
+        };
+        claim.AdjudicationResult = new ChoAdjudicationResult
+        {
+            NetworkTier = "InNetwork",
+            AllowedAmount = 18m,
+            PayerPayment = 8m,
+            CopayAmount = 10m,
+            PatientResponsibility = 10m,
+            PaymentDate = new DateTime(2026, 9, 18, 0, 0, 0, DateTimeKind.Utc),
+        };
+        claim.ClaimLines =
+        [
+            new ChoClaimLine
+            {
+                LineNumber = 1,
+                ProcedureCode = string.Empty,
+                NationalDrugCode = "00093714656",
+                DrugQuantity = 30,
+                Units = 30,
+                ChargeAmount = 24.50m,
                 ServiceDateFrom = new DateTime(2026, 9, 16, 0, 0, 0, DateTimeKind.Utc),
                 ServiceDateTo = new DateTime(2026, 9, 16, 0, 0, 0, DateTimeKind.Utc),
             },

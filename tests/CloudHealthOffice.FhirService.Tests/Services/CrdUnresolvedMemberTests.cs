@@ -80,7 +80,7 @@ public class CrdUnresolvedMemberTests
     public async Task An_explicit_classification_still_answers_for_an_unresolved_member()
     {
         var result = await EvaluateAsync(
-            "27447", CrdContextResolverDouble.Unresolved(CrdContextFailure.MemberNotFound));
+            "27447", CrdContextResolverDouble.Unresolved(CrdContextFailure.ContextIncomplete));
 
         result.Cards.Should().ContainSingle()
             .Which.Summary.Should().Contain("Prior authorization required");
@@ -90,10 +90,32 @@ public class CrdUnresolvedMemberTests
     public async Task An_auto_approved_code_still_answers_for_an_unresolved_member()
     {
         var result = await EvaluateAsync(
-            "99213", CrdContextResolverDouble.Unresolved(CrdContextFailure.NoActiveCoverage));
+            "99213", CrdContextResolverDouble.Unresolved(CrdContextFailure.Unavailable));
 
         result.Cards.Should().ContainSingle()
             .Which.Summary.Should().Contain("No prior authorization needed");
+    }
+
+    /// <summary>
+    /// Without a member, or without coverage the order could be under, nothing
+    /// is covered, whatever the service's classification says: CRD 2.2.1
+    /// answers not-covered with the reason, and no pa-needed (crd-ci-q2).
+    /// </summary>
+    [Theory]
+    [InlineData(CrdContextFailure.MemberNotFound, "no-member-found")]
+    [InlineData(CrdContextFailure.NoActiveCoverage, "no-active-coverage")]
+    [InlineData(CrdContextFailure.CoverageNotFound, "coverage-not-found")]
+    public async Task Without_coverage_to_answer_under_the_answer_is_not_covered(
+        CrdContextFailure failure, string expectedIgCode)
+    {
+        var result = await EvaluateAsync("27447", CrdContextResolverDouble.Unresolved(failure));
+
+        var parts = CoverageInformation(result);
+        parts.Single(p => p.GetProperty("url").GetString() == "covered").GetProperty("valueCode").GetString()
+            .Should().Be("not-covered");
+        parts.Should().NotContain(p => p.GetProperty("url").GetString() == "pa-needed");
+        Reason(result).GetProperty("coding")[0].GetProperty("code").GetString().Should().Be(expectedIgCode);
+        result.Cards.Should().ContainSingle().Which.Summary.Should().Contain("No coverage");
     }
 
     /// <summary>
@@ -107,6 +129,8 @@ public class CrdUnresolvedMemberTests
     [InlineData(CrdContextFailure.NoActiveCoverage, "no-active-coverage")]
     [InlineData(CrdContextFailure.ContextIncomplete, "coverage-not-found")]
     [InlineData(CrdContextFailure.Unavailable, "technical")]
+    [InlineData(CrdContextFailure.CoverageNotFound, "coverage-not-found")]
+    [InlineData(CrdContextFailure.EhrCoverageUnreadable, "technical")]
     public async Task The_extension_names_why_the_member_context_was_missing(
         CrdContextFailure failure, string expectedIgCode)
     {
@@ -145,7 +169,26 @@ public class CrdUnresolvedMemberTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private async Task<CrdEvaluationResult> EvaluateAsync(string code, ICrdContextResolver resolver)
+    /// <summary>CRD configuration option coverage-info=false: cards only, no coverage-information.</summary>
+    [Fact]
+    public async Task Coverage_info_switched_off_returns_no_coverage_information_cards_or_system_actions()
+    {
+        var hook = Hook("27447");
+        hook.Extension = JsonDocument.Parse(
+            """{"davinci-crd.configuration":{"coverage-info":false,"unknown-option":true}}""").RootElement.Clone();
+
+        var result = await EvaluateAsync(hook, CrdContextResolverDouble.Unresolved(CrdContextFailure.ContextIncomplete));
+
+        // Every CHO card is a coverage-information card (topic coverage-info),
+        // so with coverage-info off there is nothing to return, and still a 200.
+        result.Cards.Should().BeEmpty();
+        result.SystemActions.Should().BeEmpty();
+    }
+
+    private Task<CrdEvaluationResult> EvaluateAsync(string code, ICrdContextResolver resolver)
+        => EvaluateAsync(Hook(code), resolver);
+
+    private async Task<CrdEvaluationResult> EvaluateAsync(CrdHookRequest hook, ICrdContextResolver resolver)
     {
         var service = new CrdService(
             new UnreachableTerminology(),
@@ -155,19 +198,19 @@ public class CrdUnresolvedMemberTests
             resolver,
             NullLogger<CrdService>.Instance);
 
-        return await service.EvaluateCoverageRequirementsAsync(Hook(code), Tenant);
+        return await service.EvaluateCoverageRequirementsAsync(hook, Tenant);
     }
 
     private static JsonElement Reason(CrdEvaluationResult result)
-    {
-        var extension = result.SystemActions
-            .SelectMany(a => a.Resource!.Value.GetProperty("extension").EnumerateArray())
-            .Single(e => e.GetProperty("url").GetString() == CrdCoverageInformation.ExtensionUrl);
-
-        return extension.GetProperty("extension").EnumerateArray()
+        => CoverageInformation(result)
             .Single(p => p.GetProperty("url").GetString() == "reason")
             .GetProperty("valueCodeableConcept");
-    }
+
+    private static List<JsonElement> CoverageInformation(CrdEvaluationResult result)
+        => result.SystemActions
+            .SelectMany(a => a.Resource!.Value.GetProperty("extension").EnumerateArray())
+            .Single(e => e.GetProperty("url").GetString() == CrdCoverageInformation.ExtensionUrl)
+            .GetProperty("extension").EnumerateArray().ToList();
 
     private sealed class UnreachableTerminology : IHttpClientFactory
     {

@@ -23,7 +23,7 @@ public class GapAdapterTests
 {
     [Fact]
     [Trait("Scenario", "PAS-01")]
-    [Trait("Backend", "Augment")]
+    [Trait("Backend", "augment.qnxt")]
     [Trait("Kind", "GAP")]
     public void PAS01_QnxtBenefitPlanAdapter_IsNotImplementedStub()
     {
@@ -40,7 +40,7 @@ public class GapAdapterTests
 
     [Fact]
     [Trait("Scenario", "PROV-01")]
-    [Trait("Backend", "Augment")]
+    [Trait("Backend", "augment.qnxt")]
     [Trait("Kind", "GAP")]
     public void PROV01_QnxtProviderAdapter_IsNotImplementedStub()
     {
@@ -56,7 +56,7 @@ public class GapAdapterTests
 
     [Fact]
     [Trait("Scenario", "PAT-01")]
-    [Trait("Backend", "Augment")]
+    [Trait("Backend", "augment.qnxt")]
     [Trait("Kind", "GAP")]
     public void PAT01_QnxtClaimAdapter_IsNotImplementedStub()
     {

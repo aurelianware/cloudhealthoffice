@@ -22,6 +22,27 @@ public class CpcdsEnrollmentProjectorTests
         => CpcdsEnrollmentProjector.Project(Sample("members.csv"), Sample("coverages.csv"), "members.csv");
 
     [Fact]
+    public void A_column_map_names_the_headers_an_extract_uses_and_ignores_claim_columns()
+    {
+        var members = Sample("members.csv").Replace("Member id,", "MBR_KEY,").Replace("Last name", "SURNAME");
+        var coverages = Sample("coverages.csv").Replace("Member id", "MBR_KEY").Replace("Plan identifier", "BEN_PLAN");
+        var map = new Dictionary<string, string>
+        {
+            ["Member id"] = "MBR_KEY",
+            ["Last name"] = "SURNAME",
+            ["Plan identifier"] = "BEN_PLAN",
+            ["Claim unique identifier"] = "CLM_ID",
+        };
+
+        var projection = CpcdsEnrollmentProjector.Project(members, coverages, "members.csv", map);
+
+        projection.FileErrors.Should().BeEmpty();
+        projection.RowErrors.Should().BeEmpty();
+        projection.Enrollment.Enrollments.Select(e => e.ExplicitMemberId).Should().Equal("M100", "M101", "M200", "M300");
+        CpcdsEnrollmentProjector.Project(members, coverages, "members.csv").FileErrors.Should().NotBeEmpty();
+    }
+
+    [Fact]
     public void Every_member_is_its_own_enrollment_under_the_cores_member_id()
     {
         var projection = ProjectSample();

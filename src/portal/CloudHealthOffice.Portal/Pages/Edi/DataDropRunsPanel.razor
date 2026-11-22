@@ -87,6 +87,15 @@
                     <td>Providers from claims</td>
                     <td>@N(report.Window.ProvidersCreated) created · @N(report.Window.ProvidersNotInNppes) not in NPPES</td>
                 </tr>
+                @if (report.Window.RosterParticipationsAdded > 0 || report.Window.RosterRowsRejected > 0)
+                {
+                    <tr>
+                        <td>Network roster</td>
+                        <td>@N(report.Window.RosterParticipationsAdded) participations added · @N(report.Window.RosterRowsRejected) rows refused</td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                }
             </tbody>
         </MudSimpleTable>
 
@@ -330,7 +339,7 @@
     private static string StepSummary(DataDropStep step)
     {
         if (step.Status == "Failed") return "failed";
-        var created = Count(step, "created", "membersCreated", "dependentsCreated");
+        var created = Count(step, "created", "membersCreated", "dependentsCreated", "participationsAdded");
         var rejected = Count(step, "rejected", "failedCount");
         return rejected > 0 ? $"+{created:0} ({rejected:0} refused)" : $"+{created:0}";
     }
@@ -338,10 +347,11 @@
     private static int StepOrder(string name) => name switch
     {
         "members-and-coverage" => 0,
-        "claim-providers" => 1,
-        "claims" => 2,
-        "authorizations" => 3,
-        "authorizations-278" => 4,
+        "network-roster" => 1,
+        "claim-providers" => 2,
+        "claims" => 3,
+        "authorizations" => 4,
+        "authorizations-278" => 5,
         _ => 9,
     };
 
@@ -350,6 +360,7 @@
         "archive" => "Archive",
         "run" => "Run",
         "members-and-coverage" => "Members and coverage",
+        "network-roster" => "Network roster",
         "claim-providers" => "Providers on claims",
         "claims" => "Claims",
         "authorizations" => "Authorizations (CSV)",

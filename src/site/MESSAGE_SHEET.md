@@ -24,7 +24,22 @@ These implementation statements do not assert full PAS/CRD/DTR/SMART conformance
 ## Canonical one-liner
 Cloud Health Office is a source-available, FHIR-native health plan administration platform that runs in a tenant dedicated to each plan, in the plan's own cloud or operated for it, so plans keep control of their data and integrations while connecting to every partner they choose.
 
-## Homepage lead — approved by Mark Phillips, October 30, 2026
+## Homepage lead — approved by Mark Phillips, November 18, 2026
+The homepage hero leads with the buying decision, in plain language for health plan executives. It rules out a risky, all-at-once replacement, never the destination: Cloud Health Office can take over the core one function at a time, so never say "without replacing" the core. Technical depth (CMS-0057-F conformance, Inferno, FHIR, developer paths) stays on the page below the fold and one click away.
+**Homepage H1:** Modernize your health plan’s core at your own pace.
+**Homepage supporting:** Start beside QNXT, Facets or HealthEdge in a tenant your plan controls. Prove it on your own claims, then move one function at a time, up to the core itself, on your schedule.
+**Homepage primary CTA:** See it on your own claims (→ /services/cms-0057-f-cpcds-trial). **Secondary CTA:** Overview for health plan leaders (→ /health-plan-leaders). The nav CTA (Book a readiness review) is unchanged.
+**Executive outcomes (homepage section and /health-plan-leaders):** Less dependence on one vendor · Compliance that keeps up · Data you own, ready for AI. Describe these as design goals and capabilities; never promise cost savings, a percentage or any financial outcome.
+The conformance check remains on the homepage directly after the shadow-trial section, with all of the conformance check facts below.
+
+## Savings scenario article — approved by Mark Phillips, November 22, 2026
+Applies only to `/insights/cms-0057-f/outsourced-core-cms-0057-f-blueprint` and copy that quotes it. It is a narrow exception to "never promise cost savings" above, not a change to the homepage or executive outcomes.
+**Headline:** Paying $30 Million a Year for an Outsourced Core? A Blueprint to Keep About $20 Million of It.
+**Rules:** The figure is always a worked, illustrative scenario with every assumption shown on the same page (200,000 members; outsourced BPaaS contract at $12.50 PMPM = $30.0M; license and Google Cloud hosting at an assumed $2.25 PMPM; 10-person platform team at $160K; 35 operations staff at $80K; difference $20.2M). Say "illustrative scenario", never "you will save". Readers can change every input. One-time transition and contract-exit costs are always named as excluded. The $2.25 PMPM is a modelling assumption that combines license and hosting, never presented as a Cloud Health Office price. The BPaaS rate is an assumption, not a published market rate.
+**Never** name a prospect, a plan or an incumbent vendor as the source of the $30M figure.
+**Reinvesting in members** is a choice a plan can make with the money (care management, community health workers, faster prior authorization, member service, value-based programs), never a promised clinical or MLR outcome; MLR treatment is for the plan's actuaries and state contract.
+
+## Previous homepage lead — approved by Mark Phillips, October 30, 2026 (superseded November 18, 2026)
 The homepage hero leads with the CMS-0057-F conformance check. Sovereignty stays the category and the reason to choose Cloud Health Office; the check is the reason to engage now.
 **Homepage H1:** Find and close your CMS-0057-F gaps, in your own cloud.
 **Homepage supporting:** We test your Patient Access, Provider Access, Provider Directory and Payer-to-Payer APIs with the ONC Inferno test kits and show you what fails and why. Cloud Health Office can then run the fixes in a tenant your plan controls, alongside QNXT, Facets or HealthEdge, with no core replacement required.
@@ -150,6 +165,11 @@ Never frame Cognizant, TriZetto, QNXT, Facets, HealthEdge, Availity, clearinghou
 integrators as enemies or inferior alternatives. Never claim certification by, affiliation with,
 endorsement by, or an implementation partnership with any named vendor.
 
+## Connecting to the core (locked, November 18, 2026)
+Lead with standard files and a daily drop as the default way Cloud Health Office connects to a plan's core: CARIN CPCDS extracts, 834 enrollment, prior authorizations from X12 278 or a UM export, and fee schedule CSVs, loaded each day. Core adapters (QNXT, Facets, HealthEdge, generic DB or REST) are the option when an implementation needs direct integration, scoped per engagement. Never imply a pre-built adapter for a specific core is shipped.
+
+**Updated November 21, 2026:** live core adapters are an optional, alternate integration point, off by default in the product (`CoreIntegration:LiveConnectors:Enabled`). Offer them for real-time reads or write-back, after the file drop is running. The CMS-0057-F APIs are served from what the file drop loads, not through a live adapter. See docs/integration/CORE-INTEGRATION-OPTIONS.md.
+
 ## Deployment & operating models (locked status labels)
 
 | Model | Status label | Never say |
@@ -199,14 +219,16 @@ candidates under evaluation, never as shipped features.
 
 ## QNXT CMS-0057-F adapter scoping (locked) — `/services/qnxt-cms-0057-f-adapter`
 
-**H1:** Scoping a QNXT-to-CMS-0057-F adapter.
+**H1:** Scoping QNXT for CMS-0057-F. (Updated November 21, 2026; was "Scoping a QNXT-to-CMS-0057-F adapter.")
 
 **Subhead:** The four required APIs — Patient Access, Provider Access, Payer-to-Payer, and Prior
 Authorization — are due January 1, 2027, and most of the data behind them already lives in QNXT. The hard
-part is getting it out cleanly.
+part is getting it out cleanly. Most plans start with the extracts QNXT already produces, sent to a daily
+file drop. A live adapter is an option when you need real-time reads or write-back.
 
-**Process:** questionnaire → 90-minute discovery workshop → fixed-scope SOW. Read path first (Patient
-Access, Provider Access, Payer-to-Payer, metrics); Prior Authorization write-back is phase 2.
+**Process:** questionnaire → 90-minute discovery workshop → fixed-scope SOW. Phase 1 is the daily file drop
+(Patient Access, Provider Access, Payer-to-Payer, metrics), with no QNXT API license or database access.
+Phase 2, only if needed, is an optional live adapter for real-time reads and Prior Authorization write-back.
 
 **Credibility line:** Scoped by an architect with 25+ years in payer core systems, nearly two decades of
 them on QNXT.

@@ -14,6 +14,7 @@ const slugs = [
   "ai-ready-health-plan-architecture",
   "incremental-modernization",
   "founding-transformation-partners",
+  "health-plan-leaders",
 ];
 const read = (f) => fs.readFileSync(path.join(dist, f), "utf8");
 test("built executive routes have unique metadata, one h1, shared scripts once and resolvable local links", () => {

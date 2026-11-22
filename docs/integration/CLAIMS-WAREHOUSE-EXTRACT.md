@@ -13,6 +13,8 @@ Each run writes one folder to the tenant's drop:
   manifest.json     written last: window, row counts, sizes, SHA-256, columns, agreement
 ```
 
+With `includeCpcds` on, the same folder also holds `CPCDS_Members.csv`, `CPCDS_Coverages.csv` and `CPCDS_Claims.csv`, for tools, vendors or a state that read CPCDS. See [CPCDS-EXPORT.md](CPCDS-EXPORT.md).
+
 The plan collects it with the SFTP login it already uses for its core extracts. `/outbound` is list-and-download only for that login. A login created before `/outbound` existed gets it the next time its keys are saved on the data drop setup page.
 
 **Which rows a run includes:**
@@ -48,7 +50,7 @@ The files carry PHI for every member, so:
 | Call | What it does |
 | --- | --- |
 | `GET /api/claims/extracts/claims` | Settings and progress: `enabled`, `dataUseAgreement`, `deliveredThrough`, `lastSucceededAt`, `running`, `folder` |
-| `PUT /api/claims/extracts/claims` | `{ "enabled": true, "dataUseAgreement": "DUA-2026-014" }` |
+| `PUT /api/claims/extracts/claims` | `{ "enabled": true, "dataUseAgreement": "DUA-2026-014", "includeCpcds": false }` |
 | `POST /api/claims/extracts/claims/runs?full=false` | Starts a run now (202). 409 if the extract is off or already running |
 | `GET /api/claims/extracts/claims/runs?limit=20` | Past runs, newest first |
 

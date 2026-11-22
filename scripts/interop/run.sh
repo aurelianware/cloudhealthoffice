@@ -13,6 +13,9 @@
 #   ./scripts/interop/run.sh inferno bulk-data  # Bulk Data Group and Patient export (INFERNO-BULK-SERVER-001)
 #   ./scripts/interop/run.sh inferno pdex       # PDex payer-server $member-match (INFERNO-PDEX-SERVER-001)
 #   ./scripts/interop/run.sh inferno dtr        # DTR 2.2.0 payer server (INFERNO-DTR-PAYER-001)
+#   ./scripts/interop/run.sh inferno crd        # CRD 2.2.1 server, CDS Hooks (INFERNO-CRD-SERVER-001)
+#   ./scripts/interop/run.sh inferno pas        # PAS 2.2.1 server (INFERNO-PAS-SERVER-001)
+#   ./scripts/interop/run.sh inferno smart      # SMART App Launch 2.2 server (INFERNO-SMART-SERVER-001)
 #   ./scripts/interop/run.sh inferno all        # every conformance kit
 #   ./scripts/interop/run.sh unit               # harness unit tests only, no Docker
 #
@@ -36,7 +39,7 @@
 # the interop-cho profile — CHO's own services, not the mock — seed it through
 # those services' APIs, and hand the kit CHO's endpoint and a development token
 # (the Bulk Data kit instead authenticates itself with SMART Backend Services).
-# The kits must be fetched first: ./scripts/interop/fetch-inferno.sh us-core c4bb plan-net bulk-data pdex dtr
+# The kits must be fetched first: ./scripts/interop/fetch-inferno.sh us-core c4bb plan-net bulk-data pdex dtr crd pas smart
 #
 # Each scenario starts the pinned HL7 Da Vinci burden-reduction payer reference
 # implementation, waits for it to actually be ready, performs a real exchange
@@ -84,28 +87,52 @@ fi
 # Each mode maps to the scenario ids it runs, via the [Trait("Scenario", …)] the
 # scenario tests carry. `all` runs every external scenario in one invocation; the
 # evidence writer merges their results into a single run document.
+# One Inferno mode's filter and label. Several modes, comma-separated
+# (`crd,pas,smart`), run in one invocation and so land in one run document.
+inferno_mode() {
+    case "$1" in
+      us-core) FILTER='Scenario=INFERNO-USCORE-SERVER-001'
+               LABEL='Inferno US Core 3.1.1 server groups (INFERNO-USCORE-SERVER-001)' ;;
+      c4bb)    FILTER='Scenario=INFERNO-C4BB-SERVER-001'
+               LABEL='Inferno CARIN BB financial groups (INFERNO-C4BB-SERVER-001)' ;;
+      plan-net) FILTER='Scenario=INFERNO-PLANNET-SERVER-001'
+               LABEL='Inferno Plan-Net public Provider Directory (INFERNO-PLANNET-SERVER-001)' ;;
+      bulk-data) FILTER='Scenario=INFERNO-BULK-SERVER-001'
+               LABEL='Inferno Bulk Data Group and Patient export (INFERNO-BULK-SERVER-001)' ;;
+      pdex)    FILTER='Scenario=INFERNO-PDEX-SERVER-001'
+               LABEL='Inferno PDex payer-server $member-match (INFERNO-PDEX-SERVER-001)' ;;
+      dtr)     FILTER='Scenario=INFERNO-DTR-PAYER-001'
+               LABEL='Inferno DTR 2.2.0 payer server (INFERNO-DTR-PAYER-001)' ;;
+      crd)     FILTER='Scenario=INFERNO-CRD-SERVER-001'
+               LABEL='Inferno CRD 2.2.1 server (INFERNO-CRD-SERVER-001)' ;;
+      pas)     FILTER='Scenario=INFERNO-PAS-SERVER-001'
+               LABEL='Inferno PAS 2.2.1 server (INFERNO-PAS-SERVER-001)' ;;
+      smart)   FILTER='Scenario=INFERNO-SMART-SERVER-001'
+               LABEL='Inferno SMART App Launch 2.2 server (INFERNO-SMART-SERVER-001)' ;;
+      all)     FILTER='Target~inferno-framework'
+               LABEL='every Inferno conformance kit' ;;
+      *)
+        echo "Unknown mode '$1' for target 'inferno'. Modes: us-core | c4bb | plan-net | bulk-data | pdex | dtr | crd | pas | smart | all." >&2
+        exit 2
+        ;;
+    esac
+}
+
 if [[ "$TARGET" == "inferno" ]]; then
   MODE="${2:-all}"
-  case "$MODE" in
-    us-core) FILTER='Scenario=INFERNO-USCORE-SERVER-001'
-             LABEL='Inferno US Core 3.1.1 server groups (INFERNO-USCORE-SERVER-001)' ;;
-    c4bb)    FILTER='Scenario=INFERNO-C4BB-SERVER-001'
-             LABEL='Inferno CARIN BB financial groups (INFERNO-C4BB-SERVER-001)' ;;
-    plan-net) FILTER='Scenario=INFERNO-PLANNET-SERVER-001'
-             LABEL='Inferno Plan-Net public Provider Directory (INFERNO-PLANNET-SERVER-001)' ;;
-    bulk-data) FILTER='Scenario=INFERNO-BULK-SERVER-001'
-             LABEL='Inferno Bulk Data Group and Patient export (INFERNO-BULK-SERVER-001)' ;;
-    pdex)    FILTER='Scenario=INFERNO-PDEX-SERVER-001'
-             LABEL='Inferno PDex payer-server $member-match (INFERNO-PDEX-SERVER-001)' ;;
-    dtr)     FILTER='Scenario=INFERNO-DTR-PAYER-001'
-             LABEL='Inferno DTR 2.2.0 payer server (INFERNO-DTR-PAYER-001)' ;;
-    all)     FILTER='Target~inferno-framework'
-             LABEL='every Inferno conformance kit' ;;
-    *)
-      echo "Unknown mode '$MODE' for target 'inferno'. Modes: us-core | c4bb | plan-net | bulk-data | pdex | dtr | all." >&2
-      exit 2
-      ;;
-  esac
+  if [[ "$MODE" == *,* ]]; then
+    FILTERS=(); LABELS=()
+    IFS=, read -r -a MODES <<<"$MODE"
+    for one in "${MODES[@]}"; do
+      [[ "$one" == "all" ]] && { echo "'all' cannot be combined with other modes." >&2; exit 2; }
+      inferno_mode "$one"
+      FILTERS+=("$FILTER"); LABELS+=("$LABEL")
+    done
+    FILTER="$(IFS='|'; echo "${FILTERS[*]}")"
+    LABEL="$(IFS=';'; echo "${LABELS[*]}")"
+  else
+    inferno_mode "$MODE"
+  fi
 elif [[ "$TARGET" == "deployment" ]]; then
   MODE="${2:-all}"
   if [[ -z "${CHO_INTEROP_TARGET_URL:-}" ]]; then
@@ -162,6 +189,7 @@ cleanup() {
       --profile interop-br --profile interop-br-provider --profile interop-cho \
       --profile interop-pdex --profile interop-dtr-inferno \
       --profile interop-c4bb --profile interop-us-core --profile interop-plan-net --profile interop-bulk-data \
+      --profile interop-crd --profile interop-pas --profile interop-smart \
       down --volumes --remove-orphans --timeout 30 >/dev/null 2>&1 || true
   fi
   exit "$status"
@@ -178,7 +206,8 @@ if [[ "$TARGET" != "br-payer" && "$TARGET" != "inferno" && "$TARGET" != "deploym
   echo "Executable targets in this repository:" >&2
   echo "  br-payer  BR-PAS-SUBMIT-001, BR-CRD-001, BR-DTR-001" >&2
   echo "  inferno   INFERNO-USCORE-SERVER-001, INFERNO-C4BB-SERVER-001, INFERNO-PLANNET-SERVER-001, INFERNO-BULK-SERVER-001," >&2
-  echo "            INFERNO-PDEX-SERVER-001, INFERNO-DTR-PAYER-001" >&2
+  echo "            INFERNO-PDEX-SERVER-001, INFERNO-DTR-PAYER-001, INFERNO-CRD-SERVER-001, INFERNO-PAS-SERVER-001," >&2
+  echo "            INFERNO-SMART-SERVER-001" >&2
   echo "  deployment  the US Core, CARIN BB and Plan-Net kits against a deployed CHO" >&2
   echo "Other targets are pinned in interop/versions.json but have no scenario yet;" >&2
   echo "see docs/interop/davinci.md for how to add one." >&2
@@ -195,10 +224,15 @@ if [[ "$TARGET" == "inferno" || "$TARGET" == "deployment" ]]; then
     "plan-net:$REPO_ROOT/interop/.external/davinci-plan-net-test-kit:$MODE:plan-net" \
     "bulk-data:$REPO_ROOT/interop/.external/bulk-data-test-kit:$MODE:bulk-data" \
     "pdex:$REPO_ROOT/interop/.external/davinci-pdex-test-kit:$MODE:pdex" \
-    "dtr:$REPO_ROOT/interop/.external/davinci-dtr-test-kit:$MODE:dtr"
+    "dtr:$REPO_ROOT/interop/.external/davinci-dtr-test-kit:$MODE:dtr" \
+    "crd:$REPO_ROOT/interop/.external/davinci-crd-test-kit:$MODE:crd" \
+    "pas:$REPO_ROOT/interop/.external/davinci-pas-test-kit:$MODE:pas" \
+    "smart:$REPO_ROOT/interop/.external/smart-app-launch-test-kit:$MODE:smart"
   do
     IFS=: read -r name path mode wanted <<<"$kit"
-    [[ "$mode" == "all" || "$mode" == "$wanted" ]] || continue
+    [[ "$mode" == "all" || ",$mode," == *",$wanted,"* ]] || continue
+    # A deployment runs only the kits that need no token of their own.
+    [[ "$TARGET" == "deployment" && ! "$name" =~ ^(us-core|c4bb|plan-net)$ ]] && continue
     if [[ ! -f "$path/Dockerfile" ]]; then
       echo "The $name test kit is not checked out at $path." >&2
       echo "Fetch it at its pinned tag first: ./scripts/interop/fetch-inferno.sh $name" >&2

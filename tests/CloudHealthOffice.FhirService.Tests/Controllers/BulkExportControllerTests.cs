@@ -78,7 +78,7 @@ public class BulkExportControllerTests
         service.Setup(s => s.GetJobStatusAsync("real-job", "tenant-a", default)).ReturnsAsync(job);
         var controller = Controller(service.Object);
 
-        (await controller.SystemExport(null, null, null, null, null, default)).Should().BeOfType<StatusCodeResult>()
+        (await controller.PatientExport(null, null, null, null, null, default)).Should().BeOfType<StatusCodeResult>()
             .Which.StatusCode.Should().Be(202);
         controller.Response.Headers["Content-Location"].ToString().Should().EndWith("/$export-status/real-job");
         (await controller.ExportStatus("real-job", default)).Should().BeOfType<OkObjectResult>().Which.Value.Should().BeSameAs(job.Manifest);

@@ -1,0 +1,236 @@
+[
+  {
+    "planId": "TX-STAR-SYN",
+    "planName": "STAR (synthetic)",
+    "payer": "Sample Texas Community Health Plan (synthetic)",
+    "effectiveDate": "2026-01-01T00:00:00Z",
+    "planType": "Medicaid",
+    "lineOfBusiness": "Medicaid",
+    "isActive": true,
+    "costSharing": {
+      "individualDeductible": 0,
+      "familyDeductible": 0,
+      "individualOutOfPocketMax": 0,
+      "familyOutOfPocketMax": 0,
+      "inNetworkDeductible": 0,
+      "outOfNetworkDeductible": 0,
+      "inNetworkOutOfPocketMax": 0,
+      "outOfNetworkOutOfPocketMax": 0
+    },
+    "benefits": [
+      {
+        "serviceCategory": "Office Visit",
+        "description": "Office visit: no copay (Medicaid managed care, no cost sharing)",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Preventive Care",
+        "description": "Texas Health Steps checkups and immunizations: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Laboratory",
+        "description": "Lab tests: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Imaging",
+        "description": "X-ray and imaging: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Physical Therapy",
+        "description": "Physical, occupational and speech therapy: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Emergency Room",
+        "description": "Emergency care: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Pharmacy",
+        "description": "Prescriptions: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      }
+    ],
+    "networkTiers": []
+  },
+  {
+    "planId": "TX-STARKIDS-SYN",
+    "planName": "STAR Kids (synthetic)",
+    "payer": "Sample Texas Community Health Plan (synthetic)",
+    "effectiveDate": "2026-01-01T00:00:00Z",
+    "planType": "Medicaid",
+    "lineOfBusiness": "Medicaid",
+    "isActive": true,
+    "costSharing": {
+      "individualDeductible": 0,
+      "familyDeductible": 0,
+      "individualOutOfPocketMax": 0,
+      "familyOutOfPocketMax": 0,
+      "inNetworkDeductible": 0,
+      "outOfNetworkDeductible": 0,
+      "inNetworkOutOfPocketMax": 0,
+      "outOfNetworkOutOfPocketMax": 0
+    },
+    "benefits": [
+      {
+        "serviceCategory": "Office Visit",
+        "description": "Office visit: no copay (Medicaid managed care for children with disabilities, no cost sharing)",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Preventive Care",
+        "description": "Texas Health Steps checkups and immunizations: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Laboratory",
+        "description": "Lab tests: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Imaging",
+        "description": "X-ray and imaging: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Physical Therapy",
+        "description": "Physical, occupational and speech therapy: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Emergency Room",
+        "description": "Emergency care: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Pharmacy",
+        "description": "Prescriptions: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      }
+    ],
+    "networkTiers": []
+  },
+  {
+    "planId": "TX-CHIP-SYN",
+    "planName": "CHIP (synthetic)",
+    "payer": "Sample Texas Community Health Plan (synthetic)",
+    "effectiveDate": "2026-01-01T00:00:00Z",
+    "planType": "Medicaid",
+    "lineOfBusiness": "Medicaid",
+    "isActive": true,
+    "costSharing": {
+      "individualDeductible": 0,
+      "familyDeductible": 0,
+      "individualOutOfPocketMax": 0,
+      "familyOutOfPocketMax": 0,
+      "inNetworkDeductible": 0,
+      "outOfNetworkDeductible": 0,
+      "inNetworkOutOfPocketMax": 0,
+      "outOfNetworkOutOfPocketMax": 0
+    },
+    "benefits": [
+      {
+        "serviceCategory": "Office Visit",
+        "description": "Office visit: no copay in this synthetic plan (real CHIP copays depend on family income)",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Preventive Care",
+        "description": "Texas Health Steps checkups and immunizations: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Laboratory",
+        "description": "Lab tests: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Imaging",
+        "description": "X-ray and imaging: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Physical Therapy",
+        "description": "Physical, occupational and speech therapy: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Emergency Room",
+        "description": "Emergency care: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      },
+      {
+        "serviceCategory": "Pharmacy",
+        "description": "Prescriptions: no copay",
+        "inNetworkCopay": 0,
+        "inNetworkCoinsurance": 0,
+        "deductibleApplies": false,
+        "priorAuthRequired": false
+      }
+    ],
+    "networkTiers": []
+  }
+]

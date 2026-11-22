@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -157,11 +158,45 @@ public interface IPriorAuthorizationStore
 }
 
 /// <summary>
+/// The member's decided-approved authorizations, read live from
+/// authorization-service, for CRD to answer pa-needed <c>satisfied</c>. A
+/// separate seam from <see cref="IPriorAuthorizationStore"/>, which stays the
+/// single PAS inquiry lookup; like it, this reads and never writes or keeps.
+/// </summary>
+public interface IApprovedAuthorizationSearch
+{
+    /// <summary>
+    /// The member's approved (and approved-as-modified) authorizations. Empty
+    /// when there are none or they cannot be read: a requirement CHO cannot
+    /// show is satisfied stays a requirement.
+    /// </summary>
+    Task<IReadOnlyList<PriorAuthorizationRecord>> FindApprovedForMemberAsync(
+        string tenantId, string memberId, CancellationToken ct = default);
+}
+
+/// <summary>
+/// The PAS-recorded authorization a submitter identified with its own
+/// <c>Claim.identifier</c>, for an inquiry that names that identifier rather
+/// than the <c>preAuthRef</c> CHO issued. A separate seam from
+/// <see cref="IPriorAuthorizationStore"/> for the same reason as
+/// <see cref="IApprovedAuthorizationSearch"/>; it reads and never writes.
+/// The inquiry service applies the same tenant and corroborating-key checks
+/// to what it returns.
+/// </summary>
+public interface ISubmitterIdentifierLookup
+{
+    /// <summary>The tenant's most recent authorization recorded under <paramref name="submitterIdentifier"/> (<c>system|value</c>), or null.</summary>
+    Task<PriorAuthorizationRecord?> GetBySubmitterIdentifierAsync(
+        string tenantId, string submitterIdentifier, CancellationToken ct = default);
+}
+
+/// <summary>
 /// Reads the authoritative record from authorization-service over HTTP, using
 /// the read endpoint that already exists (<c>GET api/authorizations/number/{n}</c>).
 /// No new store, no new status field, no second copy of the state.
 /// </summary>
-public sealed class HttpPriorAuthorizationStore : IPriorAuthorizationStore
+public sealed class HttpPriorAuthorizationStore
+    : IPriorAuthorizationStore, IApprovedAuthorizationSearch, ISubmitterIdentifierLookup
 {
     public const string HttpClientName = "AuthorizationService";
 
@@ -191,6 +226,100 @@ public sealed class HttpPriorAuthorizationStore : IPriorAuthorizationStore
     {
         _factory = factory;
         _logger = logger;
+    }
+
+    public async Task<IReadOnlyList<PriorAuthorizationRecord>> FindApprovedForMemberAsync(
+        string tenantId, string memberId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(memberId) || string.IsNullOrWhiteSpace(tenantId))
+            return [];
+
+        var found = new List<PriorAuthorizationRecord>();
+        foreach (var status in new[] { PriorAuthorizationStatus.Approved, PriorAuthorizationStatus.Modified })
+        {
+            var page = await SearchAsync(tenantId,
+                $"api/authorizations/search?memberId={Uri.EscapeDataString(memberId.Trim())}&status={status}&pageSize=50", ct);
+            found.AddRange(page.Where(r => r.Status == status));
+        }
+
+        return found;
+    }
+
+    public async Task<PriorAuthorizationRecord?> GetBySubmitterIdentifierAsync(
+        string tenantId, string submitterIdentifier, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(submitterIdentifier))
+            return null;
+
+        var client = _factory.CreateClient(HttpClientName);
+        try
+        {
+            // The internal endpoint takes fhir-service's own service token
+            // (the one the submit path records with), for the caller's tenant.
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                "api/internal/authorizations/automated-decisions/by-submitter-identifier?identifier="
+                + Uri.EscapeDataString(submitterIdentifier.Trim())).UseChoServiceToken();
+            request.Headers.Add(TenantHeaderPropagationHandler.HeaderName, tenantId);
+            using var response = await client.SendAsync(request, ct);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return null;
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Prior-authorization lookup by submitter identifier returned {Status}; treating as not found.",
+                    (int)response.StatusCode);
+                return null;
+            }
+
+            return await response.Content.ReadFromJsonAsync<PriorAuthorizationRecord>(WireFormat, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Category only — never the URL or the body.
+            _logger.LogWarning(
+                "Prior-authorization lookup by submitter identifier failed ({Fault}); treating as not found.",
+                ex.GetType().Name);
+            return null;
+        }
+    }
+
+    private async Task<List<PriorAuthorizationRecord>> SearchAsync(string tenantId, string path, CancellationToken ct)
+    {
+        var client = _factory.CreateClient(HttpClientName);
+        try
+        {
+            // CRD's caller is an EHR with a CDS Hooks JWT, not a CHO token, so
+            // nothing would be forwarded and authorization-service would
+            // refuse the read. The search is for the caller's own tenant and
+            // the member CRD already resolved, so CHO's service token is used.
+            // The tenant is named on the request itself: the token is minted
+            // for the tenant the request names, before any later handler adds it.
+            using var request = new HttpRequestMessage(HttpMethod.Get, path).UseChoServiceToken();
+            request.Headers.Add(TenantHeaderPropagationHandler.HeaderName, tenantId);
+            using var response = await client.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Prior-authorization search returned {Status}; treating as none.", (int)response.StatusCode);
+                return [];
+            }
+
+            return await response.Content.ReadFromJsonAsync<List<PriorAuthorizationRecord>>(WireFormat, ct) ?? [];
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Category only — never the URL (it carries the member id) or the body.
+            _logger.LogWarning("Prior-authorization search failed ({Fault}); treating as none.", ex.GetType().Name);
+            return [];
+        }
     }
 
     public async Task<PriorAuthorizationRecord?> GetByAuthorizationNumberAsync(
