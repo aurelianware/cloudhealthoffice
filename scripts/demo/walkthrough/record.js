@@ -68,17 +68,39 @@ async function scrollTo(page, selector) {
 }
 
 async function searchClaimsForMember(page) {
-  // The claims list is empty until searched: pick the member in the Member box, then Search.
-  const member = page.locator('.mud-input-control', { hasText: /^\s*Member\s*$/ }).locator('input').first();
-  await member.waitFor({ timeout: 15000 });
-  await member.click();
-  await member.pressSequentially(TX_MEMBER, { delay: 60 });
-  const option = page.locator('.mud-popover-open .mud-list-item', { hasText: TX_MEMBER }).first();
-  await option.waitFor({ timeout: 15000 });
-  await option.click();
-  await page.getByRole('button', { name: /^\s*Search\s*$/ }).first().click();
-  // Each result row opens its claim from a button holding the claim number.
-  await claimButtons(page).first().waitFor({ timeout: 20000 });
+  // The claims list is empty until searched: pick the member in the Member
+  // autocomplete (placeholder "Search by name or ID"), then Search.
+  const member = page.locator('input[placeholder="Search by name or ID"]').first();
+  try {
+    await member.waitFor({ timeout: 20000 });
+    await member.click();
+    await member.pressSequentially(TX_MEMBER, { delay: 80 });
+    const option = page.locator('.mud-popover-open .mud-list-item, .mud-popover-open [role="option"]', { hasText: TX_MEMBER }).first();
+    try {
+      await option.waitFor({ timeout: 10000 });
+      await option.click();
+    } catch {
+      // MudAutocomplete also takes the highlighted option from the keyboard.
+      await member.press('ArrowDown');
+      await member.press('Enter');
+    }
+    await page.waitForTimeout(800);
+    await page.getByRole('button', { name: /^\s*Search\s*$/ }).first().click();
+    // Each result row opens its claim from a button holding the claim number.
+    await claimButtons(page).first().waitFor({ timeout: 20000 });
+  } catch (err) {
+    // Print what the page showed, so the job log says which part did not match.
+    const dump = await page.evaluate(() => {
+      const control = document.querySelector('input[placeholder="Search by name or ID"]')?.closest('.mud-input-control');
+      const popovers = [...document.querySelectorAll('.mud-popover')].map((p) => `${p.className}: ${p.innerText.slice(0, 300)}`);
+      const alerts = [...document.querySelectorAll('.mud-alert')].map((a) => a.innerText.slice(0, 200));
+      const rows = document.querySelectorAll('tbody tr').length;
+      return { control: control ? control.outerHTML.slice(0, 1200) : 'no Member input', popovers, alerts, rows,
+        inputs: [...document.querySelectorAll('input')].map((i) => i.placeholder || i.id).slice(0, 15) };
+    }).catch(() => ({}));
+    console.log(`Claims search diagnostics: ${JSON.stringify(dump)}`);
+    throw err;
+  }
 }
 
 const claimButtons = (page) => page.locator('td[data-label="Claim #"] button');
