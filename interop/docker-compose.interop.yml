@@ -591,6 +591,10 @@ services:
     environment: &inferno-sidecars
       REDIS_URL: redis://inferno-redis:6379/0
       FHIR_RESOURCE_VALIDATOR_URL: http://inferno-validator:3500
+      # inferno_core's FHIRPath evaluator (Inferno::DSL::FhirpathEvaluation).
+      # Only the PAS kit calls it here, and its profile starts inferno-fhirpath;
+      # the kit's own .env.production names a host `fhirpath` this network lacks.
+      FHIRPATH_URL: http://inferno-fhirpath:6789
       # The kits' own switch for their TLS version tests (tls-test-kit 1.0.2 in
       # every kit pinned here): they report "omit" instead of failing. The
       # interop network is plain HTTP, so they could only fail here, and a
@@ -994,6 +998,8 @@ services:
       - "127.0.0.1:${INTEROP_INFERNO_PAS_PORT:-14574}:4567"
     depends_on:
       <<: *inferno-depends
+      inferno-fhirpath:
+        condition: service_healthy
       inferno-pas-migrate:
         condition: service_completed_successfully
     security_opt:
@@ -1017,6 +1023,8 @@ services:
       - inferno_pas_data:/opt/inferno/data
     depends_on:
       <<: *inferno-depends
+      inferno-fhirpath:
+        condition: service_healthy
       inferno-pas-migrate:
         condition: service_completed_successfully
     security_opt:
@@ -1105,6 +1113,25 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  inferno-fhirpath:
+    profiles: [interop-pas]
+    networks: [interop]
+    # infernocommunity/fhirpath-service:latest, resolved on 2026-11-22. The PAS
+    # kit evaluates FHIRPath through it while validating its request bundles
+    # (davinci-pas-test-kit 0.16.0, cross_suite/fhirpath_utils.rb); without it
+    # those tests error with "Connection failed to evaluator".
+    image: infernocommunity/fhirpath-service@sha256:8bfdd53894e6708ad4e663175c0805281c968777ac732a9688780c275df71636
+    # Upstream ships no healthcheck. The image carries curl, and the service
+    # answers GET /version with 200 once it is serving.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:6789/version"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
     security_opt:
       - no-new-privileges:true
 

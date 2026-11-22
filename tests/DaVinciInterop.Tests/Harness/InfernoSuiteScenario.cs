@@ -510,8 +510,12 @@ public static class InfernoSuiteScenario
                 BackendClientFor(scenario, fixture).ClientId,
                 string.Join(' ', BackendClientFor(scenario, fixture).Scopes),
                 // The Bulk Data and DTR kits run SMART Backend Services tests
-                // that obtain the token; the PDex server suite has none.
-                startExpired: scenario.InfernoAuth == InfernoAuthModes.PayerBackendServices),
+                // that obtain the token; the PDex and PAS server suites have
+                // none, so they start from an expired token that inferno_core
+                // refreshes on the first request. A blank token is never
+                // refreshed, and every call would go out unauthenticated.
+                startExpired: scenario.InfernoAuth
+                    is InfernoAuthModes.PayerBackendServices or InfernoAuthModes.PasClientBackendServices),
             _ => throw new InteropEnvironmentException(
                 $"Scenario '{scenario.Id}' declares infernoAuth '{scenario.InfernoAuth}', which the harness " +
                 $"does not know. Known: {InfernoAuthModes.ChoToken}, {InfernoAuthModes.BackendServices}, " +

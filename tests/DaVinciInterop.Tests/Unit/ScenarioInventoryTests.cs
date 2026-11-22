@@ -247,6 +247,24 @@ public sealed class ScenarioInventoryTests
     }
 
     [Fact]
+    public void The_pas_kit_starts_from_an_expired_token_so_inferno_fetches_a_real_one()
+    {
+        // The PAS server suite has no Backend Services group: given no token,
+        // inferno_core sends every $submit unauthenticated (run 8: all 401).
+        var scenario = Inventory.Scenario("INFERNO-PAS-SERVER-001");
+        var fixture = ChoSeedFixture.Load();
+        var pasInputs = scenario.InfernoInputs.ToDictionary(name => name, _ => "{}");
+
+        var inputs = InfernoSuiteScenario.BuildInputs(scenario, fixture, pasInputs: pasInputs).ToDictionary(i => i.Name);
+
+        var auth = System.Text.Json.JsonDocument.Parse(inputs["smart_credentials"].Value).RootElement;
+        auth.GetProperty("auth_type").GetString().Should().Be("backend_services");
+        auth.GetProperty("client_id").GetString().Should().Be(fixture.PasBackendClient.ClientId);
+        auth.GetProperty("access_token").GetString().Should().Be(InfernoInput.ExpiredPlaceholderToken);
+        auth.GetProperty("expires_in").GetString().Should().Be("0");
+    }
+
+    [Fact]
     public void Every_inferno_scenario_declares_only_inputs_the_harness_can_supply()
     {
         var fixture = ChoSeedFixture.Load();
