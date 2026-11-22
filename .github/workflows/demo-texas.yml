@@ -71,5 +71,6 @@ jobs:
           case "$ACTION" in
             up+seed) "$demo" up; "$demo" seed ;;
             seed) "$demo" status; "$demo" seed ;;
+            clocks) "$demo" status; "$demo" clocks ;; # status fetches the cluster credentials
             *) "$demo" "$ACTION" ;;
           esac
