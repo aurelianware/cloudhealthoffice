@@ -84,6 +84,10 @@ public sealed record PasStoredAuthorization
     [JsonPropertyName("reviewedDate")]
     public DateTime? ReviewedDate { get; init; }
 
+    /// <summary>Tracking id of the CDex request a pend raised in rfai-service (PAS-07), or null.</summary>
+    [JsonPropertyName("rfaiReference")]
+    public string? RfaiReference { get; init; }
+
     /// <summary>Read only to say whether a person made the stored decision (a repeat of a request a reviewer has since decided).</summary>
     [JsonPropertyName("statusHistory")]
     public List<PriorAuthorizationStatusChange> StatusHistory { get; init; } = new();

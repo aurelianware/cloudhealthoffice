@@ -534,6 +534,9 @@ else
 // ── Da Vinci PAS ──────────────────────────────────────────────────────────────
 // PasAutoAdjudicator now receives IEnrollmentDecisionGate (Rule 0)
 // and IPriorAuthRuleEngine (Rule 5) via constructor injection.
+// PAS-07: the documentation a pended PAS request is asked for, by service.
+builder.Services.Configure<FhirService.Services.Pas.PasAdditionalInformationOptions>(
+    builder.Configuration.GetSection(FhirService.Services.Pas.PasAdditionalInformationOptions.SectionName));
 builder.Services.Configure<PasAutoAdjudicationConfig>(
     builder.Configuration.GetSection("Cms0057:PasAutoAdjudication"));
 // Scoped, not singleton: once a database is configured the provider-enrollment registration

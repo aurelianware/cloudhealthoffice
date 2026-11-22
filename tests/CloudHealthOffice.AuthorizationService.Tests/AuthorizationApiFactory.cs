@@ -29,6 +29,10 @@ public class AuthorizationApiFactory : WebApplicationFactory<Program>
     /// <summary>Concurrent review reads stays through this; nothing here exercises Mongo.</summary>
     public IInpatientStayRepository InpatientStayRepository { get; } = Substitute.For<IInpatientStayRepository>();
 
+    /// <summary>rfai-service, as the additional-information coordinator reaches it.</summary>
+    public global::AuthorizationService.Services.Rfai.IRfaiRequestGateway RfaiGateway { get; } =
+        Substitute.For<global::AuthorizationService.Services.Rfai.IRfaiRequestGateway>();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
@@ -44,7 +48,8 @@ public class AuthorizationApiFactory : WebApplicationFactory<Program>
             var descriptorsToRemove = services
                 .Where(d => d.ServiceType == typeof(IAuthorizationRepository)
                          || d.ServiceType == typeof(IInpatientStayRepository)
-                         || d.ServiceType == typeof(IPaRuleRepository))
+                         || d.ServiceType == typeof(IPaRuleRepository)
+                         || d.ServiceType == typeof(global::AuthorizationService.Services.Rfai.IRfaiRequestGateway))
                 .ToList();
 
             foreach (var descriptor in descriptorsToRemove)
@@ -74,6 +79,7 @@ public class AuthorizationApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(ReportingPackages);
             services.AddSingleton(InpatientStayRepository);
             services.AddSingleton(Substitute.For<IPaRuleRepository>());
+            services.AddSingleton(RfaiGateway);
         });
     }
 

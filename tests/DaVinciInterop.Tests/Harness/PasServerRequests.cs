@@ -60,13 +60,24 @@ public static class PasServerRequests
             {
                 // A payload is one bundle or, for the must-support and
                 // inquiry inputs, a list of them.
-                var payload = JsonNode.Parse(value)!;
+                JsonNode payload = JsonNode.Parse(value)!;
                 var bundles = payload is JsonArray list ? list.OfType<JsonObject>().ToList() : [payload.AsObject()];
                 foreach (var bundle in bundles)
                 {
                     Repoint(bundle, fixture);
                     if (ServiceTypeFor(name) is { } serviceType)
                         SetServiceType(bundle, serviceType);
+                }
+
+                // CHO's own additions to the must-support requests (the kit
+                // asks testers to supply requests that elicit every element).
+                var additions = MustSupportAdditions(name, bundles);
+                if (additions.Count > 0)
+                {
+                    var extended = payload as JsonArray ?? new JsonArray(payload.DeepClone());
+                    foreach (var addition in additions)
+                        extended.Add(addition);
+                    payload = extended;
                 }
 
                 value = payload.ToJsonString();
@@ -108,6 +119,54 @@ public static class PasServerRequests
         "pended_pa_submit_request_payload" => PendedServiceType,
         _ => null,
     };
+
+    /// <summary>
+    /// The submitter's identifier on CHO's pended must-support request (PAS-07),
+    /// so the must-support inquiry can name that request and no other: every
+    /// kit example shares one identifier, and an inquiry by it returns the
+    /// latest request made with it.
+    /// </summary>
+    public const string DocumentationPendIdentifier = "111099-PAS07";
+
+    private const string PatientEventTraceSystem = "http://davinci-pas.org/PATIENT_EVENT_TRACE_NUMBER";
+
+    /// <summary>
+    /// The requests CHO adds to the kit's must-support inputs. A copy of the
+    /// kit's first request for a service that needs documentation
+    /// (<see cref="PendedServiceType"/>): CHO pends it and asks for what it
+    /// lacks, so the response carries a PAS Task and CommunicationRequest.
+    /// And an inquiry about exactly that request, so the inquiry response
+    /// carries the Task too. Each is the kit's own example, otherwise unchanged.
+    /// </summary>
+    public static IReadOnlyList<JsonObject> MustSupportAdditions(string input, IReadOnlyList<JsonObject> kitBundles)
+    {
+        if (kitBundles.Count == 0
+            || input is not ("must_support_pa_submit_request_payload" or "must_support_pa_inquire_request_payload"))
+            return [];
+
+        var pend = (JsonObject)kitBundles[0].DeepClone();
+        if (!SetSubmitterIdentifier(pend, DocumentationPendIdentifier))
+            return [];
+        if (input == "must_support_pa_submit_request_payload")
+            SetServiceType(pend, PendedServiceType);
+        return [pend];
+    }
+
+    /// <summary>Replaces the Claim's patient-event trace number; false when it carries none.</summary>
+    public static bool SetSubmitterIdentifier(JsonObject bundle, string value)
+    {
+        var claim = ((bundle["entry"] as JsonArray)?.OfType<JsonObject>() ?? [])
+            .Select(e => e["resource"] as JsonObject)
+            .FirstOrDefault(r => r?["resourceType"]?.GetValue<string>() == "Claim");
+        var identifier = (claim?["identifier"] as JsonArray)?.OfType<JsonObject>()
+            .FirstOrDefault(i => i["system"]?.GetValue<string>() == PatientEventTraceSystem);
+        if (identifier is null) return false;
+        identifier["value"] = value;
+        // A fresh Bundle identity for a request the kit did not send.
+        if (bundle["identifier"] is JsonObject bundleIdentifier)
+            bundleIdentifier["value"] = $"{bundleIdentifier["value"]?.GetValue<string>()}-{value}";
+        return true;
+    }
 
     /// <summary>Sets every Claim item's X12 service type code to <paramref name="code"/>.</summary>
     public static void SetServiceType(JsonObject bundle, string code)

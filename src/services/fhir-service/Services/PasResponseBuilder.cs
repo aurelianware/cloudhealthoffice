@@ -210,8 +210,9 @@ public class PasResponseBuilder
     /// / partially decided) and <c>disposition</c> the specific one, so a caller
     /// can tell "pending" from "pended for additional information" from
     /// "approved" from "denied" without CHO inventing states it does not hold.
-    /// The A4 reviewAction says a decision is outstanding pending information —
-    /// it is NOT a CDex exchange, which CHO does not implement.
+    /// The A4 reviewAction says a decision is outstanding pending information;
+    /// when the pend asked for documents or forms, the controller adds the CDex
+    /// request as PAS Tasks (<see cref="Pas.PasAdditionalInformationResources"/>).
     /// </summary>
     public Bundle BuildInquiryResponse(
         PriorAuthorizationRecord authorization, Bundle? request = null, string? fhirBaseUrl = null)

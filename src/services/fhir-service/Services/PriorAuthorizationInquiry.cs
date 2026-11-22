@@ -58,9 +58,16 @@ public sealed record PriorAuthorizationRecord
     [JsonPropertyName("denialReason")]
     public string? DenialReason { get; init; }
 
-    /// <summary>Why the decision is pended. Present for A4; NOT a CDex exchange.</summary>
+    /// <summary>Why the decision is pended. Present for A4.</summary>
     [JsonPropertyName("pendReason")]
     public string? PendReason { get; init; }
+
+    /// <summary>
+    /// Tracking id of the CDex additional-information request the pend raised
+    /// in rfai-service (PAS-07), or null when it asked for nothing.
+    /// </summary>
+    [JsonPropertyName("rfaiReference")]
+    public string? RfaiReference { get; init; }
 
     [JsonPropertyName("followUpAction")]
     public string? FollowUpAction { get; init; }

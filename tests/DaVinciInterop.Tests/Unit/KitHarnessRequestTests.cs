@@ -51,6 +51,39 @@ public sealed class KitHarnessRequestTests
             .Should().BeFalse();
     }
 
+    private static JsonObject KitPasRequest() => JsonNode.Parse("""
+        {"resourceType":"Bundle","identifier":{"system":"urn:example","value":"b1"},"entry":[
+          {"resource":{"resourceType":"Claim","identifier":[{"system":"http://davinci-pas.org/PATIENT_EVENT_TRACE_NUMBER","value":"111099"}],
+           "item":[{"sequence":1,"productOrService":{"coding":[{"system":"https://codesystem.x12.org/005010/1365","code":"3"}]}}]}}]}
+        """)!.AsObject();
+
+    [Fact]
+    public void The_pas_must_support_submit_gains_a_pend_for_a_service_that_needs_documentation()
+    {
+        var kit = KitPasRequest();
+
+        var added = PasServerRequests.MustSupportAdditions("must_support_pa_submit_request_payload", [kit]);
+
+        var claim = added.Should().ContainSingle().Subject["entry"]![0]!["resource"]!;
+        claim["identifier"]![0]!["value"]!.GetValue<string>().Should().Be(PasServerRequests.DocumentationPendIdentifier);
+        claim["item"]![0]!["productOrService"]!["coding"]![0]!["code"]!.GetValue<string>()
+            .Should().Be(PasServerRequests.PendedServiceType);
+        kit["entry"]![0]!["resource"]!["identifier"]![0]!["value"]!.GetValue<string>()
+            .Should().Be("111099", "the kit's own request is left as it is");
+    }
+
+    [Fact]
+    public void The_pas_must_support_inquiry_gains_one_about_that_pend_and_nothing_else_does()
+    {
+        var added = PasServerRequests.MustSupportAdditions("must_support_pa_inquire_request_payload", [KitPasRequest()]);
+
+        var claim = added.Should().ContainSingle().Subject["entry"]![0]!["resource"]!;
+        claim["identifier"]![0]!["value"]!.GetValue<string>().Should().Be(PasServerRequests.DocumentationPendIdentifier);
+        claim["item"]![0]!["productOrService"]!["coding"]![0]!["code"]!.GetValue<string>().Should().Be("3");
+
+        PasServerRequests.MustSupportAdditions("approval_pa_submit_request_payload", [KitPasRequest()]).Should().BeEmpty();
+    }
+
     [Fact]
     public void The_order_sign_requests_lead_with_the_one_hook_response_request()
     {

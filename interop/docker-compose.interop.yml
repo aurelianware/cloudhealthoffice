@@ -263,6 +263,33 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       MongoDb__ConnectionString: mongodb://interop-mongo:27017
       MongoDb__DatabaseName: InteropAuthorizationDB
+      # A pend that names missing documentation raises its CDex request here
+      # (PAS-07), as a reviewer's A4 decision does.
+      Services__RfaiServiceUrl: http://cho-rfai-service:8080/
+    depends_on:
+      interop-mongo:
+        condition: service_healthy
+      cho-rfai-service:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  # The one store of CDex additional-information requests (PAS-07). A pended
+  # PAS request for a service that needs documentation raises one here, and
+  # the PAS response carries it as a Task and CommunicationRequests, which
+  # INFERNO-PAS-SERVER-001 judges on $submit and $inquire.
+  cho-rfai-service:
+    build:
+      context: ..
+      dockerfile: src/services/rfai-service/Dockerfile
+      args:
+        REGISTRY: ${CHO_IMAGE_REGISTRY:-mcr.microsoft.com}
+    profiles: [interop-cho]
+    networks: [interop]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      MongoDb__ConnectionString: mongodb://interop-mongo:27017
+      MongoDb__DatabaseName: InteropRfaiDB
     depends_on:
       interop-mongo:
         condition: service_healthy
@@ -422,6 +449,7 @@ services:
       Services__ProviderServiceUrl: http://cho-provider-service:8080/
       Services__BenefitPlanServiceUrl: http://cho-benefit-plan-service:8080/
       Services__AuthorizationServiceUrl: http://cho-authorization-service:8080/
+      Services__RfaiServiceUrl: http://cho-rfai-service:8080/
       # The public Plan-Net Provider Directory (G-36) INFERNO-PLANNET-SERVER-001
       # judges, at /fhir/r4/directory/interop. The id must match
       # ChoUnderTest.PublicDirectoryId. The payer is the plan's own synthetic
@@ -488,6 +516,17 @@ services:
       # does not cover, and the pended one matches neither, so it pends.
       Cms0057__PasAutoAdjudication__AutoApproveServiceTypes__0: "3"
       Cms0057__PasAutoAdjudication__AutoDenyServiceTypes__0: "4"
+      # The pended service type needs documentation (PAS-07): a procedure
+      # note from the last three months and CHO's MRI form. A pended request
+      # for it raises a CDex request, and the response carries it as a PAS
+      # Task and CommunicationRequest.
+      Cms0057__PasAdditionalInformation__Requirements__0__ServiceCodes__0: "2"
+      Cms0057__PasAdditionalInformation__Requirements__0__ServiceCodeSystem: https://codesystem.x12.org/005010/1365
+      Cms0057__PasAdditionalInformation__Requirements__0__Attachments__0__LoincCode: 28570-0
+      Cms0057__PasAdditionalInformation__Requirements__0__Attachments__0__Description: Procedure note
+      Cms0057__PasAdditionalInformation__Requirements__0__Attachments__0__PwkCode: "09"
+      Cms0057__PasAdditionalInformation__Requirements__0__Attachments__0__ContentModifier: 18804-5
+      Cms0057__PasAdditionalInformation__Requirements__0__Questionnaires__0: https://cloudhealthoffice.com/fhir/Questionnaire/pa-imaging-mri|1.0.0
       SmartAuth__Issuer: ${INTEROP_SMART_ISSUER:-http://cho-smart-auth-service:8080}
       SmartAuth__RequireHttpsMetadata: "false"
       # The SMART kit reads .well-known/smart-configuration cross-origin.

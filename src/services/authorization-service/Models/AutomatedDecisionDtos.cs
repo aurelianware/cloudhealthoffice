@@ -147,6 +147,20 @@ public sealed class AutomatedDecision
     [StringLength(500)]
     public string? PendReason { get; set; }
 
+    /// <summary>
+    /// What a pend asks the provider for (PAS-07): the documents and forms the
+    /// adjudicator found missing for the requested services. A pend that names
+    /// any is recorded as A4 with an additional-information request raised in
+    /// rfai-service, exactly as a reviewer's A4 decision is. Only a pend may
+    /// carry it.
+    /// </summary>
+    [MaxLength(Services.Rfai.PendedAuthorizationRfaiCoordinator.MaxAutomatedRequestedItems,
+        ErrorMessage = "A pend names at most 25 requested items.")]
+    public List<Services.Rfai.RequestedInformationItem>? RequestedInformation { get; set; }
+
+    /// <summary>When the provider's documentation is due. Only with <see cref="RequestedInformation"/>.</summary>
+    public DateTime? InformationDueDate { get; set; }
+
     /// <summary>Approved period. Required for an approval; not allowed otherwise.</summary>
     public DateTime? ApprovedServiceDateFrom { get; set; }
 

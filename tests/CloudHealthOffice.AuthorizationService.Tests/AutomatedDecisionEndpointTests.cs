@@ -6,6 +6,7 @@ using AuthorizationService.Backends;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services.BenefitExclusion;
+using AuthorizationService.Services.Rfai;
 using CloudHealthOffice.Infrastructure.Security;
 using NSubstitute;
 using Authorization = AuthorizationService.Models.Authorization;
@@ -45,7 +46,29 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         _repo.ClearReceivedCalls();
         _repo.GetByAuthorizationNumberAsync(Arg.Any<string>()).Returns((Authorization?)null);
         _repo.CreateAsync(Arg.Do<Authorization>(a => _stored = a)).Returns(call => call.Arg<Authorization>());
+        _repo.UpdateAsync(Arg.Any<Authorization>()).Returns(call => call.Arg<Authorization>());
+        factory.RfaiGateway.ClearReceivedCalls();
+        factory.RfaiGateway.EnsureRequestAsync(Arg.Any<RfaiRequestCommand>(), Arg.Any<CancellationToken>())
+            .Returns(new RfaiRequestHandle { Id = "rfai-1", TrackingId = "RFAI-TRK-1", Created = true });
     }
+
+    /// <summary>A body whose decision is a pend naming what it needs.</summary>
+    private static object PendAskingFor(object[]? requestedInformation, DateTime? dueDate = null, string outcome = "Pended")
+    {
+        var body = JsonSerializer.SerializeToNode(Body(outcome: outcome, withApprovedPeriod: outcome == "Approved"), Json)!.AsObject();
+        var decision = body["decision"]!.AsObject();
+        decision["requestedInformation"] = JsonSerializer.SerializeToNode(requestedInformation, Json);
+        if (dueDate is { } due) decision["informationDueDate"] = due.ToString("o");
+        return body;
+    }
+
+    private static readonly object[] ProcedureNoteAndForm =
+    [
+        new { code = "09", loincCode = "28570-0", description = "Procedure note", serviceLineNumber = 1,
+              contentModifier = "18804-5", serviceLineProcedureCode = "27447", diagnosisCode = "M17.11" },
+        new { description = "Complete the knee arthroplasty questionnaire",
+              questionnaire = "http://example.org/Questionnaire/knee|1.0", serviceLineNumber = 1 },
+    ];
 
     private HttpClient ClientWithToken(string token)
     {
@@ -324,6 +347,97 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         Assert.Equal(AuthorizationStatus.Pended, _stored!.Status);
         Assert.Equal("A4", _stored.ReviewDecision);
         Assert.Null(_stored.ReviewedDate);
+    }
+
+    [Fact]
+    public async Task PendNamingWhatItNeeds_RaisesTheRequest_AndStampsItsHandle()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var due = DateTime.UtcNow.AddDays(14);
+
+        var response = await client.PostAsJsonAsync(Path, PendAskingFor(ProcedureNoteAndForm, due), Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        await _factory.RfaiGateway.Received(1).EnsureRequestAsync(
+            Arg.Is<RfaiRequestCommand>(c =>
+                c.TenantId == Tenant && c.AuthNumber == "PAS-20261011-AAAA0001"
+                && c.DueDate.HasValue && Math.Abs((c.DueDate.Value - due).TotalSeconds) < 1
+                && c.RequestedItems.Count == 2
+                && c.RequestedItems[0].LoincCode == "28570-0" && c.RequestedItems[0].ServiceLineNumber == 1
+                && c.RequestedItems[0].ContentModifier == "18804-5"
+                && c.RequestedItems[1].Questionnaire == "http://example.org/Questionnaire/knee|1.0"),
+            Arg.Any<CancellationToken>());
+        await _repo.Received(1).UpdateAsync(Arg.Is<Authorization>(a => a.RFAIReference == "RFAI-TRK-1" && a.RFAIIssued));
+        var body = await response.Content.ReadFromJsonAsync<Authorization>(Json);
+        Assert.Equal("RFAI-TRK-1", body!.RFAIReference);
+    }
+
+    [Fact]
+    public async Task PendNamingNothing_RaisesNoRequest()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, Body(outcome: "Pended", withApprovedPeriod: false), Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        await _factory.RfaiGateway.DidNotReceive().EnsureRequestAsync(Arg.Any<RfaiRequestCommand>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().UpdateAsync(Arg.Any<Authorization>());
+    }
+
+    [Fact]
+    public async Task RfaiServiceDown_StillRecordsThePend_WithNoHandle()
+    {
+        _factory.RfaiGateway.EnsureRequestAsync(Arg.Any<RfaiRequestCommand>(), Arg.Any<CancellationToken>())
+            .Returns((RfaiRequestHandle?)null);
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, PendAskingFor(ProcedureNoteAndForm), Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(AuthorizationStatus.Pended, _stored!.Status);
+        Assert.Null(_stored.RFAIReference);
+        await _repo.DidNotReceive().UpdateAsync(Arg.Any<Authorization>());
+    }
+
+    [Fact]
+    public async Task Retry_OfAPendWhoseRequestWasNotRaised_RaisesIt()
+    {
+        _repo.GetByAuthorizationNumberAsync("PAS-20261011-AAAA0001").Returns(new Authorization
+        {
+            Id = "auth-1", TenantId = Tenant, AuthorizationNumber = "PAS-20261011-AAAA0001", RequestHash = RequestHash,
+            Status = AuthorizationStatus.Pended, ReviewDecision = "A4",
+        });
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, PendAskingFor(ProcedureNoteAndForm), Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await _factory.RfaiGateway.Received(1).EnsureRequestAsync(Arg.Any<RfaiRequestCommand>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    [Theory]
+    [InlineData("Approved")]
+    [InlineData("Denied")]
+    public async Task RequestedInformation_OnAnythingButAPend_Returns400(string outcome)
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, PendAskingFor(ProcedureNoteAndForm, outcome: outcome), Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    [Fact]
+    public async Task RequestedItemWithoutADescription_Returns400()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path,
+            PendAskingFor([new { loincCode = "28570-0", description = " " }]), Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     // ── What it refuses ────────────────────────────────────────────────

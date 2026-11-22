@@ -982,4 +982,13 @@ public sealed class PasAutomatedDecision
     /// state rule engine was reached); null when no rule read one.
     /// </summary>
     public string? StateCode { get; set; }
+
+    /// <summary>
+    /// What a pend asks the provider for (PAS-07). authorization-service raises
+    /// the CDex request in rfai-service and stamps its tracking id on the record.
+    /// </summary>
+    public List<PasRequestedInformationItem>? RequestedInformation { get; set; }
+
+    /// <summary>When the provider's documentation is due.</summary>
+    public DateTime? InformationDueDate { get; set; }
 }
