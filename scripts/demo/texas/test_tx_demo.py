@@ -160,3 +160,76 @@ def test_pa_fixtures_cover_every_scenario_and_never_exceed_the_federal_clock():
         assert min(texas, federal) <= federal
     overdue = next(fx for fx in fixtures if fx["authorizationNumber"].endswith("OVERDUE"))
     assert overdue["_expected"]["texasDue"] < now < overdue["_expected"]["federalDue"]
+
+
+def _string_limits(model: Path) -> dict:
+    """[StringLength(n)] limits by JSON property name, from a C# model file."""
+    import re
+    limits = {}
+    for m in re.finditer(r"\[StringLength\((\d+)[^\]]*\)\][^;{]*?public\s+[\w<>?\[\]]+\s+(\w+)", model.read_text(), re.S):
+        name = m.group(2)[0].lower() + m.group(2)[1:]
+        limits[name] = min(limits.get(name, 10**6), int(m.group(1)))
+    return limits
+
+
+def test_seed_pa_fields_fit_authorization_service_limits():
+    model = Path(__file__).resolve().parents[3] / "src/services/authorization-service/Models/Authorization.cs"
+    limits = _string_limits(model)
+    assert limits["codeQualifier"] == 2
+    now = dt.datetime(2026, 11, 23, 15, 0, tzinfo=UTC)
+    members, _ = tx_demo.build_members(random.Random(48), 120, now.date())
+
+    def walk(value, path=""):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key.startswith("_"):
+                    continue
+                if isinstance(item, str) and key in limits:
+                    assert len(item) <= limits[key], f"{path}{key}={item!r} over {limits[key]}"
+                walk(item, f"{path}{key}.")
+        elif isinstance(value, list):
+            for item in value:
+                walk(item, path)
+
+    for fixture in tx_demo.build_pa_fixtures(now, members, set()):
+        walk(fixture)
+
+
+def _fake_drop(monkeypatch, runs_by_poll):
+    """drop-run against a claims-service whose run list changes per poll."""
+    polls = iter(runs_by_poll)
+    monkeypatch.setattr(tx_demo.cho_demo, "mint_token", lambda tenant: "t")
+    monkeypatch.setattr(tx_demo.time, "sleep", lambda s: None)
+
+    def call(method, url, token, body=None):
+        if method == "POST":
+            return 204, {}, None
+        return 200, {}, next(polls)
+    monkeypatch.setattr(tx_demo, "_call", call)
+
+
+def _run(run_id, names, started, status="Succeeded"):
+    return {"id": run_id, "status": status, "startedAt": started.isoformat().replace("+00:00", "Z"),
+            "completedAt": started.isoformat(), "files": [{"name": n} for n in names],
+            "steps": [{"name": "claims", "status": status, "counts": {"created": 1}}]}
+
+
+def test_drop_run_waits_for_every_file_even_when_the_worker_split_the_drop(monkeypatch, capsys):
+    import argparse
+    now = dt.datetime.now(UTC)
+    names = ["d_members.csv", "d_coverages.csv", "d_medical_claims.csv"]
+    earlier = _run("old", names, now - dt.timedelta(hours=2))
+    worker = _run("worker", ["d_medical_claims.csv"], now)
+    manual = _run("manual", ["d_members.csv", "d_coverages.csv"], now)
+    _fake_drop(monkeypatch, [[earlier], [worker, earlier], [manual, worker, earlier]])
+    assert tx_demo.cmd_drop_run(argparse.Namespace(expect=names, wait=60)) == 0
+    out = capsys.readouterr().out
+    assert "Run worker" in out and "Run manual" in out and "Run old" not in out
+    assert "2 runs" in out
+
+
+def test_drop_run_fails_when_a_run_failed(monkeypatch):
+    import argparse
+    now = dt.datetime.now(UTC)
+    _fake_drop(monkeypatch, [[_run("r", ["a_members.csv"], now, status="Failed")]])
+    assert tx_demo.cmd_drop_run(argparse.Namespace(expect=["a_members.csv"], wait=60)) == 1
