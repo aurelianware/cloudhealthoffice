@@ -79,7 +79,8 @@ async function searchClaimsForMember(page) {
     let picked = false;
     for (let attempt = 1; attempt <= 3 && !picked; attempt += 1) {
       await page.waitForTimeout(attempt === 1 ? 1500 : 1000);
-      await member.click();
+      await closeMenus(page);
+      await member.click({ timeout: 8000 });
       await member.fill('');
       await member.pressSequentially(TX_MEMBER, { delay: 90 });
       if ((await member.inputValue()) !== TX_MEMBER) continue;
@@ -97,7 +98,7 @@ async function searchClaimsForMember(page) {
     }
     if (!picked) throw new Error(`could not pick ${TX_MEMBER} in the Member box`);
     await page.waitForTimeout(800);
-    await page.getByRole('button', { name: /^\s*Search\s*$/ }).first().click();
+    await clickSearch(page);
     // Each result row opens its claim from a button holding the claim number.
     await claimButtons(page).first().waitFor({ timeout: 20000 });
   } catch (err) {
@@ -107,13 +108,42 @@ async function searchClaimsForMember(page) {
       const popovers = [...document.querySelectorAll('.mud-popover')].map((p) => `${p.className}: ${p.innerText.slice(0, 300)}`);
       const alerts = [...document.querySelectorAll('.mud-alert')].map((a) => a.innerText.slice(0, 200));
       const rows = document.querySelectorAll('tbody tr').length;
-      return { control: control ? control.outerHTML.slice(0, 1200) : 'no Member input', popovers, alerts, rows,
+      const overlays = [...document.querySelectorAll('.mud-overlay')].map((o) => o.className);
+      return { control: control ? control.outerHTML.slice(0, 1200) : 'no Member input', popovers, overlays, alerts, rows,
         inputs: [...document.querySelectorAll('input')].map((i) => i.placeholder || i.id).slice(0, 15) };
     }).catch(() => ({}));
     // To a file in the run's artifact, not the job log: the page can show member names.
+    dump.error = String(err && err.message).split('\n')[0];
     await writeFile(path.join(OUT, 'claims-search-diagnostics.json'), JSON.stringify(dump, null, 2)).catch(() => {});
     console.log('Claims search diagnostics saved to claims-search-diagnostics.json in the artifact.');
     throw err;
+  }
+}
+
+// An autocomplete menu left open covers the page and swallows clicks (a run
+// timed out clicking Search), so close it first.
+async function closeMenus(page) {
+  const open = page.locator('.mud-popover-open, .mud-overlay');
+  if (!(await open.count())) return;
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  // MudBlazor closes a menu when its backdrop is clicked.
+  const overlay = page.locator('.mud-overlay').first();
+  if (await overlay.isVisible().catch(() => false)) {
+    await overlay.click({ position: { x: 5, y: 5 }, timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(400);
+  }
+}
+
+async function clickSearch(page) {
+  const search = page.getByRole('button', { name: /^\s*Search\s*$/ }).first();
+  await closeMenus(page);
+  try {
+    await search.click({ timeout: 8000 });
+  } catch {
+    // Still covered: send the click to the button itself. Blazor handles it the same way.
+    console.log('Search button was covered; clicking it directly.');
+    await search.dispatchEvent('click');
   }
 }
 
@@ -121,6 +151,7 @@ const claimButtons = (page) => page.locator('td[data-label="Claim #"] button');
 
 async function openFirstTexasClaim(page) {
   // A medical claim (TXC-), not a pharmacy one (TXR-): it has the lines the caption describes.
+  await closeMenus(page);
   const medical = claimButtons(page).filter({ hasText: /TXC-/ });
   await ((await medical.count()) ? medical.first() : claimButtons(page).first()).click();
   await page.waitForURL(/\/claims\/[^/?]+/, { timeout: 20000 });
