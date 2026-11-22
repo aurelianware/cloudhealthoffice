@@ -29,7 +29,7 @@ public class AuthorizationSummary
     [System.Text.Json.Serialization.JsonIgnore]
     public string ProviderName => RequestingProviderName;
     [System.Text.Json.Serialization.JsonIgnore]
-    public string ServiceType => ServiceTypeCode;
+    public string ServiceType => X12ServiceTypes.Describe(ServiceTypeCode);
     [System.Text.Json.Serialization.JsonIgnore]
     public DateTime RequestDate => SubmittedDate;
     [System.Text.Json.Serialization.JsonIgnore]

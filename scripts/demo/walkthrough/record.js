@@ -106,7 +106,9 @@ async function searchClaimsForMember(page) {
 const claimButtons = (page) => page.locator('td[data-label="Claim #"] button');
 
 async function openFirstTexasClaim(page) {
-  await claimButtons(page).first().click();
+  // A medical claim (TXC-), not a pharmacy one (TXR-): it has the lines the caption describes.
+  const medical = claimButtons(page).filter({ hasText: /TXC-/ });
+  await ((await medical.count()) ? medical.first() : claimButtons(page).first()).click();
   await page.waitForURL(/\/claims\/[^/?]+/, { timeout: 20000 });
   await page.waitForTimeout(2000);
 }

@@ -82,6 +82,24 @@ public class ShadowRunReportTests
     }
 
     [Fact]
+    public void AClaimHeldForProviderScreening_IsAttributedToWhatChangedItsAmounts_NotTheHold()
+    {
+        var held = Decided("H1", ShadowDiscrepancyKind.AllowedVariance, "1000010045", -4.30m,
+            finding: "ProviderIntegrity: Billing provider: Provider verification could not reach a confident determination");
+        held.HeldForProviderScreening = true;
+        var heldWithAnotherFinding = Decided("H2", ShadowDiscrepancyKind.PaidVariance, "1000010045", -10m,
+            finding: "ProviderIntegrity: Billing provider: not screened");
+        heldWithAnotherFinding.HeldForProviderScreening = true;
+        heldWithAnotherFinding.ChoStageFindings.Add("NcciEdits: Bundled");
+        var notHeld = Decided("N1", ShadowDiscrepancyKind.AllowedVariance, "1000010045", -4.30m,
+            finding: "ProviderIntegrity: Billing provider: not screened");
+
+        Assert.Equal("Pricing", ShadowRunReportBuilder.DrivingStage(held));
+        Assert.Equal("NcciEdits", ShadowRunReportBuilder.DrivingStage(heldWithAnotherFinding));
+        Assert.Equal("ProviderIntegrity", ShadowRunReportBuilder.DrivingStage(notHeld));
+    }
+
+    [Fact]
     public void TheCsv_HasOneRowPerDifferingLine_AndLeavesOutMatches()
     {
         var csv = ShadowDiscrepancyCsv.Write(Results(), includeUndecided: false);
