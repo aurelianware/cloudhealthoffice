@@ -1,3 +1,4 @@
+using Cms0057Acceptance.Tests.TestSupport;
 using System.Reflection;
 using FhirService.Controllers;
 using FhirService.Services;
@@ -154,7 +155,7 @@ public class PasInquiryTests
         pended.Outcome.Should().Be(ClaimProcessingCodes.Queued);
 
         // The pended one carries the X12 A4 review action and says what is outstanding.
-        pended.Extension.Should().NotBeEmpty();
+        PasReviewActions.OnLines(pended).Should().Contain(c => c.Code == "A4");
         pended.ProcessNote.Should().ContainSingle()
             .Which.Text.Should().Be("Awaiting clinical notes");
     }
@@ -176,10 +177,7 @@ public class PasInquiryTests
         // ClaimResponse.error: that element binds required to X12 list 901 and
         // means the request was rejected. See PasResponseBuilder.DenialNote.
         response.Error.Should().BeEmpty();
-        response.Extension.Should().ContainSingle(e =>
-            e.Url == "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewAction")
-            .Which.Extension.Should().ContainSingle().Which.Value.Should().BeOfType<Coding>()
-            .Which.Code.Should().Be("A3");
+        PasReviewActions.OnLines(response).Should().NotBeEmpty().And.OnlyContain(c => c.Code == "A3");
         response.ProcessNote.Should().ContainSingle()
             .Which.Text.Should().Contain("A3-CRITERIA")
             .And.Contain("Does not meet clinical criteria.");

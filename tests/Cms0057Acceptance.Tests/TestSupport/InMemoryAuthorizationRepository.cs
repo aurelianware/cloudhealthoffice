@@ -138,6 +138,12 @@ internal sealed class InMemoryAuthorizationRepository : IAuthorizationRepository
         => Task.FromResult(
             _store.FirstOrDefault(a => a.AuthorizationNumber == authorizationNumber) is { } a ? Clone(a) : null);
 
+    public Task<Authorization?> GetBySubmitterIdentifierAsync(string submitterIdentifier)
+        => Task.FromResult(
+            _store.Where(a => a.SubmitterIdentifier == submitterIdentifier)
+                .OrderByDescending(a => a.SubmittedDate)
+                .FirstOrDefault() is { } a ? Clone(a) : null);
+
     public Task<IEnumerable<Authorization>> SearchAsync(
         string? memberId, string? providerNPI, DateTime? serviceDateFrom, DateTime? serviceDateTo,
         AuthorizationStatus? status, LineOfBusiness? lineOfBusiness, int page, int pageSize)

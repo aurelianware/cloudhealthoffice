@@ -16,6 +16,16 @@ public class PasAuthorizationMapperTests
 
     private static PasMappingResult Map(Bundle bundle) => PasAuthorizationMapper.Map(bundle, PasBundles.ClaimOf(bundle), Received);
 
+    [Theory]
+    [InlineData("http://example.org/trace", "111099", "http://example.org/trace|111099")]
+    [InlineData(null, " 111099 ", "111099")]
+    [InlineData("http://example.org/trace", null, null)]
+    public void SubmitterIdentifier_IsTheClaimsFirstIdentifier_AsSystemBarValue(string? system, string? value, string? expected)
+    {
+        var claim = new Claim { Identifier = [new Identifier { System = system, Value = value }] };
+        PasAuthorizationMapper.SubmitterIdentifier(claim).Should().Be(expected);
+    }
+
     [Fact]
     public void QuantityCoding_IsIndependentOfDisplay_AndParticipatesInRequestHash()
     {

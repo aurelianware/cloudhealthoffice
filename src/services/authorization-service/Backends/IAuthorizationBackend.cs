@@ -54,6 +54,14 @@ public interface IAuthorizationBackend
     Task<Authorization?> GetByNumberAsync(string authorizationNumber, CancellationToken ct = default);
 
     /// <summary>
+    /// The most recent PAS-recorded authorization the submitter identified
+    /// as <paramref name="submitterIdentifier"/> (<c>system|value</c>), or null.
+    /// A backend that records no PAS requests has none.
+    /// </summary>
+    Task<Authorization?> GetBySubmitterIdentifierAsync(string submitterIdentifier, CancellationToken ct = default)
+        => Task.FromResult<Authorization?>(null);
+
+    /// <summary>
     /// Apply a status/decision transition and persist it, preserving the
     /// append-only status history on the record.
     /// </summary>

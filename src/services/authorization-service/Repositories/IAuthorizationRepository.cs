@@ -7,6 +7,10 @@ public interface IAuthorizationRepository
 {
     Task<Authorization?> GetByIdAsync(string id);
     Task<Authorization?> GetByAuthorizationNumberAsync(string authorizationNumber);
+
+    /// <summary>The current tenant's most recently submitted authorization with this submitter identifier, or null.</summary>
+    Task<Authorization?> GetBySubmitterIdentifierAsync(string submitterIdentifier)
+        => Task.FromResult<Authorization?>(null);
     Task<IEnumerable<Authorization>> SearchAsync(
         string? memberId,
         string? providerNPI,

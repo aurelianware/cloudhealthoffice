@@ -175,11 +175,28 @@ public interface IApprovedAuthorizationSearch
 }
 
 /// <summary>
+/// The PAS-recorded authorization a submitter identified with its own
+/// <c>Claim.identifier</c>, for an inquiry that names that identifier rather
+/// than the <c>preAuthRef</c> CHO issued. A separate seam from
+/// <see cref="IPriorAuthorizationStore"/> for the same reason as
+/// <see cref="IApprovedAuthorizationSearch"/>; it reads and never writes.
+/// The inquiry service applies the same tenant and corroborating-key checks
+/// to what it returns.
+/// </summary>
+public interface ISubmitterIdentifierLookup
+{
+    /// <summary>The tenant's most recent authorization recorded under <paramref name="submitterIdentifier"/> (<c>system|value</c>), or null.</summary>
+    Task<PriorAuthorizationRecord?> GetBySubmitterIdentifierAsync(
+        string tenantId, string submitterIdentifier, CancellationToken ct = default);
+}
+
+/// <summary>
 /// Reads the authoritative record from authorization-service over HTTP, using
 /// the read endpoint that already exists (<c>GET api/authorizations/number/{n}</c>).
 /// No new store, no new status field, no second copy of the state.
 /// </summary>
-public sealed class HttpPriorAuthorizationStore : IPriorAuthorizationStore, IApprovedAuthorizationSearch
+public sealed class HttpPriorAuthorizationStore
+    : IPriorAuthorizationStore, IApprovedAuthorizationSearch, ISubmitterIdentifierLookup
 {
     public const string HttpClientName = "AuthorizationService";
 
@@ -226,6 +243,48 @@ public sealed class HttpPriorAuthorizationStore : IPriorAuthorizationStore, IApp
         }
 
         return found;
+    }
+
+    public async Task<PriorAuthorizationRecord?> GetBySubmitterIdentifierAsync(
+        string tenantId, string submitterIdentifier, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(submitterIdentifier))
+            return null;
+
+        var client = _factory.CreateClient(HttpClientName);
+        try
+        {
+            // The internal endpoint takes fhir-service's own service token
+            // (the one the submit path records with), for the caller's tenant.
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                "api/internal/authorizations/automated-decisions/by-submitter-identifier?identifier="
+                + Uri.EscapeDataString(submitterIdentifier.Trim())).UseChoServiceToken();
+            request.Headers.Add(TenantHeaderPropagationHandler.HeaderName, tenantId);
+            using var response = await client.SendAsync(request, ct);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return null;
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Prior-authorization lookup by submitter identifier returned {Status}; treating as not found.",
+                    (int)response.StatusCode);
+                return null;
+            }
+
+            return await response.Content.ReadFromJsonAsync<PriorAuthorizationRecord>(WireFormat, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Category only — never the URL or the body.
+            _logger.LogWarning(
+                "Prior-authorization lookup by submitter identifier failed ({Fault}); treating as not found.",
+                ex.GetType().Name);
+            return null;
+        }
     }
 
     private async Task<List<PriorAuthorizationRecord>> SearchAsync(string tenantId, string path, CancellationToken ct)

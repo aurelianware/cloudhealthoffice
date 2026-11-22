@@ -556,6 +556,9 @@ builder.Services.AddScoped<FhirService.Services.IPriorAuthorizationStore,
 // from the same service through the same client.
 builder.Services.AddScoped<FhirService.Services.IApprovedAuthorizationSearch,
     FhirService.Services.HttpPriorAuthorizationStore>();
+// PAS $inquire by the submitter's own Claim.identifier, when it names no preAuthRef.
+builder.Services.AddScoped<FhirService.Services.ISubmitterIdentifierLookup,
+    FhirService.Services.HttpPriorAuthorizationStore>();
 builder.Services.AddScoped<FhirService.Services.IPriorAuthorizationInquiryService,
     FhirService.Services.PriorAuthorizationInquiryService>();
 // D-26 caller binding. Absent configuration the patient binding observes and
@@ -837,6 +840,19 @@ builder.Services.AddControllers(options =>
     options.Filters.Add<FhirService.Services.ProviderAccess.ProviderAccessAuthorizationFilter>();
     // Adapter failures answer as FHIR: unsupported search 400, upstream outage 502 (ADR 018).
     options.Filters.Add<FhirAdapterExceptionFilter>();
+})
+.ConfigureApiBehaviorOptions(options =>
+{
+    // A FHIR request whose body cannot be read (malformed JSON, a resource
+    // that does not parse) is answered with an OperationOutcome, as FHIR
+    // requires of every error; the rest of the service keeps ASP.NET's
+    // ProblemDetails. PAS (spec: an invalid $submit gets an OperationOutcome)
+    // and every other FHIR client read errors from it.
+    var problemDetails = options.InvalidModelStateResponseFactory;
+    options.InvalidModelStateResponseFactory = context =>
+        context.HttpContext.Request.Path.StartsWithSegments("/fhir")
+            ? FhirService.Formatters.FhirInvalidRequest.Response(context.ModelState)
+            : problemDetails(context);
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

@@ -105,6 +105,16 @@ public class Authorization
     public string? RequestHash { get; set; }
 
     /// <summary>
+    /// The submitter's own identifier for the request, from the PAS Claim's
+    /// <c>identifier</c> (<c>system|value</c>; X12 278 patient event trace
+    /// number), kept so a PAS <c>$inquire</c> that names the request the same
+    /// way, rather than by the <c>preAuthRef</c> CHO issued, finds it. Null for
+    /// records not created from PAS.
+    /// </summary>
+    [StringLength(300)]
+    public string? SubmitterIdentifier { get; set; }
+
+    /// <summary>
     /// Coverage ID (links to Coverage Service for eligibility)
     /// </summary>
     [StringLength(50)]

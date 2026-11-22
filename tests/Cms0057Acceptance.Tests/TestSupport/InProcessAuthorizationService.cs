@@ -25,7 +25,8 @@ namespace Cms0057Acceptance.Tests.TestSupport;
 /// are proven by fhir-service's PasSubmitPersistenceSeamTests (both real
 /// hosts) and authorization-service's AutomatedDecisionEndpointTests.
 /// </summary>
-internal sealed class InProcessAuthorizationService : IPasAuthorizationRecorder, IPriorAuthorizationStore
+internal sealed class InProcessAuthorizationService
+    : IPasAuthorizationRecorder, IPriorAuthorizationStore, ISubmitterIdentifierLookup
 {
     /// <summary>authorization-service's MVC wire format: declared enum names, no integers.</summary>
     private static readonly JsonSerializerOptions AuthorizationServiceWire = new(JsonSerializerDefaults.Web)
@@ -88,6 +89,22 @@ internal sealed class InProcessAuthorizationService : IPasAuthorizationRecorder,
             ? null
             : JsonSerializer.Deserialize<PriorAuthorizationRecord>(
                 JsonSerializer.Serialize(stored, AuthorizationServiceWire), HttpPriorAuthorizationStore.WireFormat);
+    }
+
+    public async Task<PriorAuthorizationRecord?> GetBySubmitterIdentifierAsync(
+        string tenantId, string submitterIdentifier, CancellationToken ct = default)
+    {
+        var controller = new AutomatedDecisionsController(
+            _selector, new ServiceActor(tenantId), AcceptanceContext.Logger<AutomatedDecisionsController>())
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
+
+        var result = await controller.GetBySubmitterIdentifier(submitterIdentifier);
+        return result.Result is OkObjectResult { Value: StoredAuthorization stored }
+            ? JsonSerializer.Deserialize<PriorAuthorizationRecord>(
+                JsonSerializer.Serialize(stored, AuthorizationServiceWire), HttpPriorAuthorizationStore.WireFormat)
+            : null;
     }
 
     /// <summary>fhir-service's service identity, as its token would present it.</summary>

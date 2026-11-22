@@ -1,3 +1,4 @@
+using Cms0057Acceptance.Tests.TestSupport;
 using System.Security.Claims;
 using System.Text;
 using AuthorizationService.Consumers;
@@ -943,8 +944,7 @@ public class CdexAdditionalInformationTests
 
         var before = InquiryResponse(builder, await authorizations.GetByAuthorizationNumberAsync(AuthNumber));
         before.Disposition.Should().Be("pended-additional-information");
-        before.Extension.Should().Contain(e =>
-            e.Url == "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewAction");
+        PasReviewActions.OnLines(before).Should().Contain(c => c.Code == "A4");
 
         await SubmitAsync(harness, rfai.TrackingId, AuthNumber);
         var announcement = harness.Kafka.DocsReceivedMessages.Single();

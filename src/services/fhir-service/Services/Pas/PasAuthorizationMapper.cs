@@ -92,11 +92,33 @@ public static class PasAuthorizationMapper
     private static readonly Regex Npi = new(@"^\d{10}$", RegexOptions.Compiled);
     private static readonly Regex ServiceTypeCode = new(@"^[A-Za-z0-9]{1,2}$", RegexOptions.Compiled);
 
+    /// <summary>
+    /// The submitter's own identifier for a PAS request: the first
+    /// <c>Claim.identifier</c> with a value, as <c>system|value</c> (or the
+    /// value alone when it names no system). Null when there is none or it is
+    /// longer than authorization-service keeps. The same key is read from an
+    /// inquiry Claim, so a provider can inquire with the identifier it
+    /// assigned (PAS: the X12 278 patient event trace number).
+    /// </summary>
+    public static string? SubmitterIdentifier(Claim claim)
+    {
+        var identifier = claim.Identifier?.FirstOrDefault(i => !string.IsNullOrWhiteSpace(i.Value));
+        if (identifier is null) return null;
+
+        var value = identifier.Value.Trim();
+        var key = string.IsNullOrWhiteSpace(identifier.System) ? value : $"{identifier.System.Trim()}|{value}";
+        return key.Length <= 300 ? key : null;
+    }
+
     public static PasMappingResult Map(Bundle bundle, Claim claim, DateTime receivedAt)
     {
         var errors = new List<PasMappingError>();
         var warnings = new List<PasMappingWarning>();
-        var request = new PasAuthorizationRecordRequest { ReceivedAt = receivedAt };
+        var request = new PasAuthorizationRecordRequest
+        {
+            ReceivedAt = receivedAt,
+            SubmitterIdentifier = SubmitterIdentifier(claim),
+        };
 
         MapPatientAndCoverage(bundle, claim, request, errors);
         MapProviders(bundle, claim, request, errors);
@@ -853,6 +875,9 @@ public sealed class PasAuthorizationRecordRequest
     public DateTime ReceivedAt { get; set; }
     public string MemberId { get; set; } = string.Empty;
     public string? PatientReference { get; set; }
+
+    /// <summary>The submitter's own identifier for the request (see <see cref="PasAuthorizationMapper.SubmitterIdentifier"/>).</summary>
+    public string? SubmitterIdentifier { get; set; }
     public string? CoverageId { get; set; }
     public string PatientFirstName { get; set; } = string.Empty;
     public string PatientLastName { get; set; } = string.Empty;

@@ -159,7 +159,7 @@ public class PasController : FhirControllerBase
                         "PAS $submit auto-denied: excluded provider NPI {Npi}, source={Source}",
                         LogSanitizer.Sanitize(providerNpi), LogSanitizer.Sanitize(verificationResult.ExclusionSource));
 
-                    return await RecordAndRespondAsync(claim, record, mapping, deniedDecision, sw);
+                    return await RecordAndRespondAsync(requestBundle, claim, record, mapping, deniedDecision, sw);
                 }
 
                 if (verificationResult.IntegrityScore >= 0 && verificationResult.IntegrityScore < 40)
@@ -180,7 +180,7 @@ public class PasController : FhirControllerBase
                 _logger.LogInformation(
                     "PAS $submit for tenant {TenantId}: line of business undetermined, pended without adjudication",
                     LogSanitizer.Sanitize(TenantId));
-                return await RecordAndRespondAsync(claim, record, mapping, new PasDecisionResult
+                return await RecordAndRespondAsync(requestBundle, claim, record, mapping, new PasDecisionResult
                 {
                     HasDecision = false,
                     RuleName = LineOfBusinessUndeterminedRule,
@@ -194,7 +194,7 @@ public class PasController : FhirControllerBase
             var decision = await _adjudicator.TryDecideAsync(
                 claim, requestBundle, TenantId, basis, timeBudgetMs, HttpContext.RequestAborted);
 
-            return await RecordAndRespondAsync(claim, record, mapping, decision, sw);
+            return await RecordAndRespondAsync(requestBundle, claim, record, mapping, decision, sw);
         }
         catch (Exception ex)
         {
@@ -215,7 +215,7 @@ public class PasController : FhirControllerBase
     /// OperationOutcome and no ClaimResponse.
     /// </summary>
     private async Task<IActionResult> RecordAndRespondAsync(
-        Claim claim, PasAuthorizationRecordRequest record, PasMappingResult mapping,
+        Bundle requestBundle, Claim claim, PasAuthorizationRecordRequest record, PasMappingResult mapping,
         PasDecisionResult decision, Stopwatch sw)
     {
         decision.AuthorizationNumber ??= NewAuthorizationNumber();
@@ -285,7 +285,7 @@ public class PasController : FhirControllerBase
                 answer.Decision = "approved";
                 answer.EffectiveFrom = kept.ApprovedServiceDateFrom;
                 answer.EffectiveTo = kept.ApprovedServiceDateTo;
-                responseBundle = _responseBuilder.BuildApprovedResponse(claim, answer, kept.RequestedServices);
+                responseBundle = _responseBuilder.BuildApprovedResponse(claim, answer, kept.RequestedServices, requestBundle, FhirBaseUrl);
                 break;
             case PriorAuthorizationStatus.Modified:
             case PriorAuthorizationStatus.Expired:
@@ -300,7 +300,7 @@ public class PasController : FhirControllerBase
                     ApprovedServiceDateTo = kept.ApprovedServiceDateTo,
                     ExpirationDate = kept.ExpirationDate,
                     RequestedServices = kept.RequestedServices,
-                });
+                }, requestBundle, FhirBaseUrl);
                 break;
             case PriorAuthorizationStatus.Denied:
                 answer.HasDecision = true;
@@ -309,10 +309,10 @@ public class PasController : FhirControllerBase
                 answer.DenialReason = kept.DenialReason;
                 if (outcome != "Denied")
                     answer.RuleName = "benefit-exclusion";
-                responseBundle = _responseBuilder.BuildDeniedResponse(claim, answer, kept.RequestedServices);
+                responseBundle = _responseBuilder.BuildDeniedResponse(claim, answer, kept.RequestedServices, requestBundle, FhirBaseUrl);
                 break;
             case PriorAuthorizationStatus.Pended:
-                responseBundle = _responseBuilder.BuildPendedResponse(claim, kept.AuthorizationNumber, kept.RequestedServices);
+                responseBundle = _responseBuilder.BuildPendedResponse(claim, kept.AuthorizationNumber, kept.RequestedServices, requestBundle, FhirBaseUrl);
                 await WatchForDecisionAsync(record.RequestingProviderNPI, kept.AuthorizationNumber, HttpContext.RequestAborted);
                 break;
             default:
@@ -494,7 +494,7 @@ public class PasController : FhirControllerBase
             });
         }
 
-        return Ok(_responseBuilder.BuildInquiryResponse(result.Authorization!));
+        return Ok(_responseBuilder.BuildInquiryResponse(result.Authorization!, requestBundle, FhirBaseUrl));
     }
 
     /// <summary>

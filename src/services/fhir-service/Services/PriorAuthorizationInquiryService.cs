@@ -66,6 +66,13 @@ public sealed record PriorAuthorizationInquiryRequest
     /// <summary>The tracking identifier issued at submit (ClaimResponse.preAuthRef).</summary>
     public string? AuthorizationNumber { get; init; }
 
+    /// <summary>
+    /// The inquiry Claim's own identifier (<c>system|value</c>). A provider
+    /// may inquire with the identifier it gave the request rather than the
+    /// preAuthRef; used only when no authorization has that number.
+    /// </summary>
+    public string? SubmitterIdentifier { get; init; }
+
     /// <summary>Member the caller asserts the authorization is for.</summary>
     public string? MemberReference { get; init; }
 
@@ -205,14 +212,17 @@ public sealed class PriorAuthorizationInquiryService : IPriorAuthorizationInquir
 {
     private readonly IPriorAuthorizationStore _store;
     private readonly PasCallerBindingOptions _binding;
+    private readonly ISubmitterIdentifierLookup? _submitterLookup;
     private readonly ILogger<PriorAuthorizationInquiryService>? _logger;
 
     public PriorAuthorizationInquiryService(
         IPriorAuthorizationStore store,
         Microsoft.Extensions.Options.IOptions<PasCallerBindingOptions>? binding = null,
-        ILogger<PriorAuthorizationInquiryService>? logger = null)
+        ILogger<PriorAuthorizationInquiryService>? logger = null,
+        ISubmitterIdentifierLookup? submitterLookup = null)
     {
         _store = store;
+        _submitterLookup = submitterLookup;
         // Defaulting to observe-only is the safe default in both directions: a
         // deployment that configures nothing refuses nothing new, and the
         // setting has to be turned on deliberately.
@@ -232,6 +242,7 @@ public sealed class PriorAuthorizationInquiryService : IPriorAuthorizationInquir
         // Trimmed on the way in: a padded identifier would otherwise miss the
         // lookup and be echoed untrimmed into the audit line.
         AuthorizationNumber = Normalize(ExtractAuthorizationNumber(claim)),
+        SubmitterIdentifier = Pas.PasAuthorizationMapper.SubmitterIdentifier(claim),
         MemberReference = Normalize(claim.Patient?.Reference),
         RequestingProviderNpi = Normalize(claim.Provider?.Identifier?.Value),
         // From the TOKEN, and only ever from the token. Both are null unless a
@@ -276,6 +287,17 @@ public sealed class PriorAuthorizationInquiryService : IPriorAuthorizationInquir
                 authorizationNumber);
 
         var record = await _store.GetByAuthorizationNumberAsync(authorizationNumber, ct);
+
+        // PAS: the inquiry Claim may carry the identifier the provider gave
+        // the request rather than the preAuthRef CHO issued. Everything below
+        // (tenant, verified caller, corroborating key) applies unchanged.
+        if (record is null && _submitterLookup is not null
+            && !string.IsNullOrWhiteSpace(request.SubmitterIdentifier))
+        {
+            record = await _submitterLookup.GetBySubmitterIdentifierAsync(
+                request.TenantId, request.SubmitterIdentifier, ct);
+        }
+
         if (record is null)
             return PriorAuthorizationInquiryResult.Refused(
                 PriorAuthorizationInquiryOutcome.NotFound, authorizationNumber);
