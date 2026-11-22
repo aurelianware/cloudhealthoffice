@@ -19,7 +19,7 @@
 // `demo.sh seed` (scripts/demo/texas) run the same day.
 
 import { chromium } from 'playwright';
-import { mkdir, rename } from 'node:fs/promises';
+import { mkdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const BASE_URL = (process.env.BASE_URL || 'https://demo.cloudhealthoffice.com').replace(/\/$/, '');
@@ -89,7 +89,7 @@ async function searchClaimsForMember(page) {
     // Each result row opens its claim from a button holding the claim number.
     await claimButtons(page).first().waitFor({ timeout: 20000 });
   } catch (err) {
-    // Print what the page showed, so the job log says which part did not match.
+    // Record what the page showed, so the run says which part did not match.
     const dump = await page.evaluate(() => {
       const control = document.querySelector('input[placeholder="Search by name or ID"]')?.closest('.mud-input-control');
       const popovers = [...document.querySelectorAll('.mud-popover')].map((p) => `${p.className}: ${p.innerText.slice(0, 300)}`);
@@ -98,7 +98,9 @@ async function searchClaimsForMember(page) {
       return { control: control ? control.outerHTML.slice(0, 1200) : 'no Member input', popovers, alerts, rows,
         inputs: [...document.querySelectorAll('input')].map((i) => i.placeholder || i.id).slice(0, 15) };
     }).catch(() => ({}));
-    console.log(`Claims search diagnostics: ${JSON.stringify(dump)}`);
+    // To a file in the run's artifact, not the job log: the page can show member names.
+    await writeFile(path.join(OUT, 'claims-search-diagnostics.json'), JSON.stringify(dump, null, 2)).catch(() => {});
+    console.log('Claims search diagnostics saved to claims-search-diagnostics.json in the artifact.');
     throw err;
   }
 }
