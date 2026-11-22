@@ -77,6 +77,19 @@ public sealed record PasStoredAuthorization
     /// <summary>The hash of the request this record was created from (see <see cref="PasAuthorizationRecordRequest.RequestHash"/>).</summary>
     [JsonPropertyName("requestHash")]
     public string? RequestHash { get; init; }
+
+    [JsonPropertyName("pendReason")]
+    public string? PendReason { get; init; }
+
+    [JsonPropertyName("reviewedDate")]
+    public DateTime? ReviewedDate { get; init; }
+
+    /// <summary>Read only to say whether a person made the stored decision (a repeat of a request a reviewer has since decided).</summary>
+    [JsonPropertyName("statusHistory")]
+    public List<PriorAuthorizationStatusChange> StatusHistory { get; init; } = new();
+
+    /// <summary>See <see cref="PriorAuthorizationRecord.HumanReviewed"/>.</summary>
+    public bool? HumanReviewed() => PriorAuthorizationStatusChange.HumanReviewed(Status, StatusHistory);
 }
 
 /// <summary>

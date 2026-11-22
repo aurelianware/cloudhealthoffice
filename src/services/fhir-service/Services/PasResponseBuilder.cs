@@ -95,9 +95,13 @@ public class PasResponseBuilder
     /// <summary>
     /// Builds an approved ClaimResponse bundle.
     /// </summary>
+    /// <param name="humanReviewed">
+    /// Whether a person made the decision (false for CHO's automated ones);
+    /// null when unknown, in which case the response does not say.
+    /// </param>
     public Bundle BuildApprovedResponse(
         Claim claim, PasDecisionResult decision, List<PriorAuthorizationService>? services = null,
-        Bundle? request = null, string? fhirBaseUrl = null)
+        Bundle? request = null, string? fhirBaseUrl = null, bool? humanReviewed = null)
     {
         var claimResponse = BuildBase(claim);
         claimResponse.Outcome = ClaimProcessingCodes.Complete;
@@ -115,6 +119,8 @@ public class PasResponseBuilder
 
         AddRequestedServices(claimResponse, new PriorAuthorizationRecord { RequestedServices = services ?? new() },
             ("A1", "Certified in total"), claim);
+        PasResponseDetail.Apply(claimResponse, claim, request, new PasResponseContext(
+            decision.AuthorizationNumber, "A1", DateTime.UtcNow, claimResponse.PreAuthPeriod, humanReviewed));
         return WrapInBundle(claimResponse, request, fhirBaseUrl);
     }
 
@@ -123,7 +129,7 @@ public class PasResponseBuilder
     /// </summary>
     public Bundle BuildDeniedResponse(
         Claim claim, PasDecisionResult decision, List<PriorAuthorizationService>? services = null,
-        Bundle? request = null, string? fhirBaseUrl = null)
+        Bundle? request = null, string? fhirBaseUrl = null, bool? humanReviewed = null)
     {
         var claimResponse = BuildBase(claim);
         claimResponse.Outcome = ClaimProcessingCodes.Complete;
@@ -138,15 +144,18 @@ public class PasResponseBuilder
 
         AddRequestedServices(claimResponse, new PriorAuthorizationRecord { RequestedServices = services ?? new() },
             ("A3", "Not Certified"), claim);
+        PasResponseDetail.Apply(claimResponse, claim, request, new PasResponseContext(
+            decision.AuthorizationNumber, "A3", DateTime.UtcNow, null, humanReviewed));
         return WrapInBundle(claimResponse, request, fhirBaseUrl);
     }
 
     /// <summary>
     /// Builds a pended ClaimResponse bundle with X12 review action code A4.
     /// </summary>
+    /// <param name="pendReason">Why the request is pended, as the record states it; sent as a note.</param>
     public Bundle BuildPendedResponse(
         Claim claim, string? authorizationNumber = null, List<PriorAuthorizationService>? services = null,
-        Bundle? request = null, string? fhirBaseUrl = null)
+        Bundle? request = null, string? fhirBaseUrl = null, string? pendReason = null)
     {
         var claimResponse = BuildBase(claim);
         // PAS 2.2.1 binds outcome to complete | error | partial: receiving
@@ -158,9 +167,20 @@ public class PasResponseBuilder
         // following up. PAS-04 depends on it.
         claimResponse.PreAuthRef = authorizationNumber;
 
+        if (!string.IsNullOrWhiteSpace(pendReason))
+        {
+            AddNote(claimResponse, new ClaimResponse.NoteComponent
+            {
+                Type = Hl7.Fhir.Model.NoteType.Print,
+                Text = pendReason,
+            });
+        }
+
         // A4 (pended) on every line's adjudication reviewAction.
         AddRequestedServices(claimResponse, new PriorAuthorizationRecord { RequestedServices = services ?? new() },
             ("A4", "Pending"), claim);
+        PasResponseDetail.Apply(claimResponse, claim, request, new PasResponseContext(
+            authorizationNumber, "A4", null, null, null));
         return WrapInBundle(claimResponse, request, fhirBaseUrl);
     }
 
@@ -230,7 +250,7 @@ public class PasResponseBuilder
 
         claimResponse.Identifier.Add(new Identifier
         {
-            System = "http://cloudhealthoffice.com/prior-authorization",
+            System = PasResponseDetail.ChoAuthorizationSystem,
             Value = authorization.AuthorizationNumber,
         });
 
@@ -276,6 +296,12 @@ public class PasResponseBuilder
 
         AddRequestedServices(claimResponse, authorization,
             reviewActionCode is null ? null : (reviewActionCode, reviewActionDisplay), inquiryClaim);
+
+        // The inquiry Claim restates the request, so its trace numbers, dates,
+        // care team and diagnoses are the ones the response hands back.
+        PasResponseDetail.Apply(claimResponse, inquiryClaim, request, new PasResponseContext(
+            authorization.AuthorizationNumber, reviewActionCode, authorization.ReviewedDate,
+            claimResponse.PreAuthPeriod, authorization.HumanReviewed()));
 
         return WrapInBundle(claimResponse, request, fhirBaseUrl);
     }

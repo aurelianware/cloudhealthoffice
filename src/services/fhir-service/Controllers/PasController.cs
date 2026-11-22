@@ -285,7 +285,8 @@ public class PasController : FhirControllerBase
                 answer.Decision = "approved";
                 answer.EffectiveFrom = kept.ApprovedServiceDateFrom;
                 answer.EffectiveTo = kept.ApprovedServiceDateTo;
-                responseBundle = _responseBuilder.BuildApprovedResponse(claim, answer, kept.RequestedServices, requestBundle, FhirBaseUrl);
+                responseBundle = _responseBuilder.BuildApprovedResponse(claim, answer, kept.RequestedServices, requestBundle, FhirBaseUrl,
+                    kept.HumanReviewed());
                 break;
             case PriorAuthorizationStatus.Modified:
             case PriorAuthorizationStatus.Expired:
@@ -299,6 +300,9 @@ public class PasController : FhirControllerBase
                     ApprovedServiceDateFrom = kept.ApprovedServiceDateFrom,
                     ApprovedServiceDateTo = kept.ApprovedServiceDateTo,
                     ExpirationDate = kept.ExpirationDate,
+                    ReviewedDate = kept.ReviewedDate,
+                    PendReason = kept.PendReason,
+                    StatusHistory = kept.StatusHistory,
                     RequestedServices = kept.RequestedServices,
                 }, requestBundle, FhirBaseUrl);
                 break;
@@ -309,10 +313,12 @@ public class PasController : FhirControllerBase
                 answer.DenialReason = kept.DenialReason;
                 if (outcome != "Denied")
                     answer.RuleName = "benefit-exclusion";
-                responseBundle = _responseBuilder.BuildDeniedResponse(claim, answer, kept.RequestedServices, requestBundle, FhirBaseUrl);
+                responseBundle = _responseBuilder.BuildDeniedResponse(claim, answer, kept.RequestedServices, requestBundle, FhirBaseUrl,
+                    kept.HumanReviewed());
                 break;
             case PriorAuthorizationStatus.Pended:
-                responseBundle = _responseBuilder.BuildPendedResponse(claim, kept.AuthorizationNumber, kept.RequestedServices, requestBundle, FhirBaseUrl);
+                responseBundle = _responseBuilder.BuildPendedResponse(claim, kept.AuthorizationNumber, kept.RequestedServices, requestBundle, FhirBaseUrl,
+                    kept.PendReason);
                 await WatchForDecisionAsync(record.RequestingProviderNPI, kept.AuthorizationNumber, HttpContext.RequestAborted);
                 break;
             default:
