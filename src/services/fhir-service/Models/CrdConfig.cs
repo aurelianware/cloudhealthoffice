@@ -17,4 +17,10 @@ public class CrdConfig
     /// resolves as a DTR <c>$questionnaire-package</c> context (DTR spec-107).
     /// </summary>
     public int AssertionRetentionDays { get; set; } = 90;
+
+    /// <summary>
+    /// The plan's published coverage policy. When set, every coverage
+    /// assertion links to it (a <c>policy-link</c> detail); when not, none does.
+    /// </summary>
+    public string? CoveragePolicyUrl { get; set; }
 }

@@ -48,6 +48,10 @@ public sealed class AutomatedDecisionRecordRequest
     [StringLength(200)]
     public string? PatientReference { get; set; }
 
+    /// <summary>The submitter's own identifier for the request (<c>system|value</c>), from the PAS Claim.</summary>
+    [StringLength(300)]
+    public string? SubmitterIdentifier { get; set; }
+
     [StringLength(50)]
     public string? CoverageId { get; set; }
 

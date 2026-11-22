@@ -52,15 +52,29 @@ public class CpcdsEnrollmentController : ControllerBase
         [FromForm] IFormFile members,
         [FromForm] IFormFile? coverages = null,
         [FromForm] bool dryRun = false,
+        [FromForm] string? columnMap = null,
         CancellationToken ct = default)
     {
         if (members is null || members.Length == 0)
             return BadRequest(new { error = "A non-empty CPCDS member file is required." });
 
+        Dictionary<string, string>? map = null;
+        if (!string.IsNullOrWhiteSpace(columnMap))
+        {
+            try
+            {
+                map = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(columnMap);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return BadRequest(new { error = "columnMap must be a JSON object of CPCDS column name to file header." });
+            }
+        }
+
         var membersContent = await ReadAsync(members, ct);
         var coveragesContent = coverages is { Length: > 0 } ? await ReadAsync(coverages, ct) : null;
 
-        var projection = CpcdsEnrollmentProjector.Project(membersContent, coveragesContent, members.FileName);
+        var projection = CpcdsEnrollmentProjector.Project(membersContent, coveragesContent, members.FileName, map);
         var result = new CpcdsEnrollmentImportResult
         {
             DryRun = dryRun,

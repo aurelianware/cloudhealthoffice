@@ -112,6 +112,9 @@ public sealed class AutomatedDecisionsController : ControllerBase
             RequestHash = request.RequestHash,
             MemberId = request.MemberId.Trim(),
             PatientReference = request.PatientReference,
+            SubmitterIdentifier = string.IsNullOrWhiteSpace(request.SubmitterIdentifier)
+                ? null
+                : request.SubmitterIdentifier.Trim(),
             CoverageId = request.CoverageId,
             PatientFirstName = request.PatientFirstName.Trim(),
             PatientLastName = request.PatientLastName.Trim(),
@@ -203,6 +206,28 @@ public sealed class AutomatedDecisionsController : ControllerBase
             return BadRequest("Malformed authorization number.");
 
         var stored = await _backends.Resolve().GetByNumberAsync(authorizationNumber, HttpContext.RequestAborted);
+        return stored is null ? NotFound() : Ok(stored);
+    }
+
+    /// <summary>
+    /// The most recent record this endpoint stored under the submitter's own
+    /// identifier for the request (<c>system|value</c> of the PAS Claim's
+    /// <c>identifier</c>), in the token's tenant. For fhir-service's PAS
+    /// <c>$inquire</c>, which a provider may make with the identifier it
+    /// assigned rather than the <c>preAuthRef</c> CHO issued. fhir-service
+    /// still checks the inquiry's corroborating key against the record.
+    /// </summary>
+    [HttpGet("by-submitter-identifier")]
+    [ProducesResponseType(typeof(Authorization), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<Authorization>> GetBySubmitterIdentifier([FromQuery] string? identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier) || identifier.Length > 300)
+            return BadRequest("A submitter identifier of at most 300 characters is required.");
+
+        var stored = await _backends.Resolve()
+            .GetBySubmitterIdentifierAsync(identifier.Trim(), HttpContext.RequestAborted);
         return stored is null ? NotFound() : Ok(stored);
     }
 

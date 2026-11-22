@@ -25,6 +25,14 @@ public sealed class ClaimExtractSettings
     public string? DataUseAgreement { get; set; }
 
     /// <summary>
+    /// Also deliver the run in CPCDS: <c>CPCDS_Claims.csv</c> (the adjudicated
+    /// claims that changed), and <c>CPCDS_Members.csv</c> and
+    /// <c>CPCDS_Coverages.csv</c> (the whole membership). See
+    /// docs/integration/CPCDS-EXPORT.md.
+    /// </summary>
+    public bool IncludeCpcds { get; set; }
+
+    /// <summary>
     /// Every claim version last updated at or before this instant has been
     /// delivered. The next run delivers what changed after it. Null until the
     /// first run, which delivers everything.
@@ -84,6 +92,9 @@ public sealed class ClaimExtractRun
     public string? DataUseAgreement { get; set; }
     public long ClaimVersions { get; set; }
     public long Lines { get; set; }
+
+    /// <summary>Whether the run also delivered the CPCDS files.</summary>
+    public bool Cpcds { get; set; }
     public List<ClaimExtractFile> Files { get; set; } = [];
     public string? Error { get; set; }
 }
@@ -93,7 +104,9 @@ public interface IClaimExtractStore
     Task<ClaimExtractSettings?> GetSettingsAsync(string tenantId, CancellationToken ct = default);
 
     /// <summary>Saves whether the extract runs and its agreement, keeping its progress.</summary>
-    Task<ClaimExtractSettings> SaveSettingsAsync(string tenantId, bool enabled, string? dataUseAgreement, string updatedBy, DateTime now, CancellationToken ct = default);
+    Task<ClaimExtractSettings> SaveSettingsAsync(
+        string tenantId, bool enabled, string? dataUseAgreement, string updatedBy, DateTime now,
+        bool includeCpcds = false, CancellationToken ct = default);
 
     Task<IReadOnlyList<ClaimExtractSettings>> ListEnabledAsync(CancellationToken ct = default);
 
@@ -126,11 +139,13 @@ public sealed class ClaimExtractStoreMongo : IClaimExtractStore
         => await _settings.Find(s => s.TenantId == tenantId).FirstOrDefaultAsync(ct);
 
     public async Task<ClaimExtractSettings> SaveSettingsAsync(
-        string tenantId, bool enabled, string? dataUseAgreement, string updatedBy, DateTime now, CancellationToken ct = default)
+        string tenantId, bool enabled, string? dataUseAgreement, string updatedBy, DateTime now,
+        bool includeCpcds = false, CancellationToken ct = default)
     {
         var update = Builders<ClaimExtractSettings>.Update
             .Set(s => s.Enabled, enabled)
             .Set(s => s.DataUseAgreement, dataUseAgreement)
+            .Set(s => s.IncludeCpcds, includeCpcds)
             .Set(s => s.UpdatedAt, now)
             .Set(s => s.UpdatedBy, updatedBy);
         return await _settings.FindOneAndUpdateAsync(
@@ -182,7 +197,8 @@ public sealed class InMemoryClaimExtractStore : IClaimExtractStore
     }
 
     public Task<ClaimExtractSettings> SaveSettingsAsync(
-        string tenantId, bool enabled, string? dataUseAgreement, string updatedBy, DateTime now, CancellationToken ct = default)
+        string tenantId, bool enabled, string? dataUseAgreement, string updatedBy, DateTime now,
+        bool includeCpcds = false, CancellationToken ct = default)
     {
         lock (_sync)
         {
@@ -190,6 +206,7 @@ public sealed class InMemoryClaimExtractStore : IClaimExtractStore
                 _settings[tenantId] = s = new ClaimExtractSettings { TenantId = tenantId };
             s.Enabled = enabled;
             s.DataUseAgreement = dataUseAgreement;
+            s.IncludeCpcds = includeCpcds;
             s.UpdatedAt = now;
             s.UpdatedBy = updatedBy;
             return Task.FromResult(Copy(s));
@@ -243,7 +260,8 @@ public sealed class InMemoryClaimExtractStore : IClaimExtractStore
 
     private static ClaimExtractSettings Copy(ClaimExtractSettings s) => new()
     {
-        TenantId = s.TenantId, Enabled = s.Enabled, DataUseAgreement = s.DataUseAgreement, Watermark = s.Watermark,
+        TenantId = s.TenantId, Enabled = s.Enabled, DataUseAgreement = s.DataUseAgreement, IncludeCpcds = s.IncludeCpcds,
+        Watermark = s.Watermark,
         LastSucceededAt = s.LastSucceededAt, LeaseUntil = s.LeaseUntil, LeaseOwner = s.LeaseOwner,
         UpdatedAt = s.UpdatedAt, UpdatedBy = s.UpdatedBy,
     };

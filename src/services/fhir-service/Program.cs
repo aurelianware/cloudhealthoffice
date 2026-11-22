@@ -69,7 +69,7 @@ builder.Services.AddSingleton(new CloudHealthOffice.Infrastructure.Middleware.Te
     ],
 });
 builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment);
-builder.Services.AddFhirCallerSchemes(builder.Configuration);
+builder.Services.AddFhirCallerSchemes(builder.Configuration, builder.Environment);
 builder.Services.AddFhirAccessPolicies();
 
 // ── Public Provider Directory (CMS-9115-F, D-29) ─────────────────────────────
@@ -552,6 +552,13 @@ builder.Services.AddScoped<FhirService.Services.Pas.IPasAuthorizationRecorder,
 // no inquiry-specific status.
 builder.Services.AddScoped<FhirService.Services.IPriorAuthorizationStore,
     FhirService.Services.HttpPriorAuthorizationStore>();
+// CRD's pa-needed "satisfied": the member's approved authorizations, read live
+// from the same service through the same client.
+builder.Services.AddScoped<FhirService.Services.IApprovedAuthorizationSearch,
+    FhirService.Services.HttpPriorAuthorizationStore>();
+// PAS $inquire by the submitter's own Claim.identifier, when it names no preAuthRef.
+builder.Services.AddScoped<FhirService.Services.ISubmitterIdentifierLookup,
+    FhirService.Services.HttpPriorAuthorizationStore>();
 builder.Services.AddScoped<FhirService.Services.IPriorAuthorizationInquiryService,
     FhirService.Services.PriorAuthorizationInquiryService>();
 // D-26 caller binding. Absent configuration the patient binding observes and
@@ -735,10 +742,25 @@ builder.Services.AddSingleton<ICrdClassificationStore, CrdClassificationStore>()
 // program code for a member's benefit plan from one program record.
 builder.Services.AddProgramDirectoryClient(builder.Configuration);
 builder.Services.AddScoped<ICrdContextResolver, CrdContextResolver>();
+// The EHR's Coverage, read from the hook's fhirServer when it was not
+// prefetched (only for a trusted CDS Client, on its own origin).
+builder.Services.AddHttpClient(CrdEhrCoverageReader.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddScoped<ICrdEhrCoverageReader, CrdEhrCoverageReader>();
 // The coverage assertions CRD returns, so a DTR $questionnaire-package can
 // resolve a coverage-assertion-id context (DTR spec-107). Singleton: the store
 // ensures its indexes at construction.
 builder.Services.AddSingleton<ICrdAssertionStore, MongoCrdAssertionStore>();
+// PAS pended-decision Subscriptions (R4 backport). Off unless
+// Subscriptions:Enabled; the endpoints a Subscription may name are allowlisted.
+builder.Services.Configure<FhirService.Services.Subscriptions.PasSubscriptionOptions>(
+    builder.Configuration.GetSection(FhirService.Services.Subscriptions.PasSubscriptionOptions.SectionName));
+builder.Services.AddSingleton<FhirService.Services.Subscriptions.IPasSubscriptionStore,
+    FhirService.Services.Subscriptions.MongoPasSubscriptionStore>();
+builder.Services.AddSingleton<FhirService.Services.Subscriptions.PasSubscriptionService>();
+builder.Services.AddHttpClient(FhirService.Services.Subscriptions.PasSubscriptionService.HttpClientName,
+        client => client.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHostedService<FhirService.Services.Subscriptions.PasSubscriptionNotificationWorker>();
 builder.Services.AddScoped<ICrdService, CrdService>();
 builder.Services.Configure<DtrConfig>(builder.Configuration.GetSection("Cms0057:Dtr"));
 // Singleton: the store ensures its indexes at construction.
@@ -818,6 +840,19 @@ builder.Services.AddControllers(options =>
     options.Filters.Add<FhirService.Services.ProviderAccess.ProviderAccessAuthorizationFilter>();
     // Adapter failures answer as FHIR: unsupported search 400, upstream outage 502 (ADR 018).
     options.Filters.Add<FhirAdapterExceptionFilter>();
+})
+.ConfigureApiBehaviorOptions(options =>
+{
+    // A FHIR request whose body cannot be read (malformed JSON, a resource
+    // that does not parse) is answered with an OperationOutcome, as FHIR
+    // requires of every error; the rest of the service keeps ASP.NET's
+    // ProblemDetails. PAS (spec: an invalid $submit gets an OperationOutcome)
+    // and every other FHIR client read errors from it.
+    var problemDetails = options.InvalidModelStateResponseFactory;
+    options.InvalidModelStateResponseFactory = context =>
+        context.HttpContext.Request.Path.StartsWithSegments("/fhir")
+            ? FhirService.Formatters.FhirInvalidRequest.Response(context.ModelState)
+            : problemDetails(context);
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

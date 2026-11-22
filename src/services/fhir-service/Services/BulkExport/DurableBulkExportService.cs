@@ -16,8 +16,9 @@ namespace FhirService.Services.BulkExport;
 /// provider id. A provider exporting any other Group is answered as if that
 /// Group did not exist. <c>Patient/$export</c> exports every patient the
 /// caller may see, which for a provider is that same panel. A system-level
-/// <c>$export</c> (every member in the tenant) is still refused as not
-/// implemented: it has no approved caller.
+/// <c>$export</c> is every member in the tenant, for the backend clients named
+/// in <see cref="BulkExportOptions.SystemExport"/> only (the controller checks
+/// the caller); with none named it is refused as not implemented.
 /// </para>
 ///
 /// <para>
@@ -90,6 +91,16 @@ public sealed partial class DurableBulkExportService : IBulkExportService
                             new BulkMemberMatchCaller(tenantId, request.ReceivingPayerId, request.RequestedBy), group))
                         throw new BulkExportGroupNotFoundException();
                 }
+                break;
+
+            // Every member in the tenant. The controller has already matched
+            // the caller to a configured system exporter; with none
+            // configured this level does not exist.
+            case BulkExportLevel.System:
+                if (!_options.Value.SystemExport.IsOn)
+                    throw new BulkExportNotImplementedException();
+                if (string.IsNullOrWhiteSpace(request.RequestedBy))
+                    throw new BulkExportRequestException("The caller could not be identified.");
                 break;
 
             default:

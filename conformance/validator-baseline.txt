@@ -60,3 +60,29 @@ claim-eob: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-prof
 carin-oral-financial: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-prof-careTeam-practitioner: 'Professional EOB:  Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Oral-Basis)
 carin-inpatient-financial: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-inst-careTeam-practitioner: 'Institutional EOB: Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Inpatient-Institutional-Basis)
 carin-outpatient-financial: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-inst-careTeam-practitioner: 'Institutional EOB: Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Outpatient-Institutional-Basis)
+
+# The Pharmacy profiles carry the same invariant (EOB-pharm-careTeam-practitioner)
+# for the prescriber, who is careTeam.provider Practitioner/{npi} with role
+# "prescribing". Same single-file residue, same resolution as above.
+carin-pharmacy-basis: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-pharm-careTeam-practitioner: 'Pharmacy EOB: Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Pharmacy-Basis)
+carin-pharmacy-financial: ExplanationOfBenefit.careTeam[0]: Error - Constraint failed: EOB-pharm-careTeam-practitioner: 'Pharmacy EOB: Careteam roles refer to a practitioner' (defined in http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-Pharmacy-Basis)
+
+# ── NCPDP code systems are not available without a terminology server ────────
+# The CARIN BB Pharmacy profiles bind the DAW / product selection, prescription
+# origin and compound codes to NCPDP code systems. NCPDP licenses those codes, so
+# THO publishes the CodeSystems as stubs with no content, and with -tx n/a the
+# validator has nothing to check a code against. The codes are NCPDP's own
+# (DAW 0-9, origin 0-5, compound 0-2), validated on import by
+# CpcdsClaimMapper.NcpdpCode. The strict run with a terminology server checks them.
+carin-pharmacy-basis: ExplanationOfBenefit.supportingInfo[1].code.coding[0].system: Error - A definition for CodeSystem 'http://terminology.hl7.org/CodeSystem/NCPDPDispensedAsWrittenOrProductSelectionCode' could not be found, so the code cannot be validated
+carin-pharmacy-basis: ExplanationOfBenefit.supportingInfo[1].code.coding[0].system: Error - A definition for CodeSystem 'http://terminology.hl7.org/CodeSystem/NCPDPDispensedAsWrittenOrProductSelectionCode' version 'null' could not be found, so the code cannot be validated. Valid versions: 1.0.2
+carin-pharmacy-basis: ExplanationOfBenefit.supportingInfo[4].code.coding[0].system: Error - A definition for CodeSystem 'http://terminology.hl7.org/CodeSystem/NCPDPPrescriptionOriginCode' could not be found, so the code cannot be validated
+carin-pharmacy-basis: ExplanationOfBenefit.supportingInfo[4].code.coding[0].system: Error - A definition for CodeSystem 'http://terminology.hl7.org/CodeSystem/NCPDPPrescriptionOriginCode' version 'null' could not be found, so the code cannot be validated. Valid versions: 1.0.2
+carin-pharmacy-basis: ExplanationOfBenefit.supportingInfo[5].code.coding[0].system: Error - A definition for CodeSystem 'http://terminology.hl7.org/CodeSystem/NCPDPCompoundCode' could not be found, so the code cannot be validated
+carin-pharmacy-basis: ExplanationOfBenefit.supportingInfo[5].code.coding[0].system: Error - A definition for CodeSystem 'http://terminology.hl7.org/CodeSystem/NCPDPCompoundCode' version 'null' could not be found, so the code cannot be validated. Valid versions: 1.0.2
+carin-pharmacy-financial: ExplanationOfBenefit.supportingInfo[1].code.coding[0].system: Error - A definition for CodeSystem 'http://terminology.hl7.org/CodeSystem/NCPDPDispensedAsWrittenOrProductSelectionCode' could not be found, so the code cannot be validated
+carin-pharmacy-financial: ExplanationOfBenefit.supportingInfo[1].code.coding[0].system: Error - A definition for CodeSystem 'http://terminology.hl7.org/CodeSystem/NCPDPDispensedAsWrittenOrProductSelectionCode' version 'null' could not be found, so the code cannot be validated. Valid versions: 1.0.2
+carin-pharmacy-financial: ExplanationOfBenefit.supportingInfo[4].code.coding[0].system: Error - A definition for CodeSystem 'http://terminology.hl7.org/CodeSystem/NCPDPPrescriptionOriginCode' could not be found, so the code cannot be validated
+carin-pharmacy-financial: ExplanationOfBenefit.supportingInfo[4].code.coding[0].system: Error - A definition for CodeSystem 'http://terminology.hl7.org/CodeSystem/NCPDPPrescriptionOriginCode' version 'null' could not be found, so the code cannot be validated. Valid versions: 1.0.2
+carin-pharmacy-financial: ExplanationOfBenefit.supportingInfo[5].code.coding[0].system: Error - A definition for CodeSystem 'http://terminology.hl7.org/CodeSystem/NCPDPCompoundCode' could not be found, so the code cannot be validated
+carin-pharmacy-financial: ExplanationOfBenefit.supportingInfo[5].code.coding[0].system: Error - A definition for CodeSystem 'http://terminology.hl7.org/CodeSystem/NCPDPCompoundCode' version 'null' could not be found, so the code cannot be validated. Valid versions: 1.0.2

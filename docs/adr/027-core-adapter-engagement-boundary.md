@@ -2,6 +2,17 @@
 
 **Status:** accepted product/architecture intent, confirmed by the owner October 22, 2026.
 
+## Amendment, November 21, 2026: file drops first
+
+Confirmed by the owner: the **daily file drop is the default** way a plan's
+core feeds CHO, and the path CHO leads with. Live core connectors are an
+**optional, alternate integration point** for a plan that prefers to build
+them, scoped under this ADR after the file drop is live. They are now
+registered only when a deployment sets `CoreIntegration:LiveConnectors:Enabled`;
+with it off, a tenant naming a vendor platform is refused (501), never served
+CHO's data. No connector code was removed. See
+[Connecting a plan's core](../integration/CORE-INTEGRATION-OPTIONS.md).
+
 ## Decision
 
 CHO is the **reference backend implementation** behind its domain adapter

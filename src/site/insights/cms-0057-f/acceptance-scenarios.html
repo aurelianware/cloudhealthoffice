@@ -295,7 +295,7 @@
           <div class="topic"><h4>PAS</h4><p>A FHIR prior-authorization request produces a decision with a tracking id, a coded reason on denial, and priority-aware decision timing.</p></div>
           <div class="topic"><h4>Patient &amp; Provider Access</h4><p>US Core and CARIN projections for the member; attribution and opt-out gate what a provider can read.</p></div>
           <div class="topic"><h4>Security &amp; consent</h4><p>SMART on FHIR / OAuth discovery, and a single consent registry for opt-out and opt-in lifecycle.</p></div>
-          <div class="topic"><h4>Source-system boundary</h4><p>QNXT, Facets, or HealthEdge is integrated per engagement. Where that binding is not yet built, the scenario is scored honestly below.</p></div>
+          <div class="topic"><h4>Source-system boundary</h4><p>A plan that keeps QNXT, Facets, HealthEdge or its own core feeds CHO through the daily file drop. That path is scored as its own column below.</p></div>
         </div>
       </div>
     </section>
@@ -327,7 +327,7 @@
           </div>
         </div>
         <div class="note">
-          <p>These are separate questions. Whether Cloud Health Office can perform a workflow itself (product capability, proven in Replace mode) is scored independently from whether it can currently run against a specific external core (integration capability). A pending QNXT, Facets, or HealthEdge integration is not a gap in the Cloud Health Office product.</p>
+          <p>These are separate questions. Whether Cloud Health Office can perform a workflow itself (product capability, proven in Replace mode) is scored independently from whether it can serve the same workflow from a plan&rsquo;s core extracts loaded through the file drop (integration capability). Live core connectors are optional, built per engagement, and not scored.</p>
         </div>
       </div>
     </section>
@@ -553,6 +553,9 @@
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (d) {
         var keys = Object.keys(d.integrations || {}).sort();
+        // 'filedrop' is the default way a plan's core connects: it keeps its
+        // core and sends its daily extracts. Other keys are live core connectors.
+        function label(k) { return k === 'filedrop' ? 'Core via file drop' : k.toUpperCase() + ' Augment'; }
 
         // Status pill (freshness — labelled "Latest published", never "current").
         var status = document.getElementById('evidence-status');
@@ -588,7 +591,7 @@
         cards.appendChild(product);
         keys.forEach(function (k) {
           var card = el('div', 'ev-card');
-          card.appendChild(el('h3', null, k.toUpperCase() + ' Augment'));
+          card.appendChild(el('h3', null, label(k)));
           card.appendChild(el('span', 'ev-sub', 'Integration capability'));
           card.appendChild(tallies(d.integrations[k] || {}));
           cards.appendChild(card);
@@ -599,7 +602,7 @@
         ['ID', 'Scenario', 'CHO Replace (product)'].forEach(function (h) {
           head.appendChild(el('th', null, h));
         });
-        keys.forEach(function (k) { head.appendChild(el('th', null, k.toUpperCase() + ' Augment (integration)')); });
+        keys.forEach(function (k) { head.appendChild(el('th', null, label(k) + ' (integration)')); });
 
         // Matrix rows.
         var body = document.getElementById('evidence-matrix-body');

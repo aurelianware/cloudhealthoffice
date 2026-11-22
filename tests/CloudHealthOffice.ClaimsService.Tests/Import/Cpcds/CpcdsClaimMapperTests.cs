@@ -188,18 +188,6 @@ public class CpcdsClaimMapperTests
     // ── refusals and warnings ────────────────────────────────────────────────
 
     [Fact]
-    public void Pharmacy_claims_are_refused_until_there_is_a_pharmacy_projection()
-    {
-        var row = CpcdsTestFiles.ProfessionalRow();
-        row["Claim type"] = "pharmacy";
-
-        var mapped = MapRows(row);
-
-        mapped.Claim.Should().BeNull();
-        mapped.Errors.Should().ContainSingle().Which.Should().Contain("Pharmacy");
-    }
-
-    [Fact]
     public void An_amount_that_does_not_parse_refuses_the_claim()
     {
         var row = CpcdsTestFiles.ProfessionalRow();

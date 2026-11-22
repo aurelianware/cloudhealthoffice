@@ -331,6 +331,171 @@
       "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Started by INFERNO-BULK-SERVER-001, which runs the SMART Backend Services, Group and Patient export groups of bulk_data_v200 against the interop-cho profile with bulk export on. This is the kit that judges what the export files contain (gap-matrix G-60)."
     },
     {
+      "name": "inferno-framework/davinci-crd-test-kit",
+      "key": "inferno-crd",
+      "role": "ConformanceRunner",
+      "protocols": [
+        "CRD"
+      ],
+      "upstreamRepository": "https://github.com/inferno-framework/davinci-crd-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "tag": "v0.15.0",
+        "commit": "86be7f4bf6817960aa204f8ce134cea466bd73d2",
+        "reference": "https://github.com/inferno-framework/davinci-crd-test-kit@v0.15.0",
+        "pinProvenance": "git ls-remote --tags resolved refs/tags/v0.15.0 to this commit on 2026-11-21, and it was the latest release on that date."
+      },
+      "compose": {
+        "service": "inferno-crd",
+        "profiles": [
+          "interop-crd"
+        ]
+      },
+      "endpoints": {
+        "fhirBaseUrl": null,
+        "cdsHooksBaseUrl": null,
+        "readinessUrl": "http://127.0.0.1:14573/"
+      },
+      "auth": {
+        "mode": "None",
+        "note": "The kit is the CRD client (an EHR). It signs every hook call with a JWT from its own key set (/custom/crd_server_v221/jwks.json), as CDS Hooks 2.0 requires; fhir-service trusts that issuer only because the interop profile lists it under CdsHooks:TrustedClients, the same setting a plan uses to admit a real EHR. The kit also serves the EHR's FHIR API (fhirServer) that CHO reads when a hook carries no prefetch."
+      },
+      "inferno": {
+        "apiBaseUrl": "http://127.0.0.1:14573/api",
+        "suites": [
+          "crd_client",
+          "crd_client_v221",
+          "crd_server",
+          "crd_server_v221"
+        ],
+        "suitesProvenance": "Read from the Inferno::TestSuite ids in the kit's own lib/ at the pinned tag, not from documentation.",
+        "runner": "docker compose build && docker compose up (upstream run.sh) from a checkout at the pinned tag"
+      },
+      "implementationGuides": {
+        "CRD": "2.0.1 and 2.2.1",
+        "CDS Hooks": "2.0"
+      },
+      "igVersionProvenance": "Read from lib/davinci_crd_test_kit/server/v2.2.1/crd_server_suite.rb at the pinned tag (fhir_resource_validator igs 'hl7.fhir.us.davinci-crd#2.2.1') and the bundled igs/davinci_crd_2.2.1.tgz.",
+      "requiredEgress": [
+        "https://github.com — the kit is fetched at the pinned tag during explicit setup",
+        "https://rubygems.org and Docker Hub — the kit image is built locally from upstream's Dockerfile",
+        "https://packages.fhir.org — the bundled hl7_validator_service loads IG packages"
+      ],
+      "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Started by INFERNO-CRD-SERVER-001, which runs the crd_server_v221 suite. INFERNO_HOST is the in-network name so the fhirServer and jku the kit sends are addresses CHO can reach."
+    },
+    {
+      "name": "inferno-framework/davinci-pas-test-kit",
+      "key": "inferno-pas",
+      "role": "ConformanceRunner",
+      "protocols": [
+        "PAS"
+      ],
+      "upstreamRepository": "https://github.com/inferno-framework/davinci-pas-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "tag": "v0.16.0",
+        "commit": "1db14e7899d0519138ed9ac72de8ad2c996c10ac",
+        "reference": "https://github.com/inferno-framework/davinci-pas-test-kit@v0.16.0",
+        "pinProvenance": "git ls-remote --tags resolved refs/tags/v0.16.0 to this commit on 2026-11-21, and it was the latest release on that date."
+      },
+      "compose": {
+        "service": "inferno-pas",
+        "profiles": [
+          "interop-pas"
+        ]
+      },
+      "endpoints": {
+        "fhirBaseUrl": null,
+        "cdsHooksBaseUrl": null,
+        "readinessUrl": "http://127.0.0.1:14574/"
+      },
+      "auth": {
+        "mode": "None",
+        "note": "The kit is a provider's PAS client. It authenticates with SMART Backend Services as the seed's pasBackendClient, whose keys the harness registers from the kit's own JWKS before the run. Pended decisions reach it as Subscriptions R4 Backport rest-hook notifications at its in-network notification endpoint."
+      },
+      "inferno": {
+        "apiBaseUrl": "http://127.0.0.1:14574/api",
+        "suites": [
+          "davinci_pas_client_suite_v201",
+          "davinci_pas_client_suite_v221",
+          "davinci_pas_server_suite_v201",
+          "davinci_pas_server_suite_v221"
+        ],
+        "suitesProvenance": "Read from the Inferno::TestSuite ids in the kit's own lib/ at the pinned tag, not from documentation.",
+        "runner": "docker compose build && docker compose up (upstream run.sh) from a checkout at the pinned tag"
+      },
+      "implementationGuides": {
+        "PAS": "2.0.1 and 2.2.1",
+        "Subscriptions R5 Backport": "1.1.0"
+      },
+      "igVersionProvenance": "Read from lib/davinci_pas_test_kit/server/generated/v2.2.1/server_suite.rb at the pinned tag (V221_VALIDATOR_IGS) and the bundled igs/.",
+      "requiredEgress": [
+        "https://github.com — the kit is fetched at the pinned tag during explicit setup",
+        "https://rubygems.org and Docker Hub — the kit image is built locally from upstream's Dockerfile",
+        "https://packages.fhir.org — the bundled hl7_validator_service loads IG packages"
+      ],
+      "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Started by INFERNO-PAS-SERVER-001, which runs the davinci_pas_server_suite_v221 suite. INFERNO_HOST is the in-network name so the Subscription endpoint the kit registers is one CHO can deliver to."
+    },
+    {
+      "name": "inferno-framework/smart-app-launch-test-kit",
+      "key": "inferno-smart",
+      "role": "ConformanceRunner",
+      "protocols": [
+        "SMART App Launch"
+      ],
+      "upstreamRepository": "https://github.com/inferno-framework/smart-app-launch-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "tag": "v1.0.3",
+        "commit": "980e54e4ed632b28267d797013399a8588772174",
+        "reference": "https://github.com/inferno-framework/smart-app-launch-test-kit@v1.0.3",
+        "pinProvenance": "git ls-remote --tags resolved refs/tags/v1.0.3 to this commit on 2026-11-21, and it was the latest release on that date."
+      },
+      "compose": {
+        "service": "inferno-smart",
+        "profiles": [
+          "interop-smart"
+        ]
+      },
+      "endpoints": {
+        "fhirBaseUrl": null,
+        "cdsHooksBaseUrl": null,
+        "readinessUrl": "http://127.0.0.1:14575/"
+      },
+      "auth": {
+        "mode": "None",
+        "note": "The kit is a SMART app. The harness registers it with cho-smart-auth-service through the admin API, with the kit's redirect and launch URIs, and plays the user: it signs in as the seeded member (standalone launch) or creates the launch context as the EHR would (EHR launch), then approves the consent page the authorize request returns. Nothing in CHO is bypassed."
+      },
+      "inferno": {
+        "apiBaseUrl": "http://127.0.0.1:14575/api",
+        "suites": [
+          "smart",
+          "smart_stu2",
+          "smart_stu2_2",
+          "smart_access_brands",
+          "smart_client_stu2_2"
+        ],
+        "suitesProvenance": "Read from the Inferno::TestSuite ids in the kit's own lib/ at the pinned tag, not from documentation.",
+        "runner": "docker compose build && docker compose up (upstream run.sh) from a checkout at the pinned tag"
+      },
+      "implementationGuides": {
+        "SMART App Launch": "1.0.0, 2.0.0 and 2.2.0"
+      },
+      "igVersionProvenance": "Read from the suite ids and titles in lib/smart_app_launch/ at the pinned tag.",
+      "knownMismatches": [
+        "The kit's TLS tests cannot pass on the interop network, which is plain HTTP; INFERNO_DISABLE_TLS_TEST makes them report omit, as for every kit here."
+      ],
+      "requiredEgress": [
+        "https://github.com — the kit is fetched at the pinned tag during explicit setup",
+        "https://rubygems.org and Docker Hub — the kit image is built locally from upstream's Dockerfile",
+        "https://packages.fhir.org — the bundled hl7_validator_service loads IG packages"
+      ],
+      "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Started by INFERNO-SMART-SERVER-001, which runs the smart_stu2_2 standalone launch, EHR launch, backend services and token introspection groups."
+    },
+    {
       "name": "hl7/fhir-validator (validator_cli.jar)",
       "key": "hl7-validator",
       "role": "ConformanceRunner",

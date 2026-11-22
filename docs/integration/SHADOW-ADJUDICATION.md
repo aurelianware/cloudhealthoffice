@@ -142,7 +142,7 @@ One kind per claim, in this order of precedence:
 | Kind | Meaning |
 |---|---|
 | `NotComparable` | The core's claim is not final (pended, voided). CHO is not run. |
-| `ChoUndecided` | CHO pended or rejected the claim, or denied it only because the member is not loaded. `choPendCode` names the gap: `NOCONTRACT` (no contract or fee schedule rate), `PRICING`, `PLANUNAVAIL` (the member's coverage names no CHO plan, usually an unmapped core plan code), `REJECT:<stage>`, `MEMBERNOTLOADED`, ... |
+| `ChoUndecided` | CHO pended or rejected the claim, or denied it only because the member is not loaded. `choPendCode` names the gap: `NOCONTRACT` (no contract or fee schedule rate), `PRICING`, `PLANUNAVAIL` (the member's coverage names no CHO plan, usually an unmapped core plan code), `REJECT:<stage>`, `MEMBERNOTLOADED`, `NETWORK` (see [Network and credentialing](#network-and-credentialing)), ... |
 | `OutcomeMismatch` | One side paid, the other denied. |
 | `DenialCodeMismatch` | Both denied, with different CARCs (or a line both denied, with different codes). |
 | `AllowedVariance` | Allowed differs on the claim or a line: pricing. |
@@ -179,6 +179,30 @@ OIG list from oig.hhs.gov and refreshes it daily; SAM needs an API key), and set
 benefit-plan-service. The CPCDS laptop trial does both. On GKE,
 `render_manifests.py --leie-screening` turns LEIE on. Providers that are not in
 NPPES (the synthetic sample NPIs, for one) are still held after screening.
+
+## Network and credentialing
+
+Testing and Production hosts (the GKE demo among them) run the network and
+credentialing checks fail-closed (`Adjudication:Enforcement:NetworkMode` and
+`CredentialingMode` = `FailClosed`): a claim whose billing provider is not in
+the plan's network, or not credentialed on the date of service, is denied
+(CARC 242 or B7). A Development stack only observes them (`SoftValidation`).
+
+Before the plan's roster is loaded those denials say nothing about the claim, so
+a shadow run counts a network or credentialing denial as `ChoUndecided` when:
+
+- the claim has no CHO benefit plan (`PLANUNAVAIL`, usually an unmapped core plan code);
+- the plan's in-network tier names no network (`NETWORK`);
+- the provider has no credentialing record at all, status `Unknown` (`NETWORK`).
+
+Load the core's roster with the [network roster importer](NETWORK-ROSTER-IMPORTER.md)
+(with its credentialed column) to clear them. A provider in none of the plan's
+networks, or whose credentialing is pending, denied, expired or suspended, is a
+finding and is compared as the denial it is. Live adjudication is unchanged.
+
+Credentialing is read from the provider's credentialing history (a recorded
+decision), not the provider record's `credentialingStatus` field, so a provider
+created with `credentialingStatus: "Approved"` and no decision is still `Unknown`.
 
 ## Accumulators
 

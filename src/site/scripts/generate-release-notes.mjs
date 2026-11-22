@@ -388,7 +388,7 @@ ${html}
 
 function hubPage(releases) {
   const latest = releases[0];
-  const description = `What changed in each Cloud Health Office release: claims, pricing, CMS-0057-F APIs and platform, with breaking changes and upgrade notes. Latest: v${latest.versionText}${latest.codename ? ` ${latest.codename}` : ''}.`;
+  const description = `What changed in each release of Cloud Health Office, core administration software for health plans: claims, pricing, CMS-0057-F APIs and platform, with upgrade notes. Latest: v${latest.versionText}${latest.codename ? ` ${latest.codename}` : ''}.`;
   const ld = jsonLd([
     {
       '@type': 'CollectionPage',
@@ -420,7 +420,7 @@ ${r.highlights.length ? `<ul>${r.highlights.map((h) => `<li>${escapeHtml(h)}</li
 ${cards}
 <h2 id="earlier-releases">Earlier releases</h2>
 <p>Notes for v4.0.0 and earlier are on <a href="${REPO}/releases" rel="noopener">GitHub releases</a>, and every change is itemized in the <a href="${REPO}/blob/main/CHANGELOG.md" rel="noopener">changelog</a>.</p>`;
-  return page({ route: '/release-notes', title: 'Cloud Health Office Release Notes | Payer Platform', description, ogType: 'website', ld, body });
+  return page({ route: '/release-notes', title: 'Cloud Health Office Release Notes | Health Plan Administration Software', description, ogType: 'website', ld, body });
 }
 
 function feed(releases) {

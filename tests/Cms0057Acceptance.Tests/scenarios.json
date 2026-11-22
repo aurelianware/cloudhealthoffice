@@ -1,5 +1,5 @@
 {
-  "$comment": "CMS-0057-F acceptance scenario manifest. It holds each scenario's id, name, capability and external-core (Augment) status per backend. It does NOT hold the Cloud Health Office (Replace) status: that comes from docs/epa-gap-matrix.md \u00a711, and tools/Cms0057Evidence fails if a scenario here declares 'replace'. The acceptance suite validates its [Trait(\"Scenario\",...)] against this file (see ScenarioManifestTests). Statuses are one of: PASSABLE, PARTIAL, GAP, N/A. Do not invent Facets/HealthEdge results until an integration exists.",
+  "$comment": "CMS-0057-F acceptance scenario manifest. It holds each scenario's id, name, capability and external-core (Augment) status per backend. It does NOT hold the Cloud Health Office (Replace) status: that comes from docs/epa-gap-matrix.md \u00a711, and tools/Cms0057Evidence fails if a scenario here declares 'replace'. The acceptance suite validates its [Trait(\"Scenario\",...)] against this file (see ScenarioManifestTests). Statuses are one of: PASSABLE, PARTIAL, GAP, N/A. The integration scored is 'filedrop': a plan keeps its core and UM system and feeds CHO their daily extracts (CPCDS and the authorization import), the default way a core connects (docs/integration/CORE-INTEGRATION-OPTIONS.md). Live core connectors (qnxt, facets, healthedge) are optional and are not scored until one is built for a plan.",
   "schemaVersion": 1,
   "capabilityDefinitions": {
     "PASSABLE": "The repository's defined acceptance scenario is supported by the tested implementation. Not a CMS certification and not by itself production readiness for a specific payer deployment.",
@@ -13,9 +13,9 @@
       "name": "CRD \u2014 is prior authorization required?",
       "capability": "PriorAuthorization",
       "augment": {
-        "qnxt": {
-          "status": "GAP",
-          "rationale": "QNXT benefit/auth-required lookup is per-engagement integration work; product path runs on the CHO rule store."
+        "filedrop": {
+          "status": "PARTIAL",
+          "rationale": "Coverage requirements are answered from CHO's prior-authorization rule set on the same CRD path as Replace. The rules are loaded with the PA rules importer, not from the daily drop."
         }
       }
     },
@@ -24,8 +24,9 @@
       "name": "DTR \u2014 correct documentation questionnaire",
       "capability": "PriorAuthorization",
       "augment": {
-        "qnxt": {
-          "status": "N/A"
+        "filedrop": {
+          "status": "N/A",
+          "rationale": "DTR questionnaires are CHO's own; no core data is involved."
         }
       }
     },
@@ -34,9 +35,9 @@
       "name": "PAS submit \u2014 create prior authorization",
       "capability": "PriorAuthorization",
       "augment": {
-        "qnxt": {
+        "filedrop": {
           "status": "GAP",
-          "rationale": "QNXT AUTH_CREATE is per-engagement integration work; product path persists via ChoAuthorizationBackend."
+          "rationale": "A PAS request is recorded and decided in CHO. The file drop flows one way, into CHO, so it cannot place the request in the plan's own UM system. That needs write-back (the optional live connector) or the plan working the request in CHO."
         }
       }
     },
@@ -45,9 +46,9 @@
       "name": "PAS inquiry / status",
       "capability": "PriorAuthorization",
       "augment": {
-        "qnxt": {
-          "status": "GAP",
-          "rationale": "QNXT status inquiry is per-engagement integration work."
+        "filedrop": {
+          "status": "PARTIAL",
+          "rationale": "Authorizations decided in the plan's UM system and loaded by the authorization import (CSV or X12 278, through the drop) are the records the PA status reads, read-only (docs/integration/AUTHORIZATION-IMPORT.md). Not yet exercised by a file-drop acceptance test; the Replace limits apply."
         }
       }
     },
@@ -56,9 +57,9 @@
       "name": "PAS specific denial reason",
       "capability": "PriorAuthorization",
       "augment": {
-        "qnxt": {
-          "status": "GAP",
-          "rationale": "QNXT-sourced denial reasons are per-engagement integration work."
+        "filedrop": {
+          "status": "PARTIAL",
+          "rationale": "An imported denial keeps the UM system's coded reason and its words; PAT03_FileDrop shows it reaching the member. The PAS response and X12 reason-code conformance limits are the same as Replace."
         }
       }
     },
@@ -67,8 +68,9 @@
       "name": "PAS decision timeframe (72h / 7 calendar days)",
       "capability": "PriorAuthorization",
       "augment": {
-        "qnxt": {
-          "status": "N/A"
+        "filedrop": {
+          "status": "N/A",
+          "rationale": "Decision clocks belong to the system that decides. Imported decisions are read-only in CHO and are not tracked by its deadline watchdog; their received and decision dates feed METRICS-01."
         }
       }
     },
@@ -77,8 +79,9 @@
       "name": "CDex additional-information exchange",
       "capability": "PriorAuthorization",
       "augment": {
-        "qnxt": {
-          "status": "N/A"
+        "filedrop": {
+          "status": "N/A",
+          "rationale": "CDex additional-information exchange is CHO's own workflow."
         }
       }
     },
@@ -87,8 +90,9 @@
       "name": "Drug exclusion from medical PA scope",
       "capability": "PriorAuthorization",
       "augment": {
-        "qnxt": {
-          "status": "N/A"
+        "filedrop": {
+          "status": "N/A",
+          "rationale": "Drug exclusion is applied by CHO to whatever it serves; no core dependency."
         }
       }
     },
@@ -97,9 +101,9 @@
       "name": "Provider Access \u2014 attributed member data pull",
       "capability": "ProviderAccess",
       "augment": {
-        "qnxt": {
-          "status": "GAP",
-          "rationale": "QNXT provider directory pull is per-engagement integration work; product path uses the CHO projection."
+        "filedrop": {
+          "status": "PARTIAL",
+          "rationale": "Claims from the CPCDS drop and authorizations from the authorization import are served to attributed providers through the same projections as Replace. Same limits as Replace; clinical data is not in the drop (see PAT-02)."
         }
       }
     },
@@ -108,8 +112,9 @@
       "name": "Provider Access \u2014 attribution enforcement",
       "capability": "ProviderAccess",
       "augment": {
-        "qnxt": {
-          "status": "N/A"
+        "filedrop": {
+          "status": "PASSABLE",
+          "rationale": "Claims the core adjudicated, loaded from the CPCDS drop, carry the billing and rendering NPIs and member ids the claims-history attribution reads (PROV02_FileDrop). A PCP panel still comes from configuration, not the drop."
         }
       }
     },
@@ -118,8 +123,9 @@
       "name": "Provider Access \u2014 patient opt-out honored",
       "capability": "ProviderAccess",
       "augment": {
-        "qnxt": {
-          "status": "N/A"
+        "filedrop": {
+          "status": "N/A",
+          "rationale": "The opt-out is recorded in CHO's consent registry, not the core."
         }
       }
     },
@@ -128,9 +134,9 @@
       "name": "Payer-to-Payer inbound respond",
       "capability": "PayerToPayer",
       "augment": {
-        "qnxt": {
-          "status": "GAP",
-          "rationale": "No external-core P2P integration."
+        "filedrop": {
+          "status": "PARTIAL",
+          "rationale": "The member, coverage and claims a requesting payer receives come from what the drop loaded. Not yet exercised by a file-drop acceptance test; clinical data is not in the drop."
         }
       }
     },
@@ -139,9 +145,9 @@
       "name": "Payer-to-Payer outbound initiate",
       "capability": "PayerToPayer",
       "augment": {
-        "qnxt": {
-          "status": "GAP",
-          "rationale": "No external-core P2P integration: outbound initiation against a QNXT-backed deployment is not implemented."
+        "filedrop": {
+          "status": "PARTIAL",
+          "rationale": "Outbound initiation uses the member and coverage the drop loaded. Not yet exercised by a file-drop acceptance test; the Replace limits apply."
         }
       }
     },
@@ -150,9 +156,9 @@
       "name": "Payer-to-Payer opt-in enforcement",
       "capability": "PayerToPayer",
       "augment": {
-        "qnxt": {
-          "status": "GAP",
-          "rationale": "No external-core P2P integration."
+        "filedrop": {
+          "status": "N/A",
+          "rationale": "Opt-in is recorded in CHO's consent registry, not the core."
         }
       }
     },
@@ -161,9 +167,9 @@
       "name": "Payer-to-Payer member-match / concurrent coverage",
       "capability": "PayerToPayer",
       "augment": {
-        "qnxt": {
-          "status": "GAP",
-          "rationale": "No external-core P2P integration."
+        "filedrop": {
+          "status": "PARTIAL",
+          "rationale": "$member-match searches the members and coverage the CPCDS member and coverage files load (enrollment import). Not yet exercised by a file-drop acceptance test; the Replace limits apply."
         }
       }
     },
@@ -172,9 +178,9 @@
       "name": "Patient Access \u2014 member claims / CARIN EOB",
       "capability": "PatientAccess",
       "augment": {
-        "qnxt": {
-          "status": "GAP",
-          "rationale": "QNXT claims read is per-engagement integration work; product path projects CHO claims to CARIN EOB."
+        "filedrop": {
+          "status": "PARTIAL",
+          "rationale": "Claims the core adjudicated, loaded from the CPCDS drop by the real importer, reach the member as CARIN BB EOBs on the same path as Replace (PAT01_FileDrop). Stays PARTIAL for the Replace reason: no external conformance run against CHO as a server."
         }
       }
     },
@@ -183,8 +189,9 @@
       "name": "Patient Access \u2014 US Core clinical",
       "capability": "PatientAccess",
       "augment": {
-        "qnxt": {
-          "status": "N/A"
+        "filedrop": {
+          "status": "GAP",
+          "rationale": "The drop carries no clinical data. Clinical resources are served only from Payer-to-Payer imports today; a clinical file (FHIR NDJSON) in the drop is planned (docs/integration/CORE-INTEGRATION-OPTIONS.md)."
         }
       }
     },
@@ -193,8 +200,9 @@
       "name": "Patient Access \u2014 PA data (drugs excluded)",
       "capability": "PatientAccess",
       "augment": {
-        "qnxt": {
-          "status": "N/A"
+        "filedrop": {
+          "status": "PARTIAL",
+          "rationale": "Authorizations the plan's UM system decided, loaded by the authorization import, reach the member as PDex prior-authorization EOBs with their decision and denial reason, and only their own (PAT03_FileDrop). PARTIAL for the Replace reason: no profile validation."
         }
       }
     },
@@ -203,8 +211,9 @@
       "name": "SMART on FHIR / OAuth",
       "capability": "Security",
       "augment": {
-        "qnxt": {
-          "status": "N/A"
+        "filedrop": {
+          "status": "N/A",
+          "rationale": "SMART and OAuth are CHO's own; no core dependency."
         }
       }
     },
@@ -213,8 +222,9 @@
       "name": "Single consent registry",
       "capability": "Consent",
       "augment": {
-        "qnxt": {
-          "status": "N/A"
+        "filedrop": {
+          "status": "N/A",
+          "rationale": "The consent registry is CHO's own."
         }
       }
     },
@@ -223,9 +233,9 @@
       "name": "Prior-authorization public metric set",
       "capability": "Metrics",
       "augment": {
-        "qnxt": {
-          "status": "GAP",
-          "rationale": "Metrics over QNXT-owned authorization data are per-engagement integration work; product path derives from the persisted CHO authorization record. The full public-metrics extract job remains engagement work."
+        "filedrop": {
+          "status": "PARTIAL",
+          "rationale": "Metrics are computed from the UM system's own received and decision dates on imported authorizations (METRICS01_FileDrop). PARTIAL for the Replace reason: appeal outcomes are not yet linked."
         }
       }
     }

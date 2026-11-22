@@ -157,6 +157,29 @@ public class NetworkRosterImporterTests
             "importer", "trace", It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Theory]
+    [InlineData(CredentialingStatus.Unknown, 1)]
+    [InlineData(CredentialingStatus.Approved, 0)]
+    public async Task A_provider_marked_approved_is_credentialed_unless_a_decision_is_on_record(
+        CredentialingStatus recorded, int decisionsRecorded)
+    {
+        var known = new Provider
+        {
+            ProviderId = "prov-known", VersionId = "v1", NPI = "1588667638", VersionState = ProviderVersionState.Active,
+            CredentialingStatus = CredentialingStatus.Approved,
+            NetworkParticipations = [.. Existing.NetworkParticipations],
+        };
+        _providers.Setup(p => p.GetByNPIAsync("1588667638")).ReturnsAsync(known);
+        _credentialing.Setup(c => c.GetCurrentStatusAsync(Tenant, "prov-known", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CredentialingProjectionResult.Empty with { Status = recorded });
+
+        var result = await Import("NPI,Network,Plan,Effective Date,Credentialed\n1588667638,net-gold,PPO-GOLD,2026-01-01,yes\n");
+
+        result.Credentialed.Should().Be(decisionsRecorded);
+        _credentialing.Verify(c => c.RecordDecisionAsync(Tenant, "prov-known", It.IsAny<RecordDecisionRequest>(),
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(decisionsRecorded));
+    }
+
     [Fact]
     public async Task Credentialing_without_the_permission_is_a_warning_not_a_write()
     {

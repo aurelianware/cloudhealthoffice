@@ -51,12 +51,27 @@ resource "google_artifact_registry_repository" "cho" {
   labels        = local.labels
   kms_key_name  = local.artifacts_kms_key
 
-  # Keep only recent images so the demo repository doesn't grow without bound.
+  # Keep only recent images so the repository doesn't grow without bound.
+  # A KEEP policy only protects versions; on its own it deletes nothing, so
+  # the DELETE policy below does the cleanup and KEEP exempts the newest
+  # var.artifact_keep_count versions of each image from it. Cleanup runs
+  # about once a day.
+  cleanup_policy_dry_run = false
+
   cleanup_policies {
     id     = "keep-recent"
     action = "KEEP"
     most_recent_versions {
-      keep_count = 5
+      keep_count = var.artifact_keep_count
+    }
+  }
+
+  cleanup_policies {
+    id     = "delete-older"
+    action = "DELETE"
+    condition {
+      tag_state  = "ANY"
+      older_than = "${var.artifact_delete_after_days * 86400}s"
     }
   }
 
@@ -161,6 +176,20 @@ resource "google_container_cluster" "cho" {
 
   release_channel {
     channel = "REGULAR"
+  }
+
+  # Demo: system metrics only. GKE's default metric packages (kube-state,
+  # cAdvisor, kubelet) and Managed Service for Prometheus are billed per
+  # sample ingested, and nothing in the demo reads them. Autopilot always runs
+  # Managed Prometheus; the hosted profile keeps Google's defaults.
+  dynamic "monitoring_config" {
+    for_each = var.lean_observability && !var.hosted && !var.autopilot ? [1] : []
+    content {
+      enable_components = ["SYSTEM_COMPONENTS"]
+      managed_prometheus {
+        enabled = false
+      }
+    }
   }
 
   # Hosted: the Backup for GKE agent, for the daily backup plan
@@ -421,6 +450,30 @@ resource "google_artifact_registry_repository_iam_member" "nodes_pull" {
   repository = google_artifact_registry_repository.cho.name
   role       = "roles/artifactregistry.reader"
   member     = "serviceAccount:${data.google_project.this.number}-compute@developer.gserviceaccount.com"
+}
+
+# ── Log volume (demo) ────────────────────────────────────────────────────────
+
+# Cloud Logging bills each GiB as it is ingested, so retention settings don't
+# lower the cost; only an exclusion does. In the demo, drop container logs
+# below WARNING from the CHO and Kafka namespaces before they are ingested.
+# The services write warnings and errors to stderr (render_manifests.py sets
+# Logging__Console__LogToStandardErrorThreshold), which GKE records as ERROR,
+# so those are kept. Kafka writes everything to stdout, so its errors are
+# dropped too; read them with kubectl logs. The hosted profile keeps all logs.
+resource "google_logging_project_exclusion" "demo_container_noise" {
+  count = var.lean_observability && !var.hosted ? 1 : 0
+
+  project     = var.project_id
+  name        = "cho-demo-container-noise"
+  description = "Demo: container logs below WARNING from the CHO and Kafka namespaces (infrastructure/gcp/main.tf)"
+  filter      = <<-EOT
+    resource.type="k8s_container"
+    resource.labels.namespace_name=("${var.kubernetes_namespace}" OR "kafka")
+    severity<WARNING
+  EOT
+
+  depends_on = [google_project_service.required]
 }
 
 # ── Optional budget alert ────────────────────────────────────────────────────

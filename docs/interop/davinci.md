@@ -333,8 +333,8 @@ What the runner can now do that it could not before:
 
 ### The conformance scenarios
 
-All five are in [`interop/scenarios.json`](../../interop/scenarios.json) and
-all five run:
+They are all in [`interop/scenarios.json`](../../interop/scenarios.json), and
+all of them run:
 
 | Scenario | Suite | Groups | What it judges |
 | --- | --- | --- | --- |
@@ -343,6 +343,9 @@ all five run:
 | `INFERNO-PLANNET-SERVER-001` | `davinci_plan_net_server_v110` | all | The public Provider Directory (G-36), with no token |
 | `INFERNO-BULK-SERVER-001` | `bulk_data_v200` | `bulk_data_smart_backend_services_v200`, `bulk_data_group_export_v200`, `bulk_data_patient_export_v200` | The SMART Backend Services token endpoint (its TLS test omitted on plain HTTP; passed on hosted Inferno), and Group and Patient `$export` (G-60), the files included |
 | `INFERNO-PDEX-SERVER-001` | `pdex_payer_server` | `pdex_workflow_member_match`, `pdex_no_member_matches` | HRex `Patient/$member-match` as the prior payer of a Payer-to-Payer exchange (G-35): the CapabilityStatement declaration, the request and response profiles, the Patient found by the returned identifier, and 422 for no match |
+| `INFERNO-CRD-SERVER-001` | `crd_server_v221` | all | CDS Hooks discovery (the `davinci-crd.version` and `coverage-info` configuration extensions), the CDS Hooks 2.0 client JWT, and the `order-sign`, `order-select` and other hooks' coverage-information answers, including not-covered and technical-issue answers |
+| `INFERNO-PAS-SERVER-001` | `davinci_pas_server_suite_v221` | all | `Claim/$submit` and `$inquire` for approved, denied and pended requests, claim updates, the must-support requests, the error cases, and the Subscriptions R4 backport notification of a pended decision |
+| `INFERNO-SMART-SERVER-001` | `smart_stu2_2` | `smart_full_standalone_launch`, `smart_full_ehr_launch`, `smart_backend_services`, `smart_token_introspection_stu2_2` | SMART App Launch 2.2 against `cho-smart-auth-service`: discovery, v2 scopes, standalone and EHR launch with refresh, Backend Services and token introspection |
 
 `INFERNO-PLANNET-SERVER-001` is the one scenario pointed somewhere other than
 the authenticated FHIR base: its `choSurface` is `publicDirectory`, so the kit's
@@ -388,6 +391,53 @@ the member's data by query and `$everything` with the requesting payer's token.
 CHO's data path is the PDex 2.1 bulk exchange (`$davinci-data-export`), so
 those groups, and the PDex and US Core search groups that need a member-bound
 token, are not run.
+
+`INFERNO-CRD-SERVER-001` has the kit play the EHR. It signs each hook call
+with a key from its own JWK Set (CDS Hooks 2.0 §Trusting CDS Clients), and the
+profile trusts that one client by issuer and key set in `interop-tenant`
+(`CdsHooks__TrustedClients__0__*`). The kit's EHR is the hook's `fhirServer`.
+When a hook prefetches no Coverage, CHO reads the patient's active Coverage
+from it with the `fhirAuthorization` the EHR granted. It does that only for a
+trusted CDS client, and only on that client's own origin, because `fhirServer`
+is supplied by the caller (`CrdEhrCoverageReader`). The hook requests and the
+kit's `mock_ehr_bundle` come from the seed (`Harness/CrdServerRequests.cs`).
+They cover the member, the order, a member CHO does not know (not-covered,
+`no-member-found`), a lapsed Coverage (`no-active-coverage`), a Coverage whose
+plan CHO does not hold (`coverage-not-found`), and an EHR that fails the
+Coverage read (indeterminate, technical). Two more order-sign requests cover
+the rest of what a coverage-information extension can say. In the first, a
+total knee arthroplasty (CPT 27447, which the profile requires authorization
+for) is already approved for the member by a seeded authorization
+(`INTEROP-PA-KNEE-1`). CHO answers pa-needed `satisfied` with that number as
+`satisfied-pa-id`, and a therapy order based on it in the same request carries
+a `dependency` on the procedure's order. In the second, the procedure is
+planned for 2100 for a member whose coverage ends 2099-12-31, and CHO answers
+covered `conditional` with info-needed `contract-window`. Every assertion also
+names the plan's `contact`, its `expiry-date` and a policy-link `detail`.
+
+`INFERNO-PAS-SERVER-001` has the kit play a provider's PAS client
+(`infernoAuth: pasClientBackendServices`, `pasBackendClient` in the seed). Its
+example requests are re-pointed at the seed (`Harness/PasServerRequests.cs`).
+The kit's approval, denial and pended examples are the same request, so each
+one gets a service type the profile decides the expected way: `3` is
+auto-approved, `4` is not covered, and `2` matches neither list and pends.
+The kit first creates a Subscription on the PAS pended topic. CHO accepts it
+only for an allowlisted endpoint host (`Subscriptions__AllowedEndpointHosts__0:
+inferno-pas`) and confirms it with a handshake. The harness opens the kit's
+confirmation link once the handshake has had time to arrive. While the kit
+waits on the pended request, the harness approves it through
+authorization-service, as a reviewer would (`Harness/PasPendedDecision.cs`).
+CHO's notification worker sees the decision and sends the kit the updated
+ClaimResponse. The kit then reads the decision with `$inquire`.
+
+`INFERNO-SMART-SERVER-001` runs the kit as a SMART app
+(`infernoAuth: smartApp`). The harness registers two apps: a patient app for
+the standalone launch and a provider app for the EHR launch
+(`Harness/InfernoSmartApp.cs`). It then plays the parts a person would. It
+signs in as the seeded member and approves consent. As the EHR, it creates
+the launch context and opens the kit's launch URI. CHO publishes SMART v2
+scopes (`.rs`, `.cud`) as exact equivalents of the v1 `.read` and `.write`
+scopes it already enforced.
 
 Which groups run is **inventory data, not code**. It is a claim about what CHO
 serves, so it belongs where a reader can check it against the scenario's
@@ -762,10 +812,10 @@ Known at the current pins:
   Same family, but as with PAS one side names a family and the other a release, so
   `run.json` reports `mismatch: true` rather than claiming an agreement it cannot
   demonstrate.
-* **CHO advertises no `davinci-crd.version` extension** in its own CDS Hooks
-  discovery, while the payer does. Recorded by `BR-CRD-001` as the Warning finding
-  `crd.surface.noVersionExtension`. A CRD client cannot tell from CHO's discovery
-  which CRD version CHO implements. Not adjudicated here; a reasonable follow-up.
+* **CHO's CDS Hooks discovery declares `davinci-crd.version` `2.2`** on every
+  service, with the `coverage-info` configuration option, as CRD 2.2.1 requires.
+  `BR-CRD-001`'s former Warning finding `crd.surface.noVersionExtension` no
+  longer applies.
 * **DTR version.** CHO targets the Da Vinci DTR **STU 2.2.x** family; the pinned
   payer reports **2.2.0**, read at runtime from the version on the
   `dtr-std-questionnaire` StructureDefinition it has installed rather than assumed

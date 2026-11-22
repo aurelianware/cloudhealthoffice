@@ -72,6 +72,19 @@ public enum CpcdsClaimColumn
     MemberLiability,
     ClaimDisallowedAmount,
 
+    // ── header: pharmacy ─────────────────────────────────────────────────────
+    DaysSupply,
+    RxServiceReferenceNumber,
+    DawProductSelectionCode,
+    RefillNumber,
+    RefillsAuthorized,
+    PrescriptionOriginCode,
+    PlanReportedBrandGenericCode,
+    PharmacyServiceTypeCode,
+    PatientResidenceCode,
+    ClaimPrescribingProviderNpi,
+    CompoundCode,
+
     // ── line ─────────────────────────────────────────────────────────────────
     LineNumber,
     ServiceFromDate,
@@ -162,6 +175,18 @@ public static class CpcdsClaimColumns
             [CpcdsClaimColumn.CopayAmount] = ["Copay amount"],
             [CpcdsClaimColumn.MemberLiability] = ["Member liability"],
             [CpcdsClaimColumn.ClaimDisallowedAmount] = ["Claim disallowed amount"],
+
+            [CpcdsClaimColumn.DaysSupply] = ["Days supply"],
+            [CpcdsClaimColumn.RxServiceReferenceNumber] = ["RX service reference number", "Prescription number", "Rx number"],
+            [CpcdsClaimColumn.DawProductSelectionCode] = ["DAW product selection code", "DAW code", "Dispense as written code"],
+            [CpcdsClaimColumn.RefillNumber] = ["Refill number", "Fill number"],
+            [CpcdsClaimColumn.RefillsAuthorized] = ["Refills authorized", "Number of refills authorized"],
+            [CpcdsClaimColumn.PrescriptionOriginCode] = ["Prescription origin code"],
+            [CpcdsClaimColumn.PlanReportedBrandGenericCode] = ["Plan reported brand-generic code", "Brand generic indicator", "Brand generic code"],
+            [CpcdsClaimColumn.PharmacyServiceTypeCode] = ["Pharmacy service type code"],
+            [CpcdsClaimColumn.PatientResidenceCode] = ["Patient residence code"],
+            [CpcdsClaimColumn.ClaimPrescribingProviderNpi] = ["Claim prescribing provider NPI", "Prescriber NPI"],
+            [CpcdsClaimColumn.CompoundCode] = ["Compound code"],
 
             [CpcdsClaimColumn.LineNumber] = ["Line number"],
             [CpcdsClaimColumn.ServiceFromDate] = ["Service (from) date", "Service from date"],

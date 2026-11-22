@@ -36,6 +36,8 @@
 #                            replica each); default keeps the manifests' requests
 #   CLAIMS_REPLICAS  BENEFIT_PLAN_REPLICAS   (1 with the small profile, else 2)
 #   ROLLOUT_TIMEOUT=900s
+#   LOG_LEVEL=Warning        Demo log level (Trace, Debug, Information, Warning, Error; ignored when
+#                            hosted). Raise it while debugging: Cloud Logging bills every line.
 #   Production security (all five, or none):
 #   TOKEN_SIGNING_KEY_VERSION     terraform output token_signing_key_version
 #   TOKEN_SERVICE_GOOGLE_ACCOUNT  terraform output token_service_google_account
@@ -705,7 +707,8 @@ fi
 log "Rendering and applying service manifests"
 render_args=(--registry "$GAR_REPOSITORY" --tag "$IMAGE_TAG"
   --claims-replicas "$CLAIMS_REPLICAS" --benefit-plan-replicas "$BENEFIT_PLAN_REPLICAS"
-  --storage-class "$STORAGE_CLASS" --resource-profile "$RESOURCE_PROFILE")
+  --storage-class "$STORAGE_CLASS" --resource-profile "$RESOURCE_PROFILE"
+  --log-level "${LOG_LEVEL:-Warning}")
 [[ -n "$KAFKA_VALUE" ]] && render_args+=(--kafka-bootstrap "$KAFKA_VALUE")
 if [[ -n "${CPCDS_DROP_BUCKET:-}" && -n "${CPCDS_DROP_SERVICE_ACCOUNT:-}" ]]; then
   render_args+=(--cpcds-drop-bucket "$CPCDS_DROP_BUCKET" --cpcds-drop-service-account "$CPCDS_DROP_SERVICE_ACCOUNT")

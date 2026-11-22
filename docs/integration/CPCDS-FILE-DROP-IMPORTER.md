@@ -52,7 +52,11 @@ diagnosis. Headers match ignoring case, spaces and punctuation, so
 Columns the importer does not use are ignored and listed in the report.
 
 A worked example with a professional, a denied, an inpatient and an oral claim
-is in [samples/cpcds/claims.csv](samples/cpcds/claims.csv). The tests load it.
+is in [samples/cpcds/claims.csv](samples/cpcds/claims.csv), and one with
+pharmacy claims (paid, denied and a compound) in
+[samples/cpcds/pharmacy-claims.csv](samples/cpcds/pharmacy-claims.csv). The
+tests load both. Which CPCDS elements CHO reads, and which it does not, is in
+[CPCDS-SPEC-COVERAGE.md](CPCDS-SPEC-COVERAGE.md).
 
 Required columns: `Claim unique identifier`, `Member id`, `Claim type`,
 `Claim service start date`, `Claim billing provider NPI`.
@@ -62,7 +66,7 @@ Required columns: `Claim unique identifier`, `Member id`, `Claim type`,
 | Claim unique identifier | `ClaimNumber`, EOB `identifier` (uc) | Also the reload key |
 | Member id | `MemberId` (after the crosswalk), EOB `patient` | |
 | Coverage id | `ExternalSource.SourceCoverageId` | Kept for tracing only. The EOB's `insurance.coverage` is the CHO Coverage the member held on the first date of service for the claim's benefit line (medical or dental), looked up in coverage-service; with none, the EOB names the plan by display and the claim carries a warning |
-| Claim type | `ClaimType` | `inpatient-facility`, `outpatient-facility`, `institutional` → Institutional; `professional-nonclinician`, `professional`, `vision` → Professional; `oral`, `dental` → Dental; `pharmacy` refused (no pharmacy projection yet) |
+| Claim type | `ClaimType` | `inpatient-facility`, `outpatient-facility`, `institutional` → Institutional; `professional-nonclinician`, `professional`, `vision` → Professional; `oral`, `dental` → Dental; `pharmacy` → Pharmacy (see [Pharmacy claims](#pharmacy-claims)) |
 | Claim service start / end date | `ServiceDateFrom` / `ServiceDateTo` | |
 | Claim received date | `ReceivedDate`, `SubmittedDate` (EOB `created`) | |
 | Claim paid date | `PaidDate`, adjudication `PaymentDate` (EOB `payment.date`) | |
@@ -96,12 +100,48 @@ line, or with an amount that does not parse, would show a member money that is
 wrong, and a wrong EOB is worse than a late one. A claim is refused when:
 a required value is empty or does not parse; rows disagree on the member or the
 claim type; a professional or oral line has no procedure code (an institutional
-line needs a procedure or a revenue code); it is a pharmacy claim; its member
+line needs a procedure or a revenue code; a pharmacy line needs an 11-digit
+NDC unless it is a compound); a pharmacy claim has no days supply; its member
 is not in the crosswalk; or its claim number belongs to a claim CHO adjudicated
 itself. One refused claim does not stop the rest of the file.
 
 Things that do not change what the member sees are warnings: a non-ICD-10-CM
 diagnosis, a missing bill type, a claim total that differs from its lines.
+
+## Pharmacy claims
+
+A `pharmacy` claim is a PBM's (or the core's) NCPDP claim, already
+adjudicated. It is served as the CARIN BB **Pharmacy** EOB (Patient Access)
+and the **Pharmacy Basis** EOB (Provider Access), from the same claim record
+and the same projectors as every other claim type. CHO does not adjudicate
+pharmacy claims: the claims API refuses a submitted one, and shadow
+adjudication skips them.
+
+One row per dispensed drug (usually one line per claim). The header columns
+below repeat on each row.
+
+| CPCDS column | CHO claim field | Notes |
+|---|---|---|
+| Claim billing provider NPI | `BillingProviderNPI`, EOB `provider` | The dispensing pharmacy, referenced as `Organization/{npi}` |
+| Claim prescribing provider NPI (or `Prescriber NPI`) | `Pharmacy.PrescriberNpi`, EOB `careTeam` (role `prescribing`) | Left off with a warning when it is not 10 digits |
+| Days supply | `Pharmacy.DaysSupply`, supportingInfo `dayssupply` | **Required**: a pharmacy claim without it is refused |
+| DAW product selection code | `Pharmacy.DispenseAsWrittenCode`, supportingInfo `dawcode` | NCPDP 0-9; empty is `0` (no product selection indicated) with a warning |
+| Refill number | `Pharmacy.RefillNumber`, supportingInfo `refillnum` | 0 is the original fill; empty is 0 with a warning |
+| Refills authorized | `Pharmacy.RefillsAuthorized`, supportingInfo `refillsauthorized` | Empty is 0 with a warning |
+| Prescription origin code | supportingInfo `rxorigincode` | NCPDP 0-5 |
+| Plan reported brand-generic code | supportingInfo `brandgenericindicator` | As given |
+| Compound code | supportingInfo `compoundcode` | NCPDP 0-2; `2` makes the item the `compound` literal |
+| RX service reference number | `Pharmacy.PrescriptionNumber` | Stored; the EOB has no element for it |
+| Pharmacy service type code, Patient residence code | `Pharmacy.*` | Stored |
+| National drug code | line `NationalDrugCode`, EOB `item.productOrService` (NDC) | Hyphenated 10-digit NDCs (4-4-2, 5-3-2, 5-4-1) are converted to 11 digits; an unhyphenated 10-digit NDC is ambiguous and refused |
+| Quantity dispensed (else Number of units) | line `DrugQuantity`, EOB `item.quantity` | |
+| Claim payment denial code, Line payment denial code | EOB `item.adjudication` `rejectreason` (NCPDP reject code) | Not a CARC, so it is not repeated as a header adjustment reason |
+
+Money is read as for every claim type. The EOB's `item.servicedDate` is the
+fill date, and the benefit payment status sits at the header, as the Pharmacy
+profile requires. A pharmacy claim's coverage is the member's prescription
+drug coverage line (`PDG`) where the plan carries one, else the medical
+(`HLT`) line.
 
 ## Reloads
 
@@ -134,6 +174,7 @@ raw 837 uploads.
 | `members` | yes | The CPCDS member file. Required column: `Member id`. |
 | `coverages` | no | The CPCDS coverage file. Required columns: `Member id`, `Plan identifier`, `Group id`. |
 | `dryRun` | no | `true` reports what would load, including the plan-code gap report, and writes nothing. |
+| `columnMap` | no | JSON object, CPCDS column name to the file's header, as for claims. Entries for columns these files do not have are ignored, so the tenant's one map serves members, coverage and claims; the daily drop sends it to all three. |
 
 The two files are turned into the 834 enrollment shape and run through the same
 import as an 834, so members, sponsors and coverage are created, updated and
@@ -163,9 +204,9 @@ the claims that name them.
   the daily full extract can be sent as is.
 
 Known limits: member updates do not change name or date of birth (as for
-834s); the claim file's `Coverage id` is the core's id, not the CHO coverage
-id the import created, so an EOB's `insurance.coverage` reference does not
-resolve to that Coverage yet.
+834s). The claim file's `Coverage id` is the core's id, which CHO keeps for
+tracing only; the EOB references the CHO Coverage the member held on the date
+of service (see the claim column table).
 
 ## Providers named on claims
 
@@ -218,16 +259,21 @@ Each run:
    still in progress is not read half-written. Hidden files and `.part`,
    `.partial`, `.filepart` and `.tmp` uploads are never read.
 2. Recognizes files by name: one containing `member` is the member file,
-   `coverage` the coverage file, `claim` a claim file (`CPCDS_Members.csv`,
-   `qnxt_claims_20261101.csv`). One member file, with its coverage file,
+   `coverage` the coverage file, `roster` a network roster
+   ([NETWORK-ROSTER-IMPORTER.md](NETWORK-ROSTER-IMPORTER.md)), `claim` a claim
+   file (`CPCDS_Members.csv`, `qnxt_network_roster_20261101.csv`,
+   `qnxt_claims_20261101.csv`, `pbm_pharmacy_claims_20261101.csv`). One member file, with its coverage file,
    loads per run; claim files all load. A coverage file with no member file,
    and a file the name does not place, wait in `inbound` with a note on the
    run.
 3. Moves each file it will load into `processing/{runId}`. The move is
    atomic, so with several claims-service replicas exactly one run gets
    each file.
-4. Loads members and coverage (enrollment-import-service), then for each
-   claim file the providers it names (provider-service) and then its claims.
+4. Loads members and coverage (enrollment-import-service), then each network
+   roster (provider-service), then for each claim file the providers it names
+   (provider-service) and then its claims. The roster loads before the claims
+   so the providers they name are already network providers; the tenant's
+   line of business is the roster's default.
    The two upstream imports are called with claims-service's own identity
    for the tenant.
 5. Records the run (`CpcdsDropRuns`), moves the files to `processed` or
@@ -449,7 +495,6 @@ is only needed when CHO already holds members under other ids.
   (the linked coverage is part of the content hash, so the reload makes a new
   version).
 
-- Pharmacy claims (needs a C4BB Pharmacy EOB projection).
 - Line-level allowed and paid amounts are stored but the financial EOB still
   emits money at the header, as it does for native claims.
 - A claim whose source id collides with a native CHO claim number is refused;
@@ -459,7 +504,9 @@ is only needed when CHO already holds members under other ids.
 
 1. **This change:** claim file parser, mapping to the claim record (and so to
    the C4BB EOBs), idempotent reloads, per-file report, pass-through crosswalk.
-2. Members and coverage from the CPCDS member and coverage files (done, see
+2. Pharmacy claims and the CARIN BB Pharmacy EOB (done, see
+   [Pharmacy claims](#pharmacy-claims)). Members and coverage from the CPCDS
+   member and coverage files (done, see
    [Members and coverage](#members-and-coverage)). Providers named on
    claims (done, see [Providers named on claims](#providers-named-on-claims)).
    Resolving the claim's core coverage id to the CHO Coverage (#1666).

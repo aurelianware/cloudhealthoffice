@@ -137,7 +137,16 @@ public class SmartConfigurationController : FhirControllerBase
                 "user/Task.write",
                 "system/Task.write",
                 "user/QuestionnaireResponse.write",
-                "system/QuestionnaireResponse.write"
+                "system/QuestionnaireResponse.write",
+
+                // SMART v2: every resource scope above is also granted in its
+                // exact v2 form (.read is .rs, .write is .cud).
+                "patient/*.rs",
+                "user/*.rs",
+                "system/*.rs",
+                "user/*.cud",
+                "system/*.cud",
+                "offline_access"
             },
 
             // ── SMART capabilities advertised ─────────────────────────────────
@@ -151,6 +160,9 @@ public class SmartConfigurationController : FhirControllerBase
                 "permission-patient",
                 "permission-user",
                 "permission-system",
+                "permission-offline",
+                "permission-v1",
+                "permission-v2",
                 "sso-openid-connect",
                 "context-ehr-patient",
                 "context-ehr-encounter",

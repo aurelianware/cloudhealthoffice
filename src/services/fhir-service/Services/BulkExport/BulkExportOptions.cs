@@ -11,6 +11,8 @@ namespace FhirService.Services.BulkExport;
 ///   BulkExport:PollInterval               how often the worker looks for work (00:00:05)
 ///   BulkExport:MatchGroupLifetime         how long a $bulk-member-match Group can be read and exported (30.00:00:00)
 ///   BulkExport:MaxMembersPerMatch         MemberBundles one $bulk-member-match may carry (500)
+///   BulkExport:SystemExport:Clients:n:Issuer    a backend client allowed a system-level /$export
+///   BulkExport:SystemExport:Clients:n:ClientId  (its issuer and client id); none by default: /$export answers 501
 ///   BulkExport:DocumentStore:Provider     Azure | Gcs | S3 | InMemory: where the files are written,
 ///   BulkExport:DocumentStore:...          with that provider's settings, as for DocumentStore:*
 /// </code>
@@ -47,6 +49,12 @@ public sealed class BulkExportOptions
     /// <summary>The members one <c>$bulk-member-match</c> may name; a larger request is split by the payer.</summary>
     public int MaxMembersPerMatch { get; set; } = 500;
 
+    /// <summary>
+    /// System-level <c>/$export</c>: every member in the tenant. Off until an
+    /// administrator names the backend clients allowed to run it.
+    /// </summary>
+    public SystemExportOptions SystemExport { get; set; } = new();
+
     /// <summary>The store's container (bucket prefix) for export files.</summary>
     public const string Container = "bulk-exports";
 
@@ -77,5 +85,44 @@ public sealed class BulkExportOptions
             throw new InvalidOperationException("BulkExport:MatchGroupLifetime and BulkExport:MaxMembersPerMatch must be positive.");
         if (PollInterval <= TimeSpan.Zero || LeaseDuration <= TimeSpan.Zero)
             throw new InvalidOperationException("BulkExport:PollInterval and BulkExport:LeaseDuration must be positive.");
+        if (SystemExport.Clients.Any(c => string.IsNullOrWhiteSpace(c.Issuer) || string.IsNullOrWhiteSpace(c.ClientId)))
+            throw new InvalidOperationException("Every BulkExport:SystemExport:Clients entry needs an Issuer and a ClientId.");
     }
+}
+
+/// <summary>
+/// Who may run a system-level <c>/$export</c> of every member in a tenant.
+///
+/// <para>
+/// No CHO permission and no SMART scope alone is enough: a system scope is
+/// something any trusted issuer's backend clients can hold, and this export
+/// is the whole membership. So the administrator names each client, by the
+/// exact issuer that authenticates it and its client id. A caller must be a
+/// SMART backend (system-context) caller and match an entry; the export's
+/// SMART scope is still checked first by SmartScopeEnforcementMiddleware.
+/// The data is the plan's own, exported to the plan's own systems (a data
+/// warehouse, state reporting, a delegated vendor under a BAA), so no member
+/// consent is checked; a payer or provider uses its own export.
+/// </para>
+/// </summary>
+public sealed class SystemExportOptions
+{
+    public List<SystemExportClient> Clients { get; set; } = [];
+
+    /// <summary>Whether any client is allowed, i.e. whether system-level export is on.</summary>
+    public bool IsOn => Clients.Count > 0;
+
+    /// <summary>Whether this issuer and client id are an allowed system exporter. Exact, ordinal.</summary>
+    public bool Allows(string? issuer, string? clientId)
+        => !string.IsNullOrEmpty(issuer) && !string.IsNullOrEmpty(clientId)
+           && Clients.Any(c => string.Equals(c.Issuer, issuer, StringComparison.Ordinal)
+                               && string.Equals(c.ClientId, clientId, StringComparison.Ordinal));
+}
+
+/// <summary>One backend client allowed a system-level export.</summary>
+public sealed class SystemExportClient
+{
+    public string Issuer { get; set; } = string.Empty;
+
+    public string ClientId { get; set; } = string.Empty;
 }

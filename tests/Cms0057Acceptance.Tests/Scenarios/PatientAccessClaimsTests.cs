@@ -6,6 +6,7 @@ using ClaimsService.Fhir;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
 using FhirService.Controllers;
+using Cms0057Acceptance.Tests.TestSupport;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -175,6 +176,39 @@ public class PatientAccessClaimsTests
 
         eob.GetProperty("identifier")[0].GetProperty("type").GetProperty("coding")[0]
             .GetProperty("code").GetString().Should().Be("uc");
+    }
+
+    // ── PAT-01 over the file drop ──────────────────────────────────────────
+
+    [Fact]
+    [Trait("Scenario", "PAT-01")]
+    [Trait("Backend", FileDrop.Backend)]
+    public async Task PAT01_FileDrop_AMemberSearchesClaimsTheirCoreAdjudicatedAsExplanationOfBenefit()
+    {
+        // The published sample CPCDS claim file, loaded by the real importer as
+        // a core's daily extract would be. M100 has two claims in it (PRO-1001
+        // paid, PRO-1002 denied); M200 and M300 have one each.
+        var claims = await FileDrop.ImportCpcdsClaimsAsync(Tenant, FileDrop.Sample("cpcds/claims.csv"));
+        claims.Select(c => c.ClaimNumber).Should().Contain(["PRO-1001", "PRO-1002", "INP-2001", "DEN-3001"]);
+        var path = new Path([.. claims]);
+
+        var bundle = Body(await path.SearchAsPatient("M100", "?_count=10"), HttpStatusCode.OK);
+
+        var eobs = bundle.GetProperty("entry").EnumerateArray().Select(e => e.GetProperty("resource")).ToList();
+        eobs.Should().HaveCount(2, "a member sees their own claims and no one else's");
+        eobs.Should().AllSatisfy(eob =>
+        {
+            eob.GetProperty("resourceType").GetString().Should().Be("ExplanationOfBenefit");
+            eob.GetProperty("patient").GetProperty("reference").GetString().Should().Be("Patient/M100");
+            eob.TryGetProperty("item", out _).Should().BeTrue("the core's claim lines become EOB items");
+            eob.GetProperty("meta").GetProperty("profile").EnumerateArray()
+                .Select(p => p.GetString()).Should().Contain(p => p!.StartsWith(
+                    "http://hl7.org/fhir/us/carin-bb/StructureDefinition/C4BB-ExplanationOfBenefit-"));
+        });
+        // The core's own claim number is the EOB's unique claim id.
+        eobs.Select(e => e.GetProperty("identifier")[0].GetProperty("value").GetString())
+            .Should().BeEquivalentTo(["PRO-1001", "PRO-1002"]);
+        path.Upstream.Should().ContainSingle().Which.Should().Contain("patient=M100");
     }
 
     // ── Harness ────────────────────────────────────────────────────────────

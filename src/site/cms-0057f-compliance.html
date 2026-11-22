@@ -4,13 +4,13 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>CMS-0057-F Compliance Beside QNXT or Facets | Cloud Health Office</title>
-  <meta name="description" content="The four CMS-0057-F FHIR APIs (Patient Access, Provider Access, Payer-to-Payer, Prior Auth) as a layer beside QNXT, Facets or HealthEdge, in your cloud."/>
+  <title>CMS-0057-F Compliance Software for Health Plans | Cloud Health Office</title>
+  <meta name="description" content="CMS-0057-F compliance software for Medicare Advantage, Medicaid, CHIP and exchange plans: Patient Access, Provider Access, Payer-to-Payer and Prior Authorization FHIR APIs beside QNXT, Facets or HealthEdge, in your cloud, by January 1, 2027."/>
   <link rel="canonical" href="https://cloudhealthoffice.com/cms-0057f-compliance"/>
 
   <!-- Open Graph -->
 
-  <meta property="og:title" content="CMS-0057-F Compliance Without Replacing QNXT or Facets | Cloud Health Office"/>
+  <meta property="og:title" content="CMS-0057-F Compliance Software Beside QNXT or Facets | Cloud Health Office"/>
   <meta property="og:description" content="All four CMS-0057-F FHIR APIs (Patient Access, Provider Access, Payer-to-Payer, Prior Auth) as a layer beside QNXT, Facets or HealthEdge. Runs in your cloud, PMPM pricing."/>
   <meta property="og:type" content="website"/>
   <meta property="og:url" content="https://cloudhealthoffice.com/cms-0057f-compliance"/>
@@ -20,7 +20,7 @@
   <!-- Twitter -->
 
   <meta name="twitter:card" content="summary_large_image"/>
-  <meta name="twitter:title" content="CMS-0057-F Compliance Without Replacing QNXT or Facets | Cloud Health Office"/>
+  <meta name="twitter:title" content="CMS-0057-F Compliance Software Beside QNXT or Facets | Cloud Health Office"/>
   <meta name="twitter:description" content="All four CMS-0057-F FHIR APIs (Patient Access, Provider Access, Payer-to-Payer, Prior Auth) as a layer beside QNXT, Facets or HealthEdge. Runs in your cloud, PMPM pricing."/>
   <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/cms-interoperability-layer.jpg"/>
 
@@ -471,6 +471,7 @@
     <div class="section-label">Background</div>
     <h2 class="section-title">What is CMS-0057-F?</h2>
     <p class="section-desc">The <strong>Advancing Interoperability and Improving Prior Authorization Processes</strong> final rule requires Medicare Advantage, Medicaid, CHIP, and QHP issuers to implement standardized FHIR R4 APIs — improving prior authorization, reducing provider burden, and enabling patient data access. Compliance deadline: <strong>January 1, 2027</strong>.</p>
+    <p class="section-desc">For the rule itself, in plain English: the <a href="https://cms-0057-f.com/fact-sheet" style="color:var(--cyan)">CMS-0057-F fact sheet</a>, the <a href="https://cms-0057-f.com/compliance-timeline" style="color:var(--cyan)">compliance timeline</a>, and the <a href="https://cms-0057-f.com/provider-access-api" style="color:var(--cyan)">Provider Access</a>, <a href="https://cms-0057-f.com/payer-to-payer-api" style="color:var(--cyan)">Payer-to-Payer</a> and <a href="https://cms-0057-f.com/prior-authorization-api" style="color:var(--cyan)">Prior Authorization API</a> requirements, on our independent guide at cms-0057-f.com.</p>
 
 <!-- Inline SVG: Required APIs Diagram -->
 <div class="flow-diagram" data-reveal>
@@ -1344,7 +1345,7 @@
     <div class="section-label">Compliance Status</div>
     <h2 class="section-title">CMS-0057-F Coverage</h2>
     <p class="section-desc">Current status of the required FHIR and prior authorization surfaces. CMS-0057-F conformance is in progress; the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer" style="color:var(--cyan)">ePA gap matrix</a> is the source of truth for each requirement.</p>
-    <p class="section-desc"><strong>Nothing on this page is a conformance verdict from an independent test kit.</strong> Six ONC Inferno kits (US Core, CARIN Blue Button, Plan-Net, Bulk Data, Da Vinci PDex and Da Vinci DTR) run nightly, and their latest verdicts, failures included, are published separately on the <a href="/evidence/inferno-conformance" style="color:var(--cyan)">Inferno conformance results page</a>. The statuses below come from Cloud Health Office's own acceptance suite, run against synthetic data at a named revision, and no status here constitutes certification by CMS, ONC or HL7.</p>
+    <p class="section-desc"><strong>Nothing on this page is a conformance verdict from an independent test kit.</strong> Nine ONC Inferno kits (US Core, CARIN Blue Button, Plan-Net, Bulk Data, Da Vinci PDex, Da Vinci DTR, Da Vinci CRD, Da Vinci PAS and SMART App Launch) run nightly, and their latest verdicts, failures included, are published separately on the <a href="/evidence/inferno-conformance" style="color:var(--cyan)">Inferno conformance results page</a>. The statuses below come from Cloud Health Office's own acceptance suite, run against synthetic data at a named revision, and no status here constitutes certification by CMS, ONC or HL7.</p>
 
 <figure style="margin:0 0 2.5rem;border:1px solid var(--border, #D9E1EA);border-radius:12px;background:#FFFFFF;padding:.6rem">
   <a href="/graphics/evidence/cho-cms-api-map.svg" title="Open the full-size diagram"><img src="/graphics/evidence/cho-cms-api-map.svg" width="1200" height="840" loading="lazy" style="display:block;width:100%;height:auto" alt="Where Cloud Health Office plugs in. Members, the public, in-network providers, other payers and ordering providers call five CMS APIs that Cloud Health Office serves: Patient Access, Provider Directory, Provider Access, Payer-to-Payer and Prior Authorization, each labeled with its rule, implementation guide, authorization and the independent test that checks it. Behind them sit the plan's systems: an existing QNXT, Facets or HealthEdge core reached through adapters built per engagement, or Cloud Health Office core modules replacing it one domain at a time, plus clinical and UM data." /></a>
@@ -1719,7 +1720,8 @@
 <!-- ═══════════════ FOOTER ═══════════════ -->
 
 <footer>
-  <p>&copy; 2026 Cloud Health Office — <a href="https://github.com/aurelianware">Aurelianware, Inc.</a> &nbsp;·&nbsp; Source-available platform (BSL 1.1) &nbsp;·&nbsp; Free for non-production use &nbsp;·&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:#0E7490;">Commercial licensing</a></p>
+  <p>Cloud Health Office is a product of <a href="https://aurelianware.com">Aurelianware, Inc.</a></p>
+  <p style="margin-top:.4rem">&copy; 2026 Aurelianware, Inc. &nbsp;·&nbsp; Source-available platform (BSL 1.1) &nbsp;·&nbsp; Free for non-production use &nbsp;·&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:#0E7490;">Commercial licensing</a></p>
   <p style="margin-top:.4rem"><a href="https://cloudhealthoffice.com/pricing">Pricing</a> &nbsp;·&nbsp; <a href="https://cloudhealthoffice.com/platform">Platform</a> &nbsp;·&nbsp; <a href="https://cloudhealthoffice.com/trust">Trust</a> &nbsp;·&nbsp; <a href="https://cloudhealthoffice.com/docs">Docs</a> &nbsp;·&nbsp; <a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a></p>
     <p style="margin-top:18px;"><a href="/founder">Meet the founder &rarr;</a></p>
   </footer>

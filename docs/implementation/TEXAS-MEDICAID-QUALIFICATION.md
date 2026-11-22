@@ -244,6 +244,31 @@ weekends/holidays/DST, outage recovery and all intake channels. Retain the tight
 applicable obligation. Requires current contract/UMCM, compliance content and
 operational acceptance; no generic FHIR endpoint can close this.
 
+**Remediation (November 2026).** `TexasMedicaidDecisionClock`
+(authorization-service, `Services/StatePrograms`) applies the statutory clocks
+on create for tenants listed in `PriorAuthDeadlines:TexasMedicaid:Tenants`,
+Medicaid line of business only, and keeps whichever of the Texas and federal
+deadlines is earlier:
+
+| Scenario (`Authorization.DecisionScenario`) | Clock | Authority |
+| --- | --- | --- |
+| `PoststabilizationOrLifeThreatening` | 1 hour | §540.0302(b)(3) |
+| `InpatientDischarge` | 72 hours | §540.0302(b)(2) |
+| `Hospitalized` | 1 business day | §540.0302(b)(1) |
+| `NotHospitalized` | 3 business days | §540.0303(b)(1) |
+
+An unstated scenario is inferred (concurrent review as hospitalized, anything
+else as not hospitalized) and the stored policy version is marked `+inferred`.
+Business days are counted in `PriorAuthDeadlines:TexasMedicaid:TimeZone`
+(default America/Chicago), skipping weekends and the plan-approved
+`Holidays` list; no holiday is built in. "Within N business days" is read as
+the same local time on the Nth business day after receipt. Still open: the
+HHSC incomplete-documentation process and reconsideration timeline
+(§§540.0303(c), 540.0306), any shorter contract/UMCM timeframe, notice
+deadlines, urgency changes after intake, existing records (created before the
+change keep their federal deadline) and compliance sign-off on the
+business-day reading.
+
 ### TX-06 — Delegation and capitation amendment propagation
 
 **Partial, with confirmed child-sync gap; P1 (P0 if used at launch); product + configuration.**

@@ -15,7 +15,8 @@ Customer deployment status, reference permissions and current commercial terms m
 | Document | What a reviewer uses it for |
 | --- | --- |
 | [SECURITY-ONE-PAGER.md](SECURITY-ONE-PAGER.md) | Architecture, tenant isolation, encryption, PHI logging, Key Vault, current gaps |
-| [BAA-TEMPLATE.md](BAA-TEMPLATE.md) | Counsel-reviewable Business Associate Agreement template |
+| [BAA-TEMPLATE.md](BAA-TEMPLATE.md) | Counsel-reviewable Business Associate Agreement template, with a state Medicaid rider |
+| [Security review readiness](../compliance/security-readiness/README.md) | SOC 2 roadmap, HIPAA posture, BAA approach, draft questionnaire answers, hosted environment checklist |
 | [DATA-HANDLING.md](DATA-HANDLING.md) | Synthetic-only until BAA; then limited PHI; never surprise production loads |
 | [ADAPTER-STATUS.md](ADAPTER-STATUS.md) | Demo vs Hybrid vs Live per FHIR resource, with the live endpoint |
 | [INCIDENT-AND-SUPPORT.md](INCIDENT-AND-SUPPORT.md) | Contacts, severity, response targets for a founding-partner pilot |

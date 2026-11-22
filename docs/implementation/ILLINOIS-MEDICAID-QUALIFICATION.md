@@ -1,7 +1,9 @@
 # Illinois Medicaid qualification and remediation backlog
 
-Assessment: October 24, 2026, America/Phoenix. **Prospective Chicago-area Medicaid
-plan business, targeting a 2027 plan start**, approximately 250,000 members.
+Assessment: October 24, 2026, America/Phoenix. **Hypothetical readiness scenario,
+not a customer or prospect:** a Chicago-area Medicaid plan of approximately 250,000
+members starting in 2027, used to evaluate CHO's capabilities and prepare
+Illinois-specific rules. No Illinois plan, contract or engagement exists.
 **Launch readiness remains unverified.** Native CHO has substantial implemented
 core administration, but the executing automatic encounter route excludes Illinois,
 no Illinois state-provider source is registered, and shared consistency, fulfillment,
@@ -16,9 +18,10 @@ Illinois requirements are not inferred from Texas or Oregon findings.
 ## 1. Scope and assumptions
 
 CHO is the native core in the plan's Azure or GCP environment. The plan operates
-its call center, claims and payment operations. The user confirmed Chicago-area
-Medicaid business and the **2027 start year**, not an exact day, county list, legal
-entity, procurement award, executed agreement or complete benefit allocation.
+its call center, claims and payment operations. The scenario assumes a
+Chicago-area Medicaid plan and a **2027 start year**; it does not specify an exact
+day, county list, legal entity, procurement award, executed agreement or complete
+benefit allocation, because no real engagement exists.
 HealthChoice Illinois (HCI) is the provisional baseline. Cook and any collar
 counties must be named individually. No CountyCare affiliation is inferred.
 
@@ -55,9 +58,9 @@ contracted MCO retains applicable accountability; CHO is software, not that enti
 
 | Scope / requirement | Confidence and current boundary | Accountable owner / evidence to close |
 | --- | --- | --- |
-| Legal customer and procurement | Unresolved MCO, delegate or service provider; no award asserted | Executive/legal: executed HFS agreement or delegation, procurement/award identity, retained duties and signatories |
-| Launch and rating period | 2027 year confirmed; exact effective day/rating period unknown | Executive/compliance: implementation calendar and controlling 2027 contract/amendments |
-| Counties and populations | Chicago area confirmed; Cook/collar counties and enrollment categories unknown | Enrollment/network: service-area schedule, member/program identifiers, population and transition inventory |
+| Legal customer and procurement | Hypothetical; no MCO, delegate or service provider engaged and no award asserted | Executive/legal: executed HFS agreement or delegation, procurement/award identity, retained duties and signatories |
+| Launch and rating period | 2027 year assumed for the scenario; exact effective day/rating period unknown | Executive/compliance: implementation calendar and controlling 2027 contract/amendments |
+| Counties and populations | Chicago area assumed for the scenario; Cook/collar counties and enrollment categories unknown | Enrollment/network: service-area schedule, member/program identifiers, population and transition inventory |
 | Physical health, behavioral health, SUD, dental, pharmacy, transportation and other benefits | Each responsibility unresolved; none excluded merely because a subcontractor participates | Benefits/operations: per-benefit coverage, authorization, payment, notice, encounter and coordination owners, carve-outs and state-retained duties |
 | YouthCare/DCFS, LTSS/HCBS/EVV, waiver programs | Conditional on assigned populations/benefits | Clinical/legal: applicable program agreement, waiver/State Plan authorities, agency/delegate responsibilities and transitions |
 | Dual coordination, MLTSS, FIDE SNP | Conditional; distinguish Medicaid coordination from operating MA/Part D | Duals/program lead: launch-effective HFS/CMS agreements and population/benefit schedule |
@@ -135,8 +138,8 @@ The IDs below are stable Illinois applicability references, not separate copies 
 the shared product ledger. All remediation statuses are **proposed** unless noted
 in §6. P0 means required before the affected launch workflow can be accepted,
 not proof an unknown contract assigns that workflow. Common scope is assigned
-HCI members/benefits in actual Chicago-area counties under IL-00; legal owner is
-the prospective contracted MCO, with delegated operational owner to be confirmed.
+HCI members/benefits in actual Chicago-area counties under IL-00; legal owner would be
+the contracted MCO in any real engagement, with delegated operational owner to be confirmed.
 
 ### IL-ENC — Automatic Illinois encounter route
 
@@ -396,7 +399,7 @@ topology and migration scope. Impact: confinement/availability or unreconciled l
 **Partial** shared implementation (CAP-06/14/39), high MCO applicability, P0 where
 the applicable rating period starts on/after January 1, 2027 (A12). Keep a separate
 comprehensive CMS-0057-F workstream, but do not defer applicable APIs until after
-this prospective 2027 launch. MCO, delegate and interoperability vendor allocation
+a 2027 launch in this scenario. MCO, delegate and interoperability vendor allocation
 must be explicit. Owner interoperability/compliance with clinical/reporting leads.
 Native PA evidence/annual draft is implemented, not an approved public artifact;
 real bulk jobs/files remain absent. Acceptance must cover authoritative all-channel
@@ -522,8 +525,8 @@ pass. No runtime behavior changed or open finding was closed.
 
 ## 7. Remaining business, certification and launch gates
 
-The next business milestone is an approved 2027 Chicago-area scope/responsibility
-and source inventory, followed by reusable correctness PRs and accepted state/
+If a real Illinois engagement arises, the next business milestone is an approved
+scope/responsibility and source inventory, followed by reusable correctness PRs and accepted state/
 partner profiles. Secure current guides and onboarding access while designing the
 shared durable boundaries. The plan must retain signed acceptance of migration,
 expected-dollar adjudication/close, source-to-state encounters, provider/enrollment
@@ -533,5 +536,5 @@ No MCO award, credentialed connection, approved notice, licensed reimbursement
 method, complete reporting/conformance or HFS readiness approval follows from
 source inspection. Required HFS readiness review (A1 §4.18), trading-partner/
 subcontractor acceptance, cloud security/scale/restore, clinical/operational staffing
-and compliance/finance sign-off remain open. For this 2027 target, applicable
+and compliance/finance sign-off remain open. For a 2027 target, applicable
 CMS API work must be planned as a launch dependency alongside native-core acceptance.

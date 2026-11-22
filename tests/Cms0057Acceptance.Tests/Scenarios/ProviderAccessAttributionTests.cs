@@ -240,6 +240,41 @@ public class ProviderAccessAttributionTests
             .Should().ThrowAsync<AttributionSourceUnavailableException>();
     }
 
+    // ── PROV-02 over the file drop ───────────────────────────────────────────
+
+    [Fact]
+    [Trait("Scenario", "PROV-02")]
+    [Trait("Backend", FileDrop.Backend)]
+    public async Task PROV02_FileDrop_ClaimsTheCoreAdjudicatedAttributeTheProviderWhoTreatedTheMember()
+    {
+        // The published sample CPCDS claim file, through the real importer.
+        // Billing NPI 1234567893 treated M100 (PRO-1001, PRO-1002) and no one else.
+        var claims = await FileDrop.ImportCpcdsClaimsAsync(
+            AcceptanceContext.TenantId, FileDrop.Sample("cpcds/claims.csv"));
+
+        // The relationship the claims-history source asks claims-service about,
+        // read off the imported records by the fields the Mongo filter matches
+        // (ProviderAttributionRepositoryMongo.TreatedBy: billing or rendering
+        // NPI, not voided, served on or after the floor).
+        var treated = claims
+            .Where(c => c.Status != ClaimsService.Models.ClaimStatus.Voided)
+            .SelectMany(c => new[] { c.BillingProviderNPI, c.RenderingProviderNPI }
+                .Where(npi => !string.IsNullOrWhiteSpace(npi))
+                .Select(npi => (Provider: npi!, Member: c.MemberId)))
+            .ToList();
+        treated.Should().Contain((Provider, "M100"), "the imported claims keep the core's provider and member ids");
+
+        var path = new Path(treated, treatedAt: claims.Max(c => c.ServiceDateTo));
+
+        var own = await path.Service(lookbackMonths: 120).AuthorizeAsync(Request("M100"));
+        var other = await path.Service(lookbackMonths: 120).AuthorizeAsync(Request("M300"));
+
+        own.Attributed.Should().BeTrue();
+        own.Allowed.Should().BeTrue();
+        other.Allowed.Should().BeFalse();
+        other.Reason.Should().Be(ProviderAccessDenialReason.NotAttributed);
+    }
+
     // ── Harness ──────────────────────────────────────────────────────────────
 
     private static ProviderAccessRequest Request(string member) => new()

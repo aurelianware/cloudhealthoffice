@@ -246,9 +246,17 @@ builder.Services.AddHttpClient(ClaimTenantConfigCache.HttpClientName)
     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddSingleton<ClaimTenantConfigCache>();
 builder.Services.AddScoped<IClaimAdapter, ChoClaimAdapter>();
-builder.Services.AddScoped<IClaimAdapter, QnxtClaimAdapter>();
-builder.Services.AddScoped<IClaimAdapter, FacetsClaimAdapter>();
-builder.Services.AddScoped<IClaimAdapter, HealthEdgeClaimAdapter>();
+// Live core connectors (QNXT, Facets, HealthEdge) are an optional integration
+// point, off by default: plans feed CHO through the daily file drop instead
+// (docs/integration/CORE-INTEGRATION-OPTIONS.md). Registered only when
+// CoreIntegration:LiveConnectors:Enabled is true; otherwise a tenant naming a
+// vendor platform is refused with 501 by the adapter factory.
+if (CloudHealthOffice.Infrastructure.Tenancy.LiveCoreConnectors.IsEnabled(builder.Configuration))
+{
+    builder.Services.AddScoped<IClaimAdapter, QnxtClaimAdapter>();
+    builder.Services.AddScoped<IClaimAdapter, FacetsClaimAdapter>();
+    builder.Services.AddScoped<IClaimAdapter, HealthEdgeClaimAdapter>();
+}
 builder.Services.AddScoped<ClaimAdapterFactory>();
 
 // Canonical claim submission orchestration (5.3). Wraps the
@@ -725,6 +733,22 @@ builder.Services.AddSingleton<ClaimsService.Extracts.IExtractDestination>(sp =>
 });
 builder.Services.AddScoped<ClaimsService.Extracts.IClaimExtractStore, ClaimsService.Extracts.ClaimExtractStoreMongo>();
 builder.Services.AddScoped<ClaimsService.Extracts.IClaimExtractSource, ClaimsService.Extracts.ClaimExtractSourceMongo>();
+// The CPCDS export (a tenant's IncludeCpcds) reads the whole membership and
+// its coverage a page at a time; a large plan takes minutes.
+builder.Services.AddHttpClient(ClaimsService.Extracts.Cpcds.HttpCpcdsEnrollmentSource.MemberClientName, client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:MemberService"] ?? "http://member-service:8080");
+    client.Timeout = TimeSpan.FromMinutes(2);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+builder.Services.AddHttpClient(ClaimsService.Extracts.Cpcds.HttpCpcdsEnrollmentSource.CoverageClientName, client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:CoverageService"] ?? "http://coverage-service:8080");
+    client.Timeout = TimeSpan.FromMinutes(2);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+builder.Services.AddScoped<ClaimsService.Extracts.Cpcds.ICpcdsEnrollmentSource,
+    ClaimsService.Extracts.Cpcds.HttpCpcdsEnrollmentSource>();
 builder.Services.AddScoped<ClaimsService.Extracts.ClaimExtractRunner>();
 builder.Services.AddHostedService<ClaimsService.Extracts.ClaimExtractWorker>();
 

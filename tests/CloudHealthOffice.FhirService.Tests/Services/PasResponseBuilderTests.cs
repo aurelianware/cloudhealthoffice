@@ -31,7 +31,7 @@ public class PasResponseBuilderTests
             for (var i = 0; i < lines.Count; i++)
             {
                 var outcome = response.Item[i].Adjudication.Single(a => a.Extension.Count > 0);
-                var code = (Coding)outcome.Extension.Single().Extension.Single().Value;
+                var code = ((CodeableConcept)outcome.Extension.Single().Extension.Single().Value).Coding.Single();
                 code.Code.Should().Be(lines[i].ServiceStatus);
                 outcome.Reason!.Text.Should().Be(lines[i].DenialReason);
                 outcome.Reason!.Coding.Single().Code.Should().Be(lines[i].DenialReasonCode);
@@ -101,10 +101,10 @@ public class PasResponseBuilderTests
         // X12 list 901 and means the request was rejected, not that the service
         // was denied. See PasResponseBuilder.DenialNote.
         claimResponse.Error.Should().BeEmpty();
-        claimResponse.Extension.Should().ContainSingle(e =>
-            e.Url == "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewAction")
-            .Which.Extension.Should().ContainSingle().Which.Value.Should().BeOfType<Coding>()
-            .Which.Code.Should().Be("A3");
+        // PAS 2.2.1 allows reviewAction only on an adjudication, never on the
+        // ClaimResponse itself, so the decision is stated on each line.
+        claimResponse.Extension.Should().BeEmpty();
+        ItemReviewActions(claimResponse).Should().NotBeEmpty().And.OnlyContain(c => c == "A3");
         claimResponse.ProcessNote.Should().ContainSingle()
             .Which.Text.Should().Contain("NOT_COVERED")
             .And.Contain("Service V2020 is not a covered benefit");
@@ -117,22 +117,69 @@ public class PasResponseBuilderTests
         var claimResponse = bundle.Entry.First().Resource as ClaimResponse;
 
         claimResponse.Should().NotBeNull();
-        claimResponse!.Outcome.Should().Be(ClaimProcessingCodes.Queued);
+        claimResponse!.Outcome.Should().Be(ClaimProcessingCodes.Complete);
         claimResponse.Disposition.Should().Be("pended");
 
-        // Check for reviewAction extension with A4 code
-        var reviewAction = claimResponse.Extension
-            .FirstOrDefault(e => e.Url.Contains("reviewAction"));
-        reviewAction.Should().NotBeNull();
-
-        var codeExt = reviewAction!.Extension
-            .FirstOrDefault(e => e.Url.Contains("reviewActionCode"));
-        codeExt.Should().NotBeNull();
-
-        var coding = codeExt!.Value as Coding;
-        coding.Should().NotBeNull();
-        coding!.Code.Should().Be("A4");
+        // A4 on each line's adjudication reviewAction, coded as a
+        // CodeableConcept in X12 list 306 (PAS 2.2.1).
+        ItemReviewActions(claimResponse).Should().NotBeEmpty().And.OnlyContain(c => c == "A4");
+        claimResponse.Extension.Should().BeEmpty();
     }
+
+    [Fact]
+    public void A_response_bundle_is_a_pas_response_bundle_holding_what_its_claim_response_references()
+    {
+        var request = new Bundle
+        {
+            Type = Bundle.BundleType.Collection,
+            Entry =
+            [
+                new() { FullUrl = "http://provider.example/fhir/Claim/test-claim-001", Resource = _claim },
+                new() { FullUrl = "http://provider.example/fhir/Patient/pat-001", Resource = new Patient { Id = "pat-001" } },
+                new() { FullUrl = "http://provider.example/fhir/Organization/cho-payer", Resource = new Organization { Id = "cho-payer" } },
+                new()
+                {
+                    FullUrl = "http://provider.example/fhir/PractitionerRole/role-1",
+                    Resource = new PractitionerRole { Id = "role-1", Practitioner = new ResourceReference("Practitioner/dr-1") },
+                },
+                new() { FullUrl = "http://provider.example/fhir/Practitioner/dr-1", Resource = new Practitioner { Id = "dr-1" } },
+                new() { FullUrl = "http://provider.example/fhir/DocumentReference/doc-1", Resource = new DocumentReference { Id = "doc-1" } },
+            ],
+        };
+        _claim.Provider = new ResourceReference("PractitionerRole/role-1");
+
+        var bundle = _builder.BuildPendedResponse(_claim, "PAS-1", request: request, fhirBaseUrl: "https://cho.example/fhir/r4");
+
+        bundle.Identifier.Should().NotBeNull();
+        bundle.Identifier.Value.Should().NotBeNullOrEmpty();
+        bundle.Timestamp.Should().NotBeNull();
+        bundle.Entry[0].Resource.Should().BeOfType<ClaimResponse>()
+            .Which.Requestor.Reference.Should().Be("PractitionerRole/role-1");
+        bundle.Entry[0].FullUrl.Should().StartWith("https://cho.example/fhir/r4/ClaimResponse/");
+        bundle.Entry.Select(e => e.FullUrl).Should().BeEquivalentTo(
+            [
+                bundle.Entry[0].FullUrl,
+                "http://provider.example/fhir/Patient/pat-001",
+                "http://provider.example/fhir/Organization/cho-payer",
+                "http://provider.example/fhir/PractitionerRole/role-1",
+                "http://provider.example/fhir/Practitioner/dr-1",
+            ],
+            "every resource the ClaimResponse reaches appears once, under the fullUrl the request gave it; "
+            + "the request Claim and its documents are not echoed");
+    }
+
+    private static List<string> ItemReviewActions(ClaimResponse claimResponse)
+        => claimResponse.Item
+            .SelectMany(i => i.Adjudication)
+            .SelectMany(a => a.Extension)
+            .Where(e => e.Url == "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewAction")
+            .SelectMany(e => e.Extension)
+            .Select(e => e.Value)
+            .OfType<CodeableConcept>()
+            .SelectMany(c => c.Coding)
+            .Where(c => c.System == "https://codesystem.x12.org/005010/306")
+            .Select(c => c.Code)
+            .ToList();
 
     [Fact]
     public void AllResponses_ArePasConformantBundles()
