@@ -20,7 +20,8 @@ public sealed record ClientRegistrationRequest(
     string? PayerId = null,
     JsonElement? Jwks = null,
     string? JwksUri = null,
-    string? ProviderId = null);
+    string? ProviderId = null,
+    bool Introspection = false);
 
 /// <summary>Body of <c>PUT {clientId}/payer</c>.</summary>
 public sealed record ClientPayerRequest(string? PayerId);
@@ -86,7 +87,10 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             return BadRequest(new { error = "clientId must be 3-64 lowercase letters, digits or hyphens." });
 
         var scopes = (request.Scopes ?? []).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.Ordinal).ToList();
-        var scopeError = ValidateScopes(kind, scopes);
+        // A resource server registered only to introspect tokens holds no
+        // scopes and is issued none: it is a backend client with no grant.
+        var introspectionOnly = request.Introspection && kind == SmartClientKind.Backend && scopes.Count == 0;
+        var scopeError = introspectionOnly ? null : ValidateScopes(kind, scopes);
         if (scopeError != null) return BadRequest(new { error = scopeError });
 
         var payerId = string.IsNullOrWhiteSpace(request.PayerId) ? null : request.PayerId.Trim();
@@ -114,10 +118,16 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             }
         }
 
+        var confidential = kind == SmartClientKind.Backend || request.Confidential;
+
+        // Introspection is for a resource server, which authenticates to call
+        // it (RFC 7662 section 2.1): a public client cannot.
+        if (request.Introspection && !confidential)
+            return BadRequest(new { error = "introspection requires a confidential client." });
+
         if (await _applications.FindByClientIdAsync(clientId, ct) is not null)
             return Conflict(new { error = "client_id_taken" });
 
-        var confidential = kind == SmartClientKind.Backend || request.Confidential;
         var secret = confidential && !asymmetric ? Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)) : null;
         var displayName = string.IsNullOrWhiteSpace(request.DisplayName) ? clientId : request.DisplayName.Trim();
 
@@ -148,10 +158,10 @@ public sealed class SmartClientRegistrationsController : ControllerBase
         };
         foreach (var uri in redirectUris) descriptor.RedirectUris.Add(uri);
 
-        descriptor.Permissions.Add(Permissions.Endpoints.Token);
+        if (!introspectionOnly) descriptor.Permissions.Add(Permissions.Endpoints.Token);
         if (kind == SmartClientKind.Backend)
         {
-            descriptor.Permissions.Add(Permissions.GrantTypes.ClientCredentials);
+            if (!introspectionOnly) descriptor.Permissions.Add(Permissions.GrantTypes.ClientCredentials);
         }
         else
         {
@@ -162,6 +172,8 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             descriptor.Permissions.Add(Permissions.ResponseTypes.Code);
             descriptor.Requirements.Add(Requirements.Features.ProofKeyForCodeExchange);
         }
+        if (request.Introspection)
+            descriptor.Permissions.Add(Permissions.Endpoints.Introspection);
         foreach (var scope in scopes)
             descriptor.Permissions.Add(Permissions.Prefixes.Scope + scope);
 
@@ -181,7 +193,8 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             : ClientAuthenticationMethods.ClientSecretBasic;
         _audit.Admin("client-registered", _actor.TenantId, _actor.UserId,
             $"client={clientId} kind={kind} auth={authMethod ?? "none"}"
-            + (payerId is null ? "" : $" payer={payerId}") + (providerId is null ? "" : $" provider={providerId}"));
+            + (payerId is null ? "" : $" payer={payerId}") + (providerId is null ? "" : $" provider={providerId}")
+            + (request.Introspection ? " introspection" : ""));
         return StatusCode(201, new
         {
             clientId,
@@ -195,6 +208,7 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             scopes,
             payerId,
             providerId,
+            introspection = request.Introspection,
         });
     }
 

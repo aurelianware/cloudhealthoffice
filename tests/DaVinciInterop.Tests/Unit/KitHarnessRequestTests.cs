@@ -111,6 +111,27 @@ public sealed class KitHarnessRequestTests
         ]);
     }
 
+    [Fact]
+    public void The_introspection_header_form_encodes_the_credentials_before_base64()
+    {
+        var header = InfernoSmartApp.BasicAuthorizationHeader("fhir-api", "a+b/c=");
+
+        header.Should().StartWith("Authorization: Basic ");
+        var decoded = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(header["Authorization: Basic ".Length..]));
+        decoded.Should().Be("fhir-api:a%2Bb%2Fc%3D");
+    }
+
+    [Fact]
+    public void The_resource_server_is_an_introspection_only_backend_named_for_the_token_audience()
+    {
+        var body = InfernoSmartApp.ResourceServerRegistration();
+
+        body["clientId"]!.GetValue<string>().Should().Be("fhir-api");
+        body["kind"]!.GetValue<string>().Should().Be("backend");
+        body["introspection"]!.GetValue<bool>().Should().BeTrue();
+        body["scopes"]!.AsArray().Should().BeEmpty("a resource server is issued no tokens");
+    }
+
     private static List<string> Orders(JsonNode body)
         => body["context"]!["draftOrders"]!["entry"]!.AsArray()
             .Select(e => e!["resource"]!.ToJsonString()).ToList();

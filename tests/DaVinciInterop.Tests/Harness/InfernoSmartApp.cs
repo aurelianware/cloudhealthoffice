@@ -54,9 +54,68 @@ public static class InfernoSmartApp
             app.EhrClientId, "provider-app", $"{app.DisplayName}, EHR launch",
             ScopesOf(app.EhrScopes), app.RedirectUri), "the EHR launch app registration", cancellationToken, conflictIsOk: true);
 
+        IntrospectionAuthorizationHeader = await RegisterResourceServerAsync(admin, smart, cancellationToken);
+
         return $"SMART apps '{app.ClientId}' (patient app, standalone launch) and '{app.EhrClientId}' (provider app, " +
-               $"EHR launch) registered with redirect URI {app.RedirectUri}";
+               $"EHR launch) registered with redirect URI {app.RedirectUri}; resource server '{ResourceServerClientId}' " +
+               "registered to introspect tokens";
     }
+
+    /// <summary>
+    /// The client id the kit introspects as: the audience of CHO's access
+    /// tokens (smart-auth-service's SmartIntrospection.ResourceServerClientId),
+    /// to which alone CHO returns a token's launch context.
+    /// </summary>
+    public const string ResourceServerClientId = "fhir-api";
+
+    /// <summary>
+    /// The <c>custom_authorization_header</c> input for the token introspection
+    /// group: HTTP Basic with the resource server's credentials (RFC 7662
+    /// section 2.1, RFC 6749 section 2.3.1). Set by <see cref="RegisterAsync"/>,
+    /// whose registration response is the only place the secret appears.
+    /// </summary>
+    public static string? IntrospectionAuthorizationHeader { get; private set; }
+
+    /// <summary>
+    /// Registers the resource server: a backend client with the introspection
+    /// permission and no scopes, so it can introspect and is issued nothing.
+    /// </summary>
+    private static async Task<string> RegisterResourceServerAsync(HttpClient admin, string smart, CancellationToken ct)
+    {
+        using var response = await admin.PostAsync($"{smart}/api/admin/smart/clients", JsonContent.Create(
+            ResourceServerRegistration()), ct);
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InteropEnvironmentException(
+                $"smart-auth-service refused the resource server registration with HTTP {(int)response.StatusCode}: " +
+                Redaction.Body(body));
+        }
+
+        var secret = JsonNode.Parse(body)?["clientSecret"]?.GetValue<string>()
+            ?? throw new InteropEnvironmentException(
+                "smart-auth-service registered the resource server without issuing a client secret.");
+        return BasicAuthorizationHeader(ResourceServerClientId, secret);
+    }
+
+    /// <summary>The resource server's registration body.</summary>
+    public static JsonObject ResourceServerRegistration() => new()
+    {
+        ["clientId"] = ResourceServerClientId,
+        ["kind"] = "backend",
+        ["displayName"] = "Inferno SMART kit token introspection (resource server)",
+        ["scopes"] = new JsonArray(),
+        ["introspection"] = true,
+    };
+
+    /// <summary>
+    /// One <c>Name: value</c> line, as the kit's header input takes it. The id
+    /// and secret are form-encoded before Base64 (RFC 6749 section 2.3.1), so a
+    /// secret holding <c>+</c>, <c>/</c> or <c>=</c> survives the server's decoding.
+    /// </summary>
+    public static string BasicAuthorizationHeader(string clientId, string secret)
+        => "Authorization: Basic " + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+            $"{Uri.EscapeDataString(clientId)}:{Uri.EscapeDataString(secret)}"));
 
     /// <summary>
     /// The scopes one app requests, which are the ones it is registered for:

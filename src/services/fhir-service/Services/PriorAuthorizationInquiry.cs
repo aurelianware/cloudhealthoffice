@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -170,7 +171,7 @@ public interface IApprovedAuthorizationSearch
     /// show is satisfied stays a requirement.
     /// </summary>
     Task<IReadOnlyList<PriorAuthorizationRecord>> FindApprovedForMemberAsync(
-        string memberId, CancellationToken ct = default);
+        string tenantId, string memberId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -211,15 +212,15 @@ public sealed class HttpPriorAuthorizationStore : IPriorAuthorizationStore, IApp
     }
 
     public async Task<IReadOnlyList<PriorAuthorizationRecord>> FindApprovedForMemberAsync(
-        string memberId, CancellationToken ct = default)
+        string tenantId, string memberId, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(memberId))
+        if (string.IsNullOrWhiteSpace(memberId) || string.IsNullOrWhiteSpace(tenantId))
             return [];
 
         var found = new List<PriorAuthorizationRecord>();
         foreach (var status in new[] { PriorAuthorizationStatus.Approved, PriorAuthorizationStatus.Modified })
         {
-            var page = await SearchAsync(
+            var page = await SearchAsync(tenantId,
                 $"api/authorizations/search?memberId={Uri.EscapeDataString(memberId.Trim())}&status={status}&pageSize=50", ct);
             found.AddRange(page.Where(r => r.Status == status));
         }
@@ -227,12 +228,20 @@ public sealed class HttpPriorAuthorizationStore : IPriorAuthorizationStore, IApp
         return found;
     }
 
-    private async Task<List<PriorAuthorizationRecord>> SearchAsync(string path, CancellationToken ct)
+    private async Task<List<PriorAuthorizationRecord>> SearchAsync(string tenantId, string path, CancellationToken ct)
     {
         var client = _factory.CreateClient(HttpClientName);
         try
         {
-            using var response = await client.GetAsync(path, ct);
+            // CRD's caller is an EHR with a CDS Hooks JWT, not a CHO token, so
+            // nothing would be forwarded and authorization-service would
+            // refuse the read. The search is for the caller's own tenant and
+            // the member CRD already resolved, so CHO's service token is used.
+            // The tenant is named on the request itself: the token is minted
+            // for the tenant the request names, before any later handler adds it.
+            using var request = new HttpRequestMessage(HttpMethod.Get, path).UseChoServiceToken();
+            request.Headers.Add(TenantHeaderPropagationHandler.HeaderName, tenantId);
+            using var response = await client.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(

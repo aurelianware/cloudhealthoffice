@@ -221,7 +221,7 @@ public class SmartTenancyTests
         var token = SmartAuthDriver.Read(body.GetProperty("access_token").GetString()!);
         SmartAuthDriver.Claim(token, "tenant_id").Should().Be(tenant);
         SmartAuthDriver.Claim(token, "sub").Should().Be("prov-77");
-        SmartAuthDriver.Claim(token, "fhirUser").Should().Be("Practitioner/prov-77");
+        SmartAuthDriver.Claim(token, "fhirUser").Should().Be($"Practitioner/{ValidNpi}");
         SmartAuthDriver.Claim(token, "npi").Should().Be(ValidNpi);
         SmartAuthDriver.Claim(token, "patient").Should().Be("mbr-7007");
     }

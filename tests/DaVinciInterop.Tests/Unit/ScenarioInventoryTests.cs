@@ -262,11 +262,14 @@ public sealed class ScenarioInventoryTests
             // A PAS suite is given the kit's own example requests, read from its checkout at run time,
             // which a unit test does not have; any value stands in for each.
             var pasInputs = scenario.InfernoInputs.ToDictionary(name => name, _ => "{}");
-            var act = () => InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken, dtrSource, crdSource, pasInputs);
+            // A SMART suite is given the resource server's header its registration returns; any value stands in here.
+            const string introspection = "Authorization: Basic c3RhbmQtaW4=";
+            var act = () => InfernoSuiteScenario.BuildInputs(
+                scenario, fixture, patientToken, dtrSource, crdSource, pasInputs, introspection);
 
             act.Should().NotThrow($"'{scenario.Id}' declares inputs [{string.Join(", ", scenario.InfernoInputs)}]");
 
-            InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken, dtrSource, crdSource, pasInputs)
+            InfernoSuiteScenario.BuildInputs(scenario, fixture, patientToken, dtrSource, crdSource, pasInputs, introspection)
                 .Select(input => input.Name)
                 .Should().BeEquivalentTo(scenario.InfernoInputs);
         }

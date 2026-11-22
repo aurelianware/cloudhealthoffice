@@ -379,8 +379,13 @@ synthetic and development-only.
    configuration plus the [integration contract](idp-integration-contract.md);
    the product-side capability is complete and tested, but a given engagement's
    IdP still has to be configured and validated against.
-2. **Token introspection (RFC 7662) is not implemented.** CHO validates JWTs
-   locally. An IdP issuing opaque reference tokens is not supported.
+2. **fhir-service does not call token introspection (RFC 7662).** It validates
+   JWTs locally, so an IdP issuing opaque reference tokens is not supported.
+   smart-auth-service does *answer* introspection for the tokens it issues
+   (`/connect/introspect`), to a confidential client registered with
+   `introspection: true`. A token's launch context (`patient`, `encounter`,
+   `fhirUser`) is returned only to its audience, the client id `fhir-api`, and
+   a client is answered `active: false` for any token of another tenant.
 3. **No dynamic client registration.** Interactive and general backend clients
    are registered at whichever IdP issues their tokens. **Payer-to-Payer backend
    clients are the exception: they must be registered in smart-auth-service**

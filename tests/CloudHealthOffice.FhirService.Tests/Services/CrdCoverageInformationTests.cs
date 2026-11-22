@@ -493,7 +493,7 @@ public class CrdCoverageInformationTests
     {
         public List<string> Members { get; } = [];
 
-        public Task<IReadOnlyList<PriorAuthorizationRecord>> FindApprovedForMemberAsync(string memberId, CancellationToken ct = default)
+        public Task<IReadOnlyList<PriorAuthorizationRecord>> FindApprovedForMemberAsync(string tenantId, string memberId, CancellationToken ct = default)
         {
             Members.Add(memberId);
             return Task.FromResult<IReadOnlyList<PriorAuthorizationRecord>>(records.Where(r => r.MemberId == memberId).ToList());

@@ -204,7 +204,10 @@ public sealed class SmartTokenContextResolver
             Subject: provider.ProviderId,
             Patient: patient,
             Encounter: encounter,
-            FhirUser: $"Practitioner/{provider.ProviderId}",
+            // CHO's Practitioner resource id is the NPI (provider-service reads
+            // Practitioner/{npi}), so fhirUser names the NPI: a client that
+            // follows the reference reads this practitioner.
+            FhirUser: $"Practitioner/{provider.Npi}",
             Npi: provider.Npi,
             Identity: identity));
     }

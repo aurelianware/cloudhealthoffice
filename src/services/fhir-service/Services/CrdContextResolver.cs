@@ -208,7 +208,12 @@ public sealed class CrdContextResolver : ICrdContextResolver
             _logger.LogWarning(ex,
                 "CRD could not read the program for {PatientId}'s benefit plan; the rule engine will not be called",
                 LogSanitizer.MaskId(patientId));
-            return CrdContextResolution.Unresolved(CrdContextFailure.Unavailable);
+            // The member and their coverage are still known (see ContextIncomplete below).
+            return CrdContextResolution.Unresolved(CrdContextFailure.Unavailable) with
+            {
+                MemberId = patientId,
+                CoverageEnd = CoverageEnd(coverage),
+            };
         }
 
         // A program states all three keys together. Without one, the member's

@@ -53,7 +53,8 @@ public sealed class ProviderUserLink
 
     /// <summary>
     /// The provider id fhir-service attributes members to (its Provider Access
-    /// panels key on the token's <c>sub</c>), and the Practitioner id in <c>fhirUser</c>.
+    /// panels key on the token's <c>sub</c>). <c>fhirUser</c> names <see cref="Npi"/>,
+    /// which is CHO's Practitioner resource id.
     /// </summary>
     public string ProviderId { get; set; } = string.Empty;
 

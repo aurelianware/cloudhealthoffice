@@ -124,6 +124,11 @@ builder.Services.AddOpenIddict()
         // most five minutes out). See SmartClientAssertions.
         options.AddSmartClientAssertions();
 
+        // ── Token introspection ──────────────────────────────────────────────
+        // Confidential clients registered with the introspection permission;
+        // a client sees only its own tenant's tokens. See SmartIntrospection.
+        options.AddSmartIntrospection();
+
         // ── ASP.NET Core integration ─────────────────────────────────────────
         var aspNetCore = options.UseAspNetCore()
                .EnableAuthorizationEndpointPassthrough()

@@ -168,7 +168,7 @@ public class CrdService : ICrdService
 
         // 4b. A requirement an approved authorization already meets is
         //     satisfied, and the answer names that authorization.
-        await SatisfyFromApprovedAuthorizationsAsync(context, request, assertions, cards, ct);
+        await SatisfyFromApprovedAuthorizationsAsync(context, request, tenantId, assertions, cards, ct);
 
         // 4c. An order planned for after the coverage ends is covered only
         //     conditionally, and its card says so as the extension does.
@@ -333,7 +333,7 @@ public class CrdService : ICrdService
     /// period — with a satisfied answer naming that authorization.
     /// </summary>
     private async Task SatisfyFromApprovedAuthorizationsAsync(
-        CrdContextResolution context, CrdHookRequest request,
+        CrdContextResolution context, CrdHookRequest request, string tenantId,
         List<CrdAssertionDraft> assertions, List<CrdCard> cards, CancellationToken ct)
     {
         if (_priorAuthorizations is null || (context.MemberId ?? context.Context?.MemberId) is not { Length: > 0 } memberId
@@ -343,7 +343,7 @@ public class CrdService : ICrdService
         IReadOnlyList<PriorAuthorizationRecord> approved;
         try
         {
-            approved = await _priorAuthorizations.FindApprovedForMemberAsync(memberId, ct);
+            approved = await _priorAuthorizations.FindApprovedForMemberAsync(tenantId, memberId, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
