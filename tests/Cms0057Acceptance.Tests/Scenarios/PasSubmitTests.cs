@@ -355,7 +355,7 @@ public class PasSubmitTests
             .Value.Should().BeOfType<Bundle>().Subject
             .Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
         claimResponse.Disposition.Should().Be("pended");
-        claimResponse.Outcome.Should().Be(ClaimProcessingCodes.Queued);
+        claimResponse.Outcome.Should().Be(ClaimProcessingCodes.Complete);
     }
 
     [Fact]

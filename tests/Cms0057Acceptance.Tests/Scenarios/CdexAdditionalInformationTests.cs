@@ -953,7 +953,7 @@ public class CdexAdditionalInformationTests
         var after = InquiryResponse(builder, await authorizations.GetByAuthorizationNumberAsync(AuthNumber));
         after.Disposition.Should().Be("pending",
             "once the information is in, the authorization is back in review — not still waiting on the provider");
-        after.Outcome.Should().Be(ClaimProcessingCodes.Queued);
+        after.Outcome.Should().Be(ClaimProcessingCodes.Complete);
         after.Disposition.Should().NotBe("approved");
     }
 

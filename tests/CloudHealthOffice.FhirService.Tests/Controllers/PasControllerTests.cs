@@ -212,7 +212,7 @@ public class PasControllerTests
         var responseBundle = okResult.Value.Should().BeOfType<Bundle>().Subject;
         var claimResponse = responseBundle.Entry[0].Resource as ClaimResponse;
         claimResponse!.Disposition.Should().Be("pended");
-        claimResponse.Outcome.Should().Be(ClaimProcessingCodes.Queued);
+        claimResponse.Outcome.Should().Be(ClaimProcessingCodes.Complete);
     }
 
     [Fact]

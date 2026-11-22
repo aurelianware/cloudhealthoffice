@@ -151,8 +151,8 @@ public class PasInquiryTests
         pending.Disposition.Should().NotBe(pended.Disposition);
 
         // Both are still open, so both report as queued rather than decided.
-        pending.Outcome.Should().Be(ClaimProcessingCodes.Queued);
-        pended.Outcome.Should().Be(ClaimProcessingCodes.Queued);
+        pending.Outcome.Should().Be(ClaimProcessingCodes.Complete);
+        pended.Outcome.Should().Be(ClaimProcessingCodes.Complete);
 
         // The pended one carries the X12 A4 review action and says what is outstanding.
         PasReviewActions.OnLines(pended).Should().Contain(c => c.Code == "A4");

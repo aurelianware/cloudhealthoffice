@@ -149,7 +149,9 @@ public class PasResponseBuilder
         Bundle? request = null, string? fhirBaseUrl = null)
     {
         var claimResponse = BuildBase(claim);
-        claimResponse.Outcome = ClaimProcessingCodes.Queued;
+        // PAS 2.2.1 binds outcome to complete | error | partial: receiving
+        // and recording the request is complete; the pend is the review action.
+        claimResponse.Outcome = ClaimProcessingCodes.Complete;
         claimResponse.Disposition = "pended";
         // Without this a pended decision had no tracking handle at all, so the
         // submitter could never inquire about the one outcome that most needs
@@ -378,11 +380,11 @@ public class PasResponseBuilder
         MapStatus(PriorAuthorizationStatus status, string? reviewDecision) => status switch
         {
             PriorAuthorizationStatus.Submitted
-                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued, "pending", null, null),
+                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete, "pending", null, null),
             PriorAuthorizationStatus.InReview
-                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued, "pending", null, null),
+                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete, "pending", null, null),
             PriorAuthorizationStatus.Pended
-                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued,
+                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete,
                     "pended-additional-information", "A4", "Pending"),
             PriorAuthorizationStatus.Approved
                 => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete, "approved", "A1", "Certified in total"),
@@ -398,7 +400,7 @@ public class PasResponseBuilder
             // An unrecognised or absent status is never reported as a decision:
             // it reads as still in progress rather than as an approval CHO
             // cannot vouch for.
-            _ => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued, "pending", null, null),
+            _ => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete, "pending", null, null),
         };
 
     private static string StripPatientPrefix(string value)

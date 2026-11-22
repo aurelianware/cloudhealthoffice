@@ -117,7 +117,7 @@ public class PasResponseBuilderTests
         var claimResponse = bundle.Entry.First().Resource as ClaimResponse;
 
         claimResponse.Should().NotBeNull();
-        claimResponse!.Outcome.Should().Be(ClaimProcessingCodes.Queued);
+        claimResponse!.Outcome.Should().Be(ClaimProcessingCodes.Complete);
         claimResponse.Disposition.Should().Be("pended");
 
         // A4 on each line's adjudication reviewAction, coded as a
