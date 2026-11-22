@@ -24,6 +24,7 @@
       "providers:write",
       "benefits:read",
       "authorizations:read",
+      "authorizations:decide",
       "settings:manage"
     ]
   },
@@ -61,6 +62,40 @@
       "launch/patient",
       "patient/*.read"
     ]
+  },
+  "pasBackendClient": {
+    "_comment": "The SMART Backend Services client INFERNO-PAS-SERVER-001 registers for the PAS kit before it runs. The kit plays a provider's PAS client submitting prior authorizations, so the client acts for the seeded provider and holds what PAS needs: Claim writes for $submit, Claim reads for $inquire, and Subscription writes for the rest-hook subscription a pended decision is delivered on. Its keys are the public half of what the kit publishes, as for backendClient.",
+    "clientId": "inferno-pas",
+    "displayName": "Inferno PAS test kit, as a provider's PAS client (interop)",
+    "providerId": "1234567893",
+    "scopes": [
+      "system/Claim.write",
+      "system/Claim.read",
+      "system/Subscription.write",
+      "system/Subscription.read"
+    ]
+  },
+  "smartApp": {
+    "_comment": "The SMART app INFERNO-SMART-SERVER-001 registers the SMART App Launch kit as: an interactive, confidential asymmetric client (private_key_jwt) whose keys are the public half of what the kit publishes under /custom/smart_stu2_2/.well-known/jwks.json, with the kit's redirect and launch URIs on the interop network. The EHR launch uses a second registration, ehrClientId, as a provider app: the harness enrols ehrUsername as a provider user for ehrProviderId, creates the launch context for the member as the EHR would, and opens the kit's launch URI. For the standalone launch the harness signs in as username with the Development login, links the member enrolment it issues, and approves the consent page, as the member would. The scopes are SMART v2, the default the kit requests.",
+    "clientId": "inferno-smart",
+    "displayName": "Inferno SMART App Launch test kit (interop)",
+    "redirectUri": "http://inferno-smart:4567/custom/smart_stu2_2/redirect",
+    "launchUri": "http://inferno-smart:4567/custom/smart_stu2_2/launch",
+    "username": "interop-member-1",
+    "scopes": [
+      "openid",
+      "fhirUser",
+      "offline_access",
+      "launch",
+      "launch/patient",
+      "patient/*.rs"
+    ],
+    "standaloneScopes": "launch/patient openid fhirUser offline_access patient/*.rs",
+    "ehrScopes": "launch openid fhirUser offline_access patient/*.rs",
+    "ehrClientId": "inferno-smart-ehr",
+    "ehrUsername": "interop-practitioner-1",
+    "ehrProviderId": "interop-dtr-practitioner",
+    "ehrProviderNpi": "1679576722"
   },
   "member": {
     "memberId": "INTEROP-MEM-1",
@@ -211,7 +246,8 @@
         "planName": "Interop Gold HMO (synthetic)",
         "coverageLevel": "EMP",
         "insuranceLineCode": "HM",
-        "effectiveDate": "2026-01-01T00:00:00Z"
+        "effectiveDate": "2026-01-01T00:00:00Z",
+        "terminationDate": "2099-12-31T00:00:00Z"
       },
       "claims": [
         {
@@ -253,8 +289,85 @@
           ]
         }
       ]
+    },
+    {
+      "_comment": "A member whose only coverage ended on 2025-12-31, and who has no claims, so no export or Group holds them. INFERNO-CRD-SERVER-001 sends a hook for them to see CHO answer not-covered for no-active-coverage.",
+      "member": {
+        "memberId": "INTEROP-MEM-3",
+        "groupNumber": "INTEROP-GRP-1",
+        "isSubscriber": true,
+        "firstName": "Lapsedcase",
+        "lastName": "Interop",
+        "dateOfBirth": "1990-03-03T00:00:00Z",
+        "gender": "F",
+        "birthSex": "F",
+        "address": "3 Synthetic Way",
+        "city": "Springfield",
+        "state": "FL",
+        "zipCode": "32401",
+        "phone": "555-0102",
+        "email": "lapsedcase.interop@example.invalid",
+        "preferredLanguage": "en",
+        "effectiveDate": "2025-01-01T00:00:00Z"
+      },
+      "coverage": {
+        "memberId": "INTEROP-MEM-3",
+        "groupNumber": "INTEROP-GRP-1",
+        "groupName": "Interop Employer Group (synthetic)",
+        "planId": "INTEROP-PLAN-1",
+        "planName": "Interop Gold HMO (synthetic)",
+        "coverageLevel": "EMP",
+        "insuranceLineCode": "HM",
+        "effectiveDate": "2025-01-01T00:00:00Z",
+        "terminationDate": "2025-12-31T00:00:00Z"
+      },
+      "claims": []
     }
   ],
+  "authorizations": {
+    "_comment": "An approved prior authorization for the member's total knee arthroplasty (CPT 27447, which the interop profile requires authorization for), seeded through authorization-service's development seed. The CRD kit's order-sign request for that procedure is answered pa-needed satisfied, with this authorization's number as satisfied-pa-id. INTEROP-MEM-2's coverage ends 2099-12-31 so a request planned after that is answered covered conditional, info-needed contract-window.",
+    "items": [
+      {
+        "authorizationNumber": "INTEROP-PA-KNEE-1",
+        "memberId": "INTEROP-MEM-1",
+        "patientFirstName": "Testcase",
+        "patientLastName": "Interop",
+        "patientDateOfBirth": "1970-01-01T00:00:00Z",
+        "lineOfBusiness": "Commercial",
+        "requestingProviderNPI": "1234567893",
+        "servicingProviderNPI": "1234567893",
+        "authorizationType": "PreAuthorization",
+        "certificationType": "I",
+        "serviceTypeCode": "2",
+        "levelOfService": "E",
+        "diagnosisCodes": [
+          { "code": "M1711", "codeQualifier": "BK", "description": "Unilateral primary osteoarthritis, right knee" }
+        ],
+        "requestedServiceDateFrom": "2026-01-01T00:00:00Z",
+        "requestedServiceDateTo": "2099-12-30T00:00:00Z",
+        "status": "Approved",
+        "reviewDecision": "A1",
+        "approvedServiceDateFrom": "2026-01-01T00:00:00Z",
+        "approvedServiceDateTo": "2099-12-30T00:00:00Z",
+        "approvedUnits": 1,
+        "submittedDate": "2026-01-05T00:00:00Z",
+        "reviewedDate": "2026-01-06T00:00:00Z",
+        "requestedServices": [
+          {
+            "lineNumber": 1,
+            "procedureCode": "27447",
+            "productOrServiceSystem": "http://www.ama-assn.org/go/cpt",
+            "procedureDescription": "Total knee arthroplasty (synthetic)",
+            "requestedUnits": 1,
+            "unitType": "UN",
+            "placeOfServiceCode": "21",
+            "approvedUnits": 1,
+            "serviceStatus": "A1"
+          }
+        ]
+      }
+    ]
+  },
   "encounters": [
     {
       "_comment": "The visit behind INTEROP-CLM-PROF-1, as an encounter record (837P). Unlike claims-service, encounter-service reads its enums as names (Commercial, Professional, Original), not numbers. fhir-service serves it as FHIR Encounter, which INTEROP-USCORE-SERVER-001 judges; without one the kit had no Encounter to test.",

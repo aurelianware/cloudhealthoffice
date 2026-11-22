@@ -212,7 +212,7 @@ public class PasControllerTests
         var responseBundle = okResult.Value.Should().BeOfType<Bundle>().Subject;
         var claimResponse = responseBundle.Entry[0].Resource as ClaimResponse;
         claimResponse!.Disposition.Should().Be("pended");
-        claimResponse.Outcome.Should().Be(ClaimProcessingCodes.Queued);
+        claimResponse.Outcome.Should().Be(ClaimProcessingCodes.Complete);
     }
 
     [Fact]
@@ -277,7 +277,10 @@ public class PasControllerTests
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
         var responseBundle = okResult.Value.Should().BeOfType<Bundle>().Subject;
         responseBundle.Type.Should().Be(Bundle.BundleType.Collection);
-        responseBundle.Entry.Should().HaveCount(1);
+        // PAS Response Bundle: identified, the ClaimResponse first, then the
+        // resources it references from the request.
+        responseBundle.Identifier.Should().NotBeNull();
+        responseBundle.Entry.Should().NotBeEmpty();
 
         var claimResponse = responseBundle.Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
         claimResponse.Meta.Profile.Should().Contain(

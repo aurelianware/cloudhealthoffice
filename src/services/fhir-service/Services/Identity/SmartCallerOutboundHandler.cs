@@ -41,7 +41,7 @@ public sealed class SmartCallerOutboundHandler : DelegatingHandler
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var http = _accessor.HttpContext;
-        if (http != null && FhirCallerSchemes.IsSmart(http.User))
+        if (http != null && FhirCallerSchemes.IsExternal(http.User))
             await PrepareAsync(request, http, cancellationToken);
 
         return await base.SendAsync(request, cancellationToken);

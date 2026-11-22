@@ -105,7 +105,18 @@ const REGULATORY_CONTEXT = {
     'The Prior Authorization API CMS-0057-F requires by January 1, 2027, which must make the payer\'s ' +
     'documentation requirements available to providers. Da Vinci DTR is the implementation guide CMS recommends ' +
     'for that part, alongside CRD and PAS: the provider\'s EHR or DTR app fetches the payer\'s questionnaires and ' +
-    'their prepopulation logic.'
+    'their prepopulation logic.',
+  CRD:
+    'The Prior Authorization API CMS-0057-F requires by January 1, 2027, which must tell providers whether a ' +
+    'service needs prior authorization and what documentation it needs. Da Vinci CRD is the implementation guide ' +
+    'CMS recommends for that part: the provider\'s EHR asks the payer through CDS Hooks as the order is written.',
+  PAS:
+    'The Prior Authorization API CMS-0057-F requires by January 1, 2027, which must let providers send a prior ' +
+    'authorization request and receive the decision. Da Vinci PAS is the implementation guide CMS recommends ' +
+    'for that part.',
+  'SMART App Launch':
+    'Every CMS-0057-F API (Patient Access, Provider Access, Payer-to-Payer, Prior Authorization) authorizes the ' +
+    'calling app with SMART App Launch: an app the member or provider launches, or a backend system.'
 };
 
 // Groups the kit declares without an id are named by the runnable id Inferno
@@ -281,7 +292,10 @@ const BADGE_LABELS = {
   'Plan-Net': 'Inferno Plan-Net',
   'Bulk Data': 'Inferno Bulk Data',
   PDex: 'Inferno PDex',
-  DTR: 'Inferno DTR'
+  DTR: 'Inferno DTR',
+  CRD: 'Inferno CRD',
+  PAS: 'Inferno PAS',
+  'SMART App Launch': 'Inferno SMART'
 };
 
 function badgeFor(kit) {

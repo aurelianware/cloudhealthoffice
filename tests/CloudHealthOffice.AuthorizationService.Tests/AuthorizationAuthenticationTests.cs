@@ -413,6 +413,38 @@ public class AuthorizationAuthenticationTests : IClassFixture<AuthorizationApiFa
         Assert.Equal(Reviewer, stored.CreatedBy);
     }
 
+    /// <summary>
+    /// The interop profile seeds its decided authorizations through this
+    /// endpoint (scripts/interop/seed-cho.mjs). A field the model requires and
+    /// the fixture lacks stops the seed, and every kit with it, so the fixture
+    /// is posted here as the seed posts it.
+    /// </summary>
+    [Fact]
+    public async Task DevSeed_AcceptsTheInteropFixturesAuthorizations()
+    {
+        var root = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(root, "interop", "cho-seed.json")))
+            root = Path.GetDirectoryName(root) ?? throw new InvalidOperationException("repository root not found");
+        var fixture = System.Text.Json.Nodes.JsonNode.Parse(
+            await File.ReadAllTextAsync(Path.Combine(root, "interop", "cho-seed.json")))!;
+        var items = fixture["authorizations"]!["items"]!.AsArray();
+        foreach (var item in items)
+            item!.AsObject().Remove("_comment");
+
+        var stored = new List<Authorization>();
+        _repo.GetByAuthorizationNumberAsync(Arg.Any<string>()).Returns((Authorization?)null);
+        _repo.CreateAsync(Arg.Do<Authorization>(stored.Add)).Returns(call => call.Arg<Authorization>());
+        using var client = ClientFor(Tenant, Reviewer, ChoRolePermissions.UMCoordinator);
+
+        var response = await client.PostAsync("/api/authorizations/dev-seed", new StringContent(
+            new System.Text.Json.Nodes.JsonObject { ["authorizations"] = items.DeepClone() }.ToJsonString(),
+            System.Text.Encoding.UTF8, "application/json"));
+
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        Assert.Equal(items.Count, stored.Count);
+        Assert.All(stored, a => Assert.Equal(AuthorizationStatus.Approved, a.Status));
+    }
+
     [Fact]
     public async Task BackendStatus_StaysAnonymous()
     {

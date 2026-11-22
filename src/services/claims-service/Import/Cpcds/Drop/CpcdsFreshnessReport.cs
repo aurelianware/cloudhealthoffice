@@ -75,6 +75,12 @@ public sealed class CpcdsFreshnessWindow
     public decimal ProvidersCreated { get; set; }
     public decimal ProvidersNotInNppes { get; set; }
 
+    /// <summary>Network participations the roster files added.</summary>
+    public decimal RosterParticipationsAdded { get; set; }
+
+    /// <summary>Roster rows refused: those providers are not in the network the row named.</summary>
+    public decimal RosterRowsRejected { get; set; }
+
     /// <summary>Plan codes unmapped in the most recent member load: coverage for them did not load.</summary>
     public decimal? UnmappedPlanCodesInLastMemberLoad { get; set; }
 }
@@ -173,6 +179,11 @@ public sealed class CpcdsFreshnessReporter
                         window.ProvidersCreated += Get(step, "created");
                         window.ProvidersNotInNppes += Get(step, "notInNppes");
                         break;
+                    case "network-roster":
+                        window.ProvidersCreated += Get(step, "providersCreated");
+                        window.RosterParticipationsAdded += Get(step, "participationsAdded");
+                        window.RosterRowsRejected += Get(step, "rejected");
+                        break;
                 }
             }
         }
@@ -221,5 +232,8 @@ public sealed class CpcdsFreshnessReporter
                               "coverage for them did not load.");
         if (w.ProvidersNotInNppes > 0)
             report.Issues.Add($"{w.ProvidersNotInNppes:0} provider NPIs on claims are not in NPPES; their EOBs carry the NPI only.");
+        if (w.RosterRowsRejected > 0)
+            report.Issues.Add($"{w.RosterRowsRejected:0} network roster rows were refused in the last {report.WindowDays} days; " +
+                              "those providers are not in the network the row named.");
     }
 }

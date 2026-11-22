@@ -105,6 +105,16 @@ public class Authorization
     public string? RequestHash { get; set; }
 
     /// <summary>
+    /// The submitter's own identifier for the request, from the PAS Claim's
+    /// <c>identifier</c> (<c>system|value</c>; X12 278 patient event trace
+    /// number), kept so a PAS <c>$inquire</c> that names the request the same
+    /// way, rather than by the <c>preAuthRef</c> CHO issued, finds it. Null for
+    /// records not created from PAS.
+    /// </summary>
+    [StringLength(300)]
+    public string? SubmitterIdentifier { get; set; }
+
+    /// <summary>
     /// Coverage ID (links to Coverage Service for eligibility)
     /// </summary>
     [StringLength(50)]
@@ -348,6 +358,15 @@ public class Authorization
     /// <summary>Persisted decision target in UTC, independent of document-arrival timestamps.</summary>
     public DateTime? DecisionDueAt { get; set; }
     public string? DecisionDeadlinePolicy { get; set; }
+
+    /// <summary>
+    /// The clinical scenario a state decision clock keys on (TX-05), as stated
+    /// at intake. Unspecified lets the state rule infer it (see
+    /// <see cref="AuthorizationService.Services.StatePrograms.TexasMedicaidDecisionClock"/>).
+    /// Ignored where no state clock applies.
+    /// </summary>
+    public PaDecisionScenario DecisionScenario { get; set; }
+
     /// <summary>
     /// The one lawful extension of the decision deadline, when taken. Server-owned:
     /// set only by the decision-extension endpoint, cleared on create.
@@ -701,6 +720,31 @@ public class ClinicalAttachment
     /// <summary>For a DTR form: the Questionnaire canonical it answers.</summary>
     [StringLength(500)]
     public string? Questionnaire { get; set; }
+}
+
+/// <summary>
+/// The scenario a state prior-authorization decision clock depends on
+/// (TX-05: Tex. Gov't Code §§540.0302–540.0303).
+/// </summary>
+public enum PaDecisionScenario
+{
+    /// <summary>Not stated at intake; a state rule infers it.</summary>
+    Unspecified = 0,
+
+    /// <summary>The member is not hospitalized at the time of the request.</summary>
+    NotHospitalized = 1,
+
+    /// <summary>The member is hospitalized at the time of the request.</summary>
+    Hospitalized = 2,
+
+    /// <summary>
+    /// Hospitalized member; an acute care inpatient provider requests services
+    /// or equipment needed to discharge the member.
+    /// </summary>
+    InpatientDischarge = 3,
+
+    /// <summary>Hospitalized member; the request concerns poststabilization care or a life-threatening condition.</summary>
+    PoststabilizationOrLifeThreatening = 4,
 }
 
 /// <summary>

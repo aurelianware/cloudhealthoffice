@@ -1,3 +1,4 @@
+using Cms0057Acceptance.Tests.TestSupport;
 using System.Reflection;
 using FhirService.Controllers;
 using FhirService.Services;
@@ -104,10 +105,7 @@ public class PasDecisionAndScopeTests
         var claimResponse = bundle.Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
 
         claimResponse.Disposition.Should().Be("pended");
-        var reviewAction = claimResponse.Extension.Should().ContainSingle(e =>
-            e.Url == "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewAction").Subject;
-        var code = reviewAction.Extension.Should().ContainSingle().Subject.Value as Coding;
-        code!.Code.Should().Be("A4");
+        PasReviewActions.OnLines(claimResponse).Should().NotBeEmpty().And.OnlyContain(c => c.Code == "A4");
     }
 
     [Fact]

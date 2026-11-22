@@ -239,6 +239,51 @@ public class CrdContextResolverTests
         (await ResolveAsync()).Failure.Should().Be(CrdContextFailure.Unavailable);
     }
 
+    // ── The EHR's Coverage ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task An_ehr_coverage_naming_a_group_chos_coverage_is_not_under_is_coverage_not_found()
+    {
+        Holds(MemberIn("OH"), InGroup(CoverageWith(PaLineOfBusiness.Commercial), "GRP-1"));
+        var hook = Hook();
+        hook.EhrCoverage = EhrCoverage("""{"resourceType":"Coverage","id":"ehr-cov","status":"active","class":[{"type":{"coding":[{"code":"group"}]},"value":"GRP-OTHER"}]}""");
+
+        (await ResolveAsync(hook)).Failure.Should().Be(CrdContextFailure.CoverageNotFound);
+    }
+
+    [Fact]
+    public async Task An_ehr_coverage_naming_chos_group_resolves_under_it()
+    {
+        Holds(MemberIn("OH"), InGroup(CoverageWith(PaLineOfBusiness.Commercial), "GRP-1"));
+        var hook = Hook();
+        hook.EhrCoverage = EhrCoverage("""{"resourceType":"Coverage","id":"ehr-cov","status":"active","class":[{"type":{"coding":[{"code":"group"}]},"value":"grp-1"}]}""");
+
+        (await ResolveAsync(hook)).IsResolved.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task An_ehr_coverage_naming_no_plan_or_group_resolves_under_the_members_coverage()
+    {
+        Holds(MemberIn("OH"), CoverageWith(PaLineOfBusiness.Commercial));
+        var hook = Hook();
+        hook.EhrCoverage = EhrCoverage("""{"resourceType":"Coverage","id":"ehr-cov","status":"active"}""");
+
+        (await ResolveAsync(hook)).IsResolved.Should().BeTrue();
+    }
+
+    private static System.Text.Json.JsonElement EhrCoverage(string json)
+        => System.Text.Json.JsonDocument.Parse(json).RootElement.Clone();
+
+    private static Coverage InGroup(Coverage coverage, string group)
+    {
+        coverage.Class.Add(new Coverage.ClassComponent
+        {
+            Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/coverage-class", "group"),
+            Value = group,
+        });
+        return coverage;
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private Task<CrdContextResolution> ResolveAsync(CrdHookRequest? request = null) =>

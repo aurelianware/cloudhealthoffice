@@ -60,6 +60,59 @@ public static class CrdPrefetch
         return null;
     }
 
+    /// <summary>The first active Coverage in the prefetch (the one <see cref="ActiveCoverageReference"/> names), or null.</summary>
+    public static JsonElement? ActiveCoverage(CrdHookRequest request)
+    {
+        if (request.Prefetch is null
+            || !request.Prefetch.TryGetValue(CoverageKey, out var prefetched)
+            || prefetched.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        foreach (var candidate in CoverageResources(prefetched))
+        {
+            if (Reference(candidate) is not null)
+                return candidate;
+        }
+
+        return null;
+    }
+
+    /// <summary>The first active Coverage in a searchset Bundle (or bare Coverage) read from the EHR.</summary>
+    public static JsonElement? ActiveCoverageIn(JsonElement bundleOrCoverage)
+        => CoverageResources(bundleOrCoverage).Where(c => Reference(c) is not null).Select(c => (JsonElement?)c).FirstOrDefault();
+
+    /// <summary>The <c>Coverage/{id}</c> an active EHR Coverage is referenced by.</summary>
+    public static string? ReferenceOf(JsonElement coverage) => Reference(coverage);
+
+    /// <summary>
+    /// The Coverage the draft orders name in <c>insurance</c> (ServiceRequest,
+    /// DeviceRequest, MedicationRequest and the like), when the EHR's own
+    /// Coverage could not be read. It is still the EHR's statement of which
+    /// coverage the order is under, not one CHO made up.
+    /// </summary>
+    public static string? OrderInsuranceReference(CrdHookRequest request)
+    {
+        foreach (var entry in request.Context?.DraftOrders?.Entry ?? [])
+        {
+            if (entry.RawResource is not { ValueKind: JsonValueKind.Object } resource
+                || !resource.TryGetProperty("insurance", out var insurance)
+                || insurance.ValueKind != JsonValueKind.Array)
+                continue;
+
+            foreach (var item in insurance.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.Object
+                    && String(item, "reference") is { } reference
+                    && reference.StartsWith("Coverage/", StringComparison.Ordinal))
+                    return reference;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Yields the Coverage resources in a prefetch value, Bundle or bare resource.</summary>
     private static IEnumerable<JsonElement> CoverageResources(JsonElement prefetched)
     {

@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Paying $30M a Year for an Outsourced Core? A CMS-0057-F Blueprint | Cloud Health Office</title>
+  <meta name="description" content="For health plans behind on CMS-0057-F: a worked scenario in which a plan paying $30M a year for outsourced administration keeps about $20M, plus the full blueprint on Google Cloud."/>
+  <meta name="keywords" content="CMS-0057-F deadline, health plan BPaaS cost, outsourced health plan administration, core administration modernization, Medicaid managed care administrative cost, health plan Google Cloud, CMS-0057-F blueprint, medical loss ratio"/>
+  <meta name="author" content="Aurelianware, Inc."/>
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/cms-0057-f/outsourced-core-cms-0057-f-blueprint"/>
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article"/>
+  <meta property="og:site_name" content="Cloud Health Office"/>
+  <meta property="og:title" content="Paying $30 Million a Year for an Outsourced Core? A Blueprint to Keep About $20 Million of It"/>
+  <meta property="og:description" content="Fix the CMS-0057-F deadline and the cost of an outsourced core together. A worked scenario with every assumption shown, a calculator, and the full architecture on Google Cloud."/>
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/cms-0057-f/outsourced-core-cms-0057-f-blueprint"/>
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png"/>
+  <meta property="article:published_time" content="2026-11-22"/>
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image"/>
+  <meta name="twitter:title" content="Paying $30 Million a Year for an Outsourced Core? A Blueprint to Keep About $20 Million of It"/>
+  <meta name="twitter:description" content="Fix the CMS-0057-F deadline and the cost of an outsourced core together. A worked scenario with every assumption shown, a calculator, and the full architecture on Google Cloud."/>
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png"/>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Article",
+      "headline": "Paying $30 Million a Year for an Outsourced Core? A Blueprint to Keep About $20 Million of It",
+      "description": "For health plans behind on CMS-0057-F: a worked scenario in which a plan paying $30M a year for outsourced administration keeps about $20M, plus the full blueprint on Google Cloud.",
+      "url": "https://cloudhealthoffice.com/insights/cms-0057-f/outsourced-core-cms-0057-f-blueprint",
+      "datePublished": "2026-11-22",
+      "dateModified": "2026-11-22",
+      "image": "https://cloudhealthoffice.com/graphics/insights/cho-health-plan-blueprint-gcp.svg",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc."
+      },
+      "about": [
+        "CMS-0057-F",
+        "Health plan administration",
+        "Business process as a service",
+        "Medicaid managed care",
+        "Google Cloud",
+        "Prior authorization"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Insights",
+          "item": "https://cloudhealthoffice.com/insights"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "CMS-0057-F & Payer Modernization",
+          "item": "https://cloudhealthoffice.com/insights/cms-0057-f/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 4,
+          "name": "The $30M outsourced core",
+          "item": "https://cloudhealthoffice.com/insights/cms-0057-f/outsourced-core-cms-0057-f-blueprint"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is $20 million a year realistic for our plan?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "It is the result of one scenario: 200,000 members, a $12.50 PMPM outsourced contract and the costs listed above. A smaller plan, a lower contract rate or a larger operations team gives a smaller number. Use the calculator with your own figures, and count your one-time and contract-exit costs separately."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can we meet CMS-0057-F without changing our core system?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, that is what the foothold step is for. The file drop feeds the CMS-0057-F APIs from extracts your core already produces, so the core keeps running. Moving further is your choice, one function at a time."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What if we will miss January 1, 2027?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Talk to your counsel and your regulator first. Then shorten the gap: the APIs can run in a tenant your plan controls, fed by the file drop, while the longer-term decision is made. We do not promise a timeline; a readiness review sizes the work."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Where does our data live?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "In a tenant dedicated to your plan, in your own Google Cloud project or operated for you by engagement. The data can be exported as CPCDS files at any time."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does passing the Inferno kits mean we are compliant?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Passing an Inferno test kit is not CMS certification or a legal determination of compliance. It shows the APIs behave as the implementation guides specify on the tested cases."
+          }
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --cyan:#0E7490;--green:#0F766E;--blue:#0E7490;
+      --bg:#F5F7FA;--surface:rgba(245, 247, 250, 0.92);--surface-alt:rgba(14, 116, 144, 0.03);
+      --border:rgba(14, 116, 144, 0.12);--border-bright:rgba(14, 116, 144, 0.3);
+      --text:#334155;--text-muted:#334155;--text-dim:#475569;
+      --font:'Outfit',system-ui,sans-serif;--mono:'JetBrains Mono',monospace;--max:1140px;--measure:760px;
+    }
+    html{scroll-behavior:smooth}
+    @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+    body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.8;overflow-x:hidden}
+    a{color:var(--cyan)}
+    .skip-to-main{position:absolute;left:-999px;top:0;background:var(--cyan);color:#FFFFFF;padding:.6rem 1rem;z-index:200}
+    .skip-to-main:focus{left:8px;top:8px}
+
+    body>nav{position:sticky;top:0;z-index:100;background:rgba(255, 255, 255, 0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 2rem}
+    .nav-inner{max-width:var(--max);margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
+    .nav-brand{font-weight:800;font-size:1.05rem;color:#0B1F33;text-decoration:none;display:flex;align-items:center;gap:.6rem}
+    .nav-brand span{opacity:.5;font-weight:400;font-size:.8rem}
+    .nav-links{display:flex;gap:1.8rem;align-items:center}
+    .nav-links a{color:var(--text-muted);text-decoration:none;font-size:.82rem;font-weight:500;transition:color .2s}
+    .nav-links a:hover{color:var(--cyan)}
+    .nav-cta{background:rgba(14, 116, 144, 0.08);border:1px solid rgba(14, 116, 144, 0.25);color:var(--cyan);padding:.35rem .9rem;border-radius:6px;font-size:.78rem;font-weight:600;text-decoration:none;transition:all .25s}
+    .nav-cta:hover{background:rgba(14, 116, 144, 0.15);box-shadow:0 0 20px rgba(14, 116, 144, 0.1)}
+
+    .article-head{padding:3.4rem 2rem 1rem;position:relative;overflow:hidden}
+    .article-head::before{content:'';position:absolute;top:-240px;left:15%;width:760px;height:760px;background:radial-gradient(circle,rgba(14, 116, 144, 0.05) 0%,transparent 70%);pointer-events:none}
+    .wrap{max-width:var(--measure);margin:0 auto}
+    .breadcrumb{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);margin-bottom:1.4rem}
+    .breadcrumb a{color:var(--text-muted);text-decoration:none}
+    .breadcrumb a:hover{color:var(--cyan)}
+    .eyebrow{font-family:var(--mono);font-size:.72rem;font-weight:500;color:var(--cyan);text-transform:uppercase;letter-spacing:3px;margin-bottom:1rem;opacity:.85}
+    h1{font-size:clamp(1.9rem,4.6vw,2.9rem);font-weight:900;color:#0B1F33;line-height:1.18;margin-bottom:1rem}
+    .subtitle{font-size:1.12rem;color:var(--text-muted);line-height:1.75;margin-bottom:1.4rem}
+    .meta{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:.8rem 0;margin:1.4rem 0 0;display:flex;flex-wrap:wrap;gap:1.2rem}
+    .meta strong{color:var(--text-muted);font-weight:500}
+
+    article{padding:1.5rem 2rem 4rem}
+    article h2{font-size:clamp(1.3rem,3vw,1.75rem);font-weight:800;color:#0B1F33;margin:3rem 0 .4rem;line-height:1.3}
+    article h2 .num{font-family:var(--mono);font-size:.85rem;color:var(--cyan);display:block;margin-bottom:.3rem;letter-spacing:2px}
+    article h3{font-size:1.05rem;font-weight:700;color:var(--cyan);margin:1.6rem 0 .3rem;font-family:var(--mono);letter-spacing:.5px}
+    article p{margin:.9rem 0;color:var(--text)}
+    article ul,article ol{margin:1rem 0 1rem 1.3rem;color:var(--text)}
+    article li{margin:.4rem 0}
+    article strong{color:#0B1F33}
+    code{font-family:var(--mono);font-size:.86em;color:var(--green);background:rgba(15, 118, 110, 0.08);padding:.1rem .35rem;border-radius:4px;overflow-wrap:anywhere}
+    .lead{font-size:1.05rem}
+
+    .callout{border-left:3px solid var(--blue);background:rgba(14, 116, 144, 0.06);padding:1.1rem 1.3rem;border-radius:0 8px 8px 0;margin:1.6rem 0}
+    .callout.green{border-left-color:var(--green);background:rgba(15, 118, 110, 0.06)}
+    .callout.amber{border-left-color:#B45309;background:rgba(180, 83, 9, 0.07)}
+    .callout p{margin:.4rem 0;font-size:.95rem;color:var(--text-muted)}
+    .callout strong{color:#0B1F33}
+    .callout .k{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:2px;color:var(--blue);display:block;margin-bottom:.4rem}
+    .callout.green .k{color:var(--green)}
+    .callout.amber .k{color:#B45309}
+
+    /* answer / warning pair under each question */
+    .ans{border:1px solid var(--border);border-radius:10px;background:var(--surface-alt);padding:1.1rem 1.3rem;margin:1.2rem 0}
+    .ans .k{font-family:var(--mono);font-size:.64rem;text-transform:uppercase;letter-spacing:2px;display:block;margin-bottom:.5rem}
+    .ans.good{border-color:rgba(15, 118, 110, 0.28)}
+    .ans.good .k{color:var(--green)}
+    .ans.weak{border-color:rgba(180, 83, 9, 0.28)}
+    .ans.weak .k{color:#B45309}
+    .ans p{margin:.3rem 0;font-size:.93rem;color:var(--text-muted)}
+    .ans strong{color:#0B1F33}
+
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:1rem;margin:1.8rem 0}
+    .stat{border:1px solid var(--border);border-radius:10px;padding:1.1rem;background:var(--surface)}
+    .stat b{display:block;font-family:var(--mono);font-size:1.5rem;color:var(--cyan);line-height:1.2;margin-bottom:.3rem}
+    .stat span{font-size:.84rem;color:var(--text-muted);line-height:1.6;display:block}
+
+    .keyline{border:1px solid var(--border-bright);border-radius:12px;padding:1.4rem 1.6rem;margin:2rem 0;background:linear-gradient(135deg,rgba(14, 116, 144, 0.05),rgba(15, 118, 110, 0.03))}
+    .keyline p{font-size:1.02rem;color:#0B1F33;margin:0}
+
+    .toc{border:1px solid var(--border);border-radius:12px;padding:1.3rem 1.6rem;margin:2rem 0;background:var(--surface)}
+    .toc h2{font-size:.72rem!important;font-family:var(--mono);text-transform:uppercase;letter-spacing:2px;color:var(--cyan);margin:0 0 .7rem!important}
+    .toc ol{margin:0 0 0 1.2rem;font-size:.92rem}
+    .toc li{margin:.25rem 0}
+    .toc a{text-decoration:none;color:var(--text-muted)}
+    .toc a:hover{color:var(--cyan)}
+
+    .related{border-top:1px solid var(--border);margin-top:3rem;padding-top:1.8rem}
+    .related-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:1rem;margin-top:1rem}
+    .rc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.1rem;text-decoration:none;display:block;transition:border-color .3s}
+    .rc:hover{border-color:var(--border-bright)}
+    .rc .k{font-family:var(--mono);font-size:.6rem;color:var(--cyan);text-transform:uppercase;letter-spacing:1.5px;display:block;margin-bottom:.4rem}
+    .rc h4{color:#0B1F33;font-size:.95rem;margin-bottom:.2rem}
+    .rc p{font-size:.8rem;color:var(--text-muted);margin:0}
+
+    .cta-section{text-align:center;padding:4rem 2rem;background:linear-gradient(180deg,transparent,rgba(14, 116, 144, 0.02),transparent);border-top:1px solid var(--border)}
+    .cta-section h2{font-size:clamp(1.4rem,3vw,2rem);color:#0B1F33;margin-bottom:.8rem}
+    .cta-section p{color:var(--text-muted);max-width:560px;margin:0 auto 1.6rem}
+    .btn{display:inline-flex;align-items:center;gap:.4rem;padding:.7rem 1.4rem;border-radius:8px;font-size:.85rem;font-weight:600;text-decoration:none;transition:all .25s}
+    .btn-primary{background:rgba(14, 116, 144, 0.1);border:1px solid rgba(14, 116, 144, 0.3);color:var(--cyan)}
+    .btn-primary:hover{background:rgba(14, 116, 144, 0.18);box-shadow:0 0 30px rgba(14, 116, 144, 0.1)}
+    .btn-ghost{background:transparent;border:1px solid rgba(11, 31, 51, 0.14);color:var(--text-muted)}
+    .btn-ghost:hover{border-color:rgba(11, 31, 51, 0.14);color:#0B1F33}
+    .cta-actions{display:flex;flex-wrap:wrap;gap:.8rem;justify-content:center}
+
+    .tbl{overflow-x:auto;margin:1.2rem 0 1.4rem}
+    .tbl table{width:100%;border-collapse:collapse;font-size:.88rem;min-width:640px}
+    .tbl th,.tbl td{text-align:left;vertical-align:top;padding:.6rem .7rem;border-bottom:1px solid var(--border)}
+    .tbl th{font-weight:700;color:#0B1F33}
+    footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;color:var(--text-dim);font-size:.82rem}
+    footer a{color:#0E7490;text-decoration:none}
+
+    @media(max-width:820px){
+      /* Never hide the primary nav without a way back to it: there is no mobile
+         toggle on these article pages, so the links stack and scroll instead of
+         disappearing. Keyboard and screen-reader users keep full reach. */
+      body>nav{padding:0 1rem}
+      .nav-inner{height:auto;flex-direction:column;align-items:flex-start;gap:.45rem;padding:.55rem 0}
+      .nav-links{width:100%;gap:1.1rem;overflow-x:auto;padding-bottom:.15rem;scrollbar-width:none}
+      .nav-links::-webkit-scrollbar{display:none}
+      .nav-links a,.nav-cta{white-space:nowrap;flex:0 0 auto}
+    }
+    @media(max-width:768px){article,.article-head{padding-left:1.2rem;padding-right:1.2rem}}
+    .figure{margin:2rem 0}
+    .figure-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:#FFFFFF}
+    .figure-scroll img{display:block;width:100%;min-width:900px;height:auto}
+    .figure figcaption{font-size:.82rem;color:var(--text-dim);margin-top:.6rem}
+    .wide{max-width:1120px;margin:0 auto}
+    .paths{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:1rem;margin:1.4rem 0}
+    .path{border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:1.1rem 1.2rem}
+    .path .k{font-family:var(--mono);font-size:.64rem;text-transform:uppercase;letter-spacing:2px;color:var(--cyan);display:block;margin-bottom:.4rem}
+    .path h3{margin:.1rem 0 .4rem!important;font-family:var(--font)!important;color:#0B1F33!important;font-size:1rem!important;letter-spacing:0!important}
+    .path p{font-size:.9rem;margin:.35rem 0}
+    .calc{border:1px solid var(--border-bright);border-radius:12px;background:#FFFFFF;padding:1.3rem 1.4rem;margin:1.6rem 0}
+    .calc h3{margin-top:0!important}
+    .calc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:.9rem 1.2rem;margin:1rem 0}
+    .calc label{display:block;font-size:.82rem;color:var(--text-muted);line-height:1.4}
+    .calc input{display:block;width:100%;margin-top:.3rem;padding:.5rem .6rem;border:1px solid rgba(11,31,51,.2);border-radius:6px;font:inherit;font-size:.95rem;color:#0B1F33;background:#FFFFFF}
+    .calc input:focus{outline:2px solid var(--cyan);outline-offset:1px}
+    .calc-out{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:.8rem;margin-top:1rem}
+    .calc-out div{border:1px solid var(--border);border-radius:8px;padding:.8rem 1rem;background:var(--surface-alt)}
+    .calc-out b{display:block;font-family:var(--mono);font-size:1.3rem;color:#0B1F33}
+    .calc-out span{font-size:.8rem;color:var(--text-muted)}
+    .calc-out .save b{color:var(--green)}
+    .calc .fine{font-size:.8rem;color:var(--text-dim);margin:.8rem 0 0}
+    .tbl td.num,.tbl th.num{text-align:right;font-family:var(--mono);white-space:nowrap}
+    .tbl tr.total td{font-weight:700;color:#0B1F33;border-top:2px solid var(--border-bright)}
+    .faq dt{font-weight:700;color:#0B1F33;margin-top:1.2rem}
+    .faq dd{margin:.3rem 0 0}
+  </style>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="https://cloudhealthoffice.com" class="nav-brand">Cloud Health Office <span>Insights</span></a>
+      <div class="nav-links">
+        <a href="/solutions-payers">Solutions</a>
+        <a href="/cms-0057f-compliance">CMS Compliance</a>
+        <a href="/evidence">Evidence</a>
+        <a href="/platform">Platform</a>
+        <a href="/services">Services</a>
+        <a href="/insights/cms-0057-f/">Series</a>
+        <a href="/docs">Docs</a>
+        <a href="/schedule-demo/" class="nav-cta">Schedule a demo →</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main-content">
+    <header class="article-head">
+      <div class="wrap">
+        <nav class="breadcrumb" aria-label="Breadcrumb">
+          <a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/insights/cms-0057-f/">CMS-0057-F &amp; Payer Modernization</a> / <span>The $30M outsourced core</span>
+        </nav>
+        <div class="eyebrow">CMS-0057-F &amp; payer economics</div>
+        <h1>Paying $30 Million a Year for an Outsourced Core? A Blueprint to Keep About $20 Million of It</h1>
+        <p class="subtitle">For health plans that will not be where they wanted to be on January 1, 2027. A worked scenario, with every assumption shown and a calculator for your own numbers, and the full architecture for meeting CMS-0057-F, running securely on Google Cloud and getting your data ready for AI.</p>
+        <div class="meta">
+          <span><strong>Series:</strong> CMS-0057-F &amp; Payer Modernization</span>
+          <span><strong>Published:</strong> <time datetime="2026-11-22">November 22, 2026</time></span>
+          <span><strong>For:</strong> Health plan CEOs, CFOs, CIOs and compliance leads</span>
+        </div>
+      </div>
+    </header>
+
+    <article>
+      <div class="wrap">
+
+        <p class="lead">Forty days before the CMS-0057-F API deadline, most health plans are not where they wanted to be. In WEDI&rsquo;s November 2026 survey, about one payer in ten said it was fully ready, 17% had not started, and 62% said the work was costing more than expected, with none saying less (<a href="https://www.healthcaredive.com/news/few-payers-are-ready-for-looming-electronic-prior-authorization-deadline/874879/" target="_blank" rel="noopener noreferrer">Healthcare Dive, November 18, 2026</a>). ONC and CMS only opened voluntary end-to-end testing sprints on November 12 (<a href="https://healthit.gov/news/onc-and-cms-launch-industry-electronic-prior-authorization-testing-initiative/" target="_blank" rel="noopener noreferrer">ONC</a>), and those run past January 1.</p>
+
+        <p>So many plans will go live with a vendor&rsquo;s FHIR layer in front of the same manual prior authorization queue, paid for as change orders on an outsourced administration contract that already costs more every year. Compliant on January 1 is not the same as working, and the next obligations will show the difference: proposed drug prior authorization through the same API by October 2027 and richer metrics from 2028 (<a href="https://www.federalregister.gov/documents/2026/04/14/2026-07205/medicare-and-medicaid-programs-patient-protection-and-affordable-care-act-interoperability-standards" target="_blank" rel="noopener noreferrer">CMS-0062-P, proposed</a>), and the industry pledge to answer 80% of electronic prior authorization requests in real time.</p>
+
+        <p>If that is your plan, you are going to revisit your approach in 2027 anyway. This article argues that the fix for the deadline and the fix for the cost are the same project, shows a worked scenario in which a plan paying about $30 million a year to an outsourced core and administration vendor keeps about $20 million of it, and lays out the blueprint of everything Cloud Health Office runs to get there.</p>
+
+        <p>CMS-0057-F is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and some exchange plans to offer FHIR APIs for patient access, provider access, payer-to-payer exchange, and prior authorization by January 1, 2027.</p>
+
+        <div class="callout amber">
+          <span class="k">Read this first</span>
+          <p>The savings figures below are an <strong>illustrative scenario</strong> built from stated assumptions, not a quote, a forecast or a promise of any financial outcome. Your contract, membership, operations and transition costs decide what is real for you, so change the inputs. Cloud Health Office modules are built and tested on synthetic data; no plan runs them in production yet. Passing an Inferno test kit is not CMS certification or a legal determination of compliance.</p>
+        </div>
+
+        <nav class="toc" aria-label="On this page">
+          <h2>On this page</h2>
+          <ol>
+            <li><a href="#where">Where are you today?</a></li>
+            <li><a href="#together">Fix the deadline and the cost together</a></li>
+            <li><a href="#scenario">The worked scenario: $30 million to about $10 million</a></li>
+            <li><a href="#blueprint">The blueprint: everything a plan runs, in one tenant</a></li>
+            <li><a href="#secure">Operating securely on Google Cloud</a></li>
+            <li><a href="#ai">Ready for AI that serves members</a></li>
+            <li><a href="#path">The path, and when each saving lands</a></li>
+            <li><a href="#proof">Evidence you can check</a></li>
+            <li><a href="#members">What the money could do for members</a></li>
+            <li><a href="#faq">Questions finance and compliance teams ask</a></li>
+          </ol>
+        </nav>
+
+        <h2 id="where"><span class="num">01</span>Where are you today?</h2>
+        <p>The prior authorization decision timeframes in CMS-0057-F (72 hours for expedited requests, 7 calendar days for standard ones) applied from January 1, 2026, and the first public prior authorization metrics were due by March 31, 2026. The API deadline is the last of the dates, and the one most plans are behind on. Pick the starting point that sounds like yours.</p>
+
+        <div class="paths">
+          <div class="path">
+            <span class="k">Starting point A</span>
+            <h3>&ldquo;Our vendor says the APIs will be ready.&rdquo;</h3>
+            <p>But nobody outside the vendor has tested them. Find out now, while there is time to act.</p>
+            <p><strong>Next step:</strong> a readiness review that runs the same Inferno kits developers use against your sandbox, with no PHI.</p>
+          </div>
+          <div class="path">
+            <span class="k">Starting point B</span>
+            <h3>&ldquo;The APIs are live, but the data behind them is thin.&rdquo;</h3>
+            <p>Prior authorizations missing from Patient Access, attribution hard-coded, Payer-to-Payer never exercised.</p>
+            <p><strong>Next step:</strong> the daily file drop. Your core sends the extracts it already produces, and the APIs serve your data.</p>
+          </div>
+          <div class="path">
+            <span class="k">Starting point C</span>
+            <h3>&ldquo;We will miss January 1.&rdquo;</h3>
+            <p>The roadmap slipped, the change order is not signed, or the core cannot expose the data in time.</p>
+            <p><strong>Next step:</strong> stand up the CMS-0057-F APIs in a tenant your plan controls, fed by the file drop, beside the core you have. Talk to your counsel and your regulator about where you stand.</p>
+          </div>
+          <div class="path">
+            <span class="k">Starting point D</span>
+            <h3>&ldquo;We will make it, but the contract is the problem.&rdquo;</h3>
+            <p>Compliance is in hand, but renewal is coming and the per-member price only goes one way.</p>
+            <p><strong>Next step:</strong> shadow adjudication. Re-run your own paid claims through Cloud Health Office and see where the answers match before you decide anything.</p>
+          </div>
+        </div>
+
+        <h2 id="together"><span class="num">02</span>Fix the deadline and the cost together</h2>
+        <p>Most plans will pay for CMS-0057-F as change orders on the contract they already have. That money buys compliance, but it rarely buys anything the plan keeps: the APIs, the data mappings and the prior authorization workflow end up inside the vendor&rsquo;s platform, priced into the next renewal. (We wrote about that pattern in <a href="/insights/cms-0057-f/own-what-you-pay-for">The Hangover Tax</a>.)</p>
+        <p>The alternative uses the deadline as the first step of a move the plan controls. The same daily file drop that feeds the CMS-0057-F APIs (claims, members and coverage as CARIN CPCDS files, 834 enrollment, authorizations from X12 278 or a UM export, fee schedules, provider rosters) is also the data a plan needs to run prior authorization, appeals, provider management and eventually claims itself. Every function you move after that reduces the scope, and the price, of the outsourced contract.</p>
+        <div class="keyline">
+          <p>Start beside your current core. Prove it on your own claims. Then move one function at a time, up to the core itself, on your schedule.</p>
+        </div>
+
+        <h2 id="scenario"><span class="num">03</span>The worked scenario: $30 million to about $10 million</h2>
+        <p>Outsourced administration for health plans is usually sold as business process as a service (BPaaS): one per-member-per-month (PMPM) price that bundles the core system, hosting, application management, claims processing and provider service. Those rates are negotiated and rarely published, so the rate below is an assumption, not a market survey. Replace it with the number on your invoice.</p>
+
+        <h3>The assumptions</h3>
+        <ul>
+          <li><strong>The plan:</strong> a Medicaid managed care plan with 200,000 members (2.4 million member months a year).</li>
+          <li><strong>Today:</strong> a BPaaS contract at <strong>$12.50 PMPM</strong>, covering the core system, hosting, application management, claims processing and provider service. That is <strong>$30.0 million a year</strong>. If your member call center is under a separate contract, leave it out of both sides.</li>
+          <li><strong>The blueprint:</strong> Cloud Health Office licensed per member and run in the plan&rsquo;s own Google Cloud project, at an assumed <strong>$2.25 PMPM</strong> for the license and cloud hosting together. This is a modelling assumption, not a price quote; license ranges are shared during discovery.</li>
+          <li><strong>A platform team the plan employs:</strong> 10 people (engineers, configuration and EDI analysts) at $160,000 a year fully loaded.</li>
+          <li><strong>The operations the plan runs itself:</strong> 35 people for claims examination, provider service and recoveries at $80,000 a year fully loaded. That is lean, and it rests on higher automatic adjudication and on providers checking eligibility, claim status and authorizations through real-time 270/271, 276/277 and the FHIR APIs instead of the phone.</li>
+        </ul>
+
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Annual cost line</th><th class="num">Outsourced today</th><th class="num">Blueprint</th></tr></thead>
+            <tbody>
+              <tr><td>BPaaS contract: core, hosting, application management, claims processing, provider service ($12.50 PMPM)</td><td class="num">$30.0M</td><td class="num">&mdash;</td></tr>
+              <tr><td>Cloud Health Office license and Google Cloud hosting ($2.25 PMPM, assumed)</td><td class="num">&mdash;</td><td class="num">$5.4M</td></tr>
+              <tr><td>Platform team, 10 people</td><td class="num">&mdash;</td><td class="num">$1.6M</td></tr>
+              <tr><td>Claims, provider service and recovery operations, 35 people</td><td class="num">&mdash;</td><td class="num">$2.8M</td></tr>
+              <tr class="total"><td>Total run cost</td><td class="num">$30.0M</td><td class="num">$9.8M</td></tr>
+              <tr class="total"><td>Difference in this scenario</td><td class="num" colspan="2">$20.2M a year, about two-thirds</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <span class="k">What the scenario leaves out</span>
+          <p><strong>One-time costs:</strong> implementation, data conversion, parallel running, staff hiring and training, and any notice period, minimum or termination fee in your current contract. They are real, they are specific to your contract, and they decide the payback period.</p>
+          <p><strong>Timing:</strong> the run-rate difference is the end state, after the core has moved. It arrives in steps, described in <a href="#path">section 7</a>, and the foothold step adds cost before it saves any.</p>
+          <p><strong>What stays the same:</strong> medical spend, pharmacy benefit management, delegated vendors and the plan&rsquo;s own management overhead.</p>
+        </div>
+
+        <div class="calc" id="calculator">
+          <h3>Run it with your numbers</h3>
+          <p style="font-size:.9rem;margin:.3rem 0">Every field is editable. Nothing you type leaves this page.</p>
+          <div class="calc-grid">
+            <label>Members<input id="c-members" type="number" min="0" step="1000" value="200000" inputmode="numeric"/></label>
+            <label>Outsourced contract today, $ PMPM<input id="c-bpaas" type="number" min="0" step="0.25" value="12.50" inputmode="decimal"/></label>
+            <label>License and cloud hosting, $ PMPM (assumption)<input id="c-cho" type="number" min="0" step="0.25" value="2.25" inputmode="decimal"/></label>
+            <label>Platform team, people<input id="c-pteam" type="number" min="0" step="1" value="10" inputmode="numeric"/></label>
+            <label>Platform team cost per person, $<input id="c-pcost" type="number" min="0" step="5000" value="160000" inputmode="numeric"/></label>
+            <label>Operations staff, people<input id="c-ops" type="number" min="0" step="1" value="35" inputmode="numeric"/></label>
+            <label>Operations cost per person, $<input id="c-ocost" type="number" min="0" step="5000" value="80000" inputmode="numeric"/></label>
+          </div>
+          <div class="calc-out" aria-live="polite">
+            <div><b id="o-today">$30.0M</b><span>Outsourced today, per year</span></div>
+            <div><b id="o-new">$9.8M</b><span>Blueprint run cost, per year</span></div>
+            <div class="save"><b id="o-diff">$20.2M</b><span id="o-pct">Difference, 67% of today</span></div>
+          </div>
+          <p class="fine">A buyer-entered scenario, not a quote or guaranteed savings. One-time transition and contract-exit costs are not included. For a fuller model with more cost categories, use the <a href="/economics-of-vendor-lock-in">PMPM and total cost calculator</a>.</p>
+        </div>
+
+        <h3>Why the gap is that large</h3>
+        <p>Three things in the bundled price do not survive the move. The vendor&rsquo;s margin on hosting and application management goes, because the plan runs the same software in its own cloud with a small team. Change orders go, because the plan can configure benefits, fee schedules, edits and letters itself, and can read the source (Cloud Health Office is source-available under BSL 1.1; production use requires a commercial license). And a share of the manual work goes, because claims that pend for missing data or simple edits are a configuration problem, and phone calls about eligibility and claim status are a real-time EDI and API problem. None of that is automatic, and all of it depends on how well the plan runs its new operation.</p>
+
+        <h2 id="blueprint"><span class="num">04</span>The blueprint: everything a plan runs, in one tenant</h2>
+        <p>Here is the end state: every function the outsourced contract covers today, running in a tenant dedicated to your plan.</p>
+      </div>
+
+      <figure class="figure wide" id="blueprint-diagram">
+        <div class="figure-scroll">
+          <img src="/graphics/insights/cho-health-plan-blueprint-gcp.svg" width="1200" height="1100" loading="lazy" alt="Cloud Health Office blueprint architecture on Google Cloud. Members, providers, phone platforms, trading partners, other plans and the state connect through CMS-0057-F FHIR APIs and X12 EDI. Twelve operations modules run in one tenant: calls and member service, appeals and grievances, UM and prior authorization, care management, enrollment and eligibility, provider management, benefit plan management, claims adjudication, fee schedules and pricing, payment and capitation with 835, accounts receivable, and premium billing. An advisory AI layer sits beside them. The current core feeds a daily file drop into the tenant's data, which can be exported as CPCDS. All of it runs on a Google Cloud security foundation."/>
+        </div>
+        <figcaption><a href="/graphics/insights/cho-health-plan-blueprint-gcp.svg">Open the diagram full size</a>. Solid outlines are in the public repository today; dashed amber items are configured or built for each plan at deployment.</figcaption>
+      </figure>
+
+      <div class="wrap">
+        <p>Each module is in the <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">public repository</a>, built and tested on synthetic data. The table says what each does and where its limits are.</p>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Function</th><th>What Cloud Health Office does</th><th>Limits to know</th></tr></thead>
+            <tbody>
+              <tr><td>Calls and member service</td><td>Logs every call, chat, email or walk-in with members and providers, with reasons and follow-ups, and opens a grievance, appeal or coverage request with the contact&rsquo;s time as its received date. Work queues route the follow-up.</td><td>Records calls; does not route them. Your phone platform stays.</td></tr>
+              <tr><td>Appeals and grievances</td><td>Cases with categories, clocks and resolution steps.</td><td>State-specific letters and fair hearing steps are configured per plan.</td></tr>
+              <tr><td>UM and prior authorization</td><td>Rules engine, clinical criteria, decisions per service line with reasons, receipt-based decision clocks, CMS metrics, and the Da Vinci CRD, DTR and PAS APIs.</td><td>Six optional PAS response elements are open gaps; DTR answer validation is incomplete; no real-time X12 278 bridge (278 files are imported).</td></tr>
+              <tr><td>Care management</td><td>Care management programs and records.</td><td>Clinical content is the plan&rsquo;s.</td></tr>
+              <tr><td>Enrollment and eligibility</td><td>Streaming 834 intake, coverage, real-time 270/271.</td><td>State enrollment file variations are mapped per plan.</td></tr>
+              <tr><td>Provider management</td><td>Provider records, enrollment, verification, contracts and the public Plan-Net directory.</td><td>Credentialing decisions stay with the plan&rsquo;s committee.</td></tr>
+              <tr><td>Benefit plan management</td><td>Plan design, benefit engine and accumulators.</td><td>Each benefit package is configured and tested per plan.</td></tr>
+              <tr><td>Claims adjudication</td><td>837 intake with SNIP validation and 999 acknowledgments, scrubbing, NCCI, coordination of benefits, grouping, pricing, plan-specific edits, and shadow adjudication.</td><td>The Million Claim Challenge is local, synthetic evidence, not a production-cloud capacity claim.</td></tr>
+              <tr><td>Fee schedules and pricing</td><td>Fee schedule engine, contract rates and a pricing API.</td><td>The plan supplies its fee schedules and contracted rates; we supply none.</td></tr>
+              <tr><td>Payment, capitation and 835</td><td>Fee-for-service and capitation payments, 835 remittance, 276/277 claim status.</td><td>Bank file formats are set up per plan.</td></tr>
+              <tr><td>Accounts receivable</td><td>Overpayments, recoveries and balances.</td><td>Recovery policy is the plan&rsquo;s.</td></tr>
+              <tr><td>Premium billing</td><td>Invoices, sponsor accounts, 820 premium remittance.</td><td>Mostly relevant to Medicare Advantage and exchange lines.</td></tr>
+              <tr><td>Encounters</td><td>837 encounter submission to the state.</td><td>Each state&rsquo;s companion guide is configured.</td></tr>
+              <tr><td>CMS-0057-F APIs</td><td>Patient Access, Provider Access, Payer-to-Payer, Provider Directory and Prior Authorization, with SMART on FHIR and bulk export.</td><td>Requirement-level status is in the public <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer">ePA gap matrix</a>.</td></tr>
+              <tr><td>File drop and CPCDS</td><td>Daily import of CPCDS, 834, authorizations, fee schedules and rosters, and CPCDS export of members, coverage and claims.</td><td>Getting a clean extract from your core is per-plan mapping work; no pre-built adapter for any core is shipped.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="secure"><span class="num">05</span>Operating securely on Google Cloud</h2>
+        <p>Each plan gets its own Google Cloud project and its own tenant. Some of the controls are in the code today; others are set up for each plan, because they depend on your organization&rsquo;s policies and your Google Cloud agreement.</p>
+        <ul>
+          <li><strong>In the repository today:</strong> the tenant is taken only from a validated token, and conflicting tenant headers are refused. Services prove their Kubernetes identity to get tokens. Workload Identity reaches Cloud Storage with no static keys. Token signing keys can live in Cloud KMS. Deploys from CI are keyless, and logging is PHI-safe.</li>
+          <li><strong>Set up for each plan:</strong> organization policies (no public IPs, approved regions, customer-managed encryption keys), a private regional GKE cluster, Cloud Armor or Cloudflare as the only public entry, audit logs in a separate project, backups in a second region, and a signed Google Cloud BAA. A Terraform environment for hosted HIPAA workloads is written and validated in CI; it has not yet been applied for a plan.</li>
+          <li><strong>Compliance programs:</strong> a HIPAA security posture and a BAA approach are drafted, and a SOC 2 program is planned. We do not hold a SOC 2 report today.</li>
+        </ul>
+        <p>The detail, layer by layer, is in the <a href="/blueprints/google-cloud">Google Cloud reference architecture</a>, and our security posture is on the <a href="/trust">Trust page</a>. Because the source is available, your security team can read exactly what the software does before anything is deployed.</p>
+
+        <h2 id="ai"><span class="num">06</span>Ready for AI that serves members</h2>
+        <p>Most plans cannot use AI for members yet, for a plain reason: the data a model would need (claims, authorizations, eligibility, contacts) is spread across vendor systems the plan does not control. The blueprint fixes that first. Everything sits in your own cloud, as FHIR resources and event streams, under your access controls.</p>
+        <p>On top of that foundation, the code includes two advisory paths today: suggested fixes for rejected EDI transactions, and an advisory claims examiner for pended claims. Both redact PHI before any model call, and both suggest rather than decide. A named person makes every decision, and suggestions are logged. Neither has been independently validated as autonomous decision-making.</p>
+        <p>Member-facing uses, such as explaining an EOB, a prior authorization status or a denial in plain language, are design goals, not shipped features. We recommend adding them one governed use case at a time, with an agreed data boundary, an accountable reviewer and a way to measure them. Our <a href="/ai-ready-health-plan-architecture">AI-ready architecture</a> page explains that approach.</p>
+
+        <h2 id="path"><span class="num">07</span>The path, and when each saving lands</h2>
+        <div class="paths">
+          <div class="path">
+            <span class="k">Step 1 · Foothold</span>
+            <h3>The file drop and the CMS-0057-F APIs</h3>
+            <p>Your core keeps running. It sends the extracts it already produces, and the APIs serve your members&rsquo; data from your tenant. Shadow adjudication re-runs paid claims and shows where the answers match.</p>
+            <p><strong>Cost effect:</strong> adds a license and a small team, and avoids paying the incumbent to build APIs you would not own.</p>
+          </div>
+          <div class="path">
+            <span class="k">Step 2 · Domain cutover</span>
+            <h3>One function at a time</h3>
+            <p>Move the functions where you feel the most pain first: prior authorization, appeals and grievances, provider data, EDI, member service. Each move has acceptance criteria, reconciliation and a rollback plan.</p>
+            <p><strong>Cost effect:</strong> the outsourced scope, and what you pay for it, shrinks as each function moves, subject to your contract terms.</p>
+          </div>
+          <div class="path">
+            <span class="k">Step 3 · Core modernization</span>
+            <h3>Claims, benefits, payment</h3>
+            <p>When shadow adjudication shows Cloud Health Office reaches the same answers on your claims, claims, benefits, pricing and payment move, and the outsourced contract can end.</p>
+            <p><strong>Cost effect:</strong> this is where the full run-rate difference in the scenario lands.</p>
+          </div>
+        </div>
+        <p>Your current contract decides the timing more than the technology does. Read it for notice periods, minimum volumes, termination fees and data return terms before you plan the dates.</p>
+
+        <h2 id="proof"><span class="num">08</span>Evidence you can check</h2>
+        <div class="stats">
+          <div class="stat"><b>8 of 9</b><span>ONC Inferno kits passing on synthetic data. The ninth, Da Vinci PAS, passes every use case with six optional-element tests logged as gaps.</span></div>
+          <div class="stat"><b>1,000,000</b><span>synthetic claims at 155.89 claims a second on local Kubernetes, zero dead letters. Local evidence, not a production-cloud claim.</span></div>
+          <div class="stat"><b>Shadow</b><span>adjudication of your own paid claims, line by line, with nothing a member or provider sees changing.</span></div>
+        </div>
+        <ul>
+          <li><strong>Inferno conformance:</strong> US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data with SMART Backend Services, Da Vinci PDex member match, Da Vinci DTR, Da Vinci CRD and SMART App Launch 2.2 pass. The kits run every night against the main branch. The verdicts, including failing tests and known kit issues, are on the <a href="/evidence/inferno-conformance">Inferno results page</a>.</li>
+          <li><strong>Shadow adjudication:</strong> claims your core already paid are re-adjudicated in Cloud Health Office, and every difference in allowed, paid, member liability and denial codes is recorded with its reason. It is a rehearsal with no risk, and often a payment integrity review too.</li>
+          <li><strong>A Texas Medicaid demonstration:</strong> a synthetic Texas Medicaid plan that we start on demand for a scheduled walkthrough, covering claims, authorizations, appeals and the APIs. <a href="/schedule-demo/">Schedule a demo</a> to see it.</li>
+        </ul>
+
+        <h2 id="members"><span class="num">09</span>What the money could do for members</h2>
+        <p>Savings in administration are only worth having if they go somewhere. A plan that stops paying for an outsourced bundle has a choice about where the difference goes, and the most useful place is usually back into members&rsquo; care. Some of the ways plans could use it:</p>
+        <ul>
+          <li><strong>Care management and community health workers.</strong> More care managers and community health workers for members with complex conditions, high emergency room use or unmet social needs.</li>
+          <li><strong>Faster prior authorization.</strong> Clinical reviewers freed from fax and phone intake, decisions made at order time through CRD and PAS, and fewer services that need prior authorization at all.</li>
+          <li><strong>Member service that answers the first time.</strong> Representatives who see the member&rsquo;s claims, authorizations, appeals and past calls on one screen, in their own system.</li>
+          <li><strong>Value-based programs.</strong> Contracts that reward providers for outcomes, which need clean claims, attribution and timely data the plan controls.</li>
+        </ul>
+        <p>For Medicaid managed care plans this connects to the medical loss ratio. Federal rules expect states to hold plans to a ratio of at least 85%, and the ratio counts claims and activities that improve health care quality, not administration (<a href="https://www.ecfr.gov/current/title-42/chapter-IV/subchapter-C/part-438/subpart-A/section-438.8" target="_blank" rel="noopener noreferrer">42 CFR 438.8</a>). A dollar moved from an administration contract into care management or quality improvement may count toward the ratio, depending on how it is classified. Your actuaries and your state contract decide that, not us.</p>
+        <div class="keyline">
+          <p>The point of keeping the money is what it buys: more care for the members the plan exists to serve.</p>
+        </div>
+
+        <h2 id="faq"><span class="num">10</span>Questions finance and compliance teams ask</h2>
+        <dl class="faq">
+          <dt>Is $20 million a year realistic for our plan?</dt>
+          <dd>It is the result of one scenario: 200,000 members, a $12.50 PMPM outsourced contract and the costs listed above. A smaller plan, a lower contract rate or a larger operations team gives a smaller number. Use the calculator with your own figures, and count your one-time and contract-exit costs separately.</dd>
+          <dt>Can we meet CMS-0057-F without changing our core system?</dt>
+          <dd>Yes, that is what the foothold step is for. The file drop feeds the CMS-0057-F APIs from extracts your core already produces, so the core keeps running. Moving further is your choice, one function at a time.</dd>
+          <dt>What if we will miss January 1, 2027?</dt>
+          <dd>Talk to your counsel and your regulator first. Then shorten the gap: the APIs can run in a tenant your plan controls, fed by the file drop, while the longer-term decision is made. We do not promise a timeline; a readiness review sizes the work.</dd>
+          <dt>Where does our data live?</dt>
+          <dd>In a tenant dedicated to your plan, in your own Google Cloud project or operated for you by engagement. The data can be exported as CPCDS files at any time.</dd>
+          <dt>Does passing the Inferno kits mean we are compliant?</dt>
+          <dd>No. Passing an Inferno test kit is not CMS certification or a legal determination of compliance. It shows the APIs behave as the implementation guides specify on the tested cases.</dd>
+        </dl>
+
+        <h2 id="disclosure"><span class="num">Disclosure</span>Where we sit in this</h2>
+        <p>Cloud Health Office sells health plan administration software, so read this with that in mind. The scenario is illustrative; its outsourced-contract rate is an assumption rather than a published market rate, and its license-and-hosting figure is a modelling assumption rather than a price. All test data is synthetic. Cloud Health Office is designed to work alongside the systems health plans already depend on, and we claim no certification by, affiliation with, or endorsement from CMS, ONC, HL7, Google or any core system vendor. Regulatory summaries here are for orientation; the rule text and your counsel are the authority.</p>
+
+        <div class="related">
+          <div class="eyebrow">Keep reading</div>
+          <div class="related-cards">
+            <a class="rc" href="/insights/cms-0057-f/medicaid-cms-0057-f-blueprint"><span class="k">Medicaid</span><h4>The Medicaid CMS-0057-F blueprint</h4><p>Each blueprint item mapped to working software, evidence and open gaps.</p></a>
+            <a class="rc" href="/insights/cms-0057-f/own-what-you-pay-for"><span class="k">Ownership</span><h4>The Hangover Tax</h4><p>Make your next CMS-0057-F dollar buy something you keep.</p></a>
+            <a class="rc" href="/blueprints/google-cloud"><span class="k">Google Cloud</span><h4>Production reference architecture</h4><p>Every layer on Google Cloud, and its status today.</p></a>
+            <a class="rc" href="https://cms-0057-f.com" target="_blank" rel="noopener noreferrer"><span class="k">Guide</span><h4>The CMS-0057-F guide</h4><p>What the rule requires, API by API, on cms-0057-f.com.</p></a>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <section class="cta-section">
+      <div class="wrap">
+        <div class="eyebrow" style="text-align:center">See it on synthetic Medicaid data</div>
+        <h2>Schedule a demo</h2>
+        <p>Walk through the file drop, the CMS-0057-F APIs, prior authorization, appeals and claims with the people who built them, and bring your own contract numbers for the scenario.</p>
+        <div class="cta-actions">
+          <a href="/schedule-demo/" class="btn btn-primary" data-ga-event="schedule_demo_cta_click">Schedule a demo →</a>
+          <a href="/contact?interest=cms0057-assessment" class="btn btn-ghost" data-ga-event="readiness_review_cta_click">Book a readiness review</a>
+          <a href="/evidence/inferno-conformance" class="btn btn-ghost">See the Inferno results</a>
+        </div>
+        <p style="margin-top:1.4rem;font-size:.82rem;color:var(--text-dim)">
+          Do not submit PHI, member data, patient data, claim data, production credentials, security secrets, or other sensitive production information through the contact form.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Cloud Health Office — <a href="https://aurelianware.com">Aurelianware, Inc.</a> &nbsp;·&nbsp; Source-available under BSL 1.1. Production use requires a commercial license. &nbsp;·&nbsp; <a href="mailto:licensing@cloudhealthoffice.com">Commercial licensing</a></p>
+    <p style="margin-top:.4rem"><a href="/insights/cms-0057-f/">CMS-0057-F Series</a> &nbsp;·&nbsp; <a href="/cms-0057f-compliance">CMS-0057-F</a> &nbsp;·&nbsp; <a href="/services">Services</a> &nbsp;·&nbsp; <a href="/platform">Platform</a> &nbsp;·&nbsp; <a href="/docs">Docs</a> &nbsp;·&nbsp; <a href="/contact">Contact</a></p>
+  </footer>
+
+  <script>
+  (function(){
+    var ids=['members','bpaas','cho','pteam','pcost','ops','ocost'];
+    function v(id){var n=parseFloat(document.getElementById('c-'+id).value);return isFinite(n)&&n>0?n:0;}
+    function m(x){return '$'+(x/1e6).toFixed(1)+'M';}
+    function run(){
+      var mm=v('members')*12;
+      var today=mm*v('bpaas');
+      var next=mm*v('cho')+v('pteam')*v('pcost')+v('ops')*v('ocost');
+      var diff=today-next;
+      document.getElementById('o-today').textContent=m(today);
+      document.getElementById('o-new').textContent=m(next);
+      document.getElementById('o-diff').textContent=(diff<0?'−':'')+m(Math.abs(diff));
+      document.getElementById('o-pct').textContent=today>0?('Difference, '+Math.round(diff/today*100)+'% of today'):'Difference';
+    }
+    ids.forEach(function(id){document.getElementById('c-'+id).addEventListener('input',run);});
+    run();
+  })();
+  </script>
+</body>
+</html>

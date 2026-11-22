@@ -1,0 +1,11 @@
+Sample Texas Medicaid professional fee schedule (SYNTHETIC, not TMHP rates)
+Procedure Code,Modifier,Description,Non-Facility Fee,Facility Fee
+99213,,Office/outpatient visit est low,52.40,38.10
+99214,,Office/outpatient visit est moderate,78.90,57.30
+99392,,Preventive visit est age 1-4,96.20,96.20
+99393,,Preventive visit est age 5-11,94.10,94.10
+87880,,Strep A assay w/optic,16.10,16.10
+90460,,Immunization admin first component,14.85,14.85
+97110,,Therapeutic exercises,21.30,21.30
+97530,,Therapeutic activities,23.90,23.90
+71046,,Chest x-ray 2 views,27.60,27.60

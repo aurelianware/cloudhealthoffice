@@ -1219,7 +1219,9 @@ describe('QNXT CMS-0057-F adapter scoping page', () => {
 
   describe('content', () => {
     it('carries the locked hero and the CMS-0057-F definition', () => {
-      expect(adapter).toContain('<h1>Scoping a QNXT-to-CMS-0057-F adapter.</h1>');
+      // Updated November 21, 2026: the file drop is the default path; a live adapter is optional.
+      expect(adapter).toContain('<h1>Scoping QNXT for CMS-0057-F.</h1>');
+      expect(visibleText).toContain('Most plans start with the extracts QNXT already produces, sent to a daily file drop.');
       expect(visibleText).toContain(
         'are due January 1, 2027, and most of the data behind them already lives in QNXT. The hard part is getting it out cleanly.'
       );
@@ -1228,11 +1230,14 @@ describe('QNXT CMS-0057-F adapter scoping page', () => {
       );
     });
 
-    it('describes the questionnaire, workshop, and fixed-scope SOW sequence with phase 2 write-back', () => {
+    it('describes the questionnaire, workshop, and fixed-scope SOW sequence, file drop first, optional adapter second', () => {
       const flow = adapter.match(/<ol class="ev-flow">[\s\S]*?<\/ol>/)?.[0] ?? '';
       const steps = [...flow.matchAll(/<strong>([^<]+)<\/strong>/g)].map((m) => m[1]);
       expect(steps).toEqual(['Questionnaire', '90-minute discovery workshop', 'Fixed-scope SOW']);
-      expect(adapter).toContain('Phase 2 &middot; Write-back');
+      expect(adapter).toContain('Phase 1 &middot; Daily file drop');
+      expect(adapter).toContain('Phase 2 &middot; Optional live adapter');
+      expect(adapter).toContain('File drop first');
+      expect(adapter).not.toContain('Read path first');
     });
 
     it('previews all nine questionnaire sections, A to I, without publishing the full questionnaire', () => {

@@ -72,6 +72,23 @@ public class ClaimAdapterFactoryTests
     }
 
     [Fact]
+    public async Task GetAdapterAsync_refuses_a_vendor_platform_with_no_registered_connector()
+    {
+        // Live core connectors are off by default, so a tenant that names a
+        // vendor core gets a 501, never CHO's own claims in its place.
+        var handler = FakeHttpMessageHandler.Json(
+            """{"configuration": {"claimsPlatform": {"platform": "facets"}}}""");
+        var (factory, _, _, _, _) = BuildFactory(handler);
+
+        var act = () => factory.GetAdapterAsync("tenant-f");
+
+        var thrown = await act.Should()
+            .ThrowAsync<CloudHealthOffice.Infrastructure.Tenancy.LiveCoreConnectorNotEnabledException>();
+        thrown.Which.Platform.Should().Be("facets");
+        thrown.Which.Should().BeAssignableTo<NotImplementedException>();
+    }
+
+    [Fact]
     public async Task GetAdapterAsync_falls_back_to_cho_on_unknown_platform()
     {
         var handler = FakeHttpMessageHandler.Json(

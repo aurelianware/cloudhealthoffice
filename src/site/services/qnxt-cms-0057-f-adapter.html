@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>QNXT CMS-0057-F Adapter Scoping — QNXT FHIR Adapter Questionnaire | Cloud Health Office</title>
-  <meta name="description" content="How we scope a QNXT FHIR adapter for CMS-0057-F: a nine-section questionnaire, a 90-minute discovery workshop, and a fixed-scope SOW, one plan at a time." />
+  <title>QNXT CMS-0057-F Scoping — File Drop First, Optional QNXT FHIR Adapter | Cloud Health Office</title>
+  <meta name="description" content="How we connect QNXT for CMS-0057-F: a daily file drop of the extracts QNXT already produces first, and a live adapter only if you need one." />
   <meta name="author" content="Aurelianware, Inc." />
   <link rel="canonical" href="https://cloudhealthoffice.com/services/qnxt-cms-0057-f-adapter" />
 
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Cloud Health Office" />
   <meta property="og:url" content="https://cloudhealthoffice.com/services/qnxt-cms-0057-f-adapter" />
-  <meta property="og:title" content="Scoping a QNXT-to-CMS-0057-F adapter" />
-  <meta property="og:description" content="Most of the data behind the CMS-0057-F APIs already lives in QNXT. The hard part is getting it out cleanly. A nine-section QNXT scoping questionnaire, a discovery workshop, and a fixed-scope SOW." />
+  <meta property="og:title" content="Scoping QNXT for CMS-0057-F: file drop first" />
+  <meta property="og:description" content="Most of the data behind the CMS-0057-F APIs already lives in QNXT. Start with a daily file drop of the extracts QNXT already produces; add a live adapter only if you need one. A nine-section questionnaire, a discovery workshop, and a fixed-scope SOW." />
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:url" content="https://cloudhealthoffice.com/services/qnxt-cms-0057-f-adapter" />
-  <meta name="twitter:title" content="Scoping a QNXT-to-CMS-0057-F adapter" />
+  <meta name="twitter:title" content="Scoping QNXT for CMS-0057-F: file drop first" />
   <meta name="twitter:description" content="A nine-section QNXT scoping questionnaire for the CMS-0057-F APIs, a 90-minute discovery workshop, and a fixed-scope SOW." />
   <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png" />
 
@@ -29,7 +29,7 @@
       "name": "QNXT CMS-0057-F adapter scoping",
       "url": "https://cloudhealthoffice.com/services/qnxt-cms-0057-f-adapter",
       "serviceType": "QNXT FHIR adapter scoping and implementation for CMS-0057-F",
-      "description": "Per-plan scoping of an adapter that extracts QNXT data for the CMS-0057-F Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs: questionnaire, discovery workshop, and fixed-scope statement of work.",
+      "description": "Per-plan scoping of how QNXT data reaches the CMS-0057-F Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs: a daily file drop first, an optional live adapter for real-time reads and write-back. Questionnaire, discovery workshop, and fixed-scope statement of work.",
       "provider": {
         "@type": "Organization",
         "name": "Aurelianware, Inc.",
@@ -96,6 +96,7 @@
 <details>
 <summary>Solutions</summary>
 <div>
+<a href="/health-plan-leaders">For health plan leaders</a>
 <a href="/solutions-payers">For health plans</a>
 <a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
 <a href="/claims-repricing">Claims repricing</a>
@@ -161,15 +162,16 @@
       <div class="ev-hero-inner">
         <nav class="ev-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/services">Services</a><span>/</span><a href="/services/qnxt-cms-0057-f-adapter" aria-current="page">QNXT CMS-0057-F adapter</a></nav>
         <span class="ev-eyebrow">Professional Services &middot; QNXT</span>
-        <h1>Scoping a QNXT-to-CMS-0057-F adapter.</h1>
+        <h1>Scoping QNXT for CMS-0057-F.</h1>
         <p class="ev-lede">
           The four required APIs &mdash; Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization
           &mdash; are due January 1, 2027, and most of the data behind them already lives in QNXT. The hard part is
-          getting it out cleanly.
+          getting it out cleanly. Most plans start with the extracts QNXT already produces, sent to a daily file drop.
+          A live adapter is an option when you need real-time reads or write-back.
         </p>
         <div class="ev-badges">
           <span class="ev-badge ev-badge--cyan">Scoped per plan</span>
-          <span class="ev-badge">Read path first</span>
+          <span class="ev-badge">File drop first</span>
           <span class="ev-badge ev-badge--green">Fixed-scope SOW</span>
         </div>
         <div class="ev-actions">
@@ -191,8 +193,8 @@
         <h2>No two QNXT installs are the same, so we scope one plan at a time.</h2>
         <p class="ev-sub">
           QNXT version, hosting, licensed modules, and years of local configuration all change where the data sits
-          and how safely it can be read. An adapter is scoping and build work for your environment, not a package
-          we install. We find out what your environment actually holds before anyone prices it.
+          and how safely it can be read. The file drop needs extracts, not access to QNXT itself. A live adapter is
+          scoping and build work for your environment, not a package we install. We find out what your environment actually holds before anyone prices it.
         </p>
 
         <ol class="ev-flow">
@@ -202,7 +204,7 @@
           </li>
           <li>
             <strong>90-minute discovery workshop</strong>
-            <p>We walk through the answers with your team, settle the open questions, and agree on sources, extraction approach, and test data.</p>
+            <p>We walk through the answers with your team, settle the open questions, and agree on sources, extract files, and test data.</p>
           </li>
           <li>
             <strong>Fixed-scope SOW</strong>
@@ -212,14 +214,14 @@
 
         <div class="ev-grid ev-grid--two svc-phases">
           <div class="ev-card">
-            <span class="ev-card__tag">Phase 1 &middot; Read path</span>
+            <span class="ev-card__tag">Phase 1 &middot; Daily file drop</span>
             <h3>Patient Access, Provider Access, Payer-to-Payer, and metrics</h3>
-            <p>Read QNXT member, claims, encounter, prior-authorization, and provider data and serve it through the read APIs. Prior-authorization metrics reporting is in this phase.</p>
+            <p>QNXT member, coverage, claims, provider, and prior-authorization data arrives as standard extract files in a per-plan SFTP drop. Cloud Health Office loads them each day and serves the read APIs from what it loaded. No QNXT API license or database access is needed. Prior-authorization metrics reporting is in this phase.</p>
           </div>
           <div class="ev-card">
-            <span class="ev-card__tag">Phase 2 &middot; Write-back</span>
-            <h3>Prior Authorization write-back</h3>
-            <p>Take prior-authorization requests arriving through the API back into QNXT. It depends on how authorizations enter QNXT today, so we scope it after the read path is understood.</p>
+            <span class="ev-card__tag">Phase 2 &middot; Optional live adapter</span>
+            <h3>Real-time reads and Prior Authorization write-back</h3>
+            <p>Only if you need it: a live QNXT adapter for real-time reads, and for taking prior-authorization requests arriving through the API back into QNXT. It depends on how authorizations enter QNXT today, so we scope it after the file drop is running.</p>
           </div>
         </div>
       </div>
@@ -439,7 +441,7 @@
 <div class="cho-footer-inner">
 <div class="cho-footer-brand">
 <strong>Cloud Health Office</strong>
-<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+<p>Sovereign, interoperable health plan administration. A product of <a href="https://aurelianware.com">Aurelianware, Inc.</a></p>
 </div>
 <div class="cho-footer-col">
 <p class="cho-footer-heading">Platform</p>
@@ -469,6 +471,7 @@
 <p class="cho-footer-heading">Company</p>
 <a href="/founder">Founder</a>
 <a href="/insights">Insights</a>
+<a href="https://cms-0057-f.com/">CMS-0057-F guide</a>
 <a href="/contact">Contact</a>
 <a href="/legal/privacy-policy">Privacy</a>
 <a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>

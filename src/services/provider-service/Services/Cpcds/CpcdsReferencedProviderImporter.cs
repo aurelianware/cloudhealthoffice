@@ -27,6 +27,7 @@ public sealed class CpcdsReferencedProviderImporter
         ("attending", ["Claim attending provider NPI"]),
         ("referring", ["Claim referring provider NPI"]),
         ("site of service", ["Claim site of service NPI"]),
+        ("prescribing", ["Claim prescribing provider NPI", "Prescriber NPI"]),
     ];
 
     private readonly IProviderRepository _providers;

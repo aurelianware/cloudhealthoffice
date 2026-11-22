@@ -3,20 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cloud Health Office Pricing for Health Plans | Payer Platform PMPM</title>
-<meta name="description" content="PMPM pricing for a payer CMS-0057-F and claims platform. This is Cloud Health Office for health plans, not VMware CloudHealth FinOps pricing." />
+<title>Cloud Health Office Pricing | Health Plan Administration, Priced PMPM</title>
+<meta name="description" content="How Cloud Health Office is priced for health plans: per member per month for payer administration and CMS-0057-F APIs. Not VMware CloudHealth or Salesforce Health Cloud." />
 <link rel="canonical" href="https://cloudhealthoffice.com/pricing" />
 
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Cloud Health Office" />
 <meta property="og:url" content="https://cloudhealthoffice.com/pricing" />
-<meta property="og:title" content="Cloud Health Office Pricing for Health Plans | Payer Platform PMPM" />
-<meta property="og:description" content="PMPM pricing for a payer CMS-0057-F and claims platform. This is Cloud Health Office for health plans, not VMware CloudHealth FinOps pricing." />
+<meta property="og:title" content="Cloud Health Office Pricing | Health Plan Administration, Priced PMPM" />
+<meta property="og:description" content="How Cloud Health Office is priced for health plans: per member per month for payer administration and CMS-0057-F APIs. Not VMware CloudHealth or Salesforce Health Cloud." />
 <meta property="og:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/progressive-modernization.jpg" />
 
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="Cloud Health Office Pricing for Health Plans | Payer Platform PMPM" />
-<meta name="twitter:description" content="PMPM pricing for a payer CMS-0057-F and claims platform. This is Cloud Health Office for health plans, not VMware CloudHealth FinOps pricing." />
+<meta name="twitter:title" content="Cloud Health Office Pricing | Health Plan Administration, Priced PMPM" />
+<meta name="twitter:description" content="How Cloud Health Office is priced for health plans: per member per month for payer administration and CMS-0057-F APIs. Not VMware CloudHealth or Salesforce Health Cloud." />
 <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/progressive-modernization.jpg" />
 
 <script type="application/ld+json">
@@ -755,6 +755,7 @@
 <details>
 <summary>Solutions</summary>
 <div>
+<a href="/health-plan-leaders">For health plan leaders</a>
 <a href="/solutions-payers">For health plans</a>
 <a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
 <a href="/claims-repricing">Claims repricing</a>
@@ -1007,10 +1008,15 @@
 
 <!-- ADAPTERS -->
 <section class="adapters-section">
-  <h2>Core Admin Adapters</h2>
-  <p>CHO connects to your existing core admin system through a defined adapter interface, so CMS-0057-F work does not require changing your legacy platform. Each core integration is scoped as engagement work: core system version, deployment topology, and configuration differ per payer, so the adapter is built to the specific environment rather than shipped pre-built.</p>
+  <h2>Connecting to Your Core</h2>
+  <p>Most plans start with the files their core already produces. CHO loads them from a daily drop, so CMS-0057-F work and shadow runs need no change to your legacy platform and no adapter project. Where an implementation needs direct integration, a core adapter is scoped as engagement work, because core version, deployment topology, and configuration differ per payer.</p>
 
   <div class="adapter-grid">
+    <div class="adapter-card">
+      <div class="adapter-name">Standard files &amp; daily drop</div>
+      <div class="adapter-desc">The default. CARIN CPCDS extracts, 834 enrollment, prior authorizations from X12 278 or a UM export, and fee schedule CSVs, loaded each day from a watched folder or cloud storage, with a freshness report. <a href="/services/cms-0057-f-cpcds-trial">How a trial on your own files works</a>.</div>
+      <div class="adapter-status status-live">Available</div>
+    </div>
     <div class="adapter-card">
       <div class="adapter-name">QNXT</div>
       <div class="adapter-desc">Adapter interface defined; integration built per engagement.</div>
@@ -1104,7 +1110,7 @@
 <div class="cho-footer-inner">
 <div class="cho-footer-brand">
 <strong>Cloud Health Office</strong>
-<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+<p>Sovereign, interoperable health plan administration. A product of <a href="https://aurelianware.com">Aurelianware, Inc.</a></p>
 </div>
 <div class="cho-footer-col">
 <p class="cho-footer-heading">Platform</p>
@@ -1134,6 +1140,7 @@
 <p class="cho-footer-heading">Company</p>
 <a href="/founder">Founder</a>
 <a href="/insights">Insights</a>
+<a href="https://cms-0057-f.com/">CMS-0057-F guide</a>
 <a href="/contact">Contact</a>
 <a href="/legal/privacy-policy">Privacy</a>
 <a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>

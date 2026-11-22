@@ -19,7 +19,7 @@ public class ScenarioManifestTests
         TraitScanner.Scan(Assembly.GetExecutingAssembly());
 
     private static readonly IReadOnlySet<string> AllowedAugmentKeys =
-        new HashSet<string>(StringComparer.Ordinal) { "qnxt", "facets", "healthedge" };
+        new HashSet<string>(StringComparer.Ordinal) { "filedrop", "qnxt", "facets", "healthedge" };
 
     [Fact]
     public void Manifest_LoadsWithExpectedSchemaVersion()
@@ -65,7 +65,7 @@ public class ScenarioManifestTests
         static bool IsValid(string b) =>
             b is "Replace" or "Augment"
             || (b.StartsWith("augment.", System.StringComparison.Ordinal)
-                && new HashSet<string>(StringComparer.Ordinal) { "qnxt", "facets", "healthedge" }
+                && new HashSet<string>(StringComparer.Ordinal) { "filedrop", "qnxt", "facets", "healthedge" }
                     .Contains(b["augment.".Length..]));
 
         var bad = Traits.Select(t => t.Backend).Distinct().Where(b => !IsValid(b)).ToList();

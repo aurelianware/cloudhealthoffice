@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using ClaimsService.Extracts.Cpcds;
 using CloudHealthOffice.Infrastructure.Logging;
 using Microsoft.Extensions.Options;
 
@@ -71,6 +72,7 @@ public sealed class ClaimExtractRunner
     private readonly ClaimExtractOptions _options;
     private readonly ILogger<ClaimExtractRunner> _logger;
     private readonly TimeProvider _clock;
+    private readonly ICpcdsEnrollmentSource? _enrollment;
 
     public ClaimExtractRunner(
         IClaimExtractStore store,
@@ -78,8 +80,10 @@ public sealed class ClaimExtractRunner
         IExtractDestination destination,
         IOptions<ClaimExtractOptions> options,
         ILogger<ClaimExtractRunner> logger,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        ICpcdsEnrollmentSource? enrollment = null)
     {
+        _enrollment = enrollment;
         _store = store;
         _source = source;
         _destination = destination;
@@ -113,6 +117,7 @@ public sealed class ClaimExtractRunner
             WindowTo = to,
             StartedAt = startedAt,
             DataUseAgreement = leased.DataUseAgreement,
+            Cpcds = leased.IncludeCpcds,
         };
 
         var work = Directory.CreateTempSubdirectory("cho-claim-extract-");
@@ -123,11 +128,22 @@ public sealed class ClaimExtractRunner
 
             var headersPath = Path.Combine(work.FullName, ClaimExtractColumns.HeadersFile);
             var linesPath = Path.Combine(work.FullName, ClaimExtractColumns.LinesFile);
-            (run.ClaimVersions, run.Lines) = await WriteFilesAsync(tenantId, from, to, headersPath, linesPath, ct);
+            var cpcdsClaimsPath = run.Cpcds ? Path.Combine(work.FullName, CpcdsClaimExportRows.FileName) : null;
+            long cpcdsClaimRows;
+            (run.ClaimVersions, run.Lines, cpcdsClaimRows) =
+                await WriteFilesAsync(tenantId, from, to, headersPath, linesPath, cpcdsClaimsPath, ct);
 
             var headers = await DeliverAsync(tenantId, run.Id, ClaimExtractColumns.HeadersFile, headersPath, run.ClaimVersions, ct);
             var lines = await DeliverAsync(tenantId, run.Id, ClaimExtractColumns.LinesFile, linesPath, run.Lines, ct);
             run.Files = [headers, lines];
+
+            if (run.Cpcds)
+            {
+                var (membersPath, memberRows, coveragesPath, coverageRows) = await WriteCpcdsEnrollmentAsync(tenantId, work.FullName, ct);
+                run.Files.Add(await DeliverAsync(tenantId, run.Id, CpcdsEnrollmentExportRows.MembersFile, membersPath, memberRows, ct));
+                run.Files.Add(await DeliverAsync(tenantId, run.Id, CpcdsEnrollmentExportRows.CoveragesFile, coveragesPath, coverageRows, ct));
+                run.Files.Add(await DeliverAsync(tenantId, run.Id, CpcdsClaimExportRows.FileName, cpcdsClaimsPath!, cpcdsClaimRows, ct));
+            }
 
             var manifestPath = Path.Combine(work.FullName, ClaimExtractColumns.ManifestFile);
             await File.WriteAllTextAsync(manifestPath, JsonSerializer.Serialize(Manifest(run), ManifestJson), Encoding.UTF8, ct);
@@ -162,15 +178,20 @@ public sealed class ClaimExtractRunner
         return new(run, ClaimExtractRefusal.None);
     }
 
-    private async Task<(long Versions, long Lines)> WriteFilesAsync(
-        string tenantId, DateTime? from, DateTime to, string headersPath, string linesPath, CancellationToken ct)
+    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
+
+    private async Task<(long Versions, long Lines, long CpcdsRows)> WriteFilesAsync(
+        string tenantId, DateTime? from, DateTime to, string headersPath, string linesPath, string? cpcdsClaimsPath,
+        CancellationToken ct)
     {
-        long versions = 0, lines = 0;
-        var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        await using var headersOut = new StreamWriter(headersPath, false, utf8) { NewLine = "\r\n" };
-        await using var linesOut = new StreamWriter(linesPath, false, utf8) { NewLine = "\r\n" };
+        long versions = 0, lines = 0, cpcdsRows = 0;
+        await using var headersOut = new StreamWriter(headersPath, false, Utf8) { NewLine = "\r\n" };
+        await using var linesOut = new StreamWriter(linesPath, false, Utf8) { NewLine = "\r\n" };
+        await using var cpcdsOut = cpcdsClaimsPath is null ? null : new StreamWriter(cpcdsClaimsPath, false, Utf8) { NewLine = "\r\n" };
         await headersOut.WriteLineAsync(ClaimExtractRows.Record(ClaimExtractColumns.Headers));
         await linesOut.WriteLineAsync(ClaimExtractRows.Record(ClaimExtractColumns.Lines));
+        if (cpcdsOut is not null)
+            await cpcdsOut.WriteLineAsync(ClaimExtractRows.Record(CpcdsClaimExportRows.Headers));
 
         (DateTime, string)? after = null;
         while (true)
@@ -185,12 +206,61 @@ public sealed class ClaimExtractRunner
                     await linesOut.WriteLineAsync(ClaimExtractRows.Record(line));
                     lines++;
                 }
+                if (cpcdsOut is not null)
+                {
+                    foreach (var row in CpcdsClaimExportRows.Rows(claim))
+                    {
+                        await cpcdsOut.WriteLineAsync(ClaimExtractRows.Record(row));
+                        cpcdsRows++;
+                    }
+                }
             }
             if (page.Count < _options.PageSize) break;
             var last = page[^1];
             after = (last.LastUpdatedDate, last.Id);
         }
-        return (versions, lines);
+        return (versions, lines, cpcdsRows);
+    }
+
+    /// <summary>
+    /// The whole membership and its coverage, as CPCDS member and coverage
+    /// files. Each run writes the full snapshot (the claims file is the only
+    /// incremental one), so a consumer replaces its copy.
+    /// </summary>
+    private async Task<(string MembersPath, long Members, string CoveragesPath, long Coverages)> WriteCpcdsEnrollmentAsync(
+        string tenantId, string folder, CancellationToken ct)
+    {
+        if (_enrollment is null)
+            throw new InvalidOperationException("The CPCDS export is on, but no member and coverage source is configured.");
+
+        var membersPath = Path.Combine(folder, CpcdsEnrollmentExportRows.MembersFile);
+        var coveragesPath = Path.Combine(folder, CpcdsEnrollmentExportRows.CoveragesFile);
+        var byId = new Dictionary<string, CpcdsExportMember>(StringComparer.Ordinal);
+        long members = 0, coverages = 0;
+
+        await using (var membersOut = new StreamWriter(membersPath, false, Utf8) { NewLine = "\r\n" })
+        {
+            await membersOut.WriteLineAsync(ClaimExtractRows.Record(CpcdsEnrollmentExportRows.MemberHeaders));
+            await foreach (var member in _enrollment.MembersAsync(tenantId, ct))
+            {
+                if (!byId.TryAdd(member.MemberId, member)) continue;
+                await membersOut.WriteLineAsync(ClaimExtractRows.Record(CpcdsEnrollmentExportRows.Member(member)));
+                members++;
+            }
+        }
+
+        await using (var coveragesOut = new StreamWriter(coveragesPath, false, Utf8) { NewLine = "\r\n" })
+        {
+            await coveragesOut.WriteLineAsync(ClaimExtractRows.Record(CpcdsEnrollmentExportRows.CoverageHeaders));
+            await foreach (var coverage in _enrollment.CoveragesAsync(tenantId, ct))
+            {
+                byId.TryGetValue(coverage.MemberId, out var member);
+                await coveragesOut.WriteLineAsync(ClaimExtractRows.Record(CpcdsEnrollmentExportRows.Coverage(coverage, member)));
+                coverages++;
+            }
+        }
+
+        return (membersPath, members, coveragesPath, coverages);
     }
 
     private async Task<ClaimExtractFile> DeliverAsync(string tenantId, string runId, string name, string path, long rows, CancellationToken ct)
@@ -222,14 +292,23 @@ public sealed class ClaimExtractRunner
             rows = f.Rows,
             bytes = f.Bytes,
             sha256 = f.Sha256,
-            columns = f.Name == ClaimExtractColumns.HeadersFile ? ClaimExtractColumns.Headers : ClaimExtractColumns.Lines,
+            columns = f.Name switch
+            {
+                ClaimExtractColumns.HeadersFile => ClaimExtractColumns.Headers,
+                CpcdsClaimExportRows.FileName => CpcdsClaimExportRows.Headers,
+                CpcdsEnrollmentExportRows.MembersFile => CpcdsEnrollmentExportRows.MemberHeaders,
+                CpcdsEnrollmentExportRows.CoveragesFile => CpcdsEnrollmentExportRows.CoverageHeaders,
+                _ => ClaimExtractColumns.Lines,
+            },
         }),
+        cpcds = run.Cpcds,
         notes = new[]
         {
             "Rows are claim versions whose LastUpdatedDate is after windowFrom (or from the beginning when full) and at or before windowTo. Drafts are not included.",
             "A version appears again in a later run whenever it changes. Load claims.csv by ClaimId, keeping the row with the latest LastUpdatedDate, and replace that version's lines with the ones in claim-lines.csv.",
             "A claim's versions share ClaimVersionId. The current version is the one with an empty SupersededAt.",
             "Instants are UTC ISO 8601; service dates are calendar dates. Lists inside a field are separated by '|' (codes) or ':' (modifiers, pointers).",
+            "When cpcds is true: CPCDS_Claims.csv holds the current version of each adjudicated claim in the window, one row per line, keyed by \"Claim unique identifier\" (a later run may repeat a claim with new content); CPCDS_Members.csv and CPCDS_Coverages.csv are the whole membership as of the run. See docs/integration/CPCDS-EXPORT.md.",
         },
     };
 }

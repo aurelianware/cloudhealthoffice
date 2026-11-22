@@ -101,35 +101,13 @@ builder.Services.AddOpenIddict()
         // Sliding expiration enabled by default; each use issues a new refresh token
 
         // ── SMART R4 scopes ──────────────────────────────────────────────────
+        // Every scope the catalog seeds (v1 and its exact v2 form), plus the
+        // standard OIDC scopes.
         options.RegisterScopes(
-            Scopes.OpenId, Scopes.Profile, Scopes.Email, Scopes.OfflineAccess,
-            "fhirUser",
-            "launch",
-            "launch/patient",
-            "launch/encounter",
-            "patient/*.read",
-            "user/*.read",
-            "system/*.read",
-            "patient/Patient.read",
-            "patient/Coverage.read",
-            "patient/ExplanationOfBenefit.read",
-            "patient/Encounter.read",
-            "patient/Claim.read",
-            "user/Patient.read",
-            "user/Coverage.read",
-            "user/ExplanationOfBenefit.read",
-            "user/Encounter.read",
-            "user/Claim.read",
-            "system/Patient.read",
-            "system/Coverage.read",
-            "system/ExplanationOfBenefit.read",
-            "system/Encounter.read",
-            "system/Claim.read",
-            "user/Questionnaire.read",
-            "system/Questionnaire.read",
-            "user/ValueSet.read",
-            "system/ValueSet.read"
-        );
+            SmartAuthService.Models.SmartScopes.Catalog.Select(c => c.Name)
+                .Concat([Scopes.OpenId, Scopes.Profile, Scopes.Email, Scopes.OfflineAccess])
+                .Distinct(StringComparer.Ordinal)
+                .ToArray());
 
         // ── Token signing ────────────────────────────────────────────────────
         // Disable access token encryption so standard JwtBearer can validate them.
@@ -145,6 +123,11 @@ builder.Services.AddOpenIddict()
         // Backend Services rules (aud = token endpoint, single-use jti, exp at
         // most five minutes out). See SmartClientAssertions.
         options.AddSmartClientAssertions();
+
+        // ── Token introspection ──────────────────────────────────────────────
+        // Confidential clients registered with the introspection permission;
+        // a client sees only its own tenant's tokens. See SmartIntrospection.
+        options.AddSmartIntrospection();
 
         // ── ASP.NET Core integration ─────────────────────────────────────────
         var aspNetCore = options.UseAspNetCore()

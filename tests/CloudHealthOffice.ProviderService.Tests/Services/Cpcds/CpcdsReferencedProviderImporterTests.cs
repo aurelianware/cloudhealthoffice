@@ -32,12 +32,12 @@ public class CpcdsReferencedProviderImporterTests
             .ReturnsAsync((string _, string npi, CancellationToken _) => Person(npi));
     }
 
-    private static string Sample()
+    private static string Sample(string file = "claims.csv")
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "cloudhealthoffice-main.sln")))
             dir = dir.Parent;
-        return File.ReadAllText(Path.Combine(dir!.FullName, "docs/integration/samples/cpcds/claims.csv"));
+        return File.ReadAllText(Path.Combine(dir!.FullName, "docs/integration/samples/cpcds", file));
     }
 
     private static NppesRecord Person(string npi) => new()
@@ -69,6 +69,16 @@ public class CpcdsReferencedProviderImporterTests
         result.Providers.Select(p => p.Npi).Should().BeEquivalentTo(
             ["1234567893", "1497758544", "1902803802", "1588667638"]);
         result.Providers.Single(p => p.Npi == "1902803802").Roles.Should().Equal("billing", "performing");
+    }
+
+    [Fact]
+    public async Task A_pharmacy_file_names_the_pharmacy_as_billing_and_the_prescriber()
+    {
+        var result = await Import(Sample("pharmacy-claims.csv"), dryRun: true);
+
+        result.FileErrors.Should().BeEmpty();
+        result.Providers.Single(p => p.Npi == "1003000126").Roles.Should().Equal("billing");
+        result.Providers.Single(p => p.Npi == "1588667638").Roles.Should().Equal("prescribing");
     }
 
     [Fact]

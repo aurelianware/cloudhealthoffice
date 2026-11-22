@@ -67,7 +67,11 @@ public sealed class AuthorizationBackendSelector : IAuthorizationBackendSelector
                 $"and :AugmentBackend to a registered backend. Registered backends: " +
                 $"[{string.Join(", ", _backends.Keys)}]. Replace mode requires the " +
                 $"'{ChoAuthorizationBackend.Key}' backend; Augment mode requires the configured " +
-                $"external backend — there is no silent fallback to CHO.");
+                $"external backend — there is no silent fallback to CHO. Vendor backends such as " +
+                $"'qnxt' are registered only when " +
+                $"{CloudHealthOffice.Infrastructure.Tenancy.LiveCoreConnectors.ConfigKey} is true; " +
+                $"decisions made in the plan's UM system can be loaded through the authorization " +
+                $"import instead (docs/integration/AUTHORIZATION-IMPORT.md).");
         }
 
         return backend;

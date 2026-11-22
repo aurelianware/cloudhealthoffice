@@ -194,7 +194,7 @@
   </url>
   <url>
     <loc>https://cloudhealthoffice.com/services/qnxt-cms-0057-f-adapter</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-11-21</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -485,6 +485,12 @@
     <lastmod>2026-11-06</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cloudhealthoffice.com/insights/cms-0057-f/outsourced-core-cms-0057-f-blueprint</loc>
+    <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://cloudhealthoffice.com/insights/cms-0057-f/medicaid-cms-0057-f-blueprint</loc>

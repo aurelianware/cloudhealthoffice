@@ -1,3 +1,4 @@
+using Cms0057Acceptance.Tests.TestSupport;
 using FhirService.Controllers;
 using FhirService.Models;
 using FhirService.Services;
@@ -90,11 +91,16 @@ public class PasSubmitTests
         return m;
     }
 
+    private const string SubmitterSystem = "http://example.org/PATIENT_EVENT_TRACE_NUMBER";
+    private const string SubmitterTrace = "111099";
+
     private static Bundle RequestBundle(string cpt = "27447", string priority = "normal")
     {
         var claim = new Claim
         {
             Id = Guid.NewGuid().ToString(),
+            // The submitter's own identifier for the request (PAS: the X12 278 trace number).
+            Identifier = [new Identifier(SubmitterSystem, SubmitterTrace)],
             Status = FinancialResourceStatusCodes.Active,
             Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
             Use = ClaimUseCode.Preauthorization,
@@ -273,11 +279,65 @@ public class PasSubmitTests
             Entry = [new() { Resource = inquiryClaim }],
         });
 
-        var answer = ((Bundle)result.Should().BeOfType<OkObjectResult>().Subject.Value!)
+        var answer = PasInquiryResponse.Bundles((Parameters)result.Should().BeOfType<OkObjectResult>().Subject.Value!).Single()
             .Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
         answer.PreAuthRef.Should().Be(submitted.PreAuthRef);
         answer.Disposition.Should().Be("denied");
         answer.Patient.Reference.Should().Be("Patient/pat-001");
+    }
+
+    [Theory]
+    [Trait("Scenario", "PAS-04")]
+    [InlineData("Patient/pat-001", true)]
+    [InlineData("Patient/someone-else", false)]
+    public async Task PAS04_InquireFindsTheAuthorizationByTheSubmittersOwnIdentifier(string patient, bool found)
+    {
+        // The Da Vinci PAS kit inquires with the Claim.identifier the provider
+        // gave the request, not the preAuthRef CHO issued (Inferno run 10).
+        var submit = BuildController(Adjudicator(new PasDecisionResult
+        {
+            HasDecision = true, Decision = "denied", DenialReasonCode = "NOT_COVERED",
+            DenialReason = "Service 27447 is not a covered benefit", RuleName = "AutoDenyList",
+        }));
+        var submitted = ((Bundle)((OkObjectResult)await submit.ClaimSubmit(RequestBundle())).Value!)
+            .Entry[0].Resource as ClaimResponse;
+
+        var inquire = new PasController(
+                new Mock<IPasAutoAdjudicator>().Object,
+                new PasResponseBuilder(),
+                new Cms0057ComplianceChecker(),
+                new PriorAuthorizationInquiryService(_authorizationService, submitterLookup: _authorizationService),
+                Options.Create(new PasAutoAdjudicationConfig()),
+                new StubHttpClientFactory(),
+                _authorizationService,
+                AcceptanceContext.Logger<PasController>())
+            .WithTenant();
+        var inquiryClaim = new Claim
+        {
+            Status = FinancialResourceStatusCodes.Active,
+            Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
+            Use = ClaimUseCode.Preauthorization,
+            Patient = new ResourceReference(patient),
+            Identifier = [new Identifier(SubmitterSystem, SubmitterTrace)],
+        };
+
+        var result = await inquire.ClaimInquire(new Bundle
+        {
+            Type = Bundle.BundleType.Collection,
+            Entry = [new() { Resource = inquiryClaim }],
+        });
+
+        if (!found)
+        {
+            // The corroborating key still has to match the record.
+            result.Should().NotBeOfType<OkObjectResult>();
+            return;
+        }
+
+        var answer = PasInquiryResponse.Bundles((Parameters)result.Should().BeOfType<OkObjectResult>().Subject.Value!).Single()
+            .Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
+        answer.PreAuthRef.Should().Be(submitted!.PreAuthRef);
+        answer.Disposition.Should().Be("denied");
     }
 
     [Fact]
@@ -295,7 +355,7 @@ public class PasSubmitTests
             .Value.Should().BeOfType<Bundle>().Subject
             .Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
         claimResponse.Disposition.Should().Be("pended");
-        claimResponse.Outcome.Should().Be(ClaimProcessingCodes.Queued);
+        claimResponse.Outcome.Should().Be(ClaimProcessingCodes.Complete);
     }
 
     [Fact]
@@ -370,15 +430,12 @@ public class PasSubmitTests
 
         claimResponse.Disposition.Should().Be("denied");
 
-        // The DECISION is coded where PAS defines it: the reviewAction
-        // extension's action code, A3 "not certified", from X12 list 306 — the
-        // same system and shape the pended path already uses for A4.
-        var reviewAction = claimResponse.Extension.Should().ContainSingle(e =>
-            e.Url == "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewAction").Subject;
-        var action = reviewAction.Extension.Should().ContainSingle().Subject
-            .Value.Should().BeOfType<Coding>().Subject;
-        action.Code.Should().Be("A3");
-        action.System.Should().Be("https://codesystem.x12.org/005010/306");
+        // The DECISION is coded where PAS defines it: the reviewAction on each
+        // line's adjudication, action code A3 "not certified", from X12 list
+        // 306 — the same system and shape the pended path uses for A4.
+        claimResponse.Extension.Should().BeEmpty("PAS 2.2.1 allows reviewAction only on an adjudication");
+        PasReviewActions.OnLines(claimResponse).Should().NotBeEmpty()
+            .And.OnlyContain(c => c.Code == "A3" && c.System == PasReviewActions.X12CertificationActionSystem);
 
         // The REASON is prose. It is deliberately not a ClaimResponse.error:
         // that element binds required to X12 list 901 and asks whether the

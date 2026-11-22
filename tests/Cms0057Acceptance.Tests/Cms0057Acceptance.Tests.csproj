@@ -36,6 +36,9 @@
     <Content Include="scenarios.json" CopyToOutputDirectory="PreserveNewest" />
     <!-- Replace status table (docs/epa-gap-matrix.md §11), read by ScenarioManifestTests. -->
     <Content Include="..\..\docs\epa-gap-matrix.md" Link="epa-gap-matrix.md" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Published sample extracts, loaded by the file-drop (augment.filedrop) scenarios. -->
+    <Content Include="..\..\docs\integration\samples\cpcds\*.csv" Link="samples\cpcds\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\docs\integration\samples\authorizations\*.*" Link="samples\authorizations\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

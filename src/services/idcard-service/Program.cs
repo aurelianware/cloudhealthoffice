@@ -103,7 +103,15 @@ builder.Services.AddScoped<ITemplateResolver, TemplateResolver>();
 // augment adapter can inject the Cho adapter directly.
 builder.Services.AddScoped<ChoIdCardAdapter>();
 builder.Services.AddScoped<IIdCardAdapter>(sp => sp.GetRequiredService<ChoIdCardAdapter>());
-builder.Services.AddScoped<IIdCardAdapter, QnxtIdCardAdapter>();
+// Live core connectors (QNXT, Facets, HealthEdge) are an optional integration
+// point, off by default: plans feed CHO through the daily file drop instead
+// (docs/integration/CORE-INTEGRATION-OPTIONS.md). Registered only when
+// CoreIntegration:LiveConnectors:Enabled is true; otherwise a tenant naming a
+// vendor platform is refused with 501 by the adapter factory.
+if (CloudHealthOffice.Infrastructure.Tenancy.LiveCoreConnectors.IsEnabled(builder.Configuration))
+{
+    builder.Services.AddScoped<IIdCardAdapter, QnxtIdCardAdapter>();
+}
 builder.Services.AddScoped<IIdCardAdapter, FulfillmentVendorAdapter>();
 builder.Services.AddScoped<IdCardAdapterFactory>();
 
@@ -127,7 +135,11 @@ else
     builder.Services.AddSingleton<IQnxtMirrorQueue, InMemoryQnxtMirrorQueue>();
 }
 
-builder.Services.AddHostedService<QnxtMirrorReconciliationJob>();
+// The QNXT mirror backstop runs only with live core connectors on (see above).
+if (CloudHealthOffice.Infrastructure.Tenancy.LiveCoreConnectors.IsEnabled(builder.Configuration))
+{
+    builder.Services.AddHostedService<QnxtMirrorReconciliationJob>();
+}
 
 builder.Services.AddScoped<IIdCardOrchestrator, IdCardOrchestrator>();
 

@@ -19,8 +19,55 @@ public class CrdHookRequest
     [JsonPropertyName("context")]
     public CrdHookContext? Context { get; set; }
 
+    [JsonPropertyName("fhirAuthorization")]
+    public CrdFhirAuthorization? FhirAuthorization { get; set; }
+
+    /// <summary>CDS Hooks request extensions, e.g. <c>davinci-crd.configuration</c>.</summary>
+    [JsonPropertyName("extension")]
+    public JsonElement? Extension { get; set; }
+
+    /// <summary>
+    /// The client's <c>coverage-info</c> configuration: false asks CHO for no
+    /// coverage-information system actions on this call. True when absent
+    /// (the option's default); unknown options are ignored.
+    /// </summary>
+    [JsonIgnore]
+    public bool CoverageInfoEnabled
+        => !(Extension is { ValueKind: JsonValueKind.Object } extension
+             && extension.TryGetProperty("davinci-crd.configuration", out var configuration)
+             && configuration.ValueKind == JsonValueKind.Object
+             && configuration.TryGetProperty("coverage-info", out var coverageInfo)
+             && coverageInfo.ValueKind == JsonValueKind.False);
+
     [JsonPropertyName("prefetch")]
     public Dictionary<string, System.Text.Json.JsonElement>? Prefetch { get; set; }
+
+    /// <summary>
+    /// The EHR's active Coverage for this hook, once CrdService has found it
+    /// (prefetch, or a read of <see cref="FhirServer"/>). Never read from the
+    /// request body.
+    /// </summary>
+    [JsonIgnore]
+    public JsonElement? EhrCoverage { get; set; }
+}
+
+/// <summary>CDS Hooks <c>fhirAuthorization</c>: the token the EHR grants the service for reading its FHIR server.</summary>
+public class CrdFhirAuthorization
+{
+    [JsonPropertyName("access_token")]
+    public string? AccessToken { get; set; }
+
+    [JsonPropertyName("token_type")]
+    public string? TokenType { get; set; }
+
+    [JsonPropertyName("expires_in")]
+    public int? ExpiresIn { get; set; }
+
+    [JsonPropertyName("scope")]
+    public string? Scope { get; set; }
+
+    [JsonPropertyName("subject")]
+    public string? Subject { get; set; }
 }
 
 public class CrdHookContext
@@ -213,11 +260,31 @@ public class CrdCard
     [JsonPropertyName("source")]
     public CrdCardSource Source { get; set; } = new();
 
-    [JsonPropertyName("suggestions")]
+    [JsonIgnore]
     public List<CrdCardSuggestion> Suggestions { get; set; } = new();
 
-    [JsonPropertyName("links")]
+    [JsonIgnore]
     public List<CrdCardLink> Links { get; set; } = new();
+
+    /// <summary>
+    /// CDS Hooks omits an empty array: a card with no suggestions or links
+    /// carries neither property (CRD's response profiles refuse an empty one).
+    /// </summary>
+    [JsonPropertyName("suggestions")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<CrdCardSuggestion>? SuggestionsForJson
+    {
+        get => Suggestions.Count > 0 ? Suggestions : null;
+        set => Suggestions = value ?? new();
+    }
+
+    [JsonPropertyName("links")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<CrdCardLink>? LinksForJson
+    {
+        get => Links.Count > 0 ? Links : null;
+        set => Links = value ?? new();
+    }
 }
 
 public class CrdCardSource
@@ -317,4 +384,31 @@ public class CrdServiceDefinition
 
     [JsonPropertyName("prefetch")]
     public Dictionary<string, string>? Prefetch { get; set; }
+
+    /// <summary>
+    /// CDS Hooks extensions: CRD 2.2's <c>davinci-crd.version</c> (the CRD
+    /// versions the service answers) and <c>davinci-crd.configuration-options</c>
+    /// (what a client may switch per call, at minimum one per type of card).
+    /// </summary>
+    [JsonPropertyName("extension")]
+    public Dictionary<string, object>? Extension { get; set; }
+}
+
+/// <summary>One CRD configuration option a CDS service offers in discovery (CRD 2.2 §Configuration options).</summary>
+public class CrdConfigurationOption
+{
+    [JsonPropertyName("code")]
+    public string Code { get; set; } = string.Empty;
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "boolean";
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = string.Empty;
+
+    [JsonPropertyName("default")]
+    public object? Default { get; set; }
 }

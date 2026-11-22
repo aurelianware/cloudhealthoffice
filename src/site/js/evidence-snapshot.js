@@ -131,6 +131,24 @@
 
   /* ── CMS-0057-F acceptance evidence ───────────────────────────────────── */
 
+  // How each scored integration is named. 'filedrop' is the default way a
+  // plan's core connects: it keeps its core and sends its daily extracts.
+  var INTEGRATION_LABELS = {
+    filedrop: {
+      title: 'Core via file drop',
+      column: 'Core via file drop',
+      text: 'Integration capability — the plan keeps its core and UM system and sends their daily extracts. Reported separately.'
+    }
+  };
+
+  function integrationLabel(key) {
+    return INTEGRATION_LABELS[key] || {
+      title: key.toUpperCase() + ' Augment',
+      column: key.toUpperCase() + ' Augment',
+      text: 'Integration capability — proven against that external core, reported separately.'
+    };
+  }
+
   function renderCms0057(root, body, data) {
     var view = root.getAttribute('data-view') || 'summary';
     var capability = root.getAttribute('data-capability');
@@ -174,8 +192,8 @@
       grid.appendChild(product);
       integrationKeys.forEach(function (key) {
         var card = el('div', 'ev-card');
-        card.appendChild(el('h3', null, key.toUpperCase() + ' Augment'));
-        card.appendChild(el('p', null, 'Integration capability — proven against that external core, reported separately.'));
+        card.appendChild(el('h3', null, integrationLabel(key).title));
+        card.appendChild(el('p', null, integrationLabel(key).text));
         card.appendChild(tallies(data.integrations[key] || {}, cmsLabels));
         grid.appendChild(card);
       });
@@ -192,7 +210,7 @@
         return !wanted || wanted.indexOf(s.capability) !== -1;
       });
       var headings = ['ID', 'Scenario', 'CHO Replace'];
-      integrationKeys.forEach(function (k) { headings.push(k.toUpperCase() + ' Augment'); });
+      integrationKeys.forEach(function (k) { headings.push(integrationLabel(k).column); });
 
       var rows = scenarios.map(function (s) {
         var tr = document.createElement('tr');

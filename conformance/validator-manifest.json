@@ -23,6 +23,10 @@
       "igs": ["hl7.fhir.us.carin-bb#2.2.0"],
       "note": "An 837D on the Oral profile, which requires two adjudication entries per line as the professional profile does."
     },
+    "carin-pharmacy-financial": {
+      "igs": ["hl7.fhir.us.carin-bb#2.2.0"],
+      "note": "A retail prescription loaded from a CPCDS pharmacy extract, on the Pharmacy profile: the NCPDP supporting information (days supply, DAW, fill number, refills authorized), an NDC item with a service date, and the benefit payment status at the header."
+    },
     "carin-professional-basis": {
       "igs": ["hl7.fhir.us.carin-bb#2.2.0"],
       "note": "The Provider Access payload for an 837P, on the CARIN BB Professional NonClinician Basis profile. Non-financial by requirement, not by simplification: the Basis family exists so a payer can send another provider the record of an encounter without the plan's financial terms."
@@ -38,6 +42,10 @@
     "carin-oral-basis": {
       "igs": ["hl7.fhir.us.carin-bb#2.2.0"],
       "note": "An 837D on the Oral Basis profile, which is the strictest of the four on network status: it requires a rendering network status CHO can only supply once the claim has been adjudicated on a mappable tier."
+    },
+    "carin-pharmacy-basis": {
+      "igs": ["hl7.fhir.us.carin-bb#2.2.0"],
+      "note": "The same prescription on the Pharmacy Basis profile, for Provider Access: the NCPDP supporting information and the prescriber, with no money."
     },
     "claim-as-billed": {
       "igs": [],

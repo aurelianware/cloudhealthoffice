@@ -29,6 +29,25 @@ public enum CrdDetermination
     /// and requires a reason alongside it.
     /// </summary>
     Indeterminate,
+
+    /// <summary>
+    /// The service is not covered because CHO holds no coverage it could be
+    /// covered under: the patient is not a member, the member's coverage has
+    /// ended, or the Coverage the order names is not one CHO holds. CRD 2.2.1
+    /// answers these with <c>not-covered</c> and the matching reason
+    /// (no-member-found, no-active-coverage, coverage-not-found). It is a
+    /// statement about eligibility, never about the service's rules, and it
+    /// carries no <c>pa-needed</c> (crd-ci-q2).
+    /// </summary>
+    NotCovered,
+
+    /// <summary>
+    /// Prior authorization would be required, and CHO holds an approved one for
+    /// this member that covers the service on its date: <c>pa-needed</c>
+    /// <c>satisfied</c>, with the authorization's number as
+    /// <c>satisfied-pa-id</c> (crd-ci-q5 requires the two together).
+    /// </summary>
+    AuthorizationSatisfied,
 }
 
 /// <summary>
@@ -59,6 +78,13 @@ public enum CrdIndeterminateReason
     /// </summary>
     DocumentationOnlyClassification,
 
+    /// <summary>
+    /// The order is planned for after the member's coverage ends, so its
+    /// coverage depends on a contract that is not yet in place (info-needed
+    /// <c>contract-window</c>).
+    /// </summary>
+    OutsideCoveragePeriod,
+
     /// <summary>No member matched the hook's patient. IG code <c>no-member-found</c>.</summary>
     MemberNotFound,
 
@@ -70,6 +96,13 @@ public enum CrdIndeterminateReason
     /// are keyed on, so no rule set resolves. IG code <c>coverage-not-found</c>.
     /// </summary>
     CoverageContextIncomplete,
+
+    /// <summary>
+    /// The member is known, but the Coverage the EHR sent (by its plan or group)
+    /// is not one CHO holds for them. IG code <c>coverage-not-found</c>; used
+    /// with <see cref="CrdDetermination.NotCovered"/>.
+    /// </summary>
+    CoverageNotFound,
 }
 
 /// <summary>
@@ -98,10 +131,12 @@ public enum CrdIndeterminateReason
 /// The invariants this construction respects, by never producing the shapes they
 /// forbid: <c>q1</c> (no questionnaire without doc-needed — CHO names
 /// questionnaires only on a documentation-required determination, which always
-/// carries doc-needed), <c>q2</c> (no pa-needed under not-covered — CHO never asserts
-/// not-covered, because it does not evaluate benefit exclusions here),
-/// <c>q3</c>/<c>q5</c> (CHO emits neither <c>conditional</c> nor
-/// <c>satisfied</c>), <c>q4</c> (doc-purpose <c>withpa</c> is never paired with a
+/// carries doc-needed), <c>q2</c> (no pa-needed under not-covered — CHO asserts
+/// not-covered only for eligibility, never for a benefit exclusion, and omits
+/// pa-needed there),
+/// <c>q3</c> (covered is <c>conditional</c> only with info-needed
+/// <c>contract-window</c>), <c>q5</c> (pa-needed <c>satisfied</c> exactly when a
+/// satisfied-pa-id is emitted), <c>q4</c> (doc-purpose <c>withpa</c> is never paired with a
 /// satisfied or no-auth determination), <c>q7</c> (every reason carries text),
 /// <c>q8</c> and <c>q9</c> (a reason accompanies every doc-purpose and every
 /// indeterminate). <c>CrdCoverageInformationTests</c> asserts each of those on
@@ -113,6 +148,9 @@ public sealed record CrdCoverageInformation
     /// <summary>The extension's canonical URL, unversioned per FHIR convention.</summary>
     public const string ExtensionUrl =
         "http://hl7.org/fhir/us/davinci-crd/StructureDefinition/ext-coverage-information";
+
+    /// <summary>The code system of the coverage-information detail codes (CRD 2.2.1 coverageDetailNew).</summary>
+    public const string CoverageDetailCodeSystem = "http://terminology.hl7.org/CodeSystem/crd-coverage-detail";
 
     /// <summary>The IG's temp code system, which carries the Coverage Assertion Reasons.</summary>
     public const string TempCodeSystem = "http://hl7.org/fhir/us/davinci-crd/CodeSystem/temp";
@@ -145,14 +183,67 @@ public sealed record CrdCoverageInformation
     /// </summary>
     public IReadOnlyList<string> Questionnaires { get; init; } = [];
 
+    /// <summary>
+    /// The last day the assertion holds: CHO keeps it, and answers its
+    /// coverage-assertion-id, until then (<c>Cms0057:Crd:AssertionRetentionDays</c>).
+    /// </summary>
+    public DateOnly? ExpiryDate { get; init; }
+
+    /// <summary>Who to contact about the determination: the plan, by name, phone and website.</summary>
+    public CrdPayerContact? Contact { get; init; }
+
+    /// <summary>
+    /// The payer's published coverage policy, emitted as a <c>policy-link</c>
+    /// detail: the document the determination's basis is in.
+    /// </summary>
+    public string? PolicyUrl { get; init; }
+
+    /// <summary>
+    /// The approved authorization that satisfies the requirement. Emitted, with
+    /// pa-needed <c>satisfied</c>, only on <see cref="CrdDetermination.AuthorizationSatisfied"/>.
+    /// </summary>
+    public string? SatisfiedPaId { get; init; }
+
+    /// <summary>
+    /// The order is planned for after the coverage period ends: covered is
+    /// <c>conditional</c> and info-needed is <c>contract-window</c> (crd-ci-q3),
+    /// whatever the plan's rules say about the service.
+    /// </summary>
+    public bool OutsideContractWindow { get; init; }
+
+    /// <summary>
+    /// Other orders in the same request this assertion depends on, as
+    /// <c>{type}/{id}</c> (the <c>dependency</c> sub-extension): an order based
+    /// on another draft order is covered as part of it.
+    /// </summary>
+    public IReadOnlyList<string> Dependencies { get; init; } = [];
+
+    private bool Satisfied => Determination == CrdDetermination.AuthorizationSatisfied
+                              && !string.IsNullOrWhiteSpace(SatisfiedPaId);
+
+    /// <summary>Whether <see cref="OutsideContractWindow"/> applies: never under not-covered or indeterminate.</summary>
+    private bool Conditional => OutsideContractWindow
+                                && Determination is not (CrdDetermination.NotCovered or CrdDetermination.Indeterminate);
+
     /// <summary>`covered` / `not-covered` / `conditional` / `indeterminate`.</summary>
-    public string Covered => Determination == CrdDetermination.Indeterminate ? "indeterminate" : "covered";
+    public string Covered => Determination switch
+    {
+        CrdDetermination.Indeterminate => "indeterminate",
+        CrdDetermination.NotCovered => "not-covered",
+        _ when Conditional => "conditional",
+        _ => "covered",
+    };
 
     /// <summary>`no-auth` / `auth-needed` / `satisfied` / `performpa` / `conditional` / `indeterminate`.</summary>
-    public string PaNeeded => Determination switch
+    /// <remarks>Null under not-covered: crd-ci-q2 forbids pa-needed there.</remarks>
+    public string? PaNeeded => Determination switch
     {
+        CrdDetermination.NotCovered => null,
         CrdDetermination.AuthorizationRequired => "auth-needed",
         CrdDetermination.NoAuthorizationRequired => "no-auth",
+        // q5: satisfied exactly when there is a satisfied-pa-id. Without the
+        // number the requirement is still a requirement.
+        CrdDetermination.AuthorizationSatisfied => Satisfied ? "satisfied" : "auth-needed",
         // CHO classified the service as needing documentation. That says nothing
         // about prior authorization, and under CHO's fail-closed policy silence
         // must not read as "none needed".
@@ -167,8 +258,11 @@ public sealed record CrdCoverageInformation
         {
             Part("coverage", "valueReference", new Dictionary<string, object?> { ["reference"] = CoverageReference }),
             Part("covered", "valueCode", Covered),
-            Part("pa-needed", "valueCode", PaNeeded),
         };
+        if (PaNeeded is { } paNeeded)
+            parts.Add(Part("pa-needed", "valueCode", paNeeded));
+        if (Satisfied)
+            parts.Add(Part("satisfied-pa-id", "valueString", SatisfiedPaId!.Trim()));
 
         if (Determination == CrdDetermination.DocumentationRequired)
         {
@@ -194,13 +288,52 @@ public sealed record CrdCoverageInformation
             }));
         }
 
-        if (Reason is { } reason)
+        if (Conditional)
+            parts.Add(Part("info-needed", "valueCode", "contract-window"));
+
+        // A reason the determination needs comes first; otherwise a
+        // conditional answer says why it is conditional.
+        if ((Reason ?? (Conditional ? CrdIndeterminateReason.OutsideCoveragePeriod : null)) is { } reason)
         {
             parts.Add(Part("reason", "valueCodeableConcept", ReasonConcept(reason, ReasonText)));
         }
 
+        foreach (var dependency in Dependencies.Where(d => !string.IsNullOrWhiteSpace(d)).Distinct(StringComparer.Ordinal))
+            parts.Add(Part("dependency", "valueReference", new Dictionary<string, object?> { ["reference"] = dependency }));
+
+        if (PolicyUrl is not null)
+        {
+            parts.Add(new Dictionary<string, object?>
+            {
+                ["url"] = "detail",
+                ["extension"] = new[]
+                {
+                    Part("category", "valueCode", "cat-other"),
+                    Part("code", "valueCodeableConcept", new Dictionary<string, object?>
+                    {
+                        ["coding"] = new[]
+                        {
+                            new Dictionary<string, object?>
+                            {
+                                ["system"] = CoverageDetailCodeSystem,
+                                ["code"] = "policy-link",
+                                ["display"] = "Policy Link",
+                            },
+                        },
+                    }),
+                    Part("value", "valueUrl", PolicyUrl),
+                },
+            });
+        }
+
         parts.Add(Part("date", "valueDate", Date.ToString("yyyy-MM-dd")));
         parts.Add(Part("coverage-assertion-id", "valueString", CoverageAssertionId));
+
+        if (Contact?.ToContactDetail() is { } contact)
+            parts.Add(Part("contact", "valueContactDetail", contact));
+
+        if (ExpiryDate is { } expiry)
+            parts.Add(Part("expiry-date", "valueDate", expiry.ToString("yyyy-MM-dd")));
 
         return new Dictionary<string, object?>
         {
@@ -244,6 +377,7 @@ public sealed record CrdCoverageInformation
         CrdIndeterminateReason.MemberNotFound => ("no-member-found", "Member not found"),
         CrdIndeterminateReason.NoActiveCoverage => ("no-active-coverage", "Coverage not active"),
         CrdIndeterminateReason.CoverageContextIncomplete => ("coverage-not-found", "Coverage not found"),
+        CrdIndeterminateReason.CoverageNotFound => ("coverage-not-found", "Coverage not found"),
         _ => null,
     };
 
@@ -270,6 +404,11 @@ public sealed record CrdCoverageInformation
         CrdIndeterminateReason.CoverageContextIncomplete =>
             "Cloud Health Office could not determine the state and line of business this member's coverage "
             + "rules are selected by, so no rule set applies.",
+        CrdIndeterminateReason.CoverageNotFound =>
+            "The coverage on this order is not a coverage Cloud Health Office holds for this member.",
+        CrdIndeterminateReason.OutsideCoveragePeriod =>
+            "The order is planned for after the member's current coverage ends. Coverage for it depends on "
+            + "coverage being in place on that date.",
         _ => "Cloud Health Office could not determine the coverage requirements for this service.",
     };
 
@@ -292,4 +431,25 @@ public class CdsHooksSystemAction
 
     [JsonPropertyName("resource")]
     public JsonElement? Resource { get; set; }
+}
+
+/// <summary>The plan's contact details, as a coverage-information <c>contact</c>.</summary>
+public sealed record CrdPayerContact(string? Name, string? Phone, string? Website)
+{
+    /// <summary>A FHIR ContactDetail, or null when there is nothing to contact.</summary>
+    public Dictionary<string, object?>? ToContactDetail()
+    {
+        var telecom = new List<Dictionary<string, object?>>();
+        if (!string.IsNullOrWhiteSpace(Phone))
+            telecom.Add(new() { ["system"] = "phone", ["value"] = Phone.Trim() });
+        if (!string.IsNullOrWhiteSpace(Website))
+            telecom.Add(new() { ["system"] = "url", ["value"] = Website.Trim() });
+        if (telecom.Count == 0)
+            return null;
+
+        var contact = new Dictionary<string, object?> { ["telecom"] = telecom };
+        if (!string.IsNullOrWhiteSpace(Name))
+            contact["name"] = Name.Trim();
+        return contact;
+    }
 }

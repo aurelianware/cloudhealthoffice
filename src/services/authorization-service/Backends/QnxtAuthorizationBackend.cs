@@ -53,6 +53,9 @@ public sealed class QnxtAuthorizationBackend : IAuthorizationBackend
     public Task<Authorization?> GetByNumberAsync(string authorizationNumber, CancellationToken ct = default)
         => throw new NotImplementedException(Todo);
 
+    public Task<Authorization?> GetBySubmitterIdentifierAsync(string submitterIdentifier, CancellationToken ct = default)
+        => throw new NotImplementedException(Todo);
+
     public Task<Authorization> UpdateStatusAsync(
         Authorization authorization,
         AuthorizationStatus status,

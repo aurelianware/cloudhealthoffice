@@ -159,7 +159,7 @@ public class PasController : FhirControllerBase
                         "PAS $submit auto-denied: excluded provider NPI {Npi}, source={Source}",
                         LogSanitizer.Sanitize(providerNpi), LogSanitizer.Sanitize(verificationResult.ExclusionSource));
 
-                    return await RecordAndRespondAsync(claim, record, mapping, deniedDecision, sw);
+                    return await RecordAndRespondAsync(requestBundle, claim, record, mapping, deniedDecision, sw);
                 }
 
                 if (verificationResult.IntegrityScore >= 0 && verificationResult.IntegrityScore < 40)
@@ -180,7 +180,7 @@ public class PasController : FhirControllerBase
                 _logger.LogInformation(
                     "PAS $submit for tenant {TenantId}: line of business undetermined, pended without adjudication",
                     LogSanitizer.Sanitize(TenantId));
-                return await RecordAndRespondAsync(claim, record, mapping, new PasDecisionResult
+                return await RecordAndRespondAsync(requestBundle, claim, record, mapping, new PasDecisionResult
                 {
                     HasDecision = false,
                     RuleName = LineOfBusinessUndeterminedRule,
@@ -194,7 +194,7 @@ public class PasController : FhirControllerBase
             var decision = await _adjudicator.TryDecideAsync(
                 claim, requestBundle, TenantId, basis, timeBudgetMs, HttpContext.RequestAborted);
 
-            return await RecordAndRespondAsync(claim, record, mapping, decision, sw);
+            return await RecordAndRespondAsync(requestBundle, claim, record, mapping, decision, sw);
         }
         catch (Exception ex)
         {
@@ -215,7 +215,7 @@ public class PasController : FhirControllerBase
     /// OperationOutcome and no ClaimResponse.
     /// </summary>
     private async Task<IActionResult> RecordAndRespondAsync(
-        Claim claim, PasAuthorizationRecordRequest record, PasMappingResult mapping,
+        Bundle requestBundle, Claim claim, PasAuthorizationRecordRequest record, PasMappingResult mapping,
         PasDecisionResult decision, Stopwatch sw)
     {
         decision.AuthorizationNumber ??= NewAuthorizationNumber();
@@ -285,7 +285,7 @@ public class PasController : FhirControllerBase
                 answer.Decision = "approved";
                 answer.EffectiveFrom = kept.ApprovedServiceDateFrom;
                 answer.EffectiveTo = kept.ApprovedServiceDateTo;
-                responseBundle = _responseBuilder.BuildApprovedResponse(claim, answer, kept.RequestedServices);
+                responseBundle = _responseBuilder.BuildApprovedResponse(claim, answer, kept.RequestedServices, requestBundle, FhirBaseUrl);
                 break;
             case PriorAuthorizationStatus.Modified:
             case PriorAuthorizationStatus.Expired:
@@ -300,7 +300,7 @@ public class PasController : FhirControllerBase
                     ApprovedServiceDateTo = kept.ApprovedServiceDateTo,
                     ExpirationDate = kept.ExpirationDate,
                     RequestedServices = kept.RequestedServices,
-                });
+                }, requestBundle, FhirBaseUrl);
                 break;
             case PriorAuthorizationStatus.Denied:
                 answer.HasDecision = true;
@@ -309,10 +309,11 @@ public class PasController : FhirControllerBase
                 answer.DenialReason = kept.DenialReason;
                 if (outcome != "Denied")
                     answer.RuleName = "benefit-exclusion";
-                responseBundle = _responseBuilder.BuildDeniedResponse(claim, answer, kept.RequestedServices);
+                responseBundle = _responseBuilder.BuildDeniedResponse(claim, answer, kept.RequestedServices, requestBundle, FhirBaseUrl);
                 break;
             case PriorAuthorizationStatus.Pended:
-                responseBundle = _responseBuilder.BuildPendedResponse(claim, kept.AuthorizationNumber, kept.RequestedServices);
+                responseBundle = _responseBuilder.BuildPendedResponse(claim, kept.AuthorizationNumber, kept.RequestedServices, requestBundle, FhirBaseUrl);
+                await WatchForDecisionAsync(record.RequestingProviderNPI, kept.AuthorizationNumber, HttpContext.RequestAborted);
                 break;
             default:
                 RecordMetrics(sw, "error", "unanswerable-stored-status");
@@ -332,6 +333,31 @@ public class PasController : FhirControllerBase
             LogSanitizer.Sanitize(answer.RuleName));
 
         return Ok(responseBundle);
+    }
+
+    /// <summary>
+    /// A pended request is watched, so the provider's PAS Subscription is told
+    /// when it is decided. Off unless Subscriptions are enabled; a failure to
+    /// watch never fails the $submit, whose answer is already stored.
+    /// </summary>
+    private async System.Threading.Tasks.Task WatchForDecisionAsync(string? providerNpi, string authorizationNumber, CancellationToken ct)
+    {
+        var subscriptions = HttpContext?.RequestServices?
+            .GetService<FhirService.Services.Subscriptions.PasSubscriptionService>();
+        if (subscriptions is not { Enabled: true })
+            return;
+
+        try
+        {
+            await subscriptions.Store.WatchAsync(new FhirService.Services.Subscriptions.PasPendedWatch(
+                TenantId, authorizationNumber, string.IsNullOrWhiteSpace(providerNpi) ? null : providerNpi,
+                DateTimeOffset.UtcNow), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "PAS $submit: authorization {AuthNumber} is pended but could not be watched "
+                + "for a Subscription notification", LogSanitizer.Sanitize(authorizationNumber));
+        }
     }
 
     /// <summary>Recorded on a pended request; the ClaimResponse says the same (queued for review).</summary>
@@ -468,7 +494,10 @@ public class PasController : FhirControllerBase
             });
         }
 
-        return Ok(_responseBuilder.BuildInquiryResponse(result.Authorization!));
+        // PAS 2.2.1's Claim/$inquire returns 0..* inquiry response Bundles,
+        // so the answer is a Parameters with one "return" per Bundle.
+        return Ok(PasInquiryResponse.Wrap(
+            _responseBuilder.BuildInquiryResponse(result.Authorization!, requestBundle, FhirBaseUrl)));
     }
 
     /// <summary>
@@ -666,10 +695,20 @@ public class PasController : FhirControllerBase
 
     // ── Input validation ─────────────────────────────────────────────────────
 
+    /// <summary>
+    /// The resource types a request bundle may carry: those the PAS 2.2.1
+    /// request bundle profiles (the Claim, its subscriber and beneficiary,
+    /// coverage, insurer, requestor and provider as Practitioner,
+    /// PractitionerRole or Organization, its location and encounter, and the
+    /// ordered service as a ServiceRequest, DeviceRequest, MedicationRequest,
+    /// NutritionOrder or CommunicationRequest, with the Device a DeviceRequest
+    /// names), plus the clinical and documentation resources CHO reads.
+    /// </summary>
     private static readonly HashSet<string> AllowedResourceTypes = new(StringComparer.Ordinal)
     {
-        "Claim", "Patient", "Coverage", "Practitioner",
-        "Organization", "Condition", "Observation", "ServiceRequest",
+        "Claim", "Patient", "Coverage", "Practitioner", "PractitionerRole",
+        "Organization", "Location", "Encounter", "Condition", "Observation",
+        "ServiceRequest", "DeviceRequest", "MedicationRequest", "NutritionOrder", "CommunicationRequest", "Device",
         "DocumentReference", "QuestionnaireResponse"
     };
 
@@ -793,4 +832,23 @@ public class PasController : FhirControllerBase
             Status = "Unavailable",
         };
     }
+}
+
+/// <summary>
+/// The PAS 2.2.1 <c>Claim/$inquire</c> answer: its output parameter
+/// <c>return</c> is 0..*, so (FHIR operations) the response is a Parameters,
+/// not a bare Bundle.
+/// </summary>
+public static class PasInquiryResponse
+{
+    public const string ReturnParameter = "return";
+
+    public static Parameters Wrap(Bundle bundle) => new()
+    {
+        Parameter = [new Parameters.ParameterComponent { Name = ReturnParameter, Resource = bundle }],
+    };
+
+    /// <summary>The inquiry response Bundles in a $inquire answer.</summary>
+    public static IEnumerable<Bundle> Bundles(Parameters parameters)
+        => parameters.Parameter.Where(p => p.Name == ReturnParameter).Select(p => p.Resource).OfType<Bundle>();
 }

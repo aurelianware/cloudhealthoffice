@@ -57,7 +57,8 @@ public class SmartScopeEnforcementMiddleware
             "Communication",
             "DocumentReference",
             "ClaimResponse",
-            "QuestionnaireResponse"
+            "QuestionnaireResponse",
+            "Subscription"
         }.Concat(ClinicalResourceInventory.ResourceTypes),
         StringComparer.OrdinalIgnoreCase);
 

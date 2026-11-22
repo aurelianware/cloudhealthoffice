@@ -539,10 +539,12 @@ public sealed class InfernoRunner
         string testRunId,
         TimeSpan timeout,
         TimeSpan pollInterval,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<InfernoResult, CancellationToken, Task>? onWaiting = null)
     {
         var deadline = DateTimeOffset.UtcNow + timeout;
         InfernoTestRun? last = null;
+        var answered = new HashSet<string>(StringComparer.Ordinal);
 
         while (DateTimeOffset.UtcNow < deadline)
         {
@@ -555,6 +557,26 @@ public sealed class InfernoRunner
                 return last;
             }
 
+            // A test that waits is asking for something outside Inferno: a
+            // user to sign in, an EHR to launch the app, a payer to decide a
+            // pended request. The scenario plays that part, once per wait.
+            if (onWaiting is not null)
+            {
+                foreach (var waiting in last.Results.Where(r => r.Result == "wait" && answered.Add(r.Id)))
+                {
+                    try
+                    {
+                        await onWaiting(waiting, cancellationToken);
+                    }
+                    catch (InteropEnvironmentException ex)
+                    {
+                        // A wait the harness cannot answer ends the run here; say
+                        // what the kit had found by then, or that is lost too.
+                        throw new InteropEnvironmentException(ex.Message + ResultsSoFar(last));
+                    }
+                }
+            }
+
             await Task.Delay(pollInterval, cancellationToken);
         }
 
@@ -562,6 +584,19 @@ public sealed class InfernoRunner
             $"Inferno test run '{testRunId}' did not finish within {timeout.TotalMinutes:0} minutes " +
             $"(last status: {last?.Status ?? "unknown"}).");
     }
+
+    /// <summary>The kit's results other than pass, skip and omit, for a run that stopped early.</summary>
+    internal static string ResultsSoFar(InfernoTestRun run)
+    {
+        var notable = run.Results
+            .Where(r => r.Result is not ("pass" or "skip" or "omit") && r.TestId is not null)
+            .Select(r => $"[{r.Result}] {r.TestId}: {Truncate(r.ResultMessage, 400)}")
+            .ToList();
+        return notable.Count == 0 ? " The kit had reported nothing else." : " The kit had reported: " + string.Join("; ", notable);
+    }
+
+    private static string Truncate(string? text, int max)
+        => string.IsNullOrEmpty(text) ? "(no message)" : text.Length <= max ? text : text[..max] + "…";
 
     /// <summary>
     /// Maps Inferno's result vocabulary into the harness's.

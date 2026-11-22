@@ -31,7 +31,8 @@ internal sealed class CrdContextResolverDouble : ICrdContextResolver
         PaLineOfBusiness lob = PaLineOfBusiness.Medicaid,
         string? program = null,
         DateOnly? memberDateOfBirth = null,
-        IReadOnlyList<string>? diagnosisCodes = null) =>
+        IReadOnlyList<string>? diagnosisCodes = null,
+        DateOnly? coverageEnd = null) =>
         new(CrdContextResolution.Resolved(new PaRuleContext
         {
             TenantId = "tenant",
@@ -46,10 +47,18 @@ internal sealed class CrdContextResolverDouble : ICrdContextResolver
             DiagnosisCodes = diagnosisCodes ?? [],
             EstimatedCost = 0m,
             MemberDateOfBirth = memberDateOfBirth,
-        }));
+        }, coverageEnd));
 
     public static CrdContextResolverDouble Unresolved(CrdContextFailure failure) =>
         new(CrdContextResolution.Unresolved(failure));
+
+    /// <summary>A known member with active coverage whose rule context could not be completed.</summary>
+    public static CrdContextResolverDouble Incomplete(string memberId, DateOnly? coverageEnd = null) =>
+        new(CrdContextResolution.Unresolved(CrdContextFailure.ContextIncomplete) with
+        {
+            MemberId = memberId,
+            CoverageEnd = coverageEnd,
+        });
 
     public Task<CrdContextResolution> ResolveAsync(
         CrdHookRequest request, string tenantId, IReadOnlyList<string> procedureCodes,
