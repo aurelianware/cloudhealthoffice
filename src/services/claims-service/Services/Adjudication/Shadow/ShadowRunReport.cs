@@ -136,10 +136,16 @@ public static class ShadowRunReportBuilder
     /// ("Stage: reason"), or "Pricing" for an allowed difference and
     /// "BenefitCalculation" for a payment or member-share difference when no
     /// stage reported one (the claim passed every stage, the amounts differ).
+    /// A claim held for provider screening was compared as CHO decides it once
+    /// the provider clears, so the screening hold does not drive its difference
+    /// (the report counts those holds on their own, in HeldForProviderScreening).
     /// </summary>
     internal static string DrivingStage(ShadowAdjudicationResult r)
     {
-        if (r.ChoStageFindings.FirstOrDefault() is { Length: > 0 } finding)
+        var findings = r.HeldForProviderScreening
+            ? r.ChoStageFindings.Where(f => !f.StartsWith(Stages.ProviderIntegrityStage.StageName, StringComparison.Ordinal))
+            : r.ChoStageFindings;
+        if (findings.FirstOrDefault() is { Length: > 0 } finding)
         {
             var colon = finding.IndexOf(':');
             return colon > 0 ? finding[..colon] : finding;

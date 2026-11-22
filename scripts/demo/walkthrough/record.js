@@ -108,7 +108,9 @@ async function searchClaimsForMember(page) {
 const claimButtons = (page) => page.locator('td[data-label="Claim #"] button');
 
 async function openFirstTexasClaim(page) {
-  await claimButtons(page).first().click();
+  // A medical claim (TXC-), not a pharmacy one (TXR-): it has the lines the caption describes.
+  const medical = claimButtons(page).filter({ hasText: /TXC-/ });
+  await ((await medical.count()) ? medical.first() : claimButtons(page).first()).click();
   await page.waitForURL(/\/claims\/[^/?]+/, { timeout: 20000 });
   await page.waitForTimeout(2000);
 }
@@ -146,7 +148,7 @@ async function openTexasPoststabilization(page) {
 const TEXAS = [
   { card: ['Texas Medicaid on Cloud Health Office',
     'A plan keeps its core system. CHO takes the core\'s nightly CPCDS file and adds CMS-0057-F APIs, a second opinion on every claim, and the Texas prior-authorization clocks. Every record shown is synthetic.'],
-    caption: 'A three-minute tour of a synthetic Texas Medicaid plan.' },
+    caption: 'A two-minute tour of a synthetic Texas Medicaid plan.' },
   { path: '/edi-transactions', caption: 'The daily file drop: members and coverage load first, then medical and pharmacy claims and UM authorizations. Counts for each file, nothing refused.' },
   { path: `/members/${TX_MEMBER}/coverage`, caption: 'A STAR member loaded from the drop, with coverage mapped from the core\'s plan code.' },
   { path: '/claims', action: searchClaimsForMember, caption: 'This member\'s claims, as the core paid them. The same records serve Patient Access and Provider Access as CARIN Blue Button EOBs.' },

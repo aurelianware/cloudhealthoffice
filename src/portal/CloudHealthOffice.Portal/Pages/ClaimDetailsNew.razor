@@ -384,11 +384,15 @@
                         <MudText Typo="Typo.h6" GutterBottom="true">Member Information</MudText>
                         <MudDivider Class="my-3" />
                         <MudStack Spacing="2">
-                            <div>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">Subscriber</MudText>
-                                <MudText Typo="Typo.body2">@_claim.SubscriberName (@_claim.SubscriberId)</MudText>
-                            </div>
-                            @if (_claim.PatientName != _claim.SubscriberName)
+                            @* A claim loaded from a core extract may carry no subscriber block: show what is there. *@
+                            @if (!string.IsNullOrWhiteSpace(_claim.SubscriberName) || !string.IsNullOrWhiteSpace(_claim.SubscriberId))
+                            {
+                                <div>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Subscriber</MudText>
+                                    <MudText Typo="Typo.body2">@SubscriberLine(_claim.SubscriberName, _claim.SubscriberId)</MudText>
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_claim.PatientName) && _claim.PatientName != _claim.SubscriberName)
                             {
                                 <div>
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">Patient</MudText>
@@ -1213,6 +1217,11 @@
 </MudContainer>
 
 @code {
+    /// <summary>"Name (id)", or whichever of the two the claim carries.</summary>
+    internal static string SubscriberLine(string? name, string? id) =>
+        string.IsNullOrWhiteSpace(id) ? name ?? string.Empty
+        : string.IsNullOrWhiteSpace(name) ? id : $"{name} ({id})";
+
     [Parameter]
     public string ClaimId { get; set; } = string.Empty;
 

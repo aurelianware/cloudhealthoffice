@@ -291,7 +291,7 @@
                                     <td>@Outcome(r.ChoOutcome, r.ChoDenialCode ?? r.ChoPendCode)</td>
                                     <td>@Money(r.CorePaid)</td>
                                     <td>@(r.Kind == ShadowKinds.ChoUndecided ? "" : Money(r.ChoPaid))</td>
-                                    <td style="max-width: 420px;">@(r.ChoPendReason ?? r.ChoStageFindings.FirstOrDefault())</td>
+                                    <td style="max-width: 420px;">@ShadowKinds.Why(r)</td>
                                 </tr>
                             }
                         </tbody>

@@ -2,6 +2,8 @@ namespace CloudHealthOffice.Portal.Services;
 
 public class AuthorizationDetails : AuthorizationSummary
 {
+    /// <summary>The requesting provider's NPI (authorization-service <c>requestingProviderNPI</c>).</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("requestingProviderNPI")]
     public string ProviderId { get; set; } = string.Empty;
     public string DiagnosisCode { get; set; } = string.Empty;
     public string DiagnosisDescription { get; set; } = string.Empty;
