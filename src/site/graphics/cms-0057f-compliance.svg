@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="t d">
   <title id="t">CMS-0057-F status by API, November 2026</title>
-  <desc id="d">Per-API CMS-0057-F status for Cloud Health Office. Acceptance scenarios from the ePA gap matrix section 11, published November 22, 2026: 6 PASSABLE, 15 PARTIAL and 0 GAP of 21. Inferno, on synthetic data: seven of eight ONC Inferno test kits pass (US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data, Da Vinci PDex member match and Da Vinci DTR in the nightly run of November 21, 2026; Da Vinci CRD and SMART App Launch on November 22, 2026). The Da Vinci PAS kit passes every use case; six must-support tests remain open. Every API is PARTIAL on acceptance; Provider Directory has no acceptance scenario. Not certification.</desc>
+  <desc id="d">Per-API CMS-0057-F status for Cloud Health Office. Acceptance scenarios from the ePA gap matrix section 11, published November 22, 2026: 6 PASSABLE, 15 PARTIAL and 0 GAP of 21. Inferno, on synthetic data: eight of nine ONC Inferno test kits pass (US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data, Da Vinci PDex member match and Da Vinci DTR in the nightly run of November 21, 2026; Da Vinci CRD and SMART App Launch on November 22, 2026). The Da Vinci PAS kit passes every use case; six must-support tests remain open. Every API is PARTIAL on acceptance; Provider Directory has no acceptance scenario. Not certification.</desc>
   <defs>
     <filter id="glow">
       <feGaussianBlur stdDeviation="3" result="blur"/>
@@ -10,7 +10,7 @@
   <rect width="1200" height="700" fill="#000000"/>
   <text x="600" y="50" font-family="Segoe UI, system-ui, sans-serif" font-size="32" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">Cloud Health Office</text>
   <text x="600" y="84" font-family="Segoe UI, system-ui, sans-serif" font-size="22" font-weight="700" fill="#00ffff" text-anchor="middle" filter="url(#glow)">CMS-0057-F status by API</text>
-  <text x="600" y="112" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">21 acceptance scenarios: <tspan fill="#00ff88">6 PASSABLE</tspan> · <tspan fill="#ffb020">15 PARTIAL</tspan> · <tspan fill="#ff4d6d">0 GAP</tspan>   |   Inferno test kits: <tspan fill="#00ff88">7 of 8 passed</tspan></text>
+  <text x="600" y="112" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">21 acceptance scenarios: <tspan fill="#00ff88">6 PASSABLE</tspan> · <tspan fill="#ffb020">15 PARTIAL</tspan> · <tspan fill="#ff4d6d">0 GAP</tspan>   |   Inferno test kits: <tspan fill="#00ff88">8 of 9 passed</tspan></text>
 
   <!-- Patient Access API -->
   <g transform="translate(30, 134)">
