@@ -218,4 +218,21 @@ public class ClaimAccessAuditTests : IClassFixture<ClaimsApiFactory>
         Assert.Equal(new[] { a.Id, b.Id }, recent.Select(r => r.ClaimId).ToArray());
         Assert.Equal(a.ClaimNumber, recent[0].ClaimNumber);
     }
+
+    [Fact]
+    public async Task Recently_viewed_skips_claims_that_no_longer_exist()
+    {
+        var kept = Seed();
+        var removed = Seed();
+        var me = Client(ChoRolePermissions.ClaimsExaminer, "examiner-removed");
+        await me.GetAsync($"/api/claims/{kept.Id}");
+        await me.GetAsync($"/api/claims/{removed.Id}");
+        _factory.ClaimRepository.GetByIdAsync(removed.Id).Returns((Claim?)null);
+
+        var recent = await me.GetFromJsonAsync<List<global::ClaimsService.Controllers.RecentClaimView>>("/api/claims/recently-viewed", Json);
+
+        Assert.NotNull(recent);
+        Assert.Equal(new[] { kept.Id }, recent.Select(r => r.ClaimId).ToArray());
+        Assert.Equal(2, _factory.AccessAudit.All.Count(e => e.ActorId == "examiner-removed" && e.Action == ClaimAccessActions.View));
+    }
 }
