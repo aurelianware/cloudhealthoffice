@@ -233,3 +233,20 @@ def test_drop_run_fails_when_a_run_failed(monkeypatch):
     now = dt.datetime.now(UTC)
     _fake_drop(monkeypatch, [[_run("r", ["a_members.csv"], now, status="Failed")]])
     assert tx_demo.cmd_drop_run(argparse.Namespace(expect=["a_members.csv"], wait=60)) == 1
+
+
+def test_thanksgiving_week_the_earlier_federal_clock_stands():
+    # The live seed on Sun 2026-11-22: three Texas business days from Saturday skip
+    # Thanksgiving and the day after, past the federal 7 days. CHO keeps the federal one.
+    now = dt.datetime(2026, 11, 22, 17, 42, tzinfo=UTC)
+    members, _ = tx_demo.build_members(random.Random(48), 120, now.date())
+    holidays = {dt.date.fromisoformat(d) for d in tx_demo.DEMO_HOLIDAYS}
+    mri = next(fx for fx in tx_demo.build_pa_fixtures(now, members, holidays)
+               if fx["authorizationNumber"].endswith("OUTPATIENT-MRI"))
+    exp = mri["_expected"]
+    assert exp["texasDue"] == dt.datetime(2026, 11, 30, 0, 0, tzinfo=CT)
+    assert exp["federalDue"].astimezone(CT) == dt.datetime(2026, 11, 28, 9, 42, tzinfo=CT)
+    stored = exp["federalDue"]
+    assert tx_demo.clock_agrees(exp, stored, "cho-receipt-v1+tx-gc-540-v1:NotHospitalized")
+    assert not tx_demo.clock_agrees(exp, exp["texasDue"], "cho-receipt-v1+tx-gc-540-v1:NotHospitalized")
+    assert not tx_demo.clock_agrees(exp, stored, "cho-receipt-v1")  # no Texas policy: not on the Texas clock

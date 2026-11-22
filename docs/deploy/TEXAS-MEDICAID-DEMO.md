@@ -142,6 +142,10 @@ the portal are UTC; `seed-pa` prints them in Central time.
 
 Talking points to keep straight:
 
+- In a holiday week the federal clock can be the earlier one: three Texas
+  business days from a weekend request skip Thanksgiving and the day after,
+  past the federal 7 days. CHO keeps the earlier deadline, and `seed-pa` says
+  so on those requests. Show it: it is the "earlier clock wins" rule.
 - Texas Medicaid dental is carved out to dental maintenance organizations, so
   the demo has no dental claims.
 - The Texas clocks apply to requests CHO receives (PAS `$submit`, the portal).
