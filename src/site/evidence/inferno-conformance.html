@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Inferno Conformance Results for Payer FHIR APIs — Cloud Health Office</title>
-  <meta name="description" content="Nightly results from six ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data with SMART Backend Services, Da Vinci PDex and Da Vinci DTR. Failures and known kit issues included." />
+  <meta name="description" content="Nightly results from nine ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data, Da Vinci PDex, DTR, CRD and PAS, and SMART App Launch. Failures and known kit issues included." />
   <meta name="author" content="Aurelianware, Inc." />
   <link rel="canonical" href="https://cloudhealthoffice.com/evidence/inferno-conformance" />
 
@@ -12,11 +12,11 @@
   <meta property="og:site_name" content="Cloud Health Office" />
   <meta property="og:url" content="https://cloudhealthoffice.com/evidence/inferno-conformance" />
   <meta property="og:title" content="Judged every night by tests we did not write" />
-  <meta property="og:description" content="Nightly results from six ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data with SMART Backend Services, Da Vinci PDex and Da Vinci DTR. Failures and known kit issues included." />
+  <meta property="og:description" content="Nightly results from nine ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data, Da Vinci PDex, DTR, CRD and PAS, and SMART App Launch. Failures and known kit issues included." />
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/evidence/evidence-model.svg" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Judged every night by tests we did not write" />
-  <meta name="twitter:description" content="Nightly results from six ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data with SMART Backend Services, Da Vinci PDex and Da Vinci DTR. Failures and known kit issues included." />
+  <meta name="twitter:description" content="Nightly results from nine ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data, Da Vinci PDex, DTR, CRD and PAS, and SMART App Launch. Failures and known kit issues included." />
   <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/evidence/evidence-model.svg" />
 
   <script type="application/ld+json">
@@ -26,7 +26,7 @@
     {
       "@type": "TechArticle",
       "headline": "Inferno conformance results",
-      "description": "Nightly results from six ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data with SMART Backend Services, Da Vinci PDex and Da Vinci DTR. Failures and known kit issues included.",
+      "description": "Nightly results from nine ONC Inferno test kits run against Cloud Health Office: US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data, Da Vinci PDex, DTR, CRD and PAS, and SMART App Launch. Failures and known kit issues included.",
       "url": "https://cloudhealthoffice.com/evidence/inferno-conformance",
       "isPartOf": {
         "@type": "WebSite",
@@ -264,6 +264,24 @@
                 <td>Suite <code>dtr_payer_server_v220</code>: discovery, SMART Backend Services, the questionnaire operations and error logging. The kit plays a provider's DTR client against CHO's standard MRI form and its adaptive sleep-study form.</td>
                 <td>The Prior Authorization API, due January 1, 2027: the provider learns what documentation the plan needs and fills it in. DTR 2.2.0 is the guide CMS recommends for that step.</td>
               </tr>
+              <tr>
+                <td><span class="ev-what">Da Vinci CRD</span><p><a href="https://github.com/inferno-framework/davinci-crd-test-kit">davinci-crd-test-kit</a> v0.15.0</p></td>
+                <td>CDS Hooks discovery and its CRD configuration extensions; the CDS Hooks 2.0 client JWT; and the coverage-information answers to <code>order-sign</code>, <code>order-select</code> and the other hooks, including not-covered and technical-issue answers.</td>
+                <td>Suite <code>crd_server_v221</code>, all groups. The kit plays the EHR and signs each hook call; CHO trusts that one client by issuer and key set.</td>
+                <td>The Prior Authorization API, due January 1, 2027: the provider learns at order time whether authorization or documentation is needed. CRD 2.2.1 is the guide CMS recommends for that step.</td>
+              </tr>
+              <tr>
+                <td><span class="ev-what">Da Vinci PAS</span><p><a href="https://github.com/inferno-framework/davinci-pas-test-kit">davinci-pas-test-kit</a> v0.16.0</p></td>
+                <td><code>Claim/$submit</code> and <code>$inquire</code> for approved, denied and pended requests; claim updates; must-support elements of the request and response; the error cases; and the Subscriptions R4 backport notification of a pended decision.</td>
+                <td>Suite <code>davinci_pas_server_suite_v221</code>, all groups. The kit plays a provider's PAS client over SMART Backend Services. Every use case passes; six must-support tests fail and are logged as CHO gaps: optional ClaimResponse elements, CDex requests inside a PAS response, and replaced-authorization references.</td>
+                <td>The Prior Authorization API, due January 1, 2027: the request, the decision and its status. PAS 2.2.1 is the guide CMS recommends for it.</td>
+              </tr>
+              <tr>
+                <td><span class="ev-what">SMART App Launch</span><p><a href="https://github.com/inferno-framework/smart-app-launch-test-kit">smart-app-launch-test-kit</a> v1.0.3</p></td>
+                <td>SMART discovery, v2 scopes, standalone and EHR launch with refresh, Backend Services, and token introspection.</td>
+                <td>Suite <code>smart_stu2_2</code>: the full standalone launch, full EHR launch, Backend Services and token introspection groups, against <code>cho-smart-auth-service</code>.</td>
+                <td>The authorization every CMS-0057-F API sits behind: SMART App Launch for member apps on Patient Access, and Backend Services for provider and payer systems.</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -321,7 +339,7 @@
         <span class="ev-eyebrow">Reproducible</span>
         <h2>How the run works, and how to repeat it</h2>
         <p>
-          The nightly job starts a Cloud Health Office stack and the six kits together on an isolated network. It
+          The nightly job starts a Cloud Health Office stack and the nine kits together on an isolated network. It
           seeds synthetic members, claims, coverage and a provider directory, checks that Cloud Health Office
           answers its own <code>metadata</code> endpoint, and then hands each kit its inputs. Each kit is pinned to
           a release tag and commit in <code>interop/versions.json</code>. The groups each kit runs, and the known kit
@@ -346,7 +364,7 @@
             <li><strong>This is not certification.</strong> Running ONC's tool is not ONC, CMS or HL7 approval. CMS-0057-F has no certification program for payer APIs.</li>
             <li><strong>A pass covers the groups that ran, at that kit version.</strong> It isn't a pass of the whole implementation guide, and it isn't a pass of CMS-0057-F.</li>
             <li><strong>Synthetic data on a test stack.</strong> No production member data is involved, and no production deployment is claimed.</li>
-            <li><strong>Only part of prior authorization is judged by a kit.</strong> The Da Vinci DTR kit runs; no Inferno PAS or CRD kit runs here yet. PAS and CRD are evidenced by <a href="/evidence/davinci-interoperability">exchanges with the HL7 Da Vinci reference implementation</a>.</li>
+            <li><strong>The PAS kit does not fully pass yet.</strong> Every PAS use case passes, but six must-support tests fail and are logged as CHO gaps. PAS, CRD and DTR are also evidenced by <a href="/evidence/davinci-interoperability">exchanges with the HL7 Da Vinci reference implementation</a>.</li>
             <li><strong>Kit results and acceptance results stay separate.</strong> A kit result never changes a <a href="/insights/cms-0057-f/acceptance-scenarios">CMS-0057-F acceptance scenario</a> status, and the two are never combined into one score.</li>
           </ul>
         </div>
