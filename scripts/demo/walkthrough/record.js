@@ -73,17 +73,29 @@ async function searchClaimsForMember(page) {
   const member = page.locator('input[placeholder="Search by name or ID"]').first();
   try {
     await member.waitFor({ timeout: 20000 });
-    await member.click();
-    await member.pressSequentially(TX_MEMBER, { delay: 80 });
     const option = page.locator('.mud-popover-open .mud-list-item, .mud-popover-open [role="option"]', { hasText: TX_MEMBER }).first();
-    try {
-      await option.waitFor({ timeout: 10000 });
-      await option.click();
-    } catch {
-      // MudAutocomplete also takes the highlighted option from the keyboard.
-      await member.press('ArrowDown');
-      await member.press('Enter');
+    // A keystroke sent before the Blazor circuit is listening is lost (a run
+    // typed "XM7100001"), so check what the box holds and type again if needed.
+    let picked = false;
+    for (let attempt = 1; attempt <= 3 && !picked; attempt += 1) {
+      await page.waitForTimeout(attempt === 1 ? 1500 : 1000);
+      await member.click();
+      await member.fill('');
+      await member.pressSequentially(TX_MEMBER, { delay: 90 });
+      if ((await member.inputValue()) !== TX_MEMBER) continue;
+      try {
+        await option.waitFor({ timeout: 8000 });
+        await option.click();
+        picked = true;
+      } catch {
+        // MudAutocomplete also takes the highlighted option from the keyboard.
+        await member.press('ArrowDown');
+        await member.press('Enter');
+        await page.waitForTimeout(500);
+        picked = (await member.inputValue()).includes(`(${TX_MEMBER})`);
+      }
     }
+    if (!picked) throw new Error(`could not pick ${TX_MEMBER} in the Member box`);
     await page.waitForTimeout(800);
     await page.getByRole('button', { name: /^\s*Search\s*$/ }).first().click();
     // Each result row opens its claim from a button holding the claim number.
