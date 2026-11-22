@@ -183,18 +183,21 @@ cmd_drop() {
           -o jsonpath='{.items[0].metadata.name}')"
   [[ -n "$pod" ]] || die "no running claims-service pod"
   say "Dropping $(basename "$dir") into $TENANT/inbound on $pod"
-  kubectl exec -n "$NAMESPACE" "$pod" -- mkdir -p "/drops/$TENANT/inbound"
-  local f
+  local inbound="/drops/$TENANT/inbound" f names=()
+  kubectl exec -n "$NAMESPACE" "$pod" -- mkdir -p "$inbound"
   for f in "$dir"/*.csv; do
-    # Upload under a dot name, then rename: the drop ignores dot files, so it
-    # never reads a file still being copied.
-    kubectl cp "$f" "$NAMESPACE/$pod:/drops/$TENANT/inbound/.$(basename "$f")"
-    kubectl exec -n "$NAMESPACE" "$pod" -- mv "/drops/$TENANT/inbound/.$(basename "$f")" "/drops/$TENANT/inbound/$(basename "$f")"
+    # Upload under a dot name: the drop never reads dot files.
+    kubectl cp "$f" "$NAMESPACE/$pod:$inbound/.$(basename "$f")"
+    names+=("$(basename "$f")")
     echo "  $(basename "$f")"
   done
-  echo "  The worker loads it within a minute, or now:"
+  # Release the whole drop at once, with one timestamp, so the drop's worker
+  # sees every file become ready together and loads members before claims.
+  kubectl exec -n "$NAMESPACE" "$pod" -- sh -c \
+    'cd "$1" && shift && for f; do touch ".$f"; done && for f; do mv ".$f" "$f"; done' sh "$inbound" "${names[@]}"
+  echo "  Released. Waiting for the load (the quiet period is 15 seconds):"
   sleep 20
-  python3 "$HERE/tx_demo.py" drop-run
+  python3 "$HERE/tx_demo.py" drop-run --expect "${names[@]}"
 }
 
 cmd_seed() {

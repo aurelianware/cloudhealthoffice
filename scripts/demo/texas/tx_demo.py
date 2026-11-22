@@ -18,6 +18,7 @@ Standard library only. Talks to the services through the local ports that
                         its providers, plan code mappings, the fee schedule,
                         and the tenant's drop and shadow settings. Idempotent
   tx_demo.py drop-run   Load what is waiting in the drop now and print the run
+                        (--expect NAMES: wait until those files are loaded, by any run)
   tx_demo.py seed-pa    Open prior authorizations on each Texas decision clock
   tx_demo.py report     Drop freshness, the latest shadow run, the PA clocks
   tx_demo.py fhir       Patient Access reads for one synthetic member
@@ -38,6 +39,7 @@ import json
 import os
 import random
 import sys
+import time
 import uuid
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -594,17 +596,59 @@ def cmd_setup(_args) -> int:
 
 # ── drop-run ─────────────────────────────────────────────────────────────────
 
-def cmd_drop_run(_args) -> int:
+_EPOCH = dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
+
+
+def _run_summary(run: dict) -> str:
+    lines = [f"Run {run.get('id')}: {run.get('status')}"]
+    for step in run.get("steps") or []:
+        counts = {k: v for k, v in (step.get("counts") or {}).items() if v}
+        lines.append(f"  {step.get('name')}: {step.get('status')} {json.dumps(counts)}")
+        for err in (step.get("errors") or [])[:3]:
+            lines.append(f"    ! {str(err)[:200]}")
+    for note in run.get("notes") or []:
+        lines.append(f"  note: {note}")
+    return "\n".join(lines)
+
+
+def cmd_drop_run(args) -> int:
+    """Load what is waiting. With --expect, wait until every named file is in a finished run.
+
+    The drop's own worker polls the folder too, so a run asked for here and the
+    worker's run can each take part of the drop. Waiting on the file names
+    reports the drop whichever run loaded it.
+    """
     token = cho_demo.mint_token(TENANT)
-    status, _, body = _call("POST", f"{CLAIMS_URL}/api/v1/claims/import/cpcds/drops/run", token)
-    if status == 204:
-        print("Nothing ready in the drop yet (a file loads once it has been still for the quiet period).")
-        return 0
-    if status != 200:
-        print(f"drop run returned HTTP {status}: {str(body)[:500]}")
-        return 1
-    print(json.dumps(body, indent=2)[:4000])
-    return 0
+    expect = set(args.expect or [])
+    deadline = time.monotonic() + args.wait
+    # Only runs from this release: the same date's drop may have loaded earlier today.
+    since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=90))
+    while True:
+        status, _, body = _call("POST", f"{CLAIMS_URL}/api/v1/claims/import/cpcds/drops/run", token)
+        if status not in (200, 204):
+            print(f"drop run returned HTTP {status}: {str(body)[:500]}")
+            return 1
+        if not expect:
+            print(json.dumps(body, indent=2)[:4000] if status == 200 else
+                  "Nothing ready in the drop yet (a file loads once it has been still for the quiet period).")
+            return 0
+        status, _, runs = _call("GET", f"{CLAIMS_URL}/api/v1/claims/import/cpcds/drops?limit=20", token)
+        runs = runs if isinstance(runs, list) else []
+        mine = [r for r in runs if r.get("completedAt") and (_parse_utc(r.get("startedAt")) or _EPOCH) >= since
+                and expect & {f.get("name") for f in r.get("files") or []}]
+        loaded = {f.get("name") for r in mine for f in r.get("files") or []}
+        if expect <= loaded:
+            for run in sorted(mine, key=lambda r: r.get("startedAt") or ""):
+                print(_run_summary(run))
+            if len(mine) > 1:
+                print(f"Note: the drop loaded in {len(mine)} runs.")
+            return 0 if all(r.get("status") == "Succeeded" for r in mine) else 1
+        if time.monotonic() > deadline:
+            print(f"Still waiting on {sorted(expect - loaded)} after {args.wait}s.")
+            for run in mine:
+                print(_run_summary(run))
+            return 1
+        time.sleep(5)
 
 
 # ── seed-pa: the Texas decision clocks ───────────────────────────────────────
@@ -686,7 +730,7 @@ def build_pa_fixtures(now_utc: dt.datetime, members: list[dict], holidays: set[d
             "requestingProviderNPI": npi, "requestingProviderName": prov_name, "serviceTypeCode": "1",
             "requestedServiceDateFrom": cho_demo._iso(received + dt.timedelta(days=1)),
             "requestedServices": [{"procedureCode": code, "procedureDescription": desc, "requestedUnits": 1}],
-            "diagnosisCodes": [{"code": dx[0], "codeQualifier": "ABK", "description": dx[1]}],
+            "diagnosisCodes": [{"code": dx[0], "codeQualifier": "BK", "description": dx[1]}],
             "status": "Submitted", "submittedDate": cho_demo._iso(received), "createdDate": cho_demo._iso(received),
         }
         if scenario:
@@ -791,7 +835,10 @@ def main() -> int:
     gen.add_argument("--date", help="the drop's date (default: today in Central time)")
     gen.set_defaults(func=cmd_generate)
     sub.add_parser("setup").set_defaults(func=cmd_setup)
-    sub.add_parser("drop-run").set_defaults(func=cmd_drop_run)
+    drop_run = sub.add_parser("drop-run")
+    drop_run.add_argument("--expect", nargs="*", help="file names to wait for, loaded by this run or the worker's")
+    drop_run.add_argument("--wait", type=int, default=180, help="seconds to wait for --expect")
+    drop_run.set_defaults(func=cmd_drop_run)
     sub.add_parser("seed-pa").set_defaults(func=cmd_seed_pa)
     sub.add_parser("report").set_defaults(func=cmd_report)
     fhir = sub.add_parser("fhir")
