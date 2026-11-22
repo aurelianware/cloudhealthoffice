@@ -77,12 +77,16 @@ async function searchClaimsForMember(page) {
   await option.waitFor({ timeout: 15000 });
   await option.click();
   await page.getByRole('button', { name: /^\s*Search\s*$/ }).first().click();
-  await page.locator('a[href*="/claims/TX"]').first().waitFor({ timeout: 20000 });
+  // Each result row opens its claim from a button holding the claim number.
+  await claimButtons(page).first().waitFor({ timeout: 20000 });
 }
 
+const claimButtons = (page) => page.locator('td[data-label="Claim #"] button');
+
 async function openFirstTexasClaim(page) {
-  await page.locator('a[href*="/claims/TXC-"]').first().click();
-  await page.waitForLoadState('load');
+  await claimButtons(page).first().click();
+  await page.waitForURL(/\/claims\/[^/?]+/, { timeout: 20000 });
+  await page.waitForTimeout(2000);
 }
 
 async function openShadowReport(page) {
@@ -98,13 +102,15 @@ async function openShadowReport(page) {
 
 async function openTexasPoststabilization(page) {
   // The list is empty until searched. seed-pa opens the poststabilization
-  // request for the first synthetic member, as txpa-poststab-<MMDDHHMM>.
+  // request for the first synthetic member; the list links it by its number,
+  // TXPA-<MMDDHHMM>-POSTSTAB. Earlier runs' requests are cancelled, so take the open one.
   const memberId = page.locator('.mud-input-control', { hasText: 'Member ID' }).locator('input').first();
   await memberId.waitFor({ timeout: 15000 });
   await memberId.fill(TX_MEMBER);
   await memberId.press('Tab'); // Blazor binds the field on change
   await page.getByRole('button', { name: /^\s*Search\s*$/ }).first().click();
-  const link = page.locator('a[href*="/authorizations/txpa-poststab-"]').first();
+  const link = page.locator('tr', { hasText: /TXPA-\d+-POSTSTAB/ }).filter({ hasNotText: /Cancel/ })
+    .locator('[data-testid="authorization-link"]').last();
   await link.waitFor({ timeout: 20000 });
   await page.waitForTimeout(2500); // let the viewer see the result before opening it
   await link.click();
