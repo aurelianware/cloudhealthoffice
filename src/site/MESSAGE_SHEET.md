@@ -32,6 +32,13 @@ The homepage hero leads with the buying decision, in plain language for health p
 **Executive outcomes (homepage section and /health-plan-leaders):** Less dependence on one vendor · Compliance that keeps up · Data you own, ready for AI. Describe these as design goals and capabilities; never promise cost savings, a percentage or any financial outcome.
 The conformance check remains on the homepage directly after the shadow-trial section, with all of the conformance check facts below.
 
+## Savings scenario article — approved by Mark Phillips, November 22, 2026
+Applies only to `/insights/cms-0057-f/outsourced-core-cms-0057-f-blueprint` and copy that quotes it. It is a narrow exception to "never promise cost savings" above, not a change to the homepage or executive outcomes.
+**Headline:** Paying $30 Million a Year for an Outsourced Core? A Blueprint to Keep About $20 Million of It.
+**Rules:** The figure is always a worked, illustrative scenario with every assumption shown on the same page (200,000 members; outsourced BPaaS contract at $12.50 PMPM = $30.0M; license and Google Cloud hosting at an assumed $2.25 PMPM; 10-person platform team at $160K; 35 operations staff at $80K; difference $20.2M). Say "illustrative scenario", never "you will save". Readers can change every input. One-time transition and contract-exit costs are always named as excluded. The $2.25 PMPM is a modelling assumption that combines license and hosting, never presented as a Cloud Health Office price. The BPaaS rate is an assumption, not a published market rate.
+**Never** name a prospect, a plan or an incumbent vendor as the source of the $30M figure.
+**Reinvesting in members** is a choice a plan can make with the money (care management, community health workers, faster prior authorization, member service, value-based programs), never a promised clinical or MLR outcome; MLR treatment is for the plan's actuaries and state contract.
+
 ## Previous homepage lead — approved by Mark Phillips, October 30, 2026 (superseded November 18, 2026)
 The homepage hero leads with the CMS-0057-F conformance check. Sovereignty stays the category and the reason to choose Cloud Health Office; the check is the reason to engage now.
 **Homepage H1:** Find and close your CMS-0057-F gaps, in your own cloud.
