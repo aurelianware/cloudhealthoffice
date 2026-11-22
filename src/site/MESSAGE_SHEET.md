@@ -32,6 +32,12 @@ The homepage hero leads with the buying decision, in plain language for health p
 **Executive outcomes (homepage section and /health-plan-leaders):** Less dependence on one vendor · Compliance that keeps up · Data you own, ready for AI. Describe these as design goals and capabilities; never promise cost savings, a percentage or any financial outcome.
 The conformance check remains on the homepage directly after the shadow-trial section, with all of the conformance check facts below.
 
+## Demo video page (/demo) — added November 22, 2026
+**H1:** Texas Medicaid on Cloud Health Office.
+**Lede:** A health plan keeps its core system. Cloud Health Office takes the core's daily CPCDS file and adds CMS-0057-F APIs, a second opinion on every claim, and the Texas prior authorization clocks.
+**Link copy (homepage Texas pillar, /schedule-demo):** Watch the two-minute Texas Medicaid demo.
+**Rules:** Always say the data is synthetic. Always carry "not a TMHP, HHSC or CMS certification" next to the video. Never present the demo plan as a customer or name a real plan. The shadow-adjudication finding (97110 paid at last year's rate) is a seeded example, not a measured result at a plan; describe it as what the demo shows, never as savings. The step list on the page follows the captions in scripts/demo/walkthrough/record.js; update both together.
+
 ## Savings scenario article — approved by Mark Phillips, November 22, 2026
 Applies only to `/insights/cms-0057-f/outsourced-core-cms-0057-f-blueprint` and copy that quotes it. It is a narrow exception to "never promise cost savings" above, not a change to the homepage or executive outcomes.
 **Headline:** Paying $30 Million a Year for an Outsourced Core? A Blueprint to Keep About $20 Million of It.

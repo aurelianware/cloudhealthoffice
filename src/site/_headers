@@ -44,3 +44,10 @@
 /graphics/*
   ! Cache-Control
   Cache-Control: public, max-age=604800
+
+# Demo videos keep stable names so a new take replaces the file in place
+# (scripts/demo/walkthrough/publish-to-site.sh); one day keeps a swap visible
+# by the next morning.
+/media/*
+  ! Cache-Control
+  Cache-Control: public, max-age=86400
