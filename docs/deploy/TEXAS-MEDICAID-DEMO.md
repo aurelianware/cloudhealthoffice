@@ -167,6 +167,8 @@ the whole video runs about 2 minutes. Download `texas.webm` and a screenshot
 per caption from the run's artifact. The job fails, and names the step, if a
 page did not render; the screenshots show what it saw.
 
+The requests are dated as received shortly before `seed-pa` runs; the poststabilization one (received 18 minutes earlier, due in an hour) runs out about 40 minutes after it. Before a showing or a recording, run **Texas Medicaid demo (on / off)** with action `clocks` (or `demo.sh clocks`): it reopens only the prior-authorization requests, in about a minute. One request is overdue by design.
+
 `seed-pa` first cancels open requests left by earlier runs (ids starting
 `txpa-`) and any open request more than a day past its deadline, so the
 console shows only today's Texas requests.
