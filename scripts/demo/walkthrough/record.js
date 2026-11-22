@@ -68,9 +68,16 @@ async function scrollDown(page) {
 }
 
 async function openTexasPoststabilization(page) {
-  // seed-pa names each request txpa-<scenario>-<MMDDHHMM>; open today's poststabilization one.
+  // The list is empty until searched. seed-pa opens the poststabilization
+  // request for the first synthetic member, as txpa-poststab-<MMDDHHMM>.
+  const memberId = page.locator('.mud-input-control', { hasText: 'Member ID' }).locator('input').first();
+  await memberId.waitFor({ timeout: 15000 });
+  await memberId.fill(TX_MEMBER);
+  await memberId.press('Tab'); // Blazor binds the field on change
+  await page.getByRole('button', { name: /^\s*Search\s*$/ }).first().click();
   const link = page.locator('a[href*="/authorizations/txpa-poststab-"]').first();
-  await link.waitFor({ timeout: 15000 });
+  await link.waitFor({ timeout: 20000 });
+  await page.waitForTimeout(2500); // let the viewer see the result before opening it
   await link.click();
   await page.waitForLoadState('load');
 }
