@@ -135,7 +135,7 @@ public class PasController : FhirControllerBase
                     LogSanitizer.Sanitize(TenantId),
                     LogSanitizer.Sanitize(string.Join(", ", mapping.Errors.Select(e => e.Expression))));
                 RecordMetrics(sw, "rejected", "incomplete-request");
-                return IncompleteRequest(mapping.Errors);
+                return IncompleteRequest(requestBundle, claim, mapping.Errors);
             }
             var record = mapping.Request!;
 
@@ -412,18 +412,15 @@ public class PasController : FhirControllerBase
                && string.Equals(lineOfBusiness.ToString(), recorded, StringComparison.Ordinal);
     }
 
-    /// <summary>422 listing every element the request lacks; nothing was decided or stored.</summary>
-    private IActionResult IncompleteRequest(IReadOnlyList<PasMappingError> errors)
-        => StatusCode(422, new OperationOutcome
-        {
-            Issue = errors.Select(e => new OperationOutcome.IssueComponent
-            {
-                Severity = OperationOutcome.IssueSeverity.Error,
-                Code = OperationOutcome.IssueType.Required,
-                Diagnostics = e.Message,
-                Expression = [e.Expression],
-            }).ToList(),
-        });
+    /// <summary>
+    /// A request CHO cannot record as sent: the PAS response says so in X12
+    /// AAA terms (<c>ClaimResponse.error</c>, outcome error), one error per
+    /// element the request lacks. Nothing was decided or stored and no
+    /// <c>preAuthRef</c> is issued (D-01).
+    /// </summary>
+    private IActionResult IncompleteRequest(Bundle requestBundle, Claim claim, IReadOnlyList<PasMappingError> errors)
+        => Ok(_responseBuilder.BuildErrorResponse(
+            claim, errors.Select(PasRequestErrors.FromMapping).ToList(), requestBundle, FhirBaseUrl));
 
     /// <summary>The request was valid but could not be stored: 503 when that may pass, 502 otherwise.</summary>
     private IActionResult NotRecorded(PasRecordFailure failure)
@@ -504,20 +501,10 @@ public class PasController : FhirControllerBase
 
             // Everything about a RECORD gets ONE answer. "Wrong tenant", "not
             // yours" and "no such authorization" must be indistinguishable, or
-            // the identifier space can be probed for what exists.
-            return StatusCode(404, new OperationOutcome
-            {
-                Issue =
-                [
-                    new OperationOutcome.IssueComponent
-                    {
-                        Severity = OperationOutcome.IssueSeverity.Error,
-                        Code = OperationOutcome.IssueType.NotFound,
-                        Diagnostics =
-                            "No prior authorization matching the supplied identifiers is available.",
-                    }
-                ]
-            });
+            // the identifier space can be probed for what exists. PAS states
+            // it as the 278 does: X12 AA, authorization number not found.
+            return Ok(PasInquiryResponse.Wrap(
+                _responseBuilder.BuildInquiryErrorResponse(requestBundle, PasRequestErrors.InquiryNotMatched(), FhirBaseUrl)));
         }
 
         // PAS 2.2.1's Claim/$inquire returns 0..* inquiry response Bundles,

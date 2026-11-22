@@ -53,8 +53,10 @@ public sealed class KitHarnessRequestTests
 
     private static JsonObject KitPasRequest() => JsonNode.Parse("""
         {"resourceType":"Bundle","identifier":{"system":"urn:example","value":"b1"},"entry":[
-          {"resource":{"resourceType":"Claim","identifier":[{"system":"http://davinci-pas.org/PATIENT_EVENT_TRACE_NUMBER","value":"111099"}],
-           "item":[{"sequence":1,"productOrService":{"coding":[{"system":"https://codesystem.x12.org/005010/1365","code":"3"}]}}]}}]}
+          {"fullUrl":"http://example.org/fhir/Claim/c1","resource":{"resourceType":"Claim","id":"c1",
+           "identifier":[{"system":"http://davinci-pas.org/PATIENT_EVENT_TRACE_NUMBER","value":"111099"}],
+           "item":[{"sequence":1,"productOrService":{"coding":[{"system":"https://codesystem.x12.org/005010/1365","code":"3"}]},"quantity":{"value":1,"unit":"visit"}},
+                   {"sequence":2,"productOrService":{"coding":[{"system":"https://codesystem.x12.org/005010/1365","code":"3"}]},"quantity":{"value":1,"unit":"visit"}}]}}]}
         """)!.AsObject();
 
     [Fact]
@@ -64,7 +66,8 @@ public sealed class KitHarnessRequestTests
 
         var added = PasServerRequests.MustSupportAdditions("must_support_pa_submit_request_payload", [kit]);
 
-        var claim = added.Should().ContainSingle().Subject["entry"]![0]!["resource"]!;
+        added.Should().HaveCount(2);
+        var claim = added[0]["entry"]![0]!["resource"]!;
         claim["identifier"]![0]!["value"]!.GetValue<string>().Should().Be(PasServerRequests.DocumentationPendIdentifier);
         claim["item"]![0]!["productOrService"]!["coding"]![0]!["code"]!.GetValue<string>()
             .Should().Be(PasServerRequests.PendedServiceType);
@@ -73,13 +76,33 @@ public sealed class KitHarnessRequestTests
     }
 
     [Fact]
-    public void The_pas_must_support_inquiry_gains_one_about_that_pend_and_nothing_else_does()
+    public void The_refused_must_support_request_asks_for_no_units_on_an_unnamed_claim()
+    {
+        var kit = KitPasRequest();
+
+        var refused = PasServerRequests.MustSupportAdditions("must_support_pa_submit_request_payload", [kit])[1];
+
+        var entry = refused["entry"]![0]!;
+        entry["fullUrl"]!.GetValue<string>().Should().Be(PasServerRequests.UnnamedClaimFullUrl);
+        var claim = entry["resource"]!.AsObject();
+        claim.ContainsKey("id").Should().BeFalse();
+        claim["identifier"]![0]!["value"]!.GetValue<string>().Should().Be(PasServerRequests.RefusedRequestIdentifier);
+        var quantities = claim["item"]!.AsArray().Select(i => decimal.Parse(i!["quantity"]!["value"]!.ToJsonString())).ToList();
+        quantities[^1].Should().Be(0);
+        quantities[..^1].Should().OnlyContain(q => q != 0, "only one line is wrong, so the error names one line");
+        kit["entry"]![0]!["resource"]!["id"].Should().NotBeNull("the kit's own request is left as it is");
+    }
+
+    [Fact]
+    public void The_pas_must_support_inquiry_gains_one_about_that_pend_and_one_about_an_unknown_request()
     {
         var added = PasServerRequests.MustSupportAdditions("must_support_pa_inquire_request_payload", [KitPasRequest()]);
 
-        var claim = added.Should().ContainSingle().Subject["entry"]![0]!["resource"]!;
-        claim["identifier"]![0]!["value"]!.GetValue<string>().Should().Be(PasServerRequests.DocumentationPendIdentifier);
+        added.Select(b => b["entry"]![0]!["resource"]!["identifier"]![0]!["value"]!.GetValue<string>())
+            .Should().Equal(PasServerRequests.DocumentationPendIdentifier, PasServerRequests.RefusedRequestIdentifier);
+        var claim = added[0]["entry"]![0]!["resource"]!;
         claim["item"]![0]!["productOrService"]!["coding"]![0]!["code"]!.GetValue<string>().Should().Be("3");
+        added[1]["entry"]![0]!["resource"]!["id"].Should().NotBeNull("an inquiry about an unknown request is otherwise the kit's own");
 
         PasServerRequests.MustSupportAdditions("approval_pa_submit_request_payload", [KitPasRequest()]).Should().BeEmpty();
     }

@@ -274,7 +274,7 @@ public class PasResponseBuilder
         {
             if (inquiryClaim.Insurer?.Reference is not null) claimResponse.Insurer = inquiryClaim.Insurer;
             if (inquiryClaim.Provider?.Reference is not null) claimResponse.Requestor = inquiryClaim.Provider;
-            if (inquiryClaim.Id is not null) claimResponse.Request = new ResourceReference($"Claim/{inquiryClaim.Id}");
+            claimResponse.Request = RequestReference(inquiryClaim, "Prior authorization inquiry");
         }
 
         // A denial says why, in the same shape $submit uses. See DenialNote.
@@ -453,8 +453,109 @@ public class PasResponseBuilder
             Insurer = claim.Insurer ?? new ResourceReference { Display = "CHO Payer" },
             // The party that asked: PAS names it on the response as the request did.
             Requestor = claim.Provider,
-            Request = new ResourceReference($"Claim/{claim.Id}"),
+            Request = RequestReference(claim),
         };
+    }
+
+    private const string DataAbsentReasonUrl = "http://hl7.org/fhir/StructureDefinition/data-absent-reason";
+
+    /// <summary>
+    /// The back-reference to the request's Claim. A Claim the request gave no
+    /// id (only a <c>urn:uuid</c> fullUrl) cannot be referenced from the
+    /// response, which does not echo it: the reference then names the Claim by
+    /// its identifier and says why the reference itself is absent.
+    /// </summary>
+    internal static ResourceReference RequestReference(Claim? claim, string? display = null)
+    {
+        if (!string.IsNullOrWhiteSpace(claim?.Id))
+            return new ResourceReference($"Claim/{claim.Id}");
+
+        var reference = new ResourceReference
+        {
+            Type = "Claim",
+            Identifier = claim?.Identifier.FirstOrDefault(i => !string.IsNullOrWhiteSpace(i.Value))?.DeepCopy() as Identifier,
+            Display = display ?? "The request's Claim, which carries no id",
+        };
+        reference.Extension.Add(new Extension(DataAbsentReasonUrl, new Code("unknown")));
+        return reference;
+    }
+
+    /// <summary>
+    /// A PAS response to a request CHO cannot process as sent (PAS: "If the
+    /// request contains errors then an error element should be provided and no
+    /// adjudication related sections"): <c>outcome</c> error, one
+    /// <c>error</c> per problem with its X12 AAA codes, element and path, and a
+    /// note per problem in words. Nothing was decided or recorded, so there is
+    /// no <c>preAuthRef</c>.
+    /// </summary>
+    public Bundle BuildErrorResponse(
+        Claim claim, IReadOnlyList<Pas.PasRequestError> errors, Bundle? request = null, string? fhirBaseUrl = null)
+    {
+        var claimResponse = BuildBase(claim);
+        claimResponse.Outcome = ClaimProcessingCodes.Error;
+        claimResponse.Disposition = "The request contains errors and was not processed.";
+        AddErrors(claimResponse, errors);
+        PasResponseDetail.Apply(claimResponse, claim, request, new PasResponseContext(null, null, null, null, null));
+        return WrapInBundle(claimResponse, request, fhirBaseUrl);
+    }
+
+    /// <summary>
+    /// The PAS answer to an inquiry CHO holds no record for (or none this
+    /// caller may see; the answer is the same): <c>outcome</c> error with X12
+    /// <c>AA</c>, authorization number not found. The original request is not
+    /// known, so the back-reference says so.
+    /// </summary>
+    public Bundle BuildInquiryErrorResponse(Bundle request, Pas.PasRequestError error, string? fhirBaseUrl = null)
+    {
+        var inquiryClaim = request.Entry.Select(e => e.Resource).OfType<Claim>().FirstOrDefault();
+        var claimResponse = new ClaimResponse
+        {
+            Id = Guid.NewGuid().ToString(),
+            Meta = new Meta { Profile = new[] { PasClaimResponseProfile }, LastUpdated = DateTimeOffset.UtcNow },
+            Status = FinancialResourceStatusCodes.Active,
+            Type = inquiryClaim?.Type ?? new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
+            Use = ClaimUseCode.Preauthorization,
+            Patient = inquiryClaim?.Patient,
+            Created = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            Insurer = inquiryClaim?.Insurer?.Reference is not null ? inquiryClaim.Insurer : new ResourceReference { Display = "CHO Payer" },
+            Requestor = inquiryClaim?.Provider,
+            Outcome = ClaimProcessingCodes.Error,
+            Disposition = "No prior authorization matches the inquiry.",
+        };
+        var unknown = new ResourceReference { Type = "Claim", Display = "The prior authorization request the inquiry names is not known." };
+        unknown.Extension.Add(new Extension(DataAbsentReasonUrl, new Code("unknown")));
+        claimResponse.Request = unknown;
+        AddErrors(claimResponse, [error]);
+        PasResponseDetail.Apply(claimResponse, inquiryClaim, request, new PasResponseContext(null, null, null, null, null));
+        return WrapInBundle(claimResponse, request, fhirBaseUrl);
+    }
+
+    private const string ErrorElementUrl = "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-errorElement";
+    private const string ErrorPathUrl = "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-errorPath";
+    private const string ErrorFollowupUrl = "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-errorFollowupAction";
+
+    private static void AddErrors(ClaimResponse claimResponse, IEnumerable<Pas.PasRequestError> errors)
+    {
+        foreach (var error in errors)
+        {
+            var component = new ClaimResponse.ErrorComponent
+            {
+                Code = new CodeableConcept(Pas.PasRequestErrors.RejectReasonSystem, error.Code),
+                ItemSequence = error.ItemSequence,
+            };
+            // The problem in words, as a note the error element points at.
+            AddNote(claimResponse, new ClaimResponse.NoteComponent { Type = Hl7.Fhir.Model.NoteType.Print, Text = error.Message });
+            var element = new Extension { Url = ErrorElementUrl };
+            if (claimResponse.ProcessNote.LastOrDefault()?.Number is { } note)
+                element.Extension.Add(new Extension("processNote", new PositiveInt(note)));
+            if (!string.IsNullOrWhiteSpace(error.X12Element))
+                element.Extension.Add(new Extension("error", new FhirString(error.X12Element)));
+            component.Extension.Add(element);
+            component.Extension.Add(new Extension(ErrorPathUrl, new FhirString(error.ErrorPath)));
+            component.Extension.Add(new Extension(ErrorFollowupUrl,
+                new CodeableConcept(Pas.PasRequestErrors.FollowUpActionSystem, error.FollowUpAction)));
+            claimResponse.Error.Add(component);
+        }
     }
 
     /// <summary>The system CHO identifies its PAS response bundles under (PAS: Bundle.identifier 1..1).</summary>

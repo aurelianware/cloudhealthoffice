@@ -131,12 +131,30 @@ public static class PasServerRequests
     private const string PatientEventTraceSystem = "http://davinci-pas.org/PATIENT_EVENT_TRACE_NUMBER";
 
     /// <summary>
-    /// The requests CHO adds to the kit's must-support inputs. A copy of the
-    /// kit's first request for a service that needs documentation
-    /// (<see cref="PendedServiceType"/>): CHO pends it and asks for what it
-    /// lacks, so the response carries a PAS Task and CommunicationRequest.
-    /// And an inquiry about exactly that request, so the inquiry response
-    /// carries the Task too. Each is the kit's own example, otherwise unchanged.
+    /// The submitter's identifier on CHO's must-support request that CHO
+    /// refuses (<see cref="RefusedRequest"/>), and on the inquiry for a
+    /// request CHO never received.
+    /// </summary>
+    public const string RefusedRequestIdentifier = "111099-PASERR";
+
+    /// <summary>The fullUrl of the refused request's Claim, which has no id.</summary>
+    public const string UnnamedClaimFullUrl = "urn:uuid:9b2e4f60-1c7a-4d2b-8e51-0f3c6a7d2e14";
+
+    /// <summary>
+    /// The requests CHO adds to the kit's must-support inputs (the kit asks
+    /// testers to supply requests that elicit every element), each a copy of
+    /// the kit's first request:
+    /// <list type="bullet">
+    /// <item>for a service that needs documentation (<see cref="PendedServiceType"/>):
+    /// CHO pends it and asks for what it lacks, so the response carries a PAS
+    /// Task and CommunicationRequest;</item>
+    /// <item>one CHO refuses (<see cref="RefusedRequest"/>), so the response
+    /// carries ClaimResponse.error and a request reference that says why it
+    /// cannot name the Claim.</item>
+    /// </list>
+    /// And the inquiries: one about exactly the pended request, so the
+    /// inquiry response carries the Task too, and one about a request CHO
+    /// never received, so it carries the error and the absent reference.
     /// </summary>
     public static IReadOnlyList<JsonObject> MustSupportAdditions(string input, IReadOnlyList<JsonObject> kitBundles)
     {
@@ -144,12 +162,40 @@ public static class PasServerRequests
             || input is not ("must_support_pa_submit_request_payload" or "must_support_pa_inquire_request_payload"))
             return [];
 
+        var submit = input == "must_support_pa_submit_request_payload";
         var pend = (JsonObject)kitBundles[0].DeepClone();
         if (!SetSubmitterIdentifier(pend, DocumentationPendIdentifier))
             return [];
-        if (input == "must_support_pa_submit_request_payload")
+        if (submit)
             SetServiceType(pend, PendedServiceType);
-        return [pend];
+
+        // The refused request is not stored, so an inquiry by its identifier
+        // finds nothing.
+        var refused = (JsonObject)kitBundles[0].DeepClone();
+        SetSubmitterIdentifier(refused, RefusedRequestIdentifier);
+        if (submit && !RefusedRequest(refused))
+            return [pend];
+        return [pend, refused];
+    }
+
+    /// <summary>
+    /// Makes a conformant request CHO refuses: its last service line asks for
+    /// no units (Claim.item.quantity 0), and its Claim has no id, only a <c>urn:uuid</c> fullUrl. The
+    /// response then names the Claim by identifier, with a data-absent reason
+    /// on the reference. False when the request has no line with a quantity.
+    /// </summary>
+    public static bool RefusedRequest(JsonObject bundle)
+    {
+        var entry = ((bundle["entry"] as JsonArray)?.OfType<JsonObject>() ?? [])
+            .FirstOrDefault(e => e["resource"]?["resourceType"]?.GetValue<string>() == "Claim");
+        if (entry?["resource"] is not JsonObject claim) return false;
+        var line = (claim["item"] as JsonArray)?.OfType<JsonObject>().LastOrDefault(i => i["quantity"] is JsonObject);
+        if (line is null) return false;
+
+        ((JsonObject)line["quantity"]!)["value"] = 0;
+        claim.Remove("id");
+        entry["fullUrl"] = UnnamedClaimFullUrl;
+        return true;
     }
 
     /// <summary>Replaces the Claim's patient-event trace number; false when it carries none.</summary>
