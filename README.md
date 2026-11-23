@@ -17,6 +17,9 @@ Current capability status and dated implementation/test evidence: [Capability Re
 [![Inferno Bulk Data](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fci-evidence%2Fbadges%2Finferno-bulk-data.json)](https://cloudhealthoffice.com/evidence/inferno-conformance)
 [![Inferno PDex](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fci-evidence%2Fbadges%2Finferno-pdex.json)](https://cloudhealthoffice.com/evidence/inferno-conformance)
 [![Inferno DTR](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fci-evidence%2Fbadges%2Finferno-dtr.json)](https://cloudhealthoffice.com/evidence/inferno-conformance)
+[![Inferno CRD](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fci-evidence%2Fbadges%2Finferno-crd.json)](https://cloudhealthoffice.com/evidence/inferno-conformance)
+[![Inferno PAS](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fci-evidence%2Fbadges%2Finferno-pas.json)](https://cloudhealthoffice.com/evidence/inferno-conformance)
+[![Inferno SMART](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fci-evidence%2Fbadges%2Finferno-smart.json)](https://cloudhealthoffice.com/evidence/inferno-conformance)
 
 CloudHealthOffice is a source-available, Kubernetes-first healthcare payer
 administration platform. It is built for teams modernizing claims, benefits,
@@ -194,9 +197,10 @@ harness runs CHO as the **provider-side client** against independent HL7 Da Vinc
 reference payer implementations running in their own containers, pinned by image
 digest. Today it shows a PAS `$submit` exchange, a CRD CDS Hooks exchange, and a
 CRD → DTR chain in which CHO follows the questionnaire canonical the payer itself
-returned into that payer's `$questionnaire-package`. It does not test CHO as the
-payer server: no Inferno or reference-implementation run has exercised CHO's own
-PAS, CRD or DTR endpoints yet (see the [ePA gap matrix](docs/epa-gap-matrix.md) §9).
+returned into that payer's `$questionnaire-package`. CHO's own payer-server
+PAS, CRD and DTR endpoints are tested separately by the Inferno kits, which all pass
+nightly (see the [Inferno conformance results](https://cloudhealthoffice.com/evidence/inferno-conformance)
+and the [ePA gap matrix](docs/epa-gap-matrix.md)).
 
 One command starts the pinned dependency, runs the scenario, writes sanitized
 evidence to `artifacts/interop/`, and tears the stack down:
