@@ -109,8 +109,22 @@ cmd_up() {
 cmd_down() {
   credentials
   say "Removing every node from $POOL. Data stays on the volumes."
-  gcloud container clusters resize "$CLUSTER" --node-pool "$POOL" --num-nodes 0 \
-    --location "$LOCATION" --project "$(project)" --quiet
+  # Draining can outlast gcloud's own wait (the nightly run of Nov 23 gave up
+  # while GKE was still removing the node), so start the resize and wait on
+  # the operation ourselves, for up to 50 minutes.
+  local op status i
+  op="$(gcloud container clusters resize "$CLUSTER" --node-pool "$POOL" --num-nodes 0 \
+    --location "$LOCATION" --project "$(project)" --quiet --async --format='value(name)')"
+  for i in $(seq 1 100); do
+    status="$(gcloud container operations describe "$op" --location "$LOCATION" \
+      --project "$(project)" --format='value(status)')"
+    [[ "$status" == DONE ]] && break
+    sleep 30
+  done
+  if [[ "$status" != DONE ]]; then
+    echo "GKE is still removing the node (operation $op). Run '$0 status' later to confirm it is off." >&2
+    return 1
+  fi
   echo "Off. The VM is no longer billed; '$0 up' brings it back with the same data."
 }
 
