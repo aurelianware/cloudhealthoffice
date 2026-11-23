@@ -28,6 +28,14 @@ ADJUDICATION_MAX_CONCURRENT_CALLS="${ADJUDICATION_MAX_CONCURRENT_CALLS:-}"
 SERVICE_CATEGORY_ADMIN_WRITE_ENABLED="${SERVICE_CATEGORY_ADMIN_WRITE_ENABLED:-true}"
 PEND_OBSERVATION_TIMEOUT_SECONDS="${PEND_OBSERVATION_TIMEOUT_SECONDS:-45}"
 PEND_OBSERVATION_INTERVAL_MS="${PEND_OBSERVATION_INTERVAL_MS:-1000}"
+# First wait before re-reading a submitted claim's status; it doubles up to
+# PEND_OBSERVATION_INTERVAL_MS. A fixed 1 s wait held every worker for a full
+# second per claim, which capped measured throughput at about PARALLELISM
+# claims/sec whatever the platform could do.
+PEND_OBSERVATION_INITIAL_INTERVAL_MS="${PEND_OBSERVATION_INITIAL_INTERVAL_MS:-50}"
+# The validator prints claims/sec and latency for each window of this many
+# seconds, so a slowdown over a long run shows when it starts.
+THROUGHPUT_WINDOW_SECONDS="${THROUGHPUT_WINDOW_SECONDS:-60}"
 # Off by default. Set to a path (e.g. /tmp/mcc-pend-diagnostics.json) to capture
 # per-claim pend diagnostics; the aggregate table prints to the job logs regardless
 # of whether the JSON artifact itself is copied out of the pod.
@@ -39,6 +47,12 @@ PEND_DIAGNOSTICS_NCCI_SAMPLE="${PEND_DIAGNOSTICS_NCCI_SAMPLE:-200}"
 # previous value afterwards. The mode is service-wide, so every Medicaid claim
 # in the run does a TPL lookup; run it separately from a baseline.
 TPL_SCENARIOS="${TPL_SCENARIOS:-false}"
+# Off by default. A local directory holding CMS's public 2023 synthetic claim
+# files (carrier, outpatient, inpatient, beneficiary_*; plain or .gz) makes the
+# run adjudicate those claims instead of generated ones (validator
+# --cms-synthetic-dir). The files are copied into the Job's pod before the
+# validator starts. scripts/demo/gcp/fetch-cms-synthetic.sh downloads them.
+CMS_SYNTHETIC_DIR="${CMS_SYNTHETIC_DIR:-}"
 PARALLELISM="${PARALLELISM:-10}"
 SEED_PARALLELISM="${SEED_PARALLELISM:-$PARALLELISM}"
 PROGRESS_EVERY="${PROGRESS_EVERY:-500}"
@@ -214,6 +228,35 @@ if [[ -n "${CHO_BEARER_TOKEN:-}" ]]; then
 else
   kubectl delete secret mcc-bearer-token -n "$NAMESPACE" --ignore-not-found >/dev/null
 fi
+# With CMS_SYNTHETIC_DIR, the pod starts with an init container (the validator
+# image, which has sh and tar) that waits until the files are copied into a
+# shared emptyDir.
+cms_init=""
+cms_mount=""
+cms_volume=""
+cms_args=""
+if [[ -n "$CMS_SYNTHETIC_DIR" ]]; then
+  [[ -d "$CMS_SYNTHETIC_DIR" ]] || { echo "CMS_SYNTHETIC_DIR not found: $CMS_SYNTHETIC_DIR" >&2; exit 1; }
+  cms_init="      initContainers:
+        - name: cms-corpus
+          image: ${IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: [\"sh\", \"-c\", \"until [ -f /cms/.ready ]; do sleep 2; done\"]
+          volumeMounts:
+            - name: cms-corpus
+              mountPath: /cms"
+  cms_mount="          volumeMounts:
+            - name: cms-corpus
+              mountPath: /cms
+              readOnly: true"
+  cms_volume="      volumes:
+        - name: cms-corpus
+          emptyDir:
+            sizeLimit: 20Gi"
+  cms_args="            - --cms-synthetic-dir
+            - /cms"
+fi
+
 kubectl apply -n "$NAMESPACE" -f - <<EOF
 apiVersion: batch/v1
 kind: Job
@@ -224,6 +267,7 @@ spec:
   template:
     spec:
       restartPolicy: Never
+${cms_init}
       containers:
         - name: mcc-platform-validator
           image: ${IMAGE}
@@ -235,6 +279,7 @@ spec:
                   name: mcc-bearer-token
                   key: token
                   optional: true
+${cms_mount}
           args:
             - --claims
             - "${CLAIMS}"
@@ -270,13 +315,35 @@ spec:
             - "${PEND_OBSERVATION_TIMEOUT_SECONDS}"
             - --pend-observation-interval-ms
             - "${PEND_OBSERVATION_INTERVAL_MS}"
+            - --pend-observation-initial-interval-ms
+            - "${PEND_OBSERVATION_INITIAL_INTERVAL_MS}"
+            - --throughput-window-seconds
+            - "${THROUGHPUT_WINDOW_SECONDS}"
             $(if [[ "$TPL_SCENARIOS" == "true" ]]; then printf -- '- --tpl-scenarios\n'; fi)
             $(if [[ -n "$PEND_DIAGNOSTICS_PATH" ]]; then printf -- '- --pend-diagnostics\n            - "%s"\n            - --pend-diagnostics-ncci-sample\n            - "%s"\n' "$PEND_DIAGNOSTICS_PATH" "$PEND_DIAGNOSTICS_NCCI_SAMPLE"; fi)
             - --progress-every
             - "${PROGRESS_EVERY}"
+${cms_args}
             - --summary-json
             - /tmp/mcc-summary.json
+${cms_volume}
 EOF
+
+if [[ -n "$CMS_SYNTHETIC_DIR" ]]; then
+  log "Copying the CMS synthetic files from ${CMS_SYNTHETIC_DIR} into the validator pod"
+  cms_pod=""
+  for _ in $(seq 1 300); do
+    cms_pod="$(kubectl get pods -n "$NAMESPACE" -l "job-name=${JOB_NAME}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+    if [[ -n "$cms_pod" ]] && [[ -n "$(kubectl get pod -n "$NAMESPACE" "$cms_pod" -o jsonpath='{.status.initContainerStatuses[0].state.running}' 2>/dev/null)" ]]; then
+      break
+    fi
+    cms_pod=""
+    sleep 2
+  done
+  [[ -n "$cms_pod" ]] || { echo "Validator pod's cms-corpus init container never started" >&2; exit 1; }
+  kubectl cp "${CMS_SYNTHETIC_DIR%/}/." "${NAMESPACE}/${cms_pod}:/cms" -c cms-corpus
+  kubectl exec -n "$NAMESPACE" "$cms_pod" -c cms-corpus -- sh -c 'ls -l /cms && touch /cms/.ready'
+fi
 
 # macOS idle sleep pauses the Docker Desktop VM -- and every pod inside it.
 # Keep the host awake while polling both successful and failed terminal states.

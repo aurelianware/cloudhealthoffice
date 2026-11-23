@@ -185,6 +185,41 @@ source_code,source_display,target_code,target_display,equivalence,priority,rule_
 73583000,Epicondylitis,M77.10,Lateral epicondylitis unspecified,equivalent,1,statespecific,TX
 ```
 
+## Dated code sets: was the code valid on the date of service?
+
+`CodeSystem/$validate-code` with a `date` answers whether an ICD-10-CM,
+ICD-10-PCS or HCPCS Level II code was valid on a claim's date of service. The
+data is the public-domain CMS release files, so no license is involved.
+
+```bash
+# Load the FY2026 ICD-10-CM order file (window defaults to 2025-10-01..2026-09-30)
+curl -X POST -H "Authorization: Bearer $CHO_TOKEN" \
+  "http://localhost:5080/admin/code-sets/load?system=http://hl7.org/fhir/sid/icd-10-cm&format=ICD10-ORDER&version=FY2026" \
+  --data-binary @icd10cm_order_2026.txt
+
+# The April update: starts 2026-04-01 and ends the October release the day before
+curl -X POST ... "...&format=ICD10-ORDER&version=FY2026-APR&effectiveFrom=2026-04-01" --data-binary @icd10cm_order_2026_april.txt
+
+# ICD-10-PCS: same order-file layout, system http://www.cms.gov/Medicare/Coding/ICD10
+# HCPCS: the CMS quarterly file saved as CSV (HCPC, RECID, LONG DESCRIPTION, ADD DT, TERM DT ...)
+#   or a plain code,display,effective_date,end_date file. Window defaults to the quarter.
+curl -X POST ... "...?system=http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets&format=HCPCS-CSV&version=2026-Q2&effectiveFrom=2026-04-01" \
+  --data-binary @HCPC2026_APR_ANWEB.csv
+
+# Validate one code, or many (a claim) at once
+GET  /fhir/CodeSystem/$validate-code?url=http://hl7.org/fhir/sid/icd-10-cm&code=E11.65&date=2026-03-01
+POST /fhir/CodeSystem/$batch-validate-code   [{ "system": "...", "code": "E11.65", "date": "2026-03-01" }]
+GET  /admin/code-sets                         # loaded releases and the dates each covers
+```
+
+The answer's `status` is `valid`, `invalid` or `unknown`, with a `reason` when
+not valid: `not-in-code-set`, `not-yet-effective`, `terminated`, `not-billable`
+(an ICD-10 header code), or for unknown `no-release-for-date` /
+`code-system-not-loaded`. **Unknown is never invalid**: a date outside every
+loaded release, or a code system with nothing loaded (CPT), is not checked, so
+a missing file cannot turn into denials. Loading needs `platform:admin`;
+validating needs `terminology:read` (service tokens satisfy it).
+
 ## Data Sources
 
 | Source | Format | Cost | Coverage |

@@ -198,6 +198,13 @@ Each run produces a report, a discrepancy CSV and per-claim results (portal:
 - **What to load next.** Each undecided reason with the file or setting that
   clears it.
 
+- **The recovery worklist.** Every payment difference as a finding the plan's
+  team approves or rejects, then tracks through recovery (in recovery,
+  recovered with the amount, appealed), with provider roll-ups, the
+  recoupment lookback the plan enters from its contracts, recovered dollars
+  against confirmed, and a CSV of approved findings for its own mass
+  adjustment.
+
 Every finding is a lead for the plan's review, not a determination.
 
 **Adjustment files.** CHO does not produce a file for a core's adjustment

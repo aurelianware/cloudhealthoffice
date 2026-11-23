@@ -1,0 +1,142 @@
+name: Million Claim Challenge on GKE
+
+# Runs a full-size Million Claim Challenge (500K or 1M claims) on the GKE demo
+# cluster and turns the cluster off again, so a scale run needs no laptop and
+# costs only the hours it runs.
+#
+#   1. Turns the demo node on (scripts/demo/texas/demo.sh up): one
+#      e2-standard-8 node (8 vCPU, 32 GB) that runs every service, MongoDB,
+#      Redis and Kafka together. About $0.28 an hour.
+#   With corpus "cms-synthetic", first downloads CMS's public 2023 synthetic
+#   Medicare claims on the runner (before the node is on, so the download
+#   costs nothing) and adjudicates a proportional sample of them instead of
+#   generated claims. Those claims carry no expected outcome: the run proves
+#   volume and throughput, not correctness, and no payment amounts are
+#   compared (CMS says they "do not closely model reality").
+#   2. Runs scripts/demo/gcp/run-mcc.sh with the claim count and parallelism
+#      below, in a fresh tenant, with the validator image of the same commit.
+#   3. Uploads the evidence (run summary, every claim that did not match, the
+#      validator log with its per-minute throughput windows) as an artifact.
+#   4. Turns the node off, also when the run fails or is cancelled.
+#
+# Prerequisite: the commit's images are in Artifact Registry, i.e. a
+# successful "Deploy demo to GKE" run of the same commit (pushes to main
+# deploy automatically unless GKE_AUTO_DEPLOY is false).
+#
+# Shares the deploy-gke concurrency group with the deploy and demo workflows,
+# so the nightly "demo off" waits for a running challenge instead of cutting
+# it off. Synthetic data only (generated, or CMS's synthetic release).
+
+on:
+  workflow_dispatch:
+    inputs:
+      claims:
+        description: "Claims to adjudicate"
+        type: choice
+        options: ["10000", "100000", "500000", "1000000"]
+        default: "500000"
+      corpus:
+        description: "Claims to run: the validator's generated scenarios (scored), or CMS 2023 synthetic Medicare claims (volume only)"
+        type: choice
+        options: ["generated", "cms-synthetic"]
+        default: "generated"
+      parallelism:
+        description: "Validator workers (max 96)"
+        type: string
+        default: "64"
+      image_tag:
+        description: "Image tag (full commit SHA of a successful deploy). Empty uses this run's commit."
+        type: string
+        default: ""
+      keep_running:
+        description: "Leave the demo node on afterwards"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-gke
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+  GKE_LOCATION: ${{ vars.GKE_LOCATION }}
+  GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY }}
+  IMAGE_TAG: ${{ inputs.image_tag != '' && inputs.image_tag || github.sha }}
+  CLAIMS: ${{ inputs.claims }}
+  PARALLELISM: ${{ inputs.parallelism }}
+  TENANT: mcc-gke-${{ inputs.corpus == 'cms-synthetic' && 'cms-' || '' }}${{ inputs.claims }}-${{ github.run_id }}
+
+jobs:
+  challenge:
+    name: MCC ${{ inputs.claims }} ${{ inputs.corpus }} claims on GKE
+    runs-on: ubuntu-latest
+    # GitHub-hosted jobs stop at 6 hours. A 1M run is preparation (member and
+    # provider seeding) plus adjudication; the windows in the log show the rate.
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download the CMS synthetic claims
+        if: inputs.corpus == 'cms-synthetic'
+        env:
+          OUT_DIR: ${{ runner.temp }}/cms
+        run: |
+          set -euo pipefail
+          ./scripts/demo/gcp/fetch-cms-synthetic.sh
+          mkdir -p "${{ runner.temp }}/mcc"
+          cp "$OUT_DIR/SOURCE.txt" "${{ runner.temp }}/mcc/cms-source.txt"
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: gke-gcloud-auth-plugin
+
+      - name: Turn the demo node on
+        run: ./scripts/demo/texas/demo.sh up
+
+      - name: Run the challenge
+        env:
+          MAX_CLAIMS: ${{ inputs.claims }}
+          SEED_PARALLELISM: ${{ inputs.parallelism }}
+          # Leaves room for the post-run steps inside the job's 355 minutes.
+          JOB_TIMEOUT: 320m
+          PROGRESS_EVERY: "5000"
+          THROUGHPUT_WINDOW_SECONDS: "60"
+          LOG_DIR: ${{ runner.temp }}/mcc
+          CMS_SYNTHETIC_DIR: ${{ inputs.corpus == 'cms-synthetic' && format('{0}/cms', runner.temp) || '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          {
+            echo "commit=${GITHUB_SHA}"
+            echo "image_tag=${IMAGE_TAG}"
+            echo "tenant=${TENANT}"
+            echo "claims=${CLAIMS} parallelism=${PARALLELISM} corpus=${{ inputs.corpus }}"
+            kubectl get nodes -o wide
+            kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.labels.node\.kubernetes\.io/instance-type}{" cpu="}{.status.capacity.cpu}{" memory="}{.status.capacity.memory}{"\n"}{end}'
+          } | tee "$LOG_DIR/environment.txt"
+          ./scripts/demo/gcp/run-mcc.sh 2>&1 | tee "$LOG_DIR/run-mcc.log"
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcc-${{ inputs.corpus }}-${{ inputs.claims }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/mcc/
+            docs/million-claim-challenge/runs/${{ env.TENANT }}/
+          if-no-files-found: warn
+
+      - name: Turn the demo node off
+        if: always() && !inputs.keep_running
+        run: ./scripts/demo/texas/demo.sh down
