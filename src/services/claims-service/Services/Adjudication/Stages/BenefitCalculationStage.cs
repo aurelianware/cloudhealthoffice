@@ -137,6 +137,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     private readonly PriorAuthAdjudicationOptions _priorAuth;
     private readonly IPriorAuthRuleScopeClient? _ruleScope;
     private readonly Shadow.IShadowAccumulatorHistory? _shadowHistory;
+    private readonly IAuthorizationMatchClient? _authorizationMatcher;
 
     public BenefitCalculationStage(
         IBenefitCalculationEngine engine,
@@ -145,7 +146,8 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         ILogger<BenefitCalculationStage> logger,
         Microsoft.Extensions.Options.IOptions<PriorAuthAdjudicationOptions>? priorAuthOptions = null,
         IPriorAuthRuleScopeClient? ruleScope = null,
-        Shadow.IShadowAccumulatorHistory? shadowHistory = null)
+        Shadow.IShadowAccumulatorHistory? shadowHistory = null,
+        IAuthorizationMatchClient? authorizationMatcher = null)
     {
         _engine = engine;
         _memberResolver = memberResolver;
@@ -154,6 +156,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         _priorAuth = priorAuthOptions?.Value ?? new PriorAuthAdjudicationOptions();
         _ruleScope = ruleScope;
         _shadowHistory = shadowHistory;
+        _authorizationMatcher = authorizationMatcher;
     }
 
     /// <summary>
@@ -676,6 +679,34 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             return default;
         }
 
+        // Why each line needs an authorization, and the rule and policy
+        // version behind it: evidence for a reviewer, whatever the check finds.
+        var claimWide = IsInpatientMedicaidInstitutional(claim);
+        var planCodes = _priorAuth.UsePlanFlaggedCodes ? context.ResolvedPlan?.PriorAuthRequiredProcedureCodes : null;
+        var evidence = new Dictionary<int, PriorAuthorizationLineEvidence>();
+        foreach (var line in lines)
+        {
+            var code = string.IsNullOrWhiteSpace(line.ProcedureCode) ? null : line.ProcedureCode.Trim();
+            var entry = scope?.Match(claim, line);
+            var item = new PriorAuthorizationLineEvidence
+            {
+                LineNumber = line.LineNumber,
+                ProcedureCode = code,
+                RequiredBy = claimWide ? PriorAuthorizationRequiredBy.MedicaidInpatient
+                    : code is not null && planCodes is { Count: > 0 } && planCodes.Contains(code) ? PriorAuthorizationRequiredBy.PlanBenefit
+                    : PriorAuthorizationRequiredBy.RuleSet,
+                RuleSet = scope?.RuleSet,
+                RuleSetVersion = scope?.RuleSetVersion,
+                RuleId = entry?.RuleId,
+                RuleName = entry?.Name,
+                PolicySource = entry?.PolicySource,
+                PolicyVersion = entry?.PolicyVersion,
+                PolicyEffectiveDate = entry?.PolicyEffectiveDate,
+            };
+            evidence[line.LineNumber] = item;
+            context.PriorAuthorizationEvidence.Add(item);
+        }
+
         // A denial on a line only the rule set put in scope goes to review when
         // the set has exemptions claims cannot check (the provider may be exempt).
         var exemptReview = new List<string>();
@@ -684,6 +715,8 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             if (scope is { HasExemptions: true } && ruleSetOnly.TryGetValue(line.LineNumber, out var ruleId))
             {
                 exemptReview.Add($"line {line.LineNumber} ({line.ProcedureCode?.Trim()}, rule {ruleId})");
+                if (evidence.TryGetValue(line.LineNumber, out var reviewed))
+                    reviewed.Outcome = PriorAuthorizationLineOutcome.ExemptionReview;
                 return current;
             }
             return current ?? reason;
@@ -706,21 +739,90 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             ? claim.BillingProviderNPI
             : claim.RenderingProviderNPI;
 
+        // A facility's authorization names the facility: match an institutional claim on its billing provider.
+        var matchProviderNpi = claim.ClaimType is ClaimsService.Models.ClaimType.Institutional
+                               && !string.IsNullOrWhiteSpace(claim.BillingProviderNPI)
+            ? claim.BillingProviderNPI
+            : providerNpi;
+        var matchWithoutNumber = _authorizationMatcher is not null
+                                 && (context.IsShadow ? _priorAuth.MatchWithoutNumberInShadow : _priorAuth.MatchWithoutNumber);
+        var matches = new Dictionary<(string? Code, DateTime Date), AuthorizationMatchLookup>();
+
         string? denialReason = null;
         var unavailable = new List<string>();
         var lookups = new Dictionary<(string Number, string? Code, DateTime Date, int? AuthLine), AuthorizationLookupResult>();
 
         foreach (var line in lines)
         {
+            var item = evidence[line.LineNumber];
+            var procedureCode = string.IsNullOrWhiteSpace(line.ProcedureCode) ? null : line.ProcedureCode.Trim();
+            var serviceDate = line.ServiceDateFrom == default ? claim.ServiceDateFrom : line.ServiceDateFrom;
             var number = AuthorizationNumberFor(claim, line);
+            item.NumberSource = number is null ? PriorAuthorizationNumberSource.None
+                : string.IsNullOrWhiteSpace(line.PriorAuthorizationNumber) ? PriorAuthorizationNumberSource.Claim
+                : PriorAuthorizationNumberSource.ClaimLine;
+            item.AuthorizationNumber = number;
+
+            if (number is null && matchWithoutNumber)
+            {
+                var matchKey = (procedureCode, serviceDate.Date);
+                if (!matches.TryGetValue(matchKey, out var match))
+                {
+                    try
+                    {
+                        match = await _authorizationMatcher!
+                            .FindCoveringAsync(context.TenantId, claimMemberId, serviceDate, procedureCode, matchProviderNpi, ct)
+                            .ConfigureAwait(false)
+                            ?? AuthorizationMatchLookup.Unavailable("authorization match returned no result");
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+                    {
+                        _logger.LogWarning(ex,
+                            "Authorization match threw for claim {ClaimVersionId} line {LineNumber}",
+                            LogSanitizer.Sanitize(context.ClaimVersionId), line.LineNumber);
+                        match = AuthorizationMatchLookup.Unavailable($"authorization match failed ({ex.GetType().Name})");
+                    }
+                    matches[matchKey] = match;
+                }
+
+                switch (match.Status)
+                {
+                    case AuthorizationMatchStatus.Found:
+                        var found = match.Candidates[0];
+                        item.AuthorizationNumber = found.AuthorizationNumber;
+                        item.NumberSource = PriorAuthorizationNumberSource.Matched;
+                        item.MatchCandidates = match.Candidates.Count;
+                        item.MatchedOn = [.. found.MatchedOn ?? []];
+                        item.CriteriaReference = found.CriteriaReference;
+                        item.Outcome = PriorAuthorizationLineOutcome.Valid;
+                        item.Reason = match.Candidates.Count == 1
+                            ? $"No number on the claim; approved authorization {found.AuthorizationNumber} covers the service"
+                            : $"No number on the claim; {match.Candidates.Count} approved authorizations cover the service " +
+                              $"({string.Join(", ", match.Candidates.Take(5).Select(c => c.AuthorizationNumber))})";
+                        continue;
+                    case AuthorizationMatchStatus.None:
+                        item.Outcome = PriorAuthorizationLineOutcome.Missing;
+                        item.Reason = "No number on the claim, and no approved authorization covers the member, date, service and provider";
+                        denialReason = DenyOrReview(line, denialReason, PriorAuthorizationRequiredReason);
+                        continue;
+                    default:
+                        item.Outcome = PriorAuthorizationLineOutcome.Unavailable;
+                        item.Reason = match.Reason;
+                        unavailable.Add($"line {line.LineNumber}: {match.Reason ?? "authorization match gave no definitive answer"}");
+                        break;
+                }
+                if (unavailable.Count > 0) break;
+                continue;
+            }
+
             if (number is null)
             {
+                item.Outcome = PriorAuthorizationLineOutcome.Missing;
+                item.Reason = PriorAuthorizationRequiredReason;
                 denialReason = DenyOrReview(line, denialReason, PriorAuthorizationRequiredReason);
                 continue;
             }
 
-            var procedureCode = string.IsNullOrWhiteSpace(line.ProcedureCode) ? null : line.ProcedureCode.Trim();
-            var serviceDate = line.ServiceDateFrom == default ? claim.ServiceDateFrom : line.ServiceDateFrom;
             var key = (number, procedureCode, serviceDate, line.PriorAuthorizationLineNumber);
 
             if (!lookups.TryGetValue(key, out var lookup))
@@ -745,6 +847,16 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 }
                 lookups[key] = lookup;
             }
+
+            item.CriteriaReference = lookup.Validation?.CriteriaReference;
+            item.Reason = lookup.Reason ?? lookup.Validation?.ValidationMessage;
+            item.Outcome = lookup.Status switch
+            {
+                AuthorizationLookupStatus.Valid => PriorAuthorizationLineOutcome.Valid,
+                AuthorizationLookupStatus.Invalid => PriorAuthorizationLineOutcome.Invalid,
+                AuthorizationLookupStatus.NotFound => PriorAuthorizationLineOutcome.NotFound,
+                _ => PriorAuthorizationLineOutcome.Unavailable,
+            };
 
             switch (lookup.Status)
             {

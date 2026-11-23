@@ -475,6 +475,7 @@ builder.Services.AddHttpClient(UpstreamClientNames.AuthorizationService, client 
 }).SetHandlerLifetime(TimeSpan.FromMinutes(5));
 builder.Services.AddScoped<HttpAuthorizationValidationClient>();
 builder.Services.AddScoped<IAuthorizationValidationClient, HttpAuthorizationValidationClient>();
+builder.Services.AddScoped<IAuthorizationMatchClient>(sp => sp.GetRequiredService<HttpAuthorizationValidationClient>());
 
 // Stages — registered as IEnumerable<IClaimAdjudicationStage>. Capabilities
 // 5.4-5.9 each replace one stub registration with the real stage that

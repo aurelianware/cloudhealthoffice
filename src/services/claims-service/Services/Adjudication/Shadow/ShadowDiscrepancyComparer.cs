@@ -115,6 +115,7 @@ public static class ShadowDiscrepancyComparer
                 .Select(r => string.IsNullOrWhiteSpace(r.Reason) ? r.StageName : $"{r.StageName}: {r.Reason}")
                 .ToList(),
             HeldForProviderScreening = heldForScreening,
+            PriorAuthorizationEvidence = [.. cho.PriorAuthorizationEvidence],
         };
         if (heldForScreening)
         {

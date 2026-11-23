@@ -163,6 +163,8 @@ returns per-claim comparisons, largest paid difference first.
 | `byChoStage` | The CHO stage behind each non-matching decision (its first finding; Pricing for an allowed difference and BenefitCalculation for a payment difference when no stage reported one), largest dollars first. |
 | `byDenialCodes` | Denial disagreements as `core CARC → CHO CARC` (`paid` when that side paid). |
 | `authorizationMismatches` | Claims one side denied for prior authorization and the other did not: "Core denied for authorization, CHO would pay" and "Core paid, CHO denies for authorization", with claims and dollars. See [Prior authorization](#prior-authorization). |
+| `authorizationMismatchesByPolicy` | The same claims by the medical policy (and version) behind CHO's check, as the plan's PA rules name it ("No policy recorded" when they name none). Tells a reviewer which policy to open first. |
+| `authorizationsMatchedWithoutNumber` | Comparable claims that carried no authorization number where CHO found an approved authorization by member, date, service and provider. |
 | `byProcedure` | Procedure codes (or `REV` revenue codes) on lines that differ, with line counts and line dollars. |
 | `byBillingProvider` | Billing NPIs on non-matching decided claims. |
 
@@ -175,10 +177,24 @@ differences for a payment-integrity team: one row per differing line, or one
 claim-level row when the claim differs but no single line does (an outcome
 mismatch with no line amounts, say). Matches and claims that were not
 comparable are left out. `includeUndecided=true` adds the claims CHO could not
-decide, with the gap code and no CHO amounts. The last two columns are the
-evidence for an authorization finding: `PriorAuthorizationNumber` (the line's
-number from the core's file, else the claim's) and `AuthorizationFinding` (one
-of the two `authorizationMismatches` keys, or empty). Text fields that start with `=`,
+decide, with the gap code and no CHO amounts. The last seven columns are the
+evidence for an authorization finding:
+
+| Column | Meaning |
+|---|---|
+| `PriorAuthorizationNumber` | The line's number from the core's file, else the claim's. |
+| `AuthorizationFinding` | One of the two `authorizationMismatches` keys, or empty. |
+| `ChoAuthorizationNumber` | The authorization CHO checked: the claim's, or the one it matched. |
+| `ChoAuthorizationSource` | `Claim line`, `Claim`, `Matched by member, date and service` (with the candidate count when more than one approval covered the service) or `None`. |
+| `AuthorizationRequiredBy` | Why the service needed one: `Medicaid inpatient (POS 21)`, `Plan benefit flag` or `PA rule set`. |
+| `MedicalPolicy` | The medical policy and version the PA rule was digitized from, its effective date, the rule id and the rule set version, e.g. `Plan medical policy MP-RAD-014 v4 (effective 2026-01-01); rule import:advanced-imaging; rule set 3f9a01c2d4e7`. |
+| `AuthorizationCriteria` | The clinical criteria or policy the authorization's decision applied, when the plan's UM file gave it (`review_criteria`). |
+
+A claim-level row joins its lines' distinct values with ` | `. Each result
+also carries the same evidence as `priorAuthorizationEvidence[]`, one entry per
+line that needed an authorization, with the check's outcome (`Valid`,
+`Invalid`, `NotFound`, `Missing`, `Unavailable`, `ExemptionReview`) and reason.
+Text fields that start with `=`,
 `+`, `-` or `@` get a leading apostrophe so a spreadsheet does not run them as
 formulas.
 
@@ -214,14 +230,36 @@ number, or a number that is not valid for the service, CHO denies the claim
 (CARC 197); a line in scope only through the PA rule set pends `NOAUTH` for
 review instead, which a shadow run counts as undecided.
 
-For that to mean anything in a shadow run, CHO needs:
+For that to mean anything in a shadow run, CHO needs the plan's
+authorizations, loaded through the [authorization import](AUTHORIZATION-IMPORT.md)
+(`*auth*` files in the drop).
 
-- the plan's authorizations, loaded through the [authorization import](AUTHORIZATION-IMPORT.md)
-  (`*auth*` files in the drop);
-- the number the core matched each claim to, in the claim file's optional
-  `Prior authorization number` / `Line prior authorization number` columns
-  ([CPCDS importer](CPCDS-FILE-DROP-IMPORTER.md)). Without them every line in
-  scope looks unauthorized.
+The number the core matched each claim to helps, in the claim file's optional
+`Prior authorization number` / `Line prior authorization number` columns
+([CPCDS importer](CPCDS-FILE-DROP-IMPORTER.md)), but it is not required. QNXT
+and Facets attach authorizations to claims by member, date and service, and
+their claim extracts often leave the number off. When a line in scope has no
+number, a shadow run asks authorization-service
+(`GET /api/authorizations/match`) for an approved authorization that covers it:
+
+- the same member;
+- an approved period (approved dates, else requested dates, and the expiration
+  date) that includes the line's date of service;
+- a service line approving the procedure, when the authorization lists
+  services (an admission approval with no service lines matches on member and
+  dates); a line with no decision of its own carries the authorization's;
+- the provider, when the authorization names one (servicing, requesting or
+  facility NPI; an institutional claim is matched on its billing NPI);
+- status Approved or Modified, or an approval that has since expired when the
+  service fell inside it.
+
+One match or several, the line is authorized and the evidence names the one
+used (the most specific first) and how many covered it. None: CHO denies 197
+and the evidence says no approved authorization covers the service. No answer
+from authorization-service: the claim pends `PAUNAVAIL`, as for a failed
+lookup. Live adjudication does not match by default
+(`ClaimsAdjudication:PriorAuth:MatchWithoutNumber`); shadow runs do
+(`MatchWithoutNumberInShadow`, default `true`).
 
 The scope is the institutional Medicaid inpatient floor (place of service 21),
 plus plan-flagged procedure codes (`ClaimsAdjudication:PriorAuth:UsePlanFlaggedCodes`)
@@ -232,9 +270,23 @@ A disagreement is reported in `authorizationMismatches` and in the CSV's
 39, 62, 197 or 198) and the other did not. Both directions are leads for the
 plan's review, not determinations.
 
-Not yet: finding an authorization for a claim that carries no number (by
-member, service and date), and naming the medical policy or rule-set version
-behind CHO's decision.
+### The policy behind a finding
+
+Every line CHO checked records why it needed an authorization and under which
+version of which policy, so a reviewer can tell whether a finding is the core
+applying an old policy or CHO applying a new one:
+
+- **The PA rule and its medical policy.** A plan's PA list loads through the
+  [prior-auth rules importer](PRIOR-AUTH-RULES-IMPORTER.md) with
+  `policySource`, `policyVersion` and `policyEffectiveDate`, naming the medical
+  policy (or state manual edition) it was digitized from. Every rule carries
+  them; the state manual promotion fills them from the manual edition.
+- **The rule set version.** A fingerprint of the rule set's content
+  (`ruleSetVersion` on the required-services list). It changes when any rule
+  the check reads changes, and not when an unchanged list is reloaded.
+- **The authorization's review criteria.** The criteria or policy the UM
+  decision applied (InterQual, MCG, the plan's own policy and version), from
+  the authorization file's optional `review_criteria` column.
 
 ## Provider screening
 
@@ -374,6 +426,14 @@ links to the page or guide that loads it ("What to load next").
 | `WorkerInterval` | `00:00:10` | How often the worker looks for queued runs. |
 | `LeaseDuration` | `00:05:00` | How long a replica holds a running run between pages. |
 | `Tolerance` | `0.01` | Dollar difference treated as equal. |
+
+`ClaimsAdjudication:PriorAuth` (shared with live adjudication):
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `MatchWithoutNumberInShadow` | `true` | A shadow run matches a line with no authorization number to an approved authorization (see [Prior authorization](#prior-authorization)). |
+| `MatchWithoutNumber` | `false` | The same for live adjudication, for a plan whose providers are not required to put the number on the claim. |
+| `UsePlanFlaggedCodes`, `UseRuleSet` | `false` | Widen the scope beyond the Medicaid inpatient floor. |
 
 A shadow run calls the same services a real adjudication does (benefit-plan,
 pricing, provider, coverage, member, authorization), once per claim.

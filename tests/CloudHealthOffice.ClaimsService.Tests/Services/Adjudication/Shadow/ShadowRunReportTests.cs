@@ -1,4 +1,5 @@
 using ClaimsService.Controllers;
+using ClaimsService.Services.Adjudication;
 using ClaimsService.Services.Adjudication.Shadow;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Http;
@@ -167,8 +168,47 @@ public class ShadowRunReportTests
 
         var rows = ShadowDiscrepancyCsv.Write(results, includeUndecided: false)
             .Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
-        Assert.EndsWith(",PA-1,\"Core denied for authorization, CHO would pay\"", Assert.Single(rows, r => r.StartsWith("A1,")));
-        Assert.EndsWith(",PA-2-L1,\"Core paid, CHO denies for authorization\"", Assert.Single(rows, r => r.StartsWith("A2,")));
+        Assert.EndsWith(",PA-1,\"Core denied for authorization, CHO would pay\",,,,,", Assert.Single(rows, r => r.StartsWith("A1,")));
+        Assert.EndsWith(",PA-2-L1,\"Core paid, CHO denies for authorization\",,,,,", Assert.Single(rows, r => r.StartsWith("A2,")));
+    }
+
+    [Fact]
+    public void AuthorizationFindings_CarryChosEvidence_AndThePolicyVersionBehindThem()
+    {
+        var results = Results();
+        // The core denied for authorization; the claim had no number, and CHO
+        // matched an approved authorization by member, date and service.
+        results.Add(new ShadowAdjudicationResult
+        {
+            Id = "r-M1", ClaimNumber = "M1", Kind = ShadowDiscrepancyKind.OutcomeMismatch,
+            CoreOutcome = ShadowOutcome.Denied, ChoOutcome = ShadowOutcome.Paid,
+            CoreDenialCode = "197", CorePaid = 0m, ChoPaid = 400m, PaidVariance = 400m, AbsolutePaidVariance = 400m,
+            PriorAuthorizationEvidence =
+            [
+                new PriorAuthorizationLineEvidence
+                {
+                    LineNumber = 1, ProcedureCode = "70551", RequiredBy = PriorAuthorizationRequiredBy.RuleSet,
+                    RuleId = "import:imaging", RuleSetVersion = "a1b2c3d4e5f6",
+                    PolicySource = "Plan medical policy MP-RAD-014", PolicyVersion = "v4",
+                    AuthorizationNumber = "AUTH-9", NumberSource = PriorAuthorizationNumberSource.Matched, MatchCandidates = 2,
+                    Outcome = PriorAuthorizationLineOutcome.Valid, CriteriaReference = "InterQual 2026 Imaging",
+                },
+            ],
+        });
+
+        var report = ShadowRunReportBuilder.Build(new ShadowAdjudicationRun(), results);
+
+        Assert.Equal(1, report.AuthorizationsMatchedWithoutNumber.Claims);
+        var policy = Assert.Single(report.AuthorizationMismatchesByPolicy);
+        Assert.Equal("Plan medical policy MP-RAD-014 v4", policy.Key);
+        Assert.Equal(400m, policy.AbsolutePaidVariance);
+
+        var csv = ShadowDiscrepancyCsv.Write(results, includeUndecided: false).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+        Assert.EndsWith(
+            ",AUTH-9,\"Matched by member, date and service (2 candidates)\",PA rule set," +
+            "Plan medical policy MP-RAD-014 v4; rule import:imaging; rule set a1b2c3d4e5f6,InterQual 2026 Imaging",
+            Assert.Single(csv, r => r.StartsWith("M1,")));
+        Assert.EndsWith(",ChoAuthorizationNumber,ChoAuthorizationSource,AuthorizationRequiredBy,MedicalPolicy,AuthorizationCriteria", csv[0]);
     }
 
     [Fact]

@@ -42,4 +42,23 @@ public sealed class PriorAuthAdjudicationOptions
     /// </para>
     /// </summary>
     public bool UseRuleSet { get; set; }
+
+    /// <summary>
+    /// When a line that needs prior authorization carries no authorization
+    /// number, look for an approved authorization that covers it (same member,
+    /// approved period including the service date, procedure, provider:
+    /// authorization-service <c>GET api/authorizations/match</c>) before
+    /// denying it, the way QNXT and Facets attach authorizations to claims.
+    /// Off by default for live adjudication: a plan turns it on when its
+    /// providers are not required to put the number on the claim.
+    /// </summary>
+    public bool MatchWithoutNumber { get; set; }
+
+    /// <summary>
+    /// <see cref="MatchWithoutNumber"/> for shadow runs. On by default: the
+    /// core's claim extract often leaves the number off a claim the core did
+    /// match to an authorization, and without the match every such claim would
+    /// read as CHO denying for a missing authorization.
+    /// </summary>
+    public bool MatchWithoutNumberInShadow { get; set; } = true;
 }

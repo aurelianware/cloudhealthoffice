@@ -42,6 +42,9 @@ public sealed class AuthorizationIndexes
                 new CreateIndexOptions { Name = "authorization_tenant_status_expiration" }),
             new CreateIndexModel<Authorization>(keys.Ascending(a => a.TenantId).Ascending(a => a.Status).Ascending(a => a.ApprovedServiceDateTo),
                 new CreateIndexOptions { Name = "authorization_tenant_status_service_end" }),
+            // Claims matched to authorizations by member (GET api/authorizations/match).
+            new CreateIndexModel<Authorization>(keys.Ascending(a => a.TenantId).Ascending(a => a.MemberId).Ascending(a => a.Status),
+                new CreateIndexOptions { Name = "authorization_tenant_member_status" }),
             // PAS $inquire by the submitter's own Claim.identifier.
             new CreateIndexModel<Authorization>(keys.Ascending(a => a.TenantId).Ascending(a => a.SubmitterIdentifier),
                 new CreateIndexOptions { Name = "authorization_tenant_submitter_identifier" }),

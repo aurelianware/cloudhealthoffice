@@ -32,6 +32,9 @@ field `file` (CSV, or a `.zip` holding one). Permission `settings:manage`.
 | `program` | no | Program code (`STAR`). Without it the set covers every program of the state and LOB **that has no program set of its own** (see warnings). |
 | `keepExemptions` | no (default `true`) | Copy the exemption rules (gold card, provider type, member age) of the rule set this import replaces into the imported set. |
 | `includeCodes` | no | Return every code of every rule in the report, not the first 25. |
+| `policySource` | no | The medical policy or PA list the file was digitized from, as the plan names it (e.g. `Plan medical policy MP-RAD-014`), up to 200 characters. Written on every imported rule. |
+| `policyVersion` | no | That policy's version (e.g. `v4`, `2026-11`), up to 64 characters. |
+| `policyEffectiveDate` | no | The date that version took effect (`yyyy-MM-dd`). |
 | `dryRun` | no (default `true`) | `false` writes. |
 
 ## The file
@@ -112,3 +115,16 @@ curl -sS "$CHO/api/v1/prior-auth-rules/required-services?stateCode=TX&lob=Medica
   in real time, per plan, for plans whose list lives there.
 - Effective dates on rules: the import is the list as of now; load the new
   list on the day it takes effect.
+
+## Policy versions
+
+A rule loaded with `policySource` and `policyVersion` carries them onto the
+required-services list (`entries[].policySource`, `policyVersion`,
+`policyEffectiveDate`) and onto every claim finding the rule drives, so a
+shadow-adjudication reviewer sees which version of which policy CHO applied
+([The policy behind a finding](SHADOW-ADJUDICATION.md#the-policy-behind-a-finding)).
+The list also has `ruleSetVersion`, a fingerprint of the rule set's content
+that changes when any rule changes (codes, places of service, diagnoses,
+limits, exemptions, policy version) and not when an unchanged file is
+reloaded, and `ruleSetUpdatedAt`. Load a new policy version as a new import of
+the whole list with the new `policyVersion`.

@@ -248,7 +248,16 @@ public sealed class PriorAuthRuleImportService(
         var provenance = $"Imported from {(string.IsNullOrWhiteSpace(options.SourceName) ? "a CSV file" : options.SourceName)} " +
                          $"on {now:yyyy-MM-dd} by {(string.IsNullOrWhiteSpace(actor) ? "unknown" : actor)}.";
 
+        if (!string.IsNullOrWhiteSpace(options.PolicySource) || !string.IsNullOrWhiteSpace(options.PolicyVersion))
+            provenance += $" Policy: {Describe(options)}.";
+
         var imported = BuildRules(builders.Values, idPrefix, state, lob, program, tenantId, provenance);
+        foreach (var rule in imported)
+        {
+            rule.PolicySource = Blank(options.PolicySource);
+            rule.PolicyVersion = Blank(options.PolicyVersion);
+            rule.PolicyEffectiveDate = options.PolicyEffectiveDate?.Date;
+        }
 
         // What requests for this scope resolve to without this tenant's imported rules:
         // the set the import replaces, and where the exemptions to keep come from.
@@ -339,6 +348,16 @@ public sealed class PriorAuthRuleImportService(
             Warnings = warnings,
         };
     }
+
+    private static string Describe(PriorAuthRuleImportOptions options)
+    {
+        var text = Blank(options.PolicySource) ?? "policy";
+        if (Blank(options.PolicyVersion) is { } version) text += $" version {version}";
+        if (options.PolicyEffectiveDate is { } effective) text += $", effective {effective:yyyy-MM-dd}";
+        return text;
+    }
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     // ── Rules ─────────────────────────────────────────────────────────────────
 

@@ -38,6 +38,14 @@ public class ClaimAdjudicationContext
     /// </summary>
     public bool IsShadow { get; init; }
 
+    /// <summary>
+    /// The evidence behind the prior-authorization check, one entry per line
+    /// that needed an authorization (<see cref="Stages.BenefitCalculationStage"/>):
+    /// why, under which rule and policy version, which authorization was
+    /// checked and how it was found. Empty when no line needed one.
+    /// </summary>
+    public List<PriorAuthorizationLineEvidence> PriorAuthorizationEvidence { get; } = new();
+
     /// <summary>Plan resolved by <see cref="IBenefitPlanResolver"/> at orchestrator entry.</summary>
     public ResolvedBenefitPlan? ResolvedPlan { get; set; }
 

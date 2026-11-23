@@ -26,6 +26,59 @@ public interface IAuthorizationValidationClient
         int? authorizationLineNumber = null);
 }
 
+/// <summary>
+/// Finds the plan's approved authorizations that cover a claim service the
+/// claim named no authorization number for (authorization-service
+/// <c>GET /api/authorizations/match</c>): same member, an approved period that
+/// includes the service date, the procedure and the provider. Cores such as
+/// QNXT and Facets attach authorizations to claims this way.
+/// </summary>
+public interface IAuthorizationMatchClient
+{
+    /// <summary>Never throws for a failed lookup: anything that is not the service's answer is <see cref="AuthorizationMatchStatus.Unavailable"/>.</summary>
+    Task<AuthorizationMatchLookup> FindCoveringAsync(
+        string tenantId,
+        string memberId,
+        DateTime serviceDate,
+        string? procedureCode,
+        string? providerNpi,
+        CancellationToken ct = default);
+}
+
+public enum AuthorizationMatchStatus
+{
+    /// <summary>At least one approved authorization covers the service.</summary>
+    Found,
+
+    /// <summary>authorization-service answered that none does.</summary>
+    None,
+
+    /// <summary>No definitive answer.</summary>
+    Unavailable,
+}
+
+/// <summary>One approved authorization that covers the service.</summary>
+public sealed record AuthorizationMatchCandidate(
+    string AuthorizationNumber,
+    int? LineNumber = null,
+    DateTime? ApprovedServiceDateFrom = null,
+    DateTime? ApprovedServiceDateTo = null,
+    string? CriteriaReference = null,
+    IReadOnlyList<string>? MatchedOn = null);
+
+/// <summary>Result of <see cref="IAuthorizationMatchClient.FindCoveringAsync"/>; candidates most specific first.</summary>
+public sealed record AuthorizationMatchLookup(
+    AuthorizationMatchStatus Status,
+    IReadOnlyList<AuthorizationMatchCandidate> Candidates,
+    string? Reason = null)
+{
+    public static AuthorizationMatchLookup Unavailable(string reason) =>
+        new(AuthorizationMatchStatus.Unavailable, [], reason);
+
+    public static AuthorizationMatchLookup From(IReadOnlyList<AuthorizationMatchCandidate> candidates) =>
+        new(candidates.Count > 0 ? AuthorizationMatchStatus.Found : AuthorizationMatchStatus.None, candidates);
+}
+
 /// <summary>Outcome of one prior-authorization lookup.</summary>
 public enum AuthorizationLookupStatus
 {
@@ -81,4 +134,5 @@ public sealed record AuthorizationValidationResult(
     bool? MemberMatches = null,
     string? ApprovedUnitType = null,
     string? ApprovedUnitCode = null,
-    string? ApprovedUnitSystem = null);
+    string? ApprovedUnitSystem = null,
+    string? CriteriaReference = null);

@@ -306,6 +306,7 @@ public sealed class MediCalTarImportService(IPriorAuthRuleImportService importer
             LineOfBusiness = options.LineOfBusiness,
             Program = string.IsNullOrWhiteSpace(options.Program) ? null : options.Program.Trim(),
             SourceName = "Medi-Cal TAR and Non-Benefit List",
+            PolicySource = "Medi-Cal TAR and Non-Benefit List",
             KeepExemptions = options.KeepExemptions,
             DryRun = options.DryRun,
             IncludeCodes = options.IncludeCodes,

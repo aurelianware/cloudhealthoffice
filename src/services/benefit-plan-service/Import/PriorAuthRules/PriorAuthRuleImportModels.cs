@@ -17,6 +17,17 @@ public sealed record PriorAuthRuleImportOptions
     /// <summary>File name, kept on each rule's description as provenance.</summary>
     public string? SourceName { get; init; }
     /// <summary>
+    /// The medical policy or PA list the file was digitized from, as the plan
+    /// names it (e.g. "Plan medical policy MP-RAD-014"). Written on every
+    /// imported rule (<see cref="CloudHealthOffice.PriorAuthRuleEngine.Models.PaRuleDocument.PolicySource"/>)
+    /// and carried onto every claim finding the rule drives. Optional.
+    /// </summary>
+    public string? PolicySource { get; init; }
+    /// <summary>The version of <see cref="PolicySource"/> (e.g. "v4", "2026-11"). Optional.</summary>
+    public string? PolicyVersion { get; init; }
+    /// <summary>The date that version took effect. Optional.</summary>
+    public DateTime? PolicyEffectiveDate { get; init; }
+    /// <summary>
     /// Copy the exemption rules (gold card, provider type, member age) of the rule
     /// set this import replaces into the imported set, so a plan's own list does
     /// not silently switch off a state's gold-card law.

@@ -213,6 +213,7 @@ public static class AuthorizationCsvReader
             ReviewDecision = status.Value.Decision,
             DenialReasonCode = Header(AuthorizationCsvColumn.DenialReasonCode),
             DenialReason = Header(AuthorizationCsvColumn.DenialReason),
+            CriteriaReference = Truncate(Header(AuthorizationCsvColumn.ReviewCriteria), 200),
             SubmittedDate = received.Value,
             ReviewedDate = AuthorizationImportValues.IsDecided(status.Value.Status) ? decided : null,
         };
@@ -341,6 +342,9 @@ public static class AuthorizationCsvReader
         errors.Add($"{name} '{value}' is not a number.");
         return null;
     }
+
+    private static string? Truncate(string? value, int max) =>
+        value is null ? null : value.Length > max ? value[..max] : value;
 
     /// <summary>The rows' raw fields, in order: a reload of the same rows hashes the same.</summary>
     private static string Hash(List<Row> rows)

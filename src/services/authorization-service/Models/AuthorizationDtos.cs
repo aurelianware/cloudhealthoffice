@@ -25,6 +25,8 @@ public class AuthorizationValidationResponse
     public string? ValidatedMemberId { get; set; }
     /// <summary>Null when no member was requested or the stored identity is unavailable.</summary>
     public bool? MemberMatches { get; set; }
+    /// <summary>The medical policy or clinical criteria the decision applied (<see cref="Authorization.CriteriaReference"/>).</summary>
+    public string? CriteriaReference { get; set; }
 }
 
 /// <summary>

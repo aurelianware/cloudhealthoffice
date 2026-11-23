@@ -258,7 +258,22 @@ public class PaRuleDocument
     /// <summary>Human-readable denial reason template.</summary>
     public string? DenialReasonTemplate         { get; set; }
 
-    public DateTime CreatedAt                   { get; set; } = DateTime.UtcNow;
+    // ── Medical policy provenance ─────────────────────────────────
+    // What the plan says this rule comes from: the medical policy or PA list
+    // (and its version) the rule was digitized from. Carried onto the
+    // required-services list and onto every claim finding the rule drives, so
+    // a reviewer sees which version of the policy a finding applied.
+
+    /// <summary>The policy or list the rule was digitized from, e.g. "Plan medical policy MP-RAD-014" or "TMPPM Radiology".</summary>
+    public string? PolicySource                 { get; set; }
+
+    /// <summary>The version of <see cref="PolicySource"/>, as the plan names it (e.g. "v4", "2026-11").</summary>
+    public string? PolicyVersion                { get; set; }
+
+    /// <summary>The date that version of the policy took effect.</summary>
+    public DateTime? PolicyEffectiveDate        { get; set; }
+
+    public DateTime CreatedAt                  { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt                   { get; set; } = DateTime.UtcNow;
 }
 

@@ -1,3 +1,4 @@
+using AuthorizationService.Services.ClaimMatching;
 using CloudHealthOffice.Infrastructure.Audit;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
@@ -366,6 +367,7 @@ public class AuthorizationsController : ControllerBase
             ApprovedUnitSystem = matchedService?.UnitSystem,
             ValidatedMemberId = requestedMember,
             MemberMatches = memberMatches,
+            CriteriaReference = authorization.CriteriaReference,
             ValidationCode = !memberConfirmed ? (memberMatches == false ? "MemberMismatch" : "MemberIdentityUnavailable")
                 : ambiguousProcedure ? "AmbiguousServiceLine" : null,
             ValidationMessage = !memberConfirmed ? (memberMatches == false
@@ -490,6 +492,49 @@ public class AuthorizationsController : ControllerBase
 
         return Ok(new DevelopmentAuthorizationSeedResponse(created + updated, created, updated));
     }
+
+    /// <summary>
+    /// The plan's approved authorizations that cover one claim service the
+    /// claim named no authorization number for: same member, an approved
+    /// period that includes the service date, a service line approving the
+    /// procedure (when the authorization lists services) and the provider
+    /// (when the authorization names one). Cores attach authorizations to
+    /// claims this way, so claims adjudication (a shadow run by default) asks
+    /// here before denying a service for a missing authorization. An empty list
+    /// is a definitive "none covers it". See
+    /// docs/integration/SHADOW-ADJUDICATION.md.
+    /// </summary>
+    [AuditRecordAccess("Authorization", RecordAccessActions.Search)]
+    [HttpGet("match")]
+    [ProducesResponseType(typeof(AuthorizationMatchResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AuthorizationMatchResponse>> MatchClaimService(
+        [FromQuery] string? memberId,
+        [FromQuery] DateTime? serviceDate,
+        [FromQuery] string? procedureCode = null,
+        [FromQuery] string? providerNpi = null,
+        CancellationToken ct = default)
+    {
+        var member = memberId?.Trim();
+        if (string.IsNullOrEmpty(member) || member.Length > 50)
+            return BadRequest(new { error = "A member identifier of 1 to 50 characters is required." });
+        if (serviceDate is null)
+            return BadRequest(new { error = "A service date is required." });
+        if (procedureCode is { Length: > 64 } || providerNpi is { Length: > 20 })
+            return BadRequest(new { error = "The procedure code or provider NPI is too long." });
+
+        _logger.LogInformation("Matching authorizations for member {Member} on {Date}",
+            LogSanitizer.MaskId(member), serviceDate.Value.Date);
+
+        var approvals = await _authorizationRepository.ListMemberApprovalsAsync(member, MaxMemberApprovals, ct);
+        return Ok(new AuthorizationMatchResponse
+        {
+            Candidates = AuthorizationClaimMatcher.Match(approvals, member, serviceDate.Value, procedureCode, providerNpi, DateTime.UtcNow),
+        });
+    }
+
+    /// <summary>Most approvals of one member a match reads.</summary>
+    private const int MaxMemberApprovals = 500;
 
     /// <summary>
     /// Search authorizations (by member, provider, status, date range)

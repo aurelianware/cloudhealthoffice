@@ -83,6 +83,20 @@ public class ShadowAdjudicationResult
     /// </summary>
     public string? PriorAuthorizationNumber { get; set; }
 
+    /// <summary>
+    /// CHO's prior-authorization evidence, one entry per line that needed an
+    /// authorization: why (and the PA rule, rule set version and medical
+    /// policy version that said so), the authorization CHO checked and how it
+    /// found it (on the claim, or matched by member, date and service when the
+    /// claim had no number), and what the check decided. Empty when no line
+    /// needed one, or CHO stopped before the check.
+    /// </summary>
+    public List<PriorAuthorizationLineEvidence> PriorAuthorizationEvidence { get; set; } = [];
+
+    /// <summary>The evidence for one line, or null.</summary>
+    public PriorAuthorizationLineEvidence? EvidenceFor(int lineNumber) =>
+        PriorAuthorizationEvidence.FirstOrDefault(e => e.LineNumber == lineNumber);
+
     public string Kind { get; set; } = ShadowDiscrepancyKind.NotComparable;
 
     public string CoreOutcome { get; set; } = ShadowOutcome.NotFinal;

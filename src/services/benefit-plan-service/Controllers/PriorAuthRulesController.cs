@@ -54,6 +54,9 @@ public sealed class PriorAuthRulesController : ControllerBase
     /// and typical payer PA lists (a code column, optional category, place of
     /// service, diagnosis and limit columns). The file is the whole list for
     /// its scope: an earlier import's rules it no longer has are disabled.
+    /// <c>policySource</c>, <c>policyVersion</c> and <c>policyEffectiveDate</c>
+    /// name the medical policy (and version) the list was digitized from; every
+    /// rule carries them, and so does every claim finding a rule drives.
     /// Dry run by default. Tenant configuration: <c>settings:manage</c>.
     /// See docs/integration/PRIOR-AUTH-RULES-IMPORTER.md.
     /// </summary>
@@ -71,6 +74,9 @@ public sealed class PriorAuthRulesController : ControllerBase
         [FromQuery] bool keepExemptions = true,
         [FromQuery] bool dryRun = true,
         [FromQuery] bool includeCodes = false,
+        [FromQuery] string? policySource = null,
+        [FromQuery] string? policyVersion = null,
+        [FromQuery] DateTime? policyEffectiveDate = null,
         CancellationToken ct = default)
     {
         if (_importer is null)
@@ -85,6 +91,8 @@ public sealed class PriorAuthRulesController : ControllerBase
         if (!Enum.IsDefined(lob)) errors.Add("Supply a line of business.");
         if (program is not null && (program.Trim().Length is 0 or > 32 || !program.Trim().All(char.IsAsciiLetterOrDigit)))
             errors.Add("A program code is letters and digits only.");
+        if (policySource is { Length: > 200 } || policyVersion is { Length: > 64 })
+            errors.Add("A policy source is at most 200 characters and a policy version at most 64.");
         if (errors.Count > 0) return BadRequest(new { error = "Invalid prior-auth list import.", details = errors });
 
         var options = new PriorAuthRuleImportOptions
@@ -96,6 +104,9 @@ public sealed class PriorAuthRulesController : ControllerBase
             KeepExemptions = keepExemptions,
             DryRun = dryRun,
             IncludeCodes = includeCodes,
+            PolicySource = string.IsNullOrWhiteSpace(policySource) ? null : policySource.Trim(),
+            PolicyVersion = string.IsNullOrWhiteSpace(policyVersion) ? null : policyVersion.Trim(),
+            PolicyEffectiveDate = policyEffectiveDate?.Date,
         };
 
         try

@@ -44,6 +44,10 @@ public sealed class PriorAuthRuleScopeUnavailableException(string message, Excep
 public sealed class PriorAuthRuleScope
 {
     public string? RuleSet { get; init; }
+    /// <summary>Fingerprint of the rule set's content: changes whenever a rule changes (benefit-plan-service <c>ruleSetVersion</c>).</summary>
+    public string? RuleSetVersion { get; init; }
+    /// <summary>When a rule of the set was last written.</summary>
+    public DateTime? RuleSetUpdatedAt { get; init; }
     public IReadOnlyList<PriorAuthRuleScopeEntry> Entries { get; init; } = [];
     /// <summary>Kinds of exemption rules in the set, e.g. TxGoldCardExemption.</summary>
     public IReadOnlyList<string> Exemptions { get; init; } = [];
@@ -99,6 +103,14 @@ public sealed class PriorAuthRuleScopeEntry
     public PriorAuthRuleCondition Condition { get; init; }
     public IReadOnlyList<string> PlacesOfService { get; init; } = [];
     public IReadOnlyList<string> Diagnoses { get; init; } = [];
+    /// <summary>The medical policy or PA list the rule was digitized from.</summary>
+    public string? PolicySource { get; init; }
+    /// <summary>The version of <see cref="PolicySource"/>.</summary>
+    public string? PolicyVersion { get; init; }
+    /// <summary>The date that version took effect.</summary>
+    public DateTime? PolicyEffectiveDate { get; init; }
+    /// <summary>When the rule was last written.</summary>
+    public DateTime? UpdatedAt { get; init; }
 
     internal bool AppliesTo(string code) =>
         AllServices
@@ -141,6 +153,8 @@ public sealed class HttpPriorAuthRuleScopeClient(
             return new PriorAuthRuleScope
             {
                 RuleSet = dto.List.RuleSet,
+                RuleSetVersion = dto.List.RuleSetVersion,
+                RuleSetUpdatedAt = dto.List.RuleSetUpdatedAt,
                 Entries = dto.List.Entries ?? [],
                 Exemptions = (dto.List.Exemptions ?? []).Select(e => e.Kind ?? "Exemption").Distinct().ToList(),
             };
@@ -165,6 +179,8 @@ public sealed class HttpPriorAuthRuleScopeClient(
     private sealed class ListDto
     {
         public string? RuleSet { get; set; }
+        public string? RuleSetVersion { get; set; }
+        public DateTime? RuleSetUpdatedAt { get; set; }
         public List<PriorAuthRuleScopeEntry>? Entries { get; set; }
         public List<ExemptionDto>? Exemptions { get; set; }
     }

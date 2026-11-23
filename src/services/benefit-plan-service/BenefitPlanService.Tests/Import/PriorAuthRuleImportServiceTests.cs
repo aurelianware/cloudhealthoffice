@@ -110,6 +110,27 @@ public sealed class PriorAuthRuleImportServiceTests
     }
 
     [Fact]
+    public async Task The_policy_the_list_was_digitized_from_is_written_on_every_rule()
+    {
+        var (svc, repo) = Build();
+
+        await svc.ImportAsync(Csv(PayerCsv), Options(dryRun: false) with
+        {
+            PolicySource = "Plan medical policy MP-RAD-014", PolicyVersion = "v4", PolicyEffectiveDate = new DateTime(2026, 1, 1),
+        }, Tenant, "admin");
+
+        var (key, rules) = await PaRuleSetResolver.ResolveAsync(repo, "TX", PaLineOfBusiness.Medicaid, "STAR", Tenant, null, default);
+        var imported = rules.Where(r => r.RuleId.StartsWith("import:advanced", StringComparison.Ordinal)).ToList();
+        imported.Should().NotBeEmpty().And.OnlyContain(r =>
+            r.PolicySource == "Plan medical policy MP-RAD-014" && r.PolicyVersion == "v4" && r.PolicyEffectiveDate == new DateTime(2026, 1, 1));
+        imported.Should().OnlyContain(r => r.Description!.Contains("Plan medical policy MP-RAD-014 version v4, effective 2026-01-01"));
+
+        var list = PaRequiredServicesList.Build("TX", PaLineOfBusiness.Medicaid, "STAR", key, rules, DateTime.UtcNow);
+        list.Entries.Single(e => e.RuleId == "import:advanced-imaging").PolicyVersion.Should().Be("v4");
+        list.RuleSetVersion.Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task Reimport_disables_rules_the_file_no_longer_has()
     {
         var (svc, repo) = Build();
