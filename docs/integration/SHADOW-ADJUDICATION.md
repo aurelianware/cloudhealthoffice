@@ -72,6 +72,25 @@ version of this argument is
 [Why run shadow adjudication?](https://cloudhealthoffice.com/insights/cms-0057-f/why-shadow-adjudication)
 (`src/site/insights/cms-0057-f/why-shadow-adjudication.html`).
 
+### Denial verification
+
+Every denial the core made gets a verdict from CHO: each claim the core denied,
+and each line it denied on a claim it paid.
+
+| Verdict | Meaning | Why it matters |
+|---|---|---|
+| CHO would pay | Applying the plan's own contracts, benefits and authorizations, CHO pays the claim or line | Wrongful-denial risk: an appeal, provider abrasion, in Medicaid a complaint the state may see. `choWouldPayAmount` is what CHO would have paid |
+| CHO denies for another reason | CHO denies too, with a different CARC | The denial may stand while the reason on the remittance is wrong, which weakens it on appeal |
+| CHO confirms | CHO denies with the same CARC | Evidence the denial holds up |
+| CHO undecided | CHO could not decide the claim yet | "What to load next" says why |
+
+`byCoreDenialCode` groups the verdicts by the core's CARC, the most
+CHO-would-pay dollars first, with the confirm rate (confirmed of decided) and
+the codes CHO used instead. A denial reason with a low confirm rate is the one
+to look at first. Authorization denials appear here too, and with their
+evidence in `authorizationMismatches`. Every verdict is a lead for the plan's
+review, not a determination.
+
 ## How a shadow run stays read-only
 
 The run uses the same `ClaimAdjudicationOrchestrator` as a real adjudication,
@@ -173,6 +192,7 @@ returns per-claim comparisons, largest paid difference first.
 | `authorizationMismatches` | Claims one side denied for prior authorization and the other did not: "Core denied for authorization, CHO would pay" and "Core paid, CHO denies for authorization", with claims and dollars. See [Prior authorization](#prior-authorization). |
 | `authorizationMismatchesByPolicy` | The same claims by the medical policy (and version) behind CHO's check, as the plan's PA rules name it ("No policy recorded" when they name none). Tells a reviewer which policy to open first. |
 | `authorizationsMatchedWithoutNumber` | Comparable claims that carried no authorization number where CHO found an approved authorization by member, date, service and provider. |
+| `denialVerification` | Every core denial checked against CHO (see [Denial verification](#denial-verification)): `coreDenials`, the four groups `choWouldPay`, `choDeniesForAnotherReason`, `choConfirms`, `choUndecided` (denials, claims, billed, what CHO would pay, example claims), `confirmRate`, and `byCoreDenialCode` with the same counts per CARC and the codes CHO used instead. |
 | `byProcedure` | Procedure codes (or `REV` revenue codes) on lines that differ, with line counts and line dollars. |
 | `byBillingProvider` | Billing NPIs on non-matching decided claims. |
 
