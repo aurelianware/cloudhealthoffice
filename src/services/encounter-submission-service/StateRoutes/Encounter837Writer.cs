@@ -46,7 +46,7 @@ public sealed record Encounter837File(
     IReadOnlyList<Encounter837Placement> Placements);
 
 /// <summary>
-/// Writes ASC X12 005010 837P (X222A1) and 837I (X223A2) encounter interchanges.
+/// Writes ASC X12 005010 837P (X222A1), 837I (X223A2) and 837D (X224A2) encounter interchanges.
 ///
 /// <para>Encounter shape (the pattern state Medicaid companion guides share):
 /// BHT06 = RP (reporting); the state is the destination payer in 2010BB; the
@@ -62,6 +62,14 @@ public static class Encounter837Writer
 {
     public const string ProfessionalVersion = "005010X222A1";
     public const string InstitutionalVersion = "005010X223A2";
+    public const string DentalVersion = "005010X224A2";
+
+    public static string FormLabel(EncounterFormType form) => form switch
+    {
+        EncounterFormType.Institutional => "837I",
+        EncounterFormType.Dental => "837D",
+        _ => "837P"
+    };
 
     private const char Element = '*';
     private const char Component = ':';
@@ -71,8 +79,6 @@ public static class Encounter837Writer
     public static Encounter837File Write(
         EncounterFormType form, IReadOnlyList<EncounterClaim> claims, Encounter837Envelope envelope)
     {
-        if (form == EncounterFormType.Dental)
-            throw new NotSupportedException("837D encounters are not built yet.");
         if (claims.Count == 0)
             throw new ArgumentException("At least one encounter is required.", nameof(claims));
         if (claims.Any(c => c.Form != form))
@@ -80,7 +86,12 @@ public static class Encounter837Writer
         if (envelope.InterchangeControlNumber is < 1 or > 999_999_999)
             throw new ArgumentOutOfRangeException(nameof(envelope), "ISA13 must be 1–999999999.");
 
-        var version = form == EncounterFormType.Institutional ? InstitutionalVersion : ProfessionalVersion;
+        var version = form switch
+        {
+            EncounterFormType.Institutional => InstitutionalVersion,
+            EncounterFormType.Dental => DentalVersion,
+            _ => ProfessionalVersion
+        };
         var now = envelope.CreatedAtUtc;
         var isa13 = envelope.InterchangeControlNumber.ToString("D9", CultureInfo.InvariantCulture);
         var gs06 = envelope.InterchangeControlNumber.ToString(CultureInfo.InvariantCulture);
@@ -126,6 +137,7 @@ public static class Encounter837Writer
         List<string> seg, EncounterClaim c, Encounter837Envelope env, string version, string st02, DateTime now)
     {
         var institutional = c.Form == EncounterFormType.Institutional;
+        var dental = c.Form == EncounterFormType.Dental;
         void Add(params string?[] e) => seg.Add(Join(e));
 
         Add("ST", "837", st02, version);
@@ -169,6 +181,8 @@ public static class Encounter837Writer
             : $"{c.PlaceOfService}{Component}B{Component}{c.FrequencyCode}";
         if (institutional)
             Add("CLM", Clean(c.PatientControlNumber), Money(c.TotalCharge), "", "", clm05, "", "A", "Y", "Y");
+        else if (dental)
+            Add("CLM", Clean(c.PatientControlNumber), Money(c.TotalCharge), "", "", clm05, "Y", "A", "Y", "Y");
         else
             Add("CLM", Clean(c.PatientControlNumber), Money(c.TotalCharge), "", "", clm05, "Y", "A", "Y", "Y");
 
@@ -186,12 +200,18 @@ public static class Encounter837Writer
             Add("CL1", Clean(c.AdmissionTypeCode), Clean(c.AdmissionSourceCode), Clean(c.PatientStatusCode));
         }
 
+        // 837D: one service date for the whole claim goes at 2300; otherwise each line carries its own.
+        var dentalClaimDate = dental && c.Lines.Count > 0
+                              && c.Lines.All(l => l.ServiceFrom == l.ServiceTo && l.ServiceFrom == c.Lines[0].ServiceFrom);
+        if (dentalClaimDate)
+            Add("DTP", "472", "D8", c.Lines[0].ServiceFrom.ToString("yyyyMMdd", CultureInfo.InvariantCulture));
+
         if (c.FrequencyCode is "7" or "8" && !string.IsNullOrWhiteSpace(c.OriginalStateReference))
             Add("REF", "F8", Clean(c.OriginalStateReference));
         if (!string.IsNullOrWhiteSpace(c.PriorAuthorizationNumber))
             Add("REF", "G1", Clean(c.PriorAuthorizationNumber));
 
-        WriteDiagnoses(seg, c, institutional);
+        WriteDiagnoses(seg, c, institutional, dental);
 
         // 2310A attending (837I) / 2310B rendering (837P) when it differs from billing
         if (!string.IsNullOrWhiteSpace(c.RenderingNpi) && c.RenderingNpi != bp.Npi)
@@ -202,7 +222,7 @@ public static class Encounter837Writer
         Add("SBR", env.PlanPayerResponsibility, "18", Clean(m.GroupNumber), "", "", "", "", "",
             env.PlanClaimFilingIndicator);
         Add("AMT", "D", Money(c.PlanPaidAmount));
-        if (institutional) Add("OI", "", "", "Y", "", "", "Y");
+        if (institutional || dental) Add("OI", "", "", "Y", "", "", "Y");
         else Add("OI", "", "", "Y", "P", "", "Y");
         Add("NM1", "IL", "1", Clean(m.LastName), Clean(m.FirstName), "", "", "", "MI", Clean(m.MemberId));
         Add("NM1", "PR", "2", Clean(env.PlanName), "", "", "", "", "PI", Clean(env.PlanPayerId));
@@ -216,7 +236,24 @@ public static class Encounter837Writer
             // A revenue-code-only institutional line (room and board) has no SV202;
             // its 2430 SVD03 reports the revenue code under the NUBC qualifier.
             var product = hasProcedure ? Composite(line.ProcedureQualifier, line.ProcedureCode, line.Modifiers) : "";
-            if (institutional)
+            if (dental)
+            {
+                var pointers = string.Join(Component, line.DiagnosisPointers.Take(4)
+                    .Select(p => p.ToString(CultureInfo.InvariantCulture)));
+                var linePos = string.Equals(line.PlaceOfService, c.PlaceOfService, StringComparison.Ordinal)
+                    ? "" : Clean(line.PlaceOfService);
+                var oralCavity = string.Join(Component, line.OralCavityDesignations
+                    .Where(x => !string.IsNullOrWhiteSpace(x)).Take(5).Select(Clean));
+                Add("SV3", product, Money(line.Charge), linePos, oralCavity, Clean(line.ProsthesisCrownInlayCode),
+                    Quantity(line.Units), "", "", "", "", pointers);
+                foreach (var tooth in line.Teeth)
+                {
+                    var surfaces = string.Join(Component, tooth.Surfaces
+                        .Where(x => !string.IsNullOrWhiteSpace(x)).Take(5).Select(Clean));
+                    Add("TOO", "JP", Clean(tooth.ToothCode), surfaces);
+                }
+            }
+            else if (institutional)
             {
                 Add("SV2", Clean(line.RevenueCode), product, Money(line.Charge), line.UnitType, Quantity(line.Units));
             }
@@ -229,12 +266,16 @@ public static class Encounter837Writer
                 Add("SV1", product, Money(line.Charge), line.UnitType, Quantity(line.Units), linePos, "", pointers);
             }
 
-            if (line.ServiceFrom == line.ServiceTo)
+            if (dentalClaimDate)
+            {
+                // reported once at 2300
+            }
+            else if (line.ServiceFrom == line.ServiceTo)
                 Add("DTP", "472", "D8", line.ServiceFrom.ToString("yyyyMMdd", CultureInfo.InvariantCulture));
             else
                 Add("DTP", "472", "RD8", Range(line.ServiceFrom, line.ServiceTo));
 
-            if (!string.IsNullOrWhiteSpace(line.NationalDrugCode) && line.DrugQuantity is > 0)
+            if (!dental && !string.IsNullOrWhiteSpace(line.NationalDrugCode) && line.DrugQuantity is > 0)
             {
                 Add("LIN", "", "N4", Digits(line.NationalDrugCode));
                 Add("CTP", "", "", "", Quantity(line.DrugQuantity.Value), Clean(line.DrugUnit ?? "UN"));
@@ -271,9 +312,17 @@ public static class Encounter837Writer
         seg.Add(Join("SE", (seg.Count + 1).ToString(CultureInfo.InvariantCulture), st02));
     }
 
-    private static void WriteDiagnoses(List<string> seg, EncounterClaim c, bool institutional)
+    private static void WriteDiagnoses(List<string> seg, EncounterClaim c, bool institutional, bool dental)
     {
         if (c.Diagnoses.Count == 0) return;
+        if (dental)
+        {
+            // 837D HI carries at most four diagnoses.
+            var parts = new List<string> { "HI", DiagnosisComposite("ABK", c.Diagnoses[0], false) };
+            parts.AddRange(c.Diagnoses.Skip(1).Take(3).Select(d => DiagnosisComposite("ABF", d, false)));
+            seg.Add(Join(parts.ToArray()));
+            return;
+        }
         if (institutional)
         {
             var principal = c.Diagnoses[0];

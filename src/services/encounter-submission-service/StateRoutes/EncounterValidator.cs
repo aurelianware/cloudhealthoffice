@@ -31,13 +31,8 @@ public static class EncounterValidator
         var errors = new List<string>();
         void Fail(string message) => errors.Add(message);
 
-        if (c.Form == EncounterFormType.Dental)
-        {
-            Fail("837D dental encounters are not supported on this route yet");
-            return errors;
-        }
-
         var institutional = c.Form == EncounterFormType.Institutional;
+        var dental = c.Form == EncounterFormType.Dental;
 
         if (string.IsNullOrWhiteSpace(c.PatientControlNumber) || c.PatientControlNumber.Length > 38)
             Fail("CLM01 patient control number must be 1–38 characters");
@@ -50,10 +45,11 @@ public static class EncounterValidator
             Fail("a replacement or void needs the state's original encounter reference (REF*F8)");
 
         if (c.Lines.Count == 0) Fail("an encounter needs at least one service line");
-        if (!institutional && c.Lines.Count > 50) Fail("837P allows at most 50 service lines");
+        if (!institutional && c.Lines.Count > 50) Fail($"{(dental ? "837D" : "837P")} allows at most 50 service lines");
         if (institutional && c.Lines.Count > 999) Fail("837I allows at most 999 service lines");
 
-        if (c.Diagnoses.Count == 0 || string.IsNullOrWhiteSpace(c.Diagnoses[0].Code))
+        // 837D diagnoses are situational; 837P and 837I need one.
+        if (!dental && (c.Diagnoses.Count == 0 || string.IsNullOrWhiteSpace(c.Diagnoses[0].Code)))
             Fail(institutional ? "principal diagnosis (HI*ABK) is required" : "at least one diagnosis is required");
 
         if (c.ServiceTo < c.ServiceFrom) Fail("service end date is before the start date");
@@ -96,7 +92,7 @@ public static class EncounterValidator
         }
         else if (string.IsNullOrWhiteSpace(c.PlaceOfService) || c.PlaceOfService.Trim().Length != 2)
         {
-            Fail("837P needs a two-character place of service (CLM05-1)");
+            Fail($"{(dental ? "837D" : "837P")} needs a two-character place of service (CLM05-1)");
         }
 
         // Lines and balancing.
@@ -111,7 +107,11 @@ public static class EncounterValidator
                 Fail($"{label}: revenue code (SV201) is missing");
             if (line.Charge < 0) Fail($"{label}: negative charge");
             if (line.Units <= 0) Fail($"{label}: units must be positive");
-            if (!institutional)
+            if (dental)
+            {
+                ValidateDentalLine(line, label, c.Diagnoses.Count, Fail);
+            }
+            else if (!institutional)
             {
                 if (line.DiagnosisPointers.Count == 0) Fail($"{label}: needs at least one diagnosis pointer");
                 if (line.DiagnosisPointers.Any(p => p < 1 || p > Math.Min(12, c.Diagnoses.Count)))
@@ -143,6 +143,58 @@ public static class EncounterValidator
         }
 
         return errors;
+    }
+
+    private static readonly HashSet<string> ToothSurfaces = new(StringComparer.Ordinal)
+    {
+        "M", "O", "D", "B", "L", "I", "F"
+    };
+
+    private static readonly HashSet<string> OralCavityCodes = new(StringComparer.Ordinal)
+    {
+        "00", "01", "02", "09", "10", "20", "30", "40", "L", "R"
+    };
+
+    /// <summary>837D line rules: CDT code, ADA tooth numbering, surfaces and oral cavity code lists.</summary>
+    private static void ValidateDentalLine(EncounterLine line, string label, int diagnosisCount, Action<string> fail)
+    {
+        if (line.ProcedureQualifier != "AD")
+            fail($"{label}: 837D procedure qualifier must be AD (CDT)");
+        var code = line.ProcedureCode?.Trim() ?? string.Empty;
+        if (code.Length != 5 || code[0] != 'D' || !code[1..].All(char.IsDigit))
+            fail($"{label}: '{code}' is not a CDT procedure code (D followed by four digits)");
+        if (line.DiagnosisPointers.Count > 4)
+            fail($"{label}: 837D allows at most four diagnosis pointers");
+        if (line.DiagnosisPointers.Any(p => p < 1 || p > Math.Min(4, diagnosisCount)))
+            fail($"{label}: a diagnosis pointer does not point at a reported diagnosis");
+        if (line.OralCavityDesignations.Count > 5)
+            fail($"{label}: at most five oral cavity designations (SV304)");
+        foreach (var area in line.OralCavityDesignations.Where(a => !OralCavityCodes.Contains(a.Trim())))
+            fail($"{label}: oral cavity designation '{area}' is not a valid code");
+        if (line.ProsthesisCrownInlayCode is { Length: > 0 } pci && pci is not ("I" or "R"))
+            fail($"{label}: prosthesis, crown or inlay code '{pci}' is not I or R");
+        if (line.Teeth.Count > 32)
+            fail($"{label}: more than 32 teeth on one line");
+        foreach (var tooth in line.Teeth)
+        {
+            if (!IsValidTooth(tooth.ToothCode))
+                fail($"{label}: tooth '{tooth.ToothCode}' is not an ADA Universal tooth designation");
+            if (tooth.Surfaces.Count > 5)
+                fail($"{label}: tooth {tooth.ToothCode} has more than five surfaces");
+            foreach (var surface in tooth.Surfaces.Where(x => !ToothSurfaces.Contains(x.Trim())))
+                fail($"{label}: tooth {tooth.ToothCode} surface '{surface}' is not M, O, D, B, L, I or F");
+        }
+    }
+
+    /// <summary>ADA Universal National Tooth Designation: 1–32, A–T, supernumerary 51–82 and AS–TS.</summary>
+    public static bool IsValidTooth(string? tooth)
+    {
+        var t = tooth?.Trim().ToUpperInvariant() ?? string.Empty;
+        if (int.TryParse(t, out var n) && t.All(char.IsDigit))
+            return n is >= 1 and <= 32 or >= 51 and <= 82;
+        if (t.Length == 1) return t[0] is >= 'A' and <= 'T';
+        if (t.Length == 2 && t[1] == 'S') return t[0] is >= 'A' and <= 'T';
+        return false;
     }
 
     /// <summary>NPI check digit (Luhn over "80840" + first nine digits).</summary>

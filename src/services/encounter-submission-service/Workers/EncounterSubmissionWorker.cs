@@ -15,7 +15,7 @@ namespace EncounterSubmissionService.Workers;
 ///   3. Florida: auto-batches submissions due within 48 hours via BuildFmmisSubmissionBatch
 ///      and writes the FMMIS staging file to Azure Blob (unchanged)
 ///   4. Texas / California: batches every pending encounter on each enabled route, per
-///      tenant, into 837P / 837I files stored with the batch (and copied to blob staging
+///      tenant, into 837P / 837I / 837D files stored with the batch (and copied to blob staging
 ///      when configured). Encounters that fail validation are held back for rework.
 /// </summary>
 public class EncounterSubmissionWorker : BackgroundService

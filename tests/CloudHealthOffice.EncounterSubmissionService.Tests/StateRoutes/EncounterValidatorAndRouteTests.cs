@@ -86,11 +86,60 @@ public class EncounterValidatorTests
     }
 
     [Fact]
-    public void Dental_IsHeldBack_NotSent()
+    public void Dental_ValidEncounter_Passes_OnEveryRoute()
     {
-        EncounterValidator.Validate(Professional() with { Form = EncounterFormType.Dental })
-            .Should().ContainSingle(e => e.Contains("837D"));
+        EncounterValidator.Validate(Dental()).Should().BeEmpty();
+        EncounterValidator.Validate(Dental(), StateEncounterRoute.Texas).Should().BeEmpty();
+        EncounterValidator.Validate(Dental() with { Diagnoses = Array.Empty<EncounterDiagnosis>(),
+                Lines = new[] { Dental().Lines[0] }, TotalCharge = 55m, PlanPaidAmount = 30m })
+            .Should().BeEmpty("837D diagnoses are situational");
     }
+
+    [Fact]
+    public void Dental_RefusesBadCdtToothSurfaceAndAreaCodes()
+    {
+        var claim = Dental();
+        var bad = claim with
+        {
+            Lines = new[]
+            {
+                claim.Lines[0] with { ProcedureCode = "99213", ProcedureQualifier = "HC" },
+                claim.Lines[1] with
+                {
+                    Teeth = new[] { new EncounterTooth("33", new[] { "M" }), new EncounterTooth("4", new[] { "X" }) },
+                    OralCavityDesignations = new[] { "99" },
+                    ProsthesisCrownInlayCode = "Z",
+                    DiagnosisPointers = new[] { 2 }
+                }
+            }
+        };
+
+        var errors = EncounterValidator.Validate(bad);
+
+        errors.Should().Contain(e => e.Contains("line 1") && e.Contains("qualifier must be AD"))
+            .And.Contain(e => e.Contains("'99213' is not a CDT procedure code"))
+            .And.Contain(e => e.Contains("tooth '33'"))
+            .And.Contain(e => e.Contains("surface 'X'"))
+            .And.Contain(e => e.Contains("oral cavity designation '99'"))
+            .And.Contain(e => e.Contains("prosthesis, crown or inlay code 'Z'"))
+            .And.Contain(e => e.Contains("line 2") && e.Contains("diagnosis pointer"));
+    }
+
+    [Theory]
+    [InlineData("1", true)]
+    [InlineData("32", true)]
+    [InlineData("A", true)]
+    [InlineData("T", true)]
+    [InlineData("51", true)]
+    [InlineData("82", true)]
+    [InlineData("AS", true)]
+    [InlineData("0", false)]
+    [InlineData("33", false)]
+    [InlineData("U", false)]
+    [InlineData("83", false)]
+    [InlineData("", false)]
+    public void ToothDesignation_FollowsTheAdaUniversalSystem(string tooth, bool valid) =>
+        EncounterValidator.IsValidTooth(tooth).Should().Be(valid);
 
     [Theory]
     [InlineData("1234567893", true)]
@@ -240,5 +289,47 @@ public class StateEncounterDeadlineTests
         var adjudicated = new DateTime(2026, 10, 3, 0, 0, 0, DateTimeKind.Utc);
 
         StateEncounterRoute.California.ComputeDeadline(adjudicated, options).Should().Be(adjudicated.AddDays(45));
+    }
+}
+
+public class DentalEncounterMapperTests
+{
+    [Fact]
+    public void DentalClaim_MapsToAn837DEncounter_WithTeethAreasAndCdtQualifier()
+    {
+        var claim = new ClaimRecord
+        {
+            Id = "c-d1",
+            ClaimNumber = "DEN-1",
+            ClaimType = ClaimRecordType.Dental,
+            MemberId = "M1",
+            BillingProviderNPI = StateRouteTestData.BillingNpi,
+            PlaceOfServiceCode = "11",
+            TotalChargeAmount = 160m,
+            ServiceDateFrom = new DateTime(2026, 10, 7),
+            ServiceDateTo = new DateTime(2026, 10, 7),
+            AdjudicatedDate = new DateTime(2026, 10, 21),
+            ClaimLines = new()
+            {
+                new ClaimLineRecord
+                {
+                    LineNumber = 1, ProcedureCode = "D2392", ChargeAmount = 160m,
+                    Teeth = new() { new ToothRecord { ToothCode = "30", Surfaces = new() { "M", "O" } } },
+                    OralCavityDesignations = new() { "40" },
+                    ProsthesisCrownInlayCode = "I",
+                    AdjudicationResult = new LineAdjudicationRecord { PaidAmount = 88m }
+                }
+            }
+        };
+
+        var encounter = EncounterClaimMapper.Map("s-1", claim, null, null);
+
+        encounter.Form.Should().Be(EncounterFormType.Dental);
+        var line = encounter.Lines.Should().ContainSingle().Subject;
+        line.ProcedureQualifier.Should().Be("AD");
+        line.Teeth.Should().ContainSingle().Which.Should().Match<EncounterTooth>(t =>
+            t.ToothCode == "30" && t.Surfaces.SequenceEqual(new[] { "M", "O" }));
+        line.OralCavityDesignations.Should().Equal("40");
+        line.ProsthesisCrownInlayCode.Should().Be("I");
     }
 }
