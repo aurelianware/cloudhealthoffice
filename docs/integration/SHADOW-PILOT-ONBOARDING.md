@@ -118,6 +118,10 @@ Each run produces a report, a discrepancy CSV and per-claim results (portal:
   than the plan's own contracts, fee schedules and benefits support) and
   possible underpayments, kept apart, by CHO stage, denial code, procedure and
   billing provider, with example claims.
+- **Denial verification.** Every claim or line the core denied, checked by
+  CHO: would pay (wrongful-denial risk, with what CHO would pay), denies for
+  another reason, or confirms, grouped by the core's denial code with a confirm
+  rate per code.
 - **Authorization findings, both ways.** Claims the core denied for a missing
   authorization when an approved one covers the service, and claims the core paid
   without a valid one where the plan's rules require it. Each names the
