@@ -7,7 +7,7 @@
 
 | Role | Name | Duties |
 | --- | --- | --- |
-| Security Officer | ________ | Owns these policies, the risk analysis, access reviews, incident response and the contingency plan |
+| Security Officer | ________ (see [SECURITY-OFFICER-DESIGNATION.md](SECURITY-OFFICER-DESIGNATION.md)) | Owns these policies, the risk analysis, access reviews, incident response and the contingency plan |
 | Privacy Officer | ________ | Owns PHI use and disclosure under the plan BAAs, requests from plans, breach risk assessments |
 | Backup for each | ________ | Acts when the officer is unavailable for more than one business day |
 
@@ -64,6 +64,8 @@ Only these subcontractors may create, receive, maintain or transmit ePHI for the
 | --- | --- | --- |
 | Google Cloud | Hosting, storage, keys, logging, load balancing, IAP | Google Cloud BAA accepted in the hosted project |
 | Anthropic (optional) | AI claims examiner, advisory only | Only after a BAA with Anthropic is signed; the deploy refuses the examiner without `ANTHROPIC_BAA_CONFIRMED=true` |
+
+The full list, with every other vendor and why it is kept out of the PHI path, is the [vendor BAA register](VENDOR-BAA-REGISTER.md).
 
 GitHub, Cloudflare, email and chat providers, and analytics tools must never receive ePHI. Adding a subcontractor needs a signed BAA first, an update to the risk analysis, and notice to each plan as its BAA requires.
 

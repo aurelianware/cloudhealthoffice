@@ -55,6 +55,23 @@ Anyone in the workforce who notices a possible incident tells the Security Offic
 - **Follow up** as more information becomes available.
 - **The plan, as covered entity, notifies members, HHS and the media** unless its BAA delegates that to Aurelianware. Aurelianware pays for and carries out any notices delegated to it.
 
+### Timelines at a glance
+
+Discovery starts every clock. The shortest one that applies wins.
+
+| Who notifies whom | Deadline | Source |
+| --- | --- | --- |
+| Aurelianware to a Texas Medicaid plan | Within 1 hour (Medicaid data from a federal system of records), otherwise 24 hours; written report by the third business day | The plan's HHS Data Use Agreement flow-down (BAA template section 13) |
+| Aurelianware to the plan, under our BAA template | 15 calendar days | [BAA template](../../diligence/BAA-TEMPLATE.md) section 6 |
+| Aurelianware to the plan, HIPAA outer limit | 60 calendar days | 164.410(b) |
+| Aurelianware to the data owner, Texas law | Immediately after discovery | Texas Business and Commerce Code 521.053 |
+| The plan to affected members | Without unreasonable delay, at most 60 days | 164.404; Texas 521.053 |
+| The plan to HHS | 500 or more people: within 60 days. Fewer: in a yearly log, within 60 days of year end | 164.408 |
+| The plan to the media | 500 or more residents of one state: within 60 days | 164.406 |
+| The plan to the Texas Attorney General | 250 or more Texans: within 30 days (confirm the current rule with counsel) | Texas 521.053 |
+
+The last four are the plan's duties unless its BAA delegates them to Aurelianware. They are listed so the written report gives the plan what it needs in time to meet them.
+
 ## 5. Severity and contacts
 
 | Contact | Details |

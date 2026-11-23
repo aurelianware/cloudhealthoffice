@@ -21,6 +21,7 @@ The full HIPAA posture, safeguard by safeguard: [HIPAA-POSTURE.md](HIPAA-POSTURE
 
 | Document | Who reads it |
 | --- | --- |
+| [BAA-READY-CHECKLIST.md](BAA-READY-CHECKLIST.md) | Founders: every step from today to signing and honoring a plan's BAA, with what only an officer can do, and cyber insurance |
 | [SOC2-ROADMAP.md](SOC2-ROADMAP.md) | Founders and investors: Type I then Type II, timeline, cost, Vanta or Drata |
 | [HIPAA-POSTURE.md](HIPAA-POSTURE.md) | A plan's CISO or privacy officer: each Security Rule safeguard, what implements it, and its status |
 | [BAA-APPROACH.md](BAA-APPROACH.md) | Founders and counsel: whose paper, what to give and refuse, Texas Medicaid flow-downs, our own BAAs with vendors |
