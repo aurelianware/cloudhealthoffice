@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Why Run Shadow Adjudication? What a Health Plan Gets | Cloud Health Office</title>
+  <meta name="description" content="Why a health plan should run shadow adjudication beside QNXT or Facets: a no-risk rehearsal for core modernization, payment-integrity findings in dollars, and prior authorizations checked against claims."/>
+  <meta name="keywords" content="shadow adjudication, parallel claims adjudication, core system parallel run, payment integrity, claims overpayment underpayment, prior authorization claim mismatch, QNXT parallel run, Facets parallel run"/>
+  <meta name="author" content="Aurelianware, Inc."/>
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/cms-0057-f/why-shadow-adjudication"/>
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article"/>
+  <meta property="og:site_name" content="Cloud Health Office"/>
+  <meta property="og:title" content="Why Run Shadow Adjudication? What a Health Plan Gets"/>
+  <meta property="og:description" content="A second opinion on every claim your core already paid: a no-risk rehearsal for modernization, payment-integrity findings in dollars, and authorizations checked against claims."/>
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/cms-0057-f/why-shadow-adjudication"/>
+  <meta property="og:image" content="https://cloudhealthoffice.com/media/demo/shadow-adjudication-poster.jpg"/>
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image"/>
+  <meta name="twitter:title" content="Why Run Shadow Adjudication? What a Health Plan Gets"/>
+  <meta name="twitter:description" content="A second opinion on every claim your core already paid: a no-risk rehearsal for modernization, payment-integrity findings in dollars, and authorizations checked against claims."/>
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/media/demo/shadow-adjudication-poster.jpg"/>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Article",
+      "headline": "Why Run Shadow Adjudication? What a Health Plan Gets",
+      "description": "Why a health plan should run shadow adjudication beside QNXT or Facets: a no-risk rehearsal for core modernization, payment-integrity findings in dollars, and prior authorizations checked against claims.",
+      "url": "https://cloudhealthoffice.com/insights/cms-0057-f/why-shadow-adjudication",
+      "image": "https://cloudhealthoffice.com/media/demo/shadow-adjudication-poster.jpg",
+      "datePublished": "2026-11-23",
+      "dateModified": "2026-11-23",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc."
+      },
+      "about": [
+        "Shadow adjudication",
+        "Parallel run",
+        "Payment integrity",
+        "Prior authorization",
+        "Core administration modernization"
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is shadow adjudication?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Shadow adjudication re-adjudicates claims your core system already decided, in a second claims engine, and records where the two answers differ: allowed, paid, member share and denial codes, claim by claim and line by line. Members, providers and payments are not affected. The core keeps paying claims."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does Cloud Health Office change claims in QNXT or Facets?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Cloud Health Office never writes to the core. It produces a report and a discrepancy file. The plan's claims and payment-integrity teams review the findings, and anything they approve goes through the plan's own adjustment process in the core."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How is shadow adjudication different from a payment-integrity vendor?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "A payment-integrity vendor reviews claims after payment and reports findings. Shadow adjudication produces similar leads, by re-pricing every claim against the plan's own contracts, fee schedules, benefits and authorizations, and at the same time measures how much of the plan's claim volume a second core can already adjudicate to the same answer."
+          }
+        }
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Insights",
+          "item": "https://cloudhealthoffice.com/insights"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "CMS-0057-F & Payer Modernization",
+          "item": "https://cloudhealthoffice.com/insights/cms-0057-f/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 4,
+          "name": "Why run shadow adjudication",
+          "item": "https://cloudhealthoffice.com/insights/cms-0057-f/why-shadow-adjudication"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --cyan:#0E7490;--green:#0F766E;--blue:#0E7490;
+      --bg:#F5F7FA;--surface:rgba(245, 247, 250, 0.92);--surface-alt:rgba(14, 116, 144, 0.03);
+      --border:rgba(14, 116, 144, 0.12);--border-bright:rgba(14, 116, 144, 0.3);
+      --text:#334155;--text-muted:#334155;--text-dim:#475569;
+      --font:'Outfit',system-ui,sans-serif;--mono:'JetBrains Mono',monospace;--max:1140px;--measure:760px;
+    }
+    html{scroll-behavior:smooth}
+    @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+    body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.8;overflow-x:hidden}
+    a{color:var(--cyan)}
+    .skip-to-main{position:absolute;left:-999px;top:0;background:var(--cyan);color:#FFFFFF;padding:.6rem 1rem;z-index:200}
+    .skip-to-main:focus{left:8px;top:8px}
+
+    body>nav{position:sticky;top:0;z-index:100;background:rgba(255, 255, 255, 0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 2rem}
+    .nav-inner{max-width:var(--max);margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
+    .nav-brand{font-weight:800;font-size:1.05rem;color:#0B1F33;text-decoration:none;display:flex;align-items:center;gap:.6rem}
+    .nav-brand span{opacity:.5;font-weight:400;font-size:.8rem}
+    .nav-links{display:flex;gap:1.8rem;align-items:center}
+    .nav-links a{color:var(--text-muted);text-decoration:none;font-size:.82rem;font-weight:500;transition:color .2s}
+    .nav-links a:hover{color:var(--cyan)}
+    .nav-cta{background:rgba(14, 116, 144, 0.08);border:1px solid rgba(14, 116, 144, 0.25);color:var(--cyan);padding:.35rem .9rem;border-radius:6px;font-size:.78rem;font-weight:600;text-decoration:none;transition:all .25s}
+    .nav-cta:hover{background:rgba(14, 116, 144, 0.15);box-shadow:0 0 20px rgba(14, 116, 144, 0.1)}
+
+    .article-head{padding:3.4rem 2rem 1rem;position:relative;overflow:hidden}
+    .article-head::before{content:'';position:absolute;top:-240px;left:15%;width:760px;height:760px;background:radial-gradient(circle,rgba(14, 116, 144, 0.05) 0%,transparent 70%);pointer-events:none}
+    .wrap{max-width:var(--measure);margin:0 auto}
+    .breadcrumb{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);margin-bottom:1.4rem}
+    .breadcrumb a{color:var(--text-muted);text-decoration:none}
+    .breadcrumb a:hover{color:var(--cyan)}
+    .eyebrow{font-family:var(--mono);font-size:.72rem;font-weight:500;color:var(--cyan);text-transform:uppercase;letter-spacing:3px;margin-bottom:1rem;opacity:.85}
+    h1{font-size:clamp(1.9rem,4.6vw,2.9rem);font-weight:900;color:#0B1F33;line-height:1.18;margin-bottom:1rem}
+    .subtitle{font-size:1.12rem;color:var(--text-muted);line-height:1.75;margin-bottom:1.4rem}
+    .meta{font-family:var(--mono);font-size:.72rem;color:var(--text-dim);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:.8rem 0;margin:1.4rem 0 0;display:flex;flex-wrap:wrap;gap:1.2rem}
+    .meta strong{color:var(--text-muted);font-weight:500}
+
+    article{padding:1.5rem 2rem 4rem}
+    article h2{font-size:clamp(1.3rem,3vw,1.75rem);font-weight:800;color:#0B1F33;margin:3rem 0 .4rem;line-height:1.3}
+    article h2 .num{font-family:var(--mono);font-size:.85rem;color:var(--cyan);display:block;margin-bottom:.3rem;letter-spacing:2px}
+    article h3{font-size:1.05rem;font-weight:700;color:var(--cyan);margin:1.6rem 0 .3rem;font-family:var(--mono);letter-spacing:.5px}
+    article p{margin:.9rem 0;color:var(--text)}
+    article ul,article ol{margin:1rem 0 1rem 1.3rem;color:var(--text)}
+    article li{margin:.4rem 0}
+    article strong{color:#0B1F33}
+    code{font-family:var(--mono);font-size:.86em;color:var(--green);background:rgba(15, 118, 110, 0.08);padding:.1rem .35rem;border-radius:4px;overflow-wrap:anywhere}
+    .lead{font-size:1.05rem}
+
+    .callout{border-left:3px solid var(--blue);background:rgba(14, 116, 144, 0.06);padding:1.1rem 1.3rem;border-radius:0 8px 8px 0;margin:1.6rem 0}
+    .callout.green{border-left-color:var(--green);background:rgba(15, 118, 110, 0.06)}
+    .callout.amber{border-left-color:#B45309;background:rgba(180, 83, 9, 0.07)}
+    .callout p{margin:.4rem 0;font-size:.95rem;color:var(--text-muted)}
+    .callout strong{color:#0B1F33}
+    .callout .k{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:2px;color:var(--blue);display:block;margin-bottom:.4rem}
+    .callout.green .k{color:var(--green)}
+    .callout.amber .k{color:#B45309}
+
+    /* answer / warning pair under each question */
+    .ans{border:1px solid var(--border);border-radius:10px;background:var(--surface-alt);padding:1.1rem 1.3rem;margin:1.2rem 0}
+    .ans .k{font-family:var(--mono);font-size:.64rem;text-transform:uppercase;letter-spacing:2px;display:block;margin-bottom:.5rem}
+    .ans.good{border-color:rgba(15, 118, 110, 0.28)}
+    .ans.good .k{color:var(--green)}
+    .ans.weak{border-color:rgba(180, 83, 9, 0.28)}
+    .ans.weak .k{color:#B45309}
+    .ans p{margin:.3rem 0;font-size:.93rem;color:var(--text-muted)}
+    .ans strong{color:#0B1F33}
+
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:1rem;margin:1.8rem 0}
+    .stat{border:1px solid var(--border);border-radius:10px;padding:1.1rem;background:var(--surface)}
+    .stat b{display:block;font-family:var(--mono);font-size:1.5rem;color:var(--cyan);line-height:1.2;margin-bottom:.3rem}
+    .stat span{font-size:.84rem;color:var(--text-muted);line-height:1.6;display:block}
+
+    .keyline{border:1px solid var(--border-bright);border-radius:12px;padding:1.4rem 1.6rem;margin:2rem 0;background:linear-gradient(135deg,rgba(14, 116, 144, 0.05),rgba(15, 118, 110, 0.03))}
+    .keyline p{font-size:1.02rem;color:#0B1F33;margin:0}
+
+    .toc{border:1px solid var(--border);border-radius:12px;padding:1.3rem 1.6rem;margin:2rem 0;background:var(--surface)}
+    .toc h2{font-size:.72rem!important;font-family:var(--mono);text-transform:uppercase;letter-spacing:2px;color:var(--cyan);margin:0 0 .7rem!important}
+    .toc ol{margin:0 0 0 1.2rem;font-size:.92rem}
+    .toc li{margin:.25rem 0}
+    .toc a{text-decoration:none;color:var(--text-muted)}
+    .toc a:hover{color:var(--cyan)}
+
+    .related{border-top:1px solid var(--border);margin-top:3rem;padding-top:1.8rem}
+    .related-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:1rem;margin-top:1rem}
+    .rc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.1rem;text-decoration:none;display:block;transition:border-color .3s}
+    .rc:hover{border-color:var(--border-bright)}
+    .rc .k{font-family:var(--mono);font-size:.6rem;color:var(--cyan);text-transform:uppercase;letter-spacing:1.5px;display:block;margin-bottom:.4rem}
+    .rc h4{color:#0B1F33;font-size:.95rem;margin-bottom:.2rem}
+    .rc p{font-size:.8rem;color:var(--text-muted);margin:0}
+
+    .cta-section{text-align:center;padding:4rem 2rem;background:linear-gradient(180deg,transparent,rgba(14, 116, 144, 0.02),transparent);border-top:1px solid var(--border)}
+    .cta-section h2{font-size:clamp(1.4rem,3vw,2rem);color:#0B1F33;margin-bottom:.8rem}
+    .cta-section p{color:var(--text-muted);max-width:560px;margin:0 auto 1.6rem}
+    .btn{display:inline-flex;align-items:center;gap:.4rem;padding:.7rem 1.4rem;border-radius:8px;font-size:.85rem;font-weight:600;text-decoration:none;transition:all .25s}
+    .btn-primary{background:rgba(14, 116, 144, 0.1);border:1px solid rgba(14, 116, 144, 0.3);color:var(--cyan)}
+    .btn-primary:hover{background:rgba(14, 116, 144, 0.18);box-shadow:0 0 30px rgba(14, 116, 144, 0.1)}
+    .btn-ghost{background:transparent;border:1px solid rgba(11, 31, 51, 0.14);color:var(--text-muted)}
+    .btn-ghost:hover{border-color:rgba(11, 31, 51, 0.14);color:#0B1F33}
+    .cta-actions{display:flex;flex-wrap:wrap;gap:.8rem;justify-content:center}
+
+    footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;color:var(--text-dim);font-size:.82rem}
+    footer a{color:#0E7490;text-decoration:none}
+
+    @media(max-width:820px){
+      /* Never hide the primary nav without a way back to it: there is no mobile
+         toggle on these article pages, so the links stack and scroll instead of
+         disappearing. Keyboard and screen-reader users keep full reach. */
+      body>nav{padding:0 1rem}
+      .nav-inner{height:auto;flex-direction:column;align-items:flex-start;gap:.45rem;padding:.55rem 0}
+      .nav-links{width:100%;gap:1.1rem;overflow-x:auto;padding-bottom:.15rem;scrollbar-width:none}
+      .nav-links::-webkit-scrollbar{display:none}
+      .nav-links a,.nav-cta{white-space:nowrap;flex:0 0 auto}
+    }
+    @media(max-width:768px){article,.article-head{padding-left:1.2rem;padding-right:1.2rem}}
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="https://cloudhealthoffice.com" class="nav-brand">Cloud Health Office <span>Insights</span></a>
+      <div class="nav-links">
+        <a href="/solutions-payers">Solutions</a>
+        <a href="/cms-0057f-compliance">CMS Compliance</a>
+        <a href="/evidence">Evidence</a>
+        <a href="/platform">Platform</a>
+        <a href="/services">Services</a>
+        <a href="/insights/cms-0057-f/">Series</a>
+        <a href="/docs">Docs</a>
+        <a href="/contact" class="nav-cta">Contact →</a>
+      </div>
+    </div>
+  </nav>
+
+
+  <main id="main-content">
+    <header class="article-head">
+      <div class="wrap">
+        <nav class="breadcrumb" aria-label="Breadcrumb">
+          <a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/insights/cms-0057-f/">CMS-0057-F &amp; Payer Modernization</a> / <span>Why run shadow adjudication</span>
+        </nav>
+        <div class="eyebrow">CMS-0057-F &amp; Payer Modernization</div>
+        <h1>Why Run Shadow Adjudication? What a Health Plan Gets</h1>
+        <p class="subtitle">Shadow adjudication runs the claims your core already paid through a second engine and shows where the answers differ. Here is why a plan should care: it rehearses a core modernization with no risk, it turns up payment-integrity findings in dollars, and it checks authorizations against claims.</p>
+        <div class="meta">
+          <span><strong>Series:</strong> CMS-0057-F &amp; Payer Modernization</span>
+          <span><strong>Published:</strong> <time datetime="2026-11-23">November 23, 2026</time></span>
+          <span><strong>For:</strong> Claims operations, payment integrity, CIOs &amp; COOs</span>
+        </div>
+      </div>
+    </header>
+
+    <article>
+      <div class="wrap">
+
+        <p class="lead">Most plans will not buy a &ldquo;second claims engine&rdquo; for its own sake, and they shouldn&rsquo;t. Shadow adjudication earns its place when it answers questions a plan already pays to answer: will a new core pay our claims the way we expect, where are we paying the wrong amount, and are our authorizations and claims telling the same story?</p>
+
+        <div class="toc">
+          <h2>On this page</h2>
+          <ol>
+            <li><a href="#what">What shadow adjudication is</a></li>
+            <li><a href="#modernize">It takes the risk out of modernizing the core</a></li>
+            <li><a href="#integrity">It is a payment-integrity review, in dollars</a></li>
+            <li><a href="#auth">It checks authorizations against claims</a></li>
+            <li><a href="#worklist">What your claims team gets, and what Cloud Health Office never does</a></li>
+            <li><a href="#takes">What it takes</a></li>
+            <li><a href="#pilot">How a shadow pilot runs</a></li>
+          </ol>
+        </div>
+
+        <h2 id="what"><span class="num">01</span>What shadow adjudication is</h2>
+        <p>Your core, whether QNXT, Facets, HealthRules or a plan-built system, keeps adjudicating and paying every claim. Each day it exports the claims it decided, along with the members, providers and authorizations behind them. Cloud Health Office loads those files and re-adjudicates each claim against your contracts, fee schedules, benefit designs and authorizations. Then it compares the two answers claim by claim and line by line: allowed amount, paid amount, member share and denial codes.</p>
+        <p>Nothing a member, a provider or an API sees changes. No payment moves, no accumulator moves and no remittance goes out. The comparison is all the run produces.</p>
+
+        <h2 id="modernize"><span class="num">02</span>It takes the risk out of modernizing the core</h2>
+        <p>No plan switches off its core because a vendor says the new one works. A parallel run, the same claims through both systems with the results reconciled, is standard practice before any core conversion. The trouble is that a conventional parallel run comes late, after months of configuration, when changing course is expensive.</p>
+        <p>Shadow adjudication moves that proof to the start. From the first file it measures two things:</p>
+        <ul>
+          <li><strong>How much of your volume Cloud Health Office can decide,</strong> and how often it agrees with your core when it does.</li>
+          <li><strong>What it is missing</strong> for every claim it can&rsquo;t decide yet, such as no contract rate for a provider, an unmapped plan code or a member who isn&rsquo;t loaded. That list is the work plan.</li>
+        </ul>
+        <p>Load the missing input, run again, and watch the gap close. When the match rate is where your operations team needs it for a line of business, you have the evidence to move that function, and only that one, on your schedule. You can stop at any point and the core never noticed.</p>
+        <div class="keyline">
+          <p>A migration usually asks you to commit before you can see the answer. A shadow run shows you the answer first, on your own claims.</p>
+        </div>
+
+        <h2 id="integrity"><span class="num">03</span>It is a payment-integrity review, in dollars</h2>
+        <p>Every difference between the two engines is either a configuration gap in Cloud Health Office or a possible error in the core. The second kind is worth money whether or not you ever change systems:</p>
+        <ul>
+          <li><strong>Possible overpayments,</strong> where the core paid more than your contract or fee schedule supports. A rate table that never picked up this year&rsquo;s fee schedule is the classic case.</li>
+          <li><strong>Possible underpayments,</strong> where the core paid less. These become provider disputes and appeals, and they wear on the network.</li>
+          <li><strong>Configuration errors</strong> behind both: a benefit set up wrong, an edit that never fires, a contract loaded against the wrong provider.</li>
+        </ul>
+        <p>The run report totals the claims where the core paid more and the claims where it paid less, in claims and dollars, and breaks the differences down by the stage behind them, denial code, procedure code and billing provider, largest dollars first.</p>
+        <p>Many plans already pay payment-integrity vendors to find these, often for a share of what is recovered. A shadow run produces the same kind of leads from a different angle: it re-prices every claim against your own configuration rather than sampling for patterns. Every finding is a lead for your team&rsquo;s review, not a confirmed overpayment.</p>
+        <div class="callout">
+          <span class="k">See one finding, start to finish</span>
+          <p>The <a href="/demo-shadow-adjudication">shadow adjudication demo</a> follows one seeded finding on a synthetic plan: physical therapy (97110) paid at last year&rsquo;s rate, traced from the report to the discrepancy file, the claim line and the 2026 fee schedule.</p>
+        </div>
+
+        <h2 id="auth"><span class="num">04</span>It checks authorizations against claims</h2>
+        <p>Prior authorization and claims usually live in different systems: a UM platform decides the authorization, the core pays the claim, and the two are matched by an authorization number. When they disagree, it shows up in two ways:</p>
+        <ul>
+          <li><strong>Denied for &ldquo;no authorization&rdquo; when one is on file.</strong> The provider did everything right and the plan denied anyway. That is an appeal, provider abrasion and, in Medicaid, a complaint the state may see.</li>
+          <li><strong>Paid without a valid authorization</strong> for a service that required one. That is a payment the plan may not be able to support when an auditor asks.</li>
+        </ul>
+        <p>Medicaid managed care plans are exposed on both sides. State contracts set authorization requirements and timeframes, the plan&rsquo;s encounter data shows the state what was paid, and audits test whether payments were supported. Finding these mismatches yourself, before an auditor or a provider does, is cheaper than finding them after.</p>
+        <p>When your daily drop includes the authorization file and the claim file carries the authorization number the core matched each claim to, a shadow run checks every line in Cloud Health Office&rsquo;s prior-authorization scope against your own authorizations. The report lists both kinds of mismatch with claims and dollars, and the discrepancy file names the authorization number behind each one.</p>
+        <p>What Cloud Health Office checks is set per plan: by default, Medicaid inpatient stays, and, when a plan switches it on, the procedure codes its benefit plans or prior authorization rules flag. Matching a claim that carries no authorization number to an authorization on file is not built yet.</p>
+
+        <h2 id="worklist"><span class="num">05</span>What your claims team gets, and what Cloud Health Office never does</h2>
+        <p>Every run produces two things:</p>
+        <ul>
+          <li><strong>A run report:</strong> how many claims were compared and decided, the match rate, the dollars where the core paid more and where it paid less, the authorization mismatches, and what to load next.</li>
+          <li><strong>A discrepancy file</strong> (CSV) with one row per differing claim line: claim number, core and Cloud Health Office allowed and paid amounts, the difference, both denial codes, the stage and reason behind Cloud Health Office&rsquo;s answer, and the authorization number. It opens in any spreadsheet.</li>
+        </ul>
+        <p>That file is a worklist, not a set of instructions. Your claims operations and payment-integrity teams review it, decide which findings are real, and run the approved adjustments through your core&rsquo;s own mass-adjustment process, the same way they handle findings from any payment-integrity vendor.</p>
+        <div class="callout green">
+          <span class="k">Read-only, by design</span>
+          <p><strong>Cloud Health Office never writes to QNXT, Facets or any other core.</strong> Every adjustment changes a provider payment and a remittance, and in Medicaid the encounter data sent to the state, so it belongs with the people accountable for those. A file laid out for a specific core&rsquo;s adjustment import can be scoped with a plan that wants one.</p>
+        </div>
+
+        <h2 id="takes"><span class="num">06</span>What it takes</h2>
+        <p>The core exports files most cores can already produce, and Cloud Health Office loads them each day:</p>
+        <ul>
+          <li>claims in CPCDS format, the data set behind the CARIN Blue Button guide, with members and coverage;</li>
+          <li>the provider roster, with network and credentialing status;</li>
+          <li>provider contracts and fee schedules;</li>
+          <li>benefit plan designs, mapped to the core&rsquo;s plan codes;</li>
+          <li>authorizations from the core or the UM platform.</li>
+        </ul>
+        <p>Expect most claims to be undecided on the first run. That is the point of the first run: it tells you which of those inputs to load next. The files, columns and loaders are listed on the <a href="/services/cms-0057-f-cpcds-trial">trial page</a>.</p>
+
+        <h2 id="pilot"><span class="num">07</span>How a shadow pilot runs</h2>
+        <p>A shadow pilot runs for 60 to 90 days on your own daily files, in a tenant dedicated to your plan. At the end you have:</p>
+        <ul>
+          <li>a payment-integrity report in dollars, possible overpayments and underpayments kept separate;</li>
+          <li>an authorization-mismatch report in dollars;</li>
+          <li>a measured answer to whether Cloud Health Office can carry your core, line of business by line of business, and the list of what it would still need.</li>
+        </ul>
+        <p>Your core keeps paying claims the whole time.</p>
+
+        <h2 id="disclosure"><span class="num">Disclosure</span>Where we sit in this</h2>
+        <p>Cloud Health Office is a payer software company, so read this with that in mind. The examples and demo on this site use synthetic data, and findings from a shadow run are leads for a plan&rsquo;s own review, not determinations of overpayment, underpayment or compliance. Source-available under BSL 1.1. Evaluate and run locally for free. Production use requires a commercial license.</p>
+
+        <div class="related">
+          <div class="eyebrow">Keep reading</div>
+          <div class="related-cards">
+            <a class="rc" href="/demo-shadow-adjudication"><span class="k">Demo video</span><h4>One shadow-adjudication finding, traced to the rate</h4><p>Under two minutes, captioned, synthetic data.</p></a>
+            <a class="rc" href="/services/cms-0057-f-cpcds-trial"><span class="k">Trial</span><h4>Run your own claims next to your core</h4><p>The files, the loaders and what each run shows.</p></a>
+            <a class="rc" href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas"><span class="k">Architecture</span><h4>CMS-0057-F beside QNXT, Facets and HealthEdge</h4><p>How the payer layer connects to an existing core.</p></a>
+            <a class="rc" href="/insights/cms-0057-f/outsourced-core-cms-0057-f-blueprint"><span class="k">Blueprint</span><h4>A blueprint for an outsourced core</h4><p>A worked scenario for bringing the core back in-house.</p></a>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <section class="cta-section">
+      <div class="wrap">
+        <div class="eyebrow" style="text-align:center">On QNXT, Facets or HealthRules?</div>
+        <h2>See what a shadow run finds on your claims</h2>
+        <p>We will walk through the files, the report and the discrepancy worklist with your claims and payment-integrity leads, using synthetic data first.</p>
+        <div class="cta-actions">
+          <a href="/contact?interest=cms0057-assessment" class="btn btn-primary" data-ga-event="cpcds_trial_cta_click">Talk about a shadow pilot →</a>
+          <a href="/demo-shadow-adjudication" class="btn btn-ghost">Watch the shadow adjudication demo</a>
+          <a href="/services/cms-0057-f-cpcds-trial" class="btn btn-ghost">See the trial on your own claims</a>
+        </div>
+        <p style="margin-top:1.4rem;font-size:.82rem;color:var(--text-dim)">
+          Please do not send PHI, member data, claim data, production credentials, or other sensitive production information through the contact form.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Cloud Health Office — <a href="https://github.com/aurelianware">Aurelianware, Inc.</a> &nbsp;·&nbsp; Source-available platform (BSL 1.1) &nbsp;·&nbsp; <a href="mailto:licensing@cloudhealthoffice.com">Commercial licensing</a></p>
+    <p style="margin-top:.4rem"><a href="/insights/cms-0057-f/">CMS-0057-F Series</a> &nbsp;·&nbsp; <a href="/cms-0057f-compliance">CMS-0057-F</a> &nbsp;·&nbsp; <a href="/services">Services</a> &nbsp;·&nbsp; <a href="/platform">Platform</a> &nbsp;·&nbsp; <a href="/docs">Docs</a> &nbsp;·&nbsp; <a href="/contact">Contact</a></p>
+  </footer>
+</body>
+</html>
