@@ -1,4 +1,5 @@
 using Bunit;
+using Microsoft.AspNetCore.Components.Forms;
 using CloudHealthOffice.Portal.Pages;
 using CloudHealthOffice.Portal.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +18,7 @@ public class ShadowAdjudicationPageTests : TestContext
     private readonly Mock<IShadowAdjudicationClient> _shadow = new();
     private readonly Mock<IShadowPendedClient> _pended = new();
     private readonly Mock<IUserContextService> _user = new();
+    private readonly Mock<IShadowQuickStartClient> _quick = new();
 
     private static readonly ShadowRun Run1 = new()
     {
@@ -32,6 +34,7 @@ public class ShadowAdjudicationPageTests : TestContext
         Services.AddSingleton(_shadow.Object);
         Services.AddSingleton(_pended.Object);
         Services.AddSingleton(_user.Object);
+        Services.AddSingleton(_quick.Object);
         _user.Setup(u => u.GetCurrentUserAsync()).ReturnsAsync(new UserContext { UserId = "ops-1", Roles = ["ClaimsSupervisor"] });
         _user.Setup(u => u.HasPermission("claims:import")).Returns(true);
 
@@ -155,5 +158,96 @@ public class ShadowAdjudicationPageTests : TestContext
 
         batches.Select(b => b.ImportBatchId).Should().Equal("b-new", "b-old");
         batches[1].Claims.Should().Be(3);
+    }
+
+    [Fact]
+    public void A_sample_uploaded_in_the_quick_start_loads_and_is_shadow_run()
+    {
+        var queued = new ShadowRun { Id = "run9", Status = "Queued", Background = true, ClaimsRequested = 50, StartedAtUtc = DateTime.UtcNow };
+        _quick.Setup(q => q.ImportAuthorizationsAsync(It.IsAny<ShadowQuickStartFile>(), "Medicaid", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ShadowQuickStartStep { Label = "Authorizations", Succeeded = true, Summary = "3 authorizations: 3 created" });
+        _quick.Setup(q => q.ImportClaimsAsync(It.IsAny<ShadowQuickStartFile>(), "Medicaid", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ShadowQuickStartStep { Label = "Claims", Succeeded = true, Summary = "50 claims: 50 loaded", ImportBatchId = "batch-9" });
+        _shadow.Setup(s => s.RunBatchAsync("batch-9")).ReturnsAsync(DataDropChange<ShadowRun>.Ok(queued));
+
+        var cut = RenderComponent<ShadowAdjudication>();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=shadow-quick-start]"));
+        cut.Find("[data-testid=quick-load-run]").HasAttribute("disabled").Should().BeTrue();
+
+        var inputs = cut.FindComponents<InputFile>();
+        inputs[0].UploadFiles(InputFileContent.CreateFromText("Claim unique identifier\nC-1", "claims.csv"));
+        inputs[3].UploadFiles(InputFileContent.CreateFromText("authorization_number\nA-1", "auths.csv"));
+        cut.Find("[data-testid=quick-load-run]").Click();
+
+        cut.WaitForAssertion(() => _shadow.Verify(s => s.RunBatchAsync("batch-9"), Times.Once));
+        cut.Find("[data-testid=quick-steps]").TextContent.Should().Contain("3 authorizations").And.Contain("50 claims");
+        _quick.Verify(q => q.ImportMembersAsync(It.IsAny<ShadowQuickStartFile>(), It.IsAny<ShadowQuickStartFile?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public void A_quick_start_whose_claims_did_not_load_starts_no_run()
+    {
+        _quick.Setup(q => q.ImportClaimsAsync(It.IsAny<ShadowQuickStartFile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ShadowQuickStartStep { Label = "Claims", Succeeded = false, Summary = "0 claims: 0 loaded, 4 refused", Problems = { "C-1: member not found" } });
+
+        var cut = RenderComponent<ShadowAdjudication>();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=shadow-quick-start]"));
+        cut.FindComponents<InputFile>()[0].UploadFiles(InputFileContent.CreateFromText("x", "claims.csv"));
+        cut.Find("[data-testid=quick-load-run]").Click();
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=quick-steps]").TextContent.Should().Contain("4 refused").And.Contain("member not found"));
+        _shadow.Verify(s => s.RunBatchAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public void The_nightly_switch_turns_on_the_drop_and_a_shadow_run_after_each_claim_file()
+    {
+        _drops.Setup(d => d.GetSettingsAsync()).ReturnsAsync(new DataDropSettingsView
+        {
+            DropEnabledForDeployment = true, Enabled = false, InboundFolder = "/plan-a/inbound",
+            Settings = new DataDropSettings { Enabled = false, LineOfBusiness = "Medicaid", SourceSystem = "facets", ExpectedEveryHours = 24, StaleGraceHours = 6 },
+        });
+        DataDropSettings? saved = null;
+        _drops.Setup(d => d.SaveSettingsAsync(It.IsAny<DataDropSettings>()))
+            .Callback<DataDropSettings>(s => saved = s)
+            .ReturnsAsync(() => DataDropChange<DataDropSettingsView>.Ok(new DataDropSettingsView
+            {
+                DropEnabledForDeployment = true, Enabled = true, InboundFolder = "/plan-a/inbound", Settings = saved,
+            }));
+        _drops.Setup(d => d.SaveShadowSettingsAsync(true)).ReturnsAsync(DataDropChange<ShadowAdjudicationSettingsView>.Ok(new ShadowAdjudicationSettingsView
+        {
+            EnabledForDeployment = true, Enabled = true, Running = true,
+        }));
+
+        var cut = RenderComponent<ShadowAdjudication>();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=nightly-state]").TextContent.Should().Contain("Off"));
+        var nightly = cut.FindComponents<MudBlazor.MudSwitch<bool>>()
+            .Single(c => c.Instance.Label == "Load the file drop and shadow-run each claim file");
+        cut.InvokeAsync(() => nightly.Instance.ValueChanged.InvokeAsync(true));
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=nightly-state]").TextContent.Should().Contain("/plan-a/inbound"));
+        saved!.Enabled.Should().BeTrue();
+        saved.ShadowAfterImport.Should().BeTrue();
+        saved.SourceSystem.Should().Be("facets");
+        saved.LineOfBusiness.Should().Be("Medicaid");
+        _drops.Verify(d => d.SaveShadowSettingsAsync(true), Times.Once);
+    }
+
+    [Fact]
+    public void The_weekly_trend_shows_when_there_are_two_weeks_of_runs()
+    {
+        _shadow.Setup(s => s.GetTrendAsync(90, "week")).ReturnsAsync(new ShadowRunTrend
+        {
+            Points =
+            {
+                new() { Period = "2026-11-02", Runs = 5, ClaimsCompared = 5000, DecidedRate = 0.4m, MatchRate = 0.8m, CorePaidMoreAmount = 1200m, CorePaidLessAmount = 300m },
+                new() { Period = "2026-11-09", Runs = 5, ClaimsCompared = 5100, DecidedRate = 0.7m, MatchRate = 0.9m, CorePaidMoreAmount = 900m, CorePaidLessAmount = 250m },
+            },
+        });
+
+        var cut = RenderComponent<ShadowAdjudication>();
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=shadow-trend]").TextContent
+            .Should().Contain("2026-11-09").And.Contain("70%").And.Contain("$1,200.00").And.Contain("5,100"));
     }
 }

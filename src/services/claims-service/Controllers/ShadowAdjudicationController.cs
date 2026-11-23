@@ -18,6 +18,9 @@ public class ShadowAdjudicationController : ControllerBase
 {
     private const int MaxListLimit = 1000;
 
+    /// <summary>Most recent runs a trend reads: two years of nightly runs with room for re-runs.</summary>
+    private const int MaxTrendRuns = 2000;
+
     /// <summary>Most results one report or CSV reads (a run holds at most MaxClaimsPerRun).</summary>
     internal const int MaxReportResults = 50_000;
 
@@ -117,6 +120,25 @@ public class ShadowAdjudicationController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<ShadowAdjudicationRun>>> ListRuns(
         [FromQuery] int limit = 50, CancellationToken ct = default) =>
         Ok(await _store.ListRunsAsync(TenantId, Math.Clamp(limit, 1, MaxListLimit), ct));
+
+    /// <summary>
+    /// How the tenant's completed runs moved over the last <c>days</c> days
+    /// (default 90, at most 730), by <c>bucket</c> <c>day</c> or <c>week</c>
+    /// (default): claims compared, decided and matched rates, and the dollars
+    /// where the core paid more and less. An import batch run more than once
+    /// counts its latest run only.
+    /// </summary>
+    [HttpGet("trend")]
+    [RequirePermission(ClaimsPermissions.Import)]
+    [ProducesResponseType(typeof(ShadowRunTrend), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ShadowRunTrend>> Trend(
+        [FromQuery] int days = 90, [FromQuery] string bucket = ShadowRunTrendBuilder.Week, CancellationToken ct = default)
+    {
+        var to = _clock.GetUtcNow().UtcDateTime;
+        var from = to.Date.AddDays(-(Math.Clamp(days, 1, 730) - 1));
+        var runs = await _store.ListRunsAsync(TenantId, MaxTrendRuns, ct);
+        return Ok(ShadowRunTrendBuilder.Build(runs, from, to.AddTicks(1), bucket));
+    }
 
     [HttpGet("runs/{runId}")]
     [RequirePermission(ClaimsPermissions.Import)]

@@ -326,6 +326,9 @@ shadow() {
       def money: (. * 100 | round) / 100 | tostring | "$" + .;
       "  \(.run.claimsCompared) claims compared; CHO decided \(if .comparableClaims > 0 then (.decidedClaims / .comparableClaims | pct) else "-" end), matched the core on \(.run.matchRate | pct) of those.",
       "  Core paid more on \(.corePaidMore.claims) claims (\(.corePaidMore.amount | money)), less on \(.corePaidLess.claims) (\(.corePaidLess.amount | money)).",
+      (if (.denialVerification.coreDenials // 0) > 0 then
+        "  Denials checked: \(.denialVerification.coreDenials); CHO would pay \(.denialVerification.choWouldPay.denials) (\(.denialVerification.choWouldPay.choWouldPayAmount | money)), denies for another reason \(.denialVerification.choDeniesForAnotherReason.denials), confirms \(.denialVerification.choConfirms.denials), undecided \(.denialVerification.choUndecided.denials)." else empty end),
+      ((.denialVerification.byCoreDenialCode // [])[:3][] | select(.choWouldPay > 0) | "    CARC \(.coreDenialCode): CHO would pay \(.choWouldPay) of \(.denials) (\(.choWouldPayAmount | money))."),
       ((.authorizationMismatches // [])[] | "  \(.key): \(.claims) claims (\(.absolutePaidVariance | money))."),
       ((.authorizationMismatchesByPolicy // [])[:3][] | "    policy \(.key): \(.claims) claims."),
       (if (.authorizationsMatchedWithoutNumber.claims // 0) > 0 then
