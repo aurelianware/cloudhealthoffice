@@ -13,11 +13,18 @@ Use the [canonical capability ledger](../../docs/CAPABILITY_RECONCILIATION.md) f
 
 - PAS submission stores the request and decision before responding; inquiry returns stored outcomes. CHO validates and persists service-line decisions and adverse reasons and projects them into PAS responses.
 - CRD unresolved/uncoded inputs and evaluation failures return uncertainty rather than a no-authorization-needed assertion.
-- DTR creates, conditional questionnaire updates, response submission, reads, searches and existence checks use MongoDB across pods. Full answer validation, canonical URL/version resolution and complete packages remain incomplete; do not claim full DTR conformance.
+- DTR creates, conditional questionnaire updates, response submission, reads, searches and existence checks use MongoDB across pods. `$questionnaire-package` follows DTR 2.2.0 and is selected by the CRD coverage-assertion-id; one form (MRI) carries CQL prepopulation. Full answer validation remains open; do not claim full DTR conformance.
 - SMART tenant/client-bound launch and patient/encounter token context are implemented; withdrawing an application approval affects refresh. This is not a claim of every SMART response field or revocation mechanism.
 - CMS reporting computes standard/expedited counts, rates, mean/median and timeliness. Appeal/extension metrics and complete public reporting remain separate.
 - Ordinary CHO authorization workflows enforce transition guards, audit cancellation and expire approvals atomically while preserving clinical outcomes. Tenant-database sweeps and separate reopening/overturn workflows remain outside this scope. See CAP-23 and `docs/operations/AUTHORIZATION-LIFECYCLE.md`.
 - CHO receipt-v1 persists authorization receipt/due timestamps and preserves the original clock across additional-information receipt; deployment-specific policy and alerting require validation.
+
+## Inferno kit wording — November 23, 2026
+
+- All nine ONC Inferno test kits pass in one run on November 23, 2026 (US Core, CARIN Blue Button, Da Vinci Plan-Net, Bulk Data with SMART Backend Services, Da Vinci PDex, DTR, CRD, PAS, and SMART App Launch 2.2 including v2 scopes and token introspection). Say "all nine Inferno kits pass" or "9 of 9"; link /evidence/inferno-conformance.
+- Always add that the kits run against synthetic data on CHO's test stack, and that passing Inferno is not CMS certification, not ONC certification and not a determination of compliance.
+- Acceptance status is separate: 21 scenarios, Replace mode 6 PASSABLE / 15 PARTIAL / 0 GAP; core via file drop 1 PASSABLE / 10 PARTIAL / 2 GAP / 8 N/A. Every CMS API stays "Partial" on status tables until its acceptance scenarios are passable. Never turn a kit pass into "compliant", "certified" or "production ready".
+- Retired wording: "in development, not yet conformant" for CRD/DTR/PAS, "v1 scopes" for SMART, and "bulk export is a scaffold" or "planned".
 
 These implementation statements do not assert full PAS/CRD/DTR/SMART conformance, universal compliance, production readiness or customer deployments. Unverified is not equivalent to missing. Preserve precise remaining limitations and reverify changed paths before stronger claims.
 
@@ -96,10 +103,15 @@ payer-to-payer exchange, and prior authorization by January 1, 2027.
 
 Code includes advisory EDI rejection suggestions and an advisory claims-examiner
 path; do not describe them as independently validated autonomous decision-making.
-The committed fraud-model asset is a placeholder. Bulk export remains a scaffold;
-default FHIR data-provider bindings are mocks. These limits do not negate verified
-CHO authorization persistence or every other FHIR/AI path. Use CAP-14, CAP-18,
-CAP-19 and CAP-22 for their exact evidence and scope.
+The committed fraud-model asset is a placeholder (CAP-18). Updated November 23,
+2026: durable bulk export is implemented when the Mongo-backed FHIR store is
+configured (System, Patient and Group `$export`, `$davinci-data-export`,
+`$bulk-member-match`, Payer-to-Payer `$bulk-initiate`); without that configuration
+the legacy stub refuses initiation, so say "when configured" (CAP-14). Native FHIR
+data bindings are available for all five resource paths, and mocks are used only
+where a deployment selects them (CAP-22/27/30). Full conformance and production
+readiness remain unverified (CAP-19). Use CAP-14, CAP-18, CAP-19 and CAP-22 for
+their exact evidence and scope.
 
 ## License sentence
 Source-available under BSL 1.1. Evaluate and run locally for free. Production use
