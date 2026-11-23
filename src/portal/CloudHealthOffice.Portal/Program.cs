@@ -291,6 +291,7 @@ builder.Services.AddScoped<GlobalSearch>();
 builder.Services.AddScoped<IEdiTransactionsService, EdiTransactionsService>();
 builder.Services.AddScoped<IDataDropService, DataDropService>();
 builder.Services.AddScoped<IShadowAdjudicationClient, ShadowAdjudicationClient>();
+builder.Services.AddScoped<IShadowQuickStartClient, ShadowQuickStartClient>();
 builder.Services.AddScoped<IShadowFindingsClient, ShadowFindingsClient>();
 builder.Services.AddScoped<IEligibilityService, EligibilityService>();
 builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();

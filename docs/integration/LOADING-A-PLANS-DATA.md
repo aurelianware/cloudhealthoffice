@@ -195,7 +195,7 @@ can hold plan data, so keep it with the plan.
 
 ## Related
 
-- [Shadow pilot onboarding kit](SHADOW-PILOT-ONBOARDING.md): the files, security steps, timeline and report for a 60 to 90 day shadow pilot.
+- [Shadow pilot onboarding kit](SHADOW-PILOT-ONBOARDING.md): the files, security steps, timeline and report for a shadow pilot: a historical batch first, then an optional 60 to 90 day concurrent run.
 - [CPCDS trial kit](CPCDS-TRIAL-KIT.md): steps 4 to 7 as one script (dry run, load, Inferno) for a plan trying CHO on its own extracts.
 - [Implementation Blueprint](../implementation/IMPLEMENTATION-BLUEPRINT.md): phases, teams and decision gates.
 - [Core adapter implementer guide](CORE-ADAPTER-IMPLEMENTER-GUIDE.md): live adapters, the alternative to loading data into CHO.

@@ -21,6 +21,9 @@ public interface IShadowAdjudicationClient
 
     /// <summary>The run's discrepancy CSV; null when the run is not this tenant's.</summary>
     Task<byte[]?> GetDiscrepanciesCsvAsync(string runId, bool includeUndecided);
+
+    /// <summary>How completed runs moved over the last <paramref name="days"/> days, by day or week.</summary>
+    Task<ShadowRunTrend?> GetTrendAsync(int days = 90, string bucket = "week");
 }
 
 public class ShadowAdjudicationClient : IShadowAdjudicationClient
@@ -45,6 +48,10 @@ public class ShadowAdjudicationClient : IShadowAdjudicationClient
 
     public async Task<List<ShadowRun>> ListRunsAsync(int limit = 25)
         => await GetAsync<List<ShadowRun>>($"{RunsUrl}?limit={Math.Clamp(limit, 1, 200)}") ?? new();
+
+    public Task<ShadowRunTrend?> GetTrendAsync(int days = 90, string bucket = "week")
+        => GetAsync<ShadowRunTrend>(
+            $"{_configuration["Services:ClaimsService"]}/v1/claims/shadow-adjudication/trend?days={Math.Clamp(days, 1, 730)}&bucket={Uri.EscapeDataString(bucket)}");
 
     public Task<ShadowRunReport?> GetReportAsync(string runId, int top = 10)
         => GetAsync<ShadowRunReport>($"{RunUrl(runId)}/report?top={Math.Clamp(top, 1, 100)}");

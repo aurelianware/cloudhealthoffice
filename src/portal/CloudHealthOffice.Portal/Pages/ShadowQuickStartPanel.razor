@@ -1,0 +1,311 @@
+@using CloudHealthOffice.Portal.Services
+@using Microsoft.AspNetCore.Components.Forms
+@inject IShadowQuickStartClient QuickStart
+@inject IDataDropService DataDrops
+@inject ISnackbar Snackbar
+
+@*
+    Quick start for shadow adjudication: upload a sample of what the core
+    already decided and get a shadow report the same day, then turn on nightly
+    runs from the file drop with one switch. The uploads go through the same
+    importers the file drop uses. See docs/integration/SHADOW-ADJUDICATION.md.
+*@
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" md="7">
+        <MudPaper Elevation="0" Class="pa-4" Style="@PaperStyle" data-testid="shadow-quick-start">
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Try it on a sample of your claims</MudText>
+            <MudText Typo="Typo.body2" Class="my-2">
+                Upload a month of claims your core already adjudicated, as a CPCDS claim file. Members, coverage and authorizations
+                are optional, and each one lets CHO decide more of the claims. The shadow run starts as soon as the claims load,
+                and its report opens below.
+            </MudText>
+            <div class="d-flex flex-wrap gap-3">
+                <MudSelect T="string" @bind-Value="_lineOfBusiness" Label="Line of business" Dense="true" Style="max-width: 200px;">
+                    @foreach (var lob in LinesOfBusiness)
+                    {
+                        <MudSelectItem T="string" Value="@lob">@lob</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudTextField T="string" @bind-Value="_sourceSystem" Label="Core system" Placeholder="qnxt, facets, ..." Dense="true" Style="max-width: 200px;" />
+            </div>
+            <MudSimpleTable Dense="true" Elevation="0" Class="mt-2">
+                <tbody>
+                    @FileRow("Claims (CPCDS), required", "quick-claims", f => _claims = f, _claims)
+                    @FileRow("Members (CPCDS)", "quick-members", f => _members = f, _members)
+                    @FileRow("Coverage (CPCDS)", "quick-coverage", f => _coverages = f, _coverages)
+                    @FileRow("Authorizations (CSV or X12 278)", "quick-auths", f => _authorizations = f, _authorizations)
+                </tbody>
+            </MudSimpleTable>
+            <div class="d-flex align-center gap-2 mt-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_busy || _claims is null || !CanRun)"
+                           OnClick="LoadAndRunAsync" data-testid="quick-load-run">Load and run</MudButton>
+                @if (_busy)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    <MudText Typo="Typo.caption">@_stage</MudText>
+                }
+            </div>
+            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); display: block;" Class="mt-1">
+                Up to @(MaxUploadMb) MB a file. A larger history goes through the file drop as monthly files. Members without
+                coverage, claims with no contract rate and plan codes not yet mapped show up in the report as "What to load next".
+            </MudText>
+            @if (_steps.Count > 0)
+            {
+                <MudSimpleTable Dense="true" Elevation="0" Class="mt-2" data-testid="quick-steps">
+                    <tbody>
+                        @foreach (var step in _steps)
+                        {
+                            <tr>
+                                <td style="white-space: nowrap;">
+                                    <MudIcon Icon="@(step.Succeeded ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.ErrorOutline)"
+                                             Color="@(step.Succeeded ? Color.Success : Color.Error)" Size="Size.Small" />
+                                    @step.Label
+                                </td>
+                                <td>
+                                    @step.Summary
+                                    @foreach (var problem in step.Problems)
+                                    {
+                                        <div style="font-size: 0.8em; color: var(--cb-fg-text-55);">@problem</div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="5">
+        <MudPaper Elevation="0" Class="pa-4" Style="@PaperStyle" data-testid="shadow-nightly">
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Run it every night</MudText>
+            <MudText Typo="Typo.body2" Class="my-2">
+                Point your core's daily CPCDS export at the file drop, and CHO loads each file and shadow-runs its claims as soon as
+                it arrives. Each run's report and worklist appear here, and the trend below shows how the match rate and the dollars move.
+            </MudText>
+            @if (_drop is { } drop && !drop.DropEnabledForDeployment)
+            {
+                <MudText Typo="Typo.body2" data-testid="nightly-unavailable">
+                    The file drop is off in this deployment. Ask your CHO operator to turn it on.
+                </MudText>
+            }
+            else if (_drop is not null)
+            {
+                <MudSwitch T="bool" Value="Nightly" ValueChanged="SetNightlyAsync" Color="Color.Primary" Disabled="_busy || !CanRun"
+                           Label="Load the file drop and shadow-run each claim file" data-testid="nightly-switch" />
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); display: block;" data-testid="nightly-state">
+                    @NightlyState
+                </MudText>
+                <MudLink Href="/edi-transactions" Typo="Typo.body2">Set up the SFTP login and folder in Imports &amp; EDI, Setup</MudLink>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2">The file drop's settings could not be read from the claims service.</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    /// <summary>Starts the shadow run on a loaded claim batch; the page watches its progress.</summary>
+    [Parameter] public EventCallback<string> RunBatch { get; set; }
+
+    /// <summary>Whether shadow runs are accepted for this plan (the page's switch).</summary>
+    [Parameter] public bool CanRun { get; set; }
+
+    /// <summary>The plan's shadow switch changed here (nightly runs turn it on).</summary>
+    [Parameter] public EventCallback<ShadowAdjudicationSettingsView> ShadowSettingsChanged { get; set; }
+
+    internal const int MaxUploadMb = 200;
+    private const long MaxUploadBytes = MaxUploadMb * 1_000_000L;
+    private const string PaperStyle = "background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;";
+    private static readonly string[] LinesOfBusiness = ["Medicaid", "Commercial", "Medicare", "Exchange", "TRICARE", "VA"];
+
+    private IBrowserFile? _claims;
+    private IBrowserFile? _members;
+    private IBrowserFile? _coverages;
+    private IBrowserFile? _authorizations;
+    private string _lineOfBusiness = "Medicaid";
+    private string? _sourceSystem;
+    private bool _busy;
+    private string? _stage;
+    private List<ShadowQuickStartStep> _steps = new();
+    private DataDropSettingsView? _drop;
+
+    private bool Nightly => _drop is { Enabled: true, Settings.ShadowAfterImport: true };
+
+    private string NightlyState => _drop switch
+    {
+        { Enabled: true, Settings.ShadowAfterImport: true } => $"On. Files dropped in {Folder} load at the next poll and are shadow-run as they load.",
+        { Enabled: true } => "The file drop is on, but its claim files are not shadow-run. Switch this on to run them each night.",
+        _ => "Off. Switching this on turns on the file drop and a shadow run after each claim file.",
+    };
+
+    private string Folder => string.IsNullOrWhiteSpace(_drop?.InboundFolder) ? "the drop folder" : _drop!.InboundFolder;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _drop = await DataDrops.GetSettingsAsync();
+            if (_drop?.Settings is { } s)
+            {
+                _lineOfBusiness = string.IsNullOrWhiteSpace(s.LineOfBusiness) ? _lineOfBusiness : s.LineOfBusiness;
+                _sourceSystem = s.SourceSystem;
+            }
+        }
+        catch (Exception)
+        {
+            _drop = null;
+        }
+    }
+
+    private RenderFragment FileRow(string label, string testId, Action<IBrowserFile?> set, IBrowserFile? current) => __builder =>
+    {
+        <tr>
+            <td style="white-space: nowrap;">@label</td>
+            <td>
+                <InputFile OnChange="@(e => set(e.File))" data-testid="@testId" accept=".csv,.txt,.psv,.tsv,.x12,.edi,.278" />
+                @if (current is not null && current.Size > MaxUploadBytes)
+                {
+                    <div style="font-size: 0.8em; color: var(--mud-palette-error);">Over @(MaxUploadMb) MB: send it through the file drop instead.</div>
+                }
+            </td>
+        </tr>
+    };
+
+    private async Task LoadAndRunAsync()
+    {
+        if (_claims is null) return;
+        var files = new[] { _claims, _members, _coverages, _authorizations }.Where(f => f is not null).ToList();
+        if (files.Any(f => f!.Size > MaxUploadBytes))
+        {
+            Snackbar.Add($"A file is over {MaxUploadMb} MB. Send it through the file drop instead.", Severity.Warning);
+            return;
+        }
+
+        _busy = true;
+        _steps = new();
+        var temp = new List<string>();
+        try
+        {
+            async Task<ShadowQuickStartFile> Open(IBrowserFile file)
+            {
+                // Copy to a seekable temp file: the browser stream reads once, and the
+                // authorization import sniffs the first bytes for an X12 interchange.
+                var path = Path.GetTempFileName();
+                temp.Add(path);
+                await using (var target = File.Create(path))
+                await using (var source = file.OpenReadStream(MaxUploadBytes))
+                    await source.CopyToAsync(target);
+                return new ShadowQuickStartFile(file.Name, File.OpenRead(path));
+            }
+
+            if (_members is not null)
+            {
+                _stage = "Loading members and coverage";
+                StateHasChanged();
+                var members = await Open(_members);
+                var coverages = _coverages is null ? null : await Open(_coverages);
+                await using (members.Content)
+                await using (coverages?.Content)
+                    _steps.Add(await QuickStart.ImportMembersAsync(members, coverages));
+            }
+
+            if (_authorizations is not null)
+            {
+                _stage = "Loading authorizations";
+                StateHasChanged();
+                var auths = await Open(_authorizations);
+                await using (auths.Content)
+                    _steps.Add(await QuickStart.ImportAuthorizationsAsync(auths, _lineOfBusiness, _sourceSystem));
+            }
+
+            _stage = "Loading claims";
+            StateHasChanged();
+            var claims = await Open(_claims);
+            ShadowQuickStartStep claimStep;
+            await using (claims.Content)
+                claimStep = await QuickStart.ImportClaimsAsync(claims, _lineOfBusiness, _sourceSystem);
+            _steps.Add(claimStep);
+
+            if (claimStep.ImportBatchId is { Length: > 0 } batch)
+            {
+                _stage = "Starting the shadow run";
+                StateHasChanged();
+                await RunBatch.InvokeAsync(batch);
+            }
+            else
+            {
+                Snackbar.Add("No claims loaded, so there is nothing to shadow-run. The claims line above says why.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            foreach (var path in temp)
+            {
+                try { File.Delete(path); } catch (IOException) { }
+            }
+            _busy = false;
+            _stage = null;
+        }
+    }
+
+    /// <summary>
+    /// The one switch for nightly runs: the file drop on, a shadow run after
+    /// each claim file, and shadow adjudication on for the plan. Off stops the
+    /// shadow runs and leaves the drop loading files.
+    /// </summary>
+    private async Task SetNightlyAsync(bool on)
+    {
+        if (_drop is null) return;
+        _busy = true;
+        try
+        {
+            var current = _drop.Settings;
+            var settings = new DataDropSettings
+            {
+                Enabled = on || _drop.Enabled,
+                SourceSystem = string.IsNullOrWhiteSpace(_sourceSystem) ? current?.SourceSystem : _sourceSystem.Trim(),
+                LineOfBusiness = current?.LineOfBusiness ?? _lineOfBusiness,
+                ColumnMap = current?.ColumnMap,
+                ShadowAfterImport = on,
+                ExpectedEveryHours = current?.ExpectedEveryHours ?? 24,
+                StaleGraceHours = current?.StaleGraceHours ?? 6,
+            };
+            var saved = await DataDrops.SaveSettingsAsync(settings);
+            if (!saved.Succeeded)
+            {
+                Snackbar.Add(string.Join(" ", saved.Errors), Severity.Error);
+                return;
+            }
+            _drop = saved.Value ?? _drop;
+
+            if (on)
+            {
+                var shadow = await DataDrops.SaveShadowSettingsAsync(true);
+                if (!shadow.Succeeded)
+                {
+                    Snackbar.Add(string.Join(" ", shadow.Errors), Severity.Error);
+                    return;
+                }
+                if (shadow.Value is { } view)
+                    await ShadowSettingsChanged.InvokeAsync(view);
+            }
+            Snackbar.Add(on ? "Nightly shadow runs are on from the next file drop." : "Nightly shadow runs are off.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}
