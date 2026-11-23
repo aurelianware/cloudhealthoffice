@@ -46,6 +46,13 @@ public class ClaimAdjudicationContext
     /// </summary>
     public List<PriorAuthorizationLineEvidence> PriorAuthorizationEvidence { get; } = new();
 
+    /// <summary>
+    /// Codes on the claim that were not valid on the date of service
+    /// (<see cref="Stages.CodeValidityStage"/>). Empty when every checked code
+    /// was valid, or nothing could be checked.
+    /// </summary>
+    public List<CodeValidity.CodeValidityFinding> CodeValidityFindings { get; } = new();
+
     /// <summary>Plan resolved by <see cref="IBenefitPlanResolver"/> at orchestrator entry.</summary>
     public ResolvedBenefitPlan? ResolvedPlan { get; set; }
 

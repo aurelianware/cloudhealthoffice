@@ -114,6 +114,7 @@ POST /api/v1/claims                                     (capability 5.3)
    │   └── iterate stages by Order ascending:                     │
    │                                                              │
    │       100  ScrubbingStage               ★ real (5.4)         │
+   │       105  CodeValidityStage            ★ real (added 11/26) │
    │       110  TimelyFilingStage            ★ real (added 10/26) │
    │       120  DuplicateClaimStage          ★ real               │
    │       150  ProviderIntegrityStage       ★ real (added 7/26)  │
@@ -529,6 +530,33 @@ exclusion check on a hypothetical calculation.
   to `Passed=false` + `RequiresManualReview=true`, distinct from a
   confirmed `IsExcluded` finding. See
   [`integrity-score-consumption.md`](./integrity-score-consumption.md).
+
+## Code validity stage (added November 2026)
+
+`CodeValidityStage`, `Order=105`, right after scrubbing. It asks
+terminology-service (`CodeSystem/$batch-validate-code`) whether each ICD-10-CM
+diagnosis, ICD-10-PCS procedure (HI qualifier BBR/BBQ) and HCPCS Level II line
+code was valid on the date of service, from the dated CMS releases loaded there
+(see the terminology-service README). The scrub engine's CV001-CV003 rules only
+check a code's shape; this checks the code itself.
+
+- **Dates.** Diagnoses and ICD-10-PCS codes use the through (discharge) date on
+  an inpatient claim and the from date otherwise; a HCPCS line uses its own
+  from date.
+- **Not checked.** CPT (no public dated code set) and CDT. An `unknown` answer
+  (no release loaded for that date or system) is never a finding, and an
+  unreachable or slow terminology-service passes the claim unchecked with a
+  note: a new check does not hold claims on an outage.
+- **Mode** (`Adjudication:CodeValidity:Mode`, per tenant under `Tenants`):
+  `Report` (default) records the findings on the context and as stage notes
+  and passes; `PendForReview` pends `CODEVALID`; `Deny` denies with CARC 146
+  (diagnosis invalid for the dates of service) when a diagnosis is invalid,
+  otherwise CARC 181 (procedure code invalid on the date of service), group CO
+  on the header and every line. `Off` skips it.
+- **Shadow.** The stage is shadow-safe. Findings are copied onto the shadow
+  result (`CodeValidityFindings`); a claim the core paid with such a code is a
+  lead (`ShadowCodeValidity`) in the discrepancy CSV and the run report
+  (`CorePaidWithInvalidCodes`), even when both sides paid the same amounts.
 
 ## Timely filing stage (added October 2026)
 

@@ -23,7 +23,8 @@ public static class ShadowDiscrepancyCsv
         "Kind", "CoreOutcome", "ChoOutcome", "LineNumber", "ProcedureCode", "RevenueCode", "Charge",
         "CoreAllowed", "ChoAllowed", "CorePaid", "ChoPaid", "PaidVariance",
         "CoreMemberLiability", "ChoMemberLiability", "CoreDenialCode", "ChoDenialCode",
-        "Differences", "ChoPendCode", "ChoFindings", "PriorAuthorizationNumber", "AuthorizationFinding",
+        "Differences", "ChoPendCode", "ChoFindings", "CodeValidityFinding", "CodesNotValidOnDateOfService",
+        "PriorAuthorizationNumber", "AuthorizationFinding",
         "ChoAuthorizationNumber", "ChoAuthorizationSource", "AuthorizationRequiredBy", "MedicalPolicy", "AuthorizationCriteria",
     ];
 
@@ -34,11 +35,14 @@ public static class ShadowDiscrepancyCsv
 
         foreach (var r in results)
         {
-            if (r.Kind is ShadowDiscrepancyKind.Match or ShadowDiscrepancyKind.NotComparable) continue;
+            if (r.Kind == ShadowDiscrepancyKind.NotComparable) continue;
+            // A match is left out unless the core paid with a code not valid on
+            // the date of service: then it is a lead even though the amounts agree.
+            if (r.Kind == ShadowDiscrepancyKind.Match && ShadowCodeValidity.For(r) is null) continue;
             if (r.Kind == ShadowDiscrepancyKind.ChoUndecided && !includeUndecided) continue;
 
             var differing = r.Lines.Where(l => l.Differences.Count > 0).ToList();
-            if (differing.Count == 0 || r.Kind == ShadowDiscrepancyKind.ChoUndecided)
+            if (differing.Count == 0 || r.Kind is ShadowDiscrepancyKind.ChoUndecided or ShadowDiscrepancyKind.Match)
             {
                 AppendRow(sb, ClaimRow(r));
                 continue;
@@ -66,6 +70,7 @@ public static class ShadowDiscrepancyCsv
         Money(r.CoreMemberLiability), Undecided(r) ? null : Money(r.ChoMemberLiability),
         r.CoreDenialCode, r.ChoDenialCode,
         null, r.ChoPendCode, string.Join(" | ", r.ChoStageFindings),
+        ShadowCodeValidity.For(r), ShadowCodeValidity.Describe(r),
         r.PriorAuthorizationNumber, ShadowAuthorizationMismatch.For(r),
         .. Evidence(r.PriorAuthorizationEvidence),
     ];
@@ -79,6 +84,7 @@ public static class ShadowDiscrepancyCsv
         Money(l.CoreMemberLiability), Money(l.ChoMemberLiability),
         l.CoreDenialCode, l.ChoDenialCode,
         string.Join(";", l.Differences), r.ChoPendCode, string.Join(" | ", r.ChoStageFindings),
+        ShadowCodeValidity.For(r), ShadowCodeValidity.Describe(r),
         l.PriorAuthorizationNumber ?? r.PriorAuthorizationNumber, ShadowAuthorizationMismatch.For(r, l),
         .. Evidence(r.EvidenceFor(l.LineNumber) is { } e ? [e] : []),
     ];

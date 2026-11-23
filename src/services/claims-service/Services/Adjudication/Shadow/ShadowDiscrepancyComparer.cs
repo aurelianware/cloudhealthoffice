@@ -116,6 +116,7 @@ public static class ShadowDiscrepancyComparer
                 .ToList(),
             HeldForProviderScreening = heldForScreening,
             PriorAuthorizationEvidence = [.. cho.PriorAuthorizationEvidence],
+            CodeValidityFindings = [.. cho.CodeValidityFindings],
         };
         if (heldForScreening)
         {
