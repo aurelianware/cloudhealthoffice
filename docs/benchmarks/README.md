@@ -22,6 +22,17 @@ All results below are **local Docker Desktop Kubernetes** runs. They are enginee
 benchmarks, not production-cloud capacity claims. Throughput figures are hardware-dependent
 and will not reproduce exactly elsewhere; the correctness gates are seed-reproducible.
 
+> **Read the throughput figures below as a floor, not a ceiling (November 2026).**
+> Until November 2026 the validator re-read each submitted claim's status on a
+> fixed 1,000 ms poll and held one worker per claim, with at most 96 workers. A
+> claim that finished in 200 ms still held its worker for a second, so measured
+> throughput could not go much above parallelism per second. The episode 15 and
+> 16 rates (124 and 156 claims/sec) sit right at that ceiling. The poll now
+> starts at 50 ms and doubles up to the interval, and the validator prints
+> claims/sec for every minute of the run. See
+> [steady-state scale diagnosis](../million-claim-challenge/2026-11-23-steady-state-scale.md)
+> and the [GKE run workflow](../../.github/workflows/mcc-gke.yml).
+
 **Canonical current result — correctness baseline (episode 15, run 2):**
 
 | Measure | Result |

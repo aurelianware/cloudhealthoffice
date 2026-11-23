@@ -80,6 +80,14 @@ public sealed class ClaimIndexInitializer : IHostedService
                 new CreateIndexOptions { Sparse = true, Name = "accumulator_outbox_commit_due" }),
             new CreateIndexModel<Claim>(keys.Ascending(c => c.PendingAccumulatorReversal!.DueAtMs),
                 new CreateIndexOptions { Sparse = true, Name = "accumulator_outbox_reversal_due" }),
+            // Accumulator outbox: the age query (OldestAccumulatorOutboxAsync)
+            // runs on every dispatcher poll of every replica. Without these it
+            // scanned the whole collection, so its cost grew with every claim
+            // ever stored (1.2 s per scan at 1M claims, two scans per poll).
+            new CreateIndexModel<Claim>(keys.Ascending(c => c.PendingAccumulatorCommit!.CreatedAtMs),
+                new CreateIndexOptions { Sparse = true, Name = "accumulator_outbox_commit_created" }),
+            new CreateIndexModel<Claim>(keys.Ascending(c => c.PendingAccumulatorReversal!.CreatedAtMs),
+                new CreateIndexOptions { Sparse = true, Name = "accumulator_outbox_reversal_created" }),
             // Claim-event outbox: the dispatcher's due scan over the pending
             // events (multikey; sparse — claims without one are not indexed).
             new CreateIndexModel<Claim>(new IndexKeysDefinitionBuilder<Claim>().Ascending("PendingClaimEvents.DueAtMs"),
