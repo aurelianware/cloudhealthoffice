@@ -273,7 +273,7 @@
               <tr>
                 <td><span class="ev-what">Da Vinci PAS</span><p><a href="https://github.com/inferno-framework/davinci-pas-test-kit">davinci-pas-test-kit</a> v0.16.0</p></td>
                 <td><code>Claim/$submit</code> and <code>$inquire</code> for approved, denied and pended requests; claim updates; must-support elements of the request and response; the error cases; and the Subscriptions R4 backport notification of a pended decision.</td>
-                <td>Suite <code>davinci_pas_server_suite_v221</code>, all groups. The kit plays a provider's PAS client over SMART Backend Services. Every use case passes; six must-support tests fail and are logged as CHO gaps: optional ClaimResponse elements, CDex requests inside a PAS response, and replaced-authorization references.</td>
+                <td>Suite <code>davinci_pas_server_suite_v221</code>, all groups. The kit plays a provider's PAS client over SMART Backend Services. To the kit's must-support requests the harness adds its own (a pend that asks for documentation, a preferred alternative, a refused request), so the optional response elements are shown rather than merely allowed.</td>
                 <td>The Prior Authorization API, due January 1, 2027: the request, the decision and its status. PAS 2.2.1 is the guide CMS recommends for it.</td>
               </tr>
               <tr>
@@ -364,7 +364,7 @@
             <li><strong>This is not certification.</strong> Running ONC's tool is not ONC, CMS or HL7 approval. CMS-0057-F has no certification program for payer APIs.</li>
             <li><strong>A pass covers the groups that ran, at that kit version.</strong> It isn't a pass of the whole implementation guide, and it isn't a pass of CMS-0057-F.</li>
             <li><strong>Synthetic data on a test stack.</strong> No production member data is involved, and no production deployment is claimed.</li>
-            <li><strong>The PAS kit does not fully pass yet.</strong> Every PAS use case passes, but six must-support tests fail and are logged as CHO gaps. PAS, CRD and DTR are also evidenced by <a href="/evidence/davinci-interoperability">exchanges with the HL7 Da Vinci reference implementation</a>.</li>
+            <li><strong>The PAS kit passes every test</strong>, since November 23, 2026; until then six must-support tests failed and were logged as CHO gaps. PAS, CRD and DTR are also evidenced by <a href="/evidence/davinci-interoperability">exchanges with the HL7 Da Vinci reference implementation</a>.</li>
             <li><strong>Kit results and acceptance results stay separate.</strong> A kit result never changes a <a href="/insights/cms-0057-f/acceptance-scenarios">CMS-0057-F acceptance scenario</a> status, and the two are never combined into one score.</li>
           </ul>
         </div>

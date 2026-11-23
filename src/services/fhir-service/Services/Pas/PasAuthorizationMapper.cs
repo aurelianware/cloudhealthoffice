@@ -835,6 +835,44 @@ public static class PasAuthorizationMapper
         return null;
     }
 
+    /// <summary>
+    /// Writes each reference in <paramref name="element"/> that names a Bundle
+    /// entry by its absolute fullUrl as that entry's <c>Type/id</c>. A
+    /// submitter may address an entry either way (a Claim in an entry with a
+    /// <c>urn:uuid</c> fullUrl has to, since a relative reference does not
+    /// resolve from one), and what CHO reads and forwards afterwards is then
+    /// always relative. A reference that names nothing in the Bundle is left
+    /// as it is, so it is still refused as an outside reference.
+    /// </summary>
+    public static void PointAtEntriesByTypeAndId(Bundle bundle, Base element)
+    {
+        if (bundle.Entry is null) return;
+        var byFullUrl = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var entry in bundle.Entry)
+        {
+            if (entry.Resource?.Id is { Length: > 0 } id && entry.FullUrl is { } fullUrl
+                && fullUrl.Contains("://", StringComparison.Ordinal))
+                byFullUrl.TryAdd(fullUrl, $"{entry.Resource.TypeName}/{id}");
+        }
+        if (byFullUrl.Count == 0) return;
+
+        foreach (var reference in ReferencesIn(element))
+        {
+            if (reference.Reference is { } value && byFullUrl.TryGetValue(value, out var relative))
+                reference.Reference = relative;
+        }
+    }
+
+    private static IEnumerable<ResourceReference> ReferencesIn(Base element)
+    {
+        if (element is ResourceReference reference) yield return reference;
+        foreach (var child in element.Children)
+        {
+            foreach (var nested in ReferencesIn(child))
+                yield return nested;
+        }
+    }
+
     private static string? Truncate(string? value, int max)
         => value is null ? null : value.Length <= max ? value : value[..max];
 }

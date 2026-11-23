@@ -690,7 +690,50 @@ public class PasResponseBuilder
             IncludeReferenced(copy);
         }
 
+        PointReferencesAtEntries(bundle);
         return bundle;
+    }
+
+    /// <summary>
+    /// Writes a reference to a resource in the bundle as that entry's fullUrl
+    /// wherever it would not otherwise resolve to it. A relative reference
+    /// resolves against the referencing entry's own base, and the echoed
+    /// resources keep the request's fullUrls, which need not share the
+    /// ClaimResponse's base: <c>Patient/X</c> in the ClaimResponse would name
+    /// CHO's Patient/X, not the submitter's entry.
+    /// </summary>
+    private static void PointReferencesAtEntries(Bundle bundle)
+    {
+        var fullUrlByKey = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var entry in bundle.Entry)
+        {
+            if (entry.Resource?.Id is { } id && !string.IsNullOrWhiteSpace(entry.FullUrl))
+                fullUrlByKey.TryAdd($"{entry.Resource.TypeName}/{id}", entry.FullUrl);
+        }
+
+        foreach (var entry in bundle.Entry)
+        {
+            if (entry.Resource is null) continue;
+            foreach (var reference in References(entry.Resource))
+            {
+                var value = reference.Reference;
+                if (string.IsNullOrWhiteSpace(value) || value.StartsWith('#')
+                    || value.StartsWith("urn:", StringComparison.OrdinalIgnoreCase)
+                    || value.Contains("://", StringComparison.Ordinal)
+                    || !fullUrlByKey.TryGetValue(value, out var target))
+                    continue;
+                if (!string.Equals(ResolveRelative(entry.FullUrl, value), target, StringComparison.Ordinal))
+                    reference.Reference = target;
+            }
+        }
+    }
+
+    /// <summary>A relative <c>Type/id</c> reference resolved against an entry's RESTful fullUrl, or null.</summary>
+    private static string? ResolveRelative(string? fullUrl, string reference)
+    {
+        if (string.IsNullOrWhiteSpace(fullUrl) || !fullUrl.Contains("://", StringComparison.Ordinal)) return null;
+        var parts = fullUrl.TrimEnd('/').Split('/');
+        return parts.Length > 4 ? $"{string.Join('/', parts[..^2])}/{reference}" : null;
     }
 
     private const string PasResponseBundleProfile =

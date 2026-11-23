@@ -869,6 +869,9 @@ public class PasController : FhirControllerBase
                 "Claim must include provider, patient, and insurance references"));
         }
 
+        // An entry may be named by its fullUrl; read it as the entry's Type/id.
+        PasAuthorizationMapper.PointAtEntriesByTypeAndId(requestBundle, claim);
+
         // Ensure references are relative (e.g. "Patient/123"), not absolute URLs,
         // to prevent SSRF when references are forwarded to internal services.
         if (!IsRelativeReference(claim.Patient?.Reference) ||
