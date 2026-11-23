@@ -311,13 +311,49 @@ public static class PasServerRequests
     /// Takes the Claim's id away, leaving it a <c>urn:uuid</c> fullUrl: the
     /// response then names the Claim by identifier, with a data-absent reason
     /// on the reference, since it cannot name a Claim it does not echo.
+    ///
+    /// <para>
+    /// A relative reference does not resolve from an entry whose fullUrl is a
+    /// <c>urn:uuid</c>, so the Claim's references to the other entries are
+    /// written as their fullUrls.
+    /// </para>
     /// </summary>
     public static bool UnnameClaim(JsonObject bundle)
     {
         if (ClaimEntry(bundle) is not { } entry || entry["resource"] is not JsonObject claim) return false;
         claim.Remove("id");
         entry["fullUrl"] = UnnamedClaimFullUrl;
+
+        var fullUrls = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var other in (bundle["entry"] as JsonArray)?.OfType<JsonObject>() ?? [])
+        {
+            if (other["resource"] is JsonObject resource
+                && resource["resourceType"]?.GetValue<string>() is { } type
+                && resource["id"]?.GetValue<string>() is { } id
+                && other["fullUrl"]?.GetValue<string>() is { } fullUrl
+                && fullUrl.Contains("://", StringComparison.Ordinal))
+                fullUrls.TryAdd($"{type}/{id}", fullUrl);
+        }
+        PointAt(claim, fullUrls);
         return true;
+    }
+
+    private static void PointAt(JsonNode? node, IReadOnlyDictionary<string, string> fullUrls)
+    {
+        switch (node)
+        {
+            case JsonObject obj:
+                if (obj["reference"] is JsonValue value && value.TryGetValue<string>(out var reference)
+                    && fullUrls.TryGetValue(reference, out var fullUrl))
+                    obj["reference"] = fullUrl;
+                foreach (var (_, child) in obj.ToList())
+                    PointAt(child, fullUrls);
+                break;
+            case JsonArray array:
+                foreach (var child in array)
+                    PointAt(child, fullUrls);
+                break;
+        }
     }
 
     private static JsonObject? ClaimEntry(JsonObject bundle)

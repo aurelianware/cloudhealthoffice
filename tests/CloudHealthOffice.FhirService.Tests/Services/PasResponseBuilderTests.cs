@@ -153,8 +153,12 @@ public class PasResponseBuilderTests
         bundle.Identifier.Should().NotBeNull();
         bundle.Identifier.Value.Should().NotBeNullOrEmpty();
         bundle.Timestamp.Should().NotBeNull();
-        bundle.Entry[0].Resource.Should().BeOfType<ClaimResponse>()
-            .Which.Requestor.Reference.Should().Be("PractitionerRole/role-1");
+        var claimResponse = bundle.Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
+        claimResponse.Requestor.Reference.Should().Be("http://provider.example/fhir/PractitionerRole/role-1",
+            "the echoed entry keeps the request's fullUrl, which a relative reference from CHO's base would miss");
+        claimResponse.Patient.Reference.Should().Be("http://provider.example/fhir/Patient/pat-001");
+        bundle.Entry.Select(e => e.Resource).OfType<PractitionerRole>().Single().Practitioner.Reference
+            .Should().Be("Practitioner/dr-1", "it resolves from the request's own base, so it is left as the request had it");
         bundle.Entry[0].FullUrl.Should().StartWith("https://cho.example/fhir/r4/ClaimResponse/");
         bundle.Entry.Select(e => e.FullUrl).Should().BeEquivalentTo(
             [

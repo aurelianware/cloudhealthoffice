@@ -602,4 +602,21 @@ public class PasAuthorizationMapperTests
         PasAuthorizationMapper.Resolve(bundle, new ResourceReference("Patient/someone-else"))
             .Should().BeNull();
     }
+
+    [Fact]
+    public void PointAtEntriesByTypeAndId_ReadsAFullUrlReferenceAsTheEntrysTypeAndId()
+    {
+        var bundle = PasBundles.Complete();
+        var patientEntry = bundle.Entry.Single(e => e.Resource is Patient);
+        patientEntry.FullUrl = "http://example.org/fhir/Patient/" + patientEntry.Resource.Id;
+        var claim = PasBundles.ClaimOf(bundle);
+        claim.Patient = new ResourceReference(patientEntry.FullUrl);
+        claim.Referral = new ResourceReference("http://elsewhere.example/fhir/ServiceRequest/sr-1");
+
+        PasAuthorizationMapper.PointAtEntriesByTypeAndId(bundle, claim);
+
+        claim.Patient.Reference.Should().Be("Patient/" + patientEntry.Resource.Id);
+        claim.Referral.Reference.Should().Be("http://elsewhere.example/fhir/ServiceRequest/sr-1",
+            "a reference to nothing in the bundle stays absolute, and is refused as one");
+    }
 }

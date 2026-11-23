@@ -102,6 +102,27 @@ public sealed class KitHarnessRequestTests
     }
 
     [Fact]
+    public void The_unnamed_claim_names_the_other_entries_by_their_fullUrls()
+    {
+        var request = KitPasRequest();
+        var claim = request["entry"]![0]!["resource"]!.AsObject();
+        claim["patient"] = JsonNode.Parse("""{"reference":"Patient/p1"}""");
+        claim["insurance"] = JsonNode.Parse("""[{"coverage":{"reference":"Coverage/cov1"}}]""");
+        claim["supportingInfo"] = JsonNode.Parse("""[{"valueReference":{"reference":"DocumentReference/elsewhere"}}]""");
+        request["entry"]!.AsArray().Add(JsonNode.Parse(
+            """{"fullUrl":"http://example.org/fhir/Patient/p1","resource":{"resourceType":"Patient","id":"p1"}}"""));
+        request["entry"]!.AsArray().Add(JsonNode.Parse(
+            """{"fullUrl":"http://example.org/fhir/Coverage/cov1","resource":{"resourceType":"Coverage","id":"cov1"}}"""));
+
+        PasServerRequests.UnnameClaim(request).Should().BeTrue();
+
+        claim["patient"]!["reference"]!.GetValue<string>().Should().Be("http://example.org/fhir/Patient/p1");
+        claim["insurance"]![0]!["coverage"]!["reference"]!.GetValue<string>().Should().Be("http://example.org/fhir/Coverage/cov1");
+        claim["supportingInfo"]![0]!["valueReference"]!["reference"]!.GetValue<string>()
+            .Should().Be("DocumentReference/elsewhere", "a reference to nothing in the bundle is left as it is");
+    }
+
+    [Fact]
     public void The_pas_must_support_inquiry_gains_one_about_that_pend_and_one_about_an_unknown_request()
     {
         var added = PasServerRequests.MustSupportAdditions("must_support_pa_inquire_request_payload", [KitPasRequest()]);
