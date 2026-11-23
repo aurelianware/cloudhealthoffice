@@ -81,6 +81,18 @@ public class StateResponseParserTests
     }
 
     [Fact]
+    public void Ack277_TreatsTheReceiversWarningCategoryAsAWarning()
+    {
+        var x12 = X12Segments.Parse(ResponseFiles.Ack277(("CLM-a", "R3:Bx000095W", null)));
+
+        var texas = Ack277Parser.Parse(x12, StateEncounterRoute.Texas.WarningStatusCategories.ToList()).Single();
+        texas.IsRejected.Should().BeFalse("TMHP uses R3 for warnings");
+        texas.Warnings.Should().Equal("R3:Bx000095W");
+
+        Ack277Parser.Parse(x12).Single().IsRejected.Should().BeTrue("without the TMHP rule an R category rejects");
+    }
+
+    [Fact]
     public void NotAnInterchange_IsRefused()
     {
         var act = () => X12Segments.Parse("hello");
@@ -210,6 +222,70 @@ public sealed class StateResponseReconcilerTests : IAsyncLifetime
 
         result.Matched.Should().Be(1, "only CLM-b was still waiting on its 999");
         (await Get("tenant-1:TX:a")).Status.Should().Be(EncounterSubmissionStatus.StateFrontEndAccepted);
+    }
+
+    [Fact]
+    public async Task Texas_AcceptanceWithAnR3Warning_IsAcceptedAndKeepsTheWarning()
+    {
+        var content = ResponseFiles.Ack277(("CLM-a", "A2:PR001", null)).Replace(
+            "STC*A2:PR001*20261102*WQ*250~", "STC*A2:PR001*20261102*WQ*250~STC*R3:Bx000095W*20261102*WQ*250~");
+
+        var result = await _reconciler.ApplyAsync(StateEncounterRoute.Texas, "tenant-1", null, content);
+
+        result.Accepted.Should().Be(1);
+        var a = await Get("tenant-1:TX:a");
+        a.Status.Should().Be(EncounterSubmissionStatus.StateFrontEndAccepted);
+        a.StateStatusCodes.Should().Equal("A2:PR001", "R3:Bx000095W");
+        a.ResponseHistory.Single().Errors.Should().Equal("TMHP warning R3:Bx000095W");
+        a.StateClaimReference.Should().BeNull("TMHP does not return the ICN on an encounter 277CA");
+    }
+
+    [Fact]
+    public async Task References_RecordTheIcn_OnlyForTheTenantsTakenInEncounters()
+    {
+        await _reconciler.ApplyAsync(StateEncounterRoute.Texas, "tenant-1", null,
+            ResponseFiles.Ack277(("CLM-a", "A2:PR001", null), ("CLM-b", "A3:Bx0000011", null)));
+
+        var result = await _reconciler.ApplyReferencesAsync(StateEncounterRoute.Texas, "tenant-1", "icn-report.csv",
+            new[]
+            {
+                new StateClaimReferenceRow { PatientControlNumber = "CLM-a", StateClaimReference = "626300000000001" },
+                new StateClaimReferenceRow { PatientControlNumber = "CLM-b", StateClaimReference = "626300000000002" },
+                new StateClaimReferenceRow { PatientControlNumber = "CLM-z", StateClaimReference = "626300000000003" }
+            });
+
+        result.Matched.Should().Be(1);
+        result.Unmatched.Should().Equal("CLM01 CLM-b", "CLM01 CLM-z");
+        var a = await Get("tenant-1:TX:a");
+        a.StateClaimReference.Should().Be("626300000000001");
+        a.Status.Should().Be(EncounterSubmissionStatus.StateFrontEndAccepted, "a reference never moves status");
+        a.ResponseHistory.Last().Kind.Should().Be("REFERENCES");
+        (await Get("tenant-1:TX:b")).StateClaimReference.Should().BeNull("a rejected encounter has nothing to replace");
+        (await Get("tenant-2:TX:a")).StateClaimReference.Should().BeNull("another tenant's record is untouched");
+
+        var again = await _reconciler.ApplyReferencesAsync(StateEncounterRoute.Texas, "tenant-1", null,
+            new[]
+            {
+                new StateClaimReferenceRow { PatientControlNumber = "CLM-a", StateClaimReference = "626300000000001" }
+            });
+        again.Unchanged.Should().Be(1);
+
+        var conflict = await _reconciler.ApplyReferencesAsync(StateEncounterRoute.Texas, "tenant-1", null,
+            new[]
+            {
+                new StateClaimReferenceRow { PatientControlNumber = "CLM-a", StateClaimReference = "626399999999999" }
+            });
+        conflict.Conflicts.Should().ContainSingle(c => c.Contains("626300000000001"));
+        (await Get("tenant-1:TX:a")).StateClaimReference.Should().Be("626300000000001");
+    }
+
+    [Fact]
+    public async Task References_RefuseIncompleteRows()
+    {
+        var act = () => _reconciler.ApplyReferencesAsync(StateEncounterRoute.Texas, "tenant-1", null,
+            new[] { new StateClaimReferenceRow { PatientControlNumber = "CLM-a" } });
+
+        await act.Should().ThrowAsync<FormatException>();
     }
 
     [Fact]

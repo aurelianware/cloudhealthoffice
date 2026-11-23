@@ -54,7 +54,10 @@ public class StateEncounterRoutesController : ControllerBase
                 DeadlineRule = (options?.DeadlineRule ?? route.DefaultDeadlineRule).ToString(),
                 DeadlineDays = options?.DeadlineDays is > 0 ? options.DeadlineDays.Value : route.DefaultDeadlineDays,
                 DeadlineSource = route.DeadlineSource,
-                ResponseFiles = route.ResponseFiles
+                ResponseFiles = route.ResponseFiles,
+                MaxTransactionsPerFile = route.MaxTransactionsPerFile,
+                MaxPatientControlNumberLength = route.MaxPatientControlNumberLength,
+                StateReferenceOn277 = route.StateReferenceOn277
             };
         });
         return Ok(statuses);
@@ -125,6 +128,37 @@ public class StateEncounterRoutesController : ControllerBase
     }
 
     /// <summary>
+    /// Records the state's claim identifiers (TMHP ICNs) for encounters it took in,
+    /// keyed by the CLM01 they were sent under. TMHP's 277CA does not carry the ICN
+    /// for encounters, and a replacement or void cannot be sent without it, so the
+    /// ICNs from the plan's HHSC/TMHP encounter reports are loaded here. Status is
+    /// not changed.
+    /// </summary>
+    [HttpPost("{stateCode}/references")]
+    [ProducesResponseType(typeof(StateReferenceResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<StateReferenceResult>> ApplyReferences(
+        string stateCode, [FromBody] StateReferenceRequest request, CancellationToken ct)
+    {
+        var route = _registry.Get(stateCode);
+        if (route is null || route.Format != EncounterRouteFormat.X12_837)
+            return BadRequest(new { message = $"'{stateCode}' has no X12 encounter route." });
+        if (request.References is null || request.References.Count == 0)
+            return BadRequest(new { message = "At least one reference is required." });
+        if (request.References.Count > 50_000)
+            return BadRequest(new { message = "At most 50,000 references per request." });
+
+        try
+        {
+            return Ok(await _responses.ApplyReferencesAsync(route, _actor.TenantId, request.FileName, request.References, ct));
+        }
+        catch (FormatException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// The rework queue: Texas and California encounters held back by validation or
     /// rejected by the state, nearest deadline first, with the reasons to fix.
     /// Filter by <c>state</c> and by <c>reason</c> (VALIDATION, SYNTAX_REJECTED, STATE_REJECTED).
@@ -183,6 +217,13 @@ public sealed class StateResponseRequest
     public string Content { get; set; } = string.Empty;
 }
 
+public sealed class StateReferenceRequest
+{
+    /// <summary>The report the identifiers came from, for the audit record.</summary>
+    public string? FileName { get; set; }
+    public List<StateClaimReferenceRow> References { get; set; } = new();
+}
+
 public sealed class StateRouteStatus
 {
     public string StateCode { get; set; } = string.Empty;
@@ -195,4 +236,9 @@ public sealed class StateRouteStatus
     public int DeadlineDays { get; set; }
     public string DeadlineSource { get; set; } = string.Empty;
     public IReadOnlyList<string> ResponseFiles { get; set; } = Array.Empty<string>();
+    public int? MaxTransactionsPerFile { get; set; }
+    public int MaxPatientControlNumberLength { get; set; }
+
+    /// <summary>False when the state's claim identifiers must be loaded through the references endpoint.</summary>
+    public bool StateReferenceOn277 { get; set; }
 }

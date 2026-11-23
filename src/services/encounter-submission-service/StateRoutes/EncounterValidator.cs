@@ -17,7 +17,16 @@ public static class EncounterValidator
         "CO", "CR", "OA", "PI", "PR"
     };
 
-    public static IReadOnlyList<string> Validate(EncounterClaim c)
+    private static readonly HashSet<string> PresentOnAdmissionValues = new(StringComparer.Ordinal)
+    {
+        "Y", "N", "U", "W", "1"
+    };
+
+    /// <summary>
+    /// Validates against the 5010 rules, plus the receiver's own limits when a route
+    /// is given (CLM01 length, POA on inpatient encounters).
+    /// </summary>
+    public static IReadOnlyList<string> Validate(EncounterClaim c, StateEncounterRoute? route = null)
     {
         var errors = new List<string>();
         void Fail(string message) => errors.Add(message);
@@ -32,6 +41,9 @@ public static class EncounterValidator
 
         if (string.IsNullOrWhiteSpace(c.PatientControlNumber) || c.PatientControlNumber.Length > 38)
             Fail("CLM01 patient control number must be 1–38 characters");
+        else if (route is not null && c.PatientControlNumber.Length > route.MaxPatientControlNumberLength)
+            Fail($"CLM01 '{c.PatientControlNumber}' is longer than the {route.MaxPatientControlNumberLength} characters " +
+                 $"{route.Receiver} returns on its 277CA, so its response could not be matched back");
         if (c.FrequencyCode is not ("1" or "7" or "8"))
             Fail($"CLM05-3 frequency code '{c.FrequencyCode}' is not 1, 7 or 8");
         if (c.FrequencyCode is "7" or "8" && string.IsNullOrWhiteSpace(c.OriginalStateReference))
@@ -76,6 +88,10 @@ public static class EncounterValidator
             {
                 if (c.AdmissionDate is null) Fail("inpatient 837I needs an admission date (DTP*435)");
                 if (string.IsNullOrWhiteSpace(c.AdmissionTypeCode)) Fail("inpatient 837I needs an admission type (CL101)");
+                if (route is { RequiresPresentOnAdmission: true })
+                    foreach (var d in c.Diagnoses.Where(d => !string.IsNullOrWhiteSpace(d.Code)))
+                        if (d.PresentOnAdmission is null || !PresentOnAdmissionValues.Contains(d.PresentOnAdmission))
+                            Fail($"inpatient diagnosis {d.Code} needs a present-on-admission indicator (Y, N, U, W or 1) for {route.Receiver}");
             }
         }
         else if (string.IsNullOrWhiteSpace(c.PlaceOfService) || c.PlaceOfService.Trim().Length != 2)

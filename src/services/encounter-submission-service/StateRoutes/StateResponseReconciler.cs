@@ -34,8 +34,36 @@ public sealed class StateResponseResult
     public List<string> Unmatched { get; init; } = new();
 }
 
+/// <summary>One state claim identifier (TMHP ICN) for an encounter, keyed by the CLM01 it was sent under.</summary>
+public sealed class StateClaimReferenceRow
+{
+    public string PatientControlNumber { get; set; } = string.Empty;
+    public string StateClaimReference { get; set; } = string.Empty;
+}
+
+public sealed class StateReferenceResult
+{
+    public string ResponseId { get; init; } = string.Empty;
+    public int Matched { get; set; }
+    public int Unchanged { get; set; }
+    public List<string> Unmatched { get; init; } = new();
+
+    /// <summary>Encounters that already hold a different state reference; left as they were.</summary>
+    public List<string> Conflicts { get; init; } = new();
+}
+
 public interface IStateResponseReconciler
 {
+    /// <summary>
+    /// Records the state's claim identifiers for encounters it took in, for receivers
+    /// whose 277CA does not carry them (TMHP). The identifier is what a replacement or
+    /// void puts in REF*F8, so a waiting replacement or void goes in the next batch.
+    /// Status is not changed: only the 999 and 277CA move an encounter.
+    /// </summary>
+    Task<StateReferenceResult> ApplyReferencesAsync(
+        StateEncounterRoute route, string tenantId, string? fileName,
+        IReadOnlyList<StateClaimReferenceRow> rows, CancellationToken ct = default);
+
     /// <summary>
     /// Applies a 999 or 277CA / 277 from the state to the tenant's encounters on that
     /// route, record by record, and stores the file. Throws <see cref="NotSupportedException"/>
@@ -58,6 +86,15 @@ public sealed class StateResponseReconciler : IStateResponseReconciler
     private static readonly EncounterSubmissionStatus[] Awaiting277 =
     {
         EncounterSubmissionStatus.Batched,
+        EncounterSubmissionStatus.Submitted,
+        EncounterSubmissionStatus.SyntaxAccepted,
+        EncounterSubmissionStatus.SyntaxAcceptedWithErrors,
+        EncounterSubmissionStatus.StateFrontEndAccepted
+    };
+
+    // A state reference is recorded for any encounter the state may have taken in.
+    private static readonly EncounterSubmissionStatus[] AwaitingReference =
+    {
         EncounterSubmissionStatus.Submitted,
         EncounterSubmissionStatus.SyntaxAccepted,
         EncounterSubmissionStatus.SyntaxAcceptedWithErrors,
@@ -126,6 +163,95 @@ public sealed class StateResponseReconciler : IStateResponseReconciler
         return result;
     }
 
+    public async Task<StateReferenceResult> ApplyReferencesAsync(
+        StateEncounterRoute route, string tenantId, string? fileName,
+        IReadOnlyList<StateClaimReferenceRow> rows, CancellationToken ct = default)
+    {
+        if (route.Format != EncounterRouteFormat.X12_837)
+            throw new ArgumentException($"{route.StateCode} is not an X12 route.", nameof(route));
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new ArgumentException("A tenant is required.", nameof(tenantId));
+        if (rows.Count == 0)
+            throw new FormatException("At least one reference is required.");
+        if (rows.Any(r => string.IsNullOrWhiteSpace(r.PatientControlNumber) || string.IsNullOrWhiteSpace(r.StateClaimReference)))
+            throw new FormatException("Every reference needs a patientControlNumber and a stateClaimReference.");
+        if (rows.Any(r => r.StateClaimReference.Trim().Length > 50 || r.PatientControlNumber.Trim().Length > 38))
+            throw new FormatException("A state claim reference is at most 50 characters and a CLM01 at most 38.");
+
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var response = new StateEncounterResponse
+        {
+            TenantId = tenantId,
+            StateCode = route.StateCode,
+            Kind = "REFERENCES",
+            FileName = fileName,
+            ReceivedAt = now,
+            Content = string.Join("\n", rows.Select(r => $"{r.PatientControlNumber.Trim()},{r.StateClaimReference.Trim()}"))
+        };
+        var result = new StateReferenceResult { ResponseId = response.Id };
+
+        foreach (var row in rows)
+        {
+            var pcn = row.PatientControlNumber.Trim();
+            var reference = row.StateClaimReference.Trim();
+            var submission = await _submissions.Find(Builders<EncounterSubmission>.Filter.And(
+                    Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId),
+                    Builders<EncounterSubmission>.Filter.Eq(s => s.StateCode, route.StateCode),
+                    Builders<EncounterSubmission>.Filter.Eq(s => s.PatientControlNumber, pcn),
+                    Builders<EncounterSubmission>.Filter.In(s => s.Status, AwaitingReference)))
+                .SortByDescending(s => s.UpdatedAt)
+                .FirstOrDefaultAsync(ct);
+
+            if (submission is null)
+            {
+                result.Unmatched.Add($"CLM01 {pcn}");
+                continue;
+            }
+            if (string.Equals(submission.StateClaimReference, reference, StringComparison.Ordinal))
+            {
+                result.Unchanged++;
+                continue;
+            }
+            if (!string.IsNullOrWhiteSpace(submission.StateClaimReference))
+            {
+                result.Conflicts.Add($"CLM01 {pcn} already has {submission.StateClaimReference}, not {reference}");
+                continue;
+            }
+
+            var written = await _submissions.UpdateOneAsync(
+                Builders<EncounterSubmission>.Filter.And(
+                    Builders<EncounterSubmission>.Filter.Eq(s => s.Id, submission.Id),
+                    Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId),
+                    Builders<EncounterSubmission>.Filter.Eq(s => s.StateClaimReference, null),
+                    Builders<EncounterSubmission>.Filter.In(s => s.Status, AwaitingReference)),
+                Builders<EncounterSubmission>.Update
+                    .Set(s => s.StateClaimReference, reference)
+                    .Set(s => s.UpdatedAt, now)
+                    .Push(s => s.ResponseHistory, new EncounterResponseEvent
+                    {
+                        ResponseId = response.Id,
+                        Kind = response.Kind,
+                        ReceivedAt = now,
+                        StatusCodes = new List<string> { $"REF:{reference}" },
+                        ResultingStatus = submission.Status,
+                        Errors = new List<string>()
+                    }),
+                cancellationToken: ct);
+            if (written.ModifiedCount == 1) result.Matched++;
+            else result.Conflicts.Add($"CLM01 {pcn} changed while its reference was being recorded");
+        }
+
+        response.Matched = result.Matched;
+        response.Unmatched = result.Unmatched;
+        await _responses.InsertOneAsync(response, cancellationToken: ct);
+
+        _logger.LogInformation(
+            "{State} state references for tenant {TenantId}: {Matched} recorded, {Unchanged} unchanged, {Unmatched} unmatched, {Conflicts} conflicts",
+            route.StateCode, LogSanitizer.Sanitize(tenantId), result.Matched, result.Unchanged,
+            result.Unmatched.Count, result.Conflicts.Count);
+        return result;
+    }
+
     private async Task Apply999Async(StateEncounterRoute route, string tenantId, X12Segments x12,
         StateEncounterResponse response, StateResponseResult result, DateTime now, CancellationToken ct)
     {
@@ -174,7 +300,7 @@ public sealed class StateResponseReconciler : IStateResponseReconciler
     private async Task Apply277Async(StateEncounterRoute route, string tenantId, X12Segments x12,
         StateEncounterResponse response, StateResponseResult result, DateTime now, CancellationToken ct)
     {
-        foreach (var ack in Ack277Parser.Parse(x12))
+        foreach (var ack in Ack277Parser.Parse(x12, route.WarningStatusCategories.ToList()))
         {
             var submission = await _submissions.Find(Builders<EncounterSubmission>.Filter.And(
                     Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, tenantId),
@@ -207,8 +333,9 @@ public sealed class StateResponseReconciler : IStateResponseReconciler
                 status = submission.Status;
             }
 
+            var warnings = ack.Warnings.Select(w => $"{route.Receiver} warning {w}").ToList();
             if (await UpdateAsync(submission, tenantId, Awaiting277, status, response, ack.StatusCodes.ToList(),
-                    new List<string>(), lastError, ack.StateClaimReference, now, ct))
+                    warnings, lastError, ack.StateClaimReference, now, ct))
                 Count(result, status);
         }
     }

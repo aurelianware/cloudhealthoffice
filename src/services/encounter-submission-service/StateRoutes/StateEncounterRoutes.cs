@@ -43,6 +43,41 @@ public sealed record StateEncounterRoute
     /// <summary>File name prefix for staged interchanges.</summary>
     public required string FilePrefix { get; init; }
 
+    /// <summary>Extension for staged interchanges, without the dot.</summary>
+    public string FileExtension { get; init; } = "x12";
+
+    /// <summary>
+    /// Most encounters (ST/SE transaction sets) one file may carry. Null means no
+    /// receiver limit; larger batches are split into several files.
+    /// </summary>
+    public int? MaxTransactionsPerFile { get; init; }
+
+    /// <summary>
+    /// Longest CLM01 the receiver echoes back in full on its 277CA (TRN02). A longer
+    /// value could not be matched back, so the encounter is held for rework. 38 is
+    /// the 5010 maximum.
+    /// </summary>
+    public int MaxPatientControlNumberLength { get; init; } = 38;
+
+    /// <summary>
+    /// Whether the receiver's 277CA carries its claim identifier (REF*1K) for
+    /// encounters. When false, the identifier a replacement or void needs in REF*F8
+    /// is loaded separately (<c>POST /api/encounters/state/{state}/references</c>).
+    /// </summary>
+    public bool StateReferenceOn277 { get; init; } = true;
+
+    /// <summary>
+    /// 277CA status categories this receiver uses for warnings, not rejections.
+    /// They are kept on the record but do not reject the encounter.
+    /// </summary>
+    public IReadOnlyList<string> WarningStatusCategories { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Inpatient 837I encounters must carry a present-on-admission indicator on
+    /// every diagnosis.
+    /// </summary>
+    public bool RequiresPresentOnAdmission { get; init; }
+
     public DateTime ComputeDeadline(DateTime adjudicatedAtUtc, StateEncounterRouteOptions? options)
     {
         var rule = options?.DeadlineRule ?? DefaultDeadlineRule;
@@ -77,11 +112,19 @@ public sealed record StateEncounterRoute
     };
 
     /// <summary>
-    /// Texas HHSC, received through TMHP. 837P / 837I 5010 per the TMHP encounters
-    /// companion guide. The deadline default (30 days after the end of the month the
-    /// claim was adjudicated in) follows the HHSC managed care contract's encounter
-    /// timeliness standard and must be confirmed against the plan's signed contract
-    /// (TX-00). Responses: 999, 277CA, then the HHSC encounter response reports.
+    /// Texas HHSC, received through TMHP. 837P / 837I 5010. The deadline default
+    /// (30 days after the end of the month the claim was adjudicated in) must be
+    /// confirmed against the plan's signed contract (TX-00). Responses: 999, 277CA.
+    ///
+    /// <para>From TMHP's public guides: the 277CA covers encounters but "2200D REF
+    /// will not be populated for Encounters transactions", so the ICN a replacement
+    /// or void needs is loaded separately; TRN02 returns the patient control number
+    /// "up to the 20 character limit"; STC category R3 is a warning (277CA companion
+    /// guide, July 2019). "Texas Medicaid will accept up to 5000 transactions per
+    /// batch" and more than one GS-GE group fails (837P/I/D companion guides §7,
+    /// January 2026). Files are sent as .dat or .zip (EDI Connectivity Guide §6.1,
+    /// July 2026). UMCM 2.0 §VII.A requires POA indicators on institutional
+    /// encounter data.</para>
     /// </summary>
     public static readonly StateEncounterRoute Texas = new()
     {
@@ -92,7 +135,13 @@ public sealed record StateEncounterRoute
         DefaultDeadlineDays = 30,
         DeadlineSource = "HHSC MCO contract encounter timeliness (verify against the plan's contract, TX-00)",
         ResponseFiles = new[] { "999", "277CA" },
-        FilePrefix = "TMHP"
+        FilePrefix = "TMHP",
+        FileExtension = "dat",
+        MaxTransactionsPerFile = 5000,
+        MaxPatientControlNumberLength = 20,
+        StateReferenceOn277 = false,
+        WarningStatusCategories = new[] { "R3" },
+        RequiresPresentOnAdmission = true
     };
 
     /// <summary>

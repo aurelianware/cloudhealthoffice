@@ -102,6 +102,45 @@ public class EncounterValidatorTests
         EncounterValidator.IsValidNpi(npi).Should().Be(valid);
 }
 
+public class TexasEncounterValidatorTests
+{
+    [Fact]
+    public void Texas_RefusesAClaimNumberLongerThanTmhpEchoesBack()
+    {
+        var claim = StateRouteTestData.Professional() with { PatientControlNumber = "CLM-2026-11-000000000123" };
+
+        EncounterValidator.Validate(claim, StateEncounterRoute.Texas)
+            .Should().ContainSingle(e => e.Contains("longer than the 20 characters") && e.Contains("TMHP"));
+        EncounterValidator.Validate(claim, StateEncounterRoute.California).Should().BeEmpty();
+        EncounterValidator.Validate(claim).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Texas_InpatientEncounter_NeedsPresentOnAdmissionOnEveryDiagnosis()
+    {
+        var claim = StateRouteTestData.Institutional() with
+        {
+            Diagnoses = new[] { new EncounterDiagnosis("J18.9", "Y"), new EncounterDiagnosis("E11.9") }
+        };
+
+        EncounterValidator.Validate(claim, StateEncounterRoute.Texas)
+            .Should().ContainSingle(e => e.Contains("E11.9") && e.Contains("present-on-admission"));
+        EncounterValidator.Validate(claim, StateEncounterRoute.California).Should().BeEmpty();
+        EncounterValidator.Validate(StateRouteTestData.Institutional(), StateEncounterRoute.Texas).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Texas_PresentOnAdmission_RejectsAnUnknownValue()
+    {
+        var claim = StateRouteTestData.Institutional() with
+        {
+            Diagnoses = new[] { new EncounterDiagnosis("J18.9", "X") }
+        };
+
+        EncounterValidator.Validate(claim, StateEncounterRoute.Texas).Should().Contain(e => e.Contains("J18.9"));
+    }
+}
+
 public class StateEncounterRouteRegistryTests
 {
     [Fact]

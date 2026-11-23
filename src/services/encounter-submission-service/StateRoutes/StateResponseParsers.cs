@@ -118,19 +118,32 @@ public sealed record ClaimAcknowledgment(
     string PatientControlNumber,
     IReadOnlyList<string> StatusCodes,
     string? StateClaimReference,
-    decimal? ChargeAmount)
+    decimal? ChargeAmount,
+    IReadOnlyCollection<string>? WarningCategories = null)
 {
-    /// <summary>A3, A4, A6, A7, A8 and the R category are rejections; A1 and A2 accept for processing.</summary>
-    public bool IsRejected => StatusCodes.Any(c => CategoryOf(c) is "A3" or "A4" or "A6" or "A7" or "A8" || CategoryOf(c).StartsWith('R'));
+    /// <summary>
+    /// A3, A4, A6, A7, A8 and the R category are rejections, except categories the
+    /// receiver uses for warnings (TMHP R3); A1 and A2 accept for processing.
+    /// </summary>
+    public bool IsRejected => StatusCodes.Any(c =>
+        !IsWarningCategory(c)
+        && (CategoryOf(c) is "A3" or "A4" or "A6" or "A7" or "A8" || CategoryOf(c).StartsWith('R')));
 
     public bool IsAccepted => !IsRejected && StatusCodes.Any(c => CategoryOf(c) is "A1" or "A2");
+
+    /// <summary>Status codes in a warning category: kept, but they do not reject.</summary>
+    public IReadOnlyList<string> Warnings => StatusCodes.Where(IsWarningCategory).ToList();
+
+    private bool IsWarningCategory(string composite) =>
+        WarningCategories is { Count: > 0 } w && w.Contains(CategoryOf(composite), StringComparer.Ordinal);
 
     private static string CategoryOf(string composite) => composite.Split(':')[0];
 }
 
 public static class Ack277Parser
 {
-    public static IReadOnlyList<ClaimAcknowledgment> Parse(X12Segments x12)
+    public static IReadOnlyList<ClaimAcknowledgment> Parse(
+        X12Segments x12, IReadOnlyCollection<string>? warningCategories = null)
     {
         var results = new List<ClaimAcknowledgment>();
         var inPatientLevel = false;
@@ -143,7 +156,7 @@ public static class Ack277Parser
         void Close()
         {
             if (pcn is not null)
-                results.Add(new ClaimAcknowledgment(pcn, statuses.ToList(), stateRef, charge));
+                results.Add(new ClaimAcknowledgment(pcn, statuses.ToList(), stateRef, charge, warningCategories));
             pcn = null;
             statuses.Clear();
             stateRef = null;
