@@ -33,6 +33,8 @@ public class PasController : FhirControllerBase
     private readonly HttpClient _providerVerificationClient;
     private readonly ILogger<PasController> _logger;
     private readonly IDtrService? _dtr;
+    private readonly FhirService.Services.Cdex.ICdexAdditionalInformationStore? _cdex;
+    private readonly PasAdditionalInformationOptions _additionalInformation;
 
     public PasController(
         IPasAutoAdjudicator adjudicator,
@@ -43,9 +45,13 @@ public class PasController : FhirControllerBase
         IHttpClientFactory httpClientFactory,
         IPasAuthorizationRecorder recorder,
         ILogger<PasController> logger,
-        IDtrService? dtr = null)
+        IDtrService? dtr = null,
+        FhirService.Services.Cdex.ICdexAdditionalInformationStore? cdex = null,
+        IOptions<PasAdditionalInformationOptions>? additionalInformation = null)
     {
         _dtr = dtr;
+        _cdex = cdex;
+        _additionalInformation = additionalInformation?.Value ?? new PasAdditionalInformationOptions();
         _adjudicator = adjudicator;
         _responseBuilder = responseBuilder;
         _complianceChecker = complianceChecker;
@@ -129,7 +135,7 @@ public class PasController : FhirControllerBase
                     LogSanitizer.Sanitize(TenantId),
                     LogSanitizer.Sanitize(string.Join(", ", mapping.Errors.Select(e => e.Expression))));
                 RecordMetrics(sw, "rejected", "incomplete-request");
-                return IncompleteRequest(mapping.Errors);
+                return IncompleteRequest(requestBundle, claim, mapping.Errors);
             }
             var record = mapping.Request!;
 
@@ -207,6 +213,32 @@ public class PasController : FhirControllerBase
     }
 
     /// <summary>
+    /// The requested lines a modification replaces: every line whose code an
+    /// alternative names gets that alternative. Empty when it names none of
+    /// the record's lines, so the request is pended instead.
+    /// </summary>
+    private static List<PasAlternativeServiceDecision> AlternativesFor(
+        PasAuthorizationRecordRequest record, List<PasAlternativeService>? alternatives)
+    {
+        if (alternatives is not { Count: > 0 }) return [];
+        return record.RequestedServices
+            .Select((service, index) => (service, line: service.LineNumber ?? index + 1,
+                alternative: alternatives.FirstOrDefault(a =>
+                    a.Requested == new PasProcedureCode(service.ProductOrServiceSystem, service.ProcedureCode))))
+            .Where(x => x.alternative is not null)
+            .Select(x => new PasAlternativeServiceDecision
+            {
+                ForLineNumber = x.line,
+                ProcedureCode = x.alternative!.Policy.AlternativeCode,
+                ProductOrServiceSystem = x.alternative.Policy.AlternativeSystem,
+                ProcedureDescription = x.alternative.Policy.AlternativeDisplay,
+                DenialReasonCode = x.alternative.Policy.ReasonCode,
+                DenialReason = x.alternative.Policy.Reason,
+            })
+            .ToList();
+    }
+
+    /// <summary>
     /// Stores the request and its decision, then answers with what was STORED.
     /// Every outcome (approved, denied, pended) gets its tracking number before
     /// the write, and the response carries it only after the write succeeded:
@@ -220,29 +252,48 @@ public class PasController : FhirControllerBase
     {
         decision.AuthorizationNumber ??= NewAuthorizationNumber();
 
+        var alternatives = decision.HasDecision && decision.Decision == "modified"
+            ? AlternativesFor(record, decision.Alternatives)
+            : [];
         var outcome = decision.HasDecision && decision.Decision == "approved" ? "Approved"
             : decision.HasDecision && decision.Decision == "denied" ? "Denied"
+            : alternatives.Count > 0 ? "Modified"
             : "Pended";
+        var certifies = outcome is "Approved" or "Modified";
 
         // The approved period is the requested one (D-03); see
         // PasAuthorizationMapper for the open-ended fallback. An adjudicator
         // that states its own period is respected.
-        if (outcome == "Approved" && decision.EffectiveFrom is null)
+        if (certifies && decision.EffectiveFrom is null)
         {
             decision.EffectiveFrom = mapping.ApprovedFrom;
             decision.EffectiveTo ??= mapping.ApprovedTo;
         }
 
         record.AuthorizationNumber = decision.AuthorizationNumber;
+
+        // PAS-07: a pend for a service the plan needs documentation for asks
+        // the provider for what the request lacks.
+        var decidedAt = DateTime.UtcNow;
+        var requestedInformation = outcome == "Pended"
+            ? await PlanAdditionalInformationAsync(claim, record, HttpContext.RequestAborted)
+            : [];
+
         record.Decision = new PasAutomatedDecision
         {
             Outcome = outcome,
             DenialReasonCode = outcome == "Denied" ? decision.DenialReasonCode : null,
             DenialReason = outcome == "Denied" ? decision.DenialReason : null,
-            PendReason = outcome == "Pended" ? decision.PendReason ?? PendReason : null,
-            ApprovedServiceDateFrom = outcome == "Approved" ? decision.EffectiveFrom : null,
-            ApprovedServiceDateTo = outcome == "Approved" ? decision.EffectiveTo : null,
-            DecidedAt = DateTime.UtcNow,
+            PendReason = outcome != "Pended" ? null
+                : decision.PendReason ?? (requestedInformation.Count > 0 ? PasAdditionalInformationPlanner.PendReason : PendReason),
+            ApprovedServiceDateFrom = certifies ? decision.EffectiveFrom : null,
+            ApprovedServiceDateTo = certifies ? decision.EffectiveTo : null,
+            Alternatives = alternatives.Count > 0 ? alternatives : null,
+            DecidedAt = decidedAt,
+            RequestedInformation = requestedInformation.Count > 0 ? requestedInformation : null,
+            InformationDueDate = requestedInformation.Count > 0
+                ? PasAdditionalInformationPlanner.DueDate(decidedAt, _additionalInformation)
+                : null,
             Rule = decision.RuleName is { Length: > 100 } rule ? rule[..100] : decision.RuleName,
             // Only the basis the deciding path actually used (null = none).
             // authorization-service refuses a stated LOB that is not the
@@ -285,7 +336,8 @@ public class PasController : FhirControllerBase
                 answer.Decision = "approved";
                 answer.EffectiveFrom = kept.ApprovedServiceDateFrom;
                 answer.EffectiveTo = kept.ApprovedServiceDateTo;
-                responseBundle = _responseBuilder.BuildApprovedResponse(claim, answer, kept.RequestedServices, requestBundle, FhirBaseUrl);
+                responseBundle = _responseBuilder.BuildApprovedResponse(claim, answer, kept.RequestedServices, requestBundle, FhirBaseUrl,
+                    kept.HumanReviewed());
                 break;
             case PriorAuthorizationStatus.Modified:
             case PriorAuthorizationStatus.Expired:
@@ -299,7 +351,11 @@ public class PasController : FhirControllerBase
                     ApprovedServiceDateFrom = kept.ApprovedServiceDateFrom,
                     ApprovedServiceDateTo = kept.ApprovedServiceDateTo,
                     ExpirationDate = kept.ExpirationDate,
+                    ReviewedDate = kept.ReviewedDate,
+                    PendReason = kept.PendReason,
+                    StatusHistory = kept.StatusHistory,
                     RequestedServices = kept.RequestedServices,
+                    PayerAddedServices = kept.PayerAddedServices,
                 }, requestBundle, FhirBaseUrl);
                 break;
             case PriorAuthorizationStatus.Denied:
@@ -309,10 +365,13 @@ public class PasController : FhirControllerBase
                 answer.DenialReason = kept.DenialReason;
                 if (outcome != "Denied")
                     answer.RuleName = "benefit-exclusion";
-                responseBundle = _responseBuilder.BuildDeniedResponse(claim, answer, kept.RequestedServices, requestBundle, FhirBaseUrl);
+                responseBundle = _responseBuilder.BuildDeniedResponse(claim, answer, kept.RequestedServices, requestBundle, FhirBaseUrl,
+                    kept.HumanReviewed());
                 break;
             case PriorAuthorizationStatus.Pended:
-                responseBundle = _responseBuilder.BuildPendedResponse(claim, kept.AuthorizationNumber, kept.RequestedServices, requestBundle, FhirBaseUrl);
+                responseBundle = _responseBuilder.BuildPendedResponse(claim, kept.AuthorizationNumber, kept.RequestedServices, requestBundle, FhirBaseUrl,
+                    kept.PendReason);
+                await AttachAdditionalInformationAsync(responseBundle, kept.RfaiReference, HttpContext.RequestAborted);
                 await WatchForDecisionAsync(record.RequestingProviderNPI, kept.AuthorizationNumber, HttpContext.RequestAborted);
                 break;
             default:
@@ -386,18 +445,15 @@ public class PasController : FhirControllerBase
                && string.Equals(lineOfBusiness.ToString(), recorded, StringComparison.Ordinal);
     }
 
-    /// <summary>422 listing every element the request lacks; nothing was decided or stored.</summary>
-    private IActionResult IncompleteRequest(IReadOnlyList<PasMappingError> errors)
-        => StatusCode(422, new OperationOutcome
-        {
-            Issue = errors.Select(e => new OperationOutcome.IssueComponent
-            {
-                Severity = OperationOutcome.IssueSeverity.Error,
-                Code = OperationOutcome.IssueType.Required,
-                Diagnostics = e.Message,
-                Expression = [e.Expression],
-            }).ToList(),
-        });
+    /// <summary>
+    /// A request CHO cannot record as sent: the PAS response says so in X12
+    /// AAA terms (<c>ClaimResponse.error</c>, outcome error), one error per
+    /// element the request lacks. Nothing was decided or stored and no
+    /// <c>preAuthRef</c> is issued (D-01).
+    /// </summary>
+    private IActionResult IncompleteRequest(Bundle requestBundle, Claim claim, IReadOnlyList<PasMappingError> errors)
+        => Ok(_responseBuilder.BuildErrorResponse(
+            claim, errors.Select(PasRequestErrors.FromMapping).ToList(), requestBundle, FhirBaseUrl));
 
     /// <summary>The request was valid but could not be stored: 503 when that may pass, 502 otherwise.</summary>
     private IActionResult NotRecorded(PasRecordFailure failure)
@@ -478,26 +534,80 @@ public class PasController : FhirControllerBase
 
             // Everything about a RECORD gets ONE answer. "Wrong tenant", "not
             // yours" and "no such authorization" must be indistinguishable, or
-            // the identifier space can be probed for what exists.
-            return StatusCode(404, new OperationOutcome
-            {
-                Issue =
-                [
-                    new OperationOutcome.IssueComponent
-                    {
-                        Severity = OperationOutcome.IssueSeverity.Error,
-                        Code = OperationOutcome.IssueType.NotFound,
-                        Diagnostics =
-                            "No prior authorization matching the supplied identifiers is available.",
-                    }
-                ]
-            });
+            // the identifier space can be probed for what exists. PAS states
+            // it as the 278 does: X12 AA, authorization number not found.
+            return Ok(PasInquiryResponse.Wrap(
+                _responseBuilder.BuildInquiryErrorResponse(requestBundle, PasRequestErrors.InquiryNotMatched(), FhirBaseUrl)));
         }
 
         // PAS 2.2.1's Claim/$inquire returns 0..* inquiry response Bundles,
         // so the answer is a Parameters with one "return" per Bundle.
-        return Ok(PasInquiryResponse.Wrap(
-            _responseBuilder.BuildInquiryResponse(result.Authorization!, requestBundle, FhirBaseUrl)));
+        var inquiryBundle = _responseBuilder.BuildInquiryResponse(result.Authorization!, requestBundle, FhirBaseUrl);
+        await AttachAdditionalInformationAsync(inquiryBundle, result.Authorization!.RfaiReference, HttpContext.RequestAborted);
+        return Ok(PasInquiryResponse.Wrap(inquiryBundle));
+    }
+
+    /// <summary>
+    /// The documents and forms a pend asks for (PAS-07), from
+    /// <see cref="PasAdditionalInformationOptions"/> and the forms DTR serves
+    /// for each line's codes, less the forms the request answered.
+    /// </summary>
+    private async Task<List<PasRequestedInformationItem>> PlanAdditionalInformationAsync(
+        Claim claim, PasAuthorizationRecordRequest record, CancellationToken ct)
+    {
+        if (_additionalInformation.Requirements.Count == 0)
+            return [];
+
+        Dictionary<int, IReadOnlyList<string>>? dtrForms = null;
+        if (_dtr is not null)
+        {
+            dtrForms = new Dictionary<int, IReadOnlyList<string>>();
+            foreach (var line in claim.Item.Where(l => l.Sequence is not null))
+            {
+                var codes = line.ProductOrService?.Coding.Where(c => !string.IsNullOrWhiteSpace(c.Code)).ToList() ?? [];
+                if (codes.Count == 0) continue;
+                try
+                {
+                    dtrForms[line.Sequence!.Value] = await _dtr.FindQuestionnaireCanonicalsAsync(codes, TenantId, FhirBaseUrl, ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // The configured documents are still asked for.
+                    _logger.LogWarning("PAS $submit: DTR forms for a pended line could not be looked up ({Fault})",
+                        ex.GetType().Name);
+                }
+            }
+        }
+
+        var answered = record.Documentation?.Select(d => d.Questionnaire).Where(q => !string.IsNullOrWhiteSpace(q)).ToList()
+                       ?? [];
+        return PasAdditionalInformationPlanner.Plan(claim, _additionalInformation, answered, dtrForms);
+    }
+
+    /// <summary>
+    /// Adds the CDex request a pend raised (read from rfai-service by its
+    /// tracking id) to a PAS response as Tasks and CommunicationRequests, and
+    /// records that it was delivered. A request that cannot be read is left
+    /// out: the response still says the request is pended.
+    /// </summary>
+    private async System.Threading.Tasks.Task AttachAdditionalInformationAsync(
+        Bundle responseBundle, string? trackingId, CancellationToken ct)
+    {
+        if (_cdex is null || string.IsNullOrWhiteSpace(trackingId))
+            return;
+
+        var request = await _cdex.GetByTrackingIdAsync(TenantId, trackingId, ct);
+        if (request is null)
+        {
+            _logger.LogWarning("PAS response: additional-information request {Tracking} could not be read; "
+                + "the response omits its Task", LogSanitizer.Sanitize(trackingId));
+            return;
+        }
+
+        PasAdditionalInformationResources.Attach(responseBundle, request,
+            $"{FhirBaseUrl.TrimEnd('/')}/{FhirService.Services.Cdex.CdexCanonicalUrls.SubmitAttachmentRoute}",
+            withCommunicationRequests: true);
+        await _cdex.MarkDeliveredAsync(TenantId, request.Id, ct);
     }
 
     /// <summary>

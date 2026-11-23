@@ -641,7 +641,10 @@ public static class InfernoSuiteScenario
             var summary = new System.Text.StringBuilder(
                 $"Inferno reported '{result.Result}' for {where}: {result.ResultMessage ?? "(no message)"}");
 
-            if (status == InteropStatus.Failed && result.TestId is not null)
+            // A skip carries its reasons too: the kit skips a test whose input
+            // (one of the requests the harness supplies) is not conformant, and
+            // names the issues only in its messages.
+            if (result.TestId is not null && (status == InteropStatus.Failed || result.Result == "skip"))
             {
                 foreach (var message in result.Messages
                              .Where(m => m.Type == "error")

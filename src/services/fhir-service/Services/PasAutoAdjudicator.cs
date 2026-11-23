@@ -182,6 +182,26 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
 
             cts.Token.ThrowIfCancellationRequested();
 
+            // ── Rule 1b: Preferred alternative ────────────────────────────
+            // A request the plan's preferred-alternative policy covers in
+            // full (every line) is certified as the alternatives, with the
+            // reason, rather than as asked. A request it covers only in part
+            // is decided by the rules below: no line is certified here that
+            // a rule did not evaluate.
+            if (PreferredAlternatives(basis.ProcedureCodes) is { } alternatives)
+            {
+                return new PasDecisionResult
+                {
+                    HasDecision  = true,
+                    Decision     = "modified",
+                    Alternatives = alternatives,
+                    RuleName     = PreferredAlternativeRule,
+                    ElapsedMs    = sw.ElapsedMilliseconds
+                };
+            }
+
+            cts.Token.ThrowIfCancellationRequested();
+
             // ── Rule 2: Auto-approve — service type allowlist (unchanged) ─
             if (_config.AutoApproveServiceTypes.Count > 0 &&
                 procedureCodes.Any(c => _config.AutoApproveServiceTypes.Contains(c)))
@@ -288,6 +308,23 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
             consumed.State = false;
             return Pend(sw, "TimeBudgetExceeded");
         }
+    }
+
+    /// <summary>The rule a preferred-alternative modification is recorded under.</summary>
+    public const string PreferredAlternativeRule = "PreferredAlternative";
+
+    /// <summary>The alternative for every requested code, or null when any code has none.</summary>
+    private List<PasAlternativeService>? PreferredAlternatives(IReadOnlyList<PasProcedureCode> codes)
+    {
+        if (_config.PreferredAlternatives.Count == 0 || codes.Count == 0) return null;
+        var alternatives = new List<PasAlternativeService>();
+        foreach (var code in codes.Distinct())
+        {
+            var policy = _config.PreferredAlternatives.FirstOrDefault(p => p.Covers(code));
+            if (policy is null) return null;
+            alternatives.Add(new PasAlternativeService(policy, code));
+        }
+        return alternatives;
     }
 
     // ── Existing helpers (unchanged) ──────────────────────────────

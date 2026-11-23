@@ -249,6 +249,15 @@ public class Authorization
     public List<RequestedService> RequestedServices { get; set; } = new();
 
     /// <summary>
+    /// Services the payer certified in place of requested ones it did not
+    /// certify: a preferred alternative, such as a rental for a purchase of
+    /// durable medical equipment. PAS states each as a ClaimResponse.addItem
+    /// naming the requested line it replaces; the requested line itself is
+    /// not certified (A3) with the reason. Empty for every other decision.
+    /// </summary>
+    public List<PayerAddedService> PayerAddedServices { get; set; } = new();
+
+    /// <summary>
     /// Clinical information/attachments
     /// 278: PWK segment (2000E)
     /// </summary>
@@ -656,6 +665,35 @@ public class RequestedService
     /// </summary>
     [StringLength(500)]
     public string? DenialReason { get; set; }
+}
+
+/// <summary>
+/// A service the payer certified in place of a requested one (PAS
+/// <c>ClaimResponse.addItem</c>). It is certified (A1) in the quantity the
+/// replaced line asked for, under the authorization's number and period.
+/// </summary>
+[BsonIgnoreExtraElements]
+public class PayerAddedService
+{
+    /// <summary>The requested line (<see cref="RequestedService.LineNumber"/>) this service replaces.</summary>
+    public int ForLineNumber { get; set; }
+
+    /// <summary>The certified service's code, in <see cref="ProductOrServiceSystem"/>.</summary>
+    [StringLength(64)]
+    public string ProcedureCode { get; set; } = string.Empty;
+
+    [StringLength(256)]
+    public string? ProductOrServiceSystem { get; set; }
+
+    [StringLength(200)]
+    public string? ProcedureDescription { get; set; }
+
+    /// <summary>The units certified: the replaced line's requested units.</summary>
+    public decimal ApprovedUnits { get; set; }
+
+    /// <summary>A1: an added service is only ever recorded certified.</summary>
+    [StringLength(2)]
+    public string ServiceStatus { get; set; } = "A1";
 }
 
 /// <summary>

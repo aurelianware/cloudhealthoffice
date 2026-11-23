@@ -50,6 +50,18 @@ public static class PasServerRequests
         // The ERB sits inside JSON strings, so it is removed, not replaced by a literal.
         var preset = JsonNode.Parse(Erb.Replace(File.ReadAllText(path), string.Empty))!;
         var inputs = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        // The kit's must-support requests, which CHO's must-support inquiries restate.
+        var submitKit = preset["inputs"]!.AsArray().OfType<JsonObject>()
+            .Where(i => i["name"]?.GetValue<string>() == "must_support_pa_submit_request_payload")
+            .Select(i => i["value"]?.GetValue<string>())
+            .Where(v => !string.IsNullOrEmpty(v))
+            .Select(v => JsonNode.Parse(v!)!)
+            .SelectMany(n => n is JsonArray a ? a.OfType<JsonObject>() : [n.AsObject()])
+            .ToList();
+        foreach (var bundle in submitKit)
+            Repoint(bundle, fixture);
+
         foreach (var input in preset["inputs"]!.AsArray().OfType<JsonObject>())
         {
             var name = input["name"]!.GetValue<string>();
@@ -60,13 +72,24 @@ public static class PasServerRequests
             {
                 // A payload is one bundle or, for the must-support and
                 // inquiry inputs, a list of them.
-                var payload = JsonNode.Parse(value)!;
+                JsonNode payload = JsonNode.Parse(value)!;
                 var bundles = payload is JsonArray list ? list.OfType<JsonObject>().ToList() : [payload.AsObject()];
                 foreach (var bundle in bundles)
                 {
                     Repoint(bundle, fixture);
                     if (ServiceTypeFor(name) is { } serviceType)
                         SetServiceType(bundle, serviceType);
+                }
+
+                // CHO's own additions to the must-support requests (the kit
+                // asks testers to supply requests that elicit every element).
+                var additions = MustSupportAdditions(name, bundles, submitKit);
+                if (additions.Count > 0)
+                {
+                    var extended = payload as JsonArray ?? new JsonArray(payload.DeepClone());
+                    foreach (var addition in additions)
+                        extended.Add(addition);
+                    payload = extended;
                 }
 
                 value = payload.ToJsonString();
@@ -108,6 +131,214 @@ public static class PasServerRequests
         "pended_pa_submit_request_payload" => PendedServiceType,
         _ => null,
     };
+
+    /// <summary>
+    /// The submitter's identifier on CHO's pended must-support request (PAS-07),
+    /// so the must-support inquiry can name that request and no other: every
+    /// kit example shares one identifier, and an inquiry by it returns the
+    /// latest request made with it.
+    /// </summary>
+    public const string DocumentationPendIdentifier = "111099-PAS07";
+
+    private const string PatientEventTraceSystem = "http://davinci-pas.org/PATIENT_EVENT_TRACE_NUMBER";
+
+    /// <summary>
+    /// The submitter's identifier on CHO's must-support request that CHO
+    /// refuses (<see cref="RefusedRequest"/>), and on the inquiry for a
+    /// request CHO never received.
+    /// </summary>
+    public const string RefusedRequestIdentifier = "111099-PASERR";
+
+    /// <summary>The fullUrl of the unnamed request's Claim, which has no id.</summary>
+    public const string UnnamedClaimFullUrl = "urn:uuid:9b2e4f60-1c7a-4d2b-8e51-0f3c6a7d2e14";
+
+    /// <summary>
+    /// The submitter's identifier on CHO's must-support request for a service
+    /// the plan certifies an alternative to (<see cref="PurchasedEquipmentServiceType"/>),
+    /// and on the inquiry about it.
+    /// </summary>
+    public const string AlternativeIdentifier = "111099-PASALT";
+
+    /// <summary>
+    /// X12 1365 "12", durable medical equipment purchase: CHO's interop profile
+    /// certifies a rental ("18") instead, so the response states the rental
+    /// as a PAS addItem in place of the requested line.
+    /// </summary>
+    public const string PurchasedEquipmentServiceType = "12";
+
+    /// <summary>
+    /// The requests CHO adds to the kit's must-support inputs (the kit asks
+    /// testers to supply requests that elicit every element), each a copy of
+    /// the kit's first request:
+    /// <list type="bullet">
+    /// <item>for a service that needs documentation (<see cref="PendedServiceType"/>):
+    /// CHO pends it and asks for what it lacks, so the response carries a PAS
+    /// Task and CommunicationRequest;</item>
+    /// <item>for equipment the plan rents rather than buys
+    /// (<see cref="PurchasedEquipmentServiceType"/>): CHO certifies the rental
+    /// in place of each line, so the response carries addItem;</item>
+    /// <item>one CHO refuses (<see cref="RefusedRequest"/>), so the response
+    /// carries ClaimResponse.error;</item>
+    /// <item>one whose Claim has no id (<see cref="UnnameClaim"/>), so the
+    /// response's request reference says why it cannot name the Claim.</item>
+    /// </list>
+    /// And the inquiries: about exactly the pended request, so the inquiry
+    /// response carries the Task too; about the equipment request, restating
+    /// its lines (<see cref="RestateRequestLines"/>), so it carries addItem;
+    /// and about a request CHO never received, so it carries the error and
+    /// the absent reference.
+    /// </summary>
+    public static IReadOnlyList<JsonObject> MustSupportAdditions(
+        string input, IReadOnlyList<JsonObject> kitBundles, IReadOnlyList<JsonObject>? submitKit = null)
+    {
+        if (kitBundles.Count == 0
+            || input is not ("must_support_pa_submit_request_payload" or "must_support_pa_inquire_request_payload"))
+            return [];
+
+        var submit = input == "must_support_pa_submit_request_payload";
+        var additions = new List<JsonObject>();
+
+        var pend = (JsonObject)kitBundles[0].DeepClone();
+        if (!SetSubmitterIdentifier(pend, DocumentationPendIdentifier))
+            return [];
+        if (submit)
+            SetServiceType(pend, PendedServiceType);
+        additions.Add(pend);
+
+        var equipment = (JsonObject)kitBundles[0].DeepClone();
+        SetSubmitterIdentifier(equipment, AlternativeIdentifier);
+        SetServiceType(equipment, PurchasedEquipmentServiceType);
+        if (submit)
+            additions.Add(equipment);
+        else if (submitKit is { Count: > 0 } && RestateRequestLines(equipment, submitKit[0]))
+            additions.Add(equipment);
+
+        // The refused request is not stored, so an inquiry by its identifier
+        // finds nothing.
+        var refused = (JsonObject)kitBundles[0].DeepClone();
+        SetSubmitterIdentifier(refused, RefusedRequestIdentifier);
+        if (!submit || RefusedRequest(refused))
+            additions.Add(refused);
+
+        if (submit)
+        {
+            var unnamed = (JsonObject)kitBundles[0].DeepClone();
+            SetSubmitterIdentifier(unnamed, UnnamedClaimIdentifier);
+            if (UnnameClaim(unnamed))
+                additions.Add(unnamed);
+        }
+        return additions;
+    }
+
+    /// <summary>
+    /// The request-line detail a PAS inquiry Claim's profile does not slice,
+    /// but which the inquiry restates from the request so the answer can hand
+    /// it back: the order the line fulfils and the member's EPSDT and nursing
+    /// home context.
+    /// </summary>
+    private static readonly string[] RestatedLineExtensions =
+    [
+        "extension-requestedService", "extension-epsdtIndicator", "extension-nursingHomeResidentialStatus",
+        "extension-nursingHomeLevelOfCare", "extension-revenueUnitRateLimit",
+    ];
+
+    /// <summary>
+    /// Copies <see cref="RestatedLineExtensions"/> from each line of
+    /// <paramref name="request"/> onto the inquiry line with the same
+    /// sequence, with the resources they reference. False when no line has any.
+    /// </summary>
+    public static bool RestateRequestLines(JsonObject inquiry, JsonObject request)
+    {
+        static JsonObject? ClaimOf(JsonObject bundle) => ((bundle["entry"] as JsonArray)?.OfType<JsonObject>() ?? [])
+            .Select(e => e["resource"] as JsonObject)
+            .FirstOrDefault(r => r?["resourceType"]?.GetValue<string>() == "Claim");
+
+        var inquiryClaim = ClaimOf(inquiry);
+        var requestClaim = ClaimOf(request);
+        if (inquiryClaim?["item"] is not JsonArray inquiryLines || requestClaim?["item"] is not JsonArray requestLines)
+            return false;
+
+        var restated = false;
+        var referenced = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var line in inquiryLines.OfType<JsonObject>())
+        {
+            var sequence = line["sequence"]?.ToJsonString();
+            var from = requestLines.OfType<JsonObject>().FirstOrDefault(l => l["sequence"]?.ToJsonString() == sequence);
+            foreach (var extension in (from?["extension"] as JsonArray)?.OfType<JsonObject>() ?? [])
+            {
+                var url = extension["url"]?.GetValue<string>() ?? string.Empty;
+                if (!RestatedLineExtensions.Any(name => url.EndsWith("/" + name, StringComparison.Ordinal))) continue;
+                if (line["extension"] is not JsonArray extensions)
+                    line["extension"] = extensions = new JsonArray();
+                extensions.Add(extension.DeepClone());
+                if (extension["valueReference"]?["reference"]?.GetValue<string>() is { } reference)
+                    referenced.Add(reference);
+                restated = true;
+            }
+        }
+
+        // The resources those references name, so the inquiry resolves them.
+        var entries = (JsonArray)inquiry["entry"]!;
+        foreach (var entry in ((request["entry"] as JsonArray)?.OfType<JsonObject>() ?? []))
+        {
+            var resource = entry["resource"] as JsonObject;
+            var key = $"{resource?["resourceType"]?.GetValue<string>()}/{resource?["id"]?.GetValue<string>()}";
+            if (referenced.Contains(key)
+                && !entries.OfType<JsonObject>().Any(e => e["fullUrl"]?.GetValue<string>() == entry["fullUrl"]?.GetValue<string>()))
+                entries.Add(entry.DeepClone());
+        }
+        return restated;
+    }
+
+    /// <summary>The submitter's identifier on the must-support request whose Claim has no id.</summary>
+    public const string UnnamedClaimIdentifier = "111099-PASDAR";
+
+    /// <summary>
+    /// Makes a conformant request CHO refuses: its last service line asks for
+    /// no units (Claim.item.quantity 0). False when the request has no line
+    /// with a quantity.
+    /// </summary>
+    public static bool RefusedRequest(JsonObject bundle)
+    {
+        var claim = ClaimEntry(bundle)?["resource"] as JsonObject;
+        var line = (claim?["item"] as JsonArray)?.OfType<JsonObject>().LastOrDefault(i => i["quantity"] is JsonObject);
+        if (line is null) return false;
+        ((JsonObject)line["quantity"]!)["value"] = 0;
+        return true;
+    }
+
+    /// <summary>
+    /// Takes the Claim's id away, leaving it a <c>urn:uuid</c> fullUrl: the
+    /// response then names the Claim by identifier, with a data-absent reason
+    /// on the reference, since it cannot name a Claim it does not echo.
+    /// </summary>
+    public static bool UnnameClaim(JsonObject bundle)
+    {
+        if (ClaimEntry(bundle) is not { } entry || entry["resource"] is not JsonObject claim) return false;
+        claim.Remove("id");
+        entry["fullUrl"] = UnnamedClaimFullUrl;
+        return true;
+    }
+
+    private static JsonObject? ClaimEntry(JsonObject bundle)
+        => ((bundle["entry"] as JsonArray)?.OfType<JsonObject>() ?? [])
+            .FirstOrDefault(e => e["resource"]?["resourceType"]?.GetValue<string>() == "Claim");
+
+    /// <summary>Replaces the Claim's patient-event trace number; false when it carries none.</summary>
+    public static bool SetSubmitterIdentifier(JsonObject bundle, string value)
+    {
+        var claim = ((bundle["entry"] as JsonArray)?.OfType<JsonObject>() ?? [])
+            .Select(e => e["resource"] as JsonObject)
+            .FirstOrDefault(r => r?["resourceType"]?.GetValue<string>() == "Claim");
+        var identifier = (claim?["identifier"] as JsonArray)?.OfType<JsonObject>()
+            .FirstOrDefault(i => i["system"]?.GetValue<string>() == PatientEventTraceSystem);
+        if (identifier is null) return false;
+        identifier["value"] = value;
+        // A fresh Bundle identity for a request the kit did not send.
+        if (bundle["identifier"] is JsonObject bundleIdentifier)
+            bundleIdentifier["value"] = $"{bundleIdentifier["value"]?.GetValue<string>()}-{value}";
+        return true;
+    }
 
     /// <summary>Sets every Claim item's X12 service type code to <paramref name="code"/>.</summary>
     public static void SetServiceType(JsonObject bundle, string code)

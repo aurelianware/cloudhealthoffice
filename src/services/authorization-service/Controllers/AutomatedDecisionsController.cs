@@ -2,6 +2,7 @@ using AuthorizationService.Exceptions;
 using AuthorizationService.Backends;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
+using AuthorizationService.Services.Rfai;
 using CloudHealthOffice.Infrastructure.Security;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
@@ -55,15 +56,21 @@ public sealed class AutomatedDecisionsController : ControllerBase
     private readonly IAuthorizationBackendSelector _backends;
     private readonly ICurrentActor _actor;
     private readonly ILogger<AutomatedDecisionsController> _logger;
+    private readonly IPendedAuthorizationRfaiCoordinator? _rfai;
+    private readonly IAuthorizationRepository? _repository;
 
     public AutomatedDecisionsController(
         IAuthorizationBackendSelector backends,
         ICurrentActor actor,
-        ILogger<AutomatedDecisionsController> logger)
+        ILogger<AutomatedDecisionsController> logger,
+        IPendedAuthorizationRfaiCoordinator? rfai = null,
+        IAuthorizationRepository? repository = null)
     {
         _backends = backends;
         _actor = actor;
         _logger = logger;
+        _rfai = rfai;
+        _repository = repository;
     }
 
     /// <summary>PWK01 for a completed DTR form: 03, report justifying treatment.</summary>
@@ -94,6 +101,9 @@ public sealed class AutomatedDecisionsController : ControllerBase
                 _logger.LogInformation(
                     "Automated decision for authorization {AuthNumber} in tenant {Tenant} already recorded; returning it",
                     LogSanitizer.Sanitize(number), LogSanitizer.Sanitize(_actor.TenantId));
+                // A retry may follow a write whose request was not raised:
+                // the coordinator replays onto the same request, never a second.
+                await RaiseAdditionalInformationRequestAsync(backend, existing, request.Decision!);
                 return Ok(existing);
             }
 
@@ -178,9 +188,14 @@ public sealed class AutomatedDecisionsController : ControllerBase
             var winner = await backend.GetByNumberAsync(number, HttpContext.RequestAborted);
             if (winner?.RequestHash is not null
                 && string.Equals(winner.RequestHash, request.RequestHash, StringComparison.Ordinal))
+            {
+                await RaiseAdditionalInformationRequestAsync(backend, winner, request.Decision!);
                 return Ok(winner);
+            }
             return Conflict($"Authorization {number} already exists.");
         }
+
+        await RaiseAdditionalInformationRequestAsync(backend, stored, request.Decision!);
 
         _logger.LogInformation(
             "Automated decision recorded: authorization {AuthNumber} tenant {Tenant} status {Status} by {Actor}",
@@ -188,6 +203,45 @@ public sealed class AutomatedDecisionsController : ControllerBase
             LogSanitizer.Sanitize(_actor.UserId));
 
         return StatusCode(StatusCodes.Status201Created, stored);
+    }
+
+    /// <summary>
+    /// Raises the additional-information request (PAS-07) a pend names, in
+    /// rfai-service, and stamps its handle on the record, through the same
+    /// coordinator a reviewer's A4 decision uses. Only for a record this
+    /// service owns (the native backend) that is still pended A4: a plan
+    /// exclusion or a state rule that decided otherwise asks for nothing.
+    ///
+    /// A failure leaves the record pended with no request, the coordinator's
+    /// recoverable state: the decision stands, the response says nothing was
+    /// requested, and a retry of the same request replays onto the same
+    /// correlation key.
+    /// </summary>
+    private async System.Threading.Tasks.Task RaiseAdditionalInformationRequestAsync(
+        IAuthorizationBackend backend, Authorization stored, AutomatedDecision decision)
+    {
+        if (_rfai is null || _repository is null || !backend.IsAuthoritative
+            || decision.RequestedInformation is not { Count: > 0 } items
+            || (stored.RFAIIssued && !string.IsNullOrEmpty(stored.RFAIReference)))
+            return;
+
+        var stamped = await _rfai.EnsureRequestForDecisionAsync(
+            stored, items, decision.InformationDueDate, decisionControlNumber: null, HttpContext.RequestAborted);
+        if (!stamped) return;
+
+        try
+        {
+            await _repository.UpdateAsync(stored);
+        }
+        catch (Exception ex)
+        {
+            // The request is durable in rfai-service; only the handle is
+            // missing, and a retry stamps it again.
+            _logger.LogError(ex,
+                "Authorization {AuthNumber}: the additional-information request was raised "
+                + "but its handle could not be persisted.",
+                LogSanitizer.Sanitize(stored.AuthorizationNumber));
+        }
     }
 
     /// <summary>
@@ -288,10 +342,49 @@ public sealed class AutomatedDecisionsController : ControllerBase
         if (request.RequestedServiceDateTo < request.RequestedServiceDateFrom)
             Add(nameof(request.RequestedServiceDateTo), "RequestedServiceDateTo is before RequestedServiceDateFrom.");
 
+        // What a pend asks for: only a pend asks, and every item says what it is.
+        if (decision.RequestedInformation is { Count: > 0 } requested)
+        {
+            if (decision.Outcome != AutomatedDecisionOutcome.Pended)
+                Add("Decision.RequestedInformation", "Only a pend asks the provider for information.");
+            else if (requested.Any(i => string.IsNullOrWhiteSpace(i.Description)))
+                Add("Decision.RequestedInformation", "Every requested item needs a description.");
+            else if (requested.Any(i => i.ServiceLineNumber is < 1))
+                Add("Decision.RequestedInformation", "A requested item's service line number is 1 or more.");
+            else if (requested.Any(i => i.Questionnaire is { Length: > 500 }
+                         || i.Description.Length > 500 || i.LoincCode is { Length: > 20 }
+                         || i.ContentModifier is { Length: > 20 } || i.Code is { Length: > 2 }))
+                Add("Decision.RequestedInformation", "A requested item's field is too long.");
+
+            if (decision.InformationDueDate is { } due && due < decided)
+                Add("Decision.InformationDueDate", "InformationDueDate is before DecidedAt.");
+        }
+        else if (decision.InformationDueDate.HasValue)
+        {
+            Add("Decision.InformationDueDate", "A due date needs something requested.");
+        }
+
+        // A modification names the requested lines it replaces, each once.
+        if (decision.Alternatives is { Count: > 0 } alternatives)
+        {
+            var lines = request.RequestedServices.Select((s, i) => s.LineNumber ?? i + 1).ToHashSet();
+            if (decision.Outcome != AutomatedDecisionOutcome.Modified)
+                Add("Decision.Alternatives", "Only a modification certifies an alternative.");
+            else if (alternatives.Any(a => !lines.Contains(a.ForLineNumber)))
+                Add("Decision.Alternatives", "An alternative replaces a requested line.");
+            else if (alternatives.Select(a => a.ForLineNumber).Distinct().Count() != alternatives.Count)
+                Add("Decision.Alternatives", "A requested line is replaced by at most one alternative.");
+        }
+        else if (decision.Outcome == AutomatedDecisionOutcome.Modified)
+        {
+            Add("Decision.Alternatives", "A modification names the alternative it certifies.");
+        }
+
         var hasApprovedPeriod = decision.ApprovedServiceDateFrom.HasValue || decision.ApprovedServiceDateTo.HasValue;
         switch (decision.Outcome)
         {
             case AutomatedDecisionOutcome.Approved:
+            case AutomatedDecisionOutcome.Modified:
                 if (!decision.ApprovedServiceDateFrom.HasValue)
                     Add("Decision.ApprovedServiceDateFrom", "An approval needs an approved period.");
                 else if (decision.ApprovedServiceDateTo < decision.ApprovedServiceDateFrom)

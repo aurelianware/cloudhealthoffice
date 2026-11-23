@@ -163,6 +163,18 @@ public sealed record CdexRequestedItem
     /// <summary>Diagnosis context for the question (ICD-10).</summary>
     [JsonPropertyName("diagnosisCode")]
     public string? DiagnosisCode { get; init; }
+
+    /// <summary>The request's sequence number for the line the item is about (PAS <c>Claim.item.sequence</c>).</summary>
+    [JsonPropertyName("serviceLineNumber")]
+    public int? ServiceLineNumber { get; init; }
+
+    /// <summary>LOINC attachment modifier (class LP7763-8) narrowing <see cref="LoincCode"/>.</summary>
+    [JsonPropertyName("contentModifier")]
+    public string? ContentModifier { get; init; }
+
+    /// <summary>Canonical of a DTR Questionnaire the provider is asked to complete.</summary>
+    [JsonPropertyName("questionnaire")]
+    public string? Questionnaire { get; init; }
 }
 
 /// <summary>

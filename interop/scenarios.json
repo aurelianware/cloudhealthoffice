@@ -274,6 +274,7 @@
         "cho-member-service",
         "cho-coverage-service",
         "cho-authorization-service",
+        "cho-rfai-service",
         "cho-provider-service",
         "inferno-pas"
       ],

@@ -236,6 +236,25 @@ public class RequestedItem
 
     /// <summary>Diagnosis context (ICD-10) for the question, where the reviewer gave one.</summary>
     public string? DiagnosisCode { get; set; }
+
+    /// <summary>
+    /// The request's own sequence number for the service line this item is
+    /// about (PAS <c>Claim.item.sequence</c>, X12 2000F). More precise than
+    /// <see cref="ServiceLineProcedureCode"/> when two lines share a code.
+    /// </summary>
+    public int? ServiceLineNumber { get; set; }
+
+    /// <summary>
+    /// LOINC attachment modifier (class LP7763-8, e.g. "18804-5": data from the
+    /// last 3 months), narrowing what of <see cref="LoincCode"/> is wanted.
+    /// </summary>
+    public string? ContentModifier { get; set; }
+
+    /// <summary>
+    /// Canonical of a DTR Questionnaire the provider is asked to complete,
+    /// when the item is a form rather than a document.
+    /// </summary>
+    public string? Questionnaire { get; set; }
 }
 
 /// <summary>

@@ -6,6 +6,7 @@ using AuthorizationService.Backends;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services.BenefitExclusion;
+using AuthorizationService.Services.Rfai;
 using CloudHealthOffice.Infrastructure.Security;
 using NSubstitute;
 using Authorization = AuthorizationService.Models.Authorization;
@@ -45,7 +46,29 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         _repo.ClearReceivedCalls();
         _repo.GetByAuthorizationNumberAsync(Arg.Any<string>()).Returns((Authorization?)null);
         _repo.CreateAsync(Arg.Do<Authorization>(a => _stored = a)).Returns(call => call.Arg<Authorization>());
+        _repo.UpdateAsync(Arg.Any<Authorization>()).Returns(call => call.Arg<Authorization>());
+        factory.RfaiGateway.ClearReceivedCalls();
+        factory.RfaiGateway.EnsureRequestAsync(Arg.Any<RfaiRequestCommand>(), Arg.Any<CancellationToken>())
+            .Returns(new RfaiRequestHandle { Id = "rfai-1", TrackingId = "RFAI-TRK-1", Created = true });
     }
+
+    /// <summary>A body whose decision is a pend naming what it needs.</summary>
+    private static object PendAskingFor(object[]? requestedInformation, DateTime? dueDate = null, string outcome = "Pended")
+    {
+        var body = JsonSerializer.SerializeToNode(Body(outcome: outcome, withApprovedPeriod: outcome == "Approved"), Json)!.AsObject();
+        var decision = body["decision"]!.AsObject();
+        decision["requestedInformation"] = JsonSerializer.SerializeToNode(requestedInformation, Json);
+        if (dueDate is { } due) decision["informationDueDate"] = due.ToString("o");
+        return body;
+    }
+
+    private static readonly object[] ProcedureNoteAndForm =
+    [
+        new { code = "09", loincCode = "28570-0", description = "Procedure note", serviceLineNumber = 1,
+              contentModifier = "18804-5", serviceLineProcedureCode = "27447", diagnosisCode = "M17.11" },
+        new { description = "Complete the knee arthroplasty questionnaire",
+              questionnaire = "http://example.org/Questionnaire/knee|1.0", serviceLineNumber = 1 },
+    ];
 
     private HttpClient ClientWithToken(string token)
     {
@@ -326,6 +349,97 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         Assert.Null(_stored.ReviewedDate);
     }
 
+    [Fact]
+    public async Task PendNamingWhatItNeeds_RaisesTheRequest_AndStampsItsHandle()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var due = DateTime.UtcNow.AddDays(14);
+
+        var response = await client.PostAsJsonAsync(Path, PendAskingFor(ProcedureNoteAndForm, due), Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        await _factory.RfaiGateway.Received(1).EnsureRequestAsync(
+            Arg.Is<RfaiRequestCommand>(c =>
+                c.TenantId == Tenant && c.AuthNumber == "PAS-20261011-AAAA0001"
+                && c.DueDate.HasValue && Math.Abs((c.DueDate.Value - due).TotalSeconds) < 1
+                && c.RequestedItems.Count == 2
+                && c.RequestedItems[0].LoincCode == "28570-0" && c.RequestedItems[0].ServiceLineNumber == 1
+                && c.RequestedItems[0].ContentModifier == "18804-5"
+                && c.RequestedItems[1].Questionnaire == "http://example.org/Questionnaire/knee|1.0"),
+            Arg.Any<CancellationToken>());
+        await _repo.Received(1).UpdateAsync(Arg.Is<Authorization>(a => a.RFAIReference == "RFAI-TRK-1" && a.RFAIIssued));
+        var body = await response.Content.ReadFromJsonAsync<Authorization>(Json);
+        Assert.Equal("RFAI-TRK-1", body!.RFAIReference);
+    }
+
+    [Fact]
+    public async Task PendNamingNothing_RaisesNoRequest()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, Body(outcome: "Pended", withApprovedPeriod: false), Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        await _factory.RfaiGateway.DidNotReceive().EnsureRequestAsync(Arg.Any<RfaiRequestCommand>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().UpdateAsync(Arg.Any<Authorization>());
+    }
+
+    [Fact]
+    public async Task RfaiServiceDown_StillRecordsThePend_WithNoHandle()
+    {
+        _factory.RfaiGateway.EnsureRequestAsync(Arg.Any<RfaiRequestCommand>(), Arg.Any<CancellationToken>())
+            .Returns((RfaiRequestHandle?)null);
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, PendAskingFor(ProcedureNoteAndForm), Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(AuthorizationStatus.Pended, _stored!.Status);
+        Assert.Null(_stored.RFAIReference);
+        await _repo.DidNotReceive().UpdateAsync(Arg.Any<Authorization>());
+    }
+
+    [Fact]
+    public async Task Retry_OfAPendWhoseRequestWasNotRaised_RaisesIt()
+    {
+        _repo.GetByAuthorizationNumberAsync("PAS-20261011-AAAA0001").Returns(new Authorization
+        {
+            Id = "auth-1", TenantId = Tenant, AuthorizationNumber = "PAS-20261011-AAAA0001", RequestHash = RequestHash,
+            Status = AuthorizationStatus.Pended, ReviewDecision = "A4",
+        });
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, PendAskingFor(ProcedureNoteAndForm), Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await _factory.RfaiGateway.Received(1).EnsureRequestAsync(Arg.Any<RfaiRequestCommand>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    [Theory]
+    [InlineData("Approved")]
+    [InlineData("Denied")]
+    public async Task RequestedInformation_OnAnythingButAPend_Returns400(string outcome)
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, PendAskingFor(ProcedureNoteAndForm, outcome: outcome), Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    [Fact]
+    public async Task RequestedItemWithoutADescription_Returns400()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path,
+            PendAskingFor([new { loincCode = "28570-0", description = " " }]), Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     // ── What it refuses ────────────────────────────────────────────────
 
     [Fact]
@@ -341,6 +455,85 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    /// <summary>A body with two requested lines whose decision certifies an alternative for some of them.</summary>
+    private static System.Text.Json.Nodes.JsonObject WithAlternatives(string outcome, params int[] forLines)
+    {
+        var body = JsonSerializer.SerializeToNode(Body(outcome: outcome, withApprovedPeriod: outcome is "Approved" or "Modified"), Json)!.AsObject();
+        body["requestedServices"] = JsonSerializer.SerializeToNode(new object[]
+        {
+            new { lineNumber = 1, procedureCode = "E0260", productOrServiceSystem = "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets", requestedUnits = 1 },
+            new { lineNumber = 2, procedureCode = "27447", productOrServiceSystem = "http://www.ama-assn.org/go/cpt", requestedUnits = 2 },
+        }, Json);
+        body["decision"]!["alternatives"] = JsonSerializer.SerializeToNode(forLines.Select(line => new
+        {
+            forLineNumber = line,
+            procedureCode = "E0260RR",
+            procedureDescription = "Hospital bed, rental",
+            denialReasonCode = "PREFERRED_ALTERNATIVE",
+            denialReason = "The plan certifies a rental of this equipment, not its purchase.",
+        }).ToArray(), Json);
+        return body;
+    }
+
+    [Fact]
+    public async Task Modification_CertifiesTheAlternative_InPlaceOfTheLineItReplaces()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, WithAlternatives("Modified", 1), Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(AuthorizationStatus.Modified, _stored!.Status);
+        Assert.Equal("A2", _stored.ReviewDecision);
+        Assert.NotNull(_stored.ReviewedDate);
+        Assert.NotNull(_stored.ApprovedServiceDateFrom);
+
+        var replaced = _stored.RequestedServices.Single(s => s.LineNumber == 1);
+        Assert.Equal("A3", replaced.ServiceStatus);
+        Assert.Equal(0, replaced.ApprovedUnits);
+        Assert.Equal("PREFERRED_ALTERNATIVE", replaced.DenialReasonCode);
+        var kept = _stored.RequestedServices.Single(s => s.LineNumber == 2);
+        Assert.Equal("A1", kept.ServiceStatus);
+        Assert.Equal(2, kept.ApprovedUnits);
+
+        var added = Assert.Single(_stored.PayerAddedServices);
+        Assert.Equal(1, added.ForLineNumber);
+        Assert.Equal("E0260RR", added.ProcedureCode);
+        Assert.Equal(1, added.ApprovedUnits);
+        Assert.Equal("A1", added.ServiceStatus);
+        Assert.Equal("PREFERRED_ALTERNATIVE", _stored.DenialReasonCode);
+        Assert.Equal("A2", _stored.StatusHistory[^1].ReviewDecision);
+        Assert.Contains(_stored.StatusHistory[^1].LineDecisions, l => l.LineNumber == 1 && l.ReviewDecision == "A3");
+    }
+
+    [Theory]
+    [InlineData("Modified", new int[0])]   // a modification names its alternative
+    [InlineData("Modified", new[] { 3 })]  // ...for a line the request has
+    [InlineData("Modified", new[] { 1, 1 })] // ...once
+    [InlineData("Approved", new[] { 1 })]  // only a modification carries one
+    public async Task InconsistentAlternatives_Return400(string outcome, int[] forLines)
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, WithAlternatives(outcome, forLines), Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    [Fact]
+    public async Task ModificationWithoutPeriod_Returns400()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var body = WithAlternatives("Modified", 1);
+        body["decision"]!["approvedServiceDateFrom"] = null;
+        body["decision"]!["approvedServiceDateTo"] = null;
+
+        var response = await client.PostAsJsonAsync(Path, body, Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]

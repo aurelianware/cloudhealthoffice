@@ -186,28 +186,28 @@ public sealed class InteropEnvironment : IAsyncDisposable
 
     /// <summary>
     /// The services to capture logs for: every declared target, plus whatever
-    /// else the started profiles are running. The targets are included
-    /// unconditionally — a container that crashed is no longer running, and that
-    /// is exactly the case where its logs matter.
+    /// else the started profiles started, including containers that have since
+    /// exited — a container that crashed is no longer running, and that is
+    /// exactly the case where its logs matter.
     /// </summary>
     private async Task<IReadOnlyList<string>> LogTargetsAsync(CancellationToken cancellationToken)
     {
         var declared = _services.Select(s => s.Compose.Service);
 
-        IReadOnlyList<string> running;
+        IReadOnlyList<string> started;
         try
         {
-            running = await _compose.RunningServicesAsync(
+            started = await _compose.ServicesWithContainersAsync(
                 _profiles, TimeSpan.FromSeconds(60), cancellationToken);
         }
         catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or IOException)
         {
             // Listing is a convenience; the declared targets are the floor.
-            Console.Error.WriteLine($"[interop] could not list running services: {ex.Message}");
-            running = [];
+            Console.Error.WriteLine($"[interop] could not list services: {ex.Message}");
+            started = [];
         }
 
-        return declared.Concat(running).Distinct(StringComparer.Ordinal).ToList();
+        return declared.Concat(started).Distinct(StringComparer.Ordinal).ToList();
     }
 
     /// <summary>

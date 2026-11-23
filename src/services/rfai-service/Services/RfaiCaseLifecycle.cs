@@ -127,6 +127,9 @@ public static class RfaiCaseLifecycle
     /// <summary>Upper bound on distinct items one request may ask for.</summary>
     public const int MaxRequestedItems = 25;
 
+    /// <summary>Upper bound on a requested Questionnaire canonical.</summary>
+    public const int MaxQuestionnaireLength = 500;
+
     // ── Creation ─────────────────────────────────────────────────────────────
 
     public static RfaiValidation Validate(RfaiCreationRequest request)
@@ -151,6 +154,12 @@ public static class RfaiCaseLifecycle
 
         if (request.RequestedItems.Any(i => string.IsNullOrWhiteSpace(i.Description)))
             return new RfaiValidation("Each requestedItem must have a non-empty description.");
+
+        if (request.RequestedItems.Any(i => i.ServiceLineNumber is < 1))
+            return new RfaiValidation("A requestedItem's serviceLineNumber is 1 or more.");
+
+        if (request.RequestedItems.Any(i => i.Questionnaire is { Length: > MaxQuestionnaireLength }))
+            return new RfaiValidation($"A requestedItem's questionnaire is at most {MaxQuestionnaireLength} characters.");
 
         return RfaiValidation.Valid;
     }

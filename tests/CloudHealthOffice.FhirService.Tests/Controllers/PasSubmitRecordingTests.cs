@@ -72,33 +72,121 @@ public class PasSubmitRecordingTests
             It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<PasDecisionBasis>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
-    // ── Incomplete requests: 422, nothing decided, nothing stored ────────
+    // ── Incomplete requests: a PAS error response, nothing decided or stored ──
+
+    /// <summary>The refused request's ClaimResponse: outcome error, no number issued.</summary>
+    private static ClaimResponse Refused(IActionResult result)
+    {
+        var bundle = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<Bundle>().Subject;
+        var response = bundle.Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
+        response.Outcome.Should().Be(ClaimProcessingCodes.Error);
+        response.PreAuthRef.Should().BeNull("nothing was recorded, so no number is issued (D-01)");
+        response.Item.Should().BeEmpty("an error response carries no adjudication");
+        return response;
+    }
+
+    private static string ErrorPath(ClaimResponse.ErrorComponent error)
+        => ((FhirString)error.Extension.Single(e => e.Url.EndsWith("/extension-errorPath")).Value).Value;
 
     [Fact]
-    public async Task MissingPatient_Returns422_NothingDecidedOrStored()
+    public async Task MissingPatient_IsAPasErrorResponse_NothingDecidedOrStored()
     {
         var result = await Controller().ClaimSubmit(PasBundles.Complete().Without<Patient>());
 
-        var refused = result.Should().BeOfType<ObjectResult>().Subject;
-        refused.StatusCode.Should().Be(422);
-        refused.Value.Should().BeOfType<OperationOutcome>()
-            .Which.Issue.Should().Contain(i => i.Expression.Contains("Claim.patient")
-                                               && i.Code == OperationOutcome.IssueType.Required);
+        var response = Refused(result);
+        var error = response.Error.Should().Contain(e => ErrorPath(e).Contains("ofType(Claim).patient")).Subject;
+        error.Code.Coding.Single().System.Should().Be("https://codesystem.x12.org/005010/901");
+        error.Code.Coding.Single().Code.Should().Be("72");
+        error.Extension.Should().Contain(e => e.Url.EndsWith("/extension-errorFollowupAction"));
+        error.Extension.Should().Contain(e => e.Url.EndsWith("/extension-errorElement"));
+        response.ProcessNote.Should().NotBeEmpty("each error is also stated in words");
         AdjudicatorNeverRan();
         _recorder.Calls.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task MissingNpi_Returns422_NothingDecidedOrStored()
+    public async Task MissingNpi_IsAPasErrorResponse_NothingDecidedOrStored()
     {
         var bundle = PasBundles.Complete();
         bundle.Entry.Select(e => e.Resource).OfType<Practitioner>().Single().Identifier.Clear();
 
         var result = await Controller().ClaimSubmit(bundle);
 
-        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(422);
+        Refused(result).Error.Should().Contain(e => e.Code.Coding.Single().Code == "43");
         AdjudicatorNeverRan();
         _recorder.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ARequestForNoUnits_OnAClaimWithNoId_NamesTheLine_AndSaysWhyTheClaimIsUnnamed()
+    {
+        // The shape of the must-support request the Inferno harness adds.
+        var bundle = PasBundles.Complete();
+        var claim = bundle.Entry.Select(e => e.Resource).OfType<Claim>().Single();
+        claim.Id = null;
+        claim.Identifier = [new Identifier("http://davinci-pas.org/PATIENT_EVENT_TRACE_NUMBER", "111099-PASERR")];
+        var second = (Claim.ItemComponent)claim.Item[0].DeepCopy();
+        second.Sequence = 2;
+        second.Quantity = new Quantity(0, "units");
+        claim.Item.Add(second);
+
+        var response = Refused(await Controller().ClaimSubmit(bundle));
+
+        var error = response.Error.Should().ContainSingle().Subject;
+        error.Code.Coding.Single().Code.Should().Be("33");
+        error.ItemSequence.Should().Be(2);
+        ErrorPath(error).Should().Be("Bundle.entry.resource.ofType(Claim).item.where(sequence = 2).quantity");
+        response.Request.Reference.Should().BeNull();
+        response.Request.Identifier.Value.Should().Be("111099-PASERR");
+        response.Request.Extension.Should().Contain(e => e.Url == "http://hl7.org/fhir/StructureDefinition/data-absent-reason");
+        AdjudicatorNeverRan();
+        _recorder.Calls.Should().BeEmpty();
+    }
+
+    // ── A preferred alternative: certified in place of the requested line ──
+
+    private static string? ReviewActionCode(IEnumerable<ClaimResponse.AdjudicationComponent> adjudication)
+        => adjudication.SelectMany(a => a.Extension.Where(e => e.Url.EndsWith("/extension-reviewAction")))
+            .SelectMany(e => e.Extension.Where(x => x.Url.EndsWith("/extension-reviewActionCode")))
+            .Select(x => ((CodeableConcept)x.Value).Coding.Single().Code).Single();
+
+    [Fact]
+    public async Task PreferredAlternative_IsRecordedAsAModification_AndAnsweredWithAnAddedItem()
+    {
+        var policy = new PasPreferredAlternative
+        {
+            ServiceCode = "27447", ServiceCodeSystem = PasBundles.CptSystem,
+            AlternativeCode = "27446", AlternativeSystem = PasBundles.CptSystem,
+            AlternativeDisplay = "Partial knee arthroplasty",
+            ReasonCode = "PREFERRED_ALTERNATIVE", Reason = "The plan certifies the preferred alternative.",
+        };
+        var decision = new PasDecisionResult
+        {
+            HasDecision = true, Decision = "modified", RuleName = PasAutoAdjudicator.PreferredAlternativeRule,
+            Alternatives = [new PasAlternativeService(policy, new PasProcedureCode(PasBundles.CptSystem, "27447"))],
+        };
+
+        var result = await Controller(decision).ClaimSubmit(PasBundles.Complete());
+
+        var recorded = _recorder.Last!.Decision!;
+        recorded.Outcome.Should().Be("Modified");
+        recorded.ApprovedServiceDateFrom.Should().NotBeNull("a modification certifies, so it has an approved period");
+        var alternative = recorded.Alternatives.Should().ContainSingle().Subject;
+        alternative.ForLineNumber.Should().Be(1);
+        alternative.ProcedureCode.Should().Be("27446");
+        alternative.DenialReasonCode.Should().Be("PREFERRED_ALTERNATIVE");
+
+        var response = (ClaimResponse)result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<Bundle>()
+            .Subject.Entry[0].Resource;
+        response.Outcome.Should().Be(ClaimProcessingCodes.Partial);
+        response.PreAuthRef.Should().NotBeNullOrEmpty();
+        ReviewActionCode(response.Item.Single().Adjudication).Should().Be("A3");
+        var added = response.AddItem.Should().ContainSingle().Subject;
+        added.ItemSequence.Should().Equal(1);
+        added.ProductOrService.Coding.Single().Code.Should().Be("27446");
+        ReviewActionCode(added.Adjudication).Should().Be("A1");
+        added.Quantity.Value.Should().Be(1);
+        response.ProcessNote.Should().Contain(n => n.Text.Contains("preferred alternative"));
     }
 
     // ── Persistence failure: no ClaimResponse, no preAuthRef ─────────────
