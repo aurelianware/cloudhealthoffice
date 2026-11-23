@@ -56,14 +56,14 @@
     "featureList": [
       "CMS-0057-F Readiness Surface",
       "FHIR R4 APIs (Patient Access, Provider Access, Payer-to-Payer, Prior Auth)",
-      "Da Vinci IGs (PDex, PAS, CRD, DTR) in development",
+      "Da Vinci PDex, PAS, CRD and DTR (Inferno kits pass on synthetic data; not certification)",
       "X12 EDI Processing (270/271, 837, 835, 275); X12 278 bridging planned",
       "Outbound clearinghouse EDI via Stedi; Availity and Change Healthcare adapters are scaffolds",
       "Kubernetes-Native Multi-Cloud Deployment",
       "HIPAA Security Controls for Deployment Validation",
       "Multi-Tenant Architecture",
-      "OAuth 2.0 / SMART on FHIR (SMART App Launch, v1 scopes)",
-      "Bulk FHIR Export (planned)",
+      "OAuth 2.0 / SMART on FHIR (SMART App Launch 2.2 kit passes, including v2 scopes; Backend Services)",
+      "Bulk FHIR $export (Bulk Data 2.0; durable export when the FHIR store is configured)",
       "USCDI v1/v2 Data Class Coverage"
     ]
   }
@@ -185,7 +185,7 @@
         "name": "What does a payer still need to configure during implementation?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Cloud Health Office provides the technical surfaces, which are still in development (CMS-0057-F conformance in progress); a payer-specific implementation also requires configuration. During onboarding a payer maps its core data (members, coverage, claims, provider contracts) to FHIR resources, connects the core through the appropriate adapter, loads or reviews terminology and plan-specific coding overrides, sets prior authorization timelines and decision rationale, configures OAuth 2.0 and consent, and validates USCDI coverage. See the payer compliance checklist for the full list."
+          "text": "Cloud Health Office provides the technical surfaces, which pass all nine ONC Inferno test kits on synthetic data (not certification, and not a determination of compliance); a payer-specific implementation also requires configuration. During onboarding a payer maps its core data (members, coverage, claims, provider contracts) to FHIR resources, connects the core through the appropriate adapter, loads or reviews terminology and plan-specific coding overrides, sets prior authorization timelines and decision rationale, configures OAuth 2.0 and consent, and validates USCDI coverage. See the payer compliance checklist for the full list."
         }
       }
     ]
@@ -652,7 +652,7 @@
 
       <div class="qa">
         <h3>What does a payer still need to configure during implementation?</h3>
-        <p>Cloud Health Office provides the technical surfaces, which are still in development (CMS-0057-F conformance in progress); a payer-specific implementation also requires configuration. During onboarding a payer maps its core data (members, coverage, claims, provider contracts) to FHIR resources, connects the core through the appropriate adapter, loads or reviews terminology and plan-specific coding overrides, sets prior authorization timelines and decision rationale, configures OAuth 2.0 and consent, and validates USCDI coverage. See the <a href="#checklist">payer compliance checklist</a> for the full list.</p>
+        <p>Cloud Health Office provides the technical surfaces, which pass all nine ONC Inferno test kits on synthetic data (not certification, and not a determination of compliance); a payer-specific implementation also requires configuration. During onboarding a payer maps its core data (members, coverage, claims, provider contracts) to FHIR resources, connects the core through the appropriate adapter, loads or reviews terminology and plan-specific coding overrides, sets prior authorization timelines and decision rationale, configures OAuth 2.0 and consent, and validates USCDI coverage. See the <a href="#checklist">payer compliance checklist</a> for the full list.</p>
       </div>
     </div>
   </div>
@@ -1240,7 +1240,7 @@
     <span class="status" style="color:#B45309">Partial</span>
     <span class="api-tag">CRD + PAS + DTR</span>
     <h3>Da Vinci Integration</h3>
-    <p>The CRD server and PAS server (both in development) can consume the crosswalk at runtime, so SNOMED codes from EHRs are translated to payer code space for coverage rules and prior auth decisions. Questionnaire pre-population for DTR is not yet built.</p>
+    <p>The CRD server and PAS server can consume the crosswalk at runtime, so SNOMED codes from EHRs are translated to payer code space for coverage rules and prior auth decisions. DTR questionnaire pre-population uses CQL on one form so far (MRI); the others are plain forms.</p>
   </article>
   <article class="api-card">
     <span class="status">Implemented</span>
@@ -1269,7 +1269,7 @@
         <h3>Coverage Requirements Discovery (CRD)</h3>
         <div class="cap-row"><span class="cap-label">Quick answer</span><p>CRD tells a provider, while they are placing an order, whether a service needs prior authorization and what documentation applies. It runs through CDS Hooks so the answer appears inside the provider's EHR workflow.</p></div>
         <div class="cap-row"><span class="cap-label">How it works</span><p>The EHR fires an <code>order-select</code> or <code>order-sign</code> CDS Hook to the payer's CRD service, which evaluates coverage rules for the ordered code and member coverage, then returns cards indicating authorization requirements and pointing to a DTR questionnaire when documentation is needed.</p></div>
-        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office's CRD service (in development, not yet conformant) evaluates coverage rules using the terminology service, so SNOMED-coded orders resolve to the payer's CPT/ICD code space before a rule fires. It does not yet use the member's real benefit context, and it returns free-text cards without the CRD coverage-information extension. Coverage rules are payer-specific and configured during onboarding.</p></div>
+        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office's CRD service passes the Inferno Da Vinci CRD kit on synthetic data. It evaluates coverage rules using the terminology service, so SNOMED-coded orders resolve to the payer's CPT/ICD code space before a rule fires, and it returns the CRD coverage-information extension on each draft order. Unknown or failed evaluations return uncertainty, never &ldquo;no authorization needed&rdquo;. Full member benefit context is still open. Coverage rules are payer-specific and configured during onboarding.</p></div>
         <div class="cap-row evidence"><span class="cap-label">Implementation evidence</span><p><a href="/docs/prior-auth-guide">Prior authorization guide</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/tree/main/src/engines/CloudHealthOffice.PriorAuthRuleEngine">PriorAuthRuleEngine source</a></p></div>
       </div>
 
@@ -1278,7 +1278,7 @@
         <h3>Documentation Templates and Rules (DTR)</h3>
         <div class="cap-row"><span class="cap-label">Quick answer</span><p>DTR collects the clinical documentation a prior authorization needs using a FHIR Questionnaire, pre-populating answers from the patient record so the provider fills in as little as possible.</p></div>
         <div class="cap-row"><span class="cap-label">How it works</span><p>The payer publishes a FHIR <code>Questionnaire</code> with embedded CQL logic. A DTR app renders it, pulls known values from the EHR, and returns a <code>QuestionnaireResponse</code> that travels with the authorization request into PAS.</p></div>
-        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office's DTR service (in development, not yet conformant) stores and serves FHIR Questionnaire and QuestionnaireResponse resources. CQL, pre-population and linking the response to the prior authorization submission are not yet built; CHO plans to serve DTR packages to external and EHR-native DTR apps rather than ship its own. Questionnaire content is tailored to each payer's policies during onboarding.</p></div>
+        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office's DTR service passes the Inferno Da Vinci DTR kit on synthetic data. It stores FHIR Questionnaire and QuestionnaireResponse resources durably and serves DTR 2.2.0 <code>$questionnaire-package</code> bundles (Questionnaire, draft response, CQL Libraries and expanded ValueSets), selected by the CRD coverage-assertion-id. One form (MRI) carries CQL pre-population so far, and full answer validation is still open; CHO plans to serve DTR packages to external and EHR-native DTR apps rather than ship its own. Questionnaire content is tailored to each payer's policies during onboarding.</p></div>
         <div class="cap-row evidence"><span class="cap-label">Implementation evidence</span><p><a href="/docs/prior-auth-guide">Prior authorization guide</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/src/services/fhir-service/Controllers/DtrController.cs">DtrController.cs</a></p></div>
       </div>
 
@@ -1287,7 +1287,7 @@
         <h3>Prior Authorization Support (PAS)</h3>
         <div class="cap-row"><span class="cap-label">Quick answer</span><p>PAS is the FHIR mechanism behind the CMS-0057-F Prior Authorization API. It submits the authorization request and returns the decision, status, and rationale to the provider.</p></div>
         <div class="cap-row"><span class="cap-label">How it works</span><p>A provider system sends a <code>Claim/$submit</code> bundle containing the ServiceRequest and supporting documentation. The payer responds with a ClaimResponse carrying the decision. Where trading partners still use EDI, the request is bridged to and from the X12 278 transaction.</p></div>
-        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office exposes a Da Vinci-aligned PAS endpoint (in development, not yet conformant) and includes a 278&rarr;FHIR mapping prototype; X12 278 bridging is planned. Response timelines and decision rationale are set to each payer's policies during onboarding.</p></div>
+        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office exposes a Da Vinci PAS endpoint that passes the Inferno Da Vinci PAS kit on synthetic data: submissions and decisions are stored before it responds, and inquiry returns the stored outcome. It also includes a 278&rarr;FHIR mapping prototype; X12 278 bridging is planned. Response timelines and decision rationale are set to each payer's policies during onboarding.</p></div>
         <div class="cap-row evidence"><span class="cap-label">Implementation evidence</span><p><a href="/docs/prior-auth-guide">Prior authorization guide</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/src/services/fhir-service/Controllers/PasController.cs">PasController.cs</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/src/fhir/mapping/x12-to-fhir.ts">278→FHIR mapping prototype</a></p></div>
       </div>
 
@@ -1361,7 +1361,7 @@
     <div class="section-label">Compliance Status</div>
     <h2 class="section-title">CMS-0057-F Coverage</h2>
     <p class="section-desc">Current status of the required FHIR and prior authorization surfaces. CMS-0057-F conformance is in progress; the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer" style="color:var(--cyan)">ePA gap matrix</a> is the source of truth for each requirement.</p>
-    <p class="section-desc"><strong>Nothing on this page is a conformance verdict from an independent test kit.</strong> Nine ONC Inferno kits (US Core, CARIN Blue Button, Plan-Net, Bulk Data, Da Vinci PDex, Da Vinci DTR, Da Vinci CRD, Da Vinci PAS and SMART App Launch) run nightly, and their latest verdicts, failures included, are published separately on the <a href="/evidence/inferno-conformance" style="color:var(--cyan)">Inferno conformance results page</a>. The statuses below come from Cloud Health Office's own acceptance suite, run against synthetic data at a named revision, and no status here constitutes certification by CMS, ONC or HL7.</p>
+    <p class="section-desc"><strong>All nine ONC Inferno test kits pass</strong> (US Core, CARIN Blue Button, Plan-Net, Bulk Data, Da Vinci PDex, Da Vinci DTR, Da Vinci CRD, Da Vinci PAS and SMART App Launch), all from one run on November 23, 2026 against synthetic data. The kits run nightly, and their latest verdicts, failures included, are published on the <a href="/evidence/inferno-conformance" style="color:var(--cyan)">Inferno conformance results page</a>. The statuses below come from Cloud Health Office's own acceptance suite, run against synthetic data at a named revision, and no status here constitutes certification by CMS, ONC or HL7.</p>
 
 <figure style="margin:0 0 2.5rem;border:1px solid var(--border, #D9E1EA);border-radius:12px;background:#FFFFFF;padding:.6rem">
   <a href="/graphics/evidence/cho-cms-api-map.svg" title="Open the full-size diagram"><img src="/graphics/evidence/cho-cms-api-map.svg" width="1200" height="840" loading="lazy" style="display:block;width:100%;height:auto" alt="Where Cloud Health Office plugs in. Members, the public, in-network providers, other payers and ordering providers call five CMS APIs that Cloud Health Office serves: Patient Access, Provider Directory, Provider Access, Payer-to-Payer and Prior Authorization, each labeled with its rule, implementation guide, authorization and the independent test that checks it. Behind them sit the plan's systems: an existing QNXT, Facets or HealthEdge core reached through adapters built per engagement, or Cloud Health Office core modules replacing it one domain at a time, plus clinical and UM data." /></a>
@@ -1372,25 +1372,25 @@
   <thead>
     <tr>
       <th>Requirement</th>
-      <th>Da Vinci Profile</th>
-      <th>Tests</th>
+      <th>Standard</th>
+      <th>Acceptance scenarios</th>
       <th>Status</th>
     </tr>
   </thead>
   <tbody>
-    <tr><td>Patient Access API</td><td>PDex Patient / Coverage / Claim / EOB</td><td>19</td><td><span class="status-badge partial">Implemented surface / integration required</span><br><span style="font-size:.62rem;color:var(--text-dim)">Patient and Coverage data is synthetic</span></td></tr>
-    <tr><td>Provider Access API</td><td>PDex + PAS ServiceRequest / DocumentRef</td><td>8</td><td><span class="status-badge partial">Implemented surface / integration required</span><br><span style="font-size:.62rem;color:var(--text-dim)">Patient and Coverage data is synthetic</span></td></tr>
-    <tr><td>Payer-to-Payer API</td><td>Bulk FHIR $export / Enrollment Trigger</td><td>6</td><td><span class="status-badge partial">Phase 2 required</span><br><span style="font-size:.62rem;color:var(--text-dim)">Bulk $export is a scaffold; not yet producing data</span></td></tr>
-    <tr><td>Prior Authorization API</td><td>Da Vinci PAS 2.0.1+</td><td>12</td><td><span class="status-badge partial">In development</span><br><span style="font-size:.62rem;color:var(--text-dim)">CRD, DTR and PAS not yet conformant</span></td></tr>
-    <tr><td>72-Hour Urgent Response</td><td>Decision timeframe tracking</td><td>—</td><td><span class="status-badge partial">In progress</span></td></tr>
-    <tr><td>7-Day Standard Response</td><td>Decision timeframe tracking</td><td>—</td><td><span class="status-badge partial">In progress</span></td></tr>
+    <tr><td>Patient Access API</td><td>CARIN BB 2.0, US Core 3.1.1, PDex</td><td>PAT-01 to 03</td><td><span class="status-badge partial">Partial</span><br><span style="font-size:.62rem;color:var(--text-dim)">Inferno US Core and CARIN BB pass</span></td></tr>
+    <tr><td>Provider Access API</td><td>PDex, Bulk Data 2.0</td><td>PROV-01 to 03</td><td><span class="status-badge partial">Partial</span><br><span style="font-size:.62rem;color:var(--text-dim)">PROV-02, 03 passable; Inferno Bulk Data passes</span></td></tr>
+    <tr><td>Payer-to-Payer API</td><td>PDex member match, HRex, Bulk Data 2.0</td><td>P2P-01 to 04</td><td><span class="status-badge partial">Partial</span><br><span style="font-size:.62rem;color:var(--text-dim)">P2P-03 passable; durable bulk $export when the FHIR store is configured; Inferno PDex member match passes</span></td></tr>
+    <tr><td>Prior Authorization API</td><td>Da Vinci PAS, CRD, DTR 2.2.0</td><td>PAS-01 to 08</td><td><span class="status-badge partial">Partial</span><br><span style="font-size:.62rem;color:var(--text-dim)">PAS-07, 08 passable; Inferno DTR, CRD and PAS pass</span></td></tr>
+    <tr><td>72-Hour Urgent Response</td><td>Decision timeframe tracking</td><td>PAS-06</td><td><span class="status-badge partial">Partial</span><br><span style="font-size:.62rem;color:var(--text-dim)">Deadlines persisted from receipt and escalated by a watchdog</span></td></tr>
+    <tr><td>7-Day Standard Response</td><td>Decision timeframe tracking</td><td>PAS-06</td><td><span class="status-badge partial">Partial</span><br><span style="font-size:.62rem;color:var(--text-dim)">One lawful 14-day extension recorded; <a href="/evidence/pa-timeliness-challenge" style="color:var(--cyan)">timeliness evidence</a></span></td></tr>
     <tr><td>USCDI v1 / v2 Coverage</td><td>US Core 3.1.1+ data class mapping</td><td>Mapped</td><td><span class="status-badge done">✅ Complete</span></td></tr>
     <tr><td>X12 270 → FHIR</td><td>Patient + CoverageEligibilityRequest</td><td>—</td><td><span class="status-badge prod">Implemented</span></td></tr>
     <tr><td>X12 837 → FHIR</td><td>Da Vinci PDex Claim</td><td>—</td><td><span class="status-badge prod">Implemented</span></td></tr>
     <tr><td>X12 278 → FHIR</td><td>Da Vinci PAS ServiceRequest</td><td>—</td><td><span class="status-badge partial">Planned</span></td></tr>
     <tr><td>X12 835 → FHIR</td><td>Da Vinci PDex EOB</td><td>—</td><td><span class="status-badge prod">Mapped</span></td></tr>
     <tr><td>X12 275 → FHIR</td><td>US Core DocumentReference</td><td>—</td><td><span class="status-badge partial">Partial</span></td></tr>
-    <tr><td>OAuth 2.0 / SMART on FHIR</td><td>SMART authorization server (OpenIddict), v1 scopes</td><td>—</td><td><span class="status-badge partial">Partial</span><br><span style="font-size:.62rem;color:var(--text-dim)">v2 scopes, launch context in token response and asymmetric client auth in progress</span></td></tr>
+    <tr><td>OAuth 2.0 / SMART on FHIR</td><td>SMART App Launch 2.2, Backend Services</td><td>SEC-01</td><td><span class="status-badge partial">Partial</span><br><span style="font-size:.62rem;color:var(--text-dim)">Inferno SMART App Launch 2.2 passes, including v2 scopes and token introspection; production conformance still to validate</span></td></tr>
     <tr><td>HIPAA Security Controls</td><td>TLS 1.2+ / AES-256 / Key Vault / BAA</td><td>—</td><td><span class="status-badge done">Validate per deployment</span></td></tr>
     <tr><td>Terminology Translation (SNOMED ↔ CPT/ICD)</td><td>FHIR R4 ConceptMap/$translate</td><td>—</td><td><span class="status-badge done">Implemented</span></td></tr>
     <tr><td>Provider Verification &amp; Directory</td><td>NPPES / OIG / PECOS / FSMB Integrity Score</td><td>—</td><td><span class="status-badge done">Implemented</span></td></tr>

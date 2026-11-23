@@ -187,10 +187,10 @@ GET  /fhir/Consent</code></pre>
             <span style="background: var(--accent-orange); color: var(--dark-bg); padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">CMS-0057-F</span>
           </div>
           
-          <p>Prior authorization with Da Vinci PAS (in development). X12 278 bridging is planned.</p>
+          <p>Prior authorization with Da Vinci PAS (Inferno PAS kit passes on synthetic data). X12 278 bridging is planned.</p>
           
           <div style="margin: 20px 0; padding: 15px; background: var(--dark-gray); border-radius: 8px; font-size: 0.85rem;">
-            <strong>Features:</strong> Real-time decisions, CDS Hooks (CRD, in development); 72-hour / 7-day decision timeframe tracking is in development
+            <strong>Features:</strong> Real-time decisions, CDS Hooks (CRD); 72-hour / 7-day decision deadlines persisted from receipt
           </div>
 
           <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px;">
@@ -322,12 +322,12 @@ curl -X POST /api-explorer/scrubbing/v1/claims/validate \
         
         <div class="card">
           <h3 style="color: var(--accent-purple);">🟡 Da Vinci IGs</h3>
-          <p>PDex, PAS, CRD, and DTR Implementation Guides: in development, not yet conformant</p>
+          <p>PDex, PAS, CRD, and DTR Implementation Guides: Inferno kits pass on synthetic data (not certification)</p>
         </div>
         
         <div class="card">
           <h3 style="color: var(--accent-orange);">🟡 SMART on FHIR</h3>
-          <p>SMART App Launch (v1 scopes) with OAuth 2.0 security; v2 scopes, launch context in the token response and asymmetric client auth are in progress</p>
+          <p>SMART App Launch 2.2 (v1 and v2 scopes, launch context in the token response, <code>private_key_jwt</code>) with OAuth 2.0 security; the Inferno SMART App Launch kit passes on synthetic data</p>
         </div>
 
         <div class="card">
