@@ -109,6 +109,7 @@ builder.Services.AddScoped<IEncounterControlNumberSource, MongoEncounterControlN
 builder.Services.AddScoped<IStateEncounterBatchService, StateEncounterBatchService>();
 builder.Services.AddScoped<IStateResponseReconciler, StateResponseReconciler>();
 builder.Services.AddScoped<IEncounterReworkService, EncounterReworkService>();
+builder.Services.AddScoped<IEncounterScorecardService, EncounterScorecardService>();
 builder.Services.AddScoped<IEncounterLifecycleService, EncounterLifecycleService>();
 
 // Kafka consumer for adjudication-completed events

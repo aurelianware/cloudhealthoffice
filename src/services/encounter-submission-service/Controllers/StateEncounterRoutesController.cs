@@ -19,12 +19,15 @@ public class StateEncounterRoutesController : ControllerBase
     private readonly IStateEncounterBatchService _batches;
     private readonly IStateResponseReconciler _responses;
     private readonly IEncounterReworkService _rework;
+    private readonly IEncounterScorecardService _scorecards;
     private readonly ICurrentActor _actor;
 
     public StateEncounterRoutesController(
         IStateEncounterRouteRegistry registry, IStateEncounterBatchService batches,
-        IStateResponseReconciler responses, IEncounterReworkService rework, ICurrentActor actor)
+        IStateResponseReconciler responses, IEncounterReworkService rework,
+        IEncounterScorecardService scorecards, ICurrentActor actor)
     {
+        _scorecards = scorecards;
         _registry = registry;
         _batches = batches;
         _responses = responses;
@@ -153,6 +156,53 @@ public class StateEncounterRoutesController : ControllerBase
             return Ok(await _responses.ApplyReferencesAsync(route, _actor.TenantId, request.FileName, request.References, ct));
         }
         catch (FormatException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Encounter scorecard for this tenant on one state route: timeliness against the
+    /// deadline, state acceptance and first-pass acceptance, rejection codes, and how
+    /// long open rework has been waiting. The period is the month the claims were
+    /// adjudicated in (<c>month=2026-10</c>), or <c>from</c> / <c>to</c> dates (to exclusive).
+    /// </summary>
+    [HttpGet("{stateCode}/scorecard")]
+    [ProducesResponseType(typeof(EncounterScorecard), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<EncounterScorecard>> GetScorecard(string stateCode,
+        [FromQuery] string? month = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null,
+        CancellationToken ct = default)
+    {
+        var route = _registry.Get(stateCode);
+        if (route is null || route.Format != EncounterRouteFormat.X12_837)
+            return BadRequest(new { message = $"'{stateCode}' has no X12 encounter route." });
+
+        DateTime start, end;
+        if (!string.IsNullOrWhiteSpace(month))
+        {
+            if (!DateTime.TryParseExact(month, "yyyy-MM", System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
+                    out var m))
+                return BadRequest(new { message = "month must be yyyy-MM." });
+            start = DateTime.SpecifyKind(new DateTime(m.Year, m.Month, 1), DateTimeKind.Utc);
+            end = start.AddMonths(1);
+        }
+        else if (from is { } f && to is { } t)
+        {
+            start = DateTime.SpecifyKind(f.ToUniversalTime(), DateTimeKind.Utc);
+            end = DateTime.SpecifyKind(t.ToUniversalTime(), DateTimeKind.Utc);
+        }
+        else
+        {
+            return BadRequest(new { message = "Give month=yyyy-MM, or both from and to." });
+        }
+
+        try
+        {
+            return Ok(await _scorecards.GetAsync(route, _actor.TenantId, start, end, ct));
+        }
+        catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
         }

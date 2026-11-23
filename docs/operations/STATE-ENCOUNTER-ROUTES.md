@@ -221,6 +221,39 @@ void is closed. Records link both ways (`originalSubmissionId`,
 `supersededBySubmissionId`), and every automatic close is kept in
 `reworkHistory`.
 
+## Scorecard
+
+`GET /api/encounters/state/{TX|CA}/scorecard?month=2026-10` (or `from` and
+`to`, to exclusive; `encounters:read`) scores the tenant's encounters for
+claims adjudicated in that period:
+
+| Section | Measures |
+| --- | --- |
+| Timeliness | Sent on or before the deadline, sent late, not sent and past the deadline (overdue), not yet due; rate = on time / (on time + late + overdue). "Sent" is the latest time a file holding the encounter was marked transmitted. |
+| Accuracy | Accepted by the state's front end, currently rejected (split into 999 syntax and 277 business rejections), awaiting a response, held by CHO validation; acceptance rate; first-pass acceptance rate (accepted with no earlier rejection or requeue, over everything the state answered); top rejection codes and top warning codes (TMHP R3). |
+| Open rework | Rejected or held-back encounters by days since they last changed: 0–15, 16–30, over 30, and past the correction window when one is set. |
+
+Encounters closed as not reportable are counted but left out of every rate.
+
+Targets are set per route and are **not defaulted**: the HHSC encounter
+standards are in the plan's contract and UMCM, which were not available, and
+DHCS's are in its encounter APL. Set them from the controlling document and
+say where they came from:
+
+```json
+"EncounterRoutes": {
+  "TX": {
+    "TimelinessTarget": 98,
+    "AcceptanceTarget": 95,
+    "CorrectionDays": 30,
+    "ScorecardTargetSource": "<contract attachment / UMCM chapter and version>"
+  }
+}
+```
+
+(The numbers above are placeholders, not the Texas values.) The scorecard
+reports `meetsTimeliness` and `meetsAcceptance` only when a target is set.
+
 ## Rework queue
 
 `GET /api/encounters/state/rework?state=TX&reason=VALIDATION` lists the
