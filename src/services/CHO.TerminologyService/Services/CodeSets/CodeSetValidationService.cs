@@ -1,4 +1,5 @@
 using CHO.TerminologyService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CHO.TerminologyService.Services.CodeSets;
 
@@ -184,7 +185,7 @@ public sealed class CodeSetValidationService
         await _repository.SaveReleaseAsync(release, periods, ct);
 
         _logger.LogInformation("Loaded code set {System} {Version}: {Count} codes, {From:yyyy-MM-dd} to {To}",
-            system, result.Version, periods.Count, from, to?.ToString("yyyy-MM-dd") ?? "open");
+            system, LogSanitizer.Sanitize(result.Version), periods.Count, from, to?.ToString("yyyy-MM-dd") ?? "open");
 
         result.Success = true;
         result.ReleaseId = releaseId;
