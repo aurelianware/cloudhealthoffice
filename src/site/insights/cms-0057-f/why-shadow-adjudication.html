@@ -83,6 +83,14 @@
             "@type": "Answer",
             "text": "A payment-integrity vendor reviews claims after payment and reports findings. Shadow adjudication produces similar leads, by re-pricing every claim against the plan's own contracts, fee schedules, benefits and authorizations, and at the same time measures how much of the plan's claim volume a second core can already adjudicate to the same answer."
           }
+        },
+        {
+          "@type": "Question",
+          "name": "Does a shadow pilot run on historical claims or on new claims?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Both, historical first. Phase 1 re-adjudicates 6 to 12 months of claims the core already paid, with the contracts, fee schedules, benefits and authorizations in effect on each date of service, and produces payment-integrity and authorization findings within weeks. Phase 2, optional, runs for 60 to 90 days on the core's daily files and measures whether the second engine keeps agreeing with the core on new claims, which is the proof a core replacement needs."
+          }
         }
       ]
     },
@@ -291,7 +299,7 @@
             <li><a href="#auth">It checks authorizations against claims</a></li>
             <li><a href="#worklist">What your claims team gets, and what Cloud Health Office never does</a></li>
             <li><a href="#takes">What it takes</a></li>
-            <li><a href="#pilot">How a shadow pilot runs</a></li>
+            <li><a href="#pilot">How a shadow pilot runs: historical first, then concurrent</a></li>
           </ol>
         </div>
 
@@ -332,8 +340,8 @@
           <li><strong>Paid without a valid authorization</strong> for a service that required one. That is a payment the plan may not be able to support when an auditor asks.</li>
         </ul>
         <p>Medicaid managed care plans are exposed on both sides. State contracts set authorization requirements and timeframes, the plan&rsquo;s encounter data shows the state what was paid, and audits test whether payments were supported. Finding these mismatches yourself, before an auditor or a provider does, is cheaper than finding them after.</p>
-        <p>When your daily drop includes the authorization file and the claim file carries the authorization number the core matched each claim to, a shadow run checks every line in Cloud Health Office&rsquo;s prior-authorization scope against your own authorizations. The report lists both kinds of mismatch with claims and dollars, and the discrepancy file names the authorization number behind each one.</p>
-        <p>What Cloud Health Office checks is set per plan: by default, Medicaid inpatient stays, and, when a plan switches it on, the procedure codes its benefit plans or prior authorization rules flag. Matching a claim that carries no authorization number to an authorization on file is not built yet.</p>
+        <p>When your files include the authorization file, a shadow run checks every line in Cloud Health Office&rsquo;s prior-authorization scope against your own authorizations. Where the claim file carries the authorization number the core matched, that is the one checked. Where it does not, the run matches the way QNXT and Facets do, by member, date of service, procedure and provider, and records which authorization it used. The report lists both kinds of mismatch with claims and dollars, and the discrepancy file names the authorization behind each one and, when you load your prior authorization list with its medical policy version, the policy behind the finding.</p>
+        <p>What Cloud Health Office checks is set per plan: by default, Medicaid inpatient stays, and, when a plan switches it on, the procedure codes its benefit plans or prior authorization rules flag.</p>
 
         <h2 id="worklist"><span class="num">05</span>What your claims team gets, and what Cloud Health Office never does</h2>
         <p>Every run produces two things:</p>
@@ -358,14 +366,19 @@
         </ul>
         <p>Expect most claims to be undecided on the first run. That is the point of the first run: it tells you which of those inputs to load next. The files, columns and loaders are listed on the <a href="/services/cms-0057-f-cpcds-trial">trial page</a>.</p>
 
-        <h2 id="pilot"><span class="num">07</span>How a shadow pilot runs</h2>
-        <p>A shadow pilot runs for 60 to 90 days on your own daily files, in a tenant dedicated to your plan. At the end you have:</p>
+        <h2 id="pilot"><span class="num">07</span>How a shadow pilot runs: historical first, then concurrent</h2>
+        <p>Historical first for quick dollars. Concurrent if you want proof Cloud Health Office can carry your core.</p>
+        <ul>
+          <li><strong>Phase 1, a historical batch.</strong> Send 6 to 12 months of claims your core already paid, with the authorizations, contracts, fee schedules and benefit designs that were in effect on each date of service. Cloud Health Office applies what was in force on each claim&rsquo;s date, so a rate that changed mid-year is not a false finding. Because the claims already exist, the payment-integrity and authorization findings come within weeks, not after months of new claims. How far back you can recover an overpayment is set by your provider contracts and state rules, so choose a window inside that limit; the findings report shows the dollars by month.</li>
+          <li><strong>Phase 2, a concurrent run (optional).</strong> For 60 to 90 days, your core&rsquo;s daily file is shadow-run each night. This is the parity proof a core replacement needs: how often Cloud Health Office agrees with your core on new claims, line of business by line of business. It also surfaces a finding the day after the core decided the claim, often before the provider has been paid.</li>
+        </ul>
+        <p>A plan that wants payment-integrity findings only can stop after phase 1. Everything loaded for it carries into phase 2. At the end you have:</p>
         <ul>
           <li>a payment-integrity report in dollars, possible overpayments and underpayments kept separate;</li>
           <li>an authorization-mismatch report in dollars;</li>
-          <li>a measured answer to whether Cloud Health Office can carry your core, line of business by line of business, and the list of what it would still need.</li>
+          <li>after phase 2, a measured answer to whether Cloud Health Office can carry your core, line of business by line of business, and the list of what it would still need.</li>
         </ul>
-        <p>Your core keeps paying claims the whole time.</p>
+        <p>Your core keeps paying claims the whole time, in your own tenant, dedicated to your plan.</p>
 
         <h2 id="disclosure"><span class="num">Disclosure</span>Where we sit in this</h2>
         <p>Cloud Health Office is a payer software company, so read this with that in mind. The examples and demo on this site use synthetic data, and findings from a shadow run are leads for a plan&rsquo;s own review, not determinations of overpayment, underpayment or compliance. Source-available under BSL 1.1. Evaluate and run locally for free. Production use requires a commercial license.</p>
