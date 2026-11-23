@@ -130,6 +130,46 @@ public class ShadowRunReport
     public ShadowReasonRow AuthorizationsMatchedWithoutNumber { get; set; } = new();
     public List<ShadowReasonRow> ByProcedure { get; set; } = new();
     public List<ShadowReasonRow> ByBillingProvider { get; set; } = new();
+
+    /// <summary>Every core denial checked against CHO's answer.</summary>
+    public ShadowDenialVerification DenialVerification { get; set; } = new();
+}
+
+/// <summary>The core's denials, each with CHO's verdict (<c>denialVerification</c> in the run report).</summary>
+public class ShadowDenialVerification
+{
+    public int CoreDenials { get; set; }
+    public int Claims { get; set; }
+    public ShadowDenialGroup ChoWouldPay { get; set; } = new();
+    public ShadowDenialGroup ChoDeniesForAnotherReason { get; set; } = new();
+    public ShadowDenialGroup ChoConfirms { get; set; } = new();
+    public ShadowDenialGroup ChoUndecided { get; set; } = new();
+    public decimal? ConfirmRate { get; set; }
+    public List<ShadowDenialCodeRow> ByCoreDenialCode { get; set; } = new();
+}
+
+public class ShadowDenialGroup
+{
+    public int Denials { get; set; }
+    public int Claims { get; set; }
+    public decimal Billed { get; set; }
+    public decimal ChoWouldPayAmount { get; set; }
+    public List<string> ExampleClaims { get; set; } = new();
+}
+
+public class ShadowDenialCodeRow
+{
+    public string CoreDenialCode { get; set; } = string.Empty;
+    public int Denials { get; set; }
+    public int ChoWouldPay { get; set; }
+    public int ChoDeniesForAnotherReason { get; set; }
+    public int ChoConfirms { get; set; }
+    public int ChoUndecided { get; set; }
+    public decimal ChoWouldPayAmount { get; set; }
+    public decimal Billed { get; set; }
+    public decimal? ConfirmRate { get; set; }
+    public List<string> ChoCodesInstead { get; set; } = new();
+    public List<string> ExampleClaims { get; set; } = new();
 }
 
 /// <summary>One claim's comparison (the fields the page shows).</summary>
@@ -151,4 +191,27 @@ public class ShadowResult
     public string? ChoPendCode { get; set; }
     public string? ChoPendReason { get; set; }
     public List<string> ChoStageFindings { get; set; } = new();
+}
+
+/// <summary>Completed runs rolled up by day or week (<c>GET .../shadow-adjudication/trend</c>).</summary>
+public class ShadowRunTrend
+{
+    public string Bucket { get; set; } = "week";
+    public DateTime FromUtc { get; set; }
+    public DateTime ToUtc { get; set; }
+    public List<ShadowRunTrendPoint> Points { get; set; } = new();
+}
+
+public class ShadowRunTrendPoint
+{
+    public string Period { get; set; } = string.Empty;
+    public int Runs { get; set; }
+    public int ClaimsCompared { get; set; }
+    public int ComparableClaims { get; set; }
+    public int DecidedClaims { get; set; }
+    public int MatchedClaims { get; set; }
+    public decimal? DecidedRate { get; set; }
+    public decimal? MatchRate { get; set; }
+    public decimal CorePaidMoreAmount { get; set; }
+    public decimal CorePaidLessAmount { get; set; }
 }

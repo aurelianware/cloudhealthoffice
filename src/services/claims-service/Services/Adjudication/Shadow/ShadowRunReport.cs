@@ -63,6 +63,13 @@ public class ShadowRunReport
     public ShadowReasonRow AuthorizationsMatchedWithoutNumber { get; init; } = new();
 
     /// <summary>
+    /// Every core denial (denied claims, and denied lines on paid claims)
+    /// checked against CHO: would pay, denies for another reason, confirms, or
+    /// undecided, by the core's denial code. See <see cref="ShadowDenialVerification"/>.
+    /// </summary>
+    public ShadowDenialVerification DenialVerification { get; init; } = new();
+
+    /// <summary>
     /// Claims the core paid with a code not valid on the date of service
     /// (<see cref="ShadowCodeValidity"/>), by reason (terminated, not yet
     /// effective, not in the code set, ICD-10 header not billable). Counted over
@@ -170,6 +177,7 @@ public static class ShadowRunReportBuilder
             AuthorizationsMatchedWithoutNumber = Row(
                 PriorAuthorizationNumberSource.Matched,
                 comparable.Where(r => r.PriorAuthorizationEvidence.Any(e => e.NumberSource == PriorAuthorizationNumberSource.Matched))),
+            DenialVerification = ShadowDenialVerificationBuilder.Build(results, topN),
             CorePaidWithInvalidCodes = Top(
                 comparable.Where(r => ShadowCodeValidity.For(r) is not null)
                     .GroupBy(ShadowCodeValidity.ReasonKey, StringComparer.Ordinal)

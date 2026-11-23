@@ -38,6 +38,13 @@
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
     }
 
+    @if (_settings is { EnabledForDeployment: true })
+    {
+        <div class="mb-3">
+            <ShadowQuickStartPanel CanRun="!_saving" RunBatch="QuickRunAsync" ShadowSettingsChanged="s => _settings = s" />
+        </div>
+    }
+
     <MudGrid Spacing="3">
         <MudItem xs="12" md="5">
             <MudPaper Elevation="0" Class="pa-4" Style="@PaperStyle" data-testid="shadow-status">
@@ -155,6 +162,35 @@
             </MudPaper>
         </MudItem>
 
+        @if (_trend is { Points.Count: > 1 } trend)
+        {
+            <MudItem xs="12">
+                <MudPaper Elevation="0" Class="pa-4" Style="@PaperStyle" data-testid="shadow-trend">
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Trend, last 90 days by week</MudText>
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); display: block;">
+                        Completed runs, by the week they ran. A claim file run more than once counts its latest run.
+                    </MudText>
+                    <MudSimpleTable Dense="true" Elevation="0" Class="mt-2">
+                        <thead><tr><th>Week of</th><th>Runs</th><th>Compared</th><th>CHO decided</th><th>Match rate</th><th>Core paid more</th><th>Core paid less</th></tr></thead>
+                        <tbody>
+                            @foreach (var p in trend.Points)
+                            {
+                                <tr>
+                                    <td>@p.Period</td>
+                                    <td>@p.Runs.ToString("N0", CultureInfo.InvariantCulture)</td>
+                                    <td>@p.ClaimsCompared.ToString("N0", CultureInfo.InvariantCulture)</td>
+                                    <td>@Percent(p.DecidedRate)</td>
+                                    <td>@Percent(p.MatchRate)</td>
+                                    <td>@Money(p.CorePaidMoreAmount)</td>
+                                    <td>@Money(p.CorePaidLessAmount)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </MudPaper>
+            </MudItem>
+        }
+
         @if (_report is { } report)
         {
             <MudItem xs="12">
@@ -249,6 +285,67 @@
                         </MudAlert>
                     }
 
+                    @if (report.DenialVerification.CoreDenials > 0)
+                    {
+                        var dv = report.DenialVerification;
+                        <MudPaper Outlined="true" Class="pa-3 mb-3" data-testid="shadow-denial-verification">
+                            <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Denial verification</MudText>
+                            <MudText Typo="Typo.body2" Class="mb-2">
+                                @dv.CoreDenials.ToString("N0", CultureInfo.InvariantCulture) core denials (denied claims, and denied lines on paid claims) checked against CHO.
+                                @if (dv.ConfirmRate is { } rate)
+                                {
+                                    <span>CHO confirmed @((rate * 100m).ToString("0.#", CultureInfo.InvariantCulture))% of the ones it decided with the same code.</span>
+                                }
+                                Each is a lead for review, not a determination.
+                            </MudText>
+                            <MudSimpleTable Dense="true" Elevation="0" data-testid="shadow-denial-groups">
+                                <thead><tr><th>CHO's answer</th><th>Denials</th><th>Claims</th><th>Billed</th><th>CHO would pay</th><th>Look at first</th></tr></thead>
+                                <tbody>
+                                    @foreach (var (label, g) in new[]
+                                    {
+                                        ("Would pay (wrongful-denial risk)", dv.ChoWouldPay),
+                                        ("Denies for another reason", dv.ChoDeniesForAnotherReason),
+                                        ("Confirms the denial", dv.ChoConfirms),
+                                        ("Could not decide yet", dv.ChoUndecided),
+                                    })
+                                    {
+                                        <tr>
+                                            <td>@label</td>
+                                            <td>@g.Denials.ToString("N0", CultureInfo.InvariantCulture)</td>
+                                            <td>@g.Claims.ToString("N0", CultureInfo.InvariantCulture)</td>
+                                            <td>@Money(g.Billed)</td>
+                                            <td>@(g.ChoWouldPayAmount > 0 ? Money(g.ChoWouldPayAmount) : "")</td>
+                                            <td style="font-family: monospace;">@string.Join(", ", g.ExampleClaims)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                            @if (dv.ByCoreDenialCode.Count > 0)
+                            {
+                                <MudText Typo="Typo.subtitle2" Class="mt-3">By the core's denial code</MudText>
+                                <MudSimpleTable Dense="true" Elevation="0" data-testid="shadow-denial-by-code">
+                                    <thead><tr><th>Core CARC</th><th>Denials</th><th>CHO would pay</th><th>Other reason</th><th>Confirms</th><th>Undecided</th><th>Confirm rate</th><th>CHO's codes instead</th><th>Look at first</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var row in dv.ByCoreDenialCode)
+                                        {
+                                            <tr>
+                                                <td style="font-family: monospace;">@row.CoreDenialCode</td>
+                                                <td>@row.Denials.ToString("N0", CultureInfo.InvariantCulture)</td>
+                                                <td>@row.ChoWouldPay.ToString("N0", CultureInfo.InvariantCulture)@(row.ChoWouldPayAmount > 0 ? $" ({Money(row.ChoWouldPayAmount)})" : "")</td>
+                                                <td>@row.ChoDeniesForAnotherReason.ToString("N0", CultureInfo.InvariantCulture)</td>
+                                                <td>@row.ChoConfirms.ToString("N0", CultureInfo.InvariantCulture)</td>
+                                                <td>@row.ChoUndecided.ToString("N0", CultureInfo.InvariantCulture)</td>
+                                                <td>@(row.ConfirmRate is { } r ? (r * 100m).ToString("0.#", CultureInfo.InvariantCulture) + "%" : "-")</td>
+                                                <td style="font-family: monospace;">@string.Join(", ", row.ChoCodesInstead)</td>
+                                                <td style="font-family: monospace;">@string.Join(", ", row.ExampleClaims)</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            }
+                        </MudPaper>
+                    }
+
                     <MudGrid Spacing="3">
                         <MudItem xs="12" md="6">
                             @ReasonTable("How the answers compare", "Kind", report.ByKind.Where(r => r.Claims > 0).Select(r => (r, ShadowKinds.Label(r.Key))), "shadow-by-kind", money: true)
@@ -326,6 +423,7 @@
     private List<ClaimBatch> _batches = new();
     private List<ShadowRun> _runs = new();
     private ShadowRunReport? _report;
+    private ShadowRunTrend? _trend;
     private List<ShadowResult> _results = new();
     private string _kind = string.Empty;
     private string? _batchId;
@@ -352,6 +450,7 @@
             _settings = await DataDrops.GetShadowSettingsAsync();
             _runs = await Shadow.ListRunsAsync();
             _batches = ClaimBatches(await DataDrops.GetRunsAsync(30));
+            _trend = await TrendAsync();
             if (_runs.FirstOrDefault(r => !r.InProgress) is { } latest)
                 await OpenAsync(latest.Id);
             WatchProgress();
@@ -408,6 +507,33 @@
         }
     }
 
+    /// <summary>The weekly trend; a claims service without the endpoint leaves it out.</summary>
+    private async Task<ShadowRunTrend?> TrendAsync()
+    {
+        try
+        {
+            return await Shadow.GetTrendAsync(90, "week");
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The quick start's claims loaded: switch shadow adjudication on for the
+    /// plan when it is off (uploading a sample is asking for a run), then run.
+    /// </summary>
+    private async Task QuickRunAsync(string importBatchId)
+    {
+        if (_settings is { EnabledForDeployment: true, Enabled: false })
+            await SetEnabledAsync(true);
+        if (_settings is { Running: true })
+            await RunAsync(importBatchId);
+        else
+            _error ??= "Shadow adjudication is not running for this plan, so the claims loaded but were not shadow-run.";
+    }
+
     private async Task RunAsync(string importBatchId)
     {
         _saving = true;
@@ -456,7 +582,10 @@
             _runs = await Shadow.ListRunsAsync();
             var finished = _runs.FirstOrDefault(r => before.Contains(r.Id) && !r.InProgress && r.Status != "Failed");
             if (finished is not null)
+            {
                 await OpenAsync(finished.Id);
+                _trend = await TrendAsync();
+            }
             if (!_runs.Any(r => r.InProgress))
             {
                 _refresh?.Dispose();
