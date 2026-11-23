@@ -26,7 +26,8 @@
     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
         CHO re-adjudicates the claims your core system already adjudicated and shows where the two answers differ:
         what CHO could not decide yet and why, where it would have paid more or less, and which providers and codes drive it.
-        Nothing members, providers or the FHIR APIs see changes.
+        Nothing members, providers or the FHIR APIs see changes. Each run's payment differences go to the
+        <MudLink Href="/shadow-adjudication/findings" data-testid="shadow-worklist-link">recovery worklist</MudLink> for review.
     </MudText>
 
     @if (_error != null)

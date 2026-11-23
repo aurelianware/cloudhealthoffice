@@ -81,6 +81,13 @@ public class ClaimOutcomeWriterRouteGuardTests
             ["POST api/v1/claims/shadow-adjudication/accumulator-balances/import"] = (Kind.NoStatusChange,
                 "loads the core's starting accumulator balances for shadow runs into their own collection (claims:import); " +
                 "writes no claim and no accumulator"),
+            ["POST api/v1/claims/shadow-adjudication/findings/{id}/status"] = (Kind.NoStatusChange,
+                "records the plan's review of a recovery worklist finding (claims:adjust) in its own collection; " +
+                "the claim is never written and CHO never adjusts the core"),
+            ["PUT api/v1/claims/shadow-adjudication/findings/lookback"] = (Kind.NoStatusChange,
+                "saves the plan's recoupment lookback days for the recovery worklist (claims:adjust); writes no claim"),
+            ["POST api/v1/claims/shadow-adjudication/runs/{runId}/findings"] = (Kind.NoStatusChange,
+                "adds a completed shadow run's payment differences to the recovery worklist collection; writes no claim"),
             ["POST api/v1/claims/retro-rate/reprocessing-runs"] = (Kind.NoStatusChange,
                 "plans a retro rate reprocessing run in its own collection; changes no claim until approved and executed"),
             ["POST api/v1/claims/retro-rate/reprocessing-runs/{runId}/approve"] = (Kind.NoStatusChange, "approves a reprocessing run (second person); writes no claim"),
