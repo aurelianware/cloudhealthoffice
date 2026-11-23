@@ -91,6 +91,53 @@ to look at first. Authorization denials appear here too, and with their
 evidence in `authorizationMismatches`. Every verdict is a lead for the plan's
 review, not a determination.
 
+## Recovery worklist
+
+Each finished run adds its payment differences to a worklist the plan's
+claims and payment-integrity teams work through (portal: **Recovery
+Worklist**, under Shadow Adjudication). CHO never writes to the core and never
+contacts a provider: approved findings go through the plan's own
+mass-adjustment process, and the plan records here what came back.
+
+- **One finding per claim** (`ShadowFindings`, keyed by tenant and claim
+  chain): a decided claim whose payment differs by more than the tolerance.
+  `direction` is `CorePaidMore` (possible overpayment, to recover) or
+  `CorePaidLess` (possible underpayment, to pay). A later run refreshes a
+  finding not yet reviewed; once reviewed it only records whether the claim
+  still differs (`stillDiffers`).
+- **Review status:** `New` → `Approved` or `Rejected`; `Approved` →
+  `InRecovery`, `Recovered` or `Rejected`; `InRecovery` → `Recovered`,
+  `Appealed` or `Rejected`; `Appealed` → `InRecovery`, `Recovered` or
+  `Rejected`; `Rejected` → `New` (reopen). `Recovered` needs `recoveredAmount`
+  (at most the finding's amount) and is final. Every change keeps who, when
+  and the note. Changes that race another reviewer's are refused (409).
+- **Recoupment lookback:** a default in days for the plan and an override per
+  billing NPI (with its contract number), measured from the core's paid date.
+  CHO does not know these limits on its own; the plan enters them from its
+  provider contracts and state rules. Each open overpayment reads `Past`,
+  `DueSoon` (30 days), `Within` or `Unknown` (nothing entered).
+- **Summary:** overpayments and underpayments found (not rejected), confirmed
+  by review, recovered and the recovery rate (recovered of confirmed
+  overpayment dollars), totals by status, open overpayments past or near the
+  lookback, and billing providers ranked by open overpayment dollars.
+- **Export:** a plain CSV, one row per claim, the core's own claim id first,
+  with the adjustment amount (CHO paid minus core paid), reason, status, who
+  approved it and the lookback deadline. It is not laid out for any one
+  core's import; that layout is scoped per plan when asked. Formula-safe.
+
+| Endpoint | Permission | |
+|---|---|---|
+| `GET .../findings?status=&direction=&billingProviderNpi=&lookback=&limit=` | `claims:import` | Findings, largest amount first, each with its lookback state and the statuses it can move to |
+| `GET .../findings/{id}` | `claims:import` | One finding |
+| `GET .../findings/summary?topProviders=25` | `claims:import` | The totals above |
+| `POST .../findings/{id}/status` | `claims:adjust` | `{ "status": "Recovered", "recoveredAmount": 25.00, "note": "offset on the 12/1 remit" }` |
+| `GET .../findings/export.csv?status=Approved` | `claims:import` | The CSV (repeat `status` for several) |
+| `GET`/`PUT .../findings/lookback` | `claims:import` / `claims:adjust` | `{ "defaultDays": 365, "providers": [ { "npi": "1234567890", "contractNumber": "K-1007", "days": 180 } ] }` |
+| `POST .../runs/{runId}/findings` | `claims:import` | Adds a completed run's differences again (safe to repeat) |
+
+`Adjudication:Shadow:AddFindingsAfterRun` (default `true`) adds each run's
+differences automatically.
+
 ## How a shadow run stays read-only
 
 The run uses the same `ClaimAdjudicationOrchestrator` as a real adjudication,

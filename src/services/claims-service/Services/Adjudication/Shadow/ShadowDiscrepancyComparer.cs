@@ -102,6 +102,7 @@ public static class ShadowDiscrepancyComparer
             ClaimType = core.ClaimType.ToString(),
             ServiceDateFrom = core.ServiceDateFrom,
             BillingProviderNpi = core.BillingProviderNPI,
+            CorePaidDate = core.PaidDate ?? core.AdjudicatedDate,
             PriorAuthorizationNumber = Blank(core.PriorAuthorizationNumber),
             CoreOutcome = CoreOutcome(core.Status),
             ChoOutcome = ChoOutcome(resolved),

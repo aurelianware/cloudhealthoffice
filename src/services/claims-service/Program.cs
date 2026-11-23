@@ -628,6 +628,11 @@ builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.ShadowAccu
 // state retention clock and monthly report.
 builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryRepository, ClaimsService.Services.Tpl.TplRecoveryRepositoryMongo>();
 builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryService, ClaimsService.Services.Tpl.TplRecoveryService>();
+// The recovery worklist: payment differences from shadow runs, with the plan's review of each.
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowFindingRepository,
+    ClaimsService.Services.Adjudication.Shadow.ShadowFindingRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowFindingService,
+    ClaimsService.Services.Adjudication.Shadow.ShadowFindingService>();
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationService,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationService>();
 // Background shadow runs: whole import batches, in pages, resumable across replicas.
