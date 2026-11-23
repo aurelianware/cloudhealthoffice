@@ -155,6 +155,45 @@ internal static class StateRouteTestData
         }
     };
 
+    /// <summary>A synthetic STAR dental encounter: an exam and a two-surface filling on one date.</summary>
+    public static EncounterClaim Dental(string id = "sub-3") => new()
+    {
+        SubmissionId = id,
+        ClaimId = "claim-" + id,
+        PatientControlNumber = "DEN-" + id,
+        Form = EncounterFormType.Dental,
+        TotalCharge = 215m,
+        PlaceOfService = "11",
+        ServiceFrom = new DateOnly(2026, 10, 7),
+        ServiceTo = new DateOnly(2026, 10, 7),
+        Diagnoses = new[] { new EncounterDiagnosis("K02.52") },
+        Member = Member(),
+        BillingProvider = Billing() with { LastOrOrganizationName = "CAPITOL KIDS DENTAL PA", TaxonomyCode = "1223P0221X" },
+        RenderingNpi = RenderingNpi,
+        RenderingLastName = "NGUYEN",
+        RenderingFirstName = "LINH",
+        PlanPaidAmount = 118m,
+        PlanAdjudicationDate = new DateOnly(2026, 10, 21),
+        Lines = new[]
+        {
+            new EncounterLine
+            {
+                LineNumber = 1, ProcedureQualifier = "AD", ProcedureCode = "D0120", Charge = 55m, Units = 1,
+                ServiceFrom = new DateOnly(2026, 10, 7), ServiceTo = new DateOnly(2026, 10, 7),
+                PaidAmount = 30m, Adjustments = new[] { new EncounterAdjustment("CO", "45", 25m) }
+            },
+            new EncounterLine
+            {
+                LineNumber = 2, ProcedureQualifier = "AD", ProcedureCode = "D2392", Charge = 160m, Units = 1,
+                DiagnosisPointers = new[] { 1 },
+                ServiceFrom = new DateOnly(2026, 10, 7), ServiceTo = new DateOnly(2026, 10, 7),
+                Teeth = new[] { new EncounterTooth("30", new[] { "M", "O" }) },
+                OralCavityDesignations = new[] { "40" },
+                PaidAmount = 88m, Adjustments = new[] { new EncounterAdjustment("CO", "45", 72m) }
+            }
+        }
+    };
+
     public static EncounterMember Member() => new()
     {
         MemberId = "512345678",

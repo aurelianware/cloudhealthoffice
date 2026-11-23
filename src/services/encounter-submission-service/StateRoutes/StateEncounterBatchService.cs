@@ -321,7 +321,7 @@ public sealed class StateEncounterBatchService : IStateEncounterBatchService
             };
 
             var written = Encounter837Writer.Write(group.Form, group.Items.Select(g => g.Claim).ToList(), envelope);
-            var formLabel = group.Form == EncounterFormType.Institutional ? "837I" : "837P";
+            var formLabel = Encounter837Writer.FormLabel(group.Form);
             var file = new StateEncounterFile
             {
                 TenantId = tenantId,

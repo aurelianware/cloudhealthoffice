@@ -32,7 +32,7 @@ public static class EncounterClaimMapper
         var lines = claim.ClaimLines.OrderBy(l => l.LineNumber).Select(l => new EncounterLine
         {
             LineNumber = l.LineNumber,
-            ProcedureQualifier = "HC",
+            ProcedureQualifier = form == EncounterFormType.Dental ? "AD" : "HC",
             ProcedureCode = l.ProcedureCode ?? string.Empty,
             Modifiers = l.Modifiers ?? new List<string>(),
             RevenueCode = l.RevenueCode,
@@ -49,7 +49,12 @@ public static class EncounterClaimMapper
             PaidAmount = l.AdjudicationResult?.PaidAmount ?? 0m,
             Adjustments = (l.AdjudicationResult?.AdjustmentReasons ?? new List<AdjustmentRecord>())
                 .Select(a => new EncounterAdjustment(a.GroupCode, a.ReasonCode, a.Amount))
-                .ToList()
+                .ToList(),
+            Teeth = (l.Teeth ?? new List<ToothRecord>())
+                .Select(t => new EncounterTooth(t.ToothCode, t.Surfaces ?? new List<string>()))
+                .ToList(),
+            OralCavityDesignations = l.OralCavityDesignations ?? new List<string>(),
+            ProsthesisCrownInlayCode = l.ProsthesisCrownInlayCode
         }).ToList();
 
         var renderingName = SplitName(claim.RenderingProviderName);
@@ -202,6 +207,15 @@ public sealed class ClaimLineRecord
     public decimal? DrugQuantity { get; set; }
     public string? DrugUnitOfMeasure { get; set; }
     public LineAdjudicationRecord? AdjudicationResult { get; set; }
+    public List<ToothRecord>? Teeth { get; set; }
+    public List<string>? OralCavityDesignations { get; set; }
+    public string? ProsthesisCrownInlayCode { get; set; }
+}
+
+public sealed class ToothRecord
+{
+    public string ToothCode { get; set; } = string.Empty;
+    public List<string>? Surfaces { get; set; }
 }
 
 public sealed class InstitutionalRecord

@@ -153,14 +153,95 @@ public class Encounter837WriterTests
     }
 
     [Fact]
-    public void MixedForms_OrDental_AreRefused()
+    public void MixedForms_AreRefused()
     {
         var mixed = () => Encounter837Writer.Write(EncounterFormType.Professional,
             new[] { Professional(), Institutional() }, Envelope());
         mixed.Should().Throw<ArgumentException>();
 
-        var dental = () => Encounter837Writer.Write(EncounterFormType.Dental,
-            new[] { Professional() with { Form = EncounterFormType.Dental } }, Envelope());
-        dental.Should().Throw<NotSupportedException>();
+        var mixedDental = () => Encounter837Writer.Write(EncounterFormType.Dental,
+            new[] { Dental(), Professional() }, Envelope());
+        mixedDental.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Dental_Writes837D_WithCdtLinesTeethAndPlanAdjudication()
+    {
+        var file = Encounter837Writer.Write(EncounterFormType.Dental, new[] { Dental() }, Envelope());
+        var seg = Segments(file.Content);
+
+        Encounter837Writer.FormLabel(EncounterFormType.Dental).Should().Be("837D");
+        seg.Should().Contain(s => s.StartsWith("GS*HC*") && s.EndsWith("*005010X224A2"));
+        seg.Should().Contain("ST*837*0001*005010X224A2");
+        seg.Should().Contain("BHT*0019*00*DEN-sub-3*20261101*1430*RP");
+        seg.Should().Contain("PRV*BI*PXC*1223P0221X");
+        seg.Should().Contain("CLM*DEN-sub-3*215***11:B:1*Y*A*Y*Y");
+        seg.Should().Contain("DTP*472*D8*20261007", "one service date for the claim goes at 2300");
+        seg.Should().Contain("HI*ABK:K0252");
+        seg.Should().Contain("NM1*82*1*NGUYEN*LINH****XX*" + RenderingNpi);
+        seg.Should().Contain("OI***Y***Y");
+        seg.Should().Contain("SV3*AD:D0120*55****1");
+        seg.Should().Contain("SV3*AD:D2392*160**40**1*****1");
+        seg.Should().Contain("TOO*JP*30*M:O");
+        seg.Should().Contain("SVD*MCO123*88*AD:D2392**1");
+        seg.Should().Contain("CAS*CO*45*72");
+        seg.Count(s => s.StartsWith("DTP*472")).Should().Be(1, "lines do not repeat the claim's date");
+        seg.Count(s => s.StartsWith("DTP*573")).Should().Be(3, "2330B and each 2430");
+
+        var st = Array.FindIndex(seg, s => s.StartsWith("ST*"));
+        var se = Array.FindIndex(seg, s => s.StartsWith("SE*"));
+        seg[se].Should().Be($"SE*{se - st + 1}*0001");
+        file.Placements.Should().ContainSingle().Which.PatientControlNumber.Should().Be("DEN-sub-3");
+    }
+
+    [Fact]
+    public void Dental_LinesOnDifferentDates_CarryTheirOwnServiceDates()
+    {
+        var claim = Dental();
+        claim = claim with
+        {
+            Lines = new[]
+            {
+                claim.Lines[0],
+                claim.Lines[1] with { ServiceFrom = new DateOnly(2026, 10, 14), ServiceTo = new DateOnly(2026, 10, 14) }
+            }
+        };
+
+        var seg = Segments(Encounter837Writer.Write(EncounterFormType.Dental, new[] { claim }, Envelope()).Content);
+
+        seg.Where(s => s.StartsWith("DTP*472")).Should().Equal("DTP*472*D8*20261007", "DTP*472*D8*20261014");
+        var clm = Array.FindIndex(seg, s => s.StartsWith("CLM*"));
+        var lx = Array.FindIndex(seg, s => s.StartsWith("LX*"));
+        seg[clm..lx].Should().NotContain(s => s.StartsWith("DTP*472"));
+    }
+
+    [Fact]
+    public void Dental_ReportsAtMostFourDiagnoses_AndAllOralCavityAndSurfaceCodes()
+    {
+        var claim = Dental() with
+        {
+            Diagnoses = new[] { "K02.52", "K02.53", "K03.81", "K05.10", "K08.89" }
+                .Select(c => new EncounterDiagnosis(c)).ToArray()
+        };
+        claim = claim with
+        {
+            Lines = new[]
+            {
+                claim.Lines[0],
+                claim.Lines[1] with
+                {
+                    Teeth = new[] { new EncounterTooth("A", new[] { "M", "O", "D", "B", "L" }), new EncounterTooth("51", Array.Empty<string>()) },
+                    OralCavityDesignations = new[] { "10", "20" },
+                    ProsthesisCrownInlayCode = "I",
+                    DiagnosisPointers = new[] { 1, 2, 3, 4 }
+                }
+            }
+        };
+
+        var seg = Segments(Encounter837Writer.Write(EncounterFormType.Dental, new[] { claim }, Envelope()).Content);
+
+        seg.Should().Contain("HI*ABK:K0252*ABF:K0253*ABF:K0381*ABF:K0510");
+        seg.Should().Contain("SV3*AD:D2392*160**10:20*I*1*****1:2:3:4");
+        seg.Should().Contain("TOO*JP*A*M:O:D:B:L").And.Contain("TOO*JP*51");
     }
 }

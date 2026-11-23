@@ -10,8 +10,8 @@ accepts the files. It answers TX-02 and CA-01 in part; it does not close them.
 | State | Receiver | Output | Deadline default | Responses the state returns |
 | --- | --- | --- | --- | --- |
 | FL | AHCA FMMIS | Claim JSON staging file (unchanged) | Tenant compliance config, 60 days after adjudication | 999 |
-| TX | HHSC via TMHP | ASC X12 005010 837P / 837I | 30 days after the end of the adjudication month | 999, 277CA, HHSC encounter reports |
-| CA | DHCS (PACES) | ASC X12 005010 837P / 837I | 30 days after the end of the adjudication month | 999, 277, Encounter Validation Response (EVR) |
+| TX | HHSC via TMHP | ASC X12 005010 837P / 837I / 837D | 30 days after the end of the adjudication month | 999, 277CA, HHSC encounter reports |
+| CA | DHCS (PACES) | ASC X12 005010 837P / 837I / 837D | 30 days after the end of the adjudication month | 999, 277, Encounter Validation Response (EVR) |
 
 The Texas and California deadline defaults are placeholders to be confirmed
 against the plan's signed contract (Texas TX-00) and the current DHCS
@@ -75,9 +75,12 @@ Every worker cycle (default 4 hours), for each enabled route and tenant:
    rejects on: NPI check digit, EIN, billing ZIP+4, member DOB and address,
    diagnosis pointers, facility type and inpatient admission data for 837I,
    revenue codes, and line balancing (charge = plan paid + CAS adjustments).
+   Dental lines also need a CDT code (qualifier AD), ADA Universal tooth
+   numbers (1–32, A–T, supernumerary 51–82 and AS–TS), surfaces M/O/D/B/L/I/F
+   (up to five), valid oral cavity codes and at most four diagnoses.
    A failing encounter is set to `ValidationFailed` with its reasons in
    `validationErrors` and is not sent.
-3. Writes one interchange per form type (837P, 837I). Each encounter is its
+3. Writes one interchange per form type (837P, 837I, 837D). Each encounter is its
    own ST/SE, so a 999 or 277CA points at one record. The plan's adjudication
    is reported as the other payer (2320/2330B) with line-level SVD, CAS and
    DTP*573; the state is the destination payer in 2010BB; BHT06 is `RP`.
@@ -93,6 +96,19 @@ Files can be listed and downloaded with
 
 ISA13 control numbers come from an atomic per-tenant, per-state counter in
 `encounter_control_numbers`.
+
+## Dental (837D)
+
+Dental claims (`claimType: Dental`) become 837D 005010X224A2 encounters in
+their own file. Each line is an `SV3` with the CDT code (`AD`), the oral
+cavity designations (SV304), the prosthesis/crown/inlay code (SV305), the
+procedure count and diagnosis pointers (SV311), followed by one `TOO*JP`
+segment per tooth with its surfaces. When every line shares one service
+date it is reported once at 2300 (where TMHP's 277CA guide places the 837D
+service date); otherwise each line carries its own `DTP*472`. The plan's
+adjudication goes in 2320/2330B and per line in 2430 `SVD`/`CAS`/`DTP*573`,
+as for 837P. Tooth, surface and area data come from claims-service
+(`teeth`, `oralCavityDesignations`, `prosthesisCrownInlayCode`).
 
 ## Hand-off and responses
 
@@ -254,8 +270,13 @@ queue.
   checked in the encounter companion guides.
 - **The Texas ICN report layout.** ICNs are posted as JSON until a plan
   shares the report they arrive on.
-- **837D, capitated and delegated encounters, other-payer (TPL) loops** and
-  any state-specific segments in the TMHP or DHCS companion guides.
+- **Capitated and delegated encounters, other-payer (TPL) loops** and any
+  state-specific segments in the TMHP or DHCS encounter companion guides.
+- **Texas dental notes.** TMHP's 837D acute-care guide (January 2026) asks
+  fee-for-service providers for an NTE note on orthodontic D8080 ("DPC" plus
+  a local code) and on emergency or trauma services. Whether encounters need
+  the same is in the encounter guide; the claim record does not carry those
+  local codes yet.
 - **State acceptance.** Companion-guide review, partner test cycles and
   certification. Passing these tests is not evidence that either state
   accepts the files.

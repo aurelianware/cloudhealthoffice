@@ -29,7 +29,7 @@ public sealed record EncounterClaim
 
     public decimal TotalCharge { get; init; }
 
-    /// <summary>837P: place of service. 837I: two-digit facility type (type of bill, first two digits).</summary>
+    /// <summary>837P / 837D: place of service. 837I: two-digit facility type (type of bill, first two digits).</summary>
     public string? PlaceOfService { get; init; }
     public string? FacilityTypeCode { get; init; }
 
@@ -116,7 +116,21 @@ public sealed record EncounterLine
 
     public decimal PaidAmount { get; init; }
     public IReadOnlyList<EncounterAdjustment> Adjustments { get; init; } = Array.Empty<EncounterAdjustment>();
+
+    // ── 837D only ────────────────────────────────────────────────────
+
+    /// <summary>Teeth the line treats, each with its surfaces (2400 TOO).</summary>
+    public IReadOnlyList<EncounterTooth> Teeth { get; init; } = Array.Empty<EncounterTooth>();
+
+    /// <summary>Oral cavity designation codes, up to five (SV304).</summary>
+    public IReadOnlyList<string> OralCavityDesignations { get; init; } = Array.Empty<string>();
+
+    /// <summary>Prosthesis, crown or inlay code: I initial placement, R replacement (SV305).</summary>
+    public string? ProsthesisCrownInlayCode { get; init; }
 }
+
+/// <summary>A tooth (ADA Universal National Tooth Designation) and the surfaces treated (TOO02 / TOO03).</summary>
+public sealed record EncounterTooth(string ToothCode, IReadOnlyList<string> Surfaces);
 
 /// <summary>A CAS adjustment: group (CO, PR, OA, PI, CR), reason (CARC) and amount.</summary>
 public sealed record EncounterAdjustment(string GroupCode, string ReasonCode, decimal Amount, decimal? Quantity = null);

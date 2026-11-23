@@ -10,7 +10,7 @@ public enum EncounterRouteFormat
     /// <summary>Legacy Florida staging: claim JSON for the FMMIS hand-off (unchanged).</summary>
     FmmisJson,
 
-    /// <summary>ASC X12 005010 837P / 837I encounter interchange.</summary>
+    /// <summary>ASC X12 005010 837P / 837I / 837D encounter interchange.</summary>
     X12_837
 }
 
@@ -112,7 +112,7 @@ public sealed record StateEncounterRoute
     };
 
     /// <summary>
-    /// Texas HHSC, received through TMHP. 837P / 837I 5010. The deadline default
+    /// Texas HHSC, received through TMHP. 837P / 837I / 837D 5010. The deadline default
     /// (30 days after the end of the month the claim was adjudicated in) must be
     /// confirmed against the plan's signed contract (TX-00). Responses: 999, 277CA.
     ///
