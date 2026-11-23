@@ -19,6 +19,7 @@ public class StateEncounterRoutesControllerTests
     private readonly Mock<IStateEncounterBatchService> _batches = new(MockBehavior.Strict);
     private readonly Mock<IStateResponseReconciler> _responses = new(MockBehavior.Strict);
     private readonly Mock<IEncounterReworkService> _rework = new(MockBehavior.Strict);
+    private readonly Mock<IEncounterScorecardService> _scorecards = new(MockBehavior.Strict);
     private readonly Mock<ICurrentActor> _actor = new();
 
     public StateEncounterRoutesControllerTests()
@@ -28,9 +29,36 @@ public class StateEncounterRoutesControllerTests
     }
 
     private StateEncounterRoutesController Controller(IStateEncounterRouteRegistry? registry = null) =>
-        new(registry ?? Registry(tx: TexasOptions()), _batches.Object, _responses.Object, _rework.Object, _actor.Object);
+        new(registry ?? Registry(tx: TexasOptions()), _batches.Object, _responses.Object, _rework.Object, _scorecards.Object, _actor.Object);
 
     private static T Body<T>(IActionResult result) => (T)((ObjectResult)result).Value!;
+
+    // ── Scorecard ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Scorecard_ForAMonth_UsesTheCallersTenant_AndTheWholeAdjudicationMonth()
+    {
+        var card = new EncounterScorecard { StateCode = "TX" };
+        _scorecards.Setup(s => s.GetAsync(It.Is<StateEncounterRoute>(r => r.StateCode == "TX"), Tenant,
+                new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(card);
+
+        var result = await Controller().GetScorecard("tx", month: "2026-10");
+
+        ((OkObjectResult)result.Result!).Value.Should().BeSameAs(card);
+    }
+
+    [Theory]
+    [InlineData("FL", "2026-10")]
+    [InlineData("TX", "October")]
+    [InlineData("TX", null)]
+    public async Task Scorecard_RefusesFloridaBadMonthsAndMissingPeriods(string state, string? month)
+    {
+        var result = await Controller().GetScorecard(state, month: month);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
 
     // ── Routes ─────────────────────────────────────────────────────────
 

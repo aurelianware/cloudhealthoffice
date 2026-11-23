@@ -73,6 +73,24 @@ public sealed class StateEncounterRouteOptions
     public EncounterDeadlineRule? DeadlineRule { get; set; }
     public int? DeadlineDays { get; set; }
 
+    /// <summary>
+    /// Scorecard target for the share of due encounters sent by the deadline, as a
+    /// percentage (for example 98). Not defaulted: take it from the plan's contract.
+    /// </summary>
+    public decimal? TimelinessTarget { get; set; }
+
+    /// <summary>Scorecard target for the state's acceptance rate, as a percentage. Not defaulted.</summary>
+    public decimal? AcceptanceTarget { get; set; }
+
+    /// <summary>
+    /// Days a rejected or held-back encounter may stay open before it counts as past
+    /// the correction window (DHCS APL 14-019 uses 15). Not defaulted.
+    /// </summary>
+    public int? CorrectionDays { get; set; }
+
+    /// <summary>Where the targets above come from (contract section, manual version), shown on the scorecard.</summary>
+    public string? ScorecardTargetSource { get; set; }
+
     /// <summary>Blob container (or bucket prefix) that staged files are written to.</summary>
     public string? StagingContainer { get; set; }
 
