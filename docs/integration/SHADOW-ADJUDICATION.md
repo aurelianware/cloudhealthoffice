@@ -212,7 +212,7 @@ One kind per claim, in this order of precedence:
 
 | Kind | Meaning |
 |---|---|
-| `NotComparable` | The core's claim is not final (pended, voided). CHO is not run. |
+| `NotComparable` | The core's claim is not final (pended, voided). CHO is not run, except on a claim the file marked pended: CHO runs it and keeps its outcome for the [pended-claims report](#pended-claims). |
 | `ChoUndecided` | CHO pended or rejected the claim, or denied it only because the member is not loaded. `choPendCode` names the gap: `NOCONTRACT` (no contract or fee schedule rate), `PRICING`, `PLANUNAVAIL` (the member's coverage names no CHO plan, usually an unmapped core plan code), `REJECT:<stage>`, `MEMBERNOTLOADED`, `NETWORK` (see [Network and credentialing](#network-and-credentialing)), ... |
 | `OutcomeMismatch` | One side paid, the other denied. |
 | `DenialCodeMismatch` | Both denied, with different CARCs (or a line both denied, with different codes). |
@@ -227,6 +227,42 @@ Paid, MemberLiability, LineOutcome, DenialCode) and every CHO stage finding.
 Line denial codes: the core's come from the CPCDS "Line payment denial code"
 the importer stores; CHO's are the line's adjustments other than the member's
 share (group PR) and the contractual write-down (CARC 45).
+
+## Pended claims
+
+A plan can also send the claims its core has pended: payment status `pended`
+and the pend reason code, as optional columns on the same CPCDS file
+([CPCDS-FILE-DROP-IMPORTER.md](CPCDS-FILE-DROP-IMPORTER.md#file-layout)). The
+importer stores such a claim as Received with the core's pend on
+`externalSource.corePend`; it is not CHO's Pended status, so it never reaches
+CHO's pend work queues, examiners or work-management. A shadow run still runs
+CHO on it and records `corePended`, `corePendCode`, `corePendReason` and
+`corePendedDate` on the result, with CHO's outcome. The kind stays
+`NotComparable`, so pended claims never move the match rate or the dollars.
+
+When a later file brings the examiner's decision, the claim gets a new
+version, and the report compares CHO's answer with it.
+
+`GET api/v1/claims/shadow-adjudication/pended?days=365` (`claims:import`; portal:
+**Shadow Adjudication**, Pended claims) reads the pended results from the last
+`days` days (a claim's latest result, up to 20,000 claims) and reports, for
+each core pend reason:
+
+| Field | Meaning |
+|---|---|
+| `claims` | Pended claims CHO ran |
+| `choWouldResolve`, `choWouldPay`, `choWouldDeny`, `autoResolveRate` | CHO would have paid or denied the claim without an examiner. A hold only for provider screening counts; missing data (member not loaded, no contract) does not |
+| `choWouldPend`, `choPendCodes` | CHO would have pended too, and why |
+| `examinerDecided` | A later file brought the paid or denied decision |
+| `compared`, `agreed`, `agreementRate` | Of the claims CHO would have decided and the examiner has, the same outcome and, for paid claims, the same payment within `Tolerance` |
+| `choPaidExaminerDenied`, `choDeniedExaminerPaid`, `paidAmountDiffers` | The disagreements |
+| `averageDaysPended` | Pended date (or received date) to the examiner's decision |
+| `stillPended`, `oldestStillPendedDays` | No decision yet |
+| `automationCandidate` | At least 20 claims, CHO would decide 80% or more, and agreed with the examiner on 95% or more of at least 10 |
+
+`automationCandidate` is a lead for the plan's review of the pend, not a
+determination, and the report states no cost per claim touched: CHO does not
+know the plan's.
 
 ## Prior authorization
 

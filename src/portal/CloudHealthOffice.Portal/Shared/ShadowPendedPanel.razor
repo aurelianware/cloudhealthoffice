@@ -1,0 +1,145 @@
+@using CloudHealthOffice.Portal.Services
+@using System.Globalization
+@inject IShadowPendedClient Pended
+
+@*
+    Pended claims: for each pend reason in the plan's core, what CHO would
+    have done with the claims the core pended, and, once a later file brings
+    the examiner's decision, how often CHO agreed. A lead for the plan's own
+    review of which pends to automate. No cost per claim touched: CHO does not
+    know the plan's. See docs/integration/SHADOW-ADJUDICATION.md#pended-claims.
+*@
+
+<MudPaper Elevation="0" Class="pa-4" Style="@PaperStyle" data-testid="shadow-pended">
+    <div class="d-flex align-center flex-wrap" style="gap: 12px;">
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Pended claims</MudText>
+        <MudSpacer />
+        <MudSelect T="int" Value="_days" ValueChanged="DaysChangedAsync" Label="Shadow runs from" Dense="true"
+                   Variant="Variant.Outlined" Style="max-width: 200px;" data-testid="shadow-pended-days">
+            <MudSelectItem Value="90">Last 90 days</MudSelectItem>
+            <MudSelectItem Value="180">Last 180 days</MudSelectItem>
+            <MudSelectItem Value="365">Last 365 days</MudSelectItem>
+        </MudSelect>
+    </div>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+        Claims your core had pended when they were loaded. CHO ran each one; when a later file brings the examiner's decision,
+        CHO's answer is compared with it. Send pended claims with payment status "pended" and the pend reason code.
+    </MudText>
+
+    @if (_error != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" data-testid="shadow-pended-error">@_error</MudAlert>
+    }
+    else if (_analysis is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_analysis.Total.Claims == 0)
+    {
+        <MudText Typo="Typo.body2" data-testid="shadow-pended-empty">No pended claims in these runs yet.</MudText>
+    }
+    else
+    {
+        var t = _analysis.Total;
+        <MudText Typo="Typo.body2" Class="mb-2" data-testid="shadow-pended-total">
+            @N(t.Claims) pended claims. CHO would have decided @Percent(t.AutoResolveRate) of them without an examiner
+            (@N(t.ChoWouldPay) paid, @N(t.ChoWouldDeny) denied).
+            @if (t.Compared > 0)
+            {
+                <span>Where the examiner has decided, CHO agreed on @Percent(t.AgreementRate) of @N(t.Compared).</span>
+            }
+            @if (t.StillPended > 0)
+            {
+                <span> @N(t.StillPended) are still pended.</span>
+            }
+        </MudText>
+        @if (_analysis.Truncated)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">The most recent claims are shown; choose a shorter period to see them all.</MudAlert>
+        }
+        <MudSimpleTable Dense="true" Hover="true" Elevation="0" data-testid="shadow-pended-table">
+            <thead>
+                <tr>
+                    <th>Pend reason</th><th>Claims</th><th>CHO would decide</th><th>CHO would pend</th>
+                    <th>Examiner decided</th><th>Agreed with examiner</th><th>Differences</th><th>Avg days pended</th><th>Still pended</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in _analysis.ByPendReason)
+                {
+                    <tr data-testid="shadow-pended-row">
+                        <td>
+                            <span style="font-family: monospace;">@r.PendReasonCode</span>
+                            @if (!string.IsNullOrWhiteSpace(r.PendReason))
+                            {
+                                <span style="color: var(--mud-palette-text-secondary);"> @r.PendReason</span>
+                            }
+                        </td>
+                        <td>@N(r.Claims)</td>
+                        <td>@N(r.ChoWouldResolve) (@Percent(r.AutoResolveRate))</td>
+                        <td title="@string.Join(", ", r.ChoPendCodes)">@N(r.ChoWouldPend)</td>
+                        <td>@N(r.ExaminerDecided)</td>
+                        <td>@(r.Compared == 0 ? "" : $"{N(r.Agreed)} of {N(r.Compared)} ({Percent(r.AgreementRate)})")</td>
+                        <td>@Differences(r)</td>
+                        <td>@(r.AverageDaysPended?.ToString("0.0", CultureInfo.InvariantCulture) ?? "")</td>
+                        <td>@(r.StillPended == 0 ? "" : $"{N(r.StillPended)}{(r.OldestStillPendedDays is { } d ? $", oldest {d} days" : "")}")</td>
+                        <td>
+                            @if (r.AutomationCandidate)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined" data-testid="shadow-pended-candidate">Worth a look</MudChip>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2" Style="display: block;">
+            "Worth a look" marks a pend reason with at least 20 claims where CHO would decide 80% or more and agreed with the
+            examiner on 95% or more of at least 10. That is a lead for your own review of the pend, not a determination.
+        </MudText>
+    }
+</MudPaper>
+
+@code {
+    private const string PaperStyle = "background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;";
+
+    private ShadowPendedAnalysis? _analysis;
+    private int _days = 365;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task DaysChangedAsync(int days)
+    {
+        _days = days;
+        _analysis = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _error = null;
+            _analysis = await Pended.GetAsync(_days) ?? new ShadowPendedAnalysis();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load the pended claims report: {ex.Message}";
+        }
+    }
+
+    private static string N(int n) => n.ToString("N0", CultureInfo.InvariantCulture);
+
+    private static string Percent(decimal? rate) =>
+        rate is { } r ? (r * 100m).ToString("0.#", CultureInfo.InvariantCulture) + "%" : "-";
+
+    private static string Differences(ShadowPendReasonRow r)
+    {
+        var parts = new List<string>();
+        if (r.ChoPaidExaminerDenied > 0) parts.Add($"CHO paid, examiner denied {N(r.ChoPaidExaminerDenied)}");
+        if (r.ChoDeniedExaminerPaid > 0) parts.Add($"CHO denied, examiner paid {N(r.ChoDeniedExaminerPaid)}");
+        if (r.PaidAmountDiffers > 0) parts.Add($"paid amount differs {N(r.PaidAmountDiffers)}");
+        return string.Join("; ", parts);
+    }
+}

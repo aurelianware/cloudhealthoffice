@@ -207,6 +207,7 @@ public sealed class CpcdsClaimImportService : ICpcdsClaimImportService
             FileName = options.FileName,
             ImportedAt = now,
             ExtractedAt = options.ExtractedAt,
+            CorePend = claim.ExternalSource?.CorePend,
         };
 
         claimResult.Outcome = existing is null ? CpcdsClaimOutcome.Created : CpcdsClaimOutcome.Updated;

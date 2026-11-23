@@ -630,6 +630,8 @@ builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryRepository, Cl
 builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryService, ClaimsService.Services.Tpl.TplRecoveryService>();
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationService,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationService>();
+// Pended claims: what CHO would have done with the core's pends, by pend reason.
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.ShadowPendedAnalysisService>();
 // Background shadow runs: whole import batches, in pages, resumable across replicas.
 builder.Services.AddHostedService<ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationWorker>();
 // Retro rate reprocessing, step 2: dry-run impact of a fee schedule change on

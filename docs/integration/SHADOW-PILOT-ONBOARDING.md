@@ -109,6 +109,11 @@ to the core.
   policy and version), so a reviewer sees what the UM decision rested on.
 - **The core's control totals** for each claim file (claim count, billed, paid),
   so the import reconciles against them.
+- **Pended claims, with the pend reason code**, if the plan wants to see which
+  pends CHO could resolve without an examiner. Send them in the same claim file
+  with payment status "pended". CHO runs each one and, once a later file brings
+  the examiner's decision, reports by pend reason how often CHO would have
+  decided it and how often it agreed. CHO never works the core's pends.
 
 ### Minimum necessary
 
