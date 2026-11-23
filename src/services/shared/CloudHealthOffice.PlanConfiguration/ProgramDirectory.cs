@@ -122,7 +122,13 @@ public sealed class HttpProgramDirectory(
 
         // "No such program" is cached too: a caller that asks about a plan with
         // no program asks on every claim, and the answer is stable.
-        cache.Set(cacheKey, new Box(program), TimeSpan.FromSeconds(Math.Max(1, options.CacheSeconds)));
+        // Size = 1: a host may share a size-limited IMemoryCache (fhir-service
+        // does, for CRD classifications), and there an entry without a size throws.
+        cache.Set(cacheKey, new Box(program), new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(Math.Max(1, options.CacheSeconds)),
+            Size = 1,
+        });
         return program;
     }
 
@@ -183,7 +189,7 @@ public static class ProgramDirectoryServiceCollectionExtensions
         services.AddMemoryCache();
         services.AddHttpClient(HttpProgramDirectory.HttpClientName, client =>
         {
-            client.BaseAddress = new Uri((configuration["Services:TenantService"] ?? "http://tenant-service").TrimEnd('/') + "/");
+            client.BaseAddress = new Uri((configuration["Services:TenantService"] ?? "http://tenant-service.cloudhealthoffice").TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromSeconds(5);
             client.DefaultRequestHeaders.Add("Accept", "application/json");
         }).SetHandlerLifetime(TimeSpan.FromMinutes(5));

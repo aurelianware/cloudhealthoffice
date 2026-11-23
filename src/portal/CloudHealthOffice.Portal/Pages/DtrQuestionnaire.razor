@@ -182,9 +182,11 @@
                     {
                         <span> Status: <strong>@done.Decision</strong>.</span>
                     }
-                    @if (!string.IsNullOrEmpty(done.Disposition))
+                    @* The disposition often only repeats the decision ("pended"). *@
+                    @if (!string.IsNullOrEmpty(done.Disposition)
+                         && !(done.Decision ?? string.Empty).Contains(done.Disposition.Trim(), StringComparison.OrdinalIgnoreCase))
                     {
-                        <span> @done.Disposition</span>
+                        <span>&nbsp;@done.Disposition</span>
                     }
                 </MudAlert>
             }

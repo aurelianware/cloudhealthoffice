@@ -55,6 +55,10 @@ spec:
         env:
         - name: ChoAuth__ServiceToken__ClientId
           value: "coverage-service"
+        # Programs for a coverage's line of business and state (CRD, DTR, the
+        # Texas prior authorization clocks). Named so a service token is attached.
+        - name: Services__TenantService
+          value: "http://tenant-service.cloudhealthoffice"
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:

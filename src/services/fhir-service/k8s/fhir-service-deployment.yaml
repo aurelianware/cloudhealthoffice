@@ -55,6 +55,10 @@ stringData:
   Services__EncounterServiceUrl: "http://encounter-service/api"
   # The consent registry. Without it every consent decision refuses (ADR 021).
   Services__ConsentServiceUrl: "http://consent-service"
+  # Programs (state, line of business, program code) for CRD's member context
+  # and the DTR coverage label. Named here so ChoOutboundTokenHandler attaches a
+  # service token; without it tenant-service answers 401 and CRD cannot decide.
+  Services__TenantService: "http://tenant-service.cloudhealthoffice"
 
 ---
 apiVersion: apps/v1

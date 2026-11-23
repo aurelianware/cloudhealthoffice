@@ -66,6 +66,8 @@ public static class PasAuthorizationMapper
     public const string NpiSystem = "http://hl7.org/fhir/sid/us-npi";
     public const string X12ServiceTypeSystem = "https://codesystem.x12.org/005010/1365";
     public const string X12ClaimFilingIndicatorSystem = "https://codesystem.x12.org/005010/1032";
+    /// <summary>The line-of-business code system on the Coverage CHO serves (<see cref="FhirService.Services.ChoNative.ChoNativeFhirDataAdapter.LineOfBusinessSystem"/>).</summary>
+    public const string ChoLineOfBusinessSystem = FhirService.Services.ChoNative.ChoNativeFhirDataAdapter.LineOfBusinessSystem;
     public const string SourceOfPaymentTypologySystem = "https://nahdo.org/sopt";
     public const string SourceOfPaymentTypologyOid = "urn:oid:2.16.840.1.113883.3.221.5";
     public const string ProcessPrioritySystem = "http://terminology.hl7.org/CodeSystem/processpriority";
@@ -267,7 +269,23 @@ public static class PasAuthorizationMapper
             if (string.IsNullOrEmpty(code))
                 continue;
 
-            if (coding.System == X12ClaimFilingIndicatorSystem)
+            if (coding.System == ChoLineOfBusinessSystem)
+            {
+                // CHO's own Coverage (what CHO's FHIR API and the provider
+                // portal's DTR page send) states the line of business directly.
+                var lob = code switch
+                {
+                    "COMMERCIAL" => "Commercial",
+                    "MEDICARE" => "Medicare",
+                    "MEDICAID" => "Medicaid",
+                    "EXCHANGE" or "MARKETPLACE" => "Exchange",
+                    "TRICARE" => "TRICARE",
+                    "VA" => "VA",
+                    _ => null,
+                };
+                if (lob is not null) return lob;
+            }
+            else if (coding.System == X12ClaimFilingIndicatorSystem)
             {
                 var lob = code switch
                 {

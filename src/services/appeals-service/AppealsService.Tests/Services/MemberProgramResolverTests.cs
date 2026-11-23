@@ -134,6 +134,21 @@ public class MemberProgramResolverTests
     }
 
     [Fact]
+    public async Task Program_directory_caches_in_a_size_limited_memory_cache()
+    {
+        // fhir-service registers AddMemoryCache(SizeLimit = 1024) for CRD; an
+        // entry without a size there threw and CRD answered "could not be determined".
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
+        var directory = new HttpProgramDirectory(new Factory(handler), new MemoryCache(new MemoryCacheOptions { SizeLimit = 16 }),
+            new ProgramDirectoryOptions(), NullLogger<HttpProgramDirectory>.Instance);
+
+        (await directory.ForBenefitPlanAsync(Tenant, "PLAN-1")).Should().BeNull();
+        (await directory.ForBenefitPlanAsync(Tenant, "PLAN-1")).Should().BeNull();
+
+        handler.Requests.Should().ContainSingle("the second lookup is answered from the cache");
+    }
+
+    [Fact]
     public async Task Coverage_lookup_asks_with_the_service_identity()
     {
         var (resolver, handler) = Build(new InMemoryProgramDirectory(), _ => Coverages());
