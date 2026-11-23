@@ -1192,9 +1192,18 @@ services:
     # block calls, so its version is part of any result read from these kits.
     image: infernocommunity/inferno-resource-validator@sha256:92ec7a22e3c6f4cdf5eed9db210150a93531034e100c7521e4930c975b3c9058
     environment:
-      # Upstream's value: negative means a validator session never expires, so a
-      # long suite run does not lose its loaded IG packages halfway through.
-      SESSION_CACHE_DURATION: "-1"
+      # Minutes a validator session (its loaded IG packages, a gigabyte or
+      # more) stays cached. Upstream's -1 keeps every session for the life of
+      # the container, and the PAS kit opens about one a minute (a session per
+      # validator in each of its groups). On a 16 GB runner the container died
+      # midway through the suite with no error in its log, most likely killed
+      # for memory (run 45087543015; the harness now records its exit status). A session that expires while its group is still
+      # validating is rebuilt on its next request, which is slow, not wrong.
+      SESSION_CACHE_DURATION: "3"
+      # The JVM's own default here is 80% of the runner's memory, which leaves
+      # too little for CHO's services and the kits beside it; with a cap it
+      # collects expired sessions before it grows past what the runner has.
+      JAVA_TOOL_OPTIONS: "-Xmx8g"
     volumes:
       # The IG packages each suite asks for are downloaded here at first use.
       # The volume is removed at teardown, so every run starts from a clean

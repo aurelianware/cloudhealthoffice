@@ -162,6 +162,20 @@ public sealed class DockerCompose
             : [];
     }
 
+    /// <summary>
+    /// The status Compose reports for a service's container, running or not
+    /// (for example <c>Exited (137) 2 minutes ago</c>: killed, as the kernel's
+    /// out-of-memory killer does), or null when it has none.
+    /// </summary>
+    public async Task<string?> StatusAsync(string service, TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        var args = BaseArgs([]);
+        args.AddRange(["ps", "--all", "--format", "{{.Status}}", service]);
+        var outcome = await InvokeAsync(args, timeout, cancellationToken);
+        var status = outcome.Succeeded ? outcome.StandardOutput.Trim() : "";
+        return status.Length > 0 ? status : null;
+    }
+
     /// <summary>Reports whether a service's container is running.</summary>
     public async Task<bool> IsRunningAsync(string service, TimeSpan timeout, CancellationToken cancellationToken = default)
     {

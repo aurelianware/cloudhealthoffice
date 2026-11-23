@@ -175,7 +175,10 @@ public sealed class InteropEnvironment : IAsyncDisposable
             {
                 var logs = await _compose.LogsAsync(
                     service, tailLines: 400, TimeSpan.FromSeconds(60), cancellationToken);
-                _serviceLogs[service] = Redaction.Body(logs);
+                // A container that died says nothing about it in its own log
+                // when it was killed; its status (an exit code) does.
+                var status = await _compose.StatusAsync(service, TimeSpan.FromSeconds(30), cancellationToken);
+                _serviceLogs[service] = (status is null ? "" : $"[container status: {status}]\n") + Redaction.Body(logs);
             }
             catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or IOException)
             {
