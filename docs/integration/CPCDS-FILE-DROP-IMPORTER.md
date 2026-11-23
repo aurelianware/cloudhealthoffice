@@ -90,6 +90,7 @@ Required columns: `Claim unique identifier`, `Member id`, `Claim type`,
 | Procedure code, Procedure description, Modifier Code-1..4 | line procedure | ICD-10-PCS codes (by `Procedure code type`) go to `Institutional.PrincipalProcedure` / `OtherProcedures` instead |
 | Line submitted / allowed / payment amount, Line member liability | line `ChargeAmount`, line adjudication | |
 | Line payment denial code | adjudication adjustment reasons | Group code is not in CPCDS, so it is left out |
+| Prior authorization number, Line prior authorization number | `PriorAuthorizationNumber` on the claim and the line | Not CPCDS elements: optional columns for the authorization number the core matched the claim to (also read as `Authorization number`, `Prior auth number`, `Line authorization number`). A [shadow run](SHADOW-ADJUDICATION.md#prior-authorization) checks it against the plan's authorization file |
 | Tooth number, Tooth surface | line `Teeth` | Oral claims |
 | Diagnosis code, Diagnosis description, Present on admission, Diagnosis code type, Diagnosis type | `DiagnosisCodes[]` | ICD-10-CM only; others are left off with a warning. One principal: the first flagged, else the first |
 

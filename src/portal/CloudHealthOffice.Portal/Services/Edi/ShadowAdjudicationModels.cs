@@ -119,6 +119,9 @@ public class ShadowRunReport
     public ShadowReasonRow HeldForProviderScreening { get; set; } = new();
     public List<ShadowReasonRow> ByChoStage { get; set; } = new();
     public List<ShadowReasonRow> ByDenialCodes { get; set; } = new();
+
+    /// <summary>Claims one side denied for prior authorization and the other did not.</summary>
+    public List<ShadowReasonRow> AuthorizationMismatches { get; set; } = new();
     public List<ShadowReasonRow> ByProcedure { get; set; } = new();
     public List<ShadowReasonRow> ByBillingProvider { get; set; } = new();
 }

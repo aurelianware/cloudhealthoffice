@@ -76,6 +76,13 @@ public class ShadowAdjudicationResult
     public DateTime ServiceDateFrom { get; set; }
     public string? BillingProviderNpi { get; set; }
 
+    /// <summary>
+    /// The authorization number the core matched the claim to (CPCDS file column
+    /// "Prior authorization number"), the one CHO's prior-authorization check
+    /// looked up. Evidence for an authorization finding.
+    /// </summary>
+    public string? PriorAuthorizationNumber { get; set; }
+
     public string Kind { get; set; } = ShadowDiscrepancyKind.NotComparable;
 
     public string CoreOutcome { get; set; } = ShadowOutcome.NotFinal;
@@ -128,6 +135,9 @@ public class ShadowLineComparison
     public string ProcedureCode { get; set; } = string.Empty;
     public string? RevenueCode { get; set; }
     public decimal Charge { get; set; }
+
+    /// <summary>The line's own authorization number, when the core's file gave one ("Line prior authorization number").</summary>
+    public string? PriorAuthorizationNumber { get; set; }
 
     /// <summary>False when the core's file carried no line amounts; only claim totals were compared.</summary>
     public bool CoreAmountsPresent { get; set; }

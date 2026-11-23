@@ -119,6 +119,7 @@ returns per-claim comparisons, largest paid difference first.
 | `heldForProviderScreening` | Decided claims CHO would still hold because it could not screen a provider (`PROVIDERSCREEN`, see [Provider screening](#provider-screening)). They count as decided. |
 | `byChoStage` | The CHO stage behind each non-matching decision (its first finding; Pricing for an allowed difference and BenefitCalculation for a payment difference when no stage reported one), largest dollars first. |
 | `byDenialCodes` | Denial disagreements as `core CARC → CHO CARC` (`paid` when that side paid). |
+| `authorizationMismatches` | Claims one side denied for prior authorization and the other did not: "Core denied for authorization, CHO would pay" and "Core paid, CHO denies for authorization", with claims and dollars. See [Prior authorization](#prior-authorization). |
 | `byProcedure` | Procedure codes (or `REV` revenue codes) on lines that differ, with line counts and line dollars. |
 | `byBillingProvider` | Billing NPIs on non-matching decided claims. |
 
@@ -131,7 +132,10 @@ differences for a payment-integrity team: one row per differing line, or one
 claim-level row when the claim differs but no single line does (an outcome
 mismatch with no line amounts, say). Matches and claims that were not
 comparable are left out. `includeUndecided=true` adds the claims CHO could not
-decide, with the gap code and no CHO amounts. Text fields that start with `=`,
+decide, with the gap code and no CHO amounts. The last two columns are the
+evidence for an authorization finding: `PriorAuthorizationNumber` (the line's
+number from the core's file, else the claim's) and `AuthorizationFinding` (one
+of the two `authorizationMismatches` keys, or empty). Text fields that start with `=`,
 `+`, `-` or `@` get a leading apostrophe so a spreadsheet does not run them as
 formulas.
 
@@ -156,6 +160,38 @@ Paid, MemberLiability, LineOutcome, DenialCode) and every CHO stage finding.
 Line denial codes: the core's come from the CPCDS "Line payment denial code"
 the importer stores; CHO's are the line's adjustments other than the member's
 share (group PR) and the contractual write-down (CARC 45).
+
+## Prior authorization
+
+A shadow run checks authorizations the way a live CHO adjudication does: each
+line in CHO's prior-authorization scope is looked up in authorization-service by
+the authorization number on the claim (the line's, else the claim's), for the
+member, procedure, date of service and provider. When a line in scope has no
+number, or a number that is not valid for the service, CHO denies the claim
+(CARC 197); a line in scope only through the PA rule set pends `NOAUTH` for
+review instead, which a shadow run counts as undecided.
+
+For that to mean anything in a shadow run, CHO needs:
+
+- the plan's authorizations, loaded through the [authorization import](AUTHORIZATION-IMPORT.md)
+  (`*auth*` files in the drop);
+- the number the core matched each claim to, in the claim file's optional
+  `Prior authorization number` / `Line prior authorization number` columns
+  ([CPCDS importer](CPCDS-FILE-DROP-IMPORTER.md)). Without them every line in
+  scope looks unauthorized.
+
+The scope is the institutional Medicaid inpatient floor (place of service 21),
+plus plan-flagged procedure codes (`ClaimsAdjudication:PriorAuth:UsePlanFlaggedCodes`)
+and the plan's PA rule set (`UseRuleSet`) where a deployment turns them on.
+
+A disagreement is reported in `authorizationMismatches` and in the CSV's
+`AuthorizationFinding` column when one side denied for authorization (CARC 15,
+39, 62, 197 or 198) and the other did not. Both directions are leads for the
+plan's review, not determinations.
+
+Not yet: finding an authorization for a claim that carries no number (by
+member, service and date), and naming the medical policy or rule-set version
+behind CHO's decision.
 
 ## Provider screening
 
@@ -280,7 +316,7 @@ links to the page or guide that loads it ("What to load next").
 | Provider contracts and custom fee schedules | [Contract roster importer](CONTRACT-ROSTER-IMPORTER.md) and [fee schedule CSV importer](FEE-SCHEDULE-IMPORTER.md) |
 | Benefit plan design | benefit-plan-service API / portal |
 | Accumulators to date | The core's earlier claims in the same files ([Accumulators](#accumulators)). Load the whole plan year, or the core's [starting balances](#starting-balances), so a mid-year claim meets the deductible where the core did |
-| Prior authorizations | authorization-service |
+| Prior authorizations | The [authorization import](AUTHORIZATION-IMPORT.md), and the authorization number on each claim ([Prior authorization](#prior-authorization)) |
 
 ## Configuration
 

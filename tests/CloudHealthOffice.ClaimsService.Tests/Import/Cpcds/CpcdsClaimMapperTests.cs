@@ -166,6 +166,34 @@ public class CpcdsClaimMapperTests
         mapped.Warnings.Should().Contain(w => w.Contains("Bill type not given"));
     }
 
+    [Fact]
+    public void Prior_authorization_numbers_are_carried_for_the_claim_and_each_line()
+    {
+        var first = CpcdsTestFiles.ProfessionalRow();
+        first["Prior authorization number"] = " PA-2026-0042 ";
+        first["Line prior authorization number"] = "";
+        var second = CpcdsTestFiles.ProfessionalRow();
+        second["Prior authorization number"] = "PA-2026-0042";
+        second["Line number"] = "2";
+        second["Line prior authorization number"] = "PA-2026-0099";
+
+        var mapped = MapRows(first, second);
+
+        mapped.Errors.Should().BeEmpty();
+        mapped.Claim!.PriorAuthorizationNumber.Should().Be("PA-2026-0042");
+        mapped.Claim.ClaimLines.Select(l => l.PriorAuthorizationNumber).Should().Equal(null, "PA-2026-0099");
+    }
+
+    [Fact]
+    public void A_file_without_authorization_columns_leaves_the_numbers_empty()
+    {
+        var mapped = MapRows(CpcdsTestFiles.ProfessionalRow());
+
+        mapped.Errors.Should().BeEmpty();
+        mapped.Claim!.PriorAuthorizationNumber.Should().BeNull();
+        mapped.Claim.ClaimLines.Should().OnlyContain(l => l.PriorAuthorizationNumber == null);
+    }
+
     // ── oral ─────────────────────────────────────────────────────────────────
 
     [Fact]

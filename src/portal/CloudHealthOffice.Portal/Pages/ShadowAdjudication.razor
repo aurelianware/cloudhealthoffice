@@ -260,6 +260,9 @@
                             @ReasonTable("Denial codes (core to CHO)", "Codes", report.ByDenialCodes.Select(r => (r, r.Key)), "shadow-by-denial", money: true)
                         </MudItem>
                         <MudItem xs="12" md="6">
+                            @ReasonTable("Prior authorization against the claim", "Finding", report.AuthorizationMismatches.Select(r => (r, r.Key)), "shadow-by-authorization", money: true)
+                        </MudItem>
+                        <MudItem xs="12" md="6">
                             @ReasonTable("Procedures on differing lines", "Code", report.ByProcedure.Select(r => (r, r.Key)), "shadow-by-procedure", money: true)
                         </MudItem>
                         <MudItem xs="12" md="6">

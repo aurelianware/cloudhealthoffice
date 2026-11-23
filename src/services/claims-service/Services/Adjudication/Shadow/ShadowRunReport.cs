@@ -40,6 +40,13 @@ public class ShadowRunReport
     /// <summary>Denial disagreements as "core CARC → CHO CARC" ("paid" when that side paid).</summary>
     public List<ShadowReasonRow> ByDenialCodes { get; init; } = [];
 
+    /// <summary>
+    /// Prior-authorization disagreements (<see cref="ShadowAuthorizationMismatch"/>):
+    /// claims the core denied for authorization that CHO would pay, and claims
+    /// the core paid that CHO denies for authorization. Largest dollars first.
+    /// </summary>
+    public List<ShadowReasonRow> AuthorizationMismatches { get; init; } = [];
+
     /// <summary>Procedure (or revenue) codes on lines that differ, largest line dollars first.</summary>
     public List<ShadowReasonRow> ByProcedure { get; init; } = [];
 
@@ -122,6 +129,13 @@ public static class ShadowRunReportBuilder
                     .Where(r => r.Kind is ShadowDiscrepancyKind.OutcomeMismatch or ShadowDiscrepancyKind.DenialCodeMismatch)
                     .GroupBy(r => $"{r.CoreDenialCode ?? "paid"} → {r.ChoDenialCode ?? "paid"}", StringComparer.Ordinal)
                     .Select(g => Row(g.Key, g)),
+                topN, byMoney: true),
+            AuthorizationMismatches = Top(
+                differing
+                    .Select(r => (Result: r, Key: ShadowAuthorizationMismatch.For(r)))
+                    .Where(x => x.Key is not null)
+                    .GroupBy(x => x.Key!, StringComparer.Ordinal)
+                    .Select(g => Row(g.Key, g.Select(x => x.Result))),
                 topN, byMoney: true),
             ByProcedure = Top(ProcedureRows(differing), topN, byMoney: true),
             ByBillingProvider = Top(

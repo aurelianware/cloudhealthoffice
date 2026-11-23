@@ -176,6 +176,7 @@ internal static class CpcdsClaimMapper
                                  ?? (claimType == ClaimType.Pharmacy ? "01" : "11"),
             ClaimFrequencyCode = Header(C.ClaimFrequencyCode) ?? "1",
             OriginalClaimReference = Header(C.ClaimAdjustedFromIdentifier),
+            PriorAuthorizationNumber = Header(C.PriorAuthorizationNumber),
             TotalChargeAmount = totalCharge,
             ServiceDateFrom = serviceStart!.Value,
             ServiceDateTo = serviceEnd ?? serviceStart.Value,
@@ -556,6 +557,7 @@ internal static class CpcdsClaimMapper
                                   ?? serviceStart ?? default,
                 PlaceOfServiceCode = row.Get(C.PlaceOfServiceCode),
                 RevenueCode = row.Get(C.RevenueCenterCode),
+                PriorAuthorizationNumber = row.Get(C.LinePriorAuthorizationNumber),
                 NationalDrugCode = row.Get(C.NationalDrugCode),
                 DrugQuantity = Amount(row.Get(C.QuantityDispensed), C.QuantityDispensed, row.LineNumber, errors),
             };

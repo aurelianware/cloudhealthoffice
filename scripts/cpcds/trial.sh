@@ -326,6 +326,7 @@ shadow() {
       def money: (. * 100 | round) / 100 | tostring | "$" + .;
       "  \(.run.claimsCompared) claims compared; CHO decided \(if .comparableClaims > 0 then (.decidedClaims / .comparableClaims | pct) else "-" end), matched the core on \(.run.matchRate | pct) of those.",
       "  Core paid more on \(.corePaidMore.claims) claims (\(.corePaidMore.amount | money)), less on \(.corePaidLess.claims) (\(.corePaidLess.amount | money)).",
+      ((.authorizationMismatches // [])[] | "  \(.key): \(.claims) claims (\(.absolutePaidVariance | money))."),
       (if (.heldForProviderScreening.claims // 0) > 0 then
         "  CHO would hold \(.heldForProviderScreening.claims) of the decided claims until it can screen their providers"
         + " (OIG LEIE, SAM, NPPES): turn on exclusion screening (docs/integration/SHADOW-ADJUDICATION.md)." else empty end),

@@ -52,6 +52,13 @@ public enum CpcdsClaimColumn
     ClaimPaymentStatusCode,
     ClaimPaymentDenialCode,
 
+    // ── header: prior authorization (not a CPCDS element) ────────────────────
+    // CPCDS carries no authorization reference (the C4BB EOB's preAuthRef is
+    // optional and has no CPCDS column), but most cores can export the
+    // authorization number they matched the claim to. With it, a shadow run
+    // checks the claim against the plan's own authorization file.
+    PriorAuthorizationNumber,
+
     // ── header: providers ────────────────────────────────────────────────────
     ClaimBillingProviderNpi,
     ClaimBillingProviderNetworkStatus,
@@ -95,6 +102,7 @@ public enum CpcdsClaimColumn
     NationalDrugCode,
     QuantityDispensed,
     LinePaymentDenialCode,
+    LinePriorAuthorizationNumber,
     LineSubmittedAmount,
     LineAllowedAmount,
     LinePaymentAmount,
@@ -157,6 +165,7 @@ public static class CpcdsClaimColumns
             [CpcdsClaimColumn.ClaimProcessingStatusCode] = ["Claim processing status code"],
             [CpcdsClaimColumn.ClaimPaymentStatusCode] = ["Claim payment status code"],
             [CpcdsClaimColumn.ClaimPaymentDenialCode] = ["Claim payment denial code"],
+            [CpcdsClaimColumn.PriorAuthorizationNumber] = ["Prior authorization number", "Claim prior authorization number", "Authorization number", "Prior auth number"],
 
             [CpcdsClaimColumn.ClaimBillingProviderNpi] = ["Claim billing provider NPI"],
             [CpcdsClaimColumn.ClaimBillingProviderNetworkStatus] = ["Claim billing provider network status"],
@@ -197,6 +206,7 @@ public static class CpcdsClaimColumns
             [CpcdsClaimColumn.NationalDrugCode] = ["National drug code"],
             [CpcdsClaimColumn.QuantityDispensed] = ["Quantity dispensed"],
             [CpcdsClaimColumn.LinePaymentDenialCode] = ["Line payment denial code"],
+            [CpcdsClaimColumn.LinePriorAuthorizationNumber] = ["Line prior authorization number", "Line authorization number"],
             [CpcdsClaimColumn.LineSubmittedAmount] = ["Line submitted amount"],
             [CpcdsClaimColumn.LineAllowedAmount] = ["Line allowed amount"],
             [CpcdsClaimColumn.LinePaymentAmount] = ["Line payment amount"],
