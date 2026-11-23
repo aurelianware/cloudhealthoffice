@@ -96,7 +96,7 @@ A Texas Medicaid plan such as Parkland Community Health Plan (PCHP) usually send
 
 | Question | Answer |
 | --- | --- |
-| SDLC | Pull requests with CI checks: unit and integration tests (about 310,000 lines of tests), security scans, PHI checks, FHIR profile validation and Inferno conformance suites. Six ONC Inferno test kits pass against synthetic data |
+| SDLC | Pull requests with CI checks: unit and integration tests (about 310,000 lines of tests), security scans, PHI checks, FHIR profile validation and Inferno conformance suites. Nine ONC Inferno test kits (including Da Vinci CRD, DTR and PAS) pass against synthetic data |
 | Code review | Every change goes through a pull request. Deploys to the hosted environment run in a GitHub environment with required reviewers. Branch protection rules will be exported as evidence |
 | Source code availability | Source-available under BSL 1.1. Your security team can read the code it is reviewing |
 | Production data in development | Never. Development and the demo use synthetic data only; the hosted deploy refuses the demo tenant and synthetic data |
