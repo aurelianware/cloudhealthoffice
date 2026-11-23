@@ -8,7 +8,10 @@ namespace ClaimsService.Services.Adjudication.Shadow;
 /// team: one row per differing line, or one claim-level row (line number
 /// empty) when the claim differs but no single line does. Matches and claims
 /// that were not comparable are left out; claims CHO could not decide are
-/// included only on request.
+/// included only on request. Each row carries the authorization number the
+/// core matched the claim (or line) to and, where one side denied for
+/// authorization and the other did not, which way
+/// (<see cref="ShadowAuthorizationMismatch"/>).
 /// </summary>
 public static class ShadowDiscrepancyCsv
 {
@@ -18,7 +21,7 @@ public static class ShadowDiscrepancyCsv
         "Kind", "CoreOutcome", "ChoOutcome", "LineNumber", "ProcedureCode", "RevenueCode", "Charge",
         "CoreAllowed", "ChoAllowed", "CorePaid", "ChoPaid", "PaidVariance",
         "CoreMemberLiability", "ChoMemberLiability", "CoreDenialCode", "ChoDenialCode",
-        "Differences", "ChoPendCode", "ChoFindings",
+        "Differences", "ChoPendCode", "ChoFindings", "PriorAuthorizationNumber", "AuthorizationFinding",
     ];
 
     public static string Write(IEnumerable<ShadowAdjudicationResult> results, bool includeUndecided)
@@ -60,6 +63,7 @@ public static class ShadowDiscrepancyCsv
         Money(r.CoreMemberLiability), Undecided(r) ? null : Money(r.ChoMemberLiability),
         r.CoreDenialCode, r.ChoDenialCode,
         null, r.ChoPendCode, string.Join(" | ", r.ChoStageFindings),
+        r.PriorAuthorizationNumber, ShadowAuthorizationMismatch.For(r),
     ];
 
     private static string?[] LineRow(ShadowAdjudicationResult r, ShadowLineComparison l) =>
@@ -71,6 +75,7 @@ public static class ShadowDiscrepancyCsv
         Money(l.CoreMemberLiability), Money(l.ChoMemberLiability),
         l.CoreDenialCode, l.ChoDenialCode,
         string.Join(";", l.Differences), r.ChoPendCode, string.Join(" | ", r.ChoStageFindings),
+        l.PriorAuthorizationNumber ?? r.PriorAuthorizationNumber, ShadowAuthorizationMismatch.For(r, l),
     ];
 
     private static bool Undecided(ShadowAdjudicationResult r) => r.Kind == ShadowDiscrepancyKind.ChoUndecided;

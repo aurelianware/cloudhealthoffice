@@ -123,6 +123,63 @@ public class ShadowRunReportTests
         Assert.Contains(",80.00,,60.00,,,", c5);
     }
 
+    [Fact]
+    public void AuthorizationDisagreements_AreReportedBothWays_WithTheirDollars()
+    {
+        var results = Results();
+        // The core denied for a missing authorization (197); CHO found the
+        // authorization the claim names and would pay.
+        results.Add(new ShadowAdjudicationResult
+        {
+            Id = "r-A1", ClaimNumber = "A1", Kind = ShadowDiscrepancyKind.OutcomeMismatch,
+            BillingProviderNpi = "4444444444", PriorAuthorizationNumber = "PA-1",
+            CoreOutcome = ShadowOutcome.Denied, ChoOutcome = ShadowOutcome.Paid,
+            CoreDenialCode = "197", CorePaid = 0m, ChoPaid = 900m,
+            PaidVariance = 900m, AbsolutePaidVariance = 900m,
+        });
+        // The core paid; CHO denies line 1 for authorization (CARC 15, the
+        // number is not valid for this service).
+        results.Add(new ShadowAdjudicationResult
+        {
+            Id = "r-A2", ClaimNumber = "A2", Kind = ShadowDiscrepancyKind.PaidVariance,
+            BillingProviderNpi = "4444444444", PriorAuthorizationNumber = "PA-2",
+            CoreOutcome = ShadowOutcome.Paid, ChoOutcome = ShadowOutcome.Paid,
+            CorePaid = 500m, ChoPaid = 200m, PaidVariance = -300m, AbsolutePaidVariance = 300m,
+            Lines =
+            [
+                new ShadowLineComparison
+                {
+                    LineNumber = 1, ProcedureCode = "97110", CoreAmountsPresent = true,
+                    CorePaid = 300m, ChoPaid = 0m, ChoDenialCode = "15", PriorAuthorizationNumber = "PA-2-L1",
+                    Differences = [ShadowLineDifference.Paid, ShadowLineDifference.LineOutcome],
+                },
+            ],
+        });
+
+        var report = ShadowRunReportBuilder.Build(new ShadowAdjudicationRun(), results);
+
+        Assert.Equal(
+            [ShadowAuthorizationMismatch.CoreDeniedChoPays, ShadowAuthorizationMismatch.CorePaidChoDenies],
+            report.AuthorizationMismatches.Select(r => r.Key));
+        Assert.Equal(900m, report.AuthorizationMismatches[0].AbsolutePaidVariance);
+        Assert.Equal(["A1"], report.AuthorizationMismatches[0].ExampleClaims);
+        Assert.Equal(300m, report.AuthorizationMismatches[1].AbsolutePaidVariance);
+
+        var rows = ShadowDiscrepancyCsv.Write(results, includeUndecided: false)
+            .Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+        Assert.EndsWith(",PA-1,\"Core denied for authorization, CHO would pay\"", Assert.Single(rows, r => r.StartsWith("A1,")));
+        Assert.EndsWith(",PA-2-L1,\"Core paid, CHO denies for authorization\"", Assert.Single(rows, r => r.StartsWith("A2,")));
+    }
+
+    [Fact]
+    public void ClaimsWithNoAuthorizationDenial_HaveNoAuthorizationFinding()
+    {
+        var report = ShadowRunReportBuilder.Build(new ShadowAdjudicationRun(), Results());
+
+        Assert.Empty(report.AuthorizationMismatches);
+        Assert.All(Results(), r => Assert.Null(ShadowAuthorizationMismatch.For(r)));
+    }
+
     [Theory]
     [InlineData("=HYPERLINK(\"x\")", "\"'=HYPERLINK(\"\"x\"\")\"")]
     [InlineData("+1", "'+1")]
