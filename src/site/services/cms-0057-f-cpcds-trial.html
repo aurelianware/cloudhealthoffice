@@ -243,7 +243,20 @@
             <h3>How much of your volume a second core already handles</h3>
             <p>The undecided rate is the readiness number. For each claim it can't decide, the report names the missing input, such as no contract rate for the provider or a member not loaded. That list is the work plan.</p>
           </div>
+          <div class="ev-card">
+            <span class="ev-card__tag">Authorizations against claims</span>
+            <h3>Denied for no authorization, or paid without one</h3>
+            <p>Load your authorization file and include the authorization number in the claim file, and the report lists claims your core denied for authorization that Cloud Health Office would pay, and claims it paid that Cloud Health Office would deny, in claims and dollars, with the authorization number on each discrepancy row.</p>
+          </div>
+          <div class="ev-card">
+            <span class="ev-card__tag">A worklist, not a write-back</span>
+            <h3>Your claims team decides what to adjust</h3>
+            <p>The discrepancy CSV is a worklist for your claims and payment-integrity teams. They review it and run approved adjustments through your core's own mass-adjustment process. Cloud Health Office never writes to QNXT, Facets or any other core.</p>
+          </div>
         </div>
+        <p>
+          Why a plan should care, in more detail: <a href="/insights/cms-0057-f/why-shadow-adjudication">Why run shadow adjudication?</a>
+        </p>
         <p>
           Setting it up takes a few clicks in the portal. Turn shadow adjudication on for the plan under Imports &amp;
           EDI, then open <strong>Operations &rarr; Shadow Adjudication</strong>. Pick a claim file from the daily

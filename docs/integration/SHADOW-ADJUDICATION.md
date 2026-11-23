@@ -9,17 +9,60 @@ Nothing a member, a provider or a FHIR API sees changes. The claim keeps the
 core's answer, its EOB is unchanged, no accumulator moves and no event is sent.
 The comparisons live in their own collections.
 
-What it is for:
-
-- **Payment-integrity findings.** Claims where CHO, applying the plan's
-  contracts and benefits, would have paid differently, with the dollar
-  difference and the reason.
-- **A migration rehearsal with no risk.** How much of the plan's real claim
-  volume CHO can already adjudicate to the same answer, and, for the rest,
-  which missing input stops it.
-
 It reads claims the [CPCDS file-drop importer](CPCDS-FILE-DROP-IMPORTER.md)
 loaded (claims with an external source). Load claims there first.
+
+## Why a plan runs it
+
+A plan will rarely buy a second claims engine for its own sake. A shadow run
+earns its place by answering questions the plan already pays to answer:
+
+- **A migration rehearsal with no risk.** A parallel run is standard practice
+  before any core conversion; no plan switches off QNXT or Facets without
+  proof that the new system pays its claims the same way. A shadow run gives
+  that proof from the first file instead of after months of configuration:
+  how much of the plan's real claim volume CHO can already adjudicate to the
+  same answer, and, for the rest, which missing input stops it. The plan can
+  stop at any point and the core never noticed.
+- **Payment-integrity findings, in dollars.** Claims where CHO, applying the
+  plan's contracts, fee schedules and benefits, would have paid differently,
+  with the dollar difference and the reason. The report keeps possible
+  overpayments (`corePaidMore`) and possible underpayments (`corePaidLess`)
+  apart. Plans already pay payment-integrity vendors for leads like these,
+  often for a share of what is recovered.
+- **Authorizations checked against claims.** Claims the core denied for a
+  missing authorization when one is on file, and claims it paid without a valid
+  one where one was required (`authorizationMismatches`; see
+  [Prior authorization](#prior-authorization)). In Medicaid managed care both
+  are audit exposure: the state's contract sets the authorization rules, the
+  plan's encounters show what was paid, and auditors test whether payments
+  were supported.
+
+Every finding is a lead for the plan's review, not a determination.
+
+### What the plan does with the findings
+
+The run report and the [discrepancy CSV](#discrepancy-csv) are a worklist for
+the plan's claims operations and payment-integrity teams. They review it,
+decide which findings are real, and run the approved adjustments through the
+core's own mass-adjustment process, the way they handle any payment-integrity
+vendor's findings.
+
+**CHO never writes to the core.** Every adjustment changes a provider payment
+and an 835, and in Medicaid the encounter sent to the state, so it stays with
+the people accountable for those. A file laid out for one core's adjustment
+import (QNXT, Facets) is not built; it is scoped per plan when one asks, since
+plans customize those imports.
+
+### A shadow pilot
+
+The usual shape is 60 to 90 days on the plan's daily files. It ends with a
+payment-integrity report and an authorization-mismatch report in dollars, and
+a measured answer to whether CHO can carry the plan's core, line of business by
+line of business, with the list of what it would still need. The public
+version of this argument is
+[Why run shadow adjudication?](https://cloudhealthoffice.com/insights/cms-0057-f/why-shadow-adjudication)
+(`src/site/insights/cms-0057-f/why-shadow-adjudication.html`).
 
 ## How a shadow run stays read-only
 
