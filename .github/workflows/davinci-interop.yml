@@ -294,14 +294,7 @@ jobs:
     name: Inferno conformance kits judging CHO (US Core, CARIN BB, Plan-Net, Bulk Data, PDex, DTR, CRD, PAS, SMART)
     runs-on: ubuntu-latest
     needs: harness
-    # TEMPORARY (remove once all nine kits pass together): the pull request
-    # closing the PAS must-support gaps runs the kits on every push, so each
-    # fix is judged by them without a manual dispatch. PAS passes on its own
-    # (run 45089782312); this push confirms the other eight still pass beside
-    # it with the validator's new session and memory limits.
-    if: >-
-      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-      || (github.event_name == 'pull_request' && github.head_ref == 'claude/pas-inferno-9of9')
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     continue-on-error: true
     # Five kit builds, eight CHO service builds, and five suites that validate
     # every resource they read. The outer bound, not an expectation.
