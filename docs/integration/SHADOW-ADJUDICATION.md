@@ -59,7 +59,10 @@ plans customize those imports.
 The usual shape is 60 to 90 days on the plan's daily files. It ends with a
 payment-integrity report and an authorization-mismatch report in dollars, and
 a measured answer to whether CHO can carry the plan's core, line of business by
-line of business, with the list of what it would still need. The public
+line of business, with the list of what it would still need. What the plan sends,
+the security and BAA steps before any data moves, the timeline to the first
+report and what the report contains are in the
+[shadow pilot onboarding kit](SHADOW-PILOT-ONBOARDING.md). The public
 version of this argument is
 [Why run shadow adjudication?](https://cloudhealthoffice.com/insights/cms-0057-f/why-shadow-adjudication)
 (`src/site/insights/cms-0057-f/why-shadow-adjudication.html`).
