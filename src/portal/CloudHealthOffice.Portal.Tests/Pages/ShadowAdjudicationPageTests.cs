@@ -16,6 +16,7 @@ public class ShadowAdjudicationPageTests : TestContext
 {
     private readonly Mock<IDataDropService> _drops = new();
     private readonly Mock<IShadowAdjudicationClient> _shadow = new();
+    private readonly Mock<IShadowPendedClient> _pended = new();
     private readonly Mock<IUserContextService> _user = new();
     private readonly Mock<IShadowQuickStartClient> _quick = new();
 
@@ -31,6 +32,7 @@ public class ShadowAdjudicationPageTests : TestContext
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddSingleton(_drops.Object);
         Services.AddSingleton(_shadow.Object);
+        Services.AddSingleton(_pended.Object);
         Services.AddSingleton(_user.Object);
         Services.AddSingleton(_quick.Object);
         _user.Setup(u => u.GetCurrentUserAsync()).ReturnsAsync(new UserContext { UserId = "ops-1", Roles = ["ClaimsSupervisor"] });

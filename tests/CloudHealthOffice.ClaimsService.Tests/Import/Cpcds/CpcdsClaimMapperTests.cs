@@ -116,10 +116,64 @@ public class CpcdsClaimMapperTests
     [InlineData("active", "partiallypaid", null, 10, ClaimStatus.PartiallyPaid)]
     [InlineData("cancelled", "paid", null, 10, ClaimStatus.Voided)]
     [InlineData(null, "Denied", null, 0, ClaimStatus.Denied)]
+    [InlineData("active", "pended", null, 0, ClaimStatus.Pended)]
+    [InlineData(null, "Pending", null, 0, ClaimStatus.Pended)]
+    [InlineData(null, "suspended", null, 0, ClaimStatus.Pended)]
     public void Status_follows_processing_status_then_payment_status_then_the_amounts(
         string? processing, string? payment, string? denial, int paid, ClaimStatus expected)
     {
         CpcdsClaimMapper.MapStatus(processing, payment, denial, paid, []).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(null, null, 0, ClaimStatus.Pended)]
+    [InlineData(null, "50", 0, ClaimStatus.Denied)]
+    [InlineData(null, null, 10, ClaimStatus.Paid)]
+    [InlineData("paid", null, 0, ClaimStatus.Paid)]
+    public void A_pend_reason_code_means_pended_only_when_nothing_else_decides(
+        string? payment, string? denial, int paid, ClaimStatus expected)
+    {
+        CpcdsClaimMapper.MapStatus(null, payment, denial, paid, [], pendCode: "P01").Should().Be(expected);
+    }
+
+    [Fact]
+    public void A_pended_claim_is_loaded_open_with_the_cores_pend_reason_and_no_payment()
+    {
+        var row = CpcdsTestFiles.ProfessionalRow();
+        row["Claim payment status code"] = "pended";
+        row["Claim payment amount"] = "";
+        row["Claim amount paid to provider"] = "";
+        row["Line payment amount"] = "";
+        row["Claim paid date"] = "";
+        row["Pend reason code"] = "MR01";
+        row["Pend reason"] = "Medical records requested";
+        row["Pended date"] = "2026-03-04";
+
+        var mapped = MapRows(row);
+
+        mapped.Errors.Should().BeEmpty();
+        var claim = mapped.Claim!;
+        // Not CHO's Pended status: the core's pend is not CHO's work queue.
+        claim.Status.Should().Be(ClaimStatus.Received);
+        claim.PendDetails.Should().BeNull();
+        claim.AdjudicatedDate.Should().BeNull();
+        claim.PaidDate.Should().BeNull();
+        claim.AdjudicationResult!.PayerPayment.Should().Be(0m);
+        claim.ExternalSource!.CorePend!.Code.Should().Be("MR01");
+        claim.ExternalSource.CorePend.Reason.Should().Be("Medical records requested");
+        claim.ExternalSource.CorePend.PendedDate.Should().Be(new DateTime(2026, 3, 4));
+    }
+
+    [Fact]
+    public void A_paid_claim_carries_no_core_pend_even_with_a_pend_reason_column()
+    {
+        var row = CpcdsTestFiles.ProfessionalRow();
+        row["Pend reason code"] = "MR01";
+
+        var mapped = MapRows(row);
+
+        mapped.Errors.Should().BeEmpty();
+        mapped.Claim!.ExternalSource.Should().BeNull();
     }
 
     // ── institutional ────────────────────────────────────────────────────────

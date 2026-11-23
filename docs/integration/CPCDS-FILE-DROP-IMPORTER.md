@@ -74,7 +74,7 @@ Required columns: `Claim unique identifier`, `Member id`, `Claim type`,
 | Claim frequency code | `ClaimFrequencyCode` | Default `1` |
 | Member admission / discharge date, Claim diagnosis related group, admission type and source, Patient discharge status code | `Institutional.*` | |
 | Claim processing status code | `Status` | `cancelled`, `entered-in-error`, `void` → Voided |
-| Claim payment status code | `Status` | `paid`, `partiallypaid`, `denied`; when absent, a denial code on a claim that paid nothing means Denied, otherwise Paid |
+| Claim payment status code | `Status` | `paid`, `partiallypaid`, `denied`; `pended` (also `pending`, `suspended`, `held`) for a claim the core has pended, see the pend columns below; when absent, a denial code on a claim that paid nothing means Denied, a pend reason code on a claim that paid nothing means pended, otherwise Paid |
 | Claim payment denial code | adjudication `DenialReasonCode` (EOB adjustment reason, CARC) | |
 | Claim billing provider NPI | `BillingProviderNPI` (EOB `provider`, `payee`) | Must be 10 digits |
 | Claim billing provider network status | adjudication `NetworkTier` (EOB `billingnetworkstatus`) | `innetwork` / `outofnetwork` and common spellings |
@@ -90,6 +90,7 @@ Required columns: `Claim unique identifier`, `Member id`, `Claim type`,
 | Procedure code, Procedure description, Modifier Code-1..4 | line procedure | ICD-10-PCS codes (by `Procedure code type`) go to `Institutional.PrincipalProcedure` / `OtherProcedures` instead |
 | Line submitted / allowed / payment amount, Line member liability | line `ChargeAmount`, line adjudication | |
 | Line payment denial code | adjudication adjustment reasons | Group code is not in CPCDS, so it is left out |
+| Pend reason code, Pend reason, Pended date | `ExternalSource.CorePend` | Not CPCDS elements: optional columns for a claim the core has pended (also read as `Pend code`, `Pend reason description`, `Pend date`). Such a claim is stored as Received, not as CHO's Pended status, so it never reaches CHO's pend work queues or examiners; no payment amount is needed. A later file with the examiner's decision makes it a new version. A [shadow run](SHADOW-ADJUDICATION.md#pended-claims) reports what CHO would have done with it |
 | Prior authorization number, Line prior authorization number | `PriorAuthorizationNumber` on the claim and the line | Not CPCDS elements: optional columns for the authorization number the core matched the claim to (also read as `Authorization number`, `Prior auth number`, `Line authorization number`). A [shadow run](SHADOW-ADJUDICATION.md#prior-authorization) checks it against the plan's authorization file |
 | Tooth number, Tooth surface | line `Teeth` | Oral claims |
 | Diagnosis code, Diagnosis description, Present on admission, Diagnosis code type, Diagnosis type | `DiagnosisCodes[]` | ICD-10-CM only; others are left off with a warning. One principal: the first flagged, else the first |

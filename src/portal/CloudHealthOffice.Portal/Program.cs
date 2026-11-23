@@ -294,6 +294,7 @@ builder.Services.AddScoped<IShadowAdjudicationClient, ShadowAdjudicationClient>(
 builder.Services.AddScoped<IShadowQuickStartClient, ShadowQuickStartClient>();
 builder.Services.AddScoped<IShadowFindingsClient, ShadowFindingsClient>();
 builder.Services.AddScoped<IShadowAppealsClient, ShadowAppealsClient>();
+builder.Services.AddScoped<IShadowPendedClient, ShadowPendedClient>();
 builder.Services.AddScoped<IEligibilityService, EligibilityService>();
 builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
 builder.Services.AddScoped<ICms0057Service, Cms0057Service>();

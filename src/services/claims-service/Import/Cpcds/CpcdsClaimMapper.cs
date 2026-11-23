@@ -118,12 +118,22 @@ internal static class CpcdsClaimMapper
         var memberLiability = Amount(Header(C.MemberLiability), C.MemberLiability, null, errors)
             ?? deductible + coinsurance + copay;
 
-        if (paid is null && Header(C.ClaimPaymentAmount) is null)
-            errors.Add("No payment amount: \"Claim payment amount\", \"Claim amount paid to provider\" and \"Line payment amount\" are all empty.");
-
         var denialCode = Header(C.ClaimPaymentDenialCode);
+        var pendCode = Header(C.PendReasonCode);
         var status = MapStatus(
-            Header(C.ClaimProcessingStatusCode), Header(C.ClaimPaymentStatusCode), denialCode, paid ?? 0m, warnings);
+            Header(C.ClaimProcessingStatusCode), Header(C.ClaimPaymentStatusCode), denialCode, paid ?? 0m, warnings, pendCode);
+
+        // A claim the core has pended has paid nothing yet, and may not say so.
+        var corePended = status == ClaimStatus.Pended;
+        if (paid is null && Header(C.ClaimPaymentAmount) is null && !corePended)
+            errors.Add("No payment amount: \"Claim payment amount\", \"Claim amount paid to provider\" and \"Line payment amount\" are all empty.");
+        var pendedDate = corePended ? Date(Header(C.PendedDate), C.PendedDate, null, errors) : null;
+
+        // The core's pend is kept on the claim's source, not as CHO's Pended
+        // status: a pended core claim is not CHO's work, and must not reach
+        // CHO's pend work queues or examiners. It is an open claim.
+        if (corePended)
+            status = ClaimStatus.Received;
 
         if (errors.Count > 0)
             return result;
@@ -132,7 +142,7 @@ internal static class CpcdsClaimMapper
         {
             NetworkTier = NetworkTier(Header(C.ClaimBillingProviderNetworkStatus) ?? Header(C.ClaimPerformingProviderNetworkStatus)),
             AllowedAmount = allowed ?? 0m,
-            PayerPayment = paid!.Value,
+            PayerPayment = paid ?? 0m,
             DeductibleAmount = deductible,
             CoinsuranceAmount = coinsurance,
             CopayAmount = copay,
@@ -186,12 +196,23 @@ internal static class CpcdsClaimMapper
             VersionState = ClaimRepository.MapStatusToVersionState(status),
             SubmittedDate = receivedDate ?? serviceEnd ?? serviceStart.Value,
             ReceivedDate = receivedDate,
-            AdjudicatedDate = paidDate ?? receivedDate,
+            AdjudicatedDate = corePended ? null : paidDate ?? receivedDate,
             PaidDate = status is ClaimStatus.Paid or ClaimStatus.PartiallyPaid ? paidDate : null,
             AdjudicationResult = adjudication,
             CreatedBy = actorId,
             LastUpdatedBy = actorId,
             PublishedBy = actorId,
+            ExternalSource = corePended
+                ? new ClaimExternalSource
+                {
+                    CorePend = new ClaimCorePend
+                    {
+                        Code = pendCode,
+                        Reason = Header(C.PendReason),
+                        PendedDate = pendedDate,
+                    },
+                }
+                : null,
         };
 
         if (claimType == ClaimType.Institutional)
@@ -242,9 +263,14 @@ internal static class CpcdsClaimMapper
     /// no payment status, a denial code on a claim that paid nothing means it
     /// was denied: a claim that paid nothing because the money went to the
     /// deductible carries no denial code, and is paid.
+    /// <see cref="ClaimStatus.Pended"/> means the core has the claim pended
+    /// (payment status "pended", or no payment status, a pend reason code and
+    /// nothing paid); the mapper stores such a claim as received and keeps
+    /// the pend on <see cref="ClaimExternalSource.CorePend"/>.
     /// </summary>
     internal static ClaimStatus MapStatus(
-        string? processingStatus, string? paymentStatus, string? denialCode, decimal paid, List<string> warnings)
+        string? processingStatus, string? paymentStatus, string? denialCode, decimal paid, List<string> warnings,
+        string? pendCode = null)
     {
         switch (processingStatus?.Trim().ToLowerInvariant())
         {
@@ -267,6 +293,14 @@ internal static class CpcdsClaimMapper
             case "denied":
             case "deny":
                 return ClaimStatus.Denied;
+            case "pended":
+            case "pend":
+            case "pending":
+            case "suspended":
+            case "suspend":
+            case "held":
+            case "hold":
+                return ClaimStatus.Pended;
             case null:
             case "":
                 break;
@@ -275,6 +309,8 @@ internal static class CpcdsClaimMapper
                 break;
         }
 
+        if (!string.IsNullOrWhiteSpace(pendCode) && string.IsNullOrWhiteSpace(denialCode) && paid == 0m)
+            return ClaimStatus.Pended;
         return !string.IsNullOrWhiteSpace(denialCode) && paid == 0m ? ClaimStatus.Denied : ClaimStatus.Paid;
     }
 

@@ -104,6 +104,13 @@ public class ShadowAdjudicationResult
     public PriorAuthorizationLineEvidence? EvidenceFor(int lineNumber) =>
         PriorAuthorizationEvidence.FirstOrDefault(e => e.LineNumber == lineNumber);
 
+    /// <summary>
+    /// Codes on the claim that were not valid on the date of service, by CHO's
+    /// dated CMS code sets (<see cref="Stages.CodeValidityStage"/>). A finding
+    /// even when both sides paid: see <see cref="ShadowCodeValidity"/>.
+    /// </summary>
+    public List<CodeValidity.CodeValidityFinding> CodeValidityFindings { get; set; } = [];
+
     public string Kind { get; set; } = ShadowDiscrepancyKind.NotComparable;
 
     public string CoreOutcome { get; set; } = ShadowOutcome.NotFinal;
@@ -145,6 +152,21 @@ public class ShadowAdjudicationResult
     public List<string> ChoStageFindings { get; set; } = [];
 
     public List<ShadowLineComparison> Lines { get; set; } = [];
+
+    /// <summary>
+    /// The core had this claim pended when it was loaded. CHO still ran it, so
+    /// <see cref="ChoOutcome"/> says what CHO would have done; the kind is
+    /// NotComparable because the core has not decided. The pended-claims
+    /// report compares CHO's answer with the examiner's final decision once a
+    /// later file brings it.
+    /// </summary>
+    public bool CorePended { get; set; }
+    public string? CorePendCode { get; set; }
+    public string? CorePendReason { get; set; }
+    public DateTime? CorePendedDate { get; set; }
+
+    /// <summary>When the core received the claim, if the file said; days pended count from the pended date, else this.</summary>
+    public DateTime? CoreReceivedDate { get; set; }
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }

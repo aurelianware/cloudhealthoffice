@@ -861,6 +861,30 @@ public class ClaimExternalSource
     /// so. The freshness of the Patient Access data is measured from this.
     /// </summary>
     public DateTime? ExtractedAt { get; set; }
+
+    /// <summary>
+    /// Set when the core had the claim pended when it was extracted: the
+    /// claim is stored as <see cref="ClaimStatus.Received"/> (open, and not in
+    /// CHO's own pend work queues) and this keeps the core's pend reason, so a
+    /// shadow run can say what CHO would have done with it.
+    /// </summary>
+    public ClaimCorePend? CorePend { get; set; }
+}
+
+/// <summary>Why the core pended an imported claim (see <see cref="ClaimExternalSource.CorePend"/>).</summary>
+[BsonIgnoreExtraElements]
+public class ClaimCorePend
+{
+    /// <summary>The core's pend reason code, as the plan's file gives it.</summary>
+    [StringLength(50)]
+    public string? Code { get; set; }
+
+    /// <summary>The pend reason's description.</summary>
+    [StringLength(500)]
+    public string? Reason { get; set; }
+
+    /// <summary>When the core pended the claim, if the file says.</summary>
+    public DateTime? PendedDate { get; set; }
 }
 
 /// <summary>A postal address carried on a claim (837 N3/N4).</summary>

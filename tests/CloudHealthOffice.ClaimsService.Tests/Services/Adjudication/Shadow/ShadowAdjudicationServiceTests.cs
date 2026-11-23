@@ -182,6 +182,37 @@ public class ShadowAdjudicationServiceTests
     }
 
     [Fact]
+    public async Task AClaimTheCorePended_IsRunThroughThePipeline_AndKeptOutOfTheComparison()
+    {
+        var pended = Imported("cpcds-1");
+        pended.Status = ClaimStatus.Received;
+        pended.PaidDate = null;
+        pended.ReceivedDate = new DateTime(2026, 3, 1);
+        pended.AdjudicationResult = new AdjudicationResult();
+        pended.ExternalSource!.CorePend = new ClaimCorePend
+        {
+            Code = "MR01", Reason = "Medical records requested", PendedDate = new DateTime(2026, 3, 4),
+        };
+        Store(pended);
+
+        var response = await Run(new() { ClaimIds = ["cpcds-1"] });
+
+        var result = Assert.Single(response.Results);
+        Assert.Equal(ShadowDiscrepancyKind.NotComparable, result.Kind);
+        Assert.Equal(ShadowOutcome.NotFinal, result.CoreOutcome);
+        Assert.Equal(ShadowOutcome.Paid, result.ChoOutcome);
+        Assert.Equal(60m, result.ChoPaid);
+        Assert.True(result.CorePended);
+        Assert.Equal("MR01", result.CorePendCode);
+        Assert.Equal("Medical records requested", result.CorePendReason);
+        Assert.Equal(new DateTime(2026, 3, 4), result.CorePendedDate);
+        Assert.Equal(new DateTime(2026, 3, 1), result.CoreReceivedDate);
+        Assert.Equal(0m, result.AbsolutePaidVariance);
+        Assert.Null(response.Run.MatchRate);
+        await _pipeline.ReceivedWithAnyArgs(1).EvaluateShadowAsync(default!, default!, default, default, default);
+    }
+
+    [Fact]
     public void TheRunTotals_SeparateUndecidedFromDecided()
     {
         var run = new ShadowAdjudicationRun();

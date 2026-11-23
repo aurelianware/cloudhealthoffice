@@ -486,6 +486,12 @@ builder.Services.AddScoped<IAuthorizationMatchClient>(sp => sp.GetRequiredServic
 // closing a gap the original 5.5 stage scope never covered — see the
 // stage's own doc comment and docs/architecture/claim-adjudication-pipeline.md.
 builder.Services.AddScoped<IClaimAdjudicationStage, ScrubbingStage>();
+// Order=105: ICD-10-CM/PCS and HCPCS codes valid on the date of service, from
+// terminology-service's dated CMS code sets. Report-only unless configured.
+builder.Services.Configure<CodeValidityOptions>(builder.Configuration.GetSection(CodeValidityOptions.SectionName));
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.CodeValidity.ICodeValidityClient,
+    ClaimsService.Services.Adjudication.CodeValidity.HttpCodeValidityClient>();
+builder.Services.AddScoped<IClaimAdjudicationStage, CodeValidityStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, TimelyFilingStage>(); // Order=110
 builder.Services.AddScoped<IClaimAdjudicationStage, DuplicateClaimStage>(); // Order=120
 builder.Services.AddScoped<IClaimAdjudicationStage, ProviderIntegrityStage>();
@@ -640,6 +646,8 @@ builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdj
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAppealOutcomeRepository,
     ClaimsService.Services.Adjudication.Shadow.ShadowAppealOutcomeRepositoryMongo>();
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.ShadowAppealService>();
+// Pended claims: what CHO would have done with the core's pends, by pend reason.
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.ShadowPendedAnalysisService>();
 // Background shadow runs: whole import batches, in pages, resumable across replicas.
 builder.Services.AddHostedService<ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationWorker>();
 // Retro rate reprocessing, step 2: dry-run impact of a fee schedule change on

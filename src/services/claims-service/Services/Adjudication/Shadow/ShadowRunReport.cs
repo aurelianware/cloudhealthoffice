@@ -69,6 +69,15 @@ public class ShadowRunReport
     /// </summary>
     public ShadowDenialVerification DenialVerification { get; init; } = new();
 
+    /// <summary>
+    /// Claims the core paid with a code not valid on the date of service
+    /// (<see cref="ShadowCodeValidity"/>), by reason (terminated, not yet
+    /// effective, not in the code set, ICD-10 header not billable). Counted over
+    /// every comparable claim, matches included: in Report mode both sides pay.
+    /// Most claims first.
+    /// </summary>
+    public List<ShadowReasonRow> CorePaidWithInvalidCodes { get; init; } = [];
+
     /// <summary>Procedure (or revenue) codes on lines that differ, largest line dollars first.</summary>
     public List<ShadowReasonRow> ByProcedure { get; init; } = [];
 
@@ -169,6 +178,11 @@ public static class ShadowRunReportBuilder
                 PriorAuthorizationNumberSource.Matched,
                 comparable.Where(r => r.PriorAuthorizationEvidence.Any(e => e.NumberSource == PriorAuthorizationNumberSource.Matched))),
             DenialVerification = ShadowDenialVerificationBuilder.Build(results, topN),
+            CorePaidWithInvalidCodes = Top(
+                comparable.Where(r => ShadowCodeValidity.For(r) is not null)
+                    .GroupBy(ShadowCodeValidity.ReasonKey, StringComparer.Ordinal)
+                    .Select(g => Row(g.Key, g)),
+                topN, byMoney: false),
             ByProcedure = Top(ProcedureRows(differing), topN, byMoney: true),
             ByBillingProvider = Top(
                 differing.GroupBy(r => r.BillingProviderNpi ?? "unknown", StringComparer.Ordinal)
