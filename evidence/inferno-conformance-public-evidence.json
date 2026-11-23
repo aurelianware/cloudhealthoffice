@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "inferno-conformance",
-  "generatedAtUtc": "2026-11-21T06:56:37Z",
-  "sourceCommit": "13c4b2797c6ff49ea013df31c8f66c765a9160ce",
-  "sourceCommitShort": "13c4b2797c6f",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/13c4b2797c6ff49ea013df31c8f66c765a9160ce",
+  "generatedAtUtc": "2026-11-23T07:39:27Z",
+  "sourceCommit": "a7f3b4b02554c78b9f9bc7457214b32043efa528",
+  "sourceCommitShort": "a7f3b4b02554",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/a7f3b4b02554c78b9f9bc7457214b32043efa528",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence and of the Da Vinci interoperability snapshot. A kit result never changes a CMS-0057-F scenario status, and no result here is CMS, ONC or HL7 certification.",
   "kits": [
@@ -34,7 +34,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-21T06:48:35.2302505+00:00",
+      "testedAtUtc": "2026-11-23T07:14:43.5899658+00:00",
       "tests": {
         "passed": 39,
         "failed": 0,
@@ -114,7 +114,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-21T06:51:48.3151520+00:00",
+      "testedAtUtc": "2026-11-23T07:30:12.3753059+00:00",
       "tests": {
         "passed": 13,
         "failed": 0,
@@ -151,7 +151,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-21T06:56:09.0091051+00:00",
+      "testedAtUtc": "2026-11-23T07:38:41.4122627+00:00",
       "tests": {
         "passed": 21,
         "failed": 0,
@@ -232,7 +232,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-21T06:43:11.1725530+00:00",
+      "testedAtUtc": "2026-11-23T06:57:32.5213488+00:00",
       "tests": {
         "passed": 41,
         "failed": 0,
@@ -387,7 +387,7 @@
       "groups": [],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-21T06:53:47.4318196+00:00",
+      "testedAtUtc": "2026-11-23T07:32:38.1515688+00:00",
       "tests": {
         "passed": 180,
         "failed": 0,
@@ -791,7 +791,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-21T06:40:27.2269486+00:00",
+      "testedAtUtc": "2026-11-23T06:54:25.8398036+00:00",
       "tests": {
         "passed": 31,
         "failed": 0,
@@ -814,21 +814,371 @@
         }
       ],
       "knownKitIssues": []
+    },
+    {
+      "scenarioId": "INFERNO-CRD-SERVER-001",
+      "title": "Inferno CRD 2.2.1 server suite against CHO's CDS Hooks services",
+      "protocol": "CRD",
+      "regulatoryContext": "The Prior Authorization API CMS-0057-F requires by January 1, 2027, which must tell providers whether a service needs prior authorization and what documentation it needs. Da Vinci CRD is the implementation guide CMS recommends for that part: the provider's EHR asks the payer through CDS Hooks as the order is written.",
+      "kit": {
+        "name": "inferno-framework/davinci-crd-test-kit",
+        "key": "inferno-crd",
+        "upstreamRepository": "https://github.com/inferno-framework/davinci-crd-test-kit",
+        "tag": "v0.15.0",
+        "commit": "86be7f4bf6817960aa204f8ce134cea466bd73d2",
+        "reference": "https://github.com/inferno-framework/davinci-crd-test-kit@v0.15.0",
+        "implementationGuides": {
+          "CRD": "2.0.1 and 2.2.1",
+          "CDS Hooks": "2.0"
+        }
+      },
+      "suite": "crd_server_v221",
+      "groups": [],
+      "status": "Passed",
+      "statusReason": null,
+      "testedAtUtc": "2026-11-23T07:04:56.8619061+00:00",
+      "tests": {
+        "passed": 64,
+        "failed": 0,
+        "skipped": 70,
+        "omitted": 9,
+        "knownKitIssue": 0,
+        "total": 143
+      },
+      "failingTests": [],
+      "notRunTests": [
+        {
+          "test": "crd_v221_server_tls_version_stu2",
+          "result": "omit",
+          "message": "This test is disabled because INFERNO_DISABLE_TLS_TEST is present in env."
+        },
+        {
+          "test": "Group01",
+          "result": "wait",
+          "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_server_invoke_hook_test",
+          "result": "skip",
+          "message": "Request body not provided, skipping test."
+        },
+        {
+          "test": "crd_v221_service_request_required_fields_validation",
+          "result": "skip",
+          "message": "No appointment-book request was made in a previous test as expected."
+        },
+        {
+          "test": "crd_v221_service_request_context_validation",
+          "result": "skip",
+          "message": "Input 'appointment_book_contexts' is nil, skipping test."
+        },
+        {
+          "test": "crd_v221_service_request_optional_fields_validation",
+          "result": "skip",
+          "message": "No appointment-book request was made in a previous test as expected."
+        },
+        {
+          "test": "Group02",
+          "result": "skip",
+          "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_service_response_validation",
+          "result": "skip",
+          "message": "No appointment-book request was made in a previous test as expected."
+        },
+        {
+          "test": "crd_v221_external_reference_card_validation",
+          "result": "skip",
+          "message": "No successful hook responses were received"
+        },
+        {
+          "test": "crd_v221_launch_smart_app_card_validation",
+          "result": "skip",
+          "message": "No successful hook responses were received"
+        },
+        {
+          "test": "crd_v221_valid_instructions_card_received",
+          "result": "skip",
+          "message": "No successful hook responses were received"
+        },
+        {
+          "test": "crd_v221_coverage_info_system_action_validation",
+          "result": "skip",
+          "message": "No successful hook responses were received"
+        },
+        {
+          "test": "crd_v221_all_responses_include_coverage_information",
+          "result": "skip",
+          "message": "No successful hook calls were made with resources which did not already contain a coverage-information extension."
+        },
+        {
+          "test": "crd_v221_coverage_information_card_absence",
+          "result": "skip",
+          "message": "No appointment-book request was made in a previous test as expected."
+        },
+        {
+          "test": "crd_v221_request_form_completion_response_validation",
+          "result": "skip",
+          "message": "No successful hook responses were received"
+        },
+        {
+          "test": "crd_v221_create_or_update_coverage_info_response_validation",
+          "result": "skip",
+          "message": "No successful hook responses were received"
+        },
+        {
+          "test": "crd_v221_coverage_info_configuration",
+          "result": "skip",
+          "message": "No successful appointment-book response contained coverage-info content to suppress."
+        },
+        {
+          "test": "crd_v221_unknown_configuration",
+          "result": "skip",
+          "message": "No successful appointment-book response contained a coverage-info action."
+        },
+        {
+          "test": "crd_v221_unknown_context",
+          "result": "skip",
+          "message": "No successful appointment-book response contained a coverage-info action."
+        },
+        {
+          "test": "crd_v221_unknown_cds_hooks_elements",
+          "result": "skip",
+          "message": "No successful appointment-book response contained a coverage-info action."
+        },
+        {
+          "test": "Group03",
+          "result": "skip",
+          "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_server_appointment_book",
+          "result": "skip",
+          "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_server_encounter_start",
+          "result": "skip",
+          "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_server_order_select",
+          "result": "wait",
+          "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_propose_alternate_request_card_validation",
+          "result": "skip",
+          "message": "order-select hook responses do not contain any Propose Alternate Request cards."
+        },
+        {
+          "test": "crd_v221_additional_orders_card_validation",
+          "result": "skip",
+          "message": "order-select hook responses do not contain any Additional Orders cards."
+        },
+        {
+          "test": "crd_v221_server_order_sign",
+          "result": "wait",
+          "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_order_dispatch_coverage_information",
+          "result": "skip",
+          "message": "No successful hook calls were made with resources which did not already contain a coverage-information extension."
+        },
+        {
+          "test": "crd_v221_server_order_dispatch",
+          "result": "skip",
+          "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_server_encounter_discharge",
+          "result": "skip",
+          "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_server_technical_issues_group",
+          "result": "wait",
+          "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_server_no_member_found_group",
+          "result": "wait",
+          "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_server_coverage_not_found_group",
+          "result": "wait",
+          "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_server_no_active_coverage_group",
+          "result": "wait",
+          "message": "(no message)"
+        }
+      ],
+      "knownKitIssues": []
+    },
+    {
+      "scenarioId": "INFERNO-PAS-SERVER-001",
+      "title": "Inferno PAS 2.2.1 server suite against CHO",
+      "protocol": "PAS",
+      "regulatoryContext": "The Prior Authorization API CMS-0057-F requires by January 1, 2027, which must let providers send a prior authorization request and receive the decision. Da Vinci PAS is the implementation guide CMS recommends for that part.",
+      "kit": {
+        "name": "inferno-framework/davinci-pas-test-kit",
+        "key": "inferno-pas",
+        "upstreamRepository": "https://github.com/inferno-framework/davinci-pas-test-kit",
+        "tag": "v0.16.0",
+        "commit": "1db14e7899d0519138ed9ac72de8ad2c996c10ac",
+        "reference": "https://github.com/inferno-framework/davinci-pas-test-kit@v0.16.0",
+        "implementationGuides": {
+          "PAS": "2.0.1 and 2.2.1",
+          "Subscriptions R5 Backport": "1.1.0"
+        }
+      },
+      "suite": "davinci_pas_server_suite_v221",
+      "groups": [],
+      "status": "Failed",
+      "statusReason": null,
+      "testedAtUtc": "2026-11-23T07:26:18.3086448+00:00",
+      "tests": {
+        "passed": 81,
+        "failed": 2,
+        "skipped": 1,
+        "omitted": 0,
+        "knownKitIssue": 0,
+        "total": 84
+      },
+      "failingTests": [
+        {
+          "test": "pas_server_v221_pas_response_bundle_validation_test_pended",
+          "result": "fail",
+          "message": "Bundle response(s) returned are not conformant. Check messages for issues found."
+        },
+        {
+          "test": "Group01",
+          "result": "fail",
+          "message": "(no message)"
+        },
+        {
+          "test": "pas_server_v221_submit_response_bundle_validation_test_must_support",
+          "result": "fail",
+          "message": "Bundle response(s) returned are not conformant. Check messages for issues found."
+        }
+      ],
+      "notRunTests": [
+        {
+          "test": "Group02",
+          "result": "wait",
+          "message": "(no message)"
+        },
+        {
+          "test": "pas_server_v221_pended_use_case",
+          "result": "wait",
+          "message": "(no message)"
+        },
+        {
+          "test": "pas_server_v221_submit_request_bundle_validation_test_must_support",
+          "result": "skip",
+          "message": "Bundle(s) provided are not conformant. Check messages for issues found."
+        }
+      ],
+      "knownKitIssues": []
+    },
+    {
+      "scenarioId": "INFERNO-SMART-SERVER-001",
+      "title": "Inferno SMART App Launch 2.2 suite against cho-smart-auth-service",
+      "protocol": "SMART App Launch",
+      "regulatoryContext": "Every CMS-0057-F API (Patient Access, Provider Access, Payer-to-Payer, Prior Authorization) authorizes the calling app with SMART App Launch: an app the member or provider launches, or a backend system.",
+      "kit": {
+        "name": "inferno-framework/smart-app-launch-test-kit",
+        "key": "inferno-smart",
+        "upstreamRepository": "https://github.com/inferno-framework/smart-app-launch-test-kit",
+        "tag": "v1.0.3",
+        "commit": "980e54e4ed632b28267d797013399a8588772174",
+        "reference": "https://github.com/inferno-framework/smart-app-launch-test-kit@v1.0.3",
+        "implementationGuides": {
+          "SMART App Launch": "1.0.0, 2.0.0 and 2.2.0"
+        }
+      },
+      "suite": "smart_stu2_2",
+      "groups": [
+        "smart_full_standalone_launch",
+        "smart_full_ehr_launch",
+        "smart_backend_services",
+        "smart_token_introspection_stu2_2"
+      ],
+      "status": "Passed",
+      "statusReason": null,
+      "testedAtUtc": "2026-11-23T07:35:55.5226381+00:00",
+      "tests": {
+        "passed": 73,
+        "failed": 0,
+        "skipped": 0,
+        "omitted": 7,
+        "knownKitIssue": 0,
+        "total": 80
+      },
+      "failingTests": [],
+      "notRunTests": [
+        {
+          "test": "standalone_auth_tls",
+          "result": "omit",
+          "message": "This test is disabled because INFERNO_DISABLE_TLS_TEST is present in env."
+        },
+        {
+          "test": "smart_standalone_launch_stu2_2",
+          "result": "wait",
+          "message": "(no message)"
+        },
+        {
+          "test": "standalone_token_tls",
+          "result": "omit",
+          "message": "This test is disabled because INFERNO_DISABLE_TLS_TEST is present in env."
+        },
+        {
+          "test": "smart_ehr_launch_stu2_2",
+          "result": "wait",
+          "message": "(no message)"
+        },
+        {
+          "test": "ehr_auth_tls",
+          "result": "omit",
+          "message": "This test is disabled because INFERNO_DISABLE_TLS_TEST is present in env."
+        },
+        {
+          "test": "ehr_token_tls",
+          "result": "omit",
+          "message": "This test is disabled because INFERNO_DISABLE_TLS_TEST is present in env."
+        },
+        {
+          "test": "smart_backend_services_token_tls_version",
+          "result": "omit",
+          "message": "This test is disabled because INFERNO_DISABLE_TLS_TEST is present in env."
+        },
+        {
+          "test": "smart_token_introspection_access_token_group_stu2_2",
+          "result": "wait",
+          "message": "(no message)"
+        }
+      ],
+      "knownKitIssues": []
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-11-21T06:56:09.0105475+00:00",
+    "generatedAtUtc": "2026-11-23T07:38:41.4158507+00:00",
     "environment": "CI",
-    "choCommit": "13c4b2797c6ff49ea013df31c8f66c765a9160ce",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/13c4b2797c6ff49ea013df31c8f66c765a9160ce",
-    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/44875636952",
+    "choCommit": "a7f3b4b02554c78b9f9bc7457214b32043efa528",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/a7f3b4b02554c78b9f9bc7457214b32043efa528",
+    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/45125570232",
     "dataClassification": "synthetic",
     "summary": {
-      "passed": 6,
-      "failed": 0,
+      "passed": 8,
+      "failed": 1,
       "skipped": 0,
       "notRun": 0,
-      "total": 6
+      "total": 9
     }
   },
   "disclaimers": [
