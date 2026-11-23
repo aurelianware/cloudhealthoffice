@@ -150,6 +150,14 @@
       },
       {
         "@type": "Question",
+        "name": "Can we meet CMS-0057-F with Mirth Connect or another integration engine?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "An integration engine such as Mirth Connect is a strong way to move data from the core and other systems, and many plans will keep theirs. CMS-0057-F also asks for conformant FHIR APIs, SMART on FHIR authorization, consent and opt-out, Da Vinci prior authorization and decision timeframes. A plan can build those on its engine, or run Cloud Health Office as the payer layer while the engine keeps moving the data underneath."
+        }
+      },
+      {
+        "@type": "Question",
         "name": "Can Cloud Health Office become the payer core backend?",
         "acceptedAnswer": {
           "@type": "Answer",
@@ -620,6 +628,11 @@
       <div class="qa">
         <h3>Can Cloud Health Office work alongside an existing payer core?</h3>
         <p>Yes. Running alongside an existing core is the default deployment. Cloud Health Office reads member, coverage, provider, and claims data from the core through a vendor-neutral adapter, typically in a read-only augment mode, and exposes CMS-0057-F FHIR APIs, terminology translation, and Da Vinci-aligned prior authorization on top. Your core administration system stays in place as the system of record. The specific adapter and data mappings for QNXT, Facets, HealthEdge, or a custom core are configured during onboarding. The <a href="/docs/architecture">architecture documentation</a> details the adapter model.</p>
+      </div>
+
+      <div class="qa">
+        <h3>Can we meet CMS-0057-F with Mirth Connect or another integration engine?</h3>
+        <p>An integration engine such as Mirth Connect is a strong way to move data from the core and other systems, and many plans will keep theirs. CMS-0057-F also asks for conformant FHIR APIs, SMART on FHIR authorization, consent and opt-out, Da Vinci prior authorization and decision timeframes. A plan can build those on its engine, or run Cloud Health Office as the payer layer while the engine keeps moving the data underneath. The <a href="/insights/cms-0057-f/mirth-connect-cms-0057-f">Mirth Connect and CMS-0057-F article</a> shows how the two fit together.</p>
       </div>
 
       <div class="qa">
