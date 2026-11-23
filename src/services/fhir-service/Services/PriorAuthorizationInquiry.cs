@@ -58,9 +58,16 @@ public sealed record PriorAuthorizationRecord
     [JsonPropertyName("denialReason")]
     public string? DenialReason { get; init; }
 
-    /// <summary>Why the decision is pended. Present for A4; NOT a CDex exchange.</summary>
+    /// <summary>Why the decision is pended. Present for A4.</summary>
     [JsonPropertyName("pendReason")]
     public string? PendReason { get; init; }
+
+    /// <summary>
+    /// Tracking id of the CDex additional-information request the pend raised
+    /// in rfai-service (PAS-07), or null when it asked for nothing.
+    /// </summary>
+    [JsonPropertyName("rfaiReference")]
+    public string? RfaiReference { get; init; }
 
     [JsonPropertyName("followUpAction")]
     public string? FollowUpAction { get; init; }
@@ -85,6 +92,78 @@ public sealed record PriorAuthorizationRecord
 
     [JsonPropertyName("requestedServices")]
     public List<PriorAuthorizationService> RequestedServices { get; init; } = new();
+
+    /// <summary>
+    /// Services the payer certified in place of requested lines it did not
+    /// (a preferred alternative), each naming the line it replaces. PAS
+    /// states them as <c>ClaimResponse.addItem</c>.
+    /// </summary>
+    [JsonPropertyName("payerAddedServices")]
+    public List<PriorAuthorizationAddedService> PayerAddedServices { get; init; } = new();
+
+    /// <summary>
+    /// The record's status changes, oldest first: what each one moved to and
+    /// which path moved it. Read only to say whether a person made the
+    /// decision (<see cref="HumanReviewed"/>); the reasons and actors in
+    /// authorization-service's history have no property here.
+    /// </summary>
+    [JsonPropertyName("statusHistory")]
+    public List<PriorAuthorizationStatusChange> StatusHistory { get; init; } = new();
+
+    /// <summary>
+    /// Whether the current decision was made by a person: false when the
+    /// change that made it came from one of CHO's automated paths
+    /// (an automated rule, a plan benefit exclusion, a state program check),
+    /// true when it came from anywhere else (a reviewer's decision or a 278
+    /// response recorded against the record), and null when the record is not
+    /// decided, was imported from another system, or its history does not show
+    /// the change that decided it.
+    /// </summary>
+    public bool? HumanReviewed() => PriorAuthorizationStatusChange.HumanReviewed(Status, StatusHistory);
+}
+
+/// <summary>One status change on the record, as much of it as fhir-service reads.</summary>
+public sealed record PriorAuthorizationStatusChange
+{
+    [JsonPropertyName("status")]
+    public PriorAuthorizationStatus Status { get; init; }
+
+    /// <summary>
+    /// The path that made the change. authorization-service writes
+    /// <c>automated[:rule];lob=..;state=..</c> for an automated decision,
+    /// <c>benefit-exclusion</c> for a plan exclusion and
+    /// <c>state-program:...</c> for a state program check; a reviewer's
+    /// decision carries none of those.
+    /// </summary>
+    [JsonPropertyName("source")]
+    public string? Source { get; init; }
+
+    [JsonPropertyName("changedAt")]
+    public DateTime ChangedAt { get; init; }
+
+    /// <summary>authorization-service's source for a record imported from another system.</summary>
+    public const string ImportSource = "import";
+
+    /// <summary>See <see cref="PriorAuthorizationRecord.HumanReviewed"/>.</summary>
+    public static bool? HumanReviewed(
+        PriorAuthorizationStatus status, IEnumerable<PriorAuthorizationStatusChange>? history)
+    {
+        if (status is not (PriorAuthorizationStatus.Approved or PriorAuthorizationStatus.Modified
+            or PriorAuthorizationStatus.Denied))
+            return null;
+
+        var deciding = history?.LastOrDefault(c => c.Status == status);
+        if (deciding is null) return null;
+        // A record imported from another system says nothing about who decided it there.
+        if (deciding.Source == ImportSource) return null;
+        return !IsAutomated(deciding.Source);
+    }
+
+    public static bool IsAutomated(string? source)
+        => source is not null
+           && (source.StartsWith("automated", StringComparison.Ordinal)
+               || source.StartsWith("benefit-exclusion", StringComparison.Ordinal)
+               || source.StartsWith("state-program:", StringComparison.Ordinal));
 }
 
 /// <summary>
@@ -137,6 +216,29 @@ public sealed record PriorAuthorizationService
 
     [JsonPropertyName("approvedUnits")]
     public decimal? ApprovedUnits { get; init; }
+}
+
+/// <summary>A service the payer certified in place of a requested line.</summary>
+public sealed record PriorAuthorizationAddedService
+{
+    /// <summary>The requested line (<see cref="PriorAuthorizationService.LineNumber"/>) it replaces.</summary>
+    [JsonPropertyName("forLineNumber")]
+    public int ForLineNumber { get; init; }
+
+    [JsonPropertyName("procedureCode")]
+    public string? ProcedureCode { get; init; }
+
+    [JsonPropertyName("productOrServiceSystem")]
+    public string? ProductOrServiceSystem { get; init; }
+
+    [JsonPropertyName("procedureDescription")]
+    public string? ProcedureDescription { get; init; }
+
+    [JsonPropertyName("approvedUnits")]
+    public decimal? ApprovedUnits { get; init; }
+
+    [JsonPropertyName("serviceStatus")]
+    public string? ServiceStatus { get; init; }
 }
 
 /// <summary>

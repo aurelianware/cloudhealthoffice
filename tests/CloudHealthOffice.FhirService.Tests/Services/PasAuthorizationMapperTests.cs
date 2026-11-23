@@ -305,6 +305,10 @@ public class PasAuthorizationMapperTests
     [InlineData("urn:oid:2.16.840.1.113883.3.221.5", "21", "Medicaid")]
     [InlineData("urn:oid:2.16.840.1.113883.3.221.5", "512", "Commercial")]
     [InlineData("http://example.org/plan-type", "COMMERCIAL", "Unknown")]
+    // CHO's own Coverage, as its FHIR API and the portal's DTR page send it.
+    [InlineData("http://fhir.cloudhealthoffice.com/CodeSystem/cho-line-of-business", "Medicaid", "Medicaid")]
+    [InlineData("http://fhir.cloudhealthoffice.com/CodeSystem/cho-line-of-business", "Exchange", "Exchange")]
+    [InlineData("http://fhir.cloudhealthoffice.com/CodeSystem/cho-line-of-business", "Unknown", "Unknown")]
     public void LineOfBusiness_FromCoverageType_OrUnknown(string system, string code, string expected)
     {
         var coverage = new Coverage { Type = new CodeableConcept(system, code) };

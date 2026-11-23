@@ -19,6 +19,8 @@ data:
   ASPNETCORE_ENVIRONMENT: "Production"
   MongoDb__DatabaseName: "CloudHealthOffice"
   Services__SponsorService: "http://sponsor-service.cloudhealthoffice"
+  # Followed for GET api/v1/programs/by-benefit-plan (a plan's program).
+  Services__BenefitPlanService: "http://benefit-plan-service.cloudhealthoffice"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -76,6 +78,11 @@ spec:
             configMapKeyRef:
               name: tenant-service-config
               key: Services__SponsorService
+        - name: Services__BenefitPlanService
+          valueFrom:
+            configMapKeyRef:
+              name: tenant-service-config
+              key: Services__BenefitPlanService
         - name: SeedAdmin__TenantId
           value: "aurelianware"
         - name: SeedAdmin__Email

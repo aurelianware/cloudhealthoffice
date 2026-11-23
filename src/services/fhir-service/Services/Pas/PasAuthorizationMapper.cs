@@ -66,6 +66,8 @@ public static class PasAuthorizationMapper
     public const string NpiSystem = "http://hl7.org/fhir/sid/us-npi";
     public const string X12ServiceTypeSystem = "https://codesystem.x12.org/005010/1365";
     public const string X12ClaimFilingIndicatorSystem = "https://codesystem.x12.org/005010/1032";
+    /// <summary>The line-of-business code system on the Coverage CHO serves (<see cref="FhirService.Services.ChoNative.ChoNativeFhirDataAdapter.LineOfBusinessSystem"/>).</summary>
+    public const string ChoLineOfBusinessSystem = FhirService.Services.ChoNative.ChoNativeFhirDataAdapter.LineOfBusinessSystem;
     public const string SourceOfPaymentTypologySystem = "https://nahdo.org/sopt";
     public const string SourceOfPaymentTypologyOid = "urn:oid:2.16.840.1.113883.3.221.5";
     public const string ProcessPrioritySystem = "http://terminology.hl7.org/CodeSystem/processpriority";
@@ -267,7 +269,23 @@ public static class PasAuthorizationMapper
             if (string.IsNullOrEmpty(code))
                 continue;
 
-            if (coding.System == X12ClaimFilingIndicatorSystem)
+            if (coding.System == ChoLineOfBusinessSystem)
+            {
+                // CHO's own Coverage (what CHO's FHIR API and the provider
+                // portal's DTR page send) states the line of business directly.
+                var lob = code switch
+                {
+                    "COMMERCIAL" => "Commercial",
+                    "MEDICARE" => "Medicare",
+                    "MEDICAID" => "Medicaid",
+                    "EXCHANGE" or "MARKETPLACE" => "Exchange",
+                    "TRICARE" => "TRICARE",
+                    "VA" => "VA",
+                    _ => null,
+                };
+                if (lob is not null) return lob;
+            }
+            else if (coding.System == X12ClaimFilingIndicatorSystem)
             {
                 var lob = code switch
                 {
@@ -982,4 +1000,30 @@ public sealed class PasAutomatedDecision
     /// state rule engine was reached); null when no rule read one.
     /// </summary>
     public string? StateCode { get; set; }
+
+    /// <summary>
+    /// What a pend asks the provider for (PAS-07). authorization-service raises
+    /// the CDex request in rfai-service and stamps its tracking id on the record.
+    /// </summary>
+    public List<PasRequestedInformationItem>? RequestedInformation { get; set; }
+
+    /// <summary>When the provider's documentation is due.</summary>
+    public DateTime? InformationDueDate { get; set; }
+
+    /// <summary>
+    /// A modification: the requested lines not certified as asked, each with
+    /// the preferred alternative certified in its place.
+    /// </summary>
+    public List<PasAlternativeServiceDecision>? Alternatives { get; set; }
+}
+
+/// <summary>The alternative certified in place of one requested line, and why.</summary>
+public sealed class PasAlternativeServiceDecision
+{
+    public int ForLineNumber { get; set; }
+    public string ProcedureCode { get; set; } = string.Empty;
+    public string? ProductOrServiceSystem { get; set; }
+    public string? ProcedureDescription { get; set; }
+    public string DenialReasonCode { get; set; } = string.Empty;
+    public string DenialReason { get; set; } = string.Empty;
 }

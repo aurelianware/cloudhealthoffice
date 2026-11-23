@@ -10,6 +10,7 @@
 #   ./scripts/demo/texas/demo.sh up        # add the node, wait for the services, apply the Texas settings
 #   ./scripts/demo/texas/demo.sh connect   # port-forwards for the portal and the APIs (leave running)
 #   ./scripts/demo/texas/demo.sh seed      # plans, providers, today's file drop, Texas PA clocks
+#   ./scripts/demo/texas/demo.sh clocks    # today's Texas PA requests only, fresh (before a showing)
 #   ./scripts/demo/texas/demo.sh status    # nodes, pods and what it is costing
 #   ./scripts/demo/texas/demo.sh down      # remove the node: back to near-zero cost
 #
@@ -17,7 +18,8 @@
 #   overlay        apply only the Texas settings (up does this): the CPCDS drop
 #                  folder and shadow adjudication on claims-service, the Texas
 #                  decision clock on authorization-service, service categories
-#                  on benefit-plan-service. Idempotent; rerun after any deploy.
+#                  on benefit-plan-service, the CRD MRI documentation rule on
+#                  fhir-service. Idempotent; rerun after any deploy.
 #   drop [DIR]     copy one day's drop into the tenant's inbound folder and load
 #                  it (DIR defaults to a freshly generated drop for today)
 #
@@ -145,14 +147,22 @@ cmd_overlay() {
   kubectl patch deploy/benefit-plan-service -n "$NAMESPACE" --type strategic -p '{
     "spec":{"template":{"spec":{"containers":[{"name":"benefit-plan-service","env":[
       {"name":"ServiceCategoryMapping__AdminWriteEnabled","value":"true","valueFrom":null}]}]}}}}'
-  for d in authorization-service claims-service benefit-plan-service; do
+  # CRD on fhir-service: the plan's documentation rule for the MRI the prior
+  # authorization walkthrough orders, so CRD answers with a documentation-
+  # required card and coverage-information naming the DTR form. (No portal
+  # link: fhir-service links only an https portal, and this one is reached
+  # by port-forward.)
+  kubectl patch deploy/fhir-service -n "$NAMESPACE" --type strategic -p '{
+    "spec":{"template":{"spec":{"containers":[{"name":"fhir-service","env":[
+      {"name":"Cms0057__Crd__DocumentationRequiredCodes__0","value":"70553","valueFrom":null}]}]}}}}'
+  for d in authorization-service claims-service benefit-plan-service fhir-service; do
     kubectl rollout status "deploy/$d" -n "$NAMESPACE" --timeout=10m >/dev/null
   done
-  echo "  Texas decision clock on for tenant '$TENANT'; CPCDS drop and shadow adjudication on."
+  echo "  Texas decision clock on for tenant '$TENANT'; CPCDS drop and shadow adjudication on; CRD documentation rule for 70553."
 }
 
 FORWARDS=("portal 8080" "claims-service 5001" "benefit-plan-service 5002" "provider-service 5004"
-          "authorization-service 5006" "fhir-service 5023")
+          "authorization-service 5006" "coverage-service 5012" "tenant-service 5013" "fhir-service 5023")
 
 cmd_connect() {
   need kubectl
@@ -200,23 +210,40 @@ cmd_drop() {
   python3 "$HERE/tx_demo.py" drop-run --expect "${names[@]}"
 }
 
+# Opens port-forwards unless they are already open; prints the pid to stop, or nothing.
+open_ports() {
+  if ! ports_open; then
+    cmd_connect >/dev/null 2>&1 &
+    local pid=$!
+    for _ in $(seq 1 30); do ports_open && break; sleep 2; done
+    ports_open || die "could not reach claims-service through a port-forward"
+    echo "$pid"
+  fi
+}
+
 cmd_seed() {
   need python3 curl
   # A deploy since "up" resets the deployments to the shared manifests.
   cmd_overlay
-  local own=""
-  if ! ports_open; then
-    say "Opening port-forwards for this run"
-    cmd_connect >/dev/null 2>&1 &
-    own=$!
-    for _ in $(seq 1 30); do ports_open && break; sleep 2; done
-    ports_open || die "could not reach claims-service through a port-forward"
-  fi
+  say "Opening port-forwards for this run"
+  local own; own=$(open_ports)
   python3 "$HERE/tx_demo.py" setup
   cmd_drop ""
   python3 "$HERE/tx_demo.py" seed-pa
   [[ -z "$own" ]] || kill "$own" 2>/dev/null || true
   say "Loaded. Follow docs/deploy/TEXAS-MEDICAID-DEMO.md for the click-through."
+}
+
+# The prior-authorization requests only: closes the earlier ones and opens
+# today's set, received minutes ago, so no Texas clock has run out. The
+# poststabilization request runs out about 40 minutes later: run this just
+# before a showing or a recording.
+cmd_clocks() {
+  need python3 curl
+  cmd_overlay
+  local own; own=$(open_ports)
+  python3 "$HERE/tx_demo.py" seed-pa
+  [[ -z "$own" ]] || kill "$own" 2>/dev/null || true
 }
 
 case "${1:-}" in
@@ -227,5 +254,6 @@ case "${1:-}" in
   connect) cmd_connect ;;
   drop) cmd_drop "${2:-}" ;;
   seed) cmd_seed ;;
+  clocks) cmd_clocks ;;
   *) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

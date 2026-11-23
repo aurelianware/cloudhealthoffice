@@ -472,3 +472,28 @@ body.ent .signup .actions { margin-top: 0; }
   main img, main svg, main video { max-width: 100%; height: auto; }
   main { overflow-wrap: anywhere; }
 }
+
+/* Demo video page (/demo) and the homepage video link */
+body.ent .video-frame { margin: 40px 0 0; max-width: 1040px; }
+body.ent .video-frame video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 8 / 5;
+  background: var(--cho-navy);
+  border: 1px solid var(--cho-line-strong);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(11, 31, 51, 0.14);
+}
+body.ent .video-frame figcaption { margin-top: 12px; font-size: 15px; color: var(--cho-body); }
+body.ent .demo-steps { margin: 32px 0 0; padding-left: 1.4em; max-width: 780px; color: var(--cho-body); }
+body.ent .demo-steps li { margin-top: 12px; padding-left: 4px; }
+body.ent .demo-steps strong { color: var(--cho-ink); }
+body.ent #texas-steps .lede { margin-top: 32px; }
+body.ent .demo-steps + .lede { margin-top: 32px; }
+body.ent .demo-more { list-style: none; margin: 32px 0 0; padding: 0; display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); max-width: 1040px; }
+body.ent .demo-more a { display: block; color: var(--cho-ink); text-decoration: none; }
+body.ent .demo-more img { display: block; width: 100%; height: auto; border: 1px solid var(--cho-line-strong); border-radius: 8px; margin-bottom: 12px; }
+body.ent .demo-more a:hover strong, body.ent .demo-more a:focus-visible strong { text-decoration: underline; }
+body.ent .demo-more span { display: block; margin-top: 6px; color: var(--cho-body); }
+body.ent .demo-more-note { margin-top: 24px; font-size: 15px; color: var(--cho-body); }

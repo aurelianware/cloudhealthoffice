@@ -172,7 +172,12 @@ public sealed class HttpCarrierDirectory(
             }
         }
 
-        cache.Set(cacheKey, carriers, TimeSpan.FromSeconds(Math.Max(1, options.CacheSeconds)));
+        // Size = 1 so this works in a host whose IMemoryCache has a SizeLimit.
+        cache.Set(cacheKey, carriers, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(Math.Max(1, options.CacheSeconds)),
+            Size = 1,
+        });
         return carriers;
     }
 }
@@ -227,7 +232,7 @@ public static class CarrierDirectoryServiceCollectionExtensions
         services.AddMemoryCache();
         services.AddHttpClient(HttpCarrierDirectory.HttpClientName, client =>
         {
-            client.BaseAddress = new Uri((configuration["Services:TenantService"] ?? "http://tenant-service").TrimEnd('/') + "/");
+            client.BaseAddress = new Uri((configuration["Services:TenantService"] ?? "http://tenant-service.cloudhealthoffice").TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromSeconds(5);
             client.DefaultRequestHeaders.Add("Accept", "application/json");
         }).SetHandlerLifetime(TimeSpan.FromMinutes(5));

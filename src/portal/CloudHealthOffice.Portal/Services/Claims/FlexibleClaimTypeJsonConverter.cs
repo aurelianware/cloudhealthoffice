@@ -16,6 +16,7 @@ public sealed class FlexibleClaimTypeJsonConverter : JsonConverter<string>
                 1 => "Professional",
                 2 => "Institutional",
                 3 => "Dental",
+                4 => "Pharmacy",
                 _ => value.ToString()
             },
             JsonTokenType.Number => reader.GetDouble().ToString(System.Globalization.CultureInfo.InvariantCulture),

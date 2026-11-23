@@ -74,6 +74,30 @@ public class RfaiCaseLifecycleTests
         => RfaiCaseLifecycle.Validate(Request(authNumber: authNumber)).IsValid.Should().BeFalse();
 
     [Fact]
+    public void AServiceLineNumberBelowOneIsRefused()
+        => RfaiCaseLifecycle.Validate(Request(
+            items: [new RequestedItem { LoincCode = "28570-0", Description = "Procedure note", ServiceLineNumber = 0 }]))
+            .IsValid.Should().BeFalse();
+
+    [Fact]
+    public void AnItemMayNameItsLineAModifierAndAQuestionnaire()
+        => RfaiCaseLifecycle.Validate(Request(
+            items:
+            [
+                new RequestedItem
+                {
+                    LoincCode = "28570-0", Description = "Procedure note",
+                    ServiceLineNumber = 2, ContentModifier = "18804-5",
+                },
+                new RequestedItem
+                {
+                    Description = "Complete the documentation questionnaire",
+                    Questionnaire = "http://example.org/Questionnaire/mri|1.0", ServiceLineNumber = 1,
+                },
+            ]))
+            .IsValid.Should().BeTrue();
+
+    [Fact]
     public void AValidRequestPasses()
         => RfaiCaseLifecycle.Validate(Request()).IsValid.Should().BeTrue();
 

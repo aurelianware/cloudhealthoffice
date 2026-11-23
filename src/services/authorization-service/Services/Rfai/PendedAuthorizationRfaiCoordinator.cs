@@ -27,6 +27,18 @@ public sealed record RequestedInformationItem
 
     /// <summary>Diagnosis context for the question (ICD-10).</summary>
     public string? DiagnosisCode { get; init; }
+
+    /// <summary>
+    /// The request's sequence number for the service line the item is about
+    /// (PAS <c>Claim.item.sequence</c>), where the decision names one.
+    /// </summary>
+    public int? ServiceLineNumber { get; init; }
+
+    /// <summary>LOINC attachment modifier (class LP7763-8) narrowing <see cref="LoincCode"/>.</summary>
+    public string? ContentModifier { get; init; }
+
+    /// <summary>Canonical of a DTR Questionnaire the provider is asked to complete.</summary>
+    public string? Questionnaire { get; init; }
 }
 
 /// <summary>
@@ -131,6 +143,9 @@ public sealed class PendedAuthorizationRfaiCoordinator : IPendedAuthorizationRfa
 {
     /// <summary>The X12 278 review decision that means "pended — send documentation".</summary>
     public const string AdditionalInformationRequiredDecision = "A4";
+
+    /// <summary>rfai-service's own limit on items in one request.</summary>
+    public const int MaxAutomatedRequestedItems = 25;
 
     private readonly IRfaiRequestGateway _gateway;
     private readonly ILogger<PendedAuthorizationRfaiCoordinator> _logger;
@@ -302,9 +317,16 @@ public sealed class PendedAuthorizationRfaiCoordinator : IPendedAuthorizationRfa
                 + $"{AdditionalInformationRequiredDecision}|ctrl:{decisionControlNumber.Trim()}");
         }
 
+        // The line, modifier and questionnaire join the digest only when an
+        // item names one, so the key of every decision that names none is the
+        // key it always had (a redelivery after this change replays onto the
+        // request already raised).
         var content = string.Join("|", requestedItems.Select(i =>
             $"{i.Code}/{i.LoincCode}/{i.Description}/{i.Required}/"
-            + $"{i.ServiceLineProcedureCode}/{i.DiagnosisCode}"));
+            + $"{i.ServiceLineProcedureCode}/{i.DiagnosisCode}"
+            + (i.ServiceLineNumber is null && i.ContentModifier is null && i.Questionnaire is null
+                ? string.Empty
+                : $"/{i.ServiceLineNumber}/{i.ContentModifier}/{i.Questionnaire}")));
 
         return Sha256Hex(
             $"{authorization.TenantId}|{authorization.AuthorizationNumber}|"

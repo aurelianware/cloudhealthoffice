@@ -61,6 +61,9 @@ public sealed class HttpRfaiRequestGateway : IRfaiRequestGateway
                 required = i.Required,
                 serviceLineProcedureCode = i.ServiceLineProcedureCode,
                 diagnosisCode = i.DiagnosisCode,
+                serviceLineNumber = i.ServiceLineNumber,
+                contentModifier = i.ContentModifier,
+                questionnaire = i.Questionnaire,
             }).ToArray(),
         };
 

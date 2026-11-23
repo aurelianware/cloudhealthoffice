@@ -230,7 +230,7 @@ public class PasSubmitTests
 
     [Fact]
     [Trait("Scenario", "PAS-03")]
-    public async Task PAS03_Negative_MissingPatient_Returns422_NothingStored()
+    public async Task PAS03_Negative_MissingPatient_IsAPasErrorResponse_NothingStored()
     {
         var controller = BuildController(Adjudicator(new PasDecisionResult { HasDecision = true, Decision = "approved" }));
         var bundle = RequestBundle();
@@ -238,7 +238,15 @@ public class PasSubmitTests
 
         var result = await controller.ClaimSubmit(bundle);
 
-        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(422);
+        // PAS and the 278 state request errors as AAA errors on the response
+        // (ClaimResponse.error, outcome error), not as an HTTP failure. The
+        // guarantees are unchanged: nothing decided, nothing stored, no number.
+        var response = (ClaimResponse)result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<Bundle>().Subject.Entry[0].Resource;
+        response.Outcome.Should().Be(ClaimProcessingCodes.Error);
+        response.PreAuthRef.Should().BeNull();
+        response.Item.Should().BeEmpty();
+        response.Error.Should().NotBeEmpty();
         _authorizationService.Repository.CreateCount.Should().Be(0);
     }
 
@@ -329,8 +337,13 @@ public class PasSubmitTests
 
         if (!found)
         {
-            // The corroborating key still has to match the record.
-            result.Should().NotBeOfType<OkObjectResult>();
+            // The corroborating key still has to match the record. A mismatch
+            // is the uniform PAS error (X12 AA) and names no authorization.
+            var refused = PasInquiryResponse.Bundles((Parameters)result.Should().BeOfType<OkObjectResult>().Subject.Value!)
+                .Single().Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
+            refused.Outcome.Should().Be(ClaimProcessingCodes.Error);
+            refused.PreAuthRef.Should().BeNull();
+            refused.Error.Single().Code.Coding.Single().Code.Should().Be("AA");
             return;
         }
 
@@ -433,7 +446,8 @@ public class PasSubmitTests
         // The DECISION is coded where PAS defines it: the reviewAction on each
         // line's adjudication, action code A3 "not certified", from X12 list
         // 306 — the same system and shape the pended path uses for A4.
-        claimResponse.Extension.Should().BeEmpty("PAS 2.2.1 allows reviewAction only on an adjudication");
+        claimResponse.Extension.Should().NotContain(e => e.Url.EndsWith("/extension-reviewAction"),
+            "PAS 2.2.1 allows reviewAction only on an adjudication");
         PasReviewActions.OnLines(claimResponse).Should().NotBeEmpty()
             .And.OnlyContain(c => c.Code == "A3" && c.System == PasReviewActions.X12CertificationActionSystem);
 

@@ -90,7 +90,7 @@ def test_claim_totals_are_the_sum_of_their_lines(tmp_path):
 
 def test_the_core_pays_the_stale_therapy_rate(tmp_path):
     rows = [r for r in _drop(tmp_path)["medical_claims"] if r["Procedure code"] == "97110"]
-    assert rows, "the shadow run needs claims with the stale rate"
+    assert len({r["Claim unique identifier"] for r in rows}) >= 15, "the shadow run needs enough claims with the stale rate to show"
     for r in rows:
         assert float(r["Line allowed amount"]) == round(tx_demo.CORE_STALE_RATES["97110"] * int(r["Number of units"]), 2)
 
@@ -104,7 +104,7 @@ def test_pharmacy_claims_meet_the_import_rules(tmp_path):
 
 
 def test_npis_are_valid_and_below_the_issued_range():
-    npis = [p["npi"] for p in tx_demo.PROVIDERS] + [tx_demo.PHARMACY_NPI, tx_demo.PRESCRIBER_NPI] + tx_demo.RENDERING_NPIS
+    npis = [p["npi"] for p in tx_demo.PROVIDERS] + [tx_demo.PHARMACY_NPI, tx_demo.PRESCRIBER_NPI]
     assert len(set(npis)) == len(npis)
     for npi in npis:
         assert tx_demo.is_valid_npi(npi)
@@ -250,3 +250,26 @@ def test_thanksgiving_week_the_earlier_federal_clock_stands():
     assert tx_demo.clock_agrees(exp, stored, "cho-receipt-v1+tx-gc-540-v1:NotHospitalized")
     assert not tx_demo.clock_agrees(exp, exp["texasDue"], "cho-receipt-v1+tx-gc-540-v1:NotHospitalized")
     assert not tx_demo.clock_agrees(exp, stored, "cho-receipt-v1")  # no Texas policy: not on the Texas clock
+
+
+def test_every_claim_npi_is_a_loaded_network_provider(tmp_path):
+    # Shadow adjudication checks billing and rendering NPIs against the network;
+    # an NPI the setup does not load is denied CO-242 and hides every other finding.
+    loaded = {p["npi"] for p in tx_demo.PROVIDERS}
+    for r in _drop(tmp_path)["medical_claims"]:
+        assert r["Claim billing provider NPI"] in loaded
+        assert r["Claim performing provider NPI"] in ("", r["Claim billing provider NPI"])
+
+
+def test_tidy_closes_earlier_runs_and_long_overdue_requests_only():
+    now = dt.datetime(2026, 11, 22, 18, 0, tzinfo=UTC)
+    iso = lambda d: d.isoformat().replace("+00:00", "Z")
+    open_requests = [
+        {"id": "txpa-poststab-11221142", "decisionDueAt": iso(now + dt.timedelta(hours=1))},   # an earlier run
+        {"id": "CMS0057-E05", "decisionDueAt": iso(now - dt.timedelta(days=38))},              # old demo load
+        {"id": "story-pa-expedited-open", "decisionDueAt": iso(now + dt.timedelta(hours=40))},  # still on time
+        {"id": "recent-late", "decisionDueAt": iso(now - dt.timedelta(hours=3))},              # late today: kept
+        {"id": "no-clock"},
+    ]
+    closed = {a["id"] for a in tx_demo.stale_open_requests(open_requests, now)}
+    assert closed == {"txpa-poststab-11221142", "CMS0057-E05"}

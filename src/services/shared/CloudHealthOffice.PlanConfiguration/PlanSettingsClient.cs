@@ -76,7 +76,8 @@ public abstract class CachingPlanSettings(IMemoryCache cache, PlanSettingsOption
             return SettingResolver.Resolve(definition, scope, date, [], isFallback: true);
         }
 
-        var entry = new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(Math.Max(1, options.CacheSeconds)) };
+        // Size = 1 so this works in a host whose IMemoryCache has a SizeLimit.
+        var entry = new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(Math.Max(1, options.CacheSeconds)), Size = 1 };
         entry.AddExpirationToken(new CancellationChangeToken(TokenFor(tenantId, key).Token));
         cache.Set(cacheKey, resolved, entry);
         return resolved;

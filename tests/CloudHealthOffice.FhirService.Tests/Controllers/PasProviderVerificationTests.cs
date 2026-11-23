@@ -233,7 +233,7 @@ public class PasProviderVerificationTests
 
     // Changed: a request with no requesting-provider NPI used to skip
     // verification and be approved, then fail to persist (the record requires
-    // the NPI, D-01). It is now refused with a 422 before verification or
+    // the NPI, D-01). It is now refused (a PAS error response) before verification or
     // adjudication, and nothing is stored.
     [Fact]
     public async System.Threading.Tasks.Task ClaimSubmit_NoProviderNpi_IsRefusedBeforeVerification()
@@ -244,10 +244,11 @@ public class PasProviderVerificationTests
         var bundle = CreateRequestBundle("99213", null);
         var result = await controller.ClaimSubmit(bundle);
 
-        var refused = result.Should().BeOfType<ObjectResult>().Subject;
-        refused.StatusCode.Should().Be(422);
-        refused.Value.Should().BeOfType<OperationOutcome>()
-            .Which.Issue.Should().Contain(i => i.Expression.Contains("Claim.provider"));
+        var refused = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<Bundle>().Subject;
+        var response = (ClaimResponse)refused.Entry[0].Resource;
+        response.Outcome.Should().Be(ClaimProcessingCodes.Error);
+        response.PreAuthRef.Should().BeNull();
+        response.Error.Should().Contain(e => e.Code.Coding.Single().Code == "43");
         handler.RequestCount.Should().Be(0);
         _recorder.Calls.Should().BeEmpty();
     }

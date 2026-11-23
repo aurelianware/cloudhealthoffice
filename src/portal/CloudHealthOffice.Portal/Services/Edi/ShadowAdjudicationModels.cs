@@ -31,6 +31,32 @@ public static class ShadowKinds
         Match => "Match",
         _ => kind,
     };
+
+    /// <summary>claims-service's pend code for a claim held only for provider screening.</summary>
+    public const string ProviderScreeningCode = "PROVIDERSCREEN";
+
+    /// <summary>
+    /// The "Why" of one claim: CHO's pend reason or first stage finding. A claim
+    /// held only for provider screening was compared as CHO decides it once the
+    /// provider clears (the page explains the hold above the table), so its Why
+    /// names what changed the amounts and notes the hold.
+    /// </summary>
+    public static string? Why(ShadowResult r)
+    {
+        if (!string.Equals(r.ChoPendCode, ProviderScreeningCode, StringComparison.OrdinalIgnoreCase))
+            return r.ChoPendReason ?? r.ChoStageFindings.FirstOrDefault();
+
+        var reason = r.ChoStageFindings.FirstOrDefault(f => !f.StartsWith("ProviderIntegrity", StringComparison.Ordinal))
+            ?? r.Kind switch
+            {
+                AllowedVariance => "The allowed amounts differ: CHO priced the lines from the plan's fee schedule.",
+                PaidVariance => "The payments differ under the plan's benefits.",
+                MemberLiabilityVariance => "The member's share differs under the plan's benefits.",
+                Match => null,
+                _ => r.ChoPendReason,
+            };
+        return reason is null ? "Held for provider screening." : $"{reason} Held for provider screening.";
+    }
 }
 
 /// <summary>One shadow run's totals.</summary>

@@ -41,7 +41,7 @@ One-time setup:
 3. Add the repository secrets `DEMO_CF_ACCESS_CLIENT_ID` and `DEMO_CF_ACCESS_CLIENT_SECRET`.
 4. If Cloudflare Bot Fight Mode is on for the zone, turn it off. It challenges automated browsers from GitHub's runners as it did the Inferno test kits.
 
-Each recording: run `seed-story`, then Actions → **Record demo walkthrough** → choose `prior-auth` (about 1 minute, prior authorization only) or `full-tour`. Download the artifact from the run. The job fails, and names the steps, if any page did not render; the screenshots show what it saw.
+Each recording: run `seed-story`, then Actions → **Record demo walkthrough** → choose `prior-auth` (about 1 minute, prior authorization only) or `full-tour`, with connect `cloudflare-access`. With connect `port-forward` the runner reaches the portal through the cluster instead and needs none of the setup above. The `texas` walkthrough is described in [TEXAS-MEDICAID-DEMO.md](TEXAS-MEDICAID-DEMO.md#record-a-video-of-it). Download the artifact from the run. The job fails, and names the steps, if any page did not render; the screenshots show what it saw.
 
 ## Afterwards
 

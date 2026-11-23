@@ -147,7 +147,31 @@ public sealed class AutomatedDecision
     [StringLength(500)]
     public string? PendReason { get; set; }
 
-    /// <summary>Approved period. Required for an approval; not allowed otherwise.</summary>
+    /// <summary>
+    /// What a pend asks the provider for (PAS-07): the documents and forms the
+    /// adjudicator found missing for the requested services. A pend that names
+    /// any is recorded as A4 with an additional-information request raised in
+    /// rfai-service, exactly as a reviewer's A4 decision is. Only a pend may
+    /// carry it.
+    /// </summary>
+    [MaxLength(Services.Rfai.PendedAuthorizationRfaiCoordinator.MaxAutomatedRequestedItems,
+        ErrorMessage = "A pend names at most 25 requested items.")]
+    public List<Services.Rfai.RequestedInformationItem>? RequestedInformation { get; set; }
+
+    /// <summary>When the provider's documentation is due. Only with <see cref="RequestedInformation"/>.</summary>
+    public DateTime? InformationDueDate { get; set; }
+
+    /// <summary>
+    /// A modification (<see cref="AutomatedDecisionOutcome.Modified"/>): the
+    /// requested lines the adjudicator did not certify, each with the
+    /// preferred alternative it certified instead and why. Every line not
+    /// named is certified as requested. Only a modification carries it, and a
+    /// modification needs at least one.
+    /// </summary>
+    [MaxLength(25, ErrorMessage = "A modification names at most 25 alternatives.")]
+    public List<AutomatedAlternativeService>? Alternatives { get; set; }
+
+    /// <summary>Approved period. Required for an approval or a modification; not allowed otherwise.</summary>
     public DateTime? ApprovedServiceDateFrom { get; set; }
 
     public DateTime? ApprovedServiceDateTo { get; set; }
@@ -201,4 +225,34 @@ public enum AutomatedDecisionOutcome
     Approved = 1,
     Denied = 2,
     Pended = 3,
+
+    /// <summary>Certified with changes (A2): an alternative certified in place of a requested line.</summary>
+    Modified = 4,
+}
+
+/// <summary>A preferred alternative certified in place of one requested line.</summary>
+public sealed class AutomatedAlternativeService
+{
+    /// <summary>The requested line it replaces.</summary>
+    [Range(1, int.MaxValue)]
+    public int ForLineNumber { get; set; }
+
+    [Required]
+    [StringLength(64, MinimumLength = 1)]
+    public string ProcedureCode { get; set; } = string.Empty;
+
+    [StringLength(256)]
+    public string? ProductOrServiceSystem { get; set; }
+
+    [StringLength(200)]
+    public string? ProcedureDescription { get; set; }
+
+    /// <summary>Why the requested line was not certified as asked: coded, and in words.</summary>
+    [Required]
+    [StringLength(50, MinimumLength = 1)]
+    public string DenialReasonCode { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(500, MinimumLength = 1)]
+    public string DenialReason { get; set; } = string.Empty;
 }

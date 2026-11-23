@@ -54,12 +54,15 @@ BENEFIT_URL = os.environ.get("BENEFIT_URL", "http://localhost:5002")
 PROVIDER_URL = os.environ.get("PROVIDER_URL", "http://localhost:5004")
 AUTH_URL = os.environ.get("AUTH_URL", "http://localhost:5006")
 FHIR_URL = os.environ.get("FHIR_URL", "http://localhost:5023")
+TENANT_URL = os.environ.get("TENANT_URL", "http://localhost:5013")
+COVERAGE_URL = os.environ.get("COVERAGE_URL", "http://localhost:5012")
 PORTAL_URL = os.environ.get("PORTAL_URL", "http://localhost:8080")
 
 FIXTURES = HERE / "fixtures"
 CENTRAL = ZoneInfo("America/Chicago")
 
 PAYER = "Sample Texas Community Health Plan (synthetic)"
+CARRIER_CODE = "TX-SAMPLE-SYN"
 SOURCE_SYSTEM = "sample-core"
 GROUP_ID = "HHSC-DALLAS-SYN"
 GROUP_NAME = "Texas HHSC Dallas service area (synthetic)"
@@ -68,9 +71,9 @@ EFFECTIVE = "2026-01-01"
 
 # Core plan code -> CHO benefit plan (fixtures/benefit-plans.json).
 PROGRAMS = {
-    "STAR-DAL": {"planId": "TX-STAR-SYN", "name": "STAR (synthetic)", "copay_em": 0.0},
-    "STARKIDS-DAL": {"planId": "TX-STARKIDS-SYN", "name": "STAR Kids (synthetic)", "copay_em": 0.0},
-    "CHIP-DAL": {"planId": "TX-CHIP-SYN", "name": "CHIP (synthetic)", "copay_em": 0.0},
+    "STAR-DAL": {"planId": "TX-STAR-SYN", "name": "STAR (synthetic)", "copay_em": 0.0, "program": "TX-STAR"},
+    "STARKIDS-DAL": {"planId": "TX-STARKIDS-SYN", "name": "STAR Kids (synthetic)", "copay_em": 0.0, "program": "TX-STARKIDS"},
+    "CHIP-DAL": {"planId": "TX-CHIP-SYN", "name": "CHIP (synthetic)", "copay_em": 0.0, "program": "TX-CHIP"},
 }
 
 # Texas state holidays used by the demo's business-day clock. Illustrative: a
@@ -114,7 +117,6 @@ PROVIDERS = [
 ]
 PHARMACY_NPI = synthetic_npi(2001)
 PRESCRIBER_NPI = synthetic_npi(3001)
-RENDERING_NPIS = [synthetic_npi(3000 + i) for i in range(2, 8)]
 
 FIRST = ["Mateo", "Sofia", "Liam", "Camila", "Noah", "Valentina", "Elijah", "Isabella", "Josiah", "Mia",
          "Santiago", "Aaliyah", "Diego", "Zoe", "Gael", "Ximena", "Isaiah", "Luna", "Adrian", "Naomi"]
@@ -285,9 +287,8 @@ def build_claims(rng: random.Random, members: list[dict], coverages: list[dict],
             member = members[rng.randrange(len(members))]
             mid = member["Member id"]
             program = plan_of[mid]
-            kids_or_chip = program in ("STARKIDS-DAL", "CHIP-DAL")
             roll = rng.random()
-            if roll < 0.15 and kids_or_chip:
+            if roll < 0.15:
                 provider, codes = by_kind["therapy"], ["97110"] if rng.random() < 0.7 else ["97110", "97530"]
             elif roll < 0.22:
                 provider, codes = by_kind["imaging"], ["71046"]
@@ -310,7 +311,10 @@ def build_claims(rng: random.Random, members: list[dict], coverages: list[dict],
             rows += _claim_rows({
                 "id": f"TXC-{paid:%y%m%d}-{seq:05d}", "member": mid, "type": "professional-nonclinician",
                 "from": service, "to": service, "received": received, "paid": paid, "status": "paid",
-                "billing": provider["npi"], "rendering": RENDERING_NPIS[seq % len(RENDERING_NPIS)],
+                # Performed by the billing organization: every NPI on a claim is a
+                # network provider the setup loads, so shadow adjudication's network
+                # check finds them (an unloaded rendering NPI is denied CO-242).
+                "billing": provider["npi"], "rendering": provider["npi"],
             }, lines)
 
             if seq % 9 == 0:
@@ -325,7 +329,7 @@ def build_claims(rng: random.Random, members: list[dict], coverages: list[dict],
                 rows += _claim_rows({
                     "id": f"TXF-{paid:%y%m%d}-{seq:05d}", "member": mid, "type": "outpatient-facility",
                     "from": service, "to": service, "received": received, "paid": paid, "status": "paid",
-                    "billing": by_kind["hospital"]["npi"], "rendering": RENDERING_NPIS[0],
+                    "billing": by_kind["hospital"]["npi"], "rendering": by_kind["hospital"]["npi"],
                 }, er_lines)
 
             if seq % 4 == 0:
@@ -478,6 +482,62 @@ class Steps:
             print("    Is 'scripts/demo/texas/demo.sh connect' running?")
 
 
+def _link_program(s: Steps, token: str, plan_id: str, program_id: str) -> None:
+    """Names the plan's program. A published plan is changed by amendment:
+    a draft copy with the program, published with the plan's own effective
+    date so it covers the whole plan year."""
+    status, _, plans = _call("GET", f"{BENEFIT_URL}/api/v1/plans", token)
+    plan = next((p for p in plans if p.get("planId") == plan_id), None) if isinstance(plans, list) else None
+    if plan is None:
+        s.fail(f"{plan_id} not found to link its program", status, plans)
+        return
+    if plan.get("programId") == program_id:
+        s.ok(f"{plan_id} -> {program_id} (already linked)")
+        return
+    if plan.get("versionState") == "Published":
+        status, _, plan = _call("POST", f"{BENEFIT_URL}/api/v1/plans/{plan_id}/amend", token)
+        if status != 201 or not isinstance(plan, dict):
+            s.fail(f"{plan_id} not amended", status, plan)
+            return
+    plan["programId"] = program_id
+    status, _, body = _call("PUT", f"{BENEFIT_URL}/api/v1/plans/{plan['id']}", token, plan)
+    if status != 200:
+        s.fail(f"{plan_id} program not set", status, body)
+        return
+    if plan.get("versionState") == "Draft":
+        status, _, body = _call("POST", f"{BENEFIT_URL}/api/v1/plans/{plan_id}/versions/{plan['versionId']}/publish",
+                                token, {"effectiveDate": f"{EFFECTIVE}T00:00:00Z"})
+        if status != 200:
+            s.fail(f"{plan_id} amendment not published", status, body)
+            return
+    s.ok(f"{plan_id} -> {program_id}")
+
+
+def _refresh_coverage_line_of_business(s: Steps, token: str) -> None:
+    """Coverages loaded before their plan had a program were written as
+    Commercial. Saving one (an empty update) makes coverage-service take its
+    program's line of business; a coverage already on Medicaid is left alone."""
+    stale, saved, cont = [], 0, ""
+    while True:
+        url = f"{COVERAGE_URL}/api/v1/coverage?groupNumber={GROUP_ID}&pageSize=100" + (f"&continuationToken={cont}" if cont else "")
+        status, _, page = _call("GET", url, token)
+        if status != 200 or not isinstance(page, dict):
+            s.fail("coverages not listed", status, page)
+            return
+        stale += [c["id"] for c in page.get("coverage", []) if str(c.get("lineOfBusiness")) not in ("Medicaid", "3")]
+        cont = page.get("continuationToken") or ""
+        if not cont:
+            break
+    for coverage_id in stale:
+        status, _, body = _call("PUT", f"{COVERAGE_URL}/api/v1/coverage/{coverage_id}", token, {})
+        if status == 200:
+            saved += 1
+        else:
+            s.fail(f"coverage {coverage_id} not updated", status, body)
+            return
+    s.ok(f"coverage line of business: {saved} updated to the plans' programs" if saved else "coverage line of business already Medicaid")
+
+
 def cmd_setup(_args) -> int:
     token = cho_demo.mint_token(TENANT)
     s = Steps()
@@ -549,6 +609,39 @@ def cmd_setup(_args) -> int:
             s.ok(f"{plan['planId']} created")
         else:
             s.fail(f"{plan['planId']} not created", status, body)
+
+    # Each plan names a Texas Medicaid program (tenant-service). CRD reads the
+    # member's state and line of business from it, DTR labels the coverage with
+    # it, and authorization-service puts a request on the Texas clock only
+    # when the member's program is Medicaid.
+    print("   Programs")
+    # The demo tenant has no tenant record to make a default carrier from, so
+    # the programs go under a named synthetic carrier.
+    status, _, carrier = _call("POST", f"{TENANT_URL}/api/v1/carriers", token,
+                               {"code": CARRIER_CODE, "name": PAYER})
+    if status in (201, 409):
+        s.ok(f"carrier {CARRIER_CODE}" + (" (already there)" if status == 409 else " created"))
+    else:
+        s.fail(f"carrier {CARRIER_CODE} not created", status, carrier)
+    carrier_id = f"{TENANT}|{CARRIER_CODE}"
+    status, _, listed = _call("GET", f"{TENANT_URL}/api/v1/programs?carrierId={carrier_id.replace('|', '%7C')}", token)
+    program_ids = {p.get("code"): p.get("id") for p in listed} if isinstance(listed, list) else {}
+    if status != 200:
+        s.fail("programs not listed", status, listed)
+    for program in PROGRAMS.values():
+        code = program["program"]
+        if code not in program_ids and status == 200:
+            created, _, body = _call("POST", f"{TENANT_URL}/api/v1/programs", token, {
+                "carrierId": carrier_id, "code": code, "name": f"Texas Medicaid {program['name']}", "lineOfBusiness": "Medicaid",
+                "stateCode": "TX", "effectiveFrom": f"{EFFECTIVE}T00:00:00Z"})
+            if created == 201 and isinstance(body, dict):
+                program_ids[code] = body.get("id")
+                s.ok(f"program {code} created")
+            else:
+                s.fail(f"program {code} not created", created, body)
+        if program_ids.get(code):
+            _link_program(s, token, program["planId"], program_ids[code])
+    _refresh_coverage_line_of_business(s, token)
 
     print("4. Plan code mappings")
     for code, program in PROGRAMS.items():
@@ -763,9 +856,52 @@ def clock_agrees(expected: dict, due: dt.datetime | None, policy) -> bool:
             and "tx-gc-540" in str(policy))
 
 
+OPEN_STATUSES = ("Submitted", "InReview", "Pended")
+
+
+def stale_open_requests(open_requests: list[dict], now_utc: dt.datetime) -> list[dict]:
+    """Open requests to close before a showing: earlier seed-pa runs' Texas
+    requests (a new set is opened each run) and any other open request whose
+    decision deadline passed more than a day ago (left over from older demo
+    loads). Today's Texas overdue request is opened afresh, so it is kept."""
+    stale = []
+    for auth in open_requests:
+        due = _parse_utc(auth.get("decisionDueAt"))
+        if str(auth.get("id", "")).startswith("txpa-") or (due is not None and due < now_utc - dt.timedelta(days=1)):
+            stale.append(auth)
+    return stale
+
+
+def tidy_open_requests(token: str, now_utc: dt.datetime) -> int:
+    """Cancel stale open requests in the demo tenant so the console shows today's clocks."""
+    open_requests = []
+    for status_name in OPEN_STATUSES:
+        page = 1
+        while True:
+            status, _, body = _call("GET", f"{AUTH_URL}/api/authorizations/search?status={status_name}"
+                                           f"&page={page}&pageSize=200", token)
+            if status != 200 or not isinstance(body, list) or not body:
+                break
+            open_requests += body
+            if len(body) < 200:
+                break
+            page += 1
+    stale = stale_open_requests(open_requests, now_utc)
+    closed = 0
+    for auth in stale:
+        status, _, _ = _call("PUT", f"{AUTH_URL}/api/authorizations/{auth['id']}/status", token, {
+            "status": "Cancelled", "notes": "Closed by the Texas demo setup: a stale synthetic demo request."})
+        closed += 1 if status == 200 else 0
+    if stale:
+        print(f"Closed {closed} of {len(stale)} stale open demo requests (earlier runs, or past their deadline), "
+              "so the console shows today's Texas clocks.\n")
+    return closed
+
+
 def cmd_seed_pa(_args) -> int:
     token = cho_demo.mint_token(TENANT)
     now = dt.datetime.now(dt.timezone.utc)
+    tidy_open_requests(token, now)
     members, _ = build_members(random.Random(48), 120, now.date())
     holidays = {dt.date.fromisoformat(d) for d in DEMO_HOLIDAYS}
     fixtures = build_pa_fixtures(now, members, holidays)

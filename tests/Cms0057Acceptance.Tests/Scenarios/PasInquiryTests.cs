@@ -454,7 +454,7 @@ public class PasInquiryTests
 
     [Fact]
     [Trait("Scenario", "PAS-04")]
-    public async Task PAS04_Replace_RequestDefectsAre400AndRecordRefusalsAre404()
+    public async Task PAS04_Replace_RequestDefectsAre400AndRecordRefusalsAreUniform()
     {
         // A defect in the REQUEST is the caller's to fix and reveals nothing
         // about what exists, so it is reported plainly. A refusal about a RECORD
@@ -484,8 +484,27 @@ public class PasInquiryTests
         noIdentifier.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
         noCorroboratingKey.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
         // ...but a well-formed request for a record the caller may not have is
-        // still the uniform 404.
-        notYours.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(404);
+        // still the uniform answer: a PAS error response, X12 AA.
+        UniformRefusal(notYours).Error.Single().Code.Coding.Single().Code.Should().Be("AA");
+    }
+
+    /// <summary>
+    /// The one answer to every refusal about a record: an inquiry response
+    /// whose ClaimResponse is an error (X12 AA, authorization number not
+    /// found) and names no authorization.
+    /// </summary>
+    private static ClaimResponse UniformRefusal(IActionResult result)
+    {
+        var parameters = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<Parameters>().Subject;
+        var bundle = parameters.Parameter.Single().Resource.Should().BeOfType<Bundle>().Subject;
+        var response = (ClaimResponse)bundle.Entry[0].Resource;
+        response.Outcome.Should().Be(ClaimProcessingCodes.Error);
+        response.PreAuthRef.Should().BeNull();
+        // The request's own identifiers may be echoed; CHO names no
+        // authorization of its own.
+        response.Identifier.Should().NotContain(i => i.System == PasResponseDetail.ChoAuthorizationSystem);
+        response.Item.Should().BeEmpty();
+        return response;
     }
 
     [Fact]
@@ -587,30 +606,26 @@ public class PasInquiryTests
         response.Status.Should().Be(FinancialResourceStatusCodes.Active);
         response.Use.Should().Be(ClaimUseCode.Preauthorization);
         response.Patient.Reference.Should().Be($"Patient/{Member}");
-        response.Identifier.Should().ContainSingle().Which.Value.Should().Be(AuthNumber);
+        response.Identifier.Should().ContainSingle(i => i.System == PasResponseDetail.ChoAuthorizationSystem)
+            .Which.Value.Should().Be(AuthNumber);
         response.Item.Should().ContainSingle("the requested service line is reported back");
     }
 
     [Fact]
     [Trait("Scenario", "PAS-04")]
-    public async Task PAS04_Replace_UnknownAuthorizationReturnsUniform404WithoutLeakingExistence()
+    public async Task PAS04_Replace_UnknownAuthorizationReturnsAUniformRefusalWithoutLeakingExistence()
     {
         var known = InquiryController(Record(Approved, "A1", tenant: "elsewhere"));
         var unknown = InquiryController();
 
-        var wrongTenant = await known.ClaimInquire(BundleWith(InquiryClaim()));
-        var noSuchAuth = await unknown.ClaimInquire(BundleWith(InquiryClaim()));
+        var wrongTenant = UniformRefusal(await known.ClaimInquire(BundleWith(InquiryClaim())));
+        var noSuchAuth = UniformRefusal(await unknown.ClaimInquire(BundleWith(InquiryClaim())));
 
-        var a = wrongTenant.Should().BeOfType<ObjectResult>().Subject;
-        var b = noSuchAuth.Should().BeOfType<ObjectResult>().Subject;
-
-        a.StatusCode.Should().Be(404);
-        b.StatusCode.Should().Be(a.StatusCode);
-
-        var outcomeA = a.Value.Should().BeOfType<OperationOutcome>().Subject;
-        var outcomeB = b.Value.Should().BeOfType<OperationOutcome>().Subject;
-        outcomeB.Issue[0].Diagnostics.Should().Be(outcomeA.Issue[0].Diagnostics,
+        noSuchAuth.Error.Single().Code.Coding.Single().Code
+            .Should().Be(wrongTenant.Error.Single().Code.Coding.Single().Code);
+        noSuchAuth.ProcessNote.Select(n => n.Text).Should().Equal(wrongTenant.ProcessNote.Select(n => n.Text),
             "the refusal must not reveal whether the authorization exists");
+        noSuchAuth.Disposition.Should().Be(wrongTenant.Disposition);
     }
 
     [Fact]
