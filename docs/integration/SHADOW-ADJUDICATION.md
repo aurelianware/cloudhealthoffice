@@ -72,6 +72,25 @@ version of this argument is
 [Why run shadow adjudication?](https://cloudhealthoffice.com/insights/cms-0057-f/why-shadow-adjudication)
 (`src/site/insights/cms-0057-f/why-shadow-adjudication.html`).
 
+### Denial verification
+
+Every denial the core made gets a verdict from CHO: each claim the core denied,
+and each line it denied on a claim it paid.
+
+| Verdict | Meaning | Why it matters |
+|---|---|---|
+| CHO would pay | Applying the plan's own contracts, benefits and authorizations, CHO pays the claim or line | Wrongful-denial risk: an appeal, provider abrasion, in Medicaid a complaint the state may see. `choWouldPayAmount` is what CHO would have paid |
+| CHO denies for another reason | CHO denies too, with a different CARC | The denial may stand while the reason on the remittance is wrong, which weakens it on appeal |
+| CHO confirms | CHO denies with the same CARC | Evidence the denial holds up |
+| CHO undecided | CHO could not decide the claim yet | "What to load next" says why |
+
+`byCoreDenialCode` groups the verdicts by the core's CARC, the most
+CHO-would-pay dollars first, with the confirm rate (confirmed of decided) and
+the codes CHO used instead. A denial reason with a low confirm rate is the one
+to look at first. Authorization denials appear here too, and with their
+evidence in `authorizationMismatches`. Every verdict is a lead for the plan's
+review, not a determination.
+
 ## How a shadow run stays read-only
 
 The run uses the same `ClaimAdjudicationOrchestrator` as a real adjudication,
@@ -109,6 +128,18 @@ in either direction. `Adjudication:Shadow:Enabled` stays the deployment's
 switch: while it is off, nothing runs, whatever a tenant saved.
 
 In the portal: Operations → Shadow Adjudication (or Imports & EDI, Setup), "Shadow adjudication for this plan".
+
+**Quick start and nightly runs in the portal.** The Shadow Adjudication page
+takes a sample upload: a CPCDS claim file (a month is a good first sample, up
+to 200 MB), and optionally CPCDS members and coverage and the UM platform's
+authorizations. It loads them through the same importers the file drop uses
+(enrollment-import-service, authorization-service, claims-service, each with
+its own import permission), switches shadow adjudication on for the plan if
+it is off, and queues a background run on the claims; the report opens when
+the run finishes, usually the same day. "Run it every night" is one switch:
+it turns on the plan's file drop with a shadow run after each claim file
+(`ShadowAfterImport`) and shadow adjudication for the plan. The SFTP login
+and folder are set up in Imports & EDI, Setup.
 The Shadow Adjudication page also runs shadow adjudication on a loaded claim
 file, lists the runs, and shows each run's report and discrepancy CSV.
 Switching on "Shadow-adjudicate each claim file after it loads" there turns
@@ -156,6 +187,16 @@ CPCDS file drop and the portal's "Run shadow" both use this.
 `GET .../runs/{runId}` returns one, and `GET .../runs/{runId}/results?kind=PaidVariance&limit=200`
 returns per-claim comparisons, largest paid difference first.
 
+### Trend
+
+`GET .../trend?days=90&bucket=week` (`day` or `week`, weeks from Monday UTC;
+`days` at most 730) rolls the completed runs up by when they ran: runs, claims
+compared, comparable, decided and matched claims, `decidedRate`, `matchRate`,
+and `corePaidMoreAmount` and `corePaidLessAmount` (from each run's net and
+absolute paid differences). An import batch run more than once counts its
+latest run only. The portal shows the last 90 days by week once there are two
+weeks of runs.
+
 ### Run report
 
 `GET .../runs/{runId}/report?top=10` is what a plan reads after a run:
@@ -173,6 +214,7 @@ returns per-claim comparisons, largest paid difference first.
 | `authorizationMismatches` | Claims one side denied for prior authorization and the other did not: "Core denied for authorization, CHO would pay" and "Core paid, CHO denies for authorization", with claims and dollars. See [Prior authorization](#prior-authorization). |
 | `authorizationMismatchesByPolicy` | The same claims by the medical policy (and version) behind CHO's check, as the plan's PA rules name it ("No policy recorded" when they name none). Tells a reviewer which policy to open first. |
 | `authorizationsMatchedWithoutNumber` | Comparable claims that carried no authorization number where CHO found an approved authorization by member, date, service and provider. |
+| `denialVerification` | Every core denial checked against CHO (see [Denial verification](#denial-verification)): `coreDenials`, the four groups `choWouldPay`, `choDeniesForAnotherReason`, `choConfirms`, `choUndecided` (denials, claims, billed, what CHO would pay, example claims), `confirmRate`, and `byCoreDenialCode` with the same counts per CARC and the codes CHO used instead. |
 | `byProcedure` | Procedure codes (or `REV` revenue codes) on lines that differ, with line counts and line dollars. |
 | `byBillingProvider` | Billing NPIs on non-matching decided claims. |
 

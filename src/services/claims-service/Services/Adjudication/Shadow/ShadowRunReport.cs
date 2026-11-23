@@ -62,6 +62,13 @@ public class ShadowRunReport
     /// </summary>
     public ShadowReasonRow AuthorizationsMatchedWithoutNumber { get; init; } = new();
 
+    /// <summary>
+    /// Every core denial (denied claims, and denied lines on paid claims)
+    /// checked against CHO: would pay, denies for another reason, confirms, or
+    /// undecided, by the core's denial code. See <see cref="ShadowDenialVerification"/>.
+    /// </summary>
+    public ShadowDenialVerification DenialVerification { get; init; } = new();
+
     /// <summary>Procedure (or revenue) codes on lines that differ, largest line dollars first.</summary>
     public List<ShadowReasonRow> ByProcedure { get; init; } = [];
 
@@ -161,6 +168,7 @@ public static class ShadowRunReportBuilder
             AuthorizationsMatchedWithoutNumber = Row(
                 PriorAuthorizationNumberSource.Matched,
                 comparable.Where(r => r.PriorAuthorizationEvidence.Any(e => e.NumberSource == PriorAuthorizationNumberSource.Matched))),
+            DenialVerification = ShadowDenialVerificationBuilder.Build(results, topN),
             ByProcedure = Top(ProcedureRows(differing), topN, byMoney: true),
             ByBillingProvider = Top(
                 differing.GroupBy(r => r.BillingProviderNpi ?? "unknown", StringComparer.Ordinal)
