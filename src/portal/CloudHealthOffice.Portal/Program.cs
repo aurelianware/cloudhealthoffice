@@ -292,6 +292,7 @@ builder.Services.AddScoped<IEdiTransactionsService, EdiTransactionsService>();
 builder.Services.AddScoped<IDataDropService, DataDropService>();
 builder.Services.AddScoped<IShadowAdjudicationClient, ShadowAdjudicationClient>();
 builder.Services.AddScoped<IShadowQuickStartClient, ShadowQuickStartClient>();
+builder.Services.AddScoped<IShadowFindingsClient, ShadowFindingsClient>();
 builder.Services.AddScoped<IShadowPendedClient, ShadowPendedClient>();
 builder.Services.AddScoped<IEligibilityService, EligibilityService>();
 builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
@@ -540,6 +541,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 app.MapMemberDocumentDownload();
 app.MapDocumentDownload();
 app.MapShadowDiscrepancyDownload();
+app.MapShadowFindingsExport();
 
 app.MapControllers();
 app.MapRazorPages();

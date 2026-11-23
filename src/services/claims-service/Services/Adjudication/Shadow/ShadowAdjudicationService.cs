@@ -48,8 +48,10 @@ public sealed class ShadowAdjudicationService : IShadowAdjudicationService
         IShadowAdjudicationPipeline pipeline,
         IShadowAdjudicationRepository store,
         ShadowAdjudicationTenants tenants,
-        ILogger<ShadowAdjudicationService> logger)
+        ILogger<ShadowAdjudicationService> logger,
+        IShadowFindingService? findings = null)
     {
+        _findings = findings;
         _claims = claims;
         _transactions = transactions;
         _pipeline = pipeline;
@@ -57,6 +59,27 @@ public sealed class ShadowAdjudicationService : IShadowAdjudicationService
         _tenants = tenants;
         _options = tenants.Options;
         _logger = logger;
+    }
+
+    private readonly IShadowFindingService? _findings;
+
+    /// <summary>
+    /// Adds the run's payment differences to the recovery worklist. A failure
+    /// here is logged and leaves the run as it is: the worklist can be rebuilt
+    /// from the run (POST .../runs/{runId}/findings).
+    /// </summary>
+    private async Task AddFindingsAsync(ShadowAdjudicationRun run, IReadOnlyList<ShadowAdjudicationResult> results, CancellationToken ct)
+    {
+        if (_findings is null || !_options.AddFindingsAfterRun) return;
+        try
+        {
+            var n = await _findings.AddRunAsync(run, results, ct).ConfigureAwait(false);
+            _logger.LogInformation("Shadow run {RunId}: {Findings} recovery worklist findings added or updated", run.Id, n);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Shadow run {RunId}: could not update the recovery worklist", run.Id);
+        }
     }
 
     private async Task EnsureEnabledAsync(string tenantId, CancellationToken ct)
@@ -136,6 +159,7 @@ public sealed class ShadowAdjudicationService : IShadowAdjudicationService
             Math.Max(1, _options.MaxClaimsPerBackgroundRun), ct).ConfigureAwait(false);
         Summarize(run, all);
         await FinishAsync(run, ShadowRunStatus.Completed, null, ct).ConfigureAwait(false);
+        await AddFindingsAsync(run, all, ct).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Shadow adjudication background run {RunId}: {Compared} compared, {Skipped} skipped, {Failed} failed, match rate {MatchRate}",
@@ -185,6 +209,7 @@ public sealed class ShadowAdjudicationService : IShadowAdjudicationService
         Summarize(run, results);
         run.CompletedAtUtc = DateTime.UtcNow;
         await _store.SaveRunAsync(run, results, ct).ConfigureAwait(false);
+        await AddFindingsAsync(run, results, ct).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Shadow adjudication run {RunId}: {Compared} compared, {Skipped} skipped, {Failed} failed, match rate {MatchRate}",

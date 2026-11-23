@@ -63,6 +63,9 @@ builder.Services.AddSingleton<ITmppmStore, MongoTmppmStore>();
 builder.Services.AddSingleton<IContextRuleEngine, ContextRuleEngine>();
 builder.Services.AddSingleton<ITerminologyTranslationService, TerminologyTranslationService>();
 builder.Services.AddHostedService<CodeSystemCatalogSeedService>();
+// Dated code sets (CMS ICD-10-CM/PCS and HCPCS releases) for $validate-code with a date of service.
+builder.Services.AddSingleton<CHO.TerminologyService.Services.CodeSets.ICodeSetRepository, MongoCodeSetRepository>();
+builder.Services.AddSingleton<CHO.TerminologyService.Services.CodeSets.CodeSetValidationService>();
 
 // Map loaders (register all implementations)
 builder.Services.AddSingleton<IMapLoader, Rf2MapLoader>();

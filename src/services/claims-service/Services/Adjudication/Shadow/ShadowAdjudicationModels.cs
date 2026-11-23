@@ -77,6 +77,13 @@ public class ShadowAdjudicationResult
     public string? BillingProviderNpi { get; set; }
 
     /// <summary>
+    /// When the core paid (or, without a paid date, adjudicated) the claim. A
+    /// recovery worklist measures the provider contract's recoupment lookback
+    /// from it.
+    /// </summary>
+    public DateTime? CorePaidDate { get; set; }
+
+    /// <summary>
     /// The authorization number the core matched the claim to (CPCDS file column
     /// "Prior authorization number"), the one CHO's prior-authorization check
     /// looked up. Evidence for an authorization finding.
@@ -309,6 +316,12 @@ public class ShadowAdjudicationOptions
 
     /// <summary>Most claims one background run adjudicates (a whole import batch).</summary>
     public int MaxClaimsPerBackgroundRun { get; set; } = 50_000;
+
+    /// <summary>
+    /// Add each finished run's payment differences to the recovery worklist
+    /// (ShadowFindings). Default true.
+    /// </summary>
+    public bool AddFindingsAfterRun { get; set; } = true;
 
     /// <summary>How often the background worker looks for queued runs.</summary>
     public TimeSpan WorkerInterval { get; set; } = TimeSpan.FromSeconds(10);

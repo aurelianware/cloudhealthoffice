@@ -34,6 +34,22 @@ public sealed record ValidatorOptions(
     bool ShowHelp)
 {
     public const int DefaultMaxClaims = 10_000;
+
+    /// <summary>First wait before re-reading a submitted claim's status; doubles up to <see cref="PendObservationIntervalMilliseconds"/> (see <see cref="MccObservationBackoff"/>).</summary>
+    public int PendObservationInitialIntervalMilliseconds { get; init; } = MccObservationBackoff.DefaultInitialMilliseconds;
+
+    /// <summary>Width of each throughput window printed during the timed phase (see <see cref="MccThroughputWindows"/>).</summary>
+    public int ThroughputWindowSeconds { get; init; } = 60;
+
+    /// <summary>
+    /// Directory holding CMS's synthetic Medicare claim files (carrier.csv,
+    /// outpatient.csv, inpatient.csv, beneficiary_*.csv). Set: the corpus is
+    /// read from them instead of generated (see <see cref="CmsSyntheticCorpus"/>).
+    /// </summary>
+    public string? CmsSyntheticDirectory { get; init; }
+
+    /// <summary>Optional path for the per-window throughput CSV.</summary>
+    public string? ThroughputWindowsCsvPath { get; init; }
     // Three local claims-service replicas default to 32 Service Bus calls each.
     // Allow the validator to keep that 96-call consumer pool fed.
     public const int MaxParallelism = 96;
@@ -108,6 +124,18 @@ public sealed record ValidatorOptions(
                     break;
                 case "--pend-observation-interval-ms" when i + 1 < args.Length:
                     options.PendObservationIntervalMilliseconds = int.Parse(args[++i]);
+                    break;
+                case "--pend-observation-initial-interval-ms" when i + 1 < args.Length:
+                    options.PendObservationInitialIntervalMilliseconds = int.Parse(args[++i]);
+                    break;
+                case "--throughput-window-seconds" when i + 1 < args.Length:
+                    options.ThroughputWindowSeconds = int.Parse(args[++i]);
+                    break;
+                case "--cms-synthetic-dir" when i + 1 < args.Length:
+                    options.CmsSyntheticDirectory = args[++i];
+                    break;
+                case "--throughput-windows-csv" when i + 1 < args.Length:
+                    options.ThroughputWindowsCsvPath = args[++i];
                     break;
                 case "--pend-diagnostics" when i + 1 < args.Length:
                     options.PendDiagnosticsPath = args[++i];
@@ -205,7 +233,14 @@ public sealed record ValidatorOptions(
             options.PriorAuthScenariosEnabled,
             Math.Clamp(options.PriorAuthScenarioRate, 0.0, 0.25),
             options.TplScenariosEnabled,
-            options.ShowHelp);
+            options.ShowHelp)
+        {
+            PendObservationInitialIntervalMilliseconds = Math.Clamp(
+                options.PendObservationInitialIntervalMilliseconds, 10, Math.Clamp(options.PendObservationIntervalMilliseconds, 100, 30_000)),
+            ThroughputWindowSeconds = Math.Clamp(options.ThroughputWindowSeconds, 5, 3_600),
+            ThroughputWindowsCsvPath = string.IsNullOrWhiteSpace(options.ThroughputWindowsCsvPath) ? null : options.ThroughputWindowsCsvPath,
+            CmsSyntheticDirectory = string.IsNullOrWhiteSpace(options.CmsSyntheticDirectory) ? null : options.CmsSyntheticDirectory,
+        };
     }
 
     private sealed class MutableOptions
@@ -227,6 +262,10 @@ public sealed record ValidatorOptions(
         public int ServiceBusReconciliationTimeoutSeconds { get; set; } = 300;
         public int PendObservationTimeoutSeconds { get; set; } = 45;
         public int PendObservationIntervalMilliseconds { get; set; } = 1000;
+        public int PendObservationInitialIntervalMilliseconds { get; set; } = MccObservationBackoff.DefaultInitialMilliseconds;
+        public int ThroughputWindowSeconds { get; set; } = 60;
+        public string? ThroughputWindowsCsvPath { get; set; }
+        public string? CmsSyntheticDirectory { get; set; }
         public string? PendDiagnosticsPath { get; set; }
         public int PendDiagnosticsNcciSampleSize { get; set; } = 200;
         public int TimeoutSeconds { get; set; } = 60;

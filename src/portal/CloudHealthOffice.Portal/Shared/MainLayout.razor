@@ -218,8 +218,11 @@
                         </MudNavLink>
                         @if (_canImportClaims)
                         {
-                            <MudNavLink Href="/shadow-adjudication" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.CompareArrows">
+                            <MudNavLink Href="/shadow-adjudication" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.CompareArrows">
                                 Shadow Adjudication
+                            </MudNavLink>
+                            <MudNavLink Href="/shadow-adjudication/findings" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.FactCheck">
+                                Recovery Worklist
                             </MudNavLink>
                         }
                         <MudNavLink Href="/admin/unmatched-attachments" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HelpOutline">
