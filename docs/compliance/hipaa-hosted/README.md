@@ -14,6 +14,10 @@ These documents are workstream 8 of the hosted build plan. The HIPAA Security Ru
 | [CONTINGENCY-PLAN.md](CONTINGENCY-PLAN.md) | 164.308(a)(7) | Backup, disaster recovery, emergency mode, restore testing, criticality |
 | [TRAINING-RECORD.md](TRAINING-RECORD.md) | 164.308(a)(5) | Security awareness training content and the signed record |
 | [ACCESS-REVIEW.md](ACCESS-REVIEW.md) | 164.308(a)(3), (a)(4), (a)(1)(ii)(D) | Quarterly access and activity review checklist and record |
+| [SECURITY-OFFICER-DESIGNATION.md](SECURITY-OFFICER-DESIGNATION.md) | 164.308(a)(2) | Names the Security Officer and Privacy Officer, their duties and authority |
+| [VENDOR-BAA-REGISTER.md](VENDOR-BAA-REGISTER.md) | 164.308(b); 164.502(e) | Every vendor, whether it touches PHI, and its BAA status; the Google Cloud services the hosted profile uses |
+
+The step-by-step list to get from here to a signed BAA, with what only the account owner can do: [BAA-READY-CHECKLIST.md](../security-readiness/BAA-READY-CHECKLIST.md).
 
 The plan-facing BAA is [docs/diligence/BAA-TEMPLATE.md](../../diligence/BAA-TEMPLATE.md). It names Google Cloud as the subcontractor for the hosted environment.
 
