@@ -192,3 +192,26 @@ public class ShadowResult
     public string? ChoPendReason { get; set; }
     public List<string> ChoStageFindings { get; set; } = new();
 }
+
+/// <summary>Completed runs rolled up by day or week (<c>GET .../shadow-adjudication/trend</c>).</summary>
+public class ShadowRunTrend
+{
+    public string Bucket { get; set; } = "week";
+    public DateTime FromUtc { get; set; }
+    public DateTime ToUtc { get; set; }
+    public List<ShadowRunTrendPoint> Points { get; set; } = new();
+}
+
+public class ShadowRunTrendPoint
+{
+    public string Period { get; set; } = string.Empty;
+    public int Runs { get; set; }
+    public int ClaimsCompared { get; set; }
+    public int ComparableClaims { get; set; }
+    public int DecidedClaims { get; set; }
+    public int MatchedClaims { get; set; }
+    public decimal? DecidedRate { get; set; }
+    public decimal? MatchRate { get; set; }
+    public decimal CorePaidMoreAmount { get; set; }
+    public decimal CorePaidLessAmount { get; set; }
+}

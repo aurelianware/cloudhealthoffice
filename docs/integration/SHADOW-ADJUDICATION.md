@@ -128,6 +128,18 @@ in either direction. `Adjudication:Shadow:Enabled` stays the deployment's
 switch: while it is off, nothing runs, whatever a tenant saved.
 
 In the portal: Operations → Shadow Adjudication (or Imports & EDI, Setup), "Shadow adjudication for this plan".
+
+**Quick start and nightly runs in the portal.** The Shadow Adjudication page
+takes a sample upload: a CPCDS claim file (a month is a good first sample, up
+to 200 MB), and optionally CPCDS members and coverage and the UM platform's
+authorizations. It loads them through the same importers the file drop uses
+(enrollment-import-service, authorization-service, claims-service, each with
+its own import permission), switches shadow adjudication on for the plan if
+it is off, and queues a background run on the claims; the report opens when
+the run finishes, usually the same day. "Run it every night" is one switch:
+it turns on the plan's file drop with a shadow run after each claim file
+(`ShadowAfterImport`) and shadow adjudication for the plan. The SFTP login
+and folder are set up in Imports & EDI, Setup.
 The Shadow Adjudication page also runs shadow adjudication on a loaded claim
 file, lists the runs, and shows each run's report and discrepancy CSV.
 Switching on "Shadow-adjudicate each claim file after it loads" there turns
@@ -174,6 +186,16 @@ CPCDS file drop and the portal's "Run shadow" both use this.
 `GET /api/v1/claims/shadow-adjudication/runs` lists recent runs,
 `GET .../runs/{runId}` returns one, and `GET .../runs/{runId}/results?kind=PaidVariance&limit=200`
 returns per-claim comparisons, largest paid difference first.
+
+### Trend
+
+`GET .../trend?days=90&bucket=week` (`day` or `week`, weeks from Monday UTC;
+`days` at most 730) rolls the completed runs up by when they ran: runs, claims
+compared, comparable, decided and matched claims, `decidedRate`, `matchRate`,
+and `corePaidMoreAmount` and `corePaidLessAmount` (from each run's net and
+absolute paid differences). An import batch run more than once counts its
+latest run only. The portal shows the last 90 days by week once there are two
+weeks of runs.
 
 ### Run report
 
