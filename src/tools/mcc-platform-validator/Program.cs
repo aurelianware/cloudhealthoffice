@@ -66,7 +66,8 @@ Console.WriteLine(
     $"  SB reconcile:{(options.ServiceBusReconciliationEnabled
         ? $" enabled ({options.ServiceBusReconciliationTimeoutSeconds}s)"
         : " disabled")}");
-Console.WriteLine($"  Outcome wait:{options.PendObservationTimeoutSeconds}s (poll {options.PendObservationIntervalMilliseconds}ms)");
+Console.WriteLine($"  Outcome wait:{options.PendObservationTimeoutSeconds}s (poll {options.PendObservationInitialIntervalMilliseconds}ms doubling to {options.PendObservationIntervalMilliseconds}ms)");
+Console.WriteLine($"  Windows:     {options.ThroughputWindowSeconds}s throughput windows{(options.ThroughputWindowsCsvPath is null ? "" : $" -> {options.ThroughputWindowsCsvPath}")}");
 Console.WriteLine($"  Pend diag:   {(options.PendDiagnosticsPath is not null ? $"enabled -> {options.PendDiagnosticsPath}" : "disabled")}");
 Console.WriteLine();
 
@@ -128,7 +129,7 @@ var providerPool = await MeasureLifecycleValuePhaseAsync(lifecycleTimings, "Fixt
     MccCleanPaidFixture.NormalizeClaims(claims);
     return Task.FromResult(MccProviderFixturePool.Apply(claims, options.Seed, fixtureScopeId));
 });
-Console.WriteLine($"Generated {claims.Count:N0} MCC claims in memory");
+Console.WriteLine($"{(options.CmsSyntheticDirectory is null ? "Generated" : "Loaded")} {claims.Count:N0} MCC claims in memory");
 Console.WriteLine(
     $"Provider fixture pool: {providerPool.ProvidersBefore:N0} -> {providerPool.ProvidersAfter:N0} distinct NPIs " +
     $"({providerPool.ReusedAssignments:N0} assignments reused, {providerPool.ProtectedClaims:N0} provider-sensitive claims preserved)");
@@ -247,6 +248,7 @@ if (!options.NoPublishSummary)
     });
 }
 
+var throughputWindows = new MccThroughputWindows(TimeSpan.FromSeconds(options.ThroughputWindowSeconds));
 var processingStartedAtUtc = DateTimeOffset.UtcNow;
 total.Start();
 await Parallel.ForEachAsync(
@@ -262,6 +264,21 @@ await Parallel.ForEachAsync(
             answerKey,
             json);
         results.Add(result);
+        var closedWindows = throughputWindows.Record(
+            total.Elapsed,
+            result.Elapsed.TotalMilliseconds,
+            result.Outcome is ClaimValidationOutcome.PlatformFailure or ClaimValidationOutcome.ObservationTimeout);
+        if (closedWindows.Count > 0)
+        {
+            lock (progressLock)
+            {
+                Console.WriteLine();
+                foreach (var window in closedWindows)
+                {
+                    Console.WriteLine(MccThroughputWindows.FormatLine(window));
+                }
+            }
+        }
 
         var done = Interlocked.Increment(ref completed);
         if (result.Outcome is ClaimValidationOutcome.PlatformFailure or ClaimValidationOutcome.ObservationTimeout)
@@ -312,6 +329,19 @@ await Parallel.ForEachAsync(
 
 total.Stop();
 AddLifecycleTiming(lifecycleTimings, "Timed adjudication", "Processing", processingStartedAtUtc, DateTimeOffset.UtcNow, total.Elapsed);
+if (throughputWindows.Complete(total.Elapsed) is { } lastWindow)
+{
+    Console.WriteLine();
+    Console.WriteLine(MccThroughputWindows.FormatLine(lastWindow) + "  (partial)");
+}
+WriteThroughputTrend(throughputWindows.Windows);
+if (options.ThroughputWindowsCsvPath is { } windowsCsv)
+{
+    var windowsDirectory = Path.GetDirectoryName(windowsCsv);
+    if (!string.IsNullOrEmpty(windowsDirectory)) Directory.CreateDirectory(windowsDirectory);
+    await File.WriteAllTextAsync(windowsCsv, MccThroughputWindows.ToCsv(throughputWindows.Windows));
+    Console.WriteLine($"  Throughput windows: {windowsCsv}");
+}
 
 // Everything from here to the final dashboard publish happens after the
 // timed benchmark stops, so none of it counts against throughput -- but it
@@ -480,6 +510,23 @@ static void AddLifecycleTiming(
         completedAtUtc));
 }
 
+static void WriteThroughputTrend(IReadOnlyList<MccThroughputWindow> windows)
+{
+    // Full windows only: the last one is usually partial.
+    var full = windows.Take(Math.Max(0, windows.Count - 1)).ToList();
+    if (full.Count < 4)
+    {
+        return;
+    }
+
+    var quarter = Math.Max(1, full.Count / 4);
+    var first = full.Take(quarter).Average(w => w.ClaimsPerSecond);
+    var last = full.Skip(full.Count - quarter).Average(w => w.ClaimsPerSecond);
+    var change = first <= 0 ? 0 : (last - first) / first * 100;
+    Console.WriteLine(
+        $"  Throughput trend:   first quarter {first:N2} claims/sec, last quarter {last:N2} claims/sec ({change:+0.0;-0.0}%) over {full.Count:N0} full windows");
+}
+
 static async Task<ClaimValidationResult> ProcessClaimAsync(
     HttpClient http,
     ValidatorOptions options,
@@ -608,6 +655,10 @@ static async Task<ObservedClaimStatus> ObserveServiceBusOutcomeAsync(
     var source = new HttpClaimStatusSource(http, options.ClaimsUrl);
     var timeout = TimeSpan.FromSeconds(options.PendObservationTimeoutSeconds);
     var interval = TimeSpan.FromMilliseconds(options.PendObservationIntervalMilliseconds);
+    // Start short and double up to the interval (see MccObservationBackoff):
+    // a fixed 1 s wait capped measured throughput at about parallelism per second.
+    var wait = MccObservationBackoff.Initial(
+        TimeSpan.FromMilliseconds(options.PendObservationInitialIntervalMilliseconds), interval);
     var deadline = DateTimeOffset.UtcNow.Add(timeout);
 
     while (true)
@@ -649,7 +700,8 @@ static async Task<ObservedClaimStatus> ObserveServiceBusOutcomeAsync(
                 $"Timed out waiting {timeout.TotalSeconds:N0}s for Service Bus adjudication of claim {submittedClaimId}");
         }
 
-        await Task.Delay(interval < remaining ? interval : remaining);
+        await Task.Delay(wait < remaining ? wait : remaining);
+        wait = MccObservationBackoff.Next(wait, interval);
     }
 }
 
@@ -1012,6 +1064,19 @@ static async Task CreateServiceCategoryMappingAsync(
 
 static async Task<List<SyntheticClaim>> GenerateClaimsAsync(ValidatorOptions options)
 {
+    if (options.CmsSyntheticDirectory is { } cmsDirectory)
+    {
+        var cms = CmsSyntheticCorpus.Load(cmsDirectory, options.Claims, options.Seed);
+        Console.WriteLine(
+            $"CMS synthetic corpus: {cms.Claims.Count:N0} of {cms.ClaimsAvailable:N0} claims " +
+            $"({cms.Professional:N0} professional, {cms.Outpatient:N0} outpatient, {cms.Inpatient:N0} inpatient; " +
+            $"{cms.Beneficiaries:N0} beneficiaries; {cms.RowsRead:N0} rows read, {cms.ClaimsSkipped:N0} claims without a billable line skipped)");
+        Console.WriteLine("CMS synthetic corpus: no expected outcomes (scored Unspecified); a volume and throughput run, not a correctness or payment test");
+        MccClaimDateNormalizer.NormalizeClaimDates(cms.Claims, options.Seed);
+        CmsSyntheticCorpus.ResetMemberCoverage(cms.Claims);
+        return cms.Claims;
+    }
+
     var profile = BuildCorpusProfile(options.Claims, options.Seed);
     var writer = new InMemoryCorpusWriter();
     var generator = new ClaimCorpusGenerator(new InMemoryReferenceDataProvider());
@@ -3603,6 +3668,17 @@ static void PrintUsage()
       --pend-observation-interval-ms <ms>
                                  Poll interval for persisted claim status, also used by post-window
                                  reconciliation (default: 1000)
+      --pend-observation-initial-interval-ms <ms>
+                                 First wait before re-reading a submitted claim's status; doubles
+                                 up to --pend-observation-interval-ms (default: 50)
+      --throughput-window-seconds <s>
+                                 Print claims/sec and latency for each window of this many
+                                 seconds during the timed phase (default: 60)
+      --cms-synthetic-dir <dir>  Read the corpus from CMS's synthetic Medicare claim files
+                                 (carrier/outpatient/inpatient/beneficiary_*.csv) instead of
+                                 generating it. Volume and throughput only: no expected outcomes
+      --throughput-windows-csv <path>
+                                 Also write the windows as CSV
       --pend-diagnostics <path>  Write a per-claim pend diagnostic report (JSON) for expected-pend
                                  scenarios and a sample of NCCI/MUE pends; prints an aggregate
                                  scenario table to the run summary. Off by default; adds one

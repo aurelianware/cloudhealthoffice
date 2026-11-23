@@ -24,8 +24,21 @@ The validator submits each claim to claims-service and scores only the outcome
 the claims-service adjudication pipeline persisted (the single adjudicator). It
 never adjudicates on the side and never writes an adjudication back. After
 submission it polls `GET /api/claims/{id}` until the claim reaches a terminal or
-pended status, or until `--pend-observation-timeout` expires (poll interval
-`--pend-observation-interval-ms`).
+pended status, or until `--pend-observation-timeout` expires. The first wait is
+`--pend-observation-initial-interval-ms` (50 ms) and each wait doubles up to
+`--pend-observation-interval-ms` (1,000 ms).
+
+Each worker holds one claim until it is terminal, so the wait bounds measured
+throughput: with a fixed 1,000 ms poll a 200 ms claim held its worker for a
+second, and a run could not measure much more than parallelism claims per
+second. Results recorded before November 2026 used the fixed poll; read their
+throughput as a floor.
+
+During the timed phase the validator prints claims/sec and p50/p95/p99 latency
+for each `--throughput-window-seconds` window (60 s), a first-quarter versus
+last-quarter trend at the end, and with `--throughput-windows-csv <path>` the
+same windows as CSV. A rate that falls as stored data grows shows here even
+when the whole-run average looks fine.
 
 `--servicebus-only` and `--no-pend-observation` are still accepted so older
 scripts keep working, but they have no effect: this is the only mode.
@@ -35,7 +48,26 @@ was removed; passing it is now an error.
 Defaults:
 
 - `--pend-observation-timeout 45`
+- `--pend-observation-initial-interval-ms 50`
 - `--pend-observation-interval-ms 1000`
+- `--throughput-window-seconds 60`
+
+## CMS Synthetic Claims (`--cms-synthetic-dir`)
+
+`--cms-synthetic-dir <dir>` replaces the generated corpus with CMS's public
+2023 synthetic Medicare claims ("Synthetic Medicare Enrollment, Fee-for-Service
+Claims, and Prescription Drug Event", data.cms.gov; public use, no
+restrictions). The directory holds `carrier.csv`, `outpatient.csv`,
+`inpatient.csv` and `beneficiary_*.csv`, plain or gzipped;
+`scripts/demo/gcp/fetch-cms-synthetic.sh` downloads them.
+
+The validator takes a seeded sample of `--claims` claims with each claim type
+in its share of the files, keeps CMS's lines, codes, diagnoses and charges, and
+maps each beneficiary and provider number to a seeded synthetic member and
+provider. The claims have no expected outcome, so they score as Unspecified
+and the scenario injections are skipped: the run measures volume and
+throughput only. CMS says the files' payment amounts do not closely model
+reality, so no payment comparison is made.
 
 ## Pended Edge Cases
 

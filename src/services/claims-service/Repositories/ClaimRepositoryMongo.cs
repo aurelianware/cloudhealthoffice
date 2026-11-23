@@ -1071,9 +1071,14 @@ public class ClaimRepositoryMongo : IClaimRepository
             var claim = await _collection.Find(present).Sort(sort).Limit(1).FirstOrDefaultAsync(ct);
             return claim is null ? null : pick(claim);
         }
-        var commit = await Oldest(b.Ne(c => c.PendingAccumulatorCommit, null),
+        // $exists on the indexed path, so the sparse *_created indexes answer
+        // the filter and the order: only claims holding an entry are read. A
+        // "$ne: null" filter could use no index and scanned (and sorted) the
+        // whole Claims collection, every tenant's, on every poll of every
+        // replica: a cost that grew with every claim ever stored.
+        var commit = await Oldest(b.Exists("PendingAccumulatorCommit.CreatedAtMs"),
             Builders<Claim>.Sort.Ascending(c => c.PendingAccumulatorCommit!.CreatedAtMs), c => c.PendingAccumulatorCommit?.CreatedAtMs);
-        var reversal = await Oldest(b.Ne(c => c.PendingAccumulatorReversal, null),
+        var reversal = await Oldest(b.Exists("PendingAccumulatorReversal.CreatedAtMs"),
             Builders<Claim>.Sort.Ascending(c => c.PendingAccumulatorReversal!.CreatedAtMs), c => c.PendingAccumulatorReversal?.CreatedAtMs);
         return (commit, reversal) switch
         {
