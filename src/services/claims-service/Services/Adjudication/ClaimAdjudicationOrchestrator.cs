@@ -33,6 +33,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     public static readonly IReadOnlySet<string> ShadowSafeStages = new HashSet<string>(StringComparer.Ordinal)
     {
         Stages.ScrubbingStage.StageName,
+        Stages.CodeValidityStage.StageName,
         Stages.TimelyFilingStage.StageName,
         Stages.DuplicateClaimStage.StageName,
         Stages.ProviderIntegrityStage.StageName,

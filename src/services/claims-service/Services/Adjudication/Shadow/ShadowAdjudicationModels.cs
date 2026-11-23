@@ -104,6 +104,13 @@ public class ShadowAdjudicationResult
     public PriorAuthorizationLineEvidence? EvidenceFor(int lineNumber) =>
         PriorAuthorizationEvidence.FirstOrDefault(e => e.LineNumber == lineNumber);
 
+    /// <summary>
+    /// Codes on the claim that were not valid on the date of service, by CHO's
+    /// dated CMS code sets (<see cref="Stages.CodeValidityStage"/>). A finding
+    /// even when both sides paid: see <see cref="ShadowCodeValidity"/>.
+    /// </summary>
+    public List<CodeValidity.CodeValidityFinding> CodeValidityFindings { get; set; } = [];
+
     public string Kind { get; set; } = ShadowDiscrepancyKind.NotComparable;
 
     public string CoreOutcome { get; set; } = ShadowOutcome.NotFinal;
