@@ -255,7 +255,7 @@ public sealed class StateEncounterBatchService : IStateEncounterBatchService
                 FrequencyCode = link?.FrequencyCode ?? "1",
                 OriginalStateReference = link?.StateReference
             };
-            var errors = EncounterValidator.Validate(encounter).ToList();
+            var errors = EncounterValidator.Validate(encounter, route).ToList();
             if (member is null) errors.Insert(0, "member record not found in member-service");
             if (billing is null) errors.Insert(0, "billing provider not found in provider-service by NPI");
 
@@ -290,8 +290,11 @@ public sealed class StateEncounterBatchService : IStateEncounterBatchService
             WaitingOnOriginal = waiting
         };
 
-        // ── Write one interchange per form type ─────────────────────────
-        foreach (var group in mapped.GroupBy(m => m.Claim.Form).OrderBy(g => g.Key))
+        // ── Write one interchange per form type, split at the receiver's file limit ──
+        var files = mapped.GroupBy(m => m.Claim.Form).OrderBy(g => g.Key)
+            .SelectMany(g => g.Chunk(route.MaxTransactionsPerFile ?? int.MaxValue)
+                .Select(chunk => (Form: g.Key, Items: chunk)));
+        foreach (var group in files)
         {
             var icn = await _controlNumbers.NextInterchangeControlNumberAsync(tenantId, route.StateCode, ct);
             var envelope = new Encounter837Envelope
@@ -317,8 +320,8 @@ public sealed class StateEncounterBatchService : IStateEncounterBatchService
                 CreatedAtUtc = now
             };
 
-            var written = Encounter837Writer.Write(group.Key, group.Select(g => g.Claim).ToList(), envelope);
-            var formLabel = group.Key == EncounterFormType.Institutional ? "837I" : "837P";
+            var written = Encounter837Writer.Write(group.Form, group.Items.Select(g => g.Claim).ToList(), envelope);
+            var formLabel = group.Form == EncounterFormType.Institutional ? "837I" : "837P";
             var file = new StateEncounterFile
             {
                 TenantId = tenantId,
@@ -354,7 +357,7 @@ public sealed class StateEncounterBatchService : IStateEncounterBatchService
                         .Set(s => s.GroupControlNumber, placement.GroupControlNumber)
                         .Set(s => s.TransactionSetControlNumber, placement.TransactionSetControlNumber)
                         .Set(s => s.PatientControlNumber, placement.PatientControlNumber)
-                        .Set(s => s.FrequencyCode, group.First(g => g.Submission.Id == placement.SubmissionId).Claim.FrequencyCode)
+                        .Set(s => s.FrequencyCode, group.Items.First(g => g.Submission.Id == placement.SubmissionId).Claim.FrequencyCode)
                         .Set(s => s.ValidationErrors, new List<string>())
                         .Set(s => s.LastError, null)
                         .Set(s => s.UpdatedAt, now),
@@ -513,7 +516,7 @@ public sealed class StateEncounterBatchService : IStateEncounterBatchService
     {
         var who = Safe(tenant.PlanCode) is { Length: > 0 } code ? code : Safe(tenant.SubmitterId);
         var mode = usage == "P" ? "PROD" : "TEST";
-        return $"{route.FilePrefix}_{who}_{formLabel}_{mode}_{now:yyyyMMddHHmmss}_{icn:D9}.x12";
+        return $"{route.FilePrefix}_{who}_{formLabel}_{mode}_{now:yyyyMMddHHmmss}_{icn:D9}.{route.FileExtension}";
     }
 
     private static string Safe(string? value) =>

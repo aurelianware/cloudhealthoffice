@@ -113,7 +113,53 @@ encounter keeps a `responseHistory`.
 | DHCS EVR (XML) | — | Refused with 422 until the EVR schema from the DHCS guide is implemented. |
 
 References in a file that match nothing are returned as `unmatched` and kept
-on the stored response. `StateFrontEndAccepted` means the state's front end
+on the stored response.
+
+## Texas (TMHP) specifics
+
+These come from TMHP's public guides: the 277CA companion guide (July 2019,
+covers encounters), the 837P/837I/837D companion guides (January 21, 2026)
+and the EDI Connectivity Guide (revised July 28, 2026). The TMHP encounter
+companion guide and UMCM chapter 5 are distributed to contracted plans and
+were not available; anything they add must be checked with the first plan.
+
+| TMHP rule | What CHO does |
+| --- | --- |
+| "Texas Medicaid will accept up to 5000 transactions per batch"; a file with more than one GS-GE group fails | A Texas batch is split into files of at most 5,000 encounters, each with one GS-GE group |
+| Files are sent with a `.dat` or `.zip` extension | Texas files are named `TMHP_..._{ISA13}.dat` |
+| 277CA TRN02 returns the patient control number "up to the 20 character limit" | A Texas encounter whose CLM01 is longer than 20 characters is held back for rework, because its 277CA could not be matched back |
+| "2200D REF will not be populated for Encounters transactions" (no ICN on the 277CA) | The ICN is loaded separately (below). A replacement or void waits until its original has one |
+| STC category R3 is a warning (for example `R3:Bx000095W`) | R3 is kept on the record and in `responseHistory` but does not reject. A2 still accepts |
+| STC A3 with a `Bx` business edit rejects (for example `Bx0000011`, adjustment original ICN not found) | The encounter is `Rejected` and goes to the rework queue as `STATE_REJECTED` |
+| UMCM 2.0 §VII.A: institutional encounter data must carry POA indicators | An inpatient Texas 837I needs a POA value (Y, N, U, W or 1) on every diagnosis or it is held back |
+
+### Loading Texas ICNs
+
+Because TMHP's 277CA has no ICN for encounters, load them from the plan's
+HHSC/TMHP encounter reports with
+`POST /api/encounters/state/TX/references` (`encounters:write`):
+
+```json
+{
+  "fileName": "<report the ICNs came from>",
+  "references": [
+    { "patientControlNumber": "<CLM01 as sent>", "stateClaimReference": "<TMHP ICN>" }
+  ]
+}
+```
+
+Each row is matched on CLM01 to the tenant's Texas encounter that was sent and
+not rejected. The ICN is saved as `stateClaimReference`; status does not
+change. A waiting replacement or void goes in the next batch with the ICN in
+`REF*F8`. Rows that match nothing come back as `unmatched`; a row whose
+encounter already has a different ICN comes back under `conflicts` and is not
+applied. The upload is stored in `encounter_state_responses` as kind
+`REFERENCES`. The report layout itself is not public, so the rows are posted
+as JSON; a parser for the actual report can sit in front of this endpoint
+once a plan shares the layout.
+
+`GET /api/encounters/state/routes` shows each route's file limit, CLM01
+limit and whether its 277 carries the state reference. `StateFrontEndAccepted` means the state's front end
 took the encounter; it is not final encounter acceptance.
 
 The Florida `POST /api/encounters/{tenantId}/acknowledge` path now only
@@ -201,9 +247,13 @@ queue.
   unpublished `adjudication-completed` topic; moving it is a separate change.
 - **Tenants on both Texas and California** need a member-state rule before
   their claims can be routed.
-- **Companion-guide replacement rules.** Whether TMHP or DHCS want REF*F8 to
-  carry their ICN or another identifier, and whether a void must repeat the
-  original's lines, still has to be checked in the companion guides.
+- **Companion-guide replacement rules.** TMHP's 277CA reject `Bx0000011`
+  ("adjustment original ICN (or previous ICN) is not found") shows Texas
+  matches replacements on the ICN, which CHO puts in REF*F8. Whether a void
+  must repeat the original's lines, and the DHCS rule, still have to be
+  checked in the encounter companion guides.
+- **The Texas ICN report layout.** ICNs are posted as JSON until a plan
+  shares the report they arrive on.
 - **837D, capitated and delegated encounters, other-payer (TPL) loops** and
   any state-specific segments in the TMHP or DHCS companion guides.
 - **State acceptance.** Companion-guide review, partner test cycles and

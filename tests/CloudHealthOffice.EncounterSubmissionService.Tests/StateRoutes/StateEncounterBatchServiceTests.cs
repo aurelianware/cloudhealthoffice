@@ -172,7 +172,7 @@ public class StateEncounterBatchServiceTests
         file.Receiver.Should().Be("TMHP");
         file.FormType.Should().Be("837P");
         file.UsageIndicator.Should().Be("T");
-        file.FileName.Should().MatchRegex(@"^TMHP_4A_837P_TEST_\d{14}_000000100\.x12$");
+        file.FileName.Should().MatchRegex(@"^TMHP_4A_837P_TEST_\d{14}_000000100\.dat$", "TMHP takes .dat or .zip files");
         file.TransactionCount.Should().Be(2);
         file.Content.Should().StartWith("ISA*00*").And.Contain("NM1*40*2*TMHP*****46*TMHPTESTRCV");
         file.Content.Should().Contain("NM1*IL*1*DOE*ALEX****MI*512345678");
@@ -180,6 +180,36 @@ public class StateEncounterBatchServiceTests
         result.BatchedSubmissionIds.Should().Equal("tenant-1:TX:c1", "tenant-1:TX:c2");
         result.HeldBack.Should().BeEmpty();
         h.SubmissionUpdates.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Texas_SplitsABatchAtTheReceiversFileLimit()
+    {
+        var h = Create(Respond());
+        var route = StateEncounterRoute.Texas with { MaxTransactionsPerFile = 2 };
+
+        var result = await h.Service.BuildBatchAsync(route,
+            new[] { Submission("c1"), Submission("c2"), Submission("c3") }, "tenant-1");
+
+        result.Files.Should().HaveCount(2);
+        h.Files.Select(f => f.TransactionCount).Should().Equal(2, 1);
+        h.Files.Select(f => f.InterchangeControlNumber).Should().OnlyHaveUniqueItems();
+        h.Files.Select(f => f.Content.Split('~').Count(seg => seg.StartsWith("GS*", StringComparison.Ordinal)))
+            .Should().Equal(new[] { 1, 1 }, "TMHP fails a file with more than one GS-GE group");
+        result.BatchedSubmissionIds.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void Texas_RouteCarriesTheTmhpLimits()
+    {
+        var tx = StateEncounterRoute.Texas;
+        tx.MaxTransactionsPerFile.Should().Be(5000);
+        tx.MaxPatientControlNumberLength.Should().Be(20);
+        tx.StateReferenceOn277.Should().BeFalse();
+        tx.WarningStatusCategories.Should().Equal("R3");
+        tx.FileExtension.Should().Be("dat");
+        StateEncounterRoute.California.MaxTransactionsPerFile.Should().BeNull();
+        StateEncounterRoute.California.StateReferenceOn277.Should().BeTrue();
     }
 
     [Fact]
