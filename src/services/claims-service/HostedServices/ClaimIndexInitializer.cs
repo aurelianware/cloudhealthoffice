@@ -113,6 +113,7 @@ public sealed class ClaimIndexInitializer : IHostedService
             new CreateIndexOptions { Name = "tenant_import_batch", Sparse = true }),
             cancellationToken: cancellationToken);
         Services.Adjudication.Shadow.ShadowAdjudicationRepositoryMongo.EnsureIndexes(_db, cancellationToken);
+        Services.Adjudication.Shadow.ShadowAppealOutcomeRepositoryMongo.EnsureIndexes(_db, cancellationToken);
         Services.RetroRate.RetroRateImpactRepositoryMongo.EnsureIndexes(_db, cancellationToken);
         Services.RetroRate.RetroRateReprocessingRepositoryMongo.EnsureIndexes(_db, cancellationToken);
         Import.Cpcds.Drop.CpcdsDropRunRepositoryMongo.EnsureIndexes(_db, cancellationToken);

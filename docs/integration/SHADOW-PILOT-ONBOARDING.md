@@ -109,6 +109,10 @@ to the core.
   policy and version), so a reviewer sees what the UM decision rested on.
 - **The core's control totals** for each claim file (claim count, billed, paid),
   so the import reconciles against them.
+- **Appeal outcomes** (claim number, decision, decision date, CARC), if the
+  plan wants to see how often appeals of the denials CHO would have paid were
+  overturned. Each appeal on a shadowed claim also shows CHO's reading to the
+  reviewer. Advisory only: CHO never decides an appeal.
 
 ### Minimum necessary
 

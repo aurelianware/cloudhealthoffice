@@ -630,6 +630,11 @@ builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryRepository, Cl
 builder.Services.AddScoped<ClaimsService.Services.Tpl.ITplRecoveryService, ClaimsService.Services.Tpl.TplRecoveryService>();
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationService,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationService>();
+// Appeals: CHO's shadow reading of an appealed claim, and the plan's appeal
+// outcomes against it (advisory only; CHO never decides an appeal).
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAppealOutcomeRepository,
+    ClaimsService.Services.Adjudication.Shadow.ShadowAppealOutcomeRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.ShadowAppealService>();
 // Background shadow runs: whole import batches, in pages, resumable across replicas.
 builder.Services.AddHostedService<ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationWorker>();
 // Retro rate reprocessing, step 2: dry-run impact of a fee schedule change on

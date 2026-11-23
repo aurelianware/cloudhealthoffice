@@ -35,6 +35,10 @@ public interface IShadowAdjudicationRepository
     /// <paramref name="leaseUntilUtc"/>. Atomic, so two replicas never take the same run.
     /// </summary>
     Task<ShadowAdjudicationRun?> TakeNextBackgroundRunAsync(DateTime nowUtc, DateTime leaseUntilUtc, CancellationToken ct = default);
+
+    /// <summary>Each claim's most recent result, from any run, by claim number (the core's claim id).</summary>
+    Task<IReadOnlyDictionary<string, ShadowAdjudicationResult>> ListLatestByClaimNumbersAsync(
+        string tenantId, IReadOnlyCollection<string> claimNumbers, CancellationToken ct = default);
 }
 
 public sealed class ShadowAdjudicationRepositoryMongo : IShadowAdjudicationRepository
@@ -64,6 +68,12 @@ public sealed class ShadowAdjudicationRepositoryMongo : IShadowAdjudicationRepos
                 Builders<ShadowAdjudicationResult>.IndexKeys
                     .Ascending(r => r.TenantId).Ascending(r => r.RunId).Ascending(r => r.Kind),
                 new CreateIndexOptions { Name = "tenant_run_kind" }),
+            cancellationToken: ct);
+        database.GetCollection<ShadowAdjudicationResult>(ResultsCollectionName).Indexes.CreateOne(
+            new CreateIndexModel<ShadowAdjudicationResult>(
+                Builders<ShadowAdjudicationResult>.IndexKeys
+                    .Ascending(r => r.TenantId).Ascending(r => r.ClaimNumber).Descending(r => r.CreatedAtUtc),
+                new CreateIndexOptions { Name = "tenant_claim_number_created" }),
             cancellationToken: ct);
         database.GetCollection<ShadowAdjudicationRun>(RunsCollectionName).Indexes.CreateOne(
             new CreateIndexModel<ShadowAdjudicationRun>(
@@ -150,6 +160,22 @@ public sealed class ShadowAdjudicationRepositoryMongo : IShadowAdjudicationRepos
             .Limit(limit)
             .ToListAsync(ct);
     }
+
+    public async Task<IReadOnlyDictionary<string, ShadowAdjudicationResult>> ListLatestByClaimNumbersAsync(
+        string tenantId, IReadOnlyCollection<string> claimNumbers, CancellationToken ct = default)
+    {
+        var latest = new Dictionary<string, ShadowAdjudicationResult>(StringComparer.Ordinal);
+        if (claimNumbers.Count == 0) return latest;
+        var f = Builders<ShadowAdjudicationResult>.Filter;
+        var filter = f.Eq(r => r.TenantId, tenantId) & f.In(r => r.ClaimNumber, claimNumbers);
+        using var cursor = await _results.Find(filter).SortByDescending(r => r.CreatedAtUtc).ToCursorAsync(ct);
+        while (await cursor.MoveNextAsync(ct))
+        {
+            foreach (var r in cursor.Current)
+                latest.TryAdd(r.ClaimNumber, r);
+        }
+        return latest;
+    }
 }
 
 /// <summary>For tests and a laptop without Mongo.</summary>
@@ -200,6 +226,17 @@ public sealed class InMemoryShadowAdjudicationRepository : IShadowAdjudicationRe
             return Task.FromResult<IReadOnlyList<ShadowAdjudicationResult>>(_results
                 .Where(r => r.TenantId == tenantId && r.RunId == runId && (string.IsNullOrWhiteSpace(kind) || r.Kind == kind))
                 .OrderByDescending(r => r.AbsolutePaidVariance).Take(limit).ToList());
+    }
+
+    public Task<IReadOnlyDictionary<string, ShadowAdjudicationResult>> ListLatestByClaimNumbersAsync(
+        string tenantId, IReadOnlyCollection<string> claimNumbers, CancellationToken ct = default)
+    {
+        var wanted = claimNumbers.ToHashSet(StringComparer.Ordinal);
+        lock (_sync)
+            return Task.FromResult<IReadOnlyDictionary<string, ShadowAdjudicationResult>>(_results
+                .Where(r => r.TenantId == tenantId && wanted.Contains(r.ClaimNumber))
+                .GroupBy(r => r.ClaimNumber, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.CreatedAtUtc).First(), StringComparer.Ordinal));
     }
 
     public Task<IReadOnlySet<string>> ListResultClaimIdsAsync(string tenantId, string runId, CancellationToken ct = default)
