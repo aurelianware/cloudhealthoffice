@@ -62,6 +62,24 @@ public static class ShadowDiscrepancyComparer
         };
     }
 
+    /// <summary>
+    /// Records that the core had the claim pended, and why. The comparison
+    /// stays NotComparable (the core has not decided), with CHO's outcome kept.
+    /// </summary>
+    public static void MarkCorePended(ShadowAdjudicationResult result, Claim core, ClaimCorePend pend)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(core);
+        ArgumentNullException.ThrowIfNull(pend);
+        result.Kind = ShadowDiscrepancyKind.NotComparable;
+        result.CoreOutcome = ShadowOutcome.NotFinal;
+        result.CorePended = true;
+        result.CorePendCode = Blank(pend.Code);
+        result.CorePendReason = Blank(pend.Reason);
+        result.CorePendedDate = pend.PendedDate;
+        result.CoreReceivedDate = core.ReceivedDate;
+    }
+
     public static ShadowAdjudicationResult Compare(
         Claim core, ClaimAdjudicationContext cho, decimal tolerance)
     {

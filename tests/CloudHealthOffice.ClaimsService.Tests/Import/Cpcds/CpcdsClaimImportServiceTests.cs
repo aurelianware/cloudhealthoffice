@@ -205,6 +205,34 @@ public class CpcdsClaimImportServiceTests
     }
 
     [Fact]
+    public async Task A_pended_claim_keeps_its_pend_and_the_examiners_decision_arrives_as_the_next_version()
+    {
+        var header = CpcdsTestFiles.ProfessionalHeader.Concat(["Pend reason code", "Pend reason"]).ToList();
+        var pended = CpcdsTestFiles.ProfessionalRow("C-PEND");
+        pended["Claim payment status code"] = "pended";
+        pended["Claim payment amount"] = "";
+        pended["Pend reason code"] = "MR01";
+        pended["Pend reason"] = "Medical records requested";
+        await Import(CpcdsTestFiles.Build(header, pended));
+
+        var v1 = _store.Single(c => c.ClaimNumber == "C-PEND");
+        v1.Status.Should().Be(ClaimStatus.Received);
+        v1.ExternalSource!.CorePend!.Code.Should().Be("MR01");
+        v1.ExternalSource.SourceClaimId.Should().Be("C-PEND");
+
+        var paid = CpcdsTestFiles.ProfessionalRow("C-PEND");
+        paid["Claim payment status code"] = "paid";
+        var result = await Import(CpcdsTestFiles.Build(header, paid));
+
+        result.Updated.Should().Be(1);
+        var current = Current.Single(c => c.ClaimNumber == "C-PEND");
+        current.VersionNumber.Should().Be(2);
+        current.ClaimVersionId.Should().Be(v1.ClaimVersionId);
+        current.Status.Should().Be(ClaimStatus.Paid);
+        current.ExternalSource!.CorePend.Should().BeNull();
+    }
+
+    [Fact]
     public async Task A_reload_heals_a_predecessor_left_current_by_an_interrupted_load()
     {
         await Import(CpcdsTestFiles.SampleClaim("PRO-1002"));

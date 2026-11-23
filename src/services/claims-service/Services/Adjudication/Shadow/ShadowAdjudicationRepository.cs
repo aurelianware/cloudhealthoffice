@@ -35,6 +35,14 @@ public interface IShadowAdjudicationRepository
     /// <paramref name="leaseUntilUtc"/>. Atomic, so two replicas never take the same run.
     /// </summary>
     Task<ShadowAdjudicationRun?> TakeNextBackgroundRunAsync(DateTime nowUtc, DateTime leaseUntilUtc, CancellationToken ct = default);
+
+    /// <summary>
+    /// Results, from every run since <paramref name="sinceUtc"/>, for claims
+    /// the core had pended (<see cref="ShadowAdjudicationResult.CorePended"/>),
+    /// newest first.
+    /// </summary>
+    Task<IReadOnlyList<ShadowAdjudicationResult>> ListPendedResultsAsync(
+        string tenantId, DateTime sinceUtc, int limit, CancellationToken ct = default);
 }
 
 public sealed class ShadowAdjudicationRepositoryMongo : IShadowAdjudicationRepository
@@ -64,6 +72,15 @@ public sealed class ShadowAdjudicationRepositoryMongo : IShadowAdjudicationRepos
                 Builders<ShadowAdjudicationResult>.IndexKeys
                     .Ascending(r => r.TenantId).Ascending(r => r.RunId).Ascending(r => r.Kind),
                 new CreateIndexOptions { Name = "tenant_run_kind" }),
+            cancellationToken: ct);
+        database.GetCollection<ShadowAdjudicationResult>(ResultsCollectionName).Indexes.CreateOne(
+            new CreateIndexModel<ShadowAdjudicationResult>(
+                Builders<ShadowAdjudicationResult>.IndexKeys.Ascending(r => r.TenantId).Descending(r => r.CreatedAtUtc),
+                new CreateIndexOptions<ShadowAdjudicationResult>
+                {
+                    Name = "tenant_core_pended_created",
+                    PartialFilterExpression = Builders<ShadowAdjudicationResult>.Filter.Eq(r => r.CorePended, true),
+                }),
             cancellationToken: ct);
         database.GetCollection<ShadowAdjudicationRun>(RunsCollectionName).Indexes.CreateOne(
             new CreateIndexModel<ShadowAdjudicationRun>(
@@ -150,6 +167,14 @@ public sealed class ShadowAdjudicationRepositoryMongo : IShadowAdjudicationRepos
             .Limit(limit)
             .ToListAsync(ct);
     }
+
+    public async Task<IReadOnlyList<ShadowAdjudicationResult>> ListPendedResultsAsync(
+        string tenantId, DateTime sinceUtc, int limit, CancellationToken ct = default)
+    {
+        var f = Builders<ShadowAdjudicationResult>.Filter;
+        var filter = f.Eq(r => r.TenantId, tenantId) & f.Eq(r => r.CorePended, true) & f.Gte(r => r.CreatedAtUtc, sinceUtc);
+        return await _results.Find(filter).SortByDescending(r => r.CreatedAtUtc).Limit(limit).ToListAsync(ct);
+    }
 }
 
 /// <summary>For tests and a laptop without Mongo.</summary>
@@ -200,6 +225,15 @@ public sealed class InMemoryShadowAdjudicationRepository : IShadowAdjudicationRe
             return Task.FromResult<IReadOnlyList<ShadowAdjudicationResult>>(_results
                 .Where(r => r.TenantId == tenantId && r.RunId == runId && (string.IsNullOrWhiteSpace(kind) || r.Kind == kind))
                 .OrderByDescending(r => r.AbsolutePaidVariance).Take(limit).ToList());
+    }
+
+    public Task<IReadOnlyList<ShadowAdjudicationResult>> ListPendedResultsAsync(
+        string tenantId, DateTime sinceUtc, int limit, CancellationToken ct = default)
+    {
+        lock (_sync)
+            return Task.FromResult<IReadOnlyList<ShadowAdjudicationResult>>(_results
+                .Where(r => r.TenantId == tenantId && r.CorePended && r.CreatedAtUtc >= sinceUtc)
+                .OrderByDescending(r => r.CreatedAtUtc).Take(limit).ToList());
     }
 
     public Task<IReadOnlySet<string>> ListResultClaimIdsAsync(string tenantId, string runId, CancellationToken ct = default)

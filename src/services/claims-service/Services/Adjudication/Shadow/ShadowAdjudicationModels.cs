@@ -153,6 +153,21 @@ public class ShadowAdjudicationResult
 
     public List<ShadowLineComparison> Lines { get; set; } = [];
 
+    /// <summary>
+    /// The core had this claim pended when it was loaded. CHO still ran it, so
+    /// <see cref="ChoOutcome"/> says what CHO would have done; the kind is
+    /// NotComparable because the core has not decided. The pended-claims
+    /// report compares CHO's answer with the examiner's final decision once a
+    /// later file brings it.
+    /// </summary>
+    public bool CorePended { get; set; }
+    public string? CorePendCode { get; set; }
+    public string? CorePendReason { get; set; }
+    public DateTime? CorePendedDate { get; set; }
+
+    /// <summary>When the core received the claim, if the file said; days pended count from the pended date, else this.</summary>
+    public DateTime? CoreReceivedDate { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }
 

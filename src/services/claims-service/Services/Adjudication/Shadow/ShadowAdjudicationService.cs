@@ -247,7 +247,10 @@ public sealed class ShadowAdjudicationService : IShadowAdjudicationService
             }
 
             ShadowAdjudicationResult result;
-            if (ShadowDiscrepancyComparer.CoreOutcome(core.Status) == ShadowOutcome.NotFinal)
+            // A claim the core has pended is still run through CHO: what CHO
+            // would have done with it is the point of loading it.
+            var corePend = core.ExternalSource.CorePend;
+            if (ShadowDiscrepancyComparer.CoreOutcome(core.Status) == ShadowOutcome.NotFinal && corePend is null)
             {
                 result = ShadowDiscrepancyComparer.NotComparable(core, run.TenantId);
             }
@@ -259,6 +262,8 @@ public sealed class ShadowAdjudicationService : IShadowAdjudicationService
                         .EvaluateShadowAsync(run.TenantId, DetachedCopy(core), actorId, $"shadow:{run.Id}", ct)
                         .ConfigureAwait(false);
                     result = ShadowDiscrepancyComparer.Compare(core, context, _options.Tolerance);
+                    if (corePend is not null)
+                        ShadowDiscrepancyComparer.MarkCorePended(result, core, corePend);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {

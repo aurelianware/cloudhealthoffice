@@ -59,6 +59,14 @@ public enum CpcdsClaimColumn
     // checks the claim against the plan's own authorization file.
     PriorAuthorizationNumber,
 
+    // ── header: pend (not CPCDS elements) ───────────────────────────────────
+    // CPCDS describes adjudicated claims. A plan that also sends the claims
+    // its core has pended (payment status "pended") says why with these, so
+    // a shadow run can report, by pend reason, what CHO would have done.
+    PendReasonCode,
+    PendReason,
+    PendedDate,
+
     // ── header: providers ────────────────────────────────────────────────────
     ClaimBillingProviderNpi,
     ClaimBillingProviderNetworkStatus,
@@ -166,6 +174,9 @@ public static class CpcdsClaimColumns
             [CpcdsClaimColumn.ClaimPaymentStatusCode] = ["Claim payment status code"],
             [CpcdsClaimColumn.ClaimPaymentDenialCode] = ["Claim payment denial code"],
             [CpcdsClaimColumn.PriorAuthorizationNumber] = ["Prior authorization number", "Claim prior authorization number", "Authorization number", "Prior auth number"],
+            [CpcdsClaimColumn.PendReasonCode] = ["Pend reason code", "Claim pend reason code", "Pend code"],
+            [CpcdsClaimColumn.PendReason] = ["Pend reason", "Pend reason description", "Claim pend reason"],
+            [CpcdsClaimColumn.PendedDate] = ["Pended date", "Pend date", "Claim pended date"],
 
             [CpcdsClaimColumn.ClaimBillingProviderNpi] = ["Claim billing provider NPI"],
             [CpcdsClaimColumn.ClaimBillingProviderNetworkStatus] = ["Claim billing provider network status"],
