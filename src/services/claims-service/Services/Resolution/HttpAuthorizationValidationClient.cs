@@ -25,7 +25,7 @@ namespace ClaimsService.Services.Resolution;
 /// pends on it (owner decision Q-9).
 /// </para>
 /// </summary>
-public sealed class HttpAuthorizationValidationClient : IAuthorizationValidationClient
+public sealed class HttpAuthorizationValidationClient : IAuthorizationValidationClient, IAuthorizationMatchClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -177,6 +177,65 @@ public sealed class HttpAuthorizationValidationClient : IAuthorizationValidation
                 LogSanitizer.Sanitize(tenantId));
             return AuthorizationLookupResult.Unavailable($"authorization lookup failed ({ex.GetType().Name})");
         }
+    }
+
+    public async Task<AuthorizationMatchLookup> FindCoveringAsync(
+        string tenantId,
+        string memberId,
+        DateTime serviceDate,
+        string? procedureCode,
+        string? providerNpi,
+        CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(memberId))
+            return AuthorizationMatchLookup.Unavailable("claim member identity is missing");
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient(UpstreamClientNames.AuthorizationService);
+            var url = "/api/authorizations/match" +
+                      $"?memberId={Uri.EscapeDataString(memberId.Trim())}" +
+                      $"&serviceDate={Uri.EscapeDataString(serviceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}";
+            if (!string.IsNullOrWhiteSpace(procedureCode))
+                url += $"&procedureCode={Uri.EscapeDataString(procedureCode.Trim())}";
+            if (!string.IsNullOrWhiteSpace(providerNpi))
+                url += $"&providerNpi={Uri.EscapeDataString(providerNpi.Trim())}";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url).UseChoServiceIdentity();
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                // A 404 here is an authorization-service older than the match endpoint.
+                _logger.LogWarning("Authorization match for tenant {Tenant} not definitive ({StatusCode})",
+                    LogSanitizer.Sanitize(tenantId), (int)response.StatusCode);
+                return AuthorizationMatchLookup.Unavailable($"authorization match returned {(int)response.StatusCode}");
+            }
+
+            var body = await response.Content.ReadFromJsonAsync<MatchBody>(JsonOptions, ct).ConfigureAwait(false);
+            if (body?.Candidates is null)
+                return AuthorizationMatchLookup.Unavailable("authorization match returned an empty body");
+
+            return AuthorizationMatchLookup.From(body.Candidates
+                .Where(c => !string.IsNullOrWhiteSpace(c.AuthorizationNumber))
+                .ToList());
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Authorization match lookup failed for tenant {Tenant}", LogSanitizer.Sanitize(tenantId));
+            return AuthorizationMatchLookup.Unavailable($"authorization match failed ({ex.GetType().Name})");
+        }
+    }
+
+    private sealed class MatchBody
+    {
+        public List<AuthorizationMatchCandidate>? Candidates { get; set; }
     }
 
     /// <summary>

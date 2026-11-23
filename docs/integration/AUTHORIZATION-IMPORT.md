@@ -67,6 +67,7 @@ all match. Common alternatives such as `auth_number`, `subscriber_id` and
 | `approved_from_date`, `approved_to_date`, `expiration_date` | | |
 | `diagnosis_codes` | | ICD-10-CM codes, separated by `;`. Dots are optional, and the first code is principal |
 | `denial_reason_code`, `denial_reason` | | |
+| `review_criteria` | | The clinical criteria or medical policy, and its version, the decision applied, e.g. `InterQual 2026 Imaging` or `Plan medical policy MP-RAD-014 v4` (also read as `criteria`, `clinical_criteria`, `medical_policy`). Up to 200 characters. Shown as evidence on a shadow-adjudication finding that rests on the authorization |
 | `patient_first_name`, `patient_last_name`, `patient_birth_date` | | |
 | `line_number` | | Give every line one or none. Lines without one are numbered in file order |
 | `procedure_code` | | CPT or HCPCS. A row without one is not a service line |

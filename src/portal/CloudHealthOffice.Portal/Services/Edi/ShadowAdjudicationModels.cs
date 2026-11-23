@@ -122,6 +122,12 @@ public class ShadowRunReport
 
     /// <summary>Claims one side denied for prior authorization and the other did not.</summary>
     public List<ShadowReasonRow> AuthorizationMismatches { get; set; } = new();
+
+    /// <summary>The medical policy (and version) behind those disagreements.</summary>
+    public List<ShadowReasonRow> AuthorizationMismatchesByPolicy { get; set; } = new();
+
+    /// <summary>Claims with no authorization number that CHO matched to an approved authorization.</summary>
+    public ShadowReasonRow AuthorizationsMatchedWithoutNumber { get; set; } = new();
     public List<ShadowReasonRow> ByProcedure { get; set; } = new();
     public List<ShadowReasonRow> ByBillingProvider { get; set; } = new();
 }

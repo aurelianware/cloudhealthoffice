@@ -261,7 +261,19 @@
                         </MudItem>
                         <MudItem xs="12" md="6">
                             @ReasonTable("Prior authorization against the claim", "Finding", report.AuthorizationMismatches.Select(r => (r, r.Key)), "shadow-by-authorization", money: true)
+                            @if (report.AuthorizationsMatchedWithoutNumber.Claims > 0)
+                            {
+                                <MudText Typo="Typo.caption" Class="mt-1" data-testid="shadow-auth-matched">
+                                    @report.AuthorizationsMatchedWithoutNumber.Claims claims had no authorization number; CHO matched an approved authorization by member, date and service.
+                                </MudText>
+                            }
                         </MudItem>
+                        @if (report.AuthorizationMismatchesByPolicy.Count > 0)
+                        {
+                            <MudItem xs="12" md="6">
+                                @ReasonTable("Medical policy behind authorization findings", "Policy", report.AuthorizationMismatchesByPolicy.Select(r => (r, r.Key)), "shadow-by-policy", money: true)
+                            </MudItem>
+                        }
                         <MudItem xs="12" md="6">
                             @ReasonTable("Procedures on differing lines", "Code", report.ByProcedure.Select(r => (r, r.Key)), "shadow-by-procedure", money: true)
                         </MudItem>

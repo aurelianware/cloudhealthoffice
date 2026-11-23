@@ -20,6 +20,14 @@ public interface IAuthorizationRepository
         LineOfBusiness? lineOfBusiness,
         int page,
         int pageSize);
+    /// <summary>
+    /// The current tenant's authorizations for one member that are, or were,
+    /// approvals (Approved, Modified or Expired), most recent first, at most
+    /// <paramref name="limit"/>: what <c>GET api/authorizations/match</c>
+    /// matches a claim service against.
+    /// </summary>
+    Task<IReadOnlyList<Authorization>> ListMemberApprovalsAsync(string memberId, int limit, CancellationToken ct = default)
+        => throw new NotSupportedException("Matching claims to authorizations needs the MongoDB authorization store.");
     Task<AuthorizationsSummary> GetAuthorizationsSummaryAsync(DateTime from, DateTime to, LineOfBusiness? lineOfBusiness);
     Task<IEnumerable<Authorization>> GetOpenAuthorizationsAsync(string? tenantId = null);
     /// <summary>

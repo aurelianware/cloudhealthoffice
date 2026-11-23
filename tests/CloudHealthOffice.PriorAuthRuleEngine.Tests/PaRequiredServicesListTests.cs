@@ -55,6 +55,42 @@ public class PaRequiredServicesListTests
     }
 
     [Fact]
+    public void Entries_carry_their_medical_policy_and_the_list_its_rule_set_version()
+    {
+        var imaging = Rule("IMG", "ProcedureRequiresAuth", tenant: "t1"); imaging.ProcedureCodes = ["70551"];
+        imaging.PolicySource = "Plan medical policy MP-RAD-014"; imaging.PolicyVersion = "v4";
+        imaging.PolicyEffectiveDate = new DateTime(2026, 1, 1); imaging.UpdatedAt = new DateTime(2026, 11, 2);
+        var key = new RuleSetKey { StateCode = "TX", Lob = PaLineOfBusiness.Medicaid, Program = "STAR", TenantId = "t1" };
+
+        var list = PaRequiredServicesList.Build("TX", PaLineOfBusiness.Medicaid, "STAR", key, [imaging], At);
+
+        var entry = list.Entries.Should().ContainSingle().Subject;
+        entry.PolicySource.Should().Be("Plan medical policy MP-RAD-014");
+        entry.PolicyVersion.Should().Be("v4");
+        entry.PolicyEffectiveDate.Should().Be(new DateTime(2026, 1, 1));
+        list.RuleSetVersion.Should().MatchRegex("^[0-9a-f]{12}$");
+        list.RuleSetUpdatedAt.Should().Be(new DateTime(2026, 11, 2));
+        PaRequiredServicesList.Build("TX", PaLineOfBusiness.Medicaid, "STAR", null, [], At).RuleSetVersion.Should().BeNull();
+    }
+
+    [Fact]
+    public void The_rule_set_version_changes_with_content_not_with_timestamps()
+    {
+        PaRuleDocument Imaging(string version)
+        {
+            var r = Rule("IMG", "ProcedureRequiresAuth"); r.ProcedureCodes = ["70551"]; r.PolicyVersion = version;
+            return r;
+        }
+        var v4 = PaRequiredServicesList.Fingerprint([Imaging("v4")]);
+        var touched = Imaging("v4"); touched.UpdatedAt = touched.UpdatedAt.AddDays(3);
+
+        PaRequiredServicesList.Fingerprint([touched]).Should().Be(v4);
+        PaRequiredServicesList.Fingerprint([Imaging("v5")]).Should().NotBe(v4);
+        var moreCodes = Imaging("v4"); moreCodes.ProcedureCodes = ["70551", "70553"];
+        PaRequiredServicesList.Fingerprint([moreCodes]).Should().NotBe(v4);
+    }
+
+    [Fact]
     public void Drugs_are_excluded_and_reported_separately()
     {
         var mixed = Rule("MIXED", "ProcedureRequiresAuth"); mixed.ProcedureCodes = ["J1745", "27447"];

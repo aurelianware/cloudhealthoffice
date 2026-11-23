@@ -78,6 +78,22 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
             .FirstOrDefaultAsync();
     }
 
+    public async Task<IReadOnlyList<Authorization>> ListMemberApprovalsAsync(string memberId, int limit, CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        var builder = Builders<Authorization>.Filter;
+        var filter = builder.Eq(x => x.TenantId, tenantId)
+                     & builder.Eq(x => x.MemberId, memberId)
+                     & builder.In(x => x.Status, new[]
+                     {
+                         AuthorizationStatus.Approved, AuthorizationStatus.Modified, AuthorizationStatus.Expired,
+                     });
+        return await _collection.Find(filter)
+            .SortByDescending(x => x.RequestedServiceDateFrom)
+            .Limit(Math.Clamp(limit, 1, 1000))
+            .ToListAsync(ct);
+    }
+
     public async Task<IEnumerable<Authorization>> SearchAsync(
         string? memberId,
         string? providerNPI,

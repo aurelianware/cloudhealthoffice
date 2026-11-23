@@ -327,6 +327,9 @@ shadow() {
       "  \(.run.claimsCompared) claims compared; CHO decided \(if .comparableClaims > 0 then (.decidedClaims / .comparableClaims | pct) else "-" end), matched the core on \(.run.matchRate | pct) of those.",
       "  Core paid more on \(.corePaidMore.claims) claims (\(.corePaidMore.amount | money)), less on \(.corePaidLess.claims) (\(.corePaidLess.amount | money)).",
       ((.authorizationMismatches // [])[] | "  \(.key): \(.claims) claims (\(.absolutePaidVariance | money))."),
+      ((.authorizationMismatchesByPolicy // [])[:3][] | "    policy \(.key): \(.claims) claims."),
+      (if (.authorizationsMatchedWithoutNumber.claims // 0) > 0 then
+        "  \(.authorizationsMatchedWithoutNumber.claims) claims had no authorization number; CHO matched an approved authorization by member, date and service." else empty end),
       (if (.heldForProviderScreening.claims // 0) > 0 then
         "  CHO would hold \(.heldForProviderScreening.claims) of the decided claims until it can screen their providers"
         + " (OIG LEIE, SAM, NPPES): turn on exclusion screening (docs/integration/SHADOW-ADJUDICATION.md)." else empty end),

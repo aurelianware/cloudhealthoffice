@@ -308,6 +308,16 @@ public class Authorization
     public string? DenialReason { get; set; }
 
     /// <summary>
+    /// The medical policy or clinical criteria (and version) the decision
+    /// applied, as the plan's UM system records it, e.g. "InterQual 2026 Imaging"
+    /// or "Plan medical policy MP-RAD-014 v4". Evidence on a claim finding that
+    /// rests on this authorization. Optional; imported from the
+    /// <c>review_criteria</c> column.
+    /// </summary>
+    [StringLength(200)]
+    public string? CriteriaReference { get; set; }
+
+    /// <summary>
     /// Pend reason (if pending additional information)
     /// </summary>
     [StringLength(500)]

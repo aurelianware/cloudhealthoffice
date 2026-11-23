@@ -11,7 +11,9 @@ namespace ClaimsService.Services.Adjudication.Shadow;
 /// included only on request. Each row carries the authorization number the
 /// core matched the claim (or line) to and, where one side denied for
 /// authorization and the other did not, which way
-/// (<see cref="ShadowAuthorizationMismatch"/>).
+/// (<see cref="ShadowAuthorizationMismatch"/>), then CHO's evidence: the
+/// authorization CHO checked and how it found it, why the service needed one,
+/// and the medical policy version and review criteria behind the finding.
 /// </summary>
 public static class ShadowDiscrepancyCsv
 {
@@ -22,6 +24,7 @@ public static class ShadowDiscrepancyCsv
         "CoreAllowed", "ChoAllowed", "CorePaid", "ChoPaid", "PaidVariance",
         "CoreMemberLiability", "ChoMemberLiability", "CoreDenialCode", "ChoDenialCode",
         "Differences", "ChoPendCode", "ChoFindings", "PriorAuthorizationNumber", "AuthorizationFinding",
+        "ChoAuthorizationNumber", "ChoAuthorizationSource", "AuthorizationRequiredBy", "MedicalPolicy", "AuthorizationCriteria",
     ];
 
     public static string Write(IEnumerable<ShadowAdjudicationResult> results, bool includeUndecided)
@@ -64,6 +67,7 @@ public static class ShadowDiscrepancyCsv
         r.CoreDenialCode, r.ChoDenialCode,
         null, r.ChoPendCode, string.Join(" | ", r.ChoStageFindings),
         r.PriorAuthorizationNumber, ShadowAuthorizationMismatch.For(r),
+        .. Evidence(r.PriorAuthorizationEvidence),
     ];
 
     private static string?[] LineRow(ShadowAdjudicationResult r, ShadowLineComparison l) =>
@@ -76,7 +80,30 @@ public static class ShadowDiscrepancyCsv
         l.CoreDenialCode, l.ChoDenialCode,
         string.Join(";", l.Differences), r.ChoPendCode, string.Join(" | ", r.ChoStageFindings),
         l.PriorAuthorizationNumber ?? r.PriorAuthorizationNumber, ShadowAuthorizationMismatch.For(r, l),
+        .. Evidence(r.EvidenceFor(l.LineNumber) is { } e ? [e] : []),
     ];
+
+    /// <summary>
+    /// The authorization CHO checked, how it found it, why the service needed
+    /// one, and the medical policy version and review criteria behind it. A
+    /// claim row joins its lines' distinct values with " | ".
+    /// </summary>
+    private static string?[] Evidence(IReadOnlyList<PriorAuthorizationLineEvidence> evidence) =>
+    [
+        Join(evidence.Select(e => e.AuthorizationNumber)),
+        Join(evidence.Select(e => e.NumberSource == PriorAuthorizationNumberSource.Matched && e.MatchCandidates > 1
+            ? $"{e.NumberSource} ({e.MatchCandidates} candidates)"
+            : e.NumberSource)),
+        Join(evidence.Select(e => e.RequiredBy)),
+        Join(evidence.Select(e => e.PolicyLabel())),
+        Join(evidence.Select(e => e.CriteriaReference)),
+    ];
+
+    private static string? Join(IEnumerable<string?> values)
+    {
+        var distinct = values.Where(v => !string.IsNullOrWhiteSpace(v)).Distinct(StringComparer.Ordinal).ToList();
+        return distinct.Count == 0 ? null : string.Join(" | ", distinct);
+    }
 
     private static bool Undecided(ShadowAdjudicationResult r) => r.Kind == ShadowDiscrepancyKind.ChoUndecided;
 

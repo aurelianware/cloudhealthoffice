@@ -34,6 +34,14 @@ public sealed record PaRequiredServiceEntry
     public int? VisitLimit { get; init; }
     /// <summary>True when the rule denies outright rather than sending the request to clinical review.</summary>
     public bool DeniedWithoutReview { get; init; }
+    /// <summary>The medical policy or PA list the rule was digitized from (<see cref="PaRuleDocument.PolicySource"/>).</summary>
+    public string? PolicySource { get; init; }
+    /// <summary>The version of <see cref="PolicySource"/>.</summary>
+    public string? PolicyVersion { get; init; }
+    /// <summary>The date that version took effect.</summary>
+    public DateTime? PolicyEffectiveDate { get; init; }
+    /// <summary>When the rule was last written.</summary>
+    public DateTime? UpdatedAt { get; init; }
 }
 
 /// <summary>A rule that waives prior authorization for some requests (gold card, provider type, member age).</summary>
@@ -61,6 +69,15 @@ public sealed record PaRequiredServicesList
     public string? Program { get; init; }
     /// <summary>The rule set the list was built from (<see cref="RuleSetKey.AuditKey"/>); null when none is configured.</summary>
     public string? RuleSet { get; init; }
+    /// <summary>
+    /// A fingerprint of the rule set's content (its enabled rules: ids, codes,
+    /// conditions, limits and policy versions). It changes whenever a rule the
+    /// list or a claim check reads changes, so a finding that records it says
+    /// exactly which version of the rules it applied. Null when no rule set is configured.
+    /// </summary>
+    public string? RuleSetVersion { get; init; }
+    /// <summary>When a rule of the set was last written. Null when no rule set is configured.</summary>
+    public DateTime? RuleSetUpdatedAt { get; init; }
     public required DateTime GeneratedAt { get; init; }
     public IReadOnlyList<PaRequiredServiceEntry> Entries { get; init; } = [];
     public IReadOnlyList<PaRequirementExemption> Exemptions { get; init; } = [];
@@ -135,6 +152,10 @@ public sealed record PaRequiredServicesList
                 UnitLimit = condition == PaRequirementCondition.AboveQuantityLimit ? rule.UnitLimit : null,
                 VisitLimit = condition == PaRequirementCondition.AboveQuantityLimit ? rule.VisitLimit : null,
                 DeniedWithoutReview = rule.RuleType == "ProcedureRequiresAuth" && !string.IsNullOrEmpty(rule.DenialCode),
+                PolicySource = Blank(rule.PolicySource),
+                PolicyVersion = Blank(rule.PolicyVersion),
+                PolicyEffectiveDate = rule.PolicyEffectiveDate,
+                UpdatedAt = rule.UpdatedAt == default ? null : rule.UpdatedAt,
             });
         }
 
@@ -142,6 +163,9 @@ public sealed record PaRequiredServicesList
         {
             StateCode = stateCode, LineOfBusiness = lob, Program = program,
             RuleSet = resolvedKey?.AuditKey, GeneratedAt = generatedAt,
+            RuleSetVersion = resolvedKey is null ? null : Fingerprint(rules),
+            RuleSetUpdatedAt = resolvedKey is null ? null : rules.Where(r => r.IsEnabled && r.UpdatedAt != default)
+                .Select(r => (DateTime?)r.UpdatedAt).DefaultIfEmpty(null).Max(),
             Entries = entries, Exemptions = exemptions, ExcludedDrugCodes = drugs.ToList(),
             UnclassifiedRuleIds = unclassified,
         };
@@ -162,6 +186,36 @@ public sealed record PaRequiredServicesList
         }
         return csv.ToString();
     }
+
+    /// <summary>
+    /// First 12 hex digits of a SHA-256 over the enabled rules in rule id
+    /// order: everything that decides whether a service needs prior
+    /// authorization, and the policy version each rule names. Timestamps are
+    /// left out, so re-importing an unchanged list keeps the version.
+    /// </summary>
+    public static string Fingerprint(IEnumerable<PaRuleDocument> rules)
+    {
+        var text = new StringBuilder();
+        foreach (var r in rules.Where(r => r.IsEnabled).OrderBy(r => r.RuleId, StringComparer.Ordinal))
+        {
+            text.Append(r.RuleId).Append('|').Append(r.RuleType).Append('|')
+                .AppendJoin(' ', Normalize(r.ProcedureCodes)).Append('|')
+                .AppendJoin(' ', Normalize(r.ProcedureCodePrefixes)).Append('|')
+                .AppendJoin(' ', Normalize(r.PlaceOfServiceCodes)).Append('|')
+                .AppendJoin(' ', Normalize(r.RequiredDiagnosisCodes)).Append('|')
+                .AppendJoin(' ', Normalize(r.ExemptTaxonomyPrefixes)).Append('|')
+                .Append(r.UnitLimit).Append('|').Append(r.VisitLimit).Append('|')
+                .Append(r.MinMemberAgeYears).Append('|').Append(r.MaxMemberAgeYears).Append('|')
+                .Append(r.DenialCode).Append('|')
+                .Append(r.PolicySource).Append('|').Append(r.PolicyVersion).Append('|')
+                .Append(r.PolicyEffectiveDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture))
+                .Append('\n');
+        }
+        var hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString()));
+        return Convert.ToHexString(hash)[..12].ToLowerInvariant();
+    }
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static List<string> Normalize(IReadOnlyList<string> values) =>
         values.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim().ToUpperInvariant())

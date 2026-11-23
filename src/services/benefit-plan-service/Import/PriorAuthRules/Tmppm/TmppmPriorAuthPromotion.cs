@@ -187,6 +187,8 @@ public sealed class StateManualPromotionService(
             LineOfBusiness = options.LineOfBusiness,
             Program = string.IsNullOrWhiteSpace(options.Program) ? null : options.Program.Trim(),
             SourceName = editions.Count > 0 ? $"{state} provider manual (edition {editions[0]})" : $"{state} provider manual",
+            PolicySource = $"{state} Medicaid provider manual",
+            PolicyVersion = editions.Count > 0 ? editions[0] : null,
             KeepExemptions = options.KeepExemptions,
             DryRun = options.DryRun,
             IncludeCodes = options.IncludeCodes,

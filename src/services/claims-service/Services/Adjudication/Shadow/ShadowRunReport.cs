@@ -47,6 +47,21 @@ public class ShadowRunReport
     /// </summary>
     public List<ShadowReasonRow> AuthorizationMismatches { get; init; } = [];
 
+    /// <summary>
+    /// The medical policy (and version) behind each authorization disagreement,
+    /// as the plan's PA rules name it ("No policy recorded" when the rule set
+    /// carries none). Says which policy a reviewer opens first. Largest dollars first.
+    /// </summary>
+    public List<ShadowReasonRow> AuthorizationMismatchesByPolicy { get; init; } = [];
+
+    /// <summary>
+    /// Comparable claims that named no authorization number, where CHO found an
+    /// approved authorization by member, service date, procedure and provider.
+    /// The core matched these the same way; without the match they would read as
+    /// CHO denying for a missing authorization.
+    /// </summary>
+    public ShadowReasonRow AuthorizationsMatchedWithoutNumber { get; init; } = new();
+
     /// <summary>Procedure (or revenue) codes on lines that differ, largest line dollars first.</summary>
     public List<ShadowReasonRow> ByProcedure { get; init; } = [];
 
@@ -137,6 +152,15 @@ public static class ShadowRunReportBuilder
                     .GroupBy(x => x.Key!, StringComparer.Ordinal)
                     .Select(g => Row(g.Key, g.Select(x => x.Result))),
                 topN, byMoney: true),
+            AuthorizationMismatchesByPolicy = Top(
+                differing
+                    .Where(r => ShadowAuthorizationMismatch.For(r) is not null)
+                    .GroupBy(PolicyKey, StringComparer.Ordinal)
+                    .Select(g => Row(g.Key, g)),
+                topN, byMoney: true),
+            AuthorizationsMatchedWithoutNumber = Row(
+                PriorAuthorizationNumberSource.Matched,
+                comparable.Where(r => r.PriorAuthorizationEvidence.Any(e => e.NumberSource == PriorAuthorizationNumberSource.Matched))),
             ByProcedure = Top(ProcedureRows(differing), topN, byMoney: true),
             ByBillingProvider = Top(
                 differing.GroupBy(r => r.BillingProviderNpi ?? "unknown", StringComparer.Ordinal)
@@ -171,6 +195,19 @@ public static class ShadowRunReportBuilder
                 => Stages.BenefitCalculationStage.StageName,
             _ => "Unattributed",
         };
+    }
+
+    /// <summary>The distinct policy labels of a claim's authorization evidence, or "No policy recorded".</summary>
+    internal static string PolicyKey(ShadowAdjudicationResult r)
+    {
+        var labels = r.PriorAuthorizationEvidence
+            .Select(e => string.IsNullOrWhiteSpace(e.PolicySource) ? null
+                : string.IsNullOrWhiteSpace(e.PolicyVersion) ? e.PolicySource.Trim()
+                : $"{e.PolicySource.Trim()} {e.PolicyVersion.Trim()}")
+            .Where(l => l is not null)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        return labels.Count == 0 ? "No policy recorded" : string.Join(" | ", labels);
     }
 
     private static IEnumerable<ShadowReasonRow> ProcedureRows(IEnumerable<ShadowAdjudicationResult> differing)
