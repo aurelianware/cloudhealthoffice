@@ -38,6 +38,13 @@
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
     }
 
+    @if (_settings is { EnabledForDeployment: true })
+    {
+        <div class="mb-3">
+            <ShadowQuickStartPanel CanRun="!_saving" RunBatch="QuickRunAsync" ShadowSettingsChanged="s => _settings = s" />
+        </div>
+    }
+
     <MudGrid Spacing="3">
         <MudItem xs="12" md="5">
             <MudPaper Elevation="0" Class="pa-4" Style="@PaperStyle" data-testid="shadow-status">
@@ -154,6 +161,35 @@
                 }
             </MudPaper>
         </MudItem>
+
+        @if (_trend is { Points.Count: > 1 } trend)
+        {
+            <MudItem xs="12">
+                <MudPaper Elevation="0" Class="pa-4" Style="@PaperStyle" data-testid="shadow-trend">
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Trend, last 90 days by week</MudText>
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); display: block;">
+                        Completed runs, by the week they ran. A claim file run more than once counts its latest run.
+                    </MudText>
+                    <MudSimpleTable Dense="true" Elevation="0" Class="mt-2">
+                        <thead><tr><th>Week of</th><th>Runs</th><th>Compared</th><th>CHO decided</th><th>Match rate</th><th>Core paid more</th><th>Core paid less</th></tr></thead>
+                        <tbody>
+                            @foreach (var p in trend.Points)
+                            {
+                                <tr>
+                                    <td>@p.Period</td>
+                                    <td>@p.Runs.ToString("N0", CultureInfo.InvariantCulture)</td>
+                                    <td>@p.ClaimsCompared.ToString("N0", CultureInfo.InvariantCulture)</td>
+                                    <td>@Percent(p.DecidedRate)</td>
+                                    <td>@Percent(p.MatchRate)</td>
+                                    <td>@Money(p.CorePaidMoreAmount)</td>
+                                    <td>@Money(p.CorePaidLessAmount)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </MudPaper>
+            </MudItem>
+        }
 
         @if (_report is { } report)
         {
@@ -326,6 +362,7 @@
     private List<ClaimBatch> _batches = new();
     private List<ShadowRun> _runs = new();
     private ShadowRunReport? _report;
+    private ShadowRunTrend? _trend;
     private List<ShadowResult> _results = new();
     private string _kind = string.Empty;
     private string? _batchId;
@@ -352,6 +389,7 @@
             _settings = await DataDrops.GetShadowSettingsAsync();
             _runs = await Shadow.ListRunsAsync();
             _batches = ClaimBatches(await DataDrops.GetRunsAsync(30));
+            _trend = await TrendAsync();
             if (_runs.FirstOrDefault(r => !r.InProgress) is { } latest)
                 await OpenAsync(latest.Id);
             WatchProgress();
@@ -408,6 +446,33 @@
         }
     }
 
+    /// <summary>The weekly trend; a claims service without the endpoint leaves it out.</summary>
+    private async Task<ShadowRunTrend?> TrendAsync()
+    {
+        try
+        {
+            return await Shadow.GetTrendAsync(90, "week");
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The quick start's claims loaded: switch shadow adjudication on for the
+    /// plan when it is off (uploading a sample is asking for a run), then run.
+    /// </summary>
+    private async Task QuickRunAsync(string importBatchId)
+    {
+        if (_settings is { EnabledForDeployment: true, Enabled: false })
+            await SetEnabledAsync(true);
+        if (_settings is { Running: true })
+            await RunAsync(importBatchId);
+        else
+            _error ??= "Shadow adjudication is not running for this plan, so the claims loaded but were not shadow-run.";
+    }
+
     private async Task RunAsync(string importBatchId)
     {
         _saving = true;
@@ -456,7 +521,10 @@
             _runs = await Shadow.ListRunsAsync();
             var finished = _runs.FirstOrDefault(r => before.Contains(r.Id) && !r.InProgress && r.Status != "Failed");
             if (finished is not null)
+            {
                 await OpenAsync(finished.Id);
+                _trend = await TrendAsync();
+            }
             if (!_runs.Any(r => r.InProgress))
             {
                 _refresh?.Dispose();
