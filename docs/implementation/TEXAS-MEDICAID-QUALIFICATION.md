@@ -162,6 +162,19 @@ transaction and state acceptance evidence. Requires controlling HHSC specificati
 credentials, partner testing and state acceptance; scope/layout is blocked on TX-00
 (the applicability matrix), not permission to relabel FMMIS as Texas.
 
+**Progress (2026-11-23, TX-02 build).** The statement above describes the
+FMMIS-only path when this ledger was written. CHO now has a Texas X12 route
+(`StateRoutes/`, runbook `docs/operations/STATE-ENCOUNTER-ROUTES.md`): 837P,
+837I and 837D encounters, pre-send validation, 999/277CA reconciliation per
+record, ICN loading for replacements and voids (TMHP's 277CA does not carry
+REF*1K for encounters), R3 warnings, TMHP's 5,000-per-file and single-GS
+limits, a rework queue and a timeliness/accuracy scorecard. Synthetic
+Texas-format sample files and an end-to-end cycle test live under
+`tests/CloudHealthOffice.EncounterSubmissionService.Tests/Texas/`. These
+follow TMHP's public guides only. TX-02 stays open: the encounter companion
+guide, UMCM chapter 5 thresholds, receiver/payer IDs, transport and TMHP test
+and certification all need a contracted plan sponsoring CHO as its submitter.
+
 ### TX-03 — PEMS registration exists; source/history/location acceptance does not
 
 **Partial; P0; product + external integration + configuration.**
