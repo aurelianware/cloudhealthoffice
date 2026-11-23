@@ -56,10 +56,15 @@ plans customize those imports.
 
 ### A shadow pilot
 
-The usual shape is 60 to 90 days on the plan's daily files. It ends with a
-payment-integrity report and an authorization-mismatch report in dollars, and
-a measured answer to whether CHO can carry the plan's core, line of business by
-line of business, with the list of what it would still need. What the plan sends,
+A pilot has two phases. **Historical first, for quick dollars:** 6 to 12
+months of claims the core already paid, with the contracts, fee schedules,
+benefits and authorizations in effect on each date of service, shadow-run as
+monthly files; it ends with a payment-integrity report and an
+authorization-mismatch report in dollars within weeks. How far back a finding
+can still be recovered is set by the plan's provider contracts and state rules.
+**Concurrent if the plan wants proof CHO can carry its core:** 60 to 90 days on
+the plan's daily files, ending with a measured answer, line of business by line
+of business, with the list of what CHO would still need. What the plan sends,
 the security and BAA steps before any data moves, the timeline to the first
 report and what the report contains are in the
 [shadow pilot onboarding kit](SHADOW-PILOT-ONBOARDING.md). The public
