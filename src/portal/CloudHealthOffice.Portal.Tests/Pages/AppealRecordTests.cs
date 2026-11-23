@@ -47,6 +47,41 @@ public class AppealRecordTests : TestContext
     }
 
     [Fact]
+    public void Without_shadow_evidence_the_case_shows_none()
+    {
+        var cut = Render();
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("APL-9"));
+        cut.FindAll("[data-testid=shadow-appeal-evidence]").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void A_shadowed_claim_shows_chos_reading_on_the_case()
+    {
+        var shadow = new Mock<IShadowAppealsClient>();
+        shadow.Setup(s => s.GetEvidenceAsync("CLM-77")).ReturnsAsync(new ShadowAppealEvidence
+        {
+            ClaimNumber = "CLM-77", Advice = ShadowAppealAdvice.ChoWouldPay, LikelyOverturn = true,
+            AdviceText = "CHO would have paid what the core denied.",
+            Result = new()
+            {
+                CoreOutcome = "Denied", CoreDenialCode = "50", ChoOutcome = "Paid", ChoPaid = 120m,
+                ChoStageFindings = { "PriorAuthorization: approved authorization PA-1 covers the service" },
+                PriorAuthorizationEvidence = { new() { LineNumber = 1, AuthorizationNumber = "PA-1", Outcome = "Valid", PolicyVersion = "2026.2" } },
+            },
+            DenialCodeHistory = new() { Key = "50", Decided = 40, Overturned = 26, OverturnRate = 0.65m },
+        });
+        Services.AddSingleton(shadow.Object);
+
+        var cut = Render();
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=shadow-appeal-evidence]").TextContent
+            .Should().Contain("CHO would pay").And.Contain("Denied (50)").And.Contain("$120.00")
+            .And.Contain("PA-1").And.Contain("Policy 2026.2").And.Contain("Advisory"));
+        cut.Find("[data-testid=shadow-appeal-history]").TextContent.Should().Contain("26 of 40 overturned (65%)");
+    }
+
+    [Fact]
     public void Honours_the_tab_in_the_url()
     {
         var cut = Render("timeline");

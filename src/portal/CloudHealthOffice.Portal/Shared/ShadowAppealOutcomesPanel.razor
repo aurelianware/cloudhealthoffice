@@ -1,0 +1,133 @@
+@using CloudHealthOffice.Portal.Services
+@using System.Globalization
+@inject IServiceProvider ServiceProvider
+
+@*
+    Appeal outcomes against CHO's shadow readings: the plan loads its appeal
+    decisions (from its own appeals system), and the panel shows how often
+    appeals of denials CHO would have paid were overturned, against those CHO
+    confirmed, and by CARC. Advisory only. Needs claims:import.
+    See docs/integration/SHADOW-ADJUDICATION.md#appeals.
+*@
+
+@if (_client is not null)
+{
+    <MudPaper Elevation="0" Class="pa-4" Style="@PaperStyle" data-testid="shadow-appeal-outcomes">
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Appeal outcomes</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+            Load your appeal decisions (CSV: Claim number, Appeal number, Decision, Decision date, Denial code) to see how
+            often appeals of the denials CHO would have paid were overturned. Each appeal on a shadowed claim also shows CHO's
+            reading to the reviewer. Advisory only: CHO never decides an appeal.
+        </MudText>
+        <div class="d-flex align-center flex-wrap mb-2" style="gap: 12px;">
+            <InputFile OnChange="UploadAsync" accept=".csv,.txt" disabled="@_uploading" data-testid="shadow-appeal-upload" />
+            @if (_uploading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" /> }
+        </div>
+        @if (_message is not null)
+        {
+            <MudAlert Severity="@(_failed ? Severity.Warning : Severity.Success)" Dense="true" Class="mb-2" data-testid="shadow-appeal-upload-message">@_message</MudAlert>
+        }
+
+        @if (_summary is { Decided: > 0 } s)
+        {
+            <MudText Typo="Typo.body2" Class="mb-2" data-testid="shadow-appeal-total">
+                @N(s.Decided) decided appeals, @Percent(s.OverturnRate) overturned.
+                @if (s.NotShadowed > 0)
+                {
+                    <span>@N(s.NotShadowed) are on claims not shadowed yet.</span>
+                }
+            </MudText>
+            <MudSimpleTable Dense="true" Elevation="0" Class="mb-3" data-testid="shadow-appeal-by-advice">
+                <thead><tr><th>CHO's reading of the denial</th><th>Decided appeals</th><th>Overturned</th></tr></thead>
+                <tbody>
+                    @foreach (var r in s.ByAdvice)
+                    {
+                        <tr><td>@ShadowAppealAdvice.Label(r.Key)</td><td>@N(r.Decided)</td><td>@N(r.Overturned) (@Percent(r.OverturnRate))</td></tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+            <MudSimpleTable Dense="true" Elevation="0" data-testid="shadow-appeal-by-carc">
+                <thead><tr><th>CARC</th><th>Decided appeals</th><th>Overturned</th><th>CHO would pay</th><th>of those overturned</th><th>CHO confirms</th><th>of those overturned</th></tr></thead>
+                <tbody>
+                    @foreach (var r in s.ByDenialCode.Take(25))
+                    {
+                        <tr>
+                            <td style="font-family: monospace;">@r.Key</td>
+                            <td>@N(r.Decided)</td>
+                            <td>@N(r.Overturned) (@Percent(r.OverturnRate))</td>
+                            <td>@N(r.ChoWouldPay)</td>
+                            <td>@N(r.ChoWouldPayOverturned)</td>
+                            <td>@N(r.ChoConfirms)</td>
+                            <td>@N(r.ChoConfirmsOverturned)</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+        else if (_summary is not null)
+        {
+            <MudText Typo="Typo.body2" data-testid="shadow-appeal-empty">No appeal outcomes loaded yet.</MudText>
+        }
+    </MudPaper>
+}
+
+@code {
+    private const string PaperStyle = "background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;";
+    private const long MaxFileBytes = 50L * 1024 * 1024;
+
+    private IShadowAppealsClient? _client;
+    private ShadowAppealSummary? _summary;
+    private bool _uploading;
+    private string? _message;
+    private bool _failed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _client = ServiceProvider.GetService(typeof(IShadowAppealsClient)) as IShadowAppealsClient;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_client is null) return;
+        try { _summary = await _client.GetSummaryAsync() ?? new ShadowAppealSummary(); }
+        catch (ServiceUnavailableException) { _summary = new ShadowAppealSummary(); }
+    }
+
+    private async Task UploadAsync(InputFileChangeEventArgs args)
+    {
+        if (_client is null) return;
+        _uploading = true;
+        _message = null;
+        try
+        {
+            if (args.File.Size > MaxFileBytes) { Fail("The file is over 50 MB."); return; }
+            await using var stream = args.File.OpenReadStream(MaxFileBytes);
+            var change = await _client.ImportOutcomesAsync(stream, args.File.Name, dryRun: false);
+            if (change.Value is { } result)
+            {
+                _failed = result.Rejected > 0;
+                _message = $"Loaded {N(result.Loaded)} appeal outcomes" +
+                           (result.Rejected > 0 ? $"; {N(result.Rejected)} rows refused: {string.Join(" ", result.RowErrors.Take(3))}" : ".");
+                await LoadAsync();
+            }
+            else
+            {
+                Fail(string.Join(" ", change.Errors));
+            }
+        }
+        catch (ServiceUnavailableException) { Fail("Claims Service is unavailable. Try again shortly."); }
+        finally { _uploading = false; }
+    }
+
+    private void Fail(string message)
+    {
+        _failed = true;
+        _message = message;
+    }
+
+    private static string N(int n) => n.ToString("N0", CultureInfo.InvariantCulture);
+
+    private static string Percent(decimal? rate) =>
+        rate is { } r ? (r * 100m).ToString("0.#", CultureInfo.InvariantCulture) + "%" : "-";
+}

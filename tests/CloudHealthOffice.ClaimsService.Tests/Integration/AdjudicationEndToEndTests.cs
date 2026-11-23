@@ -280,6 +280,8 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                     new global::ClaimsService.Services.Adjudication.Shadow.InMemoryShadowAccumulatorBalanceRepository());
                 services.AddSingleton<global::ClaimsService.Services.Adjudication.Shadow.IShadowFindingRepository>(
                     new global::ClaimsService.Services.Adjudication.Shadow.InMemoryShadowFindingRepository());
+                services.AddSingleton<global::ClaimsService.Services.Adjudication.Shadow.IShadowAppealOutcomeRepository>(
+                    new global::ClaimsService.Services.Adjudication.Shadow.InMemoryShadowAppealOutcomeRepository());
                 services.AddSingleton(Substitute.For<global::ClaimsService.Services.Tpl.ITplRecoveryRepository>());
                 // The retro rate impact store is Mongo too.
                 services.AddSingleton(Substitute.For<global::ClaimsService.Services.RetroRate.IRetroRateImpactRepository>());

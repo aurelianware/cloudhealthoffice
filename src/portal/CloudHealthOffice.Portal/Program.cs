@@ -293,6 +293,7 @@ builder.Services.AddScoped<IDataDropService, DataDropService>();
 builder.Services.AddScoped<IShadowAdjudicationClient, ShadowAdjudicationClient>();
 builder.Services.AddScoped<IShadowQuickStartClient, ShadowQuickStartClient>();
 builder.Services.AddScoped<IShadowFindingsClient, ShadowFindingsClient>();
+builder.Services.AddScoped<IShadowAppealsClient, ShadowAppealsClient>();
 builder.Services.AddScoped<IShadowPendedClient, ShadowPendedClient>();
 builder.Services.AddScoped<IEligibilityService, EligibilityService>();
 builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();

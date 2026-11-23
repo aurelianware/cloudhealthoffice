@@ -1,0 +1,106 @@
+@using CloudHealthOffice.Portal.Services
+@using System.Globalization
+@inject IServiceProvider ServiceProvider
+
+@*
+    CHO's shadow reading of an appealed claim, on the appeal record: whether
+    CHO would have paid what the core denied, the codes and amounts on both
+    sides, CHO's findings, and how earlier appeals on the same CARC went.
+    Advisory only: the reviewer decides the appeal. Shows nothing when the
+    claim has not been shadowed. See docs/integration/SHADOW-ADJUDICATION.md#appeals.
+*@
+
+@if (_evidence is { } e)
+{
+    var r = e.Result;
+    <MudPaper Outlined="true" Class="pa-3 mt-4" data-testid="shadow-appeal-evidence">
+        <div class="d-flex align-center flex-wrap" style="gap: 8px;">
+            <MudIcon Icon="@Icons.Material.Filled.CompareArrows" Size="Size.Small" />
+            <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">CHO shadow adjudication</MudText>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                     Color="@(e.LikelyOverturn ? Color.Warning : Color.Default)" data-testid="shadow-appeal-advice">
+                @ShadowAppealAdvice.Label(e.Advice)
+            </MudChip>
+            <MudSpacer />
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Run @r.CreatedAtUtc.ToLocalTime().ToString("MM/dd/yyyy", CultureInfo.InvariantCulture)</MudText>
+        </div>
+        <MudText Typo="Typo.body2" Class="mt-1">
+            @e.AdviceText
+            Core: @Outcome(r.CoreOutcome, r.CoreDenialCode), paid @Money(r.CorePaid).
+            CHO: @Outcome(r.ChoOutcome, r.ChoDenialCode ?? r.ChoPendCode)@(r.ChoOutcome == "Paid" ? $", would pay {Money(r.ChoPaid)}" : "").
+        </MudText>
+        @if (e.DenialCodeHistory is { } h)
+        {
+            <MudText Typo="Typo.body2" Class="mt-1" data-testid="shadow-appeal-history">
+                Earlier appeals of CARC @h.Key: @h.Overturned.ToString(CultureInfo.InvariantCulture) of @h.Decided.ToString(CultureInfo.InvariantCulture) overturned (@Percent(h.OverturnRate)).
+            </MudText>
+        }
+        @{
+            var lines = r.Lines.Where(l => l.CoreDenialCode != null || l.ChoDenialCode != null).ToList();
+        }
+        @if (lines.Count > 0)
+        {
+            <MudSimpleTable Dense="true" Elevation="0" Class="mt-2" data-testid="shadow-appeal-lines">
+                <thead><tr><th>Line</th><th>Procedure</th><th>Core</th><th>CHO</th></tr></thead>
+                <tbody>
+                    @foreach (var l in lines)
+                    {
+                        <tr>
+                            <td>@l.LineNumber</td>
+                            <td style="font-family: monospace;">@l.ProcedureCode</td>
+                            <td>@(l.CoreDenialCode is { } c ? $"Denied {c}" : Money(l.CorePaid ?? 0m))</td>
+                            <td>@(l.ChoDenialCode is { } d ? $"Denied {d}" : Money(l.ChoPaid ?? 0m))</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+        @if (r.PriorAuthorizationEvidence.Count > 0)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2" Style="display: block;">AUTHORIZATION CHECKED</MudText>
+            @foreach (var a in r.PriorAuthorizationEvidence)
+            {
+                <MudText Typo="Typo.body2">
+                    Line @a.LineNumber: @a.Outcome@(a.AuthorizationNumber is { } n ? $" ({n})" : "")@(a.Reason is { } why ? $": {why}" : "")@(a.PolicyVersion is { } v ? $". Policy {v}" : "")
+                </MudText>
+            }
+        }
+        @if (r.ChoStageFindings.Count > 0)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2" Style="display: block;">CHO FINDINGS</MudText>
+            @foreach (var f in r.ChoStageFindings.Take(6))
+            {
+                <MudText Typo="Typo.body2">@f</MudText>
+            }
+        }
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2" Style="display: block;">
+            Advisory: CHO re-adjudicated the claim with the plan's own contracts, fee schedules, benefits and authorizations. The appeal decision is the reviewer's.
+        </MudText>
+    </MudPaper>
+}
+
+@code {
+    /// <summary>The appealed claim's number (the core's claim id).</summary>
+    [Parameter, EditorRequired] public string ClaimNumber { get; set; } = string.Empty;
+
+    private ShadowAppealEvidence? _evidence;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _evidence = null;
+        if (string.IsNullOrWhiteSpace(ClaimNumber)) return;
+        // Optional: a portal without the shadow client, or a claim never
+        // shadowed, shows nothing.
+        if (ServiceProvider.GetService(typeof(IShadowAppealsClient)) is not IShadowAppealsClient client) return;
+        try { _evidence = await client.GetEvidenceAsync(ClaimNumber); }
+        catch (ServiceUnavailableException) { _evidence = null; }
+    }
+
+    private static string Money(decimal amount) => amount.ToString("C", CultureInfo.GetCultureInfo("en-US"));
+
+    private static string Percent(decimal? rate) =>
+        rate is { } r ? (r * 100m).ToString("0.#", CultureInfo.InvariantCulture) + "%" : "-";
+
+    private static string Outcome(string outcome, string? code) =>
+        code is null ? outcome : $"{outcome} ({code})";
+}

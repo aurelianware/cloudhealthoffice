@@ -641,6 +641,11 @@ builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowFin
     ClaimsService.Services.Adjudication.Shadow.ShadowFindingService>();
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAdjudicationService,
     ClaimsService.Services.Adjudication.Shadow.ShadowAdjudicationService>();
+// Appeals: CHO's shadow reading of an appealed claim, and the plan's appeal
+// outcomes against it (advisory only; CHO never decides an appeal).
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.IShadowAppealOutcomeRepository,
+    ClaimsService.Services.Adjudication.Shadow.ShadowAppealOutcomeRepositoryMongo>();
+builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.ShadowAppealService>();
 // Pended claims: what CHO would have done with the core's pends, by pend reason.
 builder.Services.AddScoped<ClaimsService.Services.Adjudication.Shadow.ShadowPendedAnalysisService>();
 // Background shadow runs: whole import batches, in pages, resumable across replicas.

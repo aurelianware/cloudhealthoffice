@@ -317,6 +317,58 @@ Line denial codes: the core's come from the CPCDS "Line payment denial code"
 the importer stores; CHO's are the line's adjustments other than the member's
 share (group PR) and the contractual write-down (CARC 45).
 
+## Appeals
+
+Shadow results help the plan's appeals reviewers. CHO is advisory only: it
+never decides, files or answers an appeal, and never contacts a provider.
+
+**On the appeal.** `GET api/v1/claims/shadow-adjudication/claims/{claimNumber}/appeal-evidence`
+(`claims:read`, which appeal reviewers have) returns the claim's latest shadow
+result, from any run, with CHO's reading of the denial:
+
+| `advice` | Meaning |
+|---|---|
+| `ChoWouldPay` | The core denied the claim, or a line, and CHO would have paid it |
+| `ChoWouldPayMore` | The core paid, and CHO would have paid more |
+| `ChoDeniesForAnotherReason` | Both denied, with different CARCs |
+| `ChoConfirms` | CHO reaches the core's decision |
+| `ChoUndecided` | CHO could not decide with the data loaded |
+| `NotComparable` | The core had not decided the claim when it was shadowed |
+
+`likelyOverturn` is true for the first two. A lead for the reviewer, not a
+decision. The response carries the result's codes, amounts, lines, CHO's stage
+findings and the authorization evidence, and `denialCodeHistory`: how earlier
+appeals on the same CARC went, once there are at least 10 decided ones. The
+portal shows it on the appeal record's Case tab ("CHO shadow adjudication"); an
+unshadowed claim shows nothing. 404 when the claim has not been shadowed.
+
+**Appeal outcomes.** Plans on QNXT or Facets keep appeals in their own system,
+so the plan loads its decisions as a CSV:
+`POST api/v1/claims/shadow-adjudication/appeal-outcomes/import` (`claims:import`,
+multipart `file`, optional `dryRun`).
+
+| Column | Also read as | Required |
+|---|---|---|
+| Claim number | Claim unique identifier, Claim id | Yes: the core's claim id, as on the claim file |
+| Decision | Appeal decision, Outcome | Yes: overturned (reversed, approved), partially overturned (partial), upheld (affirmed, denied), withdrawn (dismissed) |
+| Appeal number | Appeal id | No (default `1`); a reload with the same claim and appeal number replaces the row |
+| Appeal level, Decision date, Denial code | CARC, Claim payment denial code | No |
+
+`GET api/v1/claims/shadow-adjudication/appeal-outcomes/summary` (`claims:import`;
+portal: **Shadow Adjudication**, Appeal outcomes) joins each decided appeal
+with the claim's latest shadow result:
+
+- `byAdvice`: decided appeals and overturn rate for each CHO reading. For
+  example, the share of appeals of denials CHO would have paid that were
+  overturned, against the share CHO confirmed that were overturned anyway.
+- `byDenialCode`: by CARC (from the file, else the shadow result): decided,
+  overturned, and the CHO would pay and CHO confirms counts with their
+  overturns.
+- `notShadowed`: decided appeals on claims with no shadow result yet.
+
+Withdrawn appeals are kept but not counted as decided. Up to 20,000 outcomes
+are read.
+
 ## Pended claims
 
 A plan can also send the claims its core has pended: payment status `pended`

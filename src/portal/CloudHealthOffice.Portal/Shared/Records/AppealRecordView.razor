@@ -98,6 +98,11 @@
                         </MudItem>
                     </MudGrid>
 
+                    @if (!IsAuthorization(Detail.OriginalDecisionId))
+                    {
+                        <ShadowAppealEvidencePanel ClaimNumber="@Detail.OriginalDecisionId" />
+                    }
+
                     @if (!string.IsNullOrEmpty(Detail.FinalDecision))
                     {
                         <MudDivider Class="my-4" />
@@ -247,6 +252,9 @@
         "Withdrawn" => Color.Default,
         _ => Color.Default
     };
+
+    /// <summary>An appeal of a prior authorization, not a claim: no shadow evidence.</summary>
+    private static bool IsAuthorization(string id) => id.StartsWith("AUTH-") || id.StartsWith("PA-");
 
     private static string? GetDecisionLink(string id)
     {

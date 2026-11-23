@@ -78,6 +78,9 @@ public class ClaimOutcomeWriterRouteGuardTests
             ["POST api/v1/claims/shadow-adjudication/runs"] = (Kind.NoStatusChange,
                 "shadow adjudication: re-adjudicates imported core claims through read-only stages only (no Persistence), " +
                 "stores comparisons in their own collection; the claim is never written"),
+            ["POST api/v1/claims/shadow-adjudication/appeal-outcomes/import"] = (Kind.NoStatusChange,
+                "loads the plan's appeal outcomes into their own collection, to compare with shadow results (claims:import); " +
+                "writes no claim and no appeal"),
             ["POST api/v1/claims/shadow-adjudication/accumulator-balances/import"] = (Kind.NoStatusChange,
                 "loads the core's starting accumulator balances for shadow runs into their own collection (claims:import); " +
                 "writes no claim and no accumulator"),
