@@ -2,8 +2,9 @@ name: Record demo walkthrough
 
 # Records a captioned video and per-step screenshots of the demo portal, for
 # prospect follow-ups. Run `cho_demo.py seed-story` against the demo first so
-# the prior-auth steps have their records; for `texas`, run the Texas Medicaid
-# demo workflow's `seed` the same day.
+# the prior-auth steps have their records; for `texas`, `cms0057-prior-auth`
+# and `shadow-adjudication`, run the Texas Medicaid demo workflow's `seed` the
+# same day (the prior auth video submits a new request on the Texas tenant).
 #
 # connect: port-forward (default) reaches the GKE demo's portal from the
 # runner with kubectl, as the Texas demo workflow does (Workload Identity
@@ -22,6 +23,8 @@ on:
           - prior-auth
           - full-tour
           - texas
+          - cms0057-prior-auth
+          - shadow-adjudication
         default: prior-auth
       connect:
         description: "How the runner reaches the portal"
@@ -82,8 +85,10 @@ jobs:
         with:
           install_components: gke-gcloud-auth-plugin
 
-      - name: Port-forward the portal
+      - name: Port-forward the portal and CRD
         if: ${{ inputs.connect == 'port-forward' }}
+        env:
+          WALKTHROUGH: ${{ inputs.walkthrough }}
         run: |
           set -euo pipefail
           gcloud container clusters get-credentials "${GKE_CLUSTER:-cho-demo}" \
@@ -92,6 +97,16 @@ jobs:
           ( while true; do kubectl port-forward -n cloudhealthoffice svc/portal 8080:80 >/dev/null 2>&1 || true; sleep 1; done ) &
           for _ in $(seq 1 30); do curl -s -o /dev/null http://localhost:8080/ && break; sleep 2; done
           curl -s -o /dev/null -w "Portal answered HTTP %{http_code}\n" http://localhost:8080/
+          if [ "$WALKTHROUGH" = cms0057-prior-auth ]; then
+            # This walkthrough calls CRD the way an EHR does, so it also needs
+            # fhir-service and a CHO token (the demo trusts the public
+            # development signing key; the token is masked in the log).
+            ( while true; do kubectl port-forward -n cloudhealthoffice svc/fhir-service 5023:80 >/dev/null 2>&1 || true; sleep 1; done ) &
+            for _ in $(seq 1 30); do curl -s -o /dev/null http://localhost:5023/health/live && break; sleep 2; done
+            token="$(python3 ../gcp/cho_demo.py token)"
+            echo "::add-mask::$token"
+            { echo "CRD_URL=http://localhost:5023"; echo "CHO_TOKEN=$token"; } >> "$GITHUB_ENV"
+          fi
 
       - name: Record
         env:
