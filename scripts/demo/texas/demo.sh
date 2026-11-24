@@ -10,6 +10,7 @@
 #   ./scripts/demo/texas/demo.sh up        # add the node, wait for the services, apply the Texas settings
 #   ./scripts/demo/texas/demo.sh connect   # port-forwards for the portal and the APIs (leave running)
 #   ./scripts/demo/texas/demo.sh seed      # plans, providers, today's file drop, Texas PA clocks
+#   ./scripts/demo/texas/demo.sh codesets  # CMS ICD-10-CM/PCS and HCPCS releases into terminology-service (seed does this)
 #   ./scripts/demo/texas/demo.sh clocks    # today's Texas PA requests only, fresh (before a showing)
 #   ./scripts/demo/texas/demo.sh status    # nodes, pods and what it is costing
 #   ./scripts/demo/texas/demo.sh down      # remove the node: back to near-zero cost
@@ -176,7 +177,8 @@ cmd_overlay() {
 }
 
 FORWARDS=("portal 8080" "claims-service 5001" "benefit-plan-service 5002" "provider-service 5004"
-          "authorization-service 5006" "coverage-service 5012" "tenant-service 5013" "fhir-service 5023")
+          "authorization-service 5006" "coverage-service 5012" "tenant-service 5013" "fhir-service 5023"
+          "terminology-service 5030")
 
 cmd_connect() {
   need kubectl
@@ -245,7 +247,28 @@ cmd_seed() {
   cmd_drop ""
   python3 "$HERE/tx_demo.py" seed-pa
   [[ -z "$own" ]] || kill "$own" 2>/dev/null || true
+  # The code sets come from cms.gov; a CMS outage must not fail the seed.
+  cmd_codesets || echo "  Code sets not loaded (see above); the date-of-service check answers 'unknown' until they are. Rerun: demo.sh codesets"
   say "Loaded. Follow docs/deploy/TEXAS-MEDICAID-DEMO.md for the click-through."
+}
+
+# The CMS code sets (ICD-10-CM, ICD-10-PCS, HCPCS) that claims-service checks
+# each code's date of service against. Downloads from cms.gov and loads only the
+# releases not already loaded, so it is quick after the first run; the data is
+# kept in MongoDB across "down" and "up".
+cmd_codesets() {
+  need kubectl python3
+  python3 -c 'import openpyxl' 2>/dev/null || die "openpyxl is required: pip install openpyxl"
+  say "Loading the CMS code sets into terminology-service"
+  local pf=""
+  if ! curl -s -o /dev/null --max-time 3 "http://localhost:5030/"; then
+    ( while true; do kubectl port-forward -n "$NAMESPACE" svc/terminology-service 5030:80 >/dev/null 2>&1 || true; sleep 1; done ) &
+    pf=$!
+  fi
+  local rc=0
+  python3 "$ROOT/scripts/terminology/load_cms_code_sets.py" --base-url http://localhost:5030 --dev-token --wait 90 || rc=$?
+  [[ -z "$pf" ]] || { kill "$pf" 2>/dev/null; pkill -f "port-forward -n $NAMESPACE svc/terminology-service" 2>/dev/null || true; }
+  return "$rc"
 }
 
 # The prior-authorization requests only: closes the earlier ones and opens
@@ -269,5 +292,6 @@ case "${1:-}" in
   drop) cmd_drop "${2:-}" ;;
   seed) cmd_seed ;;
   clocks) cmd_clocks ;;
+  codesets) cmd_codesets ;;
   *) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

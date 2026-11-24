@@ -1,0 +1,73 @@
+name: CMS code sets
+
+# Downloads the CMS ICD-10-CM, ICD-10-PCS and HCPCS releases listed in
+# scripts/terminology/cms-code-sets.json, loads them into a terminology-service
+# started here (against a throwaway MongoDB) and runs the manifest's spot checks
+# through CodeSystem/$validate-code. It proves the manifest's URLs still work
+# and that the real CMS files parse and answer as expected. It loads nothing
+# into any environment: the demo loads them with "demo.sh codesets" (the Texas
+# demo workflow's seed does that), and a real environment with
+# scripts/terminology/load_cms_code_sets.py and a platform:admin token.
+#
+# Runs on changes to the manifest, the loader or the service, monthly (CMS
+# posts new releases in October, April and each quarter for HCPCS, and has
+# moved files before), and by hand.
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/terminology/**'
+      - 'src/services/CHO.TerminologyService/**'
+      - '.github/workflows/cms-code-sets.yml'
+  schedule:
+    - cron: "0 13 3 * *" # the 3rd of each month
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: Load and check the CMS code sets
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+      TerminologyService__MongoConnectionString: mongodb://localhost:27017
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Python packages
+        run: pip install openpyxl
+
+      - name: Download and parse (no service)
+        run: python3 scripts/terminology/load_cms_code_sets.py --dry-run
+
+      - name: Start terminology-service
+        run: |
+          dotnet build src/services/CHO.TerminologyService/CHO.TerminologyService.csproj -c Release
+          nohup dotnet run --no-build -c Release --project src/services/CHO.TerminologyService \
+            --urls http://localhost:5030 > terminology.log 2>&1 &
+
+      - name: Load and spot-check
+        run: python3 scripts/terminology/load_cms_code_sets.py --base-url http://localhost:5030 --dev-token --wait 120
+
+      - name: Load again (skips what is loaded)
+        run: python3 scripts/terminology/load_cms_code_sets.py --base-url http://localhost:5030 --dev-token --skip-checks
+
+      - name: Service log
+        if: always()
+        run: tail -n 200 terminology.log || true

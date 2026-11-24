@@ -55,6 +55,7 @@ Run workflow**, then pick:
 | `up+seed` | Adds the node, waits for the services (about 10 minutes from off), applies the Texas settings, loads the demo |
 | `up` | The same without loading data |
 | `seed` | Loads, or reloads, the demo on a running cluster |
+| `codesets` | Loads only the CMS ICD-10 and HCPCS code sets (`seed` does this too) |
 | `status` | Nodes, pods and the running cost |
 | `down` | Removes the node. The data stays for next time |
 
@@ -118,6 +119,12 @@ shared manifests:
 3. `tx_demo.py seed-pa`: seven open Medicaid prior authorizations, one per
    Texas clock, and prints each one's Texas and federal deadline next to the
    deadline CHO stored, with a ✓ when they agree.
+4. `demo.sh codesets`: downloads the CMS ICD-10-CM, ICD-10-PCS and HCPCS
+   releases listed in `scripts/terminology/cms-code-sets.json` and loads the
+   ones not loaded yet into terminology-service, so claims-service can check
+   each code against its date of service. The first run takes a few minutes;
+   later runs skip what is loaded. If cms.gov is down the seed still finishes
+   and the check answers "unknown" (never a denial) until a rerun.
 
 The generator builds in one finding for shadow adjudication: the core still
 pays therapeutic exercise (97110) at last year's rate, $23.45 a unit against
