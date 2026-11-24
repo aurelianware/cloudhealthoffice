@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "inferno-conformance",
-  "generatedAtUtc": "2026-11-23T07:39:27Z",
-  "sourceCommit": "a7f3b4b02554c78b9f9bc7457214b32043efa528",
-  "sourceCommitShort": "a7f3b4b02554",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/a7f3b4b02554c78b9f9bc7457214b32043efa528",
+  "generatedAtUtc": "2026-11-24T07:10:21Z",
+  "sourceCommit": "7ea95d80931226e5d3bb4c5b5621bf63918058fa",
+  "sourceCommitShort": "7ea95d809312",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/7ea95d80931226e5d3bb4c5b5621bf63918058fa",
   "dataClassification": "synthetic",
   "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence and of the Da Vinci interoperability snapshot. A kit result never changes a CMS-0057-F scenario status, and no result here is CMS, ONC or HL7 certification.",
   "kits": [
@@ -34,7 +34,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-23T07:14:43.5899658+00:00",
+      "testedAtUtc": "2026-11-24T06:53:59.5823302+00:00",
       "tests": {
         "passed": 39,
         "failed": 0,
@@ -114,7 +114,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-23T07:30:12.3753059+00:00",
+      "testedAtUtc": "2026-11-24T07:03:26.5462601+00:00",
       "tests": {
         "passed": 13,
         "failed": 0,
@@ -151,7 +151,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-23T07:38:41.4122627+00:00",
+      "testedAtUtc": "2026-11-24T07:09:49.0680805+00:00",
       "tests": {
         "passed": 21,
         "failed": 0,
@@ -232,7 +232,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-23T06:57:32.5213488+00:00",
+      "testedAtUtc": "2026-11-24T06:45:57.0027017+00:00",
       "tests": {
         "passed": 41,
         "failed": 0,
@@ -387,7 +387,7 @@
       "groups": [],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-23T07:32:38.1515688+00:00",
+      "testedAtUtc": "2026-11-24T07:05:01.0625811+00:00",
       "tests": {
         "passed": 180,
         "failed": 0,
@@ -791,7 +791,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-23T06:54:25.8398036+00:00",
+      "testedAtUtc": "2026-11-24T06:43:49.4475614+00:00",
       "tests": {
         "passed": 31,
         "failed": 0,
@@ -836,7 +836,7 @@
       "groups": [],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-23T07:04:56.8619061+00:00",
+      "testedAtUtc": "2026-11-24T06:49:31.9693323+00:00",
       "tests": {
         "passed": 64,
         "failed": 0,
@@ -1039,34 +1039,18 @@
       },
       "suite": "davinci_pas_server_suite_v221",
       "groups": [],
-      "status": "Failed",
+      "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-23T07:26:18.3086448+00:00",
+      "testedAtUtc": "2026-11-24T07:00:48.7204202+00:00",
       "tests": {
-        "passed": 81,
-        "failed": 2,
+        "passed": 83,
+        "failed": 0,
         "skipped": 1,
         "omitted": 0,
         "knownKitIssue": 0,
         "total": 84
       },
-      "failingTests": [
-        {
-          "test": "pas_server_v221_pas_response_bundle_validation_test_pended",
-          "result": "fail",
-          "message": "Bundle response(s) returned are not conformant. Check messages for issues found."
-        },
-        {
-          "test": "Group01",
-          "result": "fail",
-          "message": "(no message)"
-        },
-        {
-          "test": "pas_server_v221_submit_response_bundle_validation_test_must_support",
-          "result": "fail",
-          "message": "Bundle response(s) returned are not conformant. Check messages for issues found."
-        }
-      ],
+      "failingTests": [],
       "notRunTests": [
         {
           "test": "Group02",
@@ -1082,6 +1066,11 @@
           "test": "pas_server_v221_submit_request_bundle_validation_test_must_support",
           "result": "skip",
           "message": "Bundle(s) provided are not conformant. Check messages for issues found."
+        },
+        {
+          "test": "Group01",
+          "result": "skip",
+          "message": "(no message)"
         }
       ],
       "knownKitIssues": []
@@ -1111,7 +1100,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-23T07:35:55.5226381+00:00",
+      "testedAtUtc": "2026-11-24T07:07:42.7221449+00:00",
       "tests": {
         "passed": 73,
         "failed": 0,
@@ -1167,15 +1156,15 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-11-23T07:38:41.4158507+00:00",
+    "generatedAtUtc": "2026-11-24T07:09:49.0706439+00:00",
     "environment": "CI",
-    "choCommit": "a7f3b4b02554c78b9f9bc7457214b32043efa528",
-    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/a7f3b4b02554c78b9f9bc7457214b32043efa528",
-    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/45125570232",
+    "choCommit": "7ea95d80931226e5d3bb4c5b5621bf63918058fa",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/7ea95d80931226e5d3bb4c5b5621bf63918058fa",
+    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/45340912303",
     "dataClassification": "synthetic",
     "summary": {
-      "passed": 8,
-      "failed": 1,
+      "passed": 9,
+      "failed": 0,
       "skipped": 0,
       "notRun": 0,
       "total": 9
