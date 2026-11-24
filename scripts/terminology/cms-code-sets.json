@@ -1,0 +1,108 @@
+{
+  "_comment": "CMS code-set releases terminology-service loads for CodeSystem/$validate-code with a date of service. Public-domain CMS files. Load in this order (oldest first). When CMS posts a new file, add an entry; the URLs are the zip links on https://www.cms.gov/medicare/coding-billing/icd-10-codes and https://www.cms.gov/medicare/coding-billing/healthcare-common-procedure-system/quarterly-update. 'member' is a case-insensitive glob for the file inside the zip.",
+  "releases": [
+    {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "label": "ICD-10-CM FY2026",
+      "version": "FY2026",
+      "format": "ICD10-ORDER",
+      "url": "https://www.cms.gov/files/zip/2026-code-descriptions-tabular-order.zip",
+      "member": "*order*.txt"
+    },
+    {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "label": "ICD-10-CM April 1, 2026 update",
+      "version": "FY2026-APR",
+      "format": "ICD10-ORDER",
+      "effectiveFrom": "2026-04-01",
+      "url": "https://www.cms.gov/files/zip/april-1-2026-code-descriptions-tabular-order.zip",
+      "member": "*order*.txt"
+    },
+    {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "label": "ICD-10-CM FY2027",
+      "version": "FY2027",
+      "format": "ICD10-ORDER",
+      "url": "https://www.cms.gov/files/zip/2027-code-descriptions-tabular-order.zip",
+      "member": "*order*.txt"
+    },
+    {
+      "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+      "label": "ICD-10-PCS FY2026",
+      "version": "FY2026",
+      "format": "ICD10-ORDER",
+      "url": "https://www.cms.gov/files/zip/2026-icd-10-pcs-order-file-long-and-abbreviated-titles.zip",
+      "member": "*order*.txt"
+    },
+    {
+      "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+      "label": "ICD-10-PCS April 1, 2026 update",
+      "version": "FY2026-APR",
+      "format": "ICD10-ORDER",
+      "effectiveFrom": "2026-04-01",
+      "url": "https://www.cms.gov/files/zip/april-1-2026-icd-10-pcs-order-file-long-abbreviated-titles.zip",
+      "member": "*order*.txt"
+    },
+    {
+      "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+      "label": "ICD-10-PCS FY2027",
+      "version": "FY2027",
+      "format": "ICD10-ORDER",
+      "url": "https://www.cms.gov/files/zip/2027-icd-10-pcs-order-file-long-abbreviated-titles.zip",
+      "member": "*order*.txt"
+    },
+    {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "label": "HCPCS January 2026",
+      "version": "2026-Q1",
+      "format": "HCPCS-CSV",
+      "effectiveFrom": "2026-01-01",
+      "url": "https://www.cms.gov/files/zip/january-2026-alpha-numeric-hcpcs-file.zip",
+      "member": "*anweb*.xlsx"
+    },
+    {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "label": "HCPCS April 2026",
+      "version": "2026-Q2",
+      "format": "HCPCS-CSV",
+      "effectiveFrom": "2026-04-01",
+      "url": "https://www.cms.gov/files/zip/april-2026-alpha-numeric-hcpcs-file.zip",
+      "member": "*anweb*.xlsx"
+    },
+    {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "label": "HCPCS July 2026",
+      "version": "2026-Q3",
+      "format": "HCPCS-CSV",
+      "effectiveFrom": "2026-07-01",
+      "url": "https://www.cms.gov/files/zip/july-2026-alpha-numeric-hcpcs-file.zip",
+      "member": "*anweb*.xlsx"
+    },
+    {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "label": "HCPCS October 2026",
+      "version": "2026-Q4",
+      "format": "HCPCS-CSV",
+      "effectiveFrom": "2026-10-01",
+      "url": "https://www.cms.gov/files/zip/october-2026-alpha-numeric-hcpcs-file.zip",
+      "member": "*anweb*.xlsx"
+    },
+    {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "label": "HCPCS January 2027",
+      "version": "2027-Q1",
+      "format": "HCPCS-CSV",
+      "effectiveFrom": "2027-01-01",
+      "url": "https://www.cms.gov/files/zip/january-2027-alpha-numeric-hcpcs-file.zip",
+      "member": "*anweb*.xlsx"
+    }
+  ],
+  "checks": [
+    { "system": "http://hl7.org/fhir/sid/icd-10-cm", "code": "E11.65", "date": "2026-03-01", "status": "valid" },
+    { "system": "http://hl7.org/fhir/sid/icd-10-cm", "code": "E11", "date": "2026-03-01", "status": "invalid", "reason": "not-billable" },
+    { "system": "http://hl7.org/fhir/sid/icd-10-cm", "code": "Z23", "date": "2026-11-01", "status": "valid" },
+    { "system": "http://www.cms.gov/Medicare/Coding/ICD10", "code": "0DTJ4ZZ", "date": "2026-03-01", "status": "valid" },
+    { "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets", "code": "G0008", "date": "2026-11-01", "status": "valid" },
+    { "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets", "code": "A0425", "date": "2026-05-01", "status": "valid" }
+  ]
+}

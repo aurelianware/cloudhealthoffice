@@ -220,6 +220,29 @@ loaded release, or a code system with nothing loaded (CPT), is not checked, so
 a missing file cannot turn into denials. Loading needs `platform:admin`;
 validating needs `terminology:read` (service tokens satisfy it).
 
+### Loading the CMS files (scripted)
+
+`scripts/terminology/load_cms_code_sets.py` does the downloads and loads for
+you. It reads `scripts/terminology/cms-code-sets.json` (each CMS release: the
+cms.gov zip, the file inside it, the version and its first covered date),
+takes the ICD-10 order file or the HCPCS spreadsheet out of each zip, posts it
+to `/admin/code-sets/load`, then runs the manifest's spot checks. Releases
+already loaded are skipped, so it is safe to rerun after adding a release.
+
+```bash
+pip install openpyxl                       # reads the HCPCS spreadsheet
+CHO_TOKEN=<platform:admin token> python3 scripts/terminology/load_cms_code_sets.py --base-url https://<terminology-service>
+python3 scripts/terminology/load_cms_code_sets.py --base-url http://localhost:5080 --dev-token   # docker compose
+python3 scripts/terminology/load_cms_code_sets.py --dry-run   # download and parse only
+```
+
+The **CMS code sets** workflow (`.github/workflows/cms-code-sets.yml`) runs the
+same load against a throwaway service and MongoDB on every change to the
+manifest or this service and on the 3rd of each month, so a file CMS moves or
+renames shows up as a failed run. When CMS posts a new release (ICD-10 each
+October and April, HCPCS each quarter), add its entry to the manifest. The
+Texas demo loads the sets during `seed` (or `demo.sh codesets` alone).
+
 ## Data Sources
 
 | Source | Format | Cost | Coverage |
