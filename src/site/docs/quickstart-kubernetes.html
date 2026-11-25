@@ -17,22 +17,48 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "TechArticle",
-    "headline": "Cloud Health Office Kubernetes Reference",
-    "description": "Step-by-step guide to deploying Cloud Health Office on Docker Desktop Kubernetes with production-shaped services and reference cloud-deployment patterns.",
-    "url": "https://cloudhealthoffice.com/docs/quickstart-kubernetes",
-    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
-    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
-    "datePublished": "2026-04-04",
-    "proficiencyLevel": "Intermediate",
-    "breadcrumb": {
-      "@type": "BreadcrumbList",
-      "itemListElement": [
-        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
-        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
-        { "@type": "ListItem", "position": 3, "name": "Kubernetes Reference", "item": "https://cloudhealthoffice.com/docs/quickstart-kubernetes" }
-      ]
-    }
+    "@graph": [
+      {
+        "@type": "TechArticle",
+        "headline": "Cloud Health Office Kubernetes Reference",
+        "description": "Step-by-step guide to deploying Cloud Health Office on Docker Desktop Kubernetes with production-shaped services and reference cloud-deployment patterns.",
+        "url": "https://cloudhealthoffice.com/docs/quickstart-kubernetes",
+        "author": {
+          "@type": "Organization",
+          "name": "Aurelianware, Inc."
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Cloud Health Office",
+          "url": "https://cloudhealthoffice.com"
+        },
+        "datePublished": "2026-04-04",
+        "proficiencyLevel": "Intermediate"
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://cloudhealthoffice.com"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Docs",
+            "item": "https://cloudhealthoffice.com/docs"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "Kubernetes Reference",
+            "item": "https://cloudhealthoffice.com/docs/quickstart-kubernetes"
+          }
+        ]
+      }
+    ]
   }
   </script>
 

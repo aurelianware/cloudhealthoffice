@@ -28,31 +28,44 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "Cloud Health Office Claims Repricing Tool",
-    "applicationCategory": "HealthApplication",
-    "operatingSystem": "Web",
-    "url": "https://cloudhealthoffice.com/claims-repricing",
-    "description": "Medicare claims repricing engine supporting RBRVS physician fee schedule, OPPS APC rates, and MS-DRG weights, with a sample RVU demo on this page. API access on request.",
-    "offers": {
-      "@type": "Offer",
-      "name": "Free Tier",
-      "price": "0",
-      "priceCurrency": "USD",
-      "description": "1,000 claims per month, all three Medicare fee schedules, full RVU breakdown"
-    },
-    "author": {
-      "@type": "Organization",
-      "name": "Aurelianware, Inc.",
-      "url": "https://cloudhealthoffice.com"
-    },
-    "breadcrumb": {
-      "@type": "BreadcrumbList",
-      "itemListElement": [
-        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com/" },
-        { "@type": "ListItem", "position": 2, "name": "Claims Repricing", "item": "https://cloudhealthoffice.com/claims-repricing" }
-      ]
-    }
+    "@graph": [
+      {
+        "@type": "CreativeWork",
+        "name": "Cloud Health Office Claims Repricing Tool",
+        "url": "https://cloudhealthoffice.com/claims-repricing",
+        "description": "Medicare claims repricing engine supporting RBRVS physician fee schedule, OPPS APC rates, and MS-DRG weights, with a sample RVU demo on this page. API access on request.",
+        "offers": {
+          "@type": "Offer",
+          "name": "Free Tier",
+          "price": "0",
+          "priceCurrency": "USD",
+          "description": "1,000 claims per month, all three Medicare fee schedules, full RVU breakdown"
+        },
+        "author": {
+          "@type": "Organization",
+          "name": "Aurelianware, Inc.",
+          "url": "https://cloudhealthoffice.com"
+        },
+        "additionalType": "https://schema.org/SoftwareApplication"
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://cloudhealthoffice.com/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Claims Repricing",
+            "item": "https://cloudhealthoffice.com/claims-repricing"
+          }
+        ]
+      }
+    ]
   }
   </script>
 

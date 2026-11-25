@@ -191,10 +191,10 @@ describe('Services & deployment positioning', () => {
       expect(() => jsonLdBlocks(deploy)).not.toThrow();
     });
 
-    it('describes /services as a ProfessionalService with a breadcrumb and FAQ', () => {
+    it('describes /services as a Service with a breadcrumb and FAQ', () => {
       const graph = (jsonLdBlocks(services)[0] as { '@graph': Array<{ '@type': string }> })['@graph'];
       const types = graph.map((node) => node['@type']);
-      expect(types).toContain('ProfessionalService');
+      expect(types).toContain('Service');
       expect(types).toContain('BreadcrumbList');
       expect(types).toContain('FAQPage');
     });
@@ -640,7 +640,7 @@ describe('Services & deployment positioning', () => {
       const graph = (jsonLdBlocks(services)[0] as {
         '@graph': Array<{ '@type': string; serviceType?: string[] }>;
       })['@graph'];
-      const service = graph.find((node) => node['@type'] === 'ProfessionalService');
+      const service = graph.find((node) => node['@type'] === 'Service');
       expect(service?.serviceType).toEqual(
         expect.arrayContaining([
           'Fee schedule and reimbursement configuration services',

@@ -17,22 +17,48 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "TechArticle",
-    "headline": "Terminology Crosswalk — Cloud Health Office",
-    "description": "Complete guide to the CHO Terminology Crosswalk service: FHIR-native SNOMED CT to ICD-10-CM and CPT code translation for CMS-0057 compliance, context-aware disambiguation, and payer system integration.",
-    "url": "https://cloudhealthoffice.com/docs/terminology-guide",
-    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
-    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
-    "datePublished": "2026-03-26",
-    "proficiencyLevel": "Intermediate",
-    "breadcrumb": {
-      "@type": "BreadcrumbList",
-      "itemListElement": [
-        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
-        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
-        { "@type": "ListItem", "position": 3, "name": "Terminology Crosswalk", "item": "https://cloudhealthoffice.com/docs/terminology-guide" }
-      ]
-    }
+    "@graph": [
+      {
+        "@type": "TechArticle",
+        "headline": "Terminology Crosswalk — Cloud Health Office",
+        "description": "Complete guide to the CHO Terminology Crosswalk service: FHIR-native SNOMED CT to ICD-10-CM and CPT code translation for CMS-0057 compliance, context-aware disambiguation, and payer system integration.",
+        "url": "https://cloudhealthoffice.com/docs/terminology-guide",
+        "author": {
+          "@type": "Organization",
+          "name": "Aurelianware, Inc."
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Cloud Health Office",
+          "url": "https://cloudhealthoffice.com"
+        },
+        "datePublished": "2026-03-26",
+        "proficiencyLevel": "Intermediate"
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://cloudhealthoffice.com"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Docs",
+            "item": "https://cloudhealthoffice.com/docs"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "Terminology Crosswalk",
+            "item": "https://cloudhealthoffice.com/docs/terminology-guide"
+          }
+        ]
+      }
+    ]
   }
   </script>
 
