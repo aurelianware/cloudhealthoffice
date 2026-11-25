@@ -17,22 +17,48 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "TechArticle",
-    "headline": "Commercial Licensing — Cloud Health Office",
-    "description": "Cloud Health Office commercial licensing guide. BSL 1.1 source-available license. Free for development and evaluation. Commercial license required for production use with live member data.",
-    "url": "https://cloudhealthoffice.com/docs/commercial-licensing",
-    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
-    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
-    "datePublished": "2026-03-26",
-    "proficiencyLevel": "Beginner",
-    "breadcrumb": {
-      "@type": "BreadcrumbList",
-      "itemListElement": [
-        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
-        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
-        { "@type": "ListItem", "position": 3, "name": "Commercial Licensing", "item": "https://cloudhealthoffice.com/docs/commercial-licensing" }
-      ]
-    }
+    "@graph": [
+      {
+        "@type": "TechArticle",
+        "headline": "Commercial Licensing — Cloud Health Office",
+        "description": "Cloud Health Office commercial licensing guide. BSL 1.1 source-available license. Free for development and evaluation. Commercial license required for production use with live member data.",
+        "url": "https://cloudhealthoffice.com/docs/commercial-licensing",
+        "author": {
+          "@type": "Organization",
+          "name": "Aurelianware, Inc."
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Cloud Health Office",
+          "url": "https://cloudhealthoffice.com"
+        },
+        "datePublished": "2026-03-26",
+        "proficiencyLevel": "Beginner"
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://cloudhealthoffice.com"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Docs",
+            "item": "https://cloudhealthoffice.com/docs"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "Commercial Licensing",
+            "item": "https://cloudhealthoffice.com/docs/commercial-licensing"
+          }
+        ]
+      }
+    ]
   }
   </script>
 

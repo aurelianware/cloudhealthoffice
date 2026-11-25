@@ -17,31 +17,57 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "TechArticle",
-    "headline": "Fee Schedule Engine — Cloud Health Office",
-    "description": "Fee Schedule Engine documentation — fee schedule ingestion pipeline, claim-time pricing engine, modifier logic, GPCI adjustments, and full audit trail.",
-    "url": "https://cloudhealthoffice.com/docs/fee-schedule-engine",
-    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
-    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
-    "datePublished": "2026-04-08",
-    "proficiencyLevel": "Advanced",
-    "about": [
-      "Fee schedule ingestion pipeline",
-      "Claim-time pricing engine",
-      "Medicare MPFS",
-      "CMS OPPS/ASC",
-      "Medicaid fee schedules",
-      "Fee schedule versioning",
-      "Redis hot cache pricing"
-    ],
-    "breadcrumb": {
-      "@type": "BreadcrumbList",
-      "itemListElement": [
-        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
-        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
-        { "@type": "ListItem", "position": 3, "name": "Fee Schedule Engine", "item": "https://cloudhealthoffice.com/docs/fee-schedule-engine" }
-      ]
-    }
+    "@graph": [
+      {
+        "@type": "TechArticle",
+        "headline": "Fee Schedule Engine — Cloud Health Office",
+        "description": "Fee Schedule Engine documentation — fee schedule ingestion pipeline, claim-time pricing engine, modifier logic, GPCI adjustments, and full audit trail.",
+        "url": "https://cloudhealthoffice.com/docs/fee-schedule-engine",
+        "author": {
+          "@type": "Organization",
+          "name": "Aurelianware, Inc."
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Cloud Health Office",
+          "url": "https://cloudhealthoffice.com"
+        },
+        "datePublished": "2026-04-08",
+        "proficiencyLevel": "Advanced",
+        "about": [
+          "Fee schedule ingestion pipeline",
+          "Claim-time pricing engine",
+          "Medicare MPFS",
+          "CMS OPPS/ASC",
+          "Medicaid fee schedules",
+          "Fee schedule versioning",
+          "Redis hot cache pricing"
+        ]
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://cloudhealthoffice.com"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Docs",
+            "item": "https://cloudhealthoffice.com/docs"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "Fee Schedule Engine",
+            "item": "https://cloudhealthoffice.com/docs/fee-schedule-engine"
+          }
+        ]
+      }
+    ]
   }
   </script>
 

@@ -35,39 +35,74 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "TechArticle",
-    "headline": "1 Million Claims on Local Kubernetes — Results | Cloud Health Office",
-    "alternativeHeadline": "Benchmark Any Healthcare Claims Engine With 1 Million Synthetic Claims",
-    "description": "Source-available claims adjudication benchmark designed for 1,000,000 stratified synthetic healthcare claims. Latest Cloud Health Office proof is a full-corpus asynchronous Service Bus validation at 155.89 claims per second with all claims eventually terminal.",
-    "url": "https://cloudhealthoffice.com/docs/million-claim-challenge",
-    "mainEntityOfPage": "https://cloudhealthoffice.com/docs/million-claim-challenge",
-    "author": { "@type": "Organization", "name": "Aurelianware, Inc.", "url": "https://github.com/aurelianware" },
-    "publisher": {
-      "@type": "Organization",
-      "name": "Cloud Health Office",
-      "url": "https://cloudhealthoffice.com",
-      "logo": { "@type": "ImageObject", "url": "https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" }
-    },
-    "datePublished": "2026-04-05",
-    "dateModified": "2026-07-13",
-    "proficiencyLevel": "Intermediate",
-    "about": [
-      { "@type": "Thing", "name": "Claims Adjudication" },
-      { "@type": "Thing", "name": "Healthcare Benchmarking" },
-      { "@type": "Thing", "name": "CMS-0057-F Compliance" }
-    ],
-    "keywords": "million claim challenge, claims adjudication benchmark, synthetic claim generator, healthcare benchmarking, CMS-0057-F, FHIR R4",
-    "wordCount": 3600,
-    "inLanguage": "en-US",
-    "isAccessibleForFree": true,
-    "breadcrumb": {
-      "@type": "BreadcrumbList",
-      "itemListElement": [
-        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
-        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
-        { "@type": "ListItem", "position": 3, "name": "Million Claim Challenge", "item": "https://cloudhealthoffice.com/docs/million-claim-challenge" }
-      ]
-    }
+    "@graph": [
+      {
+        "@type": "TechArticle",
+        "headline": "1 Million Claims on Local Kubernetes — Results | Cloud Health Office",
+        "alternativeHeadline": "Benchmark Any Healthcare Claims Engine With 1 Million Synthetic Claims",
+        "description": "Source-available claims adjudication benchmark designed for 1,000,000 stratified synthetic healthcare claims. Latest Cloud Health Office proof is a full-corpus asynchronous Service Bus validation at 155.89 claims per second with all claims eventually terminal.",
+        "url": "https://cloudhealthoffice.com/docs/million-claim-challenge",
+        "mainEntityOfPage": "https://cloudhealthoffice.com/docs/million-claim-challenge",
+        "author": {
+          "@type": "Organization",
+          "name": "Aurelianware, Inc.",
+          "url": "https://github.com/aurelianware"
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Cloud Health Office",
+          "url": "https://cloudhealthoffice.com",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg"
+          }
+        },
+        "datePublished": "2026-04-05",
+        "dateModified": "2026-07-13",
+        "proficiencyLevel": "Intermediate",
+        "about": [
+          {
+            "@type": "Thing",
+            "name": "Claims Adjudication"
+          },
+          {
+            "@type": "Thing",
+            "name": "Healthcare Benchmarking"
+          },
+          {
+            "@type": "Thing",
+            "name": "CMS-0057-F Compliance"
+          }
+        ],
+        "keywords": "million claim challenge, claims adjudication benchmark, synthetic claim generator, healthcare benchmarking, CMS-0057-F, FHIR R4",
+        "wordCount": 3600,
+        "inLanguage": "en-US",
+        "isAccessibleForFree": true
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://cloudhealthoffice.com"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Docs",
+            "item": "https://cloudhealthoffice.com/docs"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "Million Claim Challenge",
+            "item": "https://cloudhealthoffice.com/docs/million-claim-challenge"
+          }
+        ]
+      }
+    ]
   }
   </script>
 
@@ -172,11 +207,13 @@
     "programmingLanguage": "C#",
     "runtimePlatform": ".NET 8.0",
     "license": "https://mariadb.com/bsl11/",
-    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "author": {
+      "@type": "Organization",
+      "name": "Aurelianware, Inc."
+    },
     "isPartOf": {
-      "@type": "SoftwareApplication",
-      "name": "Cloud Health Office",
-      "applicationCategory": "HealthApplication"
+      "@id": "https://cloudhealthoffice.com/#software",
+      "name": "Cloud Health Office"
     }
   }
   </script>

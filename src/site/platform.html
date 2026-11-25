@@ -28,25 +28,59 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "TechArticle",
-    "headline": "Sit CMS-0057-F Beside QNXT, Facets, or HealthEdge | Cloud Health Office",
-    "url": "https://cloudhealthoffice.com/platform",
-    "description": "Technical architecture of Cloud Health Office: C# microservices, Blazor Server portal, FHIR R4 APIs, X12 EDI processing, Azure and Kubernetes deployment for CMS-0057-F compliance.",
-    "author": { "@type": "Organization", "name": "Aurelianware, Inc.", "url": "https://cloudhealthoffice.com" },
-    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
-    "about": [
-      { "@type": "Thing", "name": "FHIR R4" },
-      { "@type": "Thing", "name": "X12 EDI" },
-      { "@type": "Thing", "name": "CMS-0057-F" },
-      { "@type": "Thing", "name": "Healthcare Payer Integration" }
-    ],
-    "breadcrumb": {
-      "@type": "BreadcrumbList",
-      "itemListElement": [
-        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com/" },
-        { "@type": "ListItem", "position": 2, "name": "Platform", "item": "https://cloudhealthoffice.com/platform" }
-      ]
-    }
+    "@graph": [
+      {
+        "@type": "TechArticle",
+        "headline": "Sit CMS-0057-F Beside QNXT, Facets, or HealthEdge | Cloud Health Office",
+        "url": "https://cloudhealthoffice.com/platform",
+        "description": "Technical architecture of Cloud Health Office: C# microservices, Blazor Server portal, FHIR R4 APIs, X12 EDI processing, Azure and Kubernetes deployment for CMS-0057-F compliance.",
+        "author": {
+          "@type": "Organization",
+          "name": "Aurelianware, Inc.",
+          "url": "https://cloudhealthoffice.com"
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Cloud Health Office",
+          "url": "https://cloudhealthoffice.com"
+        },
+        "about": [
+          {
+            "@type": "Thing",
+            "name": "FHIR R4"
+          },
+          {
+            "@type": "Thing",
+            "name": "X12 EDI"
+          },
+          {
+            "@type": "Thing",
+            "name": "CMS-0057-F"
+          },
+          {
+            "@type": "Thing",
+            "name": "Healthcare Payer Integration"
+          }
+        ]
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://cloudhealthoffice.com/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Platform",
+            "item": "https://cloudhealthoffice.com/platform"
+          }
+        ]
+      }
+    ]
   }
   </script>
   <!-- Privacy-friendly analytics by Plausible -->

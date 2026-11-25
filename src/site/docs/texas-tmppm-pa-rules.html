@@ -17,33 +17,64 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "TechArticle",
-    "headline": "TMPPM Prior Authorization Rules — Cloud Health Office",
-    "description": "Automated extraction of Texas Medicaid prior authorization rules from the TMPPM. 50 PA categories across 8 chapters, monthly auto-refresh, hybrid regex + LLM extraction, persisted to Cosmos DB for real-time CRD responses.",
-    "url": "https://cloudhealthoffice.com/docs/texas-tmppm-pa-rules",
-    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
-    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
-    "datePublished": "2026-04-10",
-    "proficiencyLevel": "Intermediate",
-    "about": [
-      "TMPPM",
-      "Texas Medicaid prior authorization",
-      "TMHP",
-      "CPT code PA requirements",
-      "HCPCS quarterly updates",
-      "CRD endpoint",
-      "CDS Hooks",
-      "ConceptMapEntry"
-    ],
-    "breadcrumb": {
-      "@type": "BreadcrumbList",
-      "itemListElement": [
-        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
-        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
-        { "@type": "ListItem", "position": 3, "name": "Texas Compliance", "item": "https://cloudhealthoffice.com/docs/texas-compliance" },
-        { "@type": "ListItem", "position": 4, "name": "TMPPM PA Rules", "item": "https://cloudhealthoffice.com/docs/texas-tmppm-pa-rules" }
-      ]
-    }
+    "@graph": [
+      {
+        "@type": "TechArticle",
+        "headline": "TMPPM Prior Authorization Rules — Cloud Health Office",
+        "description": "Automated extraction of Texas Medicaid prior authorization rules from the TMPPM. 50 PA categories across 8 chapters, monthly auto-refresh, hybrid regex + LLM extraction, persisted to Cosmos DB for real-time CRD responses.",
+        "url": "https://cloudhealthoffice.com/docs/texas-tmppm-pa-rules",
+        "author": {
+          "@type": "Organization",
+          "name": "Aurelianware, Inc."
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Cloud Health Office",
+          "url": "https://cloudhealthoffice.com"
+        },
+        "datePublished": "2026-04-10",
+        "proficiencyLevel": "Intermediate",
+        "about": [
+          "TMPPM",
+          "Texas Medicaid prior authorization",
+          "TMHP",
+          "CPT code PA requirements",
+          "HCPCS quarterly updates",
+          "CRD endpoint",
+          "CDS Hooks",
+          "ConceptMapEntry"
+        ]
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://cloudhealthoffice.com"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Docs",
+            "item": "https://cloudhealthoffice.com/docs"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "Texas Compliance",
+            "item": "https://cloudhealthoffice.com/docs/texas-compliance"
+          },
+          {
+            "@type": "ListItem",
+            "position": 4,
+            "name": "TMPPM PA Rules",
+            "item": "https://cloudhealthoffice.com/docs/texas-tmppm-pa-rules"
+          }
+        ]
+      }
+    ]
   }
   </script>
 

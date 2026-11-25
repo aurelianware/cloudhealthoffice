@@ -355,7 +355,9 @@ function releasePage(release, newer, older) {
       datePublished: isoDate(release.date),
       author: { '@type': 'Organization', name: 'Aurelianware, Inc.' },
       publisher: PUBLISHER,
-      about: { '@type': 'SoftwareApplication', name: 'Cloud Health Office', softwareVersion: release.versionText, applicationCategory: 'BusinessApplication' }
+      // A reference, not a typed SoftwareApplication: Google and Semrush treat any
+      // SoftwareApplication as a rich-result candidate needing offers and ratings.
+      about: { '@id': `${SITE}/#software`, name: 'Cloud Health Office' }
     },
     breadcrumb([['Release notes', HUB], [`v${release.versionText}`, `${SITE}${route}`]])
   ]);
