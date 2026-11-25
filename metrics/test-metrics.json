@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-25T03:53:00Z",
-  "git_sha": "7ea95d80931226e5d3bb4c5b5621bf63918058fa",
+  "generated_at": "2026-11-25T17:12:28Z",
+  "git_sha": "8d459e0a011babcdec7ceb642f05ddae46ab7fbc",
   "git_ref": "main",
   "summary": {
     "total_tests": 21600,
     "passed": 21451,
     "failed": 0,
     "skipped": 0,
-    "duration_ms": 2312030,
+    "duration_ms": 2536470,
     "coverage_pct": 76.11,
     "all_passing": true
   },
@@ -18,7 +18,7 @@
       "passed": 20773,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 2293974,
+      "duration_ms": 2516314,
       "coverage_pct": 75.7
     },
     "jest": {
@@ -27,7 +27,7 @@
       "passed": 678,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 16529,
+      "duration_ms": 18396,
       "coverage_pct": 88.75
     },
     "python": {
@@ -36,7 +36,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 1527,
+      "duration_ms": 1760,
       "coverage_pct": 0
     }
   }
