@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "inferno-conformance",
-  "generatedAtUtc": "2026-11-27T07:28:28Z",
+  "generatedAtUtc": "2026-11-28T07:08:26Z",
   "sourceCommit": "8d459e0a011babcdec7ceb642f05ddae46ab7fbc",
   "sourceCommitShort": "8d459e0a011b",
   "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/8d459e0a011babcdec7ceb642f05ddae46ab7fbc",
@@ -32,18 +32,89 @@
         "dtr_payer_server_v220_questionnaire_operations",
         "dtr_payer_v220_log_questionnaire_error_support"
       ],
-      "status": "Passed",
+      "status": "Failed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-27T07:03:39.1727718+00:00",
+      "testedAtUtc": "2026-11-28T06:52:00.5168747+00:00",
       "tests": {
-        "passed": 39,
-        "failed": 0,
+        "passed": 32,
+        "failed": 7,
         "skipped": 1,
         "omitted": 3,
         "knownKitIssue": 3,
         "total": 46
       },
-      "failingTests": [],
+      "failingTests": [
+        {
+          "test": "dtr_payer_server_v220_capability_statement_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "dtr_v220_payer_questionnaire_package_request_validation",
+          "result": "fail",
+          "message": "Non-conformant $questionnaire-package request. See Messages for details."
+        },
+        {
+          "test": "dtr_v220_payer_next_question_request_validation",
+          "result": "fail",
+          "message": "Non-conformant $next-question QuestionnaireResponse request. See Messages for details."
+        },
+        {
+          "test": "dtr_payer_v220_request_validation",
+          "result": "fail",
+          "message": "(no message)"
+        },
+        {
+          "test": "dtr_payer_v220_questionnaire_interactions",
+          "result": "fail",
+          "message": "(no message)"
+        },
+        {
+          "test": "dtr_v220_payer_questionnaire_response_validation",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "dtr_payer_v220_questionnaire_package_support",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "dtr_v220_payer_next_question_response_validation",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "dtr_v220_payer_adaptive_questionnaire_response_validation",
+          "result": "error",
+          "message": "[Resource 1] Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "dtr_payer_v220_next_question_support",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "dtr_payer_v220_questionnaire_design",
+          "result": "fail",
+          "message": "(no message)"
+        },
+        {
+          "test": "dtr_server_v220_payer_questionnaire_not_found",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "dtr_payer_v220_error_handling",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "dtr_payer_server_v220_must_support",
+          "result": "fail",
+          "message": "(no message)"
+        }
+      ],
       "notRunTests": [
         {
           "test": "smart_backend_services_token_tls_version",
@@ -112,18 +183,49 @@
         "pdex_workflow_member_match",
         "pdex_no_member_matches"
       ],
-      "status": "Passed",
+      "status": "Failed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-27T07:19:01.0846524+00:00",
+      "testedAtUtc": "2026-11-28T06:59:15.5077737+00:00",
       "tests": {
-        "passed": 13,
-        "failed": 0,
+        "passed": 9,
+        "failed": 4,
         "skipped": 0,
         "omitted": 0,
         "knownKitIssue": 0,
         "total": 13
       },
-      "failingTests": [],
+      "failingTests": [
+        {
+          "test": "pdex_one_match_profile_validation",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pdex_member_match_response_profile",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pdex_member_match_identifier_to_id",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pdex_workflow_member_match",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "pdex_no_match_profile_validation",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pdex_no_member_matches",
+          "result": "error",
+          "message": "(no message)"
+        }
+      ],
       "notRunTests": [],
       "knownKitIssues": []
     },
@@ -149,18 +251,49 @@
         "us_core_v311_patient",
         "us_core_v311_encounter"
       ],
-      "status": "Passed",
+      "status": "Failed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-27T07:27:52.4409995+00:00",
+      "testedAtUtc": "2026-11-28T07:08:02.1611641+00:00",
       "tests": {
-        "passed": 21,
-        "failed": 0,
+        "passed": 18,
+        "failed": 3,
         "skipped": 6,
         "omitted": 1,
         "knownKitIssue": 0,
         "total": 28
       },
-      "failingTests": [],
+      "failingTests": [
+        {
+          "test": "us_core_conformance_support",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "us_core_v311_capability_statement",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "us_core_v311_patient_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "us_core_v311_patient",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "us_core_v311_encounter_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "us_core_v311_encounter",
+          "result": "error",
+          "message": "(no message)"
+        }
+      ],
       "notRunTests": [
         {
           "test": "standalone_auth_tls",
@@ -176,11 +309,6 @@
           "test": "us_core_v311_patient_must_support_test",
           "result": "skip",
           "message": "Could not find address.period.end, name.period.end, name.use:old, address.use:old in the 1 provided resource(s)"
-        },
-        {
-          "test": "us_core_v311_patient",
-          "result": "skip",
-          "message": "(no message)"
         },
         {
           "test": "us_core_v311_encounter_read_test",
@@ -201,11 +329,6 @@
           "test": "us_core_v311_encounter_reference_resolution_test",
           "result": "skip",
           "message": "Could not resolve and validate any Must Support references for participant.individual element: Reference"
-        },
-        {
-          "test": "us_core_v311_encounter",
-          "result": "skip",
-          "message": "(no message)"
         }
       ],
       "knownKitIssues": []
@@ -230,28 +353,84 @@
       "groups": [
         "C4BB FHIR API Tests (CapabilityStatement, Patient, ExplanationOfBenefit, Coverage, Organization, Practitioner, RelatedPerson)"
       ],
-      "status": "Passed",
+      "status": "Failed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-27T06:48:30.3421639+00:00",
+      "testedAtUtc": "2026-11-28T06:44:25.9235841+00:00",
       "tests": {
-        "passed": 41,
-        "failed": 0,
+        "passed": 35,
+        "failed": 6,
         "skipped": 15,
         "omitted": 0,
         "knownKitIssue": 5,
         "total": 61
       },
-      "failingTests": [],
+      "failingTests": [
+        {
+          "test": "carin_bb_conformance_support",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "capability_statement_group",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "c4bb_v200_patient_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "c4bb_v200_patient",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "c4bb_v200_eob_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "c4bb_v200_eob",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "c4bb_v200_coverage_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "c4bb_v200_coverage",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "c4bb_v200_organization_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "c4bb_v200_organization",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "c4bb_v200_practitioner_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "c4bb_v200_practitioner",
+          "result": "error",
+          "message": "(no message)"
+        }
+      ],
       "notRunTests": [
         {
           "test": "c4bb_v200_patient_must_support_test",
           "result": "skip",
           "message": "Could not find address.country, address.period in the 2 provided resource(s)"
-        },
-        {
-          "test": "c4bb_v200_patient",
-          "result": "skip",
-          "message": "(no message)"
         },
         {
           "test": "c4bb_v200_eob__lastUpdated_search_test",
@@ -294,19 +473,9 @@
           "message": "Could not find Organization.identifier:NPI, Organization.identifier:tax, Organization.identifier:payerid in the 1 provided resource(s)"
         },
         {
-          "test": "c4bb_v200_organization",
-          "result": "skip",
-          "message": "(no message)"
-        },
-        {
           "test": "c4bb_v200_practitioner_must_support_test",
           "result": "skip",
           "message": "Could not find Practitioner.identifier:tax in the 1 provided resource(s)"
-        },
-        {
-          "test": "c4bb_v200_practitioner",
-          "result": "skip",
-          "message": "(no message)"
         },
         {
           "test": "c4bb_v200_related_person__id_search_test",
@@ -385,18 +554,109 @@
       },
       "suite": "davinci_plan_net_server_v110",
       "groups": [],
-      "status": "Passed",
+      "status": "Failed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-27T07:21:43.7033385+00:00",
+      "testedAtUtc": "2026-11-28T07:02:43.3881875+00:00",
       "tests": {
-        "passed": 180,
-        "failed": 0,
+        "passed": 162,
+        "failed": 18,
         "skipped": 47,
         "omitted": 1,
         "knownKitIssue": 25,
         "total": 253
       },
-      "failingTests": [],
+      "failingTests": [
+        {
+          "test": "davinci_plan_net_conformance_support",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_endpoint_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_endpoint_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_insurance_plan_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_insurance_plan_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_org_affil_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_org_affil_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_practitioner_role_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_practitioner_role_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_practitioner_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_healthcare_service_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_healthcare_service_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_location_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_location_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_network_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_network_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_organization_validation_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "davinci_plan_net_v110_organization_reference_resolution_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        }
+      ],
       "notRunTests": [
         {
           "test": "standalone_auth_tls",
@@ -789,18 +1049,79 @@
         "bulk_data_group_export_v200",
         "bulk_data_patient_export_v200"
       ],
-      "status": "Passed",
+      "status": "Failed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-27T06:45:28.0485952+00:00",
+      "testedAtUtc": "2026-11-28T06:41:23.4731104+00:00",
       "tests": {
-        "passed": 31,
-        "failed": 0,
+        "passed": 25,
+        "failed": 6,
         "skipped": 0,
         "omitted": 3,
         "knownKitIssue": 0,
         "total": 34
       },
-      "failingTests": [],
+      "failingTests": [
+        {
+          "test": "bulk_data_group_valid_resources",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "bulk_data_group_multiple_patients",
+          "result": "fail",
+          "message": "Bulk data export did not have multiple Patient resources."
+        },
+        {
+          "test": "bulk_data_group_export_validation_stu2",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "bulk_data_group_export_cancel_stu2",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "bulk_data_group_export_cancel_group_stu2",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "bulk_data_group_export_v200",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "bulk_data_patient_valid_resources",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "bulk_data_patient_multiple_patients",
+          "result": "fail",
+          "message": "Bulk data export did not have multiple Patient resources."
+        },
+        {
+          "test": "bulk_data_patient_export_validation_stu2",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "bulk_data_patient_export_cancel_stu2",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "bulk_data_patient_export_cancel_group_stu2",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "bulk_data_patient_export_v200",
+          "result": "error",
+          "message": "(no message)"
+        }
+      ],
       "notRunTests": [
         {
           "test": "smart_backend_services_token_tls_version",
@@ -834,18 +1155,49 @@
       },
       "suite": "crd_server_v221",
       "groups": [],
-      "status": "Passed",
+      "status": "Failed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-27T06:55:35.6970042+00:00",
+      "testedAtUtc": "2026-11-28T06:48:38.7874068+00:00",
       "tests": {
-        "passed": 64,
-        "failed": 0,
-        "skipped": 70,
+        "passed": 36,
+        "failed": 23,
+        "skipped": 75,
         "omitted": 9,
         "knownKitIssue": 0,
         "total": 143
       },
-      "failingTests": [],
+      "failingTests": [
+        {
+          "test": "crd_v221_service_request_context_validation",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "Group02",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_service_response_validation",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "Group03",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_supported_us_core_versions",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "crd_v221_server_required_card_response_validation",
+          "result": "error",
+          "message": "(no message)"
+        }
+      ],
       "notRunTests": [
         {
           "test": "crd_v221_server_tls_version_stu2",
@@ -868,22 +1220,7 @@
           "message": "No appointment-book request was made in a previous test as expected."
         },
         {
-          "test": "crd_v221_service_request_context_validation",
-          "result": "skip",
-          "message": "Input 'appointment_book_contexts' is nil, skipping test."
-        },
-        {
           "test": "crd_v221_service_request_optional_fields_validation",
-          "result": "skip",
-          "message": "No appointment-book request was made in a previous test as expected."
-        },
-        {
-          "test": "Group02",
-          "result": "skip",
-          "message": "(no message)"
-        },
-        {
-          "test": "crd_v221_service_response_validation",
           "result": "skip",
           "message": "No appointment-book request was made in a previous test as expected."
         },
@@ -948,11 +1285,6 @@
           "message": "No successful appointment-book response contained a coverage-info action."
         },
         {
-          "test": "Group03",
-          "result": "skip",
-          "message": "(no message)"
-        },
-        {
           "test": "crd_v221_server_appointment_book",
           "result": "skip",
           "message": "(no message)"
@@ -998,9 +1330,19 @@
           "message": "(no message)"
         },
         {
+          "test": "crd_v221_coverage_info_system_action_across_hooks_validation",
+          "result": "skip",
+          "message": "None of the hooks invoked returned valid Coverage Info system actions."
+        },
+        {
           "test": "crd_v221_server_technical_issues_group",
           "result": "wait",
           "message": "(no message)"
+        },
+        {
+          "test": "crd_v221_coverage_info_reason",
+          "result": "skip",
+          "message": "Input 'technical_issues_coverage_info' is nil, skipping test."
         },
         {
           "test": "crd_v221_server_no_member_found_group",
@@ -1039,18 +1381,164 @@
       },
       "suite": "davinci_pas_server_suite_v221",
       "groups": [],
-      "status": "Passed",
+      "status": "Failed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-27T07:15:10.3045481+00:00",
+      "testedAtUtc": "2026-11-28T06:56:51.4967081+00:00",
       "tests": {
-        "passed": 83,
-        "failed": 0,
-        "skipped": 1,
+        "passed": 61,
+        "failed": 23,
+        "skipped": 0,
         "omitted": 0,
         "knownKitIssue": 0,
         "total": 84
       },
-      "failingTests": [],
+      "failingTests": [
+        {
+          "test": "pas_server_v221_subscription_capability_statement_test",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_subscription_input_conformance",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "subscriptions_r4_server_handshake_conformance",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_pas_request_bundle_validation_test_approval",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_pas_response_bundle_validation_test_approval",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "Group01",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "pas_server_v221_approval_use_case",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "pas_server_v221_pas_request_bundle_validation_test_denial",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_pas_response_bundle_validation_test_denial",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_denial_use_case",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "pas_server_v221_pas_request_bundle_validation_test_pended",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_pas_response_bundle_validation_test_pended",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_subscription_notification_conformance_pended",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_subscription_notification_full_resource_conformance_pended",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_claim_update_request_validation_initial",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_claim_update_response_validation_initial",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_claim_update_request_validation_add_item",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_claim_update_response_validation_add_item",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_claim_update_request_validation_modify_cancel",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_claim_update_response_validation_modify_cancel",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "Group03",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "pas_server_v221_claim_update_request_validation_cancel_all",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_claim_update_response_validation_cancel_all",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "Group04",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "pas_server_v221_claim_updates",
+          "result": "error",
+          "message": "(no message)"
+        },
+        {
+          "test": "pas_server_v221_submit_request_bundle_validation_test_must_support",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_submit_response_bundle_validation_test_must_support",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_inquire_request_bundle_validation_test_must_support",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        },
+        {
+          "test": "pas_server_v221_inquire_response_bundle_validation_test_must_support",
+          "result": "error",
+          "message": "Unable to connect to validator at http://inferno-validator:3500."
+        }
+      ],
       "notRunTests": [
         {
           "test": "Group02",
@@ -1060,16 +1548,6 @@
         {
           "test": "pas_server_v221_pended_use_case",
           "result": "wait",
-          "message": "(no message)"
-        },
-        {
-          "test": "pas_server_v221_submit_request_bundle_validation_test_must_support",
-          "result": "skip",
-          "message": "Bundle(s) provided are not conformant. Check messages for issues found."
-        },
-        {
-          "test": "Group01",
-          "result": "skip",
           "message": "(no message)"
         }
       ],
@@ -1100,7 +1578,7 @@
       ],
       "status": "Passed",
       "statusReason": null,
-      "testedAtUtc": "2026-11-27T07:25:03.1226859+00:00",
+      "testedAtUtc": "2026-11-28T07:05:42.6541538+00:00",
       "tests": {
         "passed": 73,
         "failed": 0,
@@ -1156,15 +1634,15 @@
     }
   ],
   "latestRun": {
-    "generatedAtUtc": "2026-11-27T07:27:52.4452197+00:00",
+    "generatedAtUtc": "2026-11-28T07:08:05.3118267+00:00",
     "environment": "CI",
     "choCommit": "8d459e0a011babcdec7ceb642f05ddae46ab7fbc",
     "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/8d459e0a011babcdec7ceb642f05ddae46ab7fbc",
-    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/45952332647",
+    "workflowRunUrl": "https://github.com/aurelianware/cloudhealthoffice/actions/runs/46116718845",
     "dataClassification": "synthetic",
     "summary": {
-      "passed": 9,
-      "failed": 0,
+      "passed": 1,
+      "failed": 8,
       "skipped": 0,
       "notRun": 0,
       "total": 9
